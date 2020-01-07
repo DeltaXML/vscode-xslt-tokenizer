@@ -11,14 +11,14 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onLanguage:semanticLanguage"
+		"onLanguage:XPath"
 	],
 	"enableProposedApi": true,
 	"main": "./out/extension.js",
 	"contributes": {
 		"languages": [
 			{
-				"id": "semanticLanguage",
+				"id": "XPath",
 				"extensions": [
 					".xpath"
 				]
