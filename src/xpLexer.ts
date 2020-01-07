@@ -115,7 +115,7 @@ class Data {
                                 "lt", "map", "mod", "ne", "of", "or", "return", "satisfies",
                                 "then", "to", "treat", "union"];
 
-    public static rangeVars = ["every", "for", "let", "some"];
+    public static rangeVars = ["every", "for", "let", "some", "return"];
     public static firstParts = [ "cast", "castable", "instance"];
     public static secondParts = ["as", "of"];
 

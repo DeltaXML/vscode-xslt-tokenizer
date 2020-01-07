@@ -765,7 +765,7 @@ children:[
 tokenType: TokenLevelState.Number
 },
 {value: `return`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `$a`,
 tokenType: TokenLevelState.Variable
@@ -805,7 +805,7 @@ children:[
 tokenType: TokenLevelState.Number
 },
 {value: `return`,
-tokenType: TokenLevelState.Function,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `(`,
 tokenType: TokenLevelState.Operator,
@@ -935,7 +935,7 @@ children:[
 tokenType: TokenLevelState.Number
 },
 {value: `return`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `$a`,
 tokenType: TokenLevelState.Variable

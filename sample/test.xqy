@@ -12,6 +12,6 @@
 (: declaration:) let $a := book return 
 (: function   :) count($a),
 (: map        :) map {'a': 'b'}
-(: array      :) array [1, 2]
+(: array      :) array {1, 2}
 (: comment (:nested:) :)
 5 < 2
