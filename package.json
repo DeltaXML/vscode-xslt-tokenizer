@@ -29,11 +29,15 @@
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
 		"lint": "tslint -p ./",
-		"watch": "tsc -watch -p ./"
+		"watch": "tsc -watch -p ./",
+		"test": "jest"
 	},
 	"devDependencies": {
+		"@types/jest": "^24.0.25",
 		"@types/node": "^10.14.17",
 		"@types/vscode": "^1.32.0",
+		"jest": "^24.9.0",
+		"ts-jest": "^24.3.0",
 		"tslint": "^5.16.0",
 		"typescript": "^3.5.1"
 	}
