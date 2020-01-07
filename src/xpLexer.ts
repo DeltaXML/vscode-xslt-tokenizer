@@ -156,7 +156,7 @@ class Data {
 export class XPathLexer {
 
     public debug: boolean = false;
-    public flatten: boolean = false;
+    public flatten: boolean = true;
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
@@ -864,14 +864,26 @@ export class XPathLexer {
 }
 
 export interface Token {
+    line: number;
+    startCharacter: number;
+    length: number;
+    value: string;
+    charType?: CharLevelState;
+    tokenType: TokenLevelState;
+    context?: Token|null;
+    children?: Token[];
+    error?: boolean;
+}
+
+export interface TokenLight {
     line?: number;
     startCharacter?: number;
     length?: number;
     value: string;
     charType?: CharLevelState;
     tokenType: TokenLevelState;
-    context?: Token|null;
-    children?: Token[];
+    context?: TokenLight|null;
+    children?: TokenLight[];
     error?: boolean;
 }
 

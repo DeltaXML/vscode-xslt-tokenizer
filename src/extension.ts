@@ -1,15 +1,11 @@
 import * as vscode from 'vscode';
+import {Token, XPathLexer} from "./xpLexer";
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
 
 const legend = (function () {
-	const tokenTypesLegend = [
-		'comment', 'string', 'keyword', 'number', 'regexp', 'operator', 'namespace',
-		'type', 'struct', 'class', 'interface', 'enum', 'parameterType', 'function',
-		'macro', 'variable', 'constant', 'parameter', 'property', 'label'
-	];
-	tokenTypesLegend.forEach((tokenType, index) => tokenTypes.set(tokenType, index));
+	const tokenTypesLegend = XPathLexer.getTextmateTypeLegend();
 
 	const tokenModifiersLegend = [
 		'declaration', 'documentation', 'member', 'static', 'abstract', 'deprecated',
@@ -33,11 +29,13 @@ interface IParsedToken {
 }
 
 class SemanticTokensProvider implements vscode.SemanticTokensProvider {
+	private xpLexer = new XPathLexer();
+
 	async provideSemanticTokens(document: vscode.TextDocument, options: vscode.SemanticTokensRequestOptions, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
-		const allTokens = this._parseText(document.getText());
+		const allTokens = this.xpLexer.analyse(document.getText());
 		const builder = new vscode.SemanticTokensBuilder();
 		allTokens.forEach((token) => {
-			builder.push(token.line, token.startCharacter, token.length, this._encodeTokenType(token.tokenType), this._encodeTokenModifiers(token.tokenModifiers));
+			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
 		return new vscode.SemanticTokens(builder.build());
 	}
