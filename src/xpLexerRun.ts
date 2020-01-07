@@ -8,7 +8,7 @@ let testXpath: string =
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
-let flatten = true;
+let flatten = true; // set true for vscode extension tokens
 // =============
 
 generateTest = timerOnly? false: generateTest;
@@ -35,8 +35,10 @@ if (generateTest) {
 	console.log(testXpath);
 	console.log('---------------');
 	Debug.printResultTokens(tokens);
-	console.log('===============');
-	printTokenValues(testXpath);
+	if (flatten) {
+		console.log('===============');
+		printTokenValues(testXpath);
+	}
 }
 
 function printTokenValues(xpathExpr: string) {
