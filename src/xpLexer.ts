@@ -124,7 +124,7 @@ class Data {
 
     public static setAsOperatorIfKeyword(token: Token) {
         if (token.value === 'return' || token.value === 'satisfies') {
-            token.tokenType = TokenLevelState.Operator; // TODO: this should be set to Declaration but causes test failures
+            token.tokenType = TokenLevelState.Declaration// TODO: this should be set to Declaration but causes test failures
         } else if (Data.keywords.indexOf(token.value) > -1) {
             token.tokenType = TokenLevelState.Operator;
         }
@@ -562,7 +562,7 @@ export class XPathLexer {
             let prevToken = this.latestRealToken;
             this.setLabelForLastTokenOnly(prevToken, newToken);
             this.setLabelsUsingCurrentToken(prevToken, newToken);
-            if (XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.Operator)) {
+            if (XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.Operator) || XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.Declaration)) {
                 if (newTokenValue === 'then' || newTokenValue === 'in' || newTokenValue === ':=' || newTokenValue === 'return' || newTokenValue === 'satisfies') {
                     if (!this.flatten) {
                         newToken.children = [];
