@@ -156,7 +156,7 @@ class Data {
 export class XPathLexer {
 
     public debug: boolean = false;
-    public flatten: boolean = true;
+    public flatten: boolean = false;
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;

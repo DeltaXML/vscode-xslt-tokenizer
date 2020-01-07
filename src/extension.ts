@@ -23,6 +23,10 @@ export function activate(context: vscode.ExtensionContext) {
 class SemanticTokensProvider implements vscode.SemanticTokensProvider {
 	private xpLexer = new XPathLexer();
 
+	constructor() {
+		this.xpLexer.flatten = true;
+	}
+
 	async provideSemanticTokens(document: vscode.TextDocument, options: vscode.SemanticTokensRequestOptions, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		const allTokens = this.xpLexer.analyse(document.getText());
 		const builder = new vscode.SemanticTokensBuilder();
