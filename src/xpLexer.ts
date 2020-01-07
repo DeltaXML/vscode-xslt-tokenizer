@@ -123,7 +123,9 @@ class Data {
     public static nonFunctionTypes = ["map", "array", "function"];
 
     public static setAsOperatorIfKeyword(token: Token) {
-        if (Data.keywords.indexOf(token.value) > -1) {
+        if (token.value === 'return' || token.value === 'satisfies') {
+            token.tokenType = TokenLevelState.Operator; // TODO: this should be set to Declaration but causes test failures
+        } else if (Data.keywords.indexOf(token.value) > -1) {
             token.tokenType = TokenLevelState.Operator;
         }
     }

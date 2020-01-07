@@ -4,7 +4,7 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-	`for $a in 1 to 10 return ($a * 2)`;
+	`let $a := 2 return $a`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
