@@ -8,7 +8,7 @@ let testXpath: string =
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
-let flatten = false;
+let flatten = true;
 // =============
 
 generateTest = timerOnly? false: generateTest;
@@ -40,11 +40,13 @@ if (generateTest) {
 }
 
 function printTokenValues(xpathExpr: string) {
-	let lines = testXpath.split(/\r\n|\r|\n/);
+	let lines = xpathExpr.split(/\r\n|\r|\n/);
+	console.log('line count: ' + lines.length);
+	console.log('token count: ' + tokens.length);
 	for (let i = 0; i < tokens.length; i++) {
 		let t: Token = tokens[i];
 		if (t.tokenType.valueOf() !== TokenLevelState.Whitespace.valueOf()) {
-			let line = t.line ? lines[t.line] : '';
+			let line = lines[t.line];
 			let sc = t.startCharacter ? t.startCharacter : 0;
 			console.log(line.substr(sc, t.length) + '_');
 		}
