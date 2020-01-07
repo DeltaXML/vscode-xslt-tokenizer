@@ -1,3 +1,0 @@
-for $x in $newMilestones[attribute::format:preAdjustStartIds] return 
-for $y in tokenize($x/@format:preAdjustStartIds, '\+') return
-concat($y, '-', $x/@format:startPosition)

@@ -2,7 +2,7 @@
 
 This extends the Semantic tokens sample to work with an XPath lexer. This semantic tokens provider always returns all the tokens in a file.
 
-![Screenshot](demo.png)
+![Screenshot](xpath-demo.png)
 
 ## To install dependencies
 From terminal, run:
