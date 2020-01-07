@@ -20,14 +20,6 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerSemanticTokensProvider({ language: 'semanticLanguage'}, new SemanticTokensProvider(), legend));
 }
 
-interface IParsedToken {
-	line: number;
-	startCharacter: number;
-	length: number;
-	tokenType: string;
-	tokenModifiers: string[];
-}
-
 class SemanticTokensProvider implements vscode.SemanticTokensProvider {
 	private xpLexer = new XPathLexer();
 
@@ -56,42 +48,5 @@ class SemanticTokensProvider implements vscode.SemanticTokensProvider {
 			}
 		}
 		return result;
-	}
-
-	private _parseText(text: string): IParsedToken[] {
-		let r: IParsedToken[] = [];
-		let lines = text.split(/\r\n|\r|\n/);
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			let currentOffset = 0;
-			do {
-				const openOffset = line.indexOf('[', currentOffset);
-				if (openOffset === -1) {
-					break;
-				}
-				const closeOffset = line.indexOf(']', openOffset);
-				if (closeOffset === -1) {
-					break;
-				}
-				let tokenData = this._parseTextToken(line.substring(openOffset + 1, closeOffset));
-				r.push({
-					line: i,
-					startCharacter: openOffset + 1,
-					length: closeOffset - openOffset - 1,
-					tokenType: tokenData.tokenType,
-					tokenModifiers: tokenData.tokenModifiers
-				});
-				currentOffset = closeOffset;
-			} while (true);
-		}
-		return r;
-	}
-
-	private _parseTextToken(text: string): { tokenType: string; tokenModifiers: string[]; } {
-		let parts = text.split('.');
-		return {
-			tokenType: parts[0],
-			tokenModifiers: parts.slice(1)
-		};
 	}
 }
