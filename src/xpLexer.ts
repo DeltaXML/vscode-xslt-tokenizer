@@ -614,6 +614,9 @@ export class XPathLexer {
             prevToken.tokenType = TokenLevelState.SimpleType;
         } else if (Data.nodeTypes.indexOf(prevToken.value) > -1) {
             prevToken.tokenType = TokenLevelState.NodeType;
+        } else if (prevToken.tokenType === TokenLevelState.Operator && 
+            (prevToken.value === 'return' || prevToken.value === 'satisfies')) {
+            prevToken.tokenType = TokenLevelState.Declaration;
         } else {
             prevToken.tokenType = TokenLevelState.Function;
         }
