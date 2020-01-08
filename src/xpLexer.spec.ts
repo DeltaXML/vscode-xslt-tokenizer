@@ -871,7 +871,7 @@ tokenType: TokenLevelState.Operator
 tokenType: TokenLevelState.Number
 },
 {value: `return`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `concat`,
 tokenType: TokenLevelState.Function
@@ -976,7 +976,7 @@ children:[
 tokenType: TokenLevelState.NodeType
 },
 {value: `satisfies`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `$a`,
 tokenType: TokenLevelState.Variable

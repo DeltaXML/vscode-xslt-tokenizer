@@ -610,15 +610,14 @@ export class XPathLexer {
     }
 
     private updateTokenBeforeBrackets(prevToken: Token) {
-        if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
+        if (prevToken.tokenType === TokenLevelState.Declaration){
+            // keep
+        } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
             prevToken.tokenType = TokenLevelState.Operator;
         } else if (Data.nonFunctionTypes.indexOf(prevToken.value) > -1) {
             prevToken.tokenType = TokenLevelState.SimpleType;
         } else if (Data.nodeTypes.indexOf(prevToken.value) > -1) {
             prevToken.tokenType = TokenLevelState.NodeType;
-        } else if (prevToken.tokenType === TokenLevelState.Operator && 
-            (prevToken.value === 'return' || prevToken.value === 'satisfies')) {
-            prevToken.tokenType = TokenLevelState.Declaration;
         } else {
             prevToken.tokenType = TokenLevelState.Function;
         }
