@@ -1,9 +1,9 @@
 {
-	"name": "semantic-tokens-sample",
-	"displayName": "semantic-tokens-sample",
-	"description": "Sample showing the Semantic Tokens Provider API",
+	"name": "xslt-tokenizer",
+	"displayName": "xslt-tokenizer",
+	"description": "Showing the Semantic Tokens Provider API being used for XPath3.1",
 	"version": "0.0.1",
-	"publisher": "vscode-samples",
+	"publisher": "pgfearo",
 	"engines": {
 		"vscode": "^1.41.0"
 	},
@@ -19,6 +19,7 @@
 		"languages": [
 			{
 				"id": "XPath",
+				"aliases": ["xpath"],
 				"extensions": [
 					".xpath"
 				],
