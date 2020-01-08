@@ -1,6 +1,8 @@
 # XPath 3.1 Semantic tokens sample
 
-This extends the Semantic tokens VSCode Extenions sample to work with an XPath 3.1 lexer. This semantic tokens provider always returns all the tokens in a file.
+This project builds on the Semantic tokens VSCode Extensions sample to work with an XPath 3.1 lexer. This semantic tokens provider always returns all the tokens in a file.
+
+The XPath demo file loaded in VSCode with the extension running:
 
 ![Screenshot](xpath-demo.png)
 
