@@ -30,6 +30,19 @@
 				"${workspaceFolder}/out/test/**/*.js"
 			],
 			"preLaunchTask": "npm: watch"
-		}
+		},
+		{
+            "type": "node",
+            "request": "launch",
+            "name": "Run Diagnostics Tool",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/out/xpLexerRun.js",
+            "preLaunchTask": "tsc: build - tsconfig.json",
+            "outFiles": [
+                "${workspaceFolder}/out/test/**/*.js"
+            ]
+        }
 	]
 }
