@@ -1,17 +1,16 @@
 (: attribute  :) element/@attribute,
 (: number     :) 125.87e-5,
 (: operator   :) a div b,
-(: variable   :) $variable,
+(: variable   :) $ms:var.start,
 (: string-1   :) 'a ''single "quoted" string'' here',
 (: string-2   :) "a ""double 'quoted' string"" here",
-(: uriLiteral :) Q{http://example.com.test},
+(: uriLiteral :) Q{http://www.w3.org/1999/xhtml}div,
 (: nodeType   :) node(),
-(: simmpleType:) $a castable as xs:integer,
+(: simpleType:) $a castable as xs:integer,
 (: axis       :) parent::book,
-(: name       :) dxl:simple-book,
-(: declaration:) let $a := book return 
+(: name       :) dxl:simple-book.name,
+(: declaration:) let $a := book, $b := magazine return ($a,$b),
 (: function   :) count($a),
-(: map        :) map {'a': 'b'}
+(: map        :) map {'a': 'b'},
 (: array      :) array [1, 2]
 (: comment (:nested:) :)
-
