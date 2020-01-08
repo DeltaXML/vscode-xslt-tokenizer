@@ -21,7 +21,8 @@
 				"id": "XPath",
 				"extensions": [
 					".xpath"
-				]
+				],
+				"configuration": "./language-configuration.json"
 			}
 		]
 	},
