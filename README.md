@@ -27,6 +27,12 @@ Launch the extension and open the file `sample/basic.xpath`.
 }
 ```
 
+## How to test XPath Lexer
+
+From terminal, run:
+
+``npm test``
+
 ## State of development
 
 - This is currently a work in progress. Main XPath 3.1 tokenization is complete.
