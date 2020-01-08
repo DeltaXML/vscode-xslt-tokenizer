@@ -7,7 +7,7 @@ let testXpath: string =
 	`let $a := 2 return $a`;
 let testTitle = `declaration`;
 let generateTest = false;
-let timerOnly = false;
+let timerOnly = true;
 let flatten = true; // set true for vscode extension tokens
 // =============
 
@@ -20,8 +20,9 @@ if (timerOnly) {
 }
 
 let lexer: XPathLexer = new XPathLexer();
-lexer.setDebug(debugOn);
-lexer.setFlatten(flatten);
+lexer.debug = debugOn;
+lexer.flatten = flatten;
+lexer.timerOn = timerOnly;
 let tokens: Token[] = lexer.analyse(testXpath);
 
 

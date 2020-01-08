@@ -159,6 +159,7 @@ export class XPathLexer {
 
     public debug: boolean = false;
     public flatten: boolean = false;
+    public timerOn: boolean = false;
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
@@ -193,14 +194,6 @@ export class XPathLexer {
                 break;
         }
         return result;
-    }
-
-    public setDebug(debug: boolean) {
-        this.debug = debug;
-    }
-
-    public setFlatten(flatten: boolean) {
-        this.flatten = flatten;
     }
 
     private calcNewState (isFirstChar: boolean, nesting: number, char: string, nextChar: string, existing: CharLevelState): [CharLevelState, number] {
@@ -302,8 +295,8 @@ export class XPathLexer {
     }
 
     public analyse(xpath: string): Token[] {
-        let timerOn: boolean = true;
-        if (timerOn) {
+
+        if (this.timerOn) {
             console.time('xplexer.analyse');
         }
         this.latestRealToken = null;
@@ -470,7 +463,7 @@ export class XPathLexer {
             } // end if(currentChar)
             currentChar = nextChar;
         } // end iteration over chars
-        if (timerOn) {
+        if (this.timerOn) {
             console.timeEnd('xplexer.analyse');
         }
         return result;

@@ -1268,7 +1268,7 @@ startCharacter: 0
         
 test(`flatten token structure`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.setFlatten(true);
+  l.flatten = true;
   let rx: Token[] = l.analyse(`count($a)`);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
