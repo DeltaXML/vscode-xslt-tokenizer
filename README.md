@@ -1,6 +1,6 @@
 # XPath 3.1 Semantic tokens sample
 
-This extends the Semantic tokens sample to work with an XPath lexer. This semantic tokens provider always returns all the tokens in a file.
+This extends the Semantic tokens VSCode Extenions sample to work with an XPath 3.1 lexer. This semantic tokens provider always returns all the tokens in a file.
 
 ![Screenshot](xpath-demo.png)
 
@@ -40,3 +40,13 @@ From terminal, run:
 - Next step is to add semantic tokens for XPath. 
 
 - The intention is to then add an XSLT lexer that delegates to the XPath lexer when required. Basic evaluation context will be passed from the XSLT lexer to the XPath lexer.
+
+## XPath 3.1 lexer summary
+
+- Hand-crafted lexer
+- No regular expressions
+- Iterates character by character
+- Single pass with character lookahead
+- Disambiguates token based on previous/next token
+- Manages evaluation context scope
+- Intended for highlighting unused variables etc.
