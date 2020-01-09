@@ -1298,4 +1298,61 @@ startCharacter: 8
 },]
   expect (r).toEqual(ts);
 });
+              
+test(`return declaration preceding number`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = true;
+  let rx: Token[] = l.analyse(`let $a := 2 return 9 + $a`);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `let`,
+tokenType: TokenLevelState.Declaration,
+line: 0,
+length: 3,
+startCharacter: 0
+},
+{value: `$a`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 4
+},
+{value: `:=`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 2,
+startCharacter: 7
+},
+{value: `2`,
+tokenType: TokenLevelState.Number,
+line: 0,
+length: 1,
+startCharacter: 10
+},
+{value: `return`,
+tokenType: TokenLevelState.Declaration,
+line: 0,
+length: 6,
+startCharacter: 12
+},
+{value: `9`,
+tokenType: TokenLevelState.Number,
+line: 0,
+length: 1,
+startCharacter: 19
+},
+{value: `+`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 1,
+startCharacter: 21
+},
+{value: `$a`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 23
+},]
+  expect (r).toEqual(ts);
+});
 

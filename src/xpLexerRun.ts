@@ -4,10 +4,10 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-	`let $a := 2 return $a`;
+	`let $a := 2 return 9 + $a`;
 let testTitle = `declaration`;
-let generateTest = false;
-let timerOnly = true;
+let generateTest = true;
+let timerOnly = false;
 let flatten = true; // set true for vscode extension tokens
 // =============
 

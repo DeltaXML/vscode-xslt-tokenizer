@@ -50,6 +50,7 @@ tokenType: ${tokenType + childrenString}
         
         test(\`${testTitle}\`, () => {
         let l: XPathLexer = new XPathLexer();
+        l.flatten = true;
         let rx: Token[] = l.analyse(\`${testXpath}\`);
         let r: Token[] = Utilities.minimiseTokens2(rx);
         let ts: Token[] = `;
