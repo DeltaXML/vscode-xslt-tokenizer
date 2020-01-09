@@ -19,7 +19,10 @@
 		"languages": [
 			{
 				"id": "xpath",
-				"aliases": ["XPath", "xpath"],
+				"aliases": [
+					"XPath",
+					"xpath"
+				],
 				"extensions": [
 					".xpath"
 				],
