@@ -11,15 +11,15 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onLanguage:XPath"
+		"onLanguage:xpath"
 	],
 	"enableProposedApi": true,
 	"main": "./out/extension.js",
 	"contributes": {
 		"languages": [
 			{
-				"id": "XPath",
-				"aliases": ["xpath"],
+				"id": "xpath",
+				"aliases": ["XPath", "xpath"],
 				"extensions": [
 					".xpath"
 				],
