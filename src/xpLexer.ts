@@ -332,7 +332,6 @@ export class XPathLexer {
                     currentLabelState
                 );
                 let [nextLabelState] = nextState;
-                let token: string|null = null;
                 if (
                     (nextLabelState === currentLabelState
                         && !(this.unChangedStateSignificant(currentLabelState))
@@ -377,7 +376,7 @@ export class XPathLexer {
                             break;
                         case CharLevelState.rC:
                             tokenChars.push(':)');
-                            token = tokenChars.join('');
+                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             tokenChars = [];
                             break;
                         case CharLevelState.lB:
@@ -422,7 +421,7 @@ export class XPathLexer {
                         case CharLevelState.rDq:
                         case CharLevelState.rUri:
                             tokenChars.push(currentChar);
-                            token = tokenChars.join('');
+                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             tokenChars = [];                       
                             break;
                         case CharLevelState.lSq:
@@ -431,7 +430,7 @@ export class XPathLexer {
                         case CharLevelState.lWs:
                         case CharLevelState.lUri:
                             if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq) {
-                                token = tokenChars.join('');
+                                this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                                 tokenChars = [];
                             }
                             tokenChars.push(currentChar);
@@ -442,7 +441,7 @@ export class XPathLexer {
                                 tokenChars = [];
                             } else if (currentLabelState === CharLevelState.lWs) {
                                 // set whitespace token and then initial with currentChar
-                                token = tokenChars.join('');
+                                this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                                 tokenChars = []; 
                                 tokenChars.push(currentChar);
                             }
@@ -451,13 +450,9 @@ export class XPathLexer {
                             }
                             break;
                     }
-                    if (token) {
-                        this.updateResult(nestedTokenStack, result, new BasicToken(token, currentLabelState));
-                    }
                 }
                 if (!nextChar && tokenChars.length > 0) {
-                    token = tokenChars.join('');
-                    this.updateResult(nestedTokenStack, result, new BasicToken(token, nextLabelState));
+                    this.update(nestedTokenStack, result, tokenChars, nextLabelState);
                 }
                 currentState = nextState;
             } // end if(currentChar)

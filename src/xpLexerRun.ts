@@ -4,10 +4,12 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-	`let $a := 2 return 9 + $a`;
+`let $abacus := 22 return
+     92 + $abacus, count(node1/longElementName[@definitely = 'string']), `;
+let timerXPath = testXpath.repeat(5000);
 let testTitle = `declaration`;
-let generateTest = true;
-let timerOnly = false;
+let generateTest = false;
+let timerOnly = true;
 let flatten = true; // set true for vscode extension tokens
 // =============
 
@@ -23,7 +25,7 @@ let lexer: XPathLexer = new XPathLexer();
 lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
-let tokens: Token[] = lexer.analyse(testXpath);
+let tokens: Token[] = lexer.analyse(timerXPath);
 
 
 if (generateTest) {
