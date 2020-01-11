@@ -377,7 +377,6 @@ export class XPathLexer {
                         case CharLevelState.rC:
                             tokenChars.push(':)');
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
-                            tokenChars = [];
                             break;
                         case CharLevelState.lB:
                         case CharLevelState.lBr:
@@ -421,8 +420,7 @@ export class XPathLexer {
                         case CharLevelState.rDq:
                         case CharLevelState.rUri:
                             tokenChars.push(currentChar);
-                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
-                            tokenChars = [];                       
+                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);                      
                             break;
                         case CharLevelState.lSq:
                         case CharLevelState.lDq:
@@ -431,7 +429,6 @@ export class XPathLexer {
                         case CharLevelState.lUri:
                             if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq) {
                                 this.update(nestedTokenStack, result, tokenChars, currentLabelState);
-                                tokenChars = [];
                             }
                             tokenChars.push(currentChar);
                             break;              
@@ -441,8 +438,7 @@ export class XPathLexer {
                                 tokenChars = [];
                             } else if (currentLabelState === CharLevelState.lWs) {
                                 // set whitespace token and then initial with currentChar
-                                this.update(nestedTokenStack, result, tokenChars, currentLabelState);
-                                tokenChars = []; 
+                                this.update(nestedTokenStack, result, tokenChars, currentLabelState); 
                                 tokenChars.push(currentChar);
                             }
                             else {
