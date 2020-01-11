@@ -345,7 +345,7 @@ export class XPathLexer {
                         this.lineNumber++;
                         this.tokenCharNumber = 0;
                     } else {
-                        tokenChars.push(currentChar);
+                        this.pushTokenChars(tokenChars, currentChar, currentLabelState);
                     }
                 } else  {
                     // state has changed, so save token and start new token
@@ -354,10 +354,10 @@ export class XPathLexer {
                         case CharLevelState.lVar:
                         case CharLevelState.lName:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
-                            tokenChars.push(currentChar);
+                            this.pushTokenChars(tokenChars, currentChar, currentLabelState);
                             break;
                         case CharLevelState.exp:
-                            tokenChars.push(currentChar);
+                            this.pushTokenChars(tokenChars, currentChar, currentLabelState);
                             break;
                         case CharLevelState.dSep:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
@@ -372,7 +372,7 @@ export class XPathLexer {
                             break;
                         case CharLevelState.escSq:
                         case CharLevelState.escDq:
-                            tokenChars.push(currentChar); 
+                            this.pushTokenChars(tokenChars, currentChar, currentLabelState);
                             break;
                         case CharLevelState.rC:
                             tokenChars.push(':)');
@@ -419,7 +419,7 @@ export class XPathLexer {
                         case CharLevelState.rSq:
                         case CharLevelState.rDq:
                         case CharLevelState.rUri:
-                            tokenChars.push(currentChar);
+                            this.pushTokenChars(tokenChars, currentChar, currentLabelState);
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);                      
                             break;
                         case CharLevelState.lSq:
@@ -430,7 +430,7 @@ export class XPathLexer {
                             if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq) {
                                 this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             }
-                            tokenChars.push(currentChar);
+                            this.pushTokenChars(tokenChars, currentChar, nextLabelState);
                             break;              
                         default:
                             if (currentLabelState === CharLevelState.rC) {
@@ -439,10 +439,10 @@ export class XPathLexer {
                             } else if (currentLabelState === CharLevelState.lWs) {
                                 // set whitespace token and then initial with currentChar
                                 this.update(nestedTokenStack, result, tokenChars, currentLabelState); 
-                                tokenChars.push(currentChar);
+                                this.pushTokenChars(tokenChars, currentChar, nextLabelState);
                             }
                             else {
-                                tokenChars.push(currentChar);
+                                this.pushTokenChars(tokenChars, currentChar, nextLabelState);
                             }
                             break;
                     }
@@ -458,6 +458,10 @@ export class XPathLexer {
             console.timeEnd('xplexer.analyse');
         }
         return result;
+    }
+
+    private pushTokenChars(tokenChars: string[], char: string, charType: CharLevelState) {
+        tokenChars.push(char);
     }
 
     private static closeMatchesOpen(close: CharLevelState, stack: Token[]): boolean {
