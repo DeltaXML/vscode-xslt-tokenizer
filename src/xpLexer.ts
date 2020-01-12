@@ -346,8 +346,10 @@ export class XPathLexer {
                         this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                         this.lineNumber++;
                         this.tokenCharNumber = 0;
+                        this.charCount = 0;
                     } else {
                         tokenChars.push(currentChar);
+                        this.charCount++;
                     }
                 } else  {
                     // state has changed, so save token and start new token
@@ -356,37 +358,45 @@ export class XPathLexer {
                         case CharLevelState.lVar:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             tokenChars.push(currentChar);
+                            this.charCount++;
                             break;
                         case CharLevelState.lName:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             tokenChars.push(currentChar);
+                            this.charCount++;
                             break;
                         case CharLevelState.exp:
                             tokenChars.push(currentChar);
+                            this.charCount++;
                             break;
                         case CharLevelState.dSep:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             let bothChars = currentChar + nextChar;
+                            this.charCount = 2;
                             this.updateResult(nestedTokenStack, result, new BasicToken(bothChars, nextLabelState));
                             break;
                         case CharLevelState.dSep2:
                             break;
                         case CharLevelState.sep:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                            this.charCount++;
                             this.updateResult(nestedTokenStack, result, new BasicToken(currentChar, nextLabelState));
                             break;
                         case CharLevelState.escSq:
                         case CharLevelState.escDq:
                             tokenChars.push(currentChar); 
+                            this.charCount++;
                             break;
                         case CharLevelState.rC:
                             tokenChars.push(':)');
+                            this.charCount += 2;
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             break;
                         case CharLevelState.lB:
                         case CharLevelState.lBr:
                         case CharLevelState.lPr:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                            this.charCount++;
                             let currentToken: Token;
                             if (this.flatten) {
                                 currentToken = new FlattenedToken(currentChar, nextLabelState, this.latestRealToken);
@@ -405,6 +415,7 @@ export class XPathLexer {
                             if (currentLabelState !== CharLevelState.rC) {
                                 let prevToken: Token = new BasicToken(tokenChars.join(''), currentLabelState);
                                 this.updateResult(nestedTokenStack, result, prevToken);
+                                this.charCount++;
                                 let newToken: Token = new BasicToken(currentChar, nextLabelState);
                                 if (nestedTokenStack.length > 0) {
                                     // remove from nesting level
@@ -425,6 +436,7 @@ export class XPathLexer {
                         case CharLevelState.rDq:
                         case CharLevelState.rUri:
                             tokenChars.push(currentChar);
+                            this.charCount++;
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);                      
                             break;
                         case CharLevelState.lSq:
@@ -436,18 +448,22 @@ export class XPathLexer {
                                 this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             }
                             tokenChars.push(currentChar);
+                            this.charCount++;
                             break;              
                         default:
                             if (currentLabelState === CharLevelState.rC) {
                                 // in this case, don't include ')' as it is part of last token
                                 tokenChars = [];
+                                this.charCount = 0;
                             } else if (currentLabelState === CharLevelState.lWs) {
                                 // set whitespace token and then initial with currentChar
                                 this.update(nestedTokenStack, result, tokenChars, currentLabelState); 
                                 tokenChars.push(currentChar);
+                                this.charCount++;
                             }
                             else {
                                 tokenChars.push(currentChar);
+                                this.charCount++;
                             }
                             break;
                     }
@@ -511,7 +527,7 @@ export class XPathLexer {
 
         if (newTokenValue !== '') {
 
-            newToken.length = newTokenValue.length;
+            newToken.length =  this.charCount;
             newToken.line = this.lineNumber;
             newToken.startCharacter = this.tokenCharNumber;
 
@@ -532,7 +548,7 @@ export class XPathLexer {
                 this.tokenCharNumber = this.wsCharNumber;
                 this.wsNewLine = false;
             } else {
-                this.tokenCharNumber += newTokenValue.length;
+                this.tokenCharNumber += this.charCount;
             }
             this.wsCharNumber = 0;
 
@@ -570,6 +586,7 @@ export class XPathLexer {
                 Debug.printDebugOutput(cachedRealToken, newToken, newToken.line, newToken.startCharacter);
             }
         }
+        this.charCount = 0;
     }
 
     private conditionallyPopStack(stack: Token[], token: Token) {
