@@ -31,7 +31,7 @@ let tokens: Token[] = lexer.analyse(timerXPath);
 if (generateTest) {
 	Debug.printMinSerializedTokens(testTitle, testXpath, tokens);
 } else if (timerOnly) {
-	console.log("XPath length: " + testXpath.length);
+	console.log("XPath length: " + timerXPath.length);
 	console.log("Token Count:" + tokens.length);
 } else {
 	console.log('---------------');
