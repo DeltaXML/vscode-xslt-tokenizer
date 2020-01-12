@@ -164,6 +164,7 @@ export class XPathLexer {
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
     private tokenCharNumber: number = 0;
+    private charCount = 0;
     private wsNewLine = false;
     private deferWsNewLine= false;
 
@@ -305,6 +306,7 @@ export class XPathLexer {
         this.tokenCharNumber = 0;
         this.wsNewLine = false;
         this.deferWsNewLine = false;
+        this.charCount = 0;
 
         let currentState: [CharLevelState, number] = [CharLevelState.init, 0];
         let currentChar: string = '';
@@ -352,6 +354,9 @@ export class XPathLexer {
                     switch (nextLabelState){
                         case CharLevelState.lNl:
                         case CharLevelState.lVar:
+                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                            tokenChars.push(currentChar);
+                            break;
                         case CharLevelState.lName:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             tokenChars.push(currentChar);
