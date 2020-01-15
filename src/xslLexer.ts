@@ -21,7 +21,8 @@ export enum XMLCharState {
 	rEn,  // right element-name
 	lAn,  // left atrribute-name
 	rAn,  // right attribute-name  
-	eqA,  // attribute = symbol
+    eqA,  // attribute = symbol
+    lAb,  // left angle-bracket
 }
 
 export enum XSLTokenState {
@@ -36,4 +37,86 @@ export enum XSLTokenState {
     XslSelect,
     XslAttribute, // constant
     XslInstruction,   // parameter
+}
+
+export interface XslToken {
+    line: number;
+    startCharacter: number;
+    length: number;
+    value: string;
+    charType?: XMLCharState;
+    tokenType: XSLTokenState;
+    context?: XslToken|null;
+    error?: boolean;
+}
+
+export class XslLexer {
+    public debug: boolean = false;
+    public flatten: boolean = false;
+    public timerOn: boolean = false;
+    private elementStack: XslToken[] = [];
+    private latestRealToken: XslToken|null = null;
+    private lineNumber: number = 0;
+    private wsCharNumber: number = 0;
+    private tokenCharNumber: number = 0;
+    private charCount = 0;
+    private wsNewLine = false;
+    private deferWsNewLine= false;
+
+    private calcNewState (isFirstChar: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
+        let rc: XMLCharState = existing;
+        let firstCharOfToken = true;
+
+        switch (existing) {
+            case XMLCharState.lC:
+                if (char === '-' && nextChar === '-') {
+                    rc = XMLCharState.rC;
+                }
+                break;
+            case XMLCharState.lCd:
+                if (char === ']' && nextChar === ']') {
+                    rc = XMLCharState.rCd;                   
+                }
+                break;
+            default:
+                rc = this.testChar(existing, isFirstChar, char, nextChar);
+        }
+        return rc;
+    }
+
+    private testChar (existing: XMLCharState, isFirstChar: boolean, char: string, nextChar: string): XMLCharState {
+        let rc: XMLCharState;
+
+        switch (char) {
+            case ' ':
+            case '\t':
+                rc= XMLCharState.lWs;
+                this.wsCharNumber++;
+                break;
+            case '\r':
+                rc = XMLCharState.lWs;
+                break;
+            case '\n':
+                this.deferWsNewLine = true;
+                rc = XMLCharState.lWs;
+                break;
+            case '<':
+                switch (nextChar) {
+                    case '?':
+                        rc = XMLCharState.lPi;
+                        break;
+                    case '!':
+                        rc = XMLCharState.lDtd;
+                        break;
+                    case '-':
+                        rc = XMLCharState.lC;
+                        break;
+                    
+                }
+            default:
+                rc = existing;
+        }
+        return rc;
+    }
+
 }
