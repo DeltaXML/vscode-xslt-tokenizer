@@ -1,3 +1,5 @@
+import { Token, TokenLevelState} from "./xpLexer";
+
 export enum XMLCharState {
     init,// 0 initial state
     lSt,  // 1 left start tag
@@ -25,27 +27,13 @@ export enum XMLCharState {
     lAb,  // left angle-bracket
 }
 
-export enum XSLTokenState {
-    // the comment shows the adopted TM name:
-    TemplateName,    // struct
-    VariableName,
-    ParameterName,
-    FunctionName,       // macro
-    TemplateMatch,
-    LiteralElement,
-    Whitespace, // not used
-    XslSelect,
-    XslAttribute, // constant
-    XslInstruction,   // parameter
-}
-
 export interface XslToken {
     line: number;
     startCharacter: number;
     length: number;
     value: string;
     charType?: XMLCharState;
-    tokenType: XSLTokenState;
+    tokenType: TokenLevelState;
     context?: XslToken|null;
     error?: boolean;
 }
@@ -110,13 +98,71 @@ export class XslLexer {
                         break;
                     case '-':
                         rc = XMLCharState.lC;
-                        break;
-                    
+                        break;                   
                 }
+            case '\'':
+                rc = XMLCharState.lSq;
+                break;
+            case '"':
+                rc = XMLCharState.lDtd;
+                break;
             default:
                 rc = existing;
         }
         return rc;
+    }
+
+    public analyse(xsl: string): Token[]|XslToken {
+        if (this.timerOn) {
+            console.time('xslLexer.analyse');
+        }
+        this.latestRealToken = null;
+        this.lineNumber = 0;
+        this.wsCharNumber = 0;
+        this.tokenCharNumber = 0;
+        this.wsNewLine = false;
+        this.deferWsNewLine = false;
+        this.charCount = -1;
+
+        let currentState: XMLCharState = XMLCharState.init;
+        let currentChar: string = '';
+        let tokenChars: string[] = [];
+        let result: Token[] = [];
+        let nestedTokenStack: Token[] = []; 
+        
+        if (this.debug) {
+            console.log("xsl: " + xsl);
+        }
+
+        while (this.charCount < xsl.length) {
+            this.charCount++;
+            let nextState: XMLCharState = XMLCharState.init;
+            let isFirstTokenChar = this.tokenCharNumber === 0;
+            let nextChar: string = xsl.charAt(this.charCount);
+
+            if (currentChar) {
+                nextState = this.calcNewState(
+                    isFirstTokenChar,
+                    currentChar,
+                    nextChar,
+                    currentState,
+                );
+
+                if (nextState === currentState) {
+                    this.tokenCharNumber++;
+                } else {
+                    switch (nextState) {
+                        
+                    }
+                }
+            } else {
+                currentChar = nextChar;
+            }
+            if (this.timerOn) {
+                console.timeEnd('xslLexer.analyse');
+            }
+        } // end while
+        return result;
     }
 
 }
