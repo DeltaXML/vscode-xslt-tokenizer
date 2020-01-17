@@ -48,6 +48,7 @@ export class XslLexer {
     private wsCharNumber: number = 0;
     private tokenCharNumber: number = 0;
     private charCount = 0;
+    private lineCharCount = 0;
     private wsNewLine = false;
     private deferWsNewLine= false;
 
@@ -118,6 +119,7 @@ export class XslLexer {
         }
         this.latestRealToken = null;
         this.lineNumber = 0;
+        this.lineCharCount = 0;
         this.wsCharNumber = 0;
         this.tokenCharNumber = 0;
         this.wsNewLine = false;
@@ -149,20 +151,35 @@ export class XslLexer {
                 );
 
                 if (nextState === currentState) {
-                    this.tokenCharNumber++;
+                    if (currentChar == '\n') {
+                        this.lineNumber++;
+                        this.tokenCharNumber = 0;
+                        this.charCount = 0;
+                        this.tokenCharNumber++;
+                    } 
+
+                    tokenChars.push(currentChar);
+                    this.charCount++;
+
                 } else {
                     switch (nextState) {
                         
                     }
                 }
-            } else {
-                currentChar = nextChar;
-            }
+                currentState = nextState;
+            } 
+            currentChar = nextChar;
+
             if (this.timerOn) {
                 console.timeEnd('xslLexer.analyse');
             }
-        } // end while
+        } 
         return result;
     }
+}
 
+export interface InnerLexerResult {
+    charCount: number;
+    lineNumber: number;
+    tokens: Token[];       
 }
