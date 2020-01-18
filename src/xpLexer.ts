@@ -361,21 +361,21 @@ export class XPathLexer {
                             break;
                         case CharLevelState.dSep:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
-                            let bothChars = currentChar + nextChar;
-                            this.updateResult(nestedTokenStack, result, new BasicToken(bothChars, nextLabelState));
+                            this.updateResult(nestedTokenStack, result, new BasicToken([currentChar, nextChar], nextLabelState));
                             break;
                         case CharLevelState.dSep2:
                             break;
                         case CharLevelState.sep:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
-                            this.updateResult(nestedTokenStack, result, new BasicToken(currentChar, nextLabelState));
+                            this.updateResult(nestedTokenStack, result, new BasicToken([currentChar], nextLabelState));
                             break;
                         case CharLevelState.escSq:
                         case CharLevelState.escDq:
                             tokenChars.push(currentChar); 
                             break;
                         case CharLevelState.rC:
-                            tokenChars.push(':)');
+                            tokenChars.push(':');
+                            tokenChars.push(')');
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             break;
                         case CharLevelState.lB:
@@ -398,9 +398,9 @@ export class XPathLexer {
                         case CharLevelState.rBr:
                         case CharLevelState.rPr:
                             if (currentLabelState !== CharLevelState.rC) {
-                                let prevToken: Token = new BasicToken(tokenChars.join(''), currentLabelState);
+                                let prevToken: Token = new BasicToken(tokenChars, currentLabelState);
                                 this.updateResult(nestedTokenStack, result, prevToken);
-                                let newToken: Token = new BasicToken(currentChar, nextLabelState);
+                                let newToken: Token = new BasicToken([currentChar], nextLabelState);
                                 if (nestedTokenStack.length > 0) {
                                     // remove from nesting level
                                     if (XPathLexer.closeMatchesOpen(nextLabelState, nestedTokenStack)) {
@@ -478,7 +478,7 @@ export class XPathLexer {
 
     private update(stack: Token[], result: Token[], tokenChars: string[], charState: CharLevelState) {
         if (tokenChars.length > 0) {
-            this.updateResult(stack, result, new BasicToken(tokenChars.join(''), charState ));
+            this.updateResult(stack, result, new BasicToken(tokenChars, charState ));
         }
         tokenChars.length = 0;
     }
@@ -506,7 +506,6 @@ export class XPathLexer {
 
         if (newTokenValue !== '') {
 
-            newToken.length = newTokenValue.length;
             newToken.line = this.lineNumber;
             newToken.startCharacter = this.tokenCharNumber;
 
@@ -646,7 +645,7 @@ export class XPathLexer {
 
     private setLabelsUsingCurrentToken(prevToken: Token|null, currentToken: Token) {
         if (!(prevToken)) {
-            prevToken = new BasicToken(',', CharLevelState.sep);
+            prevToken = new BasicToken([','], CharLevelState.sep);
             prevToken.tokenType = TokenLevelState.Operator;
         }
         let currentValue = currentToken.value;
@@ -915,22 +914,25 @@ class BasicToken implements Token {
     line = 0;
     startCharacter = 0 ;
     length = 0;
-    value: string;
+    value: string = '';
     charType: CharLevelState;
     tokenType: TokenLevelState;
 
-    constructor(value: string, type: CharLevelState) {
-        this.value = value;
+    constructor(tokenChars: string[], type: CharLevelState) {
+        this.value = tokenChars.join('');
         this.charType = type;
+        this.length = tokenChars.length;
         switch (type) {
             case CharLevelState.lWs:
                 this.tokenType = TokenLevelState.Whitespace;
                 break;
             case CharLevelState.lName:
                 this.tokenType = TokenLevelState.Name;
+                //this.value = tokenChars.join('');
                 break;
             case CharLevelState.dSep:
             case CharLevelState.sep:
+                // this.value= tokenChars.join(''); // no break intentional
             case CharLevelState.lB:
             case CharLevelState.lBr:
             case CharLevelState.lPr:
@@ -968,7 +970,7 @@ class BasicToken implements Token {
 class FlattenedToken implements Token {
     line = 0;
     startCharacter = 0 ;
-    length = 0;
+    length = 1;
     value: string;
     charType: CharLevelState;
     tokenType: TokenLevelState;
@@ -985,7 +987,7 @@ class FlattenedToken implements Token {
 class ContainerToken implements Token {
     line = 0;
     startCharacter = 0 ;
-    length = 0;
+    length = 1;
     value: string;
     charType: CharLevelState;
     children: Token[];

@@ -3,13 +3,14 @@ import { XPathLexer, Token, TokenLevelState } from "./xpLexer";
 import { Debug } from "./diagnostics";
 
 // -------------
-let testXpath: string =
+let testXpathOrig: string =
 `let $abacus := 22 return
-     92 + $abacus, count(node1/longElementName[@definitely = 'string']), `;
-let timerXPath = testXpath.repeat(5000);
+	 92 + $abacus, count(node1/longElementName[@definitely = 'string']), `;
+let testXpath = `(:some
+thing:)`
 let testTitle = `declaration`;
 let generateTest = false;
-let timerOnly = true;
+let timerOnly = false;
 let flatten = true; // set true for vscode extension tokens
 // =============
 
@@ -17,6 +18,7 @@ generateTest = timerOnly? false: generateTest;
 let debugOn;
 if (timerOnly) {
 	debugOn = false;
+	testXpath = testXpath.repeat(5000);
 } else {
 	debugOn = !generateTest;
 }
@@ -25,13 +27,13 @@ let lexer: XPathLexer = new XPathLexer();
 lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
-let tokens: Token[] = lexer.analyse(timerXPath);
+let tokens: Token[] = lexer.analyse(testXpath);
 
 
 if (generateTest) {
 	Debug.printMinSerializedTokens(testTitle, testXpath, tokens);
 } else if (timerOnly) {
-	console.log("XPath length: " + timerXPath.length);
+	console.log("XPath length: " + testXpath.length);
 	console.log("Token Count:" + tokens.length);
 } else {
 	console.log('---------------');
