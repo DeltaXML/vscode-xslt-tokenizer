@@ -3,10 +3,10 @@ import { XPathLexer, Token, TokenLevelState } from "./xpLexer";
 import { Debug } from "./diagnostics";
 
 // -------------
-let testXpathOrig: string =
+let testXpath: string =
 `let $abacus := 22 return
-	 92 + $abacus, count(node1/longElementName[@definitely = 'string']), `;
-let testXpath = testXpathOrig;
+     92 + $abacus, count(node1/longElementName[@definitely = 'string']), `;
+let timerXPath = testXpath.repeat(5000);
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = true;
@@ -17,7 +17,6 @@ generateTest = timerOnly? false: generateTest;
 let debugOn;
 if (timerOnly) {
 	debugOn = false;
-	testXpath = testXpath.repeat(5000);
 } else {
 	debugOn = !generateTest;
 }
@@ -26,13 +25,13 @@ let lexer: XPathLexer = new XPathLexer();
 lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
-let tokens: Token[] = lexer.analyse(testXpath);
+let tokens: Token[] = lexer.analyse(timerXPath);
 
 
 if (generateTest) {
 	Debug.printMinSerializedTokens(testTitle, testXpath, tokens);
 } else if (timerOnly) {
-	console.log("XPath length: " + testXpath.length);
+	console.log("XPath length: " + timerXPath.length);
 	console.log("Token Count:" + tokens.length);
 } else {
 	console.log('---------------');
