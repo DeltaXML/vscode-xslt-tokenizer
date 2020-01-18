@@ -52,21 +52,22 @@ export enum CharLevelState {
 
 export enum TokenLevelState {
     // where name does not correspond to semantic token name
-    // the comment shows the adopted name:
+    // the comment shows the adopted name
+    // where state is also used in XSLT, (xsl) is shown
     Attribute,    // struct
     Comment,
     Number,
     Unset,       // macro
     Operator,
-    Variable,
+    Variable,   // (xsl)
     Whitespace, // not used
     String,
     UriLiteral, // constant
     NodeType,   // parameter
     SimpleType, // parameterType
     Axis,       // label
-    Name,        // class
-    Declaration, // keyword
+    Name,        // (xsl) class
+    Declaration, // (xsl) keyword
     Function,
 }
 
