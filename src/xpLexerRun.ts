@@ -6,11 +6,10 @@ import { Debug } from "./diagnostics";
 let testXpathOrig: string =
 `let $abacus := 22 return
 	 92 + $abacus, count(node1/longElementName[@definitely = 'string']), `;
-let testXpath = `(:some
-thing:)`
+let testXpath = testXpathOrig;
 let testTitle = `declaration`;
 let generateTest = false;
-let timerOnly = false;
+let timerOnly = true;
 let flatten = true; // set true for vscode extension tokens
 // =============
 

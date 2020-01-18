@@ -99,19 +99,21 @@ tokenType: ${tokenType + childrenString}
         }
     }
 
-    public static printDebugOutput(cachedRealToken: Token|null, newValue: Token, lineNumber: number, startCharacter: number) {
-        if (newValue.value !== '') {
+    public static printDebugOutput(xpath: string, cachedRealToken: Token|null, newValue: Token, lineNumber: number, startCharacter: number, length: number) {
+        if (newValue.length !== 0) {
             let showWhitespace = true;
-            let cachedRealTokenString: string = cachedRealToken? this.getTokenDebugString(cachedRealToken): '';
-            let newT: string =  this.getTokenDebugString(newValue);
+            let cachedRealTokenString: string = cachedRealToken? this.getTokenDebugString(cachedRealToken, xpath): '';
+            let newT: string =  this.getTokenDebugString(newValue, xpath);
             let posString: string = lineNumber + ':' + startCharacter;
             let posPadding: string = this.padColumns(newT.length);
+            let lengthPadding: string = this.padSpecific(posString.length, 5);
+
 
             let cachedTpadding: string = this.padColumns(cachedRealTokenString.length);
             if (newValue.charType === CharLevelState.lWs && !(showWhitespace)) {
                 // show nothing
             } else {
-                console.log(cachedRealTokenString + cachedTpadding +  newT + posPadding + posString);
+                console.log(cachedRealTokenString + cachedTpadding +  newT + posPadding + posString + lengthPadding + length);
             }
         }
     }
@@ -131,15 +133,17 @@ tokenType: ${tokenType + childrenString}
         console.log("to:   " + Debug.charStateToString(nextLabelState)) + "[" + token + "]";
     }
 
-    public static getTokenDebugString(lrt: Token) {
+    public static getTokenDebugString(lrt: Token, xpath: string) {
         let prevType: string;
         let prevToken: string = '';
         if (lrt === null) {
             prevType = 'NULL';
         }
         else {
+            let lines: string[] = xpath.split('\n');
+            let line = lines[lrt.line];
             prevType = this.charStateToString(lrt.charType);
-            prevToken = lrt.value;
+            prevToken = line.substr(lrt.startCharacter, lrt.length);
         }
         let prevTypeLength = (prevType)? prevType.length : 0;
         let oldT: string = prevType + this.padParts(prevTypeLength) +  prevToken + '_';
@@ -169,6 +173,14 @@ tokenType: ${tokenType + childrenString}
     private static padParts(padLength: number): string {
         let padding = '';
         for (let i = 0;  i < 16 - padLength; i++) {
+            padding += ' ';
+        }
+        return padding;
+    }
+
+    private static padSpecific(padLength: number, width: number): string {
+        let padding = '';
+        for (let i = 0;  i < width - padLength; i++) {
             padding += ' ';
         }
         return padding;

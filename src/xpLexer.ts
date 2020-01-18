@@ -166,6 +166,7 @@ export class XPathLexer {
     private tokenCharNumber: number = 0;
     private wsNewLine = false;
     private deferWsNewLine= false;
+    private xpath= '';
 
     public static getTextmateTypeLegend(): string[] {
         let textmateTypes: string[] = [];
@@ -305,6 +306,7 @@ export class XPathLexer {
         this.tokenCharNumber = 0;
         this.wsNewLine = false;
         this.deferWsNewLine = false;
+        this.xpath = xpath;
 
         let currentState: [CharLevelState, number] = [CharLevelState.init, 0];
         let currentChar: string = '';
@@ -504,7 +506,7 @@ export class XPathLexer {
         let state = newToken.charType;
         let newTokenValue = newToken.value;
 
-        if (newTokenValue !== '') {
+        if (newToken.length !== 0) {
 
             newToken.line = this.lineNumber;
             newToken.startCharacter = this.tokenCharNumber;
@@ -526,7 +528,7 @@ export class XPathLexer {
                 this.tokenCharNumber = this.wsCharNumber;
                 this.wsNewLine = false;
             } else {
-                this.tokenCharNumber += newTokenValue.length;
+                this.tokenCharNumber += newToken.length;
             }
             this.wsCharNumber = 0;
 
@@ -561,7 +563,7 @@ export class XPathLexer {
             } 
 
             if (this.debug) {
-                Debug.printDebugOutput(cachedRealToken, newToken, newToken.line, newToken.startCharacter);
+                Debug.printDebugOutput(this.xpath, cachedRealToken, newToken, newToken.line, newToken.startCharacter, newToken.length);
             }
         }
     }
@@ -894,16 +896,19 @@ export class Utilities {
         return r;
     }
 
-    public static minimiseTokens2(tokens: Token[]): Token[] {
+    public static minimiseTokens2(xpath: string, tokens: Token[]): Token[] {
+        let lines = xpath.split('\n');
         let r: Token[] = new Array();
         for (let token of tokens) {
             if (token.charType !== CharLevelState.lWs) {
+                let line = lines[token.line];
+                token['value'] = line.substr(token.startCharacter, token.length);
                 delete token.charType;
                 delete token.context;
                 r.push(token);
             }
             if (token.children) {
-                token.children = this.minimiseTokens2(token.children);
+                token.children = this.minimiseTokens2(xpath, token.children);
             }
         }
         return r;
@@ -919,7 +924,7 @@ class BasicToken implements Token {
     tokenType: TokenLevelState;
 
     constructor(tokenChars: string[], type: CharLevelState) {
-        this.value = tokenChars.join('');
+        //this.value = tokenChars.join('');
         this.charType = type;
         this.length = tokenChars.length;
         switch (type) {
@@ -928,11 +933,11 @@ class BasicToken implements Token {
                 break;
             case CharLevelState.lName:
                 this.tokenType = TokenLevelState.Name;
-                //this.value = tokenChars.join('');
+                this.value = tokenChars.join('');
                 break;
             case CharLevelState.dSep:
             case CharLevelState.sep:
-                // this.value= tokenChars.join(''); // no break intentional
+                this.value= tokenChars.join(''); // no break intentional
             case CharLevelState.lB:
             case CharLevelState.lBr:
             case CharLevelState.lPr:
