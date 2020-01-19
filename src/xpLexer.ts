@@ -123,7 +123,7 @@ class Data {
                                 "else", "eq", "except",
                                 "function", "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
                                 "lt", "map", "mod", "ne", "of", "or", "return", "satisfies",
-                                "then", "to", "treat", "union"];
+                                "then", "to", "treat", "union", "&lt;", "&gt;"];
 
     public static rangeVars = ["every", "for", "let", "some", "return"];
     public static firstParts = [ "cast", "castable", "instance"];
@@ -434,6 +434,7 @@ export class XPathLexer {
                         case CharLevelState.rEnt:
                             tokenChars.push(currentChar);
                             let ent = tokenChars.join('');
+                            tokenChars.length = 0;
                             if (ent === '&quot;') {
                                 nextLabelState = CharLevelState.lDq;
                             } else if (ent === '&apos') {

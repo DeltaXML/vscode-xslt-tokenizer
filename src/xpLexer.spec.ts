@@ -1356,3 +1356,33 @@ startCharacter: 23
   expect (r).toEqual(ts);
 });
 
+
+        
+test(`entity-ref-lt`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = true;
+  l.entityRefOn = true;
+  let rx: Token[] = l.analyse(`$this &lt; $that`);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `$this`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 5,
+startCharacter: 0
+},
+{value: `&lt;`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 4,
+startCharacter: 6
+},
+{value: `$that`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 5,
+startCharacter: 11
+},]
+  expect (r).toEqual(ts);
+});
+
