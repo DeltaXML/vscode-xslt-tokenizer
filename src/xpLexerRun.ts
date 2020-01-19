@@ -4,9 +4,9 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`22&lt;22`;
+`$a eq &quot;n&quot;||$b`;
 let testTitle = `declaration`;
-let generateTest = true;
+let generateTest = false;
 let timerOnly = false;
 let flatten = true; // set true for vscode extension tokens
 // =============

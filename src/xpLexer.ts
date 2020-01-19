@@ -50,6 +50,10 @@ export enum CharLevelState {
     dSep2,   // 27 2nd char of double char separator
     lEnt,    // 28 left entity ref
     rEnt,    // 29 right entity ref
+    lSqEnt,  // 30 left single quote entity
+    rSqEnt,  // 31
+    lDqEnt,  // 32
+    rDqEnt,  // 33
 }
 
 export enum TokenLevelState {
@@ -434,14 +438,14 @@ export class XPathLexer {
                         case CharLevelState.rEnt:
                             tokenChars.push(currentChar);
                             let ent = tokenChars.join('');
-                            tokenChars.length = 0;
                             if (ent === '&quot;') {
-                                nextLabelState = CharLevelState.lDq;
+                                nextState = [CharLevelState.lDqEnt, 0];
                             } else if (ent === '&apos') {
-                                nextLabelState = CharLevelState.lSq;
+                                nextState = [CharLevelState.lSqEnt, 0];
                             } else {
                                 let entToken: Token = new BasicToken(ent, CharLevelState.lName);
                                 this.updateResult(nestedTokenStack, result, entToken);
+                                tokenChars.length = 0;
                             } 
                             break;   
                         case CharLevelState.rSq:
