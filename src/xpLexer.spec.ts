@@ -1385,4 +1385,31 @@ startCharacter: 11
 },]
   expect (r).toEqual(ts);
 });
+               
+test(`entity-ref-number-default`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = true;
+  let rx: Token[] = l.analyse(`22&lt;22`);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `22`,
+tokenType: TokenLevelState.Number,
+line: 0,
+length: 2,
+startCharacter: 0
+},
+{value: `&lt;`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 4,
+startCharacter: 2
+},
+{value: `22`,
+tokenType: TokenLevelState.Number,
+line: 0,
+length: 2,
+startCharacter: 6
+},]
+  expect (r).toEqual(ts);
+});
 

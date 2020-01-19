@@ -4,7 +4,7 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`$this &lt; $that`;
+`22&lt;22`;
 let testTitle = `declaration`;
 let generateTest = true;
 let timerOnly = false;
