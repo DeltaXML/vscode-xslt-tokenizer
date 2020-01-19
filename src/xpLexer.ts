@@ -48,6 +48,8 @@ export enum CharLevelState {
     lName,   // 25 node-name, function-name or operator like 'is' etc
     lAttr,   // 26 attribute-name
     dSep2,   // 27 2nd char of double char separator
+    lEnt,    // 28 left entity ref
+    rEnt,    // 29 right entity ref
 }
 
 export enum TokenLevelState {
@@ -69,6 +71,13 @@ export enum TokenLevelState {
     Name,        // (xsl) class
     Declaration, // (xsl) keyword
     Function,
+}
+
+export enum ExitCondition {
+    None,
+    SingleQuote,
+    DoubleQuote,
+    CurlyBrace
 }
 
 const tokenTypeLookup: [string, string][] = 
@@ -161,6 +170,8 @@ export class XPathLexer {
     public debug: boolean = false;
     public flatten: boolean = false;
     public timerOn: boolean = false;
+    public entityRefOn: boolean = true;
+    public exitCondition = ExitCondition.None;
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
@@ -288,7 +299,10 @@ export class XPathLexer {
                 } else {
                     rv = existing;
                 }
-                break; 
+                break;
+            case CharLevelState.lEnt:
+                rv = (char === ';')? CharLevelState.rEnt: existing;
+                break;
             default:
                 ({ rv, nesting } = this.testChar(existing, isFirstChar, char, nextChar, nesting));
         }
@@ -354,6 +368,7 @@ export class XPathLexer {
                         case CharLevelState.lNl:
                         case CharLevelState.lVar:
                         case CharLevelState.lName:
+                        case CharLevelState.lEnt:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             tokenChars.push(currentChar);
                             break;
@@ -416,7 +431,18 @@ export class XPathLexer {
                                 tokenChars = [];
                             }
                             break;
-                            
+                        case CharLevelState.rEnt:
+                            tokenChars.push(currentChar);
+                            let ent = tokenChars.join('');
+                            if (ent === '&quot;') {
+                                nextLabelState = CharLevelState.lDq;
+                            } else if (ent === '&apos') {
+                                nextLabelState = CharLevelState.lSq;
+                            } else {
+                                let entToken: Token = new BasicToken(ent, CharLevelState.lName);
+                                this.updateResult(nestedTokenStack, result, entToken);
+                            } 
+                            break;   
                         case CharLevelState.rSq:
                         case CharLevelState.rDq:
                         case CharLevelState.rUri:
@@ -791,6 +817,9 @@ export class XPathLexer {
             case '+':
             case '-':
                 rv = CharLevelState.sep;
+                break;
+            case '&':
+                rv = (this.entityRefOn)? CharLevelState.lEnt: existingState;
                 break;
             default:
                 let doubleChar = char + nextChar;

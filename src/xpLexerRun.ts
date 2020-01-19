@@ -4,12 +4,11 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`let $abacus := 22 return
-     92 + $abacus, count(node1/longElementName[@definitely = 'string']), `;
+`$this < $that`;
 let timerXPath = testXpath.repeat(5000);
 let testTitle = `declaration`;
-let generateTest = false;
-let timerOnly = true;
+let generateTest = true;
+let timerOnly = false;
 let flatten = true; // set true for vscode extension tokens
 // =============
 
