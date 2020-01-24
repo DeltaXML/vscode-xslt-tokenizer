@@ -17,17 +17,17 @@ const legend = (function () {
 })();
 
 export function activate(context: vscode.ExtensionContext) {
-	context.subscriptions.push(vscode.languages.registerSemanticTokensProvider({ language: 'xpath'}, new SemanticTokensProvider(), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new SemanticTokensProvider(), legend));
 }
 
-class SemanticTokensProvider implements vscode.SemanticTokensProvider {
+class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 	private xpLexer = new XPathLexer();
 
 	constructor() {
 		this.xpLexer.flatten = true;
 	}
 
-	async provideSemanticTokens(document: vscode.TextDocument, options: vscode.SemanticTokensRequestOptions, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
+	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		const allTokens = this.xpLexer.analyse(document.getText());
 		const builder = new vscode.SemanticTokensBuilder();
 		allTokens.forEach((token) => {

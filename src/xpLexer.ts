@@ -52,8 +52,10 @@ export enum CharLevelState {
     rEnt,    // 29 right entity ref
     lSqEnt,  // 30 left single quote entity
     rSqEnt,  // 31
-    lDqEnt,  // 32
-    rDqEnt,  // 33
+    rSqEnt2, // 32
+    lDqEnt,  // 33
+    rDqEnt,  // 34
+    rDqEnt2, // 35 
 }
 
 export enum TokenLevelState {
@@ -235,6 +237,33 @@ export class XPathLexer {
             case CharLevelState.exp:
                 rv = CharLevelState.lNl;
                 break;
+            case CharLevelState.rDqEnt:
+                rv = existing;
+                switch (nesting) {
+                    case 0:
+                    case 2:
+                        nesting++;
+                        break;
+                    case 1:
+                        if (char === 'u' && nextChar === 'o') {
+                            nesting++;
+                        } else {
+                            nesting = 0;
+                            rv = CharLevelState.lDq;
+                        }
+                        break;
+                    case 3:
+                        if (char === 't' && nextChar === ';') {
+                            rv = CharLevelState.rDq;
+                        } else {
+                            rv = CharLevelState.lDq;
+                        }
+                        nesting = 0;
+                        break;
+                }
+                nesting++;
+                rv = existing;
+                break;
             case CharLevelState.lWs:
                 if (char === ' ' || char === '\t') {
                     rv = existing;
@@ -264,6 +293,12 @@ export class XPathLexer {
                 break;
             case CharLevelState.lUri:
                 rv = (char === '}')? CharLevelState.rUri : existing;
+                break;
+            case CharLevelState.lSqEnt:
+                rv = (char === '&' && nextChar === 'a')? CharLevelState.rSqEnt: existing;               
+                break;
+            case CharLevelState.lDqEnt:
+                rv = (char === '&' && nextChar === 'q')? CharLevelState.rDqEnt: existing;               
                 break;
             case CharLevelState.lSq:
                 if (char === '\'' ) {
@@ -377,6 +412,10 @@ export class XPathLexer {
                             tokenChars.push(currentChar);
                             break;
                         case CharLevelState.exp:
+                        case CharLevelState.rSqEnt:
+                        case CharLevelState.rDqEnt:
+                        case CharLevelState.rSqEnt2:
+                        case CharLevelState.rDqEnt2:                                                
                             tokenChars.push(currentChar);
                             break;
                         case CharLevelState.dSep:
