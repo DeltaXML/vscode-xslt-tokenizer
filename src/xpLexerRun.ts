@@ -4,7 +4,7 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`$a eq &apos;\nthe quick brown\n&apos; and $b`;
+`$a eq &quot;\nthe quick brown\n&quot; and $b`;
 let testTitle = `declaration`;
 let generateTest = true;
 let timerOnly = false;
