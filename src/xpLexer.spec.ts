@@ -1412,4 +1412,43 @@ startCharacter: 6
 },]
   expect (r).toEqual(ts);
 });
+        
+test(`double quote char ref string`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = true;
+  let rx: Token[] = l.analyse(`$a eq &quot;n&quot; and $b`);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `$a`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 0
+},
+{value: `eq`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 2,
+startCharacter: 3
+},
+{value: `&quot;n&quot;`,
+tokenType: TokenLevelState.String,
+line: 0,
+length: 13,
+startCharacter: 6
+},
+{value: `and`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 3,
+startCharacter: 20
+},
+{value: `$b`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 24
+},]
+  expect (r).toEqual(ts);
+});
 

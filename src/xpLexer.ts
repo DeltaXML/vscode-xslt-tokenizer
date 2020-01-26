@@ -52,10 +52,8 @@ export enum CharLevelState {
     rEnt,    // 29 right entity ref
     lSqEnt,  // 30 left single quote entity
     rSqEnt,  // 31
-    rSqEnt2, // 32
     lDqEnt,  // 33
     rDqEnt,  // 34
-    rDqEnt2, // 35 
 }
 
 export enum TokenLevelState {
@@ -419,9 +417,7 @@ export class XPathLexer {
                             break;
                         case CharLevelState.exp:
                         case CharLevelState.rSqEnt:
-                        case CharLevelState.rDqEnt:
-                        case CharLevelState.rSqEnt2:
-                        case CharLevelState.rDqEnt2:                                                
+                        case CharLevelState.rDqEnt:                                               
                             tokenChars.push(currentChar);
                             break;
                         case CharLevelState.dSep:
