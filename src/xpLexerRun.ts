@@ -4,7 +4,7 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`$a eq &quot;n&quot;||$b`;
+`$a eq &quot;n&quot; and $b`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

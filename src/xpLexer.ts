@@ -253,7 +253,15 @@ export class XPathLexer {
                         }
                         break;
                     case 3:
-                        if (char === 't' && nextChar === ';') {
+                        if (char === 't') {
+                            nesting++;
+                        } else {
+                            rv = CharLevelState.lDq;
+                            nesting = 0;
+                        }
+                        break;
+                    case 4:
+                        if (char === ';') {
                             rv = CharLevelState.rDq;
                         } else {
                             rv = CharLevelState.lDq;
@@ -751,6 +759,8 @@ export class XPathLexer {
                     case CharLevelState.lVar:
                     case CharLevelState.lSq:
                     case CharLevelState.lDq:
+                    case CharLevelState.rDqEnt:
+                    case CharLevelState.rSqEnt:
                         Data.setAsOperatorIfKeyword(currentToken);
                         break;
                     case CharLevelState.sep:
@@ -1022,6 +1032,8 @@ class BasicToken implements Token {
                 break;
             case CharLevelState.lSq:
             case CharLevelState.lDq:
+            case CharLevelState.rDqEnt:
+            case CharLevelState.rSqEnt:
                 this.tokenType = TokenLevelState.String;
                 break;
             case CharLevelState.lUri:
