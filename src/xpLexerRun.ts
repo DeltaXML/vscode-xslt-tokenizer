@@ -4,9 +4,9 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`$a eq &quot;\nthe quick brown\n&quot; and $b`;
+`$a eq &quot;\nthe &lt; brown\n&quot; and $b`;
 let testTitle = `declaration`;
-let generateTest = true;
+let generateTest = false;
 let timerOnly = false;
 let flatten = true; // set true for vscode extension tokens
 // =============
