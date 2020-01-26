@@ -247,14 +247,14 @@ export class XPathLexer {
                             nesting++;
                         } else {
                             nesting = 0;
-                            rv = CharLevelState.lDq;
+                            rv = CharLevelState.lDqEnt;
                         }
                         break;
                     case 3:
                         if (char === 't') {
                             nesting++;
                         } else {
-                            rv = CharLevelState.lDq;
+                            rv = CharLevelState.lDqEnt;
                             nesting = 0;
                         }
                         break;
@@ -262,12 +262,45 @@ export class XPathLexer {
                         if (char === ';') {
                             rv = CharLevelState.rDq;
                         } else {
-                            rv = CharLevelState.lDq;
+                            rv = CharLevelState.lDqEnt;
                         }
                         nesting = 0;
                         break;
                 }
                 break;
+                case CharLevelState.rSqEnt:
+                    rv = existing;
+                    switch (nesting) {
+                        case 0:
+                        case 2:
+                            nesting++;
+                            break;
+                        case 1:
+                            if (char === 'p' && nextChar === 'o') {
+                                nesting++;
+                            } else {
+                                nesting = 0;
+                                rv = CharLevelState.lSqEnt;
+                            }
+                            break;
+                        case 3:
+                            if (char === 's') {
+                                nesting++;
+                            } else {
+                                rv = CharLevelState.lSqEnt;
+                                nesting = 0;
+                            }
+                            break;
+                        case 4:
+                            if (char === ';') {
+                                rv = CharLevelState.rSq;
+                            } else {
+                                rv = CharLevelState.lSqEnt;
+                            }
+                            nesting = 0;
+                            break;
+                    }
+                    break;
             case CharLevelState.lWs:
                 if (char === ' ' || char === '\t') {
                     rv = existing;
@@ -481,7 +514,7 @@ export class XPathLexer {
                             let ent = tokenChars.join('');
                             if (ent === '&quot;') {
                                 nextState = [CharLevelState.lDqEnt, 0];
-                            } else if (ent === '&apos') {
+                            } else if (ent === '&apos;') {
                                 nextState = [CharLevelState.lSqEnt, 0];
                             } else {
                                 let entToken: Token = new BasicToken(ent, CharLevelState.lName);
