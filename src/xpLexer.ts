@@ -430,7 +430,8 @@ export class XPathLexer {
                     || (currentLabelState === CharLevelState.exp && nextLabelState == CharLevelState.lNl)) {
                     // do nothing if state has not changed
                     // or we're within a number with an exponent
-                    if (currentChar == '\n' && (currentLabelState === CharLevelState.lSq || currentLabelState === CharLevelState.lDq || currentLabelState === CharLevelState.lC)) {
+                    if (currentChar == '\n' && (currentLabelState === CharLevelState.lSq || currentLabelState === CharLevelState.lDq || 
+                        currentLabelState === CharLevelState.lC || currentLabelState === CharLevelState.lSqEnt || currentLabelState === CharLevelState.lDqEnt)) {
                         // split multi-line strings or comments - don't include newline char
                         this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                         this.lineNumber++;
