@@ -261,8 +261,6 @@ export class XPathLexer {
                         nesting = 0;
                         break;
                 }
-                nesting++;
-                rv = existing;
                 break;
             case CharLevelState.lWs:
                 if (char === ' ' || char === '\t') {
