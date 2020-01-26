@@ -1062,6 +1062,8 @@ class BasicToken implements Token {
                 break;
             case CharLevelState.lSq:
             case CharLevelState.lDq:
+            case CharLevelState.lSqEnt:
+            case CharLevelState.lDqEnt:
             case CharLevelState.rDqEnt:
             case CharLevelState.rSqEnt:
                 this.tokenType = TokenLevelState.String;

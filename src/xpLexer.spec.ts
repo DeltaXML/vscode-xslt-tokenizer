@@ -1490,4 +1490,57 @@ startCharacter: 24
 },]
   expect (r).toEqual(ts);
 });
+        
+test(`multiline char ref single quote test`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = true;
+  let rx: Token[] = l.analyse(`$a eq &apos;
+the quick brown
+&apos; and $b`);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `$a`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 0
+},
+{value: `eq`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 2,
+startCharacter: 3
+},
+{value: `&apos;`,
+tokenType: TokenLevelState.String,
+line: 0,
+length: 6,
+startCharacter: 6
+},
+{value: `the quick brown`,
+tokenType: TokenLevelState.String,
+line: 1,
+length: 15,
+startCharacter: 0
+},
+{value: `&apos;`,
+tokenType: TokenLevelState.String,
+line: 2,
+length: 6,
+startCharacter: 0
+},
+{value: `and`,
+tokenType: TokenLevelState.Operator,
+line: 2,
+length: 3,
+startCharacter: 7
+},
+{value: `$b`,
+tokenType: TokenLevelState.Variable,
+line: 2,
+length: 2,
+startCharacter: 11
+},]
+  expect (r).toEqual(ts);
+});
 
