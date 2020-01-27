@@ -175,7 +175,7 @@ export class XPathLexer {
     public flatten: boolean = false;
     public timerOn: boolean = false;
     public entityRefOn: boolean = true;
-    public exitCondition = ExitCondition.None;
+    private exitCondition = ExitCondition.None;
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
@@ -385,7 +385,9 @@ export class XPathLexer {
         return [rv, nesting];
     }
 
-    public analyse(xpath: string): Token[] {
+    
+
+    public analyse(xpath: string, exitCondition: ExitCondition|null): Token[] {
 
         if (this.timerOn) {
             console.time('xplexer.analyse');
@@ -402,19 +404,46 @@ export class XPathLexer {
         let tokenChars: string[] = [];
         let result: Token[] = [];
         let nestedTokenStack: Token[] = [];
+        let deferExitTest = false;
         if (this.debug) {
             console.log("xpath: " + xpath);
             Debug.debugHeading();
         }
     
         for (let i = 0; i < xpath.length + 1; i++) {
+            let nextChar: string = xpath.charAt(i);
+
             // deconstruct state:
             let [currentLabelState, nestingState] = currentState;
-            let nextChar: string = xpath.charAt(i);
             let nextState: [CharLevelState, number];
             let isFirstTokenChar = tokenChars.length === 0;
     
             if (currentChar) {
+                let exitAnalysis = false;
+                switch (exitCondition) {
+                    case ExitCondition.None:
+                        exitAnalysis = false;
+                        break;
+                    case ExitCondition.CurlyBrace:
+                        if (deferExitTest) {
+                            deferExitTest = false;
+                        } else {
+                            exitAnalysis = currentChar === "}" && nextChar !== "}";
+                            deferExitTest = true;
+                        }
+                        break;
+                    case ExitCondition.DoubleQuote:
+                        exitAnalysis = currentChar === "\"";
+                        break;
+                    case ExitCondition.SingleQuote:
+                        exitAnalysis = currentChar === "'";
+                        break;   
+                }
+                if (exitAnalysis) {
+                    this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                    return result;
+                }
+
                 nextState = this.calcNewState(
                     isFirstTokenChar,
                     nestingState,

@@ -1,5 +1,5 @@
 // tslint:disable
-import { XPathLexer, Token, TokenLight, TokenLevelState, Utilities } from './xpLexer';
+import { XPathLexer, Token, TokenLight, TokenLevelState, Utilities, ExitCondition } from './xpLexer';
 
 test('items in returned legend must equal count of TokenLevelState enum', () => {
   let expectedTokenTypeCount = Object.keys(TokenLevelState).length / 2;
@@ -9,7 +9,7 @@ test('items in returned legend must equal count of TokenLevelState enum', () => 
 
 test(`numeric operator`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`1 + 2`);
+  let rx: Token[] = l.analyse(`1 + 2`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `1`,
@@ -26,7 +26,7 @@ tokenType: TokenLevelState.Number
        
 test(`stringLiteral escaping`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`'fir''st' || "seco""nd"`);
+  let rx: Token[] = l.analyse(`'fir''st' || "seco""nd"`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `'fir''st'`,
@@ -43,7 +43,7 @@ tokenType: TokenLevelState.String
        
 test(`number token`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`255.7e-2+union`);
+  let rx: Token[] = l.analyse(`255.7e-2+union`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `255.7e-2`,
@@ -60,7 +60,7 @@ tokenType: TokenLevelState.Name
 
 test(`parenthesis sum`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`255+($union+28)`);
+  let rx: Token[] = l.analyse(`255+($union+28)`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `255`,
@@ -92,7 +92,7 @@ tokenType: TokenLevelState.Operator
         
 test(`resolve ambiguous keywords`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`union and union and union div $var, div/and/union and .. and union`);
+  let rx: Token[] = l.analyse(`union and union and union div $var, div/and/union and .. and union`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `union`,
@@ -153,7 +153,7 @@ tokenType: TokenLevelState.Name
         
 test(`literal uri`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`$a eq Q{http://example.com}div`);
+  let rx: Token[] = l.analyse(`$a eq Q{http://example.com}div`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$a`,
@@ -173,7 +173,7 @@ tokenType: TokenLevelState.Name
        
 test(`attribute castable as simple type`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`@myatt castable as xs:integer and $b`);
+  let rx: Token[] = l.analyse(`@myatt castable as xs:integer and $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `@myatt`,
@@ -201,7 +201,7 @@ tokenType: TokenLevelState.Variable
         
 test(`axis and nodetype`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`ancestor::node() union parent::table/@name`);
+  let rx: Token[] = l.analyse(`ancestor::node() union parent::table/@name`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `ancestor`,
@@ -241,7 +241,7 @@ tokenType: TokenLevelState.Attribute
         
 test(`axis and attribute shorthand`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`ancestor::node() union parent::table/@name`);
+  let rx: Token[] = l.analyse(`ancestor::node() union parent::table/@name`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `ancestor`,
@@ -279,7 +279,7 @@ tokenType: TokenLevelState.Attribute
         
 test(`function call`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`count($a)`);
+  let rx: Token[] = l.analyse(`count($a)`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `count`,
@@ -300,7 +300,7 @@ tokenType: TokenLevelState.Operator
 
 test(`* wildcard 1`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`* union $b`);
+  let rx: Token[] = l.analyse(`* union $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `*`,
@@ -317,7 +317,7 @@ tokenType: TokenLevelState.Variable
         
 test(`* wildcard 2`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`pre:* union $b`);
+  let rx: Token[] = l.analyse(`pre:* union $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `pre`,
@@ -337,7 +337,7 @@ tokenType: TokenLevelState.Variable
        
 test(`* wildcard 3`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`/*:name div $b`);
+  let rx: Token[] = l.analyse(`/*:name div $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `/`,
@@ -360,7 +360,7 @@ tokenType: TokenLevelState.Variable
        
 test(`* wildcard 4`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`Q{http://example.com}* eq $b`);
+  let rx: Token[] = l.analyse(`Q{http://example.com}* eq $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `Q{http://example.com}`,
@@ -380,7 +380,7 @@ tokenType: TokenLevelState.Variable
 
 test(`* multiplication`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`$var * 8`);
+  let rx: Token[] = l.analyse(`$var * 8`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$var`,
@@ -397,7 +397,7 @@ tokenType: TokenLevelState.Number
        
 test(`array curly brace`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`array {1}`);
+  let rx: Token[] = l.analyse(`array {1}`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `array`,
@@ -418,7 +418,7 @@ tokenType: TokenLevelState.Operator
        
 test(`array square brace`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`array [1]`);
+  let rx: Token[] = l.analyse(`array [1]`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `array`,
@@ -439,7 +439,7 @@ tokenType: TokenLevelState.Operator
         
 test(`declaration`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`map {25: first}`);
+  let rx: Token[] = l.analyse(`map {25: first}`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `map`,
@@ -466,7 +466,7 @@ tokenType: TokenLevelState.Operator
         
 test(`valid names`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`$pre:var22.5a || pre:name22.5b`);
+  let rx: Token[] = l.analyse(`$pre:var22.5a || pre:name22.5b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$pre:var22.5a`,
@@ -483,7 +483,7 @@ tokenType: TokenLevelState.Name
        
 test(`valid names 2`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`$_pre:var22.5a || _pre:name22.5b`);
+  let rx: Token[] = l.analyse(`$_pre:var22.5a || _pre:name22.5b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$_pre:var22.5a`,
@@ -500,7 +500,7 @@ tokenType: TokenLevelState.Name
                
 test(`if then else`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`if ($a eq 5) then $a else union`);
+  let rx: Token[] = l.analyse(`if ($a eq 5) then $a else union`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
@@ -540,7 +540,7 @@ tokenType: TokenLevelState.Name
        
 test(`numeric literals with dot chars`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`.55 + 1.`);
+  let rx: Token[] = l.analyse(`.55 + 1.`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `.55`,
@@ -557,7 +557,7 @@ tokenType: TokenLevelState.Number
 
 test(`map type`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`$M instance of map(xs:integer, xs:string)`);
+  let rx: Token[] = l.analyse(`$M instance of map(xs:integer, xs:string)`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$M`,
@@ -593,7 +593,7 @@ tokenType: TokenLevelState.Operator
        
 test(`if else if else`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`if (level1) then 1 else if (level2) then 2 else 0`);
+  let rx: Token[] = l.analyse(`if (level1) then 1 else if (level2) then 2 else 0`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
@@ -650,7 +650,7 @@ tokenType: TokenLevelState.Number
         
 test(`if if else else`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`if (level1) then if (level1.1) then 1.1 else 1.0 else 0`);
+  let rx: Token[] = l.analyse(`if (level1) then if (level1.1) then 1.1 else 1.0 else 0`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
@@ -707,7 +707,7 @@ tokenType: TokenLevelState.Number
         
 test(`comma inside if expr - error`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`if ($a) then 1,2 else 1`);
+  let rx: Token[] = l.analyse(`if ($a) then 1,2 else 1`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
@@ -749,7 +749,7 @@ tokenType: TokenLevelState.Number
         
 test(`simple let expression`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`let $a := 2 return $a`);
+  let rx: Token[] = l.analyse(`let $a := 2 return $a`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `let`,
@@ -777,7 +777,7 @@ tokenType: TokenLevelState.Variable
        
 test(`nested let expression`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`let $a := 2, $b := 3 return ($a, $b)`);
+  let rx: Token[] = l.analyse(`let $a := 2, $b := 3 return ($a, $b)`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `let`,
@@ -831,7 +831,7 @@ tokenType: TokenLevelState.Operator
               
 test(`nested for loop`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`for $a in 1 to 5, $b in 1 to 5 return concat($a, '.', $b)`);
+  let rx: Token[] = l.analyse(`for $a in 1 to 5, $b in 1 to 5 return concat($a, '.', $b)`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `for`,
@@ -907,7 +907,7 @@ tokenType: TokenLevelState.Operator
        
 test(`nested let expression with sequence concatanation`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`let $a := 1, $b := 2 return $a + 2, union`);
+  let rx: Token[] = l.analyse(`let $a := 1, $b := 2 return $a + 2, union`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `let`,
@@ -960,7 +960,7 @@ tokenType: TokenLevelState.Name
         
 test(`everyExpr with sequence concatanation`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`every $a in * satisfies $a > 0, $b`);
+  let rx: Token[] = l.analyse(`every $a in * satisfies $a > 0, $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `every`,
@@ -1000,7 +1000,7 @@ tokenType: TokenLevelState.Variable
        
 test(`comment included in a sequence`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`$a, (:comment:), $b`);
+  let rx: Token[] = l.analyse(`$a, (:comment:), $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$a`,
@@ -1026,7 +1026,7 @@ test(`multiline string literal`, () => {
   let rx: Token[] = l.analyse(`"one
 
 two
-three" || "new"`);
+three" || "new"`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `"one`,
@@ -1054,7 +1054,7 @@ test(`multi-line if then else`, () => {
   let rx: Token[] = l.analyse(`if ($a) then
 $b (:some
 thing:) 
-else $c`);
+else $c`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `if`,
@@ -1125,7 +1125,7 @@ startCharacter: 5
 test(`multi-line comment`, () => {
   let l: XPathLexer = new XPathLexer();
   let rx: Token[] = l.analyse(`(:comment
-split:)`);
+split:)`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `(:comment`,
@@ -1147,7 +1147,7 @@ test(`multi-line string`, () => {
   let l: XPathLexer = new XPathLexer();
   let rx: Token[] = l.analyse(`'multi-line
 string' eq 
-$a`);
+$a`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `'multi-line`,
@@ -1179,7 +1179,7 @@ startCharacter: 0
         
 test(`newline whitespace after comma`, () => {
 let l: XPathLexer = new XPathLexer();
-let rx: Token[] = l.analyse("author,\n\ttitle");
+let rx: Token[] = l.analyse(`author,\n\ttitle`,  ExitCondition.None);
 let r: Token[] = Utilities.minimiseTokens2(rx);
 let ts: TokenLight[] = [
 {value: `author`,
@@ -1205,7 +1205,7 @@ startCharacter: 1
        
 test(`multiline map`, () => {
   let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`map {\n\tabc: 2\n\tdef: 23\n\thij: 24\n}`);
+  let rx: Token[] = l.analyse(`map {\n\tabc: 2\n\tdef: 23\n\thij: 24\n}`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `map`,
@@ -1269,7 +1269,7 @@ startCharacter: 0
 test(`flatten token structure`, () => {
   let l: XPathLexer = new XPathLexer();
   l.flatten = true;
-  let rx: Token[] = l.analyse(`count($a)`);
+  let rx: Token[] = l.analyse(`count($a)`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `count`,
@@ -1302,7 +1302,7 @@ startCharacter: 8
 test(`return declaration preceding number`, () => {
   let l: XPathLexer = new XPathLexer();
   l.flatten = true;
-  let rx: Token[] = l.analyse(`let $a := 2 return 9 + $a`);
+  let rx: Token[] = l.analyse(`let $a := 2 return 9 + $a`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `let`,
@@ -1362,7 +1362,7 @@ test(`entity-ref-lt`, () => {
   let l: XPathLexer = new XPathLexer();
   l.flatten = true;
   l.entityRefOn = true;
-  let rx: Token[] = l.analyse(`$this &lt; $that`);
+  let rx: Token[] = l.analyse(`$this &lt; $that`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$this`,
@@ -1389,7 +1389,7 @@ startCharacter: 11
 test(`entity-ref-number-default`, () => {
   let l: XPathLexer = new XPathLexer();
   l.flatten = true;
-  let rx: Token[] = l.analyse(`22&lt;22`);
+  let rx: Token[] = l.analyse(`22&lt;22`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `22`,
@@ -1416,7 +1416,7 @@ startCharacter: 6
 test(`double quote char ref string`, () => {
   let l: XPathLexer = new XPathLexer();
   l.flatten = true;
-  let rx: Token[] = l.analyse(`$a eq &quot;n&quot; and $b`);
+  let rx: Token[] = l.analyse(`$a eq &quot;n&quot; and $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$a`,
@@ -1455,7 +1455,7 @@ startCharacter: 24
 test(`double quote char ref string`, () => {
   let l: XPathLexer = new XPathLexer();
   l.flatten = true;
-  let rx: Token[] = l.analyse(`$a eq &apos;n&apos; and $b`);
+  let rx: Token[] = l.analyse(`$a eq &apos;n&apos; and $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$a`,
@@ -1496,7 +1496,7 @@ test(`multiline char ref single quote test`, () => {
   l.flatten = true;
   let rx: Token[] = l.analyse(`$a eq &apos;
 the quick brown
-&apos; and $b`);
+&apos; and $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$a`,
@@ -1549,7 +1549,7 @@ test(`multiline char ref double quote test`, () => {
   l.flatten = true;
   let rx: Token[] = l.analyse(`$a eq &quot;
 the quick brown
-&quot; and $b`);
+&quot; and $b`,  ExitCondition.None);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$a`,

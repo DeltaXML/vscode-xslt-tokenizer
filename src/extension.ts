@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import {Token, XPathLexer} from "./xpLexer";
+import {Token, XPathLexer, ExitCondition} from "./xpLexer";
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
@@ -28,7 +28,7 @@ class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 	}
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
-		const allTokens = this.xpLexer.analyse(document.getText());
+		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None);
 		const builder = new vscode.SemanticTokensBuilder();
 		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);

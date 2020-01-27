@@ -1,10 +1,10 @@
 // tslint:disable
-import { XPathLexer, Token, TokenLevelState } from "./xpLexer";
+import { XPathLexer, Token, TokenLevelState, ExitCondition } from "./xpLexer";
 import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`$a eq &quot;\nthe &lt; brown\n&quot; and $b`;
+`$a}},b}><anything`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
@@ -24,7 +24,7 @@ let lexer: XPathLexer = new XPathLexer();
 lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
-let tokens: Token[] = lexer.analyse(testXpath);
+let tokens: Token[] = lexer.analyse(testXpath, ExitCondition.CurlyBrace);
 
 
 if (generateTest) {
