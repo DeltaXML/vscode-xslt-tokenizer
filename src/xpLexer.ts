@@ -1,4 +1,5 @@
 import { Debug } from "./diagnostics";
+import { Position } from "vscode";
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
@@ -82,6 +83,11 @@ export enum ExitCondition {
     SingleQuote,
     DoubleQuote,
     CurlyBrace
+}
+
+export interface LexPosition {
+    line: number,
+    startCharacter: number
 }
 
 const tokenTypeLookup: [string, string][] = 
@@ -387,7 +393,7 @@ export class XPathLexer {
 
     
 
-    public analyse(xpath: string, exitCondition: ExitCondition|null): Token[] {
+    public analyse(xpath: string, exitCondition: ExitCondition|null, position: LexPosition): Token[] {
 
         if (this.timerOn) {
             console.time('xplexer.analyse');
@@ -405,6 +411,7 @@ export class XPathLexer {
         let result: Token[] = [];
         let nestedTokenStack: Token[] = [];
         let deferExitTest = false;
+
         if (this.debug) {
             console.log("xpath: " + xpath);
             Debug.debugHeading();

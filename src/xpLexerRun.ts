@@ -1,6 +1,7 @@
 // tslint:disable
-import { XPathLexer, Token, TokenLevelState, ExitCondition } from "./xpLexer";
+import { XPathLexer, Token, TokenLevelState, ExitCondition, LexPosition } from "./xpLexer";
 import { Debug } from "./diagnostics";
+import { Position } from "vscode";
 
 // -------------
 let testXpath: string =
@@ -24,7 +25,8 @@ let lexer: XPathLexer = new XPathLexer();
 lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
-let tokens: Token[] = lexer.analyse(testXpath, ExitCondition.CurlyBrace);
+let pos: LexPosition = {line: 0, startCharacter: 0};
+let tokens: Token[] = lexer.analyse(testXpath, ExitCondition.CurlyBrace, pos);
 
 
 if (generateTest) {
