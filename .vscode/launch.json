@@ -43,6 +43,19 @@
             "outFiles": [
                 "${workspaceFolder}/out/test/**/*.js"
             ]
+		},
+		{
+            "type": "node",
+            "request": "launch",
+            "name": "Run XSL Diagnostics Tool",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/out/xslLexerRun.js",
+            "preLaunchTask": "tsc: build - tsconfig.json",
+            "outFiles": [
+                "${workspaceFolder}/out/test/**/*.js"
+            ]
         }
 	]
 }

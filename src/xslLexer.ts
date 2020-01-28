@@ -113,7 +113,7 @@ export class XslLexer {
         return rc;
     }
 
-    public analyse(xsl: string): Token[]|XslToken {
+    public analyse(xsl: string): Token[]|XslToken[] {
         if (this.timerOn) {
             console.time('xslLexer.analyse');
         }
