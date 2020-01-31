@@ -1011,18 +1011,6 @@ export interface Token {
     error?: boolean;
 }
 
-export interface TokenLight {
-    line?: number;
-    startCharacter?: number;
-    length?: number;
-    value: string;
-    charType?: CharLevelState;
-    tokenType: TokenLevelState;
-    context?: TokenLight|null;
-    children?: TokenLight[];
-    error?: boolean;
-}
-
 export class Utilities {
 
     public static minimiseTokens(tokens: Token[]): Token[] {

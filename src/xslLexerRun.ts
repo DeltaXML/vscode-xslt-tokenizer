@@ -51,7 +51,7 @@ function printTokenValues(xpathExpr: string) {
 	console.log('line count: ' + lines.length);
 	console.log('token count: ' + tokens.length);
 	for (let i = 0; i < tokens.length; i++) {
-		let t: Token = tokens[i];
+		let t: Token|XslToken = tokens[i];
 		if (t.tokenType.valueOf() !== TokenLevelState.Whitespace.valueOf()) {
 			let line = lines[t.line];
 			let sc = t.startCharacter ? t.startCharacter : 0;
