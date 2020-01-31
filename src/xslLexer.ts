@@ -27,7 +27,8 @@ export enum XMLCharState {
     lAb,  // left angle-bracket
 }
 
-export interface XslToken {
+
+export interface XslToken  {
     line: number;
     startCharacter: number;
     length: number;

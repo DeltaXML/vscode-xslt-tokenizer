@@ -999,11 +999,18 @@ export class XPathLexer {
     }
 }
 
-export interface Token {
+export interface BaseToken {
     line: number;
     startCharacter: number;
     length: number;
     value: string;
+    charType?: number;
+    tokenType: number;
+    context?: BaseToken|null;
+    error?: boolean;
+}
+
+export interface Token extends BaseToken {
     charType?: CharLevelState;
     tokenType: TokenLevelState;
     context?: Token|null;
