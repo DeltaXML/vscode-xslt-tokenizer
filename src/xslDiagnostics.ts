@@ -1,9 +1,9 @@
-import {CharLevelState, TokenLevelState, XPathLexer} from "./xpLexer";
+import {CharLevelState, TokenLevelState, Token} from "./xpLexer";
 import {XslLexer, XslToken, XMLCharState } from "./xslLexer";
 
 export class XslDebug {
 
-    public static printResultTokens(tokens: XslToken[]) {
+    public static printResultTokens(tokens: XslToken[]|Token[]) {
         tokens.forEach(XslDebug.showTokens);
     }
 
@@ -43,7 +43,7 @@ tokenType: ${tokenType + childrenString}
     }
 
 
-    public static printMinSerializedTokens(testTitle: string, testXpath: string, tokens: XslToken[]) {
+    public static printMinSerializedTokens(testTitle: string, testXpath: string, tokens: XslToken[]|Token[]) {
         let preamble: string = `
         
         test(\`${testTitle}\`, () => {
@@ -55,13 +55,18 @@ tokenType: ${tokenType + childrenString}
         let postamble: string = `
         expect (r).toEqual(ts);
     });`
+
         let r = tokens.reduce(this.minSerializeTokens, '');
         let result = '[' + r + ']';
 
         console.log(preamble + result + postamble);
     }
 
-    private static minSerializeTokens = function(accumulator: any, token: XslToken|null): any {
+    public static isXslToken(token: XslToken|Token) {
+        return (<Token>token).charType !== undefined;
+    }
+
+    private static minSerializeTokens = function(accumulator: any, token: XslToken|Token|null): any {
         if (!token || token.charType === XMLCharState.lWs) {
             return accumulator;
         } else {
@@ -81,10 +86,10 @@ tokenType: ${tokenType + childrenString}
     }
 
 
-    private static showTokens = function(token: XslToken) {
+    private static showTokens = function(token: XslToken|Token) {
         let err = (token.error)? ' error' : '';
         let tokenValue = token.value + '';
-        let charState: string = XslDebug.charStateToString(token.charType);
+        let charState: string = (token.charType)? XslDebug.charStateToString(token.charType): "XSLT";
         console.log(XslDebug.padString(tokenValue) + XslDebug.padString(charState) + XslDebug.tokenStateToString(token.tokenType) + err);
     }
 
