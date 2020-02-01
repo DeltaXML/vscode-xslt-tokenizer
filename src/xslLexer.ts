@@ -1,4 +1,4 @@
-import { Token, TokenLevelState} from "./xpLexer";
+import { BaseToken, TokenLevelState} from "./xpLexer";
 
 export enum XMLCharState {
     init,// 0 initial state
@@ -27,7 +27,7 @@ export enum XMLCharState {
     lAb,  // left angle-bracket
 }
 
-export interface XslToken {
+export interface XslToken extends BaseToken {
     line: number;
     startCharacter: number;
     length: number;
