@@ -113,7 +113,7 @@ export class XslLexer {
         return rc;
     }
 
-    public analyse(xsl: string): Token[]|XslToken[] {
+    public analyse(xsl: string): BaseToken[] {
         if (this.timerOn) {
             console.time('xslLexer.analyse');
         }
@@ -129,7 +129,7 @@ export class XslLexer {
         let currentState: XMLCharState = XMLCharState.init;
         let currentChar: string = '';
         let tokenChars: string[] = [];
-        let result: Token[]|XslToken[] = [];
+        let result: BaseToken[] = [];
         let nestedTokenStack: XslToken[] = []; 
         
         if (this.debug) {
@@ -188,5 +188,5 @@ export class XslLexer {
 export interface InnerLexerResult {
     charCount: number;
     lineNumber: number;
-    tokens: Token[];       
+    tokens: BaseToken[];       
 }
