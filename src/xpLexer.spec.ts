@@ -518,7 +518,7 @@ test(`if then else`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },
 {value: `(`,
 tokenType: TokenLevelState.Operator,
@@ -537,13 +537,13 @@ tokenType: TokenLevelState.Number
 tokenType: TokenLevelState.Operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `$a`,
 tokenType: TokenLevelState.Variable
 },
 {value: `else`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },]
 },
 {value: `union`,
@@ -611,7 +611,7 @@ test(`if else if else`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },
 {value: `(`,
 tokenType: TokenLevelState.Operator,
@@ -624,17 +624,17 @@ tokenType: TokenLevelState.Name
 tokenType: TokenLevelState.Operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `1`,
 tokenType: TokenLevelState.Number
 },
 {value: `else`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },]
 },
 {value: `if`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },
 {value: `(`,
 tokenType: TokenLevelState.Operator,
@@ -647,13 +647,13 @@ tokenType: TokenLevelState.Name
 tokenType: TokenLevelState.Operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `2`,
 tokenType: TokenLevelState.Number
 },
 {value: `else`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },]
 },
 {value: `0`,
@@ -668,7 +668,7 @@ test(`if if else else`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },
 {value: `(`,
 tokenType: TokenLevelState.Operator,
@@ -681,10 +681,10 @@ tokenType: TokenLevelState.Name
 tokenType: TokenLevelState.Operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `if`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },
 {value: `(`,
 tokenType: TokenLevelState.Operator,
@@ -697,20 +697,20 @@ tokenType: TokenLevelState.Name
 tokenType: TokenLevelState.Operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `1.1`,
 tokenType: TokenLevelState.Number
 },
 {value: `else`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },]
 },
 {value: `1.0`,
 tokenType: TokenLevelState.Number
 },
 {value: `else`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },]
 },
 {value: `0`,
@@ -725,7 +725,7 @@ test(`comma inside if expr - error`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },
 {value: `(`,
 tokenType: TokenLevelState.Operator,
@@ -738,7 +738,7 @@ tokenType: TokenLevelState.Variable
 tokenType: TokenLevelState.Operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `1`,
 tokenType: TokenLevelState.Number
@@ -751,7 +751,7 @@ tokenType: TokenLevelState.Operator
 tokenType: TokenLevelState.Number
 },
 {value: `else`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.Declaration
 },]
 },
 {value: `1`,
@@ -1072,7 +1072,7 @@ else $c`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 line: 0,
 length: 2,
 startCharacter: 0
@@ -1097,7 +1097,7 @@ length: 1,
 startCharacter: 6
 },
 {value: `then`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `$b`,
 tokenType: TokenLevelState.Variable,
@@ -1118,7 +1118,7 @@ length: 7,
 startCharacter: 0
 },
 {value: `else`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 line: 3,
 length: 4,
 startCharacter: 0

@@ -1,4 +1,4 @@
-(: attribute  :) element/@attribute,
+(: attribute  :) element/@attribute[. eq 'test'],
 (: number     :) 125.87e-5,
 (: operator   :) a div b,
 (: variable   :) $ms:var.start,
@@ -12,5 +12,11 @@
 (: declaration:) let $a := book, $b := magazine return ($a,$b),
 (: function   :) count($a),
 (: map        :) map {'a': 'b'},
-(: array      :) array [1, 2]
+(: array      :) array [1, 2],
+if ($a) then $b else $c,
+every $a in union/elements[node()] satisfies $a eq 5,
+some $b in $test satisfies $b eq books/@id!xs:integer(),
+$a union $b = $c,
+let $val := count($bst), $num := $spt return $val * $num,
+$c instance of xs:string, union,div,5 div 10
 (: comment (:nested:) :)
