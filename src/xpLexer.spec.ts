@@ -855,7 +855,7 @@ tokenType: TokenLevelState.Declaration
 tokenType: TokenLevelState.Variable
 },
 {value: `in`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `1`,
 tokenType: TokenLevelState.Number
@@ -873,7 +873,7 @@ tokenType: TokenLevelState.Operator
 tokenType: TokenLevelState.Variable
 },
 {value: `in`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `1`,
 tokenType: TokenLevelState.Number
@@ -984,7 +984,7 @@ tokenType: TokenLevelState.Declaration
 tokenType: TokenLevelState.Variable
 },
 {value: `in`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `*`,
 tokenType: TokenLevelState.NodeType

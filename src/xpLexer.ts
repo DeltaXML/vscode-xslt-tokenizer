@@ -143,7 +143,7 @@ class Data {
     public static nonFunctionTypes = ["map", "array", "function"];
 
     public static setAsOperatorIfKeyword(token: Token) {
-        if (token.value === 'return' || token.value === 'satisfies') {
+        if (token.value === 'return' || token.value === 'satisfies' || token.value === 'in') {
             token.tokenType = TokenLevelState.Declaration// TODO: this should be set to Declaration but causes test failures
         } else if (Data.keywords.indexOf(token.value) > -1) {
             token.tokenType = TokenLevelState.Operator;
@@ -859,6 +859,7 @@ export class XPathLexer {
                 if (currentToken.value === '*' && 
                 (
                     XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.Operator) ||
+                    XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.Declaration) || 
                     XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.UriLiteral)
                 )) {
                     currentToken.charType = CharLevelState.lName;

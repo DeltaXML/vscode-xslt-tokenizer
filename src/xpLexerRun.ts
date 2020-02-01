@@ -5,11 +5,11 @@ import { Position } from "vscode";
 
 // -------------
 let testXpath: string =
-`$a}},b}><anything`;
+`every $a in * satisfies $a > 0, $b`;
 let testTitle = `declaration`;
-let generateTest = false;
+let generateTest = true;
 let timerOnly = false;
-let flatten = true; // set true for vscode extension tokens
+let flatten = false; // set true for vscode extension tokens
 // =============
 
 generateTest = timerOnly? false: generateTest;
