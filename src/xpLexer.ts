@@ -95,14 +95,14 @@ const tokenTypeLookup: [string, string][] =
     ['Attribute', 'struct'],
     ['Comment', 'comment'],
     ['Number', 'number'],
-    ['Unset', 'macro'], // not used
+    ['Unset', 'parameterType'], // not used
     ['Operator', 'operator'],
     ['Variable', 'variable'],
     ['Whitespace', 'whitespace'], // not used
     ['String','string'],
     ['UriLiteral', 'constant'],
     ['NodeType', 'parameter'],
-    ['SimpleType', 'parameterType'],
+    ['SimpleType', 'parameter'], // duplicate - was parameterType
     ['Axis', 'label'],
     ['Name', 'class'],
     ['Declaration', 'keyword'],
