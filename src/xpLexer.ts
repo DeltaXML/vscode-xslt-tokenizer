@@ -856,11 +856,12 @@ export class XPathLexer {
                 }
                 break;
             case CharLevelState.sep:
+                let prevTokenT = prevToken.tokenType;
                 if (currentToken.value === '*' && 
                 (
-                    XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.Operator) ||
-                    XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.Declaration) || 
-                    XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.UriLiteral)
+                    prevTokenT === TokenLevelState.Operator || 
+                    prevTokenT === TokenLevelState.Declaration || 
+                    prevTokenT === TokenLevelState.UriLiteral
                 )) {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.NodeType;
