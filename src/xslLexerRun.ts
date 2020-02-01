@@ -1,5 +1,5 @@
 // tslint:disable
-import { Token, TokenLevelState, ExitCondition, LexPosition } from "./xpLexer";
+import { Token, TokenLevelState, ExitCondition, LexPosition, BaseToken } from "./xpLexer";
 import { XslLexer, XslToken } from "./xslLexer";
 
 import { Position } from "vscode";
@@ -27,5 +27,5 @@ lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
 let pos: LexPosition = {line: 0, startCharacter: 0};
-let tokens: XslToken[]|Token[] = lexer.analyse(testXslt);
+let tokens: BaseToken[] = lexer.analyse(testXslt);
 
