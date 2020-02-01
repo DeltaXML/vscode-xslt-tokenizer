@@ -1075,6 +1075,8 @@ class BasicToken implements Token {
                 this.tokenType = TokenLevelState.Name;
                 break;
             case CharLevelState.dSep:
+                this.tokenType = value === ':='? TokenLevelState.Declaration: TokenLevelState.Operator;
+                break;
             case CharLevelState.sep:
             case CharLevelState.lB:
             case CharLevelState.lBr:

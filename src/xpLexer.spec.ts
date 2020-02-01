@@ -773,7 +773,7 @@ tokenType: TokenLevelState.Declaration
 tokenType: TokenLevelState.Variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `2`,
 tokenType: TokenLevelState.Number
@@ -801,7 +801,7 @@ tokenType: TokenLevelState.Declaration
 tokenType: TokenLevelState.Variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `2`,
 tokenType: TokenLevelState.Number
@@ -813,7 +813,7 @@ tokenType: TokenLevelState.Operator
 tokenType: TokenLevelState.Variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `3`,
 tokenType: TokenLevelState.Number
@@ -931,7 +931,7 @@ tokenType: TokenLevelState.Declaration
 tokenType: TokenLevelState.Variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `1`,
 tokenType: TokenLevelState.Number
@@ -943,7 +943,7 @@ tokenType: TokenLevelState.Operator
 tokenType: TokenLevelState.Variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 children:[
 {value: `2`,
 tokenType: TokenLevelState.Number
@@ -1332,7 +1332,7 @@ length: 2,
 startCharacter: 4
 },
 {value: `:=`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.Declaration,
 line: 0,
 length: 2,
 startCharacter: 7
