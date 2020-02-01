@@ -181,7 +181,6 @@ export class XPathLexer {
     public flatten: boolean = false;
     public timerOn: boolean = false;
     public entityRefOn: boolean = true;
-    private exitCondition = ExitCondition.None;
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
