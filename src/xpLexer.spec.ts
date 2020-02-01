@@ -1,5 +1,17 @@
 // tslint:disable
-import { XPathLexer, Token, TokenLight, TokenLevelState, Utilities, ExitCondition, LexPosition } from './xpLexer';
+import { XPathLexer, Token, TokenLevelState, Utilities, ExitCondition, LexPosition, CharLevelState } from './xpLexer';
+
+interface TokenLight {
+  line?: number;
+  startCharacter?: number;
+  length?: number;
+  value: string;
+  charType?: CharLevelState;
+  tokenType: TokenLevelState;
+  context?: TokenLight|null;
+  children?: TokenLight[];
+  error?: boolean;
+}
 
 let pos: LexPosition = {line: 0, startCharacter: 0};
 

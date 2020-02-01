@@ -27,8 +27,7 @@ export enum XMLCharState {
     lAb,  // left angle-bracket
 }
 
-
-export interface XslToken  {
+export interface XslToken {
     line: number;
     startCharacter: number;
     length: number;
@@ -106,7 +105,7 @@ export class XslLexer {
                 rc = XMLCharState.lSq;
                 break;
             case '"':
-                rc = XMLCharState.lDtd;
+                rc = XMLCharState.lDq;
                 break;
             default:
                 rc = existing;
@@ -125,13 +124,13 @@ export class XslLexer {
         this.tokenCharNumber = 0;
         this.wsNewLine = false;
         this.deferWsNewLine = false;
-        this.charCount = -1;
+        this.charCount = 0;
 
         let currentState: XMLCharState = XMLCharState.init;
         let currentChar: string = '';
         let tokenChars: string[] = [];
-        let result: Token[] = [];
-        let nestedTokenStack: Token[] = []; 
+        let result: Token[]|XslToken[] = [];
+        let nestedTokenStack: XslToken[] = []; 
         
         if (this.debug) {
             console.log("xsl: " + xsl);
@@ -164,7 +163,14 @@ export class XslLexer {
 
                 } else {
                     switch (nextState) {
-                        
+                        case XMLCharState.lSt:
+                            break;
+                        case XMLCharState.rSt:
+                            break;
+                        case XMLCharState.lCt:
+                            break;
+                        case XMLCharState.rCt:
+                            
                     }
                 }
                 currentState = nextState;
