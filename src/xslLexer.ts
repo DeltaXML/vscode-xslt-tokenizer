@@ -1,4 +1,4 @@
-import { BaseToken, TokenLevelState, XPathLexer, LexPosition} from "./xpLexer";
+import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition} from "./xpLexer";
 
 export enum XMLCharState {
     init,// 0 initial state
@@ -189,6 +189,8 @@ export class XslLexer {
                             break;
                         case XMLCharState.lDq:
                             let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount}
+                            xpLexer.analyse('', ExitCondition.DoubleQuote, p);
+                            this.charCount = p.documentOffset;
                             break;
                         case XMLCharState.rDq:
                             break;                           
