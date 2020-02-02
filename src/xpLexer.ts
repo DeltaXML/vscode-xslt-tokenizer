@@ -182,6 +182,8 @@ export class XPathLexer {
     public flatten: boolean = false;
     public timerOn: boolean = false;
     public entityRefOn: boolean = true;
+    public documentText: string = '';
+    public documentTokens: BaseToken[] = [];
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
@@ -393,7 +395,7 @@ export class XPathLexer {
 
     
 
-    public analyse(xpath: string, exitCondition: ExitCondition|null, position: LexPosition): Token[] {
+    public analyse(xpathArg: string, exitCondition: ExitCondition|null, position: LexPosition): Token[] {
 
         if (this.timerOn) {
             console.time('xplexer.analyse');
@@ -404,11 +406,12 @@ export class XPathLexer {
         this.tokenCharNumber = position.startCharacter;
         this.wsNewLine = false;
         this.deferWsNewLine = false;
+        let xpath = xpathArg.length === 0? this.documentText: xpathArg;
 
         let currentState: [CharLevelState, number] = [CharLevelState.init, 0];
         let currentChar: string = '';
         let tokenChars: string[] = [];
-        let result: Token[] = [];
+        let result = this.documentTokens;
         let nestedTokenStack: Token[] = [];
         let deferExitTest = false;
 

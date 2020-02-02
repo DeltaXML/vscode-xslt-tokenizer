@@ -145,6 +145,8 @@ export class XslLexer {
         let nestedTokenStack: XslToken[] = [];
 
         let xpLexer: XPathLexer = new XPathLexer();
+        xpLexer.documentText = xsl;
+        xpLexer.documentTokens = result;
         xpLexer.debug = this.debug;
         xpLexer.flatten = true;
         xpLexer.timerOn = this.timerOn;
@@ -175,8 +177,6 @@ export class XslLexer {
                     } else {
                         tokenChars.push(currentChar);
                     }
-
-
                 } else {
                     switch (nextState) {
                         case XMLCharState.lSt:
