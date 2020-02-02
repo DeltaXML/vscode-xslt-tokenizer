@@ -1,4 +1,4 @@
-import { BaseToken, TokenLevelState} from "./xpLexer";
+import { BaseToken, TokenLevelState, XPathLexer} from "./xpLexer";
 
 export enum XMLCharState {
     init,// 0 initial state
@@ -67,6 +67,18 @@ export class XslLexer {
                     rc = XMLCharState.rCd;                   
                 }
                 break;
+            case XMLCharState.lSt:
+                if (char === '"') {
+                    rc = XMLCharState.lDq;
+                } else if (char === '>') {
+                    rc = XMLCharState.rSt;
+                }
+                break;
+            case XMLCharState.lDq:
+                if (char === '"') {
+                    rc = XMLCharState.rDq;
+                }
+                break;    
             default:
                 rc = this.testChar(existing, isFirstChar, char, nextChar);
         }
@@ -124,13 +136,18 @@ export class XslLexer {
         this.tokenCharNumber = 0;
         this.wsNewLine = false;
         this.deferWsNewLine = false;
-        this.charCount = 0;
+        this.charCount = -1;
 
         let currentState: XMLCharState = XMLCharState.init;
         let currentChar: string = '';
         let tokenChars: string[] = [];
         let result: BaseToken[] = [];
-        let nestedTokenStack: XslToken[] = []; 
+        let nestedTokenStack: XslToken[] = [];
+
+        let xpLexer: XPathLexer = new XPathLexer();
+        xpLexer.debug = this.debug;
+        xpLexer.flatten = true;
+        xpLexer.timerOn = this.timerOn;
         
         if (this.debug) {
             console.log("xsl: " + xsl);
@@ -154,12 +171,11 @@ export class XslLexer {
                     if (currentChar == '\n') {
                         this.lineNumber++;
                         this.tokenCharNumber = 0;
-                        this.charCount = 0;
                         this.tokenCharNumber++;
-                    } 
+                    } else {
+                        tokenChars.push(currentChar);
+                    }
 
-                    tokenChars.push(currentChar);
-                    this.charCount++;
 
                 } else {
                     switch (nextState) {
@@ -170,7 +186,11 @@ export class XslLexer {
                         case XMLCharState.lCt:
                             break;
                         case XMLCharState.rCt:
-                            
+                            break;
+                        case XMLCharState.lDq:
+                            break;
+                        case XMLCharState.rDq:
+                            break;                           
                     }
                 }
                 currentState = nextState;

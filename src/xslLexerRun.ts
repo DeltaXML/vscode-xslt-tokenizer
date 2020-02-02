@@ -6,7 +6,7 @@ import { Position } from "vscode";
 
 // -------------
 let testXslt: string =
-`new`;
+`<xsl:sequence select="23+8"/>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
@@ -26,6 +26,6 @@ let lexer: XslLexer = new XslLexer();
 lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
-let pos: LexPosition = {line: 0, startCharacter: 0};
+
 let tokens: BaseToken[] = lexer.analyse(testXslt);
 

@@ -399,9 +399,9 @@ export class XPathLexer {
             console.time('xplexer.analyse');
         }
         this.latestRealToken = null;
-        this.lineNumber = 0;
+        this.lineNumber = position.line;
         this.wsCharNumber = 0;
-        this.tokenCharNumber = 0;
+        this.tokenCharNumber = position.startCharacter;
         this.wsNewLine = false;
         this.deferWsNewLine = false;
 
@@ -417,7 +417,7 @@ export class XPathLexer {
             Debug.debugHeading();
         }
     
-        for (let i = 0; i < xpath.length + 1; i++) {
+        for (let i = 0 + position.startCharacter; i < xpath.length + 1; i++) {
             let nextChar: string = xpath.charAt(i);
 
             // deconstruct state:
