@@ -13,7 +13,7 @@ interface TokenLight {
   error?: boolean;
 }
 
-let pos: LexPosition = {line: 0, startCharacter: 0};
+let pos: LexPosition = {line: 0, startCharacter: 0, documentOffset: 0};
 
 test('items in returned legend must equal count of TokenLevelState enum', () => {
   let expectedTokenTypeCount = Object.keys(TokenLevelState).length / 2;

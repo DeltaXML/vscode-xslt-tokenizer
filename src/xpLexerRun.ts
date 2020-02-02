@@ -25,7 +25,7 @@ let lexer: XPathLexer = new XPathLexer();
 lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
-let pos: LexPosition = {line: 0, startCharacter: 0};
+let pos: LexPosition = {line: 0, startCharacter: 0, documentOffset: 0};
 let tokens: Token[] = lexer.analyse(testXpath, ExitCondition.CurlyBrace, pos);
 
 

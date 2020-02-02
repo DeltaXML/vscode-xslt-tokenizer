@@ -87,7 +87,8 @@ export enum ExitCondition {
 
 export interface LexPosition {
     line: number,
-    startCharacter: number
+    startCharacter: number,
+    documentOffset: number
 }
 
 const tokenTypeLookup: [string, string][] = 
