@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import {Token, XPathLexer, ExitCondition, LexPosition} from "./xpLexer";
+import {XslLexer} from "./xslLexer";
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
@@ -17,10 +18,11 @@ const legend = (function () {
 })();
 
 export function activate(context: vscode.ExtensionContext) {
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new SemanticTokensProvider(), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
 }
 
-class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
+class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 	private xpLexer = new XPathLexer();
 
 	constructor() {
@@ -53,5 +55,18 @@ class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 			}
 		}
 		return result;
+	}
+}
+
+class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
+	private xslLexer = new XslLexer();
+
+	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
+		const allTokens = this.xslLexer.analyse(document.getText());
+		const builder = new vscode.SemanticTokensBuilder();
+		allTokens.forEach((token) => {
+			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
+		});
+		return new vscode.SemanticTokens(builder.build());
 	}
 }

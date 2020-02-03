@@ -27,7 +27,19 @@
 					".xpath"
 				],
 				"configuration": "./language-configuration.json"
-			}
+			},
+			{
+				"id": "xslt",
+				"aliases": [
+					"XSLT",
+					"xslt"
+				],
+				"extensions": [
+					".xslt",
+					".xsl"
+				],
+				"configuration": "./xsl-language-configuration.json"
+			}			
 		]
 	},
 	"scripts": {
