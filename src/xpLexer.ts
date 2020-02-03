@@ -452,6 +452,8 @@ export class XPathLexer {
                 }
                 if (exitAnalysis) {
                     this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                    position.line = this.lineNumber;
+                    position.documentOffset = i + 1;
                     return result;
                 }
 

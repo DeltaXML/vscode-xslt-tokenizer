@@ -111,8 +111,14 @@ export class XslLexer {
                         break;
                     case '-':
                         rc = XMLCharState.lC;
-                        break;                   
+                        break;
+                    case '/':
+                        rc = XMLCharState.lCt;
+                        break;
+                    default:
+                        rc = XMLCharState.lSt;                 
                 }
+                break;
             case '\'':
                 rc = XMLCharState.lSq;
                 break;
@@ -131,7 +137,7 @@ export class XslLexer {
         }
         this.latestRealToken = null;
         this.lineNumber = 0;
-        this.lineCharCount = 0;
+        this.lineCharCount = -1;
         this.wsCharNumber = 0;
         this.tokenCharNumber = 0;
         this.wsNewLine = false;
@@ -157,6 +163,7 @@ export class XslLexer {
 
         while (this.charCount < xsl.length) {
             this.charCount++;
+            this.lineCharCount++;
             let nextState: XMLCharState = XMLCharState.init;
             let isFirstTokenChar = this.tokenCharNumber === 0;
             let nextChar: string = xsl.charAt(this.charCount);
@@ -172,6 +179,7 @@ export class XslLexer {
                 if (nextState === currentState) {
                     if (currentChar == '\n') {
                         this.lineNumber++;
+                        this.lineCharCount = -1;
                         this.tokenCharNumber = 0;
                         this.tokenCharNumber++;
                     } else {
@@ -191,6 +199,8 @@ export class XslLexer {
                             let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount}
                             xpLexer.analyse('', ExitCondition.DoubleQuote, p);
                             this.charCount = p.documentOffset;
+                            this.lineNumber = p.line;
+                            
                             break;
                         case XMLCharState.rDq:
                             break;                           
@@ -200,10 +210,11 @@ export class XslLexer {
             } 
             currentChar = nextChar;
 
-            if (this.timerOn) {
-                console.timeEnd('xslLexer.analyse');
-            }
+
         } 
+        if (this.timerOn) {
+            console.timeEnd('xslLexer.analyse');
+        }
         return result;
     }
 }
