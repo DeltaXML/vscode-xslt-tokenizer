@@ -156,12 +156,13 @@ export class XslLexer {
         xpLexer.debug = this.debug;
         xpLexer.flatten = true;
         xpLexer.timerOn = this.timerOn;
+        let xslLength = xsl.length - 1;
         
         if (this.debug) {
             console.log("xsl: " + xsl);
         }
 
-        while (this.charCount < xsl.length) {
+        while (this.charCount < xslLength) {
             this.charCount++;
             this.lineCharCount++;
             let nextState: XMLCharState = XMLCharState.init;
@@ -198,11 +199,14 @@ export class XslLexer {
                         case XMLCharState.lDq:
                             let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount}
                             xpLexer.analyse('', ExitCondition.DoubleQuote, p);
-                            this.charCount = p.documentOffset;
+                            // need to process right double-quote
                             this.lineNumber = p.line;
-                            
+                            this.charCount = p.documentOffset - 1;
+                            this.lineCharCount = p.startCharacter;
+                            nextChar = xsl.charAt(this.charCount);                            
                             break;
                         case XMLCharState.rDq:
+                            nextState = XMLCharState.lSt;
                             break;                           
                     }
                 }
