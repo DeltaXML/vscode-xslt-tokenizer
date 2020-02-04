@@ -29,10 +29,11 @@
 				"configuration": "./language-configuration.json"
 			},
 			{
-				"id": "xslt",
+				"id": "xsl",
 				"aliases": [
 					"XSLT",
-					"xslt"
+					"xslt",
+					"xsl"
 				],
 				"extensions": [
 					".xslt",
