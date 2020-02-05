@@ -11,6 +11,25 @@ From terminal, run:
 
  ``npm install``
 
+## Settings
+
+Settings.json (in application directory)
+
+{
+	"[typescript]": {},
+	"git.enableSmartCommit": true,
+	"git.autofetch": true,
+	"[XPath]": {
+		"editor.matchBrackets": "always",
+		"editor.semanticHighlighting.enabled":true
+	},
+	"window.zoomLevel": 0,
+	"editor.matchBrackets": "always",
+	"[xsl]": {
+		"editor.semanticHighlighting.enabled":true
+	}
+}
+
 ## How to run
 
 Launch the extension and open the file `sample/basic.xpath`.

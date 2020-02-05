@@ -11,7 +11,8 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onLanguage:xpath"
+		"onLanguage:xpath",
+		"onLanguage:xsl"
 	],
 	"enableProposedApi": true,
 	"main": "./out/extension.js",
@@ -31,13 +32,13 @@
 			{
 				"id": "xsl",
 				"aliases": [
+					"xsl",
 					"XSLT",
-					"xslt",
-					"xsl"
+					"xslt"
 				],
 				"extensions": [
-					".xslt",
-					".xsl"
+					".xsl",
+					".xslt"
 				],
 				"configuration": "./xsl-language-configuration.json"
 			}			

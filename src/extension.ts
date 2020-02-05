@@ -18,8 +18,8 @@ const legend = (function () {
 })();
 
 export function activate(context: vscode.ExtensionContext) {
-	// context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xsl'}, new XsltSemanticTokensProvider(), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 }
 
 class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
