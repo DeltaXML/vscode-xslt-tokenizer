@@ -25,6 +25,9 @@ export enum XMLCharState {
 	rAn,  // right attribute-name  
     eqA,  // attribute = symbol
     lAb,  // left angle-bracket
+    lStWs,
+    lsEqWs,
+    lStEq
 }
 
 export interface XslToken extends BaseToken {
@@ -68,17 +71,41 @@ export class XslLexer {
                 }
                 break;
             case XMLCharState.lSt:
-                if (char === '"') {
-                    rc = XMLCharState.lDq;
-                } else if (char === '>') {
+                if (char === '>') {
+                    // error for: '<>'
                     rc = XMLCharState.rSt;
+                } else if (char === ' ' || char == '\t' || char === '\r' || char === '\n') {
+                    // error for: '< '
+                    rc = XMLCharState.lStWs;
+                } else {
+                    // TODO: check first char of element name is oK
+                    rc = XMLCharState.lEn;
                 }
+                break;
+            case XMLCharState.lStWs:
+                if (char === '=') {
+                    rc = XMLCharState.lStEq;
+                }
+                break;
+            case XMLCharState.lStEq:
+                if (char === ' ' || char == '\t' || char === '\r' || char === '\n') {
+                    rc = XMLCharState.lsEqWs;
+                } else if (char === '"') {
+                    rc = XMLCharState.lDq;
+                } else if (char === '\'') {
+                    rc = XMLCharState.lDq;
+                } 
                 break;
             case XMLCharState.lDq:
                 if (char === '"') {
                     rc = XMLCharState.rDq;
                 }
-                break;    
+                break; 
+            case XMLCharState.lSq:
+                if (char === '\s') {
+                    rc = XMLCharState.rSq;
+                }
+                break; 
             default:
                 rc = this.testChar(existing, isFirstChar, char, nextChar);
         }

@@ -6,7 +6,7 @@ import { Position } from "vscode";
 
 // -------------
 let testXslt: string =
-`<x s="23+8" t="count($b)"/>`;
+`<xsl:template s="23+8" t="count($b)"/>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
