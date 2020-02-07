@@ -26,6 +26,8 @@ export enum XMLCharState {
     eqA,  // attribute = symbol
     lAb,  // left angle-bracket
     lStWs,
+    lsElementNameWs,
+    lsAttNameWs,
     lsEqWs,
     lStEq
 }
@@ -55,7 +57,11 @@ export class XslLexer {
     private wsNewLine = false;
     private deferWsNewLine= false;
 
-    private calcNewState (isFirstChar: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
+    private isWhitespace (isCurrentCharNewLine: boolean, char: string) {
+        return isCurrentCharNewLine || char === ' ' || char == '\t' || char === '\r';
+    }
+
+    private calcNewState (isFirstChar: boolean, isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
         let rc: XMLCharState = existing;
         let firstCharOfToken = true;
 
@@ -70,25 +76,53 @@ export class XslLexer {
                     rc = XMLCharState.rCd;                   
                 }
                 break;
+            // left-start-tag
             case XMLCharState.lSt:
                 if (char === '>') {
                     // error for: '<>'
                     rc = XMLCharState.rSt;
-                } else if (char === ' ' || char == '\t' || char === '\r' || char === '\n') {
-                    // error for: '< '
-                    rc = XMLCharState.lStWs;
                 } else {
                     // TODO: check first char of element name is oK
                     rc = XMLCharState.lEn;
                 }
                 break;
-            case XMLCharState.lStWs:
+            // element name started
+            case XMLCharState.lEn:
+                if (this.isWhitespace(isCurrentCharNewLine, char)) {
+                    rc = XMLCharState.lsElementNameWs;
+                } else if (char === '/' && nextChar === '>') {
+                    rc = XMLCharState.rCt;
+                }
+                break;
+            // whitespace after element name
+            case XMLCharState.lsElementNameWs:
+                if (this.isWhitespace(isCurrentCharNewLine, char)) {
+                    // do nothing
+                } else if (char === '/' && nextChar === '>') {
+                    rc = XMLCharState.rCt;
+                } else {
+                    rc = XMLCharState.lAn;
+                }
+                break;
+            // attribute name started
+            case XMLCharState.lAn:
+                if (this.isWhitespace(isCurrentCharNewLine, char)) {
+                    rc = XMLCharState.lsAttNameWs;
+                } else if (char === '=') {
+                    rc = XMLCharState.lStEq;
+                }
+                break;
+            // whitespace after attribute name
+            case XMLCharState.lsAttNameWs:
                 if (char === '=') {
                     rc = XMLCharState.lStEq;
                 }
                 break;
+            // '=' char after attribute name or
+            // whitespace after attname and '=' char
             case XMLCharState.lStEq:
-                if (char === ' ' || char == '\t' || char === '\r' || char === '\n') {
+            case XMLCharState.lsEqWs:
+                if (this.isWhitespace(isCurrentCharNewLine, char)) {
                     rc = XMLCharState.lsEqWs;
                 } else if (char === '"') {
                     rc = XMLCharState.lDq;
@@ -195,17 +229,19 @@ export class XslLexer {
             let nextState: XMLCharState = XMLCharState.init;
             let isFirstTokenChar = this.tokenCharNumber === 0;
             let nextChar: string = xsl.charAt(this.charCount);
+            let isCurrentCharNewLIne = currentChar === '\n'
 
             if (currentChar) {
                 nextState = this.calcNewState(
                     isFirstTokenChar,
+                    isCurrentCharNewLIne,
                     currentChar,
                     nextChar,
                     currentState,
                 );
 
                 if (nextState === currentState) {
-                    if (currentChar == '\n') {
+                    if (isCurrentCharNewLIne) {
                         this.lineNumber++;
                         this.lineCharCount = -1;
                         this.tokenCharNumber = 0;
