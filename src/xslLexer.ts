@@ -11,9 +11,7 @@ export enum XMLCharState {
 	lCd, // 7 left cdata
 	rCd, // 8 right cdata
     lSq, // 9 left single quote att
-    rSq, // 10 right single quote att
     lDq, // 11 left double quote att
-    rDq, // 12 right double quote att
     lDtd, // 8 left dtd declaration
     rDtd, // 10 right dtd declaration
 	lWs,  // 13 whitspace char start
@@ -86,7 +84,7 @@ export class XslLexer {
                     rc = XMLCharState.lEn;
                 }
                 break;
-            // element name started
+            // element name started - or after att-value
             case XMLCharState.lEn:
                 if (this.isWhitespace(isCurrentCharNewLine, char)) {
                     rc = XMLCharState.lsElementNameWs;
@@ -94,7 +92,7 @@ export class XslLexer {
                     rc = XMLCharState.rCt;
                 }
                 break;
-            // whitespace after element name
+            // whitespace after element name (or after att-value)
             case XMLCharState.lsElementNameWs:
                 if (this.isWhitespace(isCurrentCharNewLine, char)) {
                     // do nothing
@@ -127,17 +125,17 @@ export class XslLexer {
                 } else if (char === '"') {
                     rc = XMLCharState.lDq;
                 } else if (char === '\'') {
-                    rc = XMLCharState.lDq;
+                    rc = XMLCharState.lSq;
                 } 
                 break;
             case XMLCharState.lDq:
                 if (char === '"') {
-                    rc = XMLCharState.rDq;
+                    rc = XMLCharState.lEn;
                 }
                 break; 
             case XMLCharState.lSq:
                 if (char === '\s') {
-                    rc = XMLCharState.rSq;
+                    rc = XMLCharState.lEn;
                 }
                 break; 
             default:
@@ -267,10 +265,7 @@ export class XslLexer {
                             this.charCount = p.documentOffset - 1;
                             this.lineCharCount = p.startCharacter;
                             nextChar = xsl.charAt(this.charCount);                            
-                            break;
-                        case XMLCharState.rDq:
-                            nextState = XMLCharState.lSt;
-                            break;                           
+                            break;                        
                     }
                 }
                 currentState = nextState;
