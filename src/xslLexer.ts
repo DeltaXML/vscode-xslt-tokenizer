@@ -93,6 +93,8 @@ export class XslLexer {
             case XMLCharState.lEn:
                 if (this.isWhitespace(isCurrentCharNewLine, char)) {
                     rc = XMLCharState.lsElementNameWs;
+                } else if (char === '>') {
+                    rc = XMLCharState.rSt;                
                 } else if (char === '/' && nextChar === '>') {
                     rc = XMLCharState.rCt;
                 }
@@ -308,6 +310,7 @@ export class XslLexer {
                             tokenChars[5] === 't');
 
                             tokenChars = [];
+                            storeToken = false;
                             break;
                         case XMLCharState.rSt:
                             break;
