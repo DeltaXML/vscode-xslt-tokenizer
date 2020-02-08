@@ -6,7 +6,7 @@ import { Position } from "vscode";
 
 // -------------
 let testXslt: string =
-`<xsl:t m="a" select="23+8" match = "count($b)" />`;
+`<xsl:variable  select="$a div $b"/>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
