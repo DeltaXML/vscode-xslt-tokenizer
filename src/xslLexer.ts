@@ -226,6 +226,8 @@ export class XslLexer {
             let nextState: XMLCharState = XMLCharState.init;
             let isFirstTokenChar = this.tokenCharNumber === 0;
             let nextChar: string = xsl.charAt(this.charCount);
+            let isXslElement = false;
+            let isXPathAttribute = false;
 
             if (currentChar) {
                 let isCurrentCharNewLIne = currentChar === '\n';
@@ -247,11 +249,51 @@ export class XslLexer {
                     if (isCurrentCharNewLIne) {
                         // do nothing yet
                     } else {
-                        tokenChars.push(currentChar);
+                        // do nothing yet
                     }
                 } else {
                     switch (nextState) {
                         case XMLCharState.lSt:
+                            break;
+                        case XMLCharState.lEn:
+                            if (tokenChars.length < 5) {
+                                tokenChars.push(currentChar);
+                            }
+                            break;
+                        case XMLCharState.lsElementNameWs:
+                            isXslElement =
+                                tokenChars.length === 5
+                                tokenChars[0] === 'x' &&
+                                tokenChars[1] === 's' &&
+                                tokenChars[2] === 'l' &&
+                                tokenChars[3] === ':';
+                            tokenChars = [];
+                            break;
+                        case XMLCharState.lAn:
+                            if (tokenChars.length < 7) {
+                                tokenChars.push(currentChar);
+                            }
+                            break;
+                        case XMLCharState.lsAttNameWs:
+                        case XMLCharState.lStEq:
+                            isXPathAttribute =
+
+                            tokenChars.length === 5 &&
+                            tokenChars[0] === 'm' &&
+                            tokenChars[1] === 'a' &&
+                            tokenChars[2] === 't' &&
+                            tokenChars[3] === 'c' &&
+                            tokenChars[4] === 'h' ||
+
+                            tokenChars.length === 6 &&
+                            tokenChars[0] === 's' &&
+                            tokenChars[1] === 'e' &&
+                            tokenChars[2] === 'l' &&
+                            tokenChars[3] === 'e' &&
+                            tokenChars[4] === 'c' &&
+                            tokenChars[5] === 't';
+
+                            tokenChars = [];
                             break;
                         case XMLCharState.rSt:
                             break;
