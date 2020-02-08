@@ -281,6 +281,7 @@ export class XslLexer {
                             tokenChars[1] === 's' &&
                             tokenChars[2] === 'l' &&
                             tokenChars[3] === ':';
+                            storeToken = false;
                             tokenChars = [];
                             break;
                         case XMLCharState.lAn:
