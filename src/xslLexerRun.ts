@@ -6,7 +6,8 @@ import { Position } from "vscode";
 
 // -------------
 let testXslt: string =
-`<xsl:variable  select="$a div $b"/>`;
+`<xsl:variable
+select="$a div $b[@node eq 'abc']"/>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
