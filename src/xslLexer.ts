@@ -215,6 +215,9 @@ export class XslLexer {
         xpLexer.flatten = true;
         xpLexer.timerOn = this.timerOn;
         let xslLength = xsl.length - 1;
+        let storeToken = false;
+        let isXslElement = false;
+        let isXPathAttribute = false;
         
         if (this.debug) {
             console.log("xsl: " + xsl);
@@ -226,8 +229,6 @@ export class XslLexer {
             let nextState: XMLCharState = XMLCharState.init;
             let isFirstTokenChar = this.tokenCharNumber === 0;
             let nextChar: string = xsl.charAt(this.charCount);
-            let isXslElement = false;
-            let isXPathAttribute = false;
 
             if (currentChar) {
                 let isCurrentCharNewLIne = currentChar === '\n';
@@ -248,8 +249,8 @@ export class XslLexer {
                 if (nextState === currentState) {
                     if (isCurrentCharNewLIne) {
                         // do nothing yet
-                    } else {
-                        // do nothing yet
+                    } else if (storeToken) {
+                        tokenChars.push(currentChar);
                     }
                 } else {
                     switch (nextState) {
@@ -258,40 +259,45 @@ export class XslLexer {
                         case XMLCharState.lEn:
                             if (tokenChars.length < 5) {
                                 tokenChars.push(currentChar);
+                                storeToken = true;
+                            } else {
+                                storeToken = false;
                             }
                             break;
                         case XMLCharState.lsElementNameWs:
                             isXslElement =
-                                tokenChars.length === 5
-                                tokenChars[0] === 'x' &&
-                                tokenChars[1] === 's' &&
-                                tokenChars[2] === 'l' &&
-                                tokenChars[3] === ':';
+                            tokenChars.length > 4 &&
+                            tokenChars[0] === 'x' &&
+                            tokenChars[1] === 's' &&
+                            tokenChars[2] === 'l' &&
+                            tokenChars[3] === ':';
                             tokenChars = [];
                             break;
                         case XMLCharState.lAn:
-                            if (tokenChars.length < 7) {
+                            if (isXslElement && tokenChars.length < 7) {
                                 tokenChars.push(currentChar);
+                                storeToken = true;
+                            } else {
+                                storeToken = false;
                             }
                             break;
                         case XMLCharState.lsAttNameWs:
                         case XMLCharState.lStEq:
-                            isXPathAttribute =
-
+                            isXPathAttribute = (
                             tokenChars.length === 5 &&
                             tokenChars[0] === 'm' &&
                             tokenChars[1] === 'a' &&
                             tokenChars[2] === 't' &&
                             tokenChars[3] === 'c' &&
-                            tokenChars[4] === 'h' ||
-
+                            tokenChars[4] === 'h') ||
+                            (
                             tokenChars.length === 6 &&
                             tokenChars[0] === 's' &&
                             tokenChars[1] === 'e' &&
                             tokenChars[2] === 'l' &&
                             tokenChars[3] === 'e' &&
                             tokenChars[4] === 'c' &&
-                            tokenChars[5] === 't';
+                            tokenChars[5] === 't');
 
                             tokenChars = [];
                             break;
@@ -303,26 +309,27 @@ export class XslLexer {
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                        case XMLCharState.avt:
-                        case XMLCharState.tvt:
-                            let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
+                            if (isXPathAttribute) {
+                                let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
 
-                            let exit: ExitCondition;
-                            if (nextState === XMLCharState.lSq) {
-                                exit = ExitCondition.SingleQuote;
-                            } else if (nextState === XMLCharState.lDq) {
-                                exit = ExitCondition.DoubleQuote;
-                            } else {
-                                exit = ExitCondition.CurlyBrace;
+                                let exit: ExitCondition;
+                                if (nextState === XMLCharState.lSq) {
+                                    exit = ExitCondition.SingleQuote;
+                                } else if (nextState === XMLCharState.lDq) {
+                                    exit = ExitCondition.DoubleQuote;
+                                } else {
+                                    exit = ExitCondition.CurlyBrace;
+                                }
+
+                                xpLexer.analyse('', exit, p);
+                                // need to process right double-quote
+                                this.lineNumber = p.line;
+                                this.charCount = p.documentOffset - 1;
+                                this.lineCharCount = p.startCharacter;
+                                nextChar = xsl.charAt(this.charCount);
+                                isXPathAttribute = false;
                             }
-
-                            xpLexer.analyse('', exit, p);
-                            // need to process right double-quote
-                            this.lineNumber = p.line;
-                            this.charCount = p.documentOffset - 1;
-                            this.lineCharCount = p.startCharacter;
-                            nextChar = xsl.charAt(this.charCount);                            
-                            break;                        
+                           break;                        
                     }
                 }
                 currentState = nextState;
