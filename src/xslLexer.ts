@@ -12,6 +12,9 @@ export enum XMLCharState {
 	rCd, // 8 right cdata
     lSq, // 9 left single quote att
     lDq, // 11 left double quote att
+    wsBeforeAttname,
+    rSq,
+    rDq,
     lDtd, // 8 left dtd declaration
     rDtd, // 10 right dtd declaration
 	lWs,  // 13 whitspace char start
@@ -96,8 +99,13 @@ export class XslLexer {
                 break;
             // whitespace after element name (or after att-value)
             case XMLCharState.lsElementNameWs:
+            case XMLCharState.rSq:
+            case XMLCharState.rDq:
+            case XMLCharState.wsBeforeAttname:
                 if (this.isWhitespace(isCurrentCharNewLine, char)) {
-                    // do nothing
+                    if (existing !== XMLCharState.lsElementNameWs)  {
+                        rc = XMLCharState.wsBeforeAttname;
+                    }
                 } else if (char === '/' && nextChar === '>') {
                     rc = XMLCharState.rCt;
                 } else {
@@ -132,12 +140,12 @@ export class XslLexer {
                 break;
             case XMLCharState.lDq:
                 if (char === '"') {
-                    rc = XMLCharState.lEn;
+                    rc = XMLCharState.rDq;
                 }
                 break; 
             case XMLCharState.lSq:
                 if (char === '\s') {
-                    rc = XMLCharState.lEn;
+                    rc = XMLCharState.rSq;
                 }
                 break; 
             default:
@@ -283,6 +291,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lsAttNameWs:
                         case XMLCharState.lStEq:
+                            // we dont check if xslElement here:
                             isXPathAttribute = (
                             tokenChars.length === 5 &&
                             tokenChars[0] === 'm' &&
