@@ -30,7 +30,7 @@ export enum XMLCharState {
     tvt,  // text value template
     lStWs,
     lsElementNameWs,
-    lsAttNameWs,
+    wsAfterAttName,
     lsEqWs,
     lStEq
 }
@@ -115,13 +115,13 @@ export class XslLexer {
             // attribute name started
             case XMLCharState.lAn:
                 if (this.isWhitespace(isCurrentCharNewLine, char)) {
-                    rc = XMLCharState.lsAttNameWs;
+                    rc = XMLCharState.wsAfterAttName;
                 } else if (char === '=') {
                     rc = XMLCharState.lStEq;
                 }
                 break;
             // whitespace after attribute name
-            case XMLCharState.lsAttNameWs:
+            case XMLCharState.wsAfterAttName:
                 if (char === '=') {
                     rc = XMLCharState.lStEq;
                 }
@@ -289,7 +289,6 @@ export class XslLexer {
                                 storeToken = false;
                             }
                             break;
-                        case XMLCharState.lsAttNameWs:
                         case XMLCharState.lStEq:
                             // we dont check if xslElement here:
                             isXPathAttribute = (
