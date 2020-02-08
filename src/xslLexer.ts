@@ -23,6 +23,8 @@ export enum XMLCharState {
 	rAn,  // right attribute-name  
     eqA,  // attribute = symbol
     lAb,  // left angle-bracket
+    avt,  // attribute value template
+    tvt,  // text value template
     lStWs,
     lsElementNameWs,
     lsAttNameWs,
@@ -198,9 +200,6 @@ export class XslLexer {
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.wsCharNumber = 0;
-        this.tokenCharNumber = 0;
-        this.wsNewLine = false;
-        this.deferWsNewLine = false;
         this.charCount = -1;
 
         let currentState: XMLCharState = XMLCharState.init;
@@ -227,9 +226,15 @@ export class XslLexer {
             let nextState: XMLCharState = XMLCharState.init;
             let isFirstTokenChar = this.tokenCharNumber === 0;
             let nextChar: string = xsl.charAt(this.charCount);
-            let isCurrentCharNewLIne = currentChar === '\n'
 
             if (currentChar) {
+                let isCurrentCharNewLIne = currentChar === '\n';
+            
+                if (isCurrentCharNewLIne) {
+                    this.lineNumber++;
+                    this.lineCharCount = -1;
+                } 
+
                 nextState = this.calcNewState(
                     isFirstTokenChar,
                     isCurrentCharNewLIne,
@@ -240,10 +245,7 @@ export class XslLexer {
 
                 if (nextState === currentState) {
                     if (isCurrentCharNewLIne) {
-                        this.lineNumber++;
-                        this.lineCharCount = -1;
-                        this.tokenCharNumber = 0;
-                        this.tokenCharNumber++;
+                        // do nothing yet
                     } else {
                         tokenChars.push(currentChar);
                     }
@@ -257,9 +259,22 @@ export class XslLexer {
                             break;
                         case XMLCharState.rCt:
                             break;
+                        case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount}
-                            xpLexer.analyse('', ExitCondition.DoubleQuote, p);
+                        case XMLCharState.avt:
+                        case XMLCharState.tvt:
+                            let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
+
+                            let exit: ExitCondition;
+                            if (nextState === XMLCharState.lSq) {
+                                exit = ExitCondition.SingleQuote;
+                            } else if (nextState === XMLCharState.lDq) {
+                                exit = ExitCondition.DoubleQuote;
+                            } else {
+                                exit = ExitCondition.CurlyBrace;
+                            }
+
+                            xpLexer.analyse('', exit, p);
                             // need to process right double-quote
                             this.lineNumber = p.line;
                             this.charCount = p.documentOffset - 1;
