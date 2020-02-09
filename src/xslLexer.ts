@@ -63,6 +63,14 @@ export class XslLexer {
         return isCurrentCharNewLine || char === ' ' || char == '\t' || char === '\r';
     }
 
+    public static expressionAtts = ['context-item', 'count', 'group-adjacent', 'from', 'for-each-item', 'for-each-source', 'group-by', 'group-ending-with', 'initial-value', 
+    'key', 'match', 'namespace-context', 'select', 'test', 'use', 'use-when', 'value', 'with-params', 'xpath' ];
+
+    public static avtAtts = ['allow-duplicate-names', 'base-uri', 'build-tree', 'byte-order-mark', 'case-order', 'cdata-section-elements', 'collation', 'data-type', 'doctype-public', 'doctype-system', 'encoding', 'error-code',
+     'escape-uri-attributes', 'flags', 'format', 'grouping-separator', 'grouping-size', 'href', 'html-version', 'include-context-type', 'indent', 'item-separator', 'json-node-output-method',
+     'lang', 'letter-value', 'media-type', 'method', 'name', 'namespace', 'normalization-form', 'omit-xml-declaration', 'order', 'ordinal', 'ordinal-type', 'output-version',
+     'parameter-document', 'regex', 'separator', 'schema-aware', 'stable', 'standalone', 'suppress-indentaion', 'terminate', 'undeclar-prefixes', 'start-at'];
+
     private calcNewState (isFirstChar: boolean, isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
         let rc: XMLCharState = existing;
         let firstCharOfToken = true;
@@ -71,6 +79,12 @@ export class XslLexer {
             case XMLCharState.lC:
                 if (char === '-' && nextChar === '-') {
                     rc = XMLCharState.rC;
+                }
+                break;
+            case XMLCharState.lDtd:
+                // assume  <![CDATA[
+                if (char === '[' && nextChar === 'C') {
+                    rc = XMLCharState.lCd;
                 }
                 break;
             case XMLCharState.lCd:
