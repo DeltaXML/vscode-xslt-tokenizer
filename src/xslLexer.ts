@@ -53,7 +53,6 @@ export class XslLexer {
     private elementStack: XslToken[] = [];
     private latestRealToken: XslToken|null = null;
     private lineNumber: number = 0;
-    private wsCharNumber: number = 0;
     private tokenCharNumber: number = 0;
     private charCount = 0;
     private lineCharCount = 0;
@@ -89,7 +88,7 @@ export class XslLexer {
                     rc = XMLCharState.lEn;
                 }
                 break;
-            // element name started - or after att-value
+            // element name started
             case XMLCharState.lEn:
                 if (this.isWhitespace(isCurrentCharNewLine, char)) {
                     rc = XMLCharState.lsElementNameWs;
@@ -108,6 +107,8 @@ export class XslLexer {
                     if (existing !== XMLCharState.lsElementNameWs)  {
                         rc = XMLCharState.wsBeforeAttname;
                     }
+                } else if (char === '>') {
+                    rc = XMLCharState.rSt;
                 } else if (char === '/' && nextChar === '>') {
                     rc = XMLCharState.rCt;
                 } else {
@@ -146,11 +147,12 @@ export class XslLexer {
                 }
                 break; 
             case XMLCharState.lSq:
-                if (char === '\s') {
+                if (char === '\'') {
                     rc = XMLCharState.rSq;
                 }
                 break; 
             default:
+                // awaiting a new node
                 rc = this.testChar(existing, isFirstChar, char, nextChar);
         }
         return rc;
@@ -160,18 +162,6 @@ export class XslLexer {
         let rc: XMLCharState;
 
         switch (char) {
-            case ' ':
-            case '\t':
-                rc= XMLCharState.lWs;
-                this.wsCharNumber++;
-                break;
-            case '\r':
-                rc = XMLCharState.lWs;
-                break;
-            case '\n':
-                this.deferWsNewLine = true;
-                rc = XMLCharState.lWs;
-                break;
             case '<':
                 switch (nextChar) {
                     case '?':
@@ -190,12 +180,6 @@ export class XslLexer {
                         rc = XMLCharState.lSt;                 
                 }
                 break;
-            case '\'':
-                rc = XMLCharState.lSq;
-                break;
-            case '"':
-                rc = XMLCharState.lDq;
-                break;
             default:
                 rc = existing;
         }
@@ -209,7 +193,6 @@ export class XslLexer {
         this.latestRealToken = null;
         this.lineNumber = 0;
         this.lineCharCount = -1;
-        this.wsCharNumber = 0;
         this.charCount = -1;
 
         let currentState: XMLCharState = XMLCharState.init;
