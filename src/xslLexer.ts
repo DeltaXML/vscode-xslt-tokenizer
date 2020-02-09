@@ -71,6 +71,14 @@ export class XslLexer {
      'lang', 'letter-value', 'media-type', 'method', 'name', 'namespace', 'normalization-form', 'omit-xml-declaration', 'order', 'ordinal', 'ordinal-type', 'output-version',
      'parameter-document', 'regex', 'separator', 'schema-aware', 'stable', 'standalone', 'suppress-indentaion', 'terminate', 'undeclar-prefixes', 'start-at'];
 
+    private isAvtAtt(name: string) {
+        return XslLexer.avtAtts.indexOf(name) > -1;
+    }
+
+    private isExpressionAtt(name: string) {
+        return XslLexer.avtAtts.indexOf(name) > -1;
+    }
+
     private calcNewState (isFirstChar: boolean, isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
         let rc: XMLCharState = existing;
         let firstCharOfToken = true;
@@ -291,21 +299,8 @@ export class XslLexer {
                             break;
                         case XMLCharState.lStEq:
                             // we dont check if xslElement here:
-                            isXPathAttribute = (
-                            tokenChars.length === 5 &&
-                            tokenChars[0] === 'm' &&
-                            tokenChars[1] === 'a' &&
-                            tokenChars[2] === 't' &&
-                            tokenChars[3] === 'c' &&
-                            tokenChars[4] === 'h') ||
-                            (
-                            tokenChars.length === 6 &&
-                            tokenChars[0] === 's' &&
-                            tokenChars[1] === 'e' &&
-                            tokenChars[2] === 'l' &&
-                            tokenChars[3] === 'e' &&
-                            tokenChars[4] === 'c' &&
-                            tokenChars[5] === 't');
+                            let attName = tokenChars.join('');
+                            isXPathAttribute = this.isExpressionAtt(attName);
 
                             tokenChars = [];
                             storeToken = false;
