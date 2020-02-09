@@ -414,7 +414,6 @@ export class XPathLexer {
         let tokenChars: string[] = [];
         let result = this.documentTokens;
         let nestedTokenStack: Token[] = [];
-        let deferExitTest = false;
 
         if (this.debug) {
             console.log("xpath: " + xpath);
@@ -436,12 +435,20 @@ export class XPathLexer {
                         exitAnalysis = false;
                         break;
                     case ExitCondition.CurlyBrace:
-                        if (deferExitTest) {
-                            deferExitTest = false;
-                        } else {
-                            exitAnalysis = currentChar === "}" && nextChar !== "}";
-                            deferExitTest = true;
+                        if (currentLabelState !== CharLevelState.lDq &&
+                            currentLabelState !== CharLevelState.lSq &&
+                            currentLabelState !== CharLevelState.lC &&
+                            currentChar === "}") {
+                            let isNestedOk = false;
+                            for (var x = 0; x < nestedTokenStack.length; x++) {
+                                if (nestedTokenStack[x].value === '{') {
+                                    isNestedOk = true;
+                                    break;
+                                }
+                            }
+                            exitAnalysis = !isNestedOk;
                         }
+                        
                         break;
                     case ExitCondition.DoubleQuote:
                         exitAnalysis = currentChar === "\"";
