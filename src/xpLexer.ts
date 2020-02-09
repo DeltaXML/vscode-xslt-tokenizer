@@ -421,7 +421,7 @@ export class XPathLexer {
             Debug.debugHeading();
         }
     
-        for (let i = 0 + position.startCharacter; i < xpath.length + 1; i++) {
+        for (let i = position.documentOffset; i < xpath.length + 1; i++) {
             let nextChar: string = xpath.charAt(i);
 
             // deconstruct state:
