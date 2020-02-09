@@ -76,7 +76,7 @@ export class XslLexer {
     }
 
     private isExpressionAtt(name: string) {
-        return XslLexer.avtAtts.indexOf(name) > -1;
+        return XslLexer.expressionAtts.indexOf(name) > -1;
     }
 
     private calcNewState (isFirstChar: boolean, isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
@@ -93,7 +93,10 @@ export class XslLexer {
                 // assume  <![CDATA[
                 if (char === '[' && nextChar === 'C') {
                     rc = XMLCharState.lCd;
+                } else if (char === '-' && nextChar === '-') {
+                    rc = XMLCharState.lC;
                 }
+                // TODO: Handle internal DTD subset
                 break;
             case XMLCharState.lCd:
                 if (char === ']' && nextChar === ']') {
@@ -290,7 +293,7 @@ export class XslLexer {
                             tokenChars = [];
                             break;
                         case XMLCharState.lAn:
-                            if (isXslElement && tokenChars.length < 7) {
+                            if (isXslElement) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             } else {
