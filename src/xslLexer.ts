@@ -245,7 +245,7 @@ export class XslLexer {
             
                 if (isCurrentCharNewLIne) {
                     this.lineNumber++;
-                    this.lineCharCount = -1;
+                    this.lineCharCount = 0;
                 } 
 
                 nextState = this.calcNewState(
