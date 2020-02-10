@@ -26,8 +26,12 @@ export enum XMLCharState {
 	rAn,  // right attribute-name  
     eqA,  // attribute = symbol
     lAb,  // left angle-bracket
-    avt,  // attribute value template
-    tvt,  // text value template
+    sqAvt,
+    dqAvt,
+    escDqAvt,  // attribute value template
+    escSqAvt,
+    tvt,
+    escTvt,  // text value template
     lStWs,
     lsElementNameWs,
     wsAfterAttName,
@@ -169,13 +173,31 @@ export class XslLexer {
             case XMLCharState.lDq:
                 if (char === '"') {
                     rc = XMLCharState.rDq;
+                } else if (char === '{') {
+                    if (nextChar === '{') {
+                        rc = XMLCharState.escDqAvt;
+                    } else {
+                        rc = XMLCharState.dqAvt;
+                    }
                 }
                 break; 
             case XMLCharState.lSq:
                 if (char === '\'') {
                     rc = XMLCharState.rSq;
+                } else if (char === '{') {
+                    if (nextChar === '{') {
+                        rc = XMLCharState.escSqAvt;
+                    } else {
+                        rc = XMLCharState.sqAvt;
+                    }
                 }
                 break; 
+            case XMLCharState.escDqAvt:
+                rc = XMLCharState.lDq;
+                break;
+            case XMLCharState.escSqAvt:
+                rc = XMLCharState.lSq;
+                break;
             default:
                 // awaiting a new node
                 rc = this.testChar(existing, isFirstChar, char, nextChar);
@@ -225,6 +247,7 @@ export class XslLexer {
         let tokenChars: string[] = [];
         let result: BaseToken[] = [];
         let nestedTokenStack: XslToken[] = [];
+        let attName: string = '';
 
         let xpLexer: XPathLexer = new XPathLexer();
         xpLexer.documentText = xsl;
@@ -302,7 +325,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lStEq:
                             // we dont check if xslElement here:
-                            let attName = tokenChars.join('');
+                            attName = tokenChars.join('');
                             isXPathAttribute = this.isExpressionAtt(attName);
 
                             tokenChars = [];
@@ -322,10 +345,8 @@ export class XslLexer {
                                 let exit: ExitCondition;
                                 if (nextState === XMLCharState.lSq) {
                                     exit = ExitCondition.SingleQuote;
-                                } else if (nextState === XMLCharState.lDq) {
-                                    exit = ExitCondition.DoubleQuote;
                                 } else {
-                                    exit = ExitCondition.CurlyBrace;
+                                    exit = ExitCondition.DoubleQuote;
                                 }
 
                                 xpLexer.analyse('', exit, p);
@@ -336,7 +357,29 @@ export class XslLexer {
                                 nextChar = xsl.charAt(this.charCount);
                                 isXPathAttribute = false;
                             }
-                           break;                        
+                           break;
+                        case XMLCharState.sqAvt:
+                        case XMLCharState.dqAvt:
+                            let exit;
+                            if (isXslElement) {
+                                exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
+                            } else {
+                                exit = ExitCondition.CurlyBrace;
+                            }
+
+                            if (exit !== ExitCondition.None) {
+                                let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
+                                
+                                xpLexer.analyse('', exit, p);
+                                // need to process right double-quote
+                                this.lineNumber = p.line;
+                                this.charCount = p.documentOffset - 1;
+                                this.lineCharCount = p.startCharacter;
+                                nextChar = xsl.charAt(this.charCount);
+                                nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
+                            }
+
+                            break;                          
                     }
                 }
                 currentState = nextState;
