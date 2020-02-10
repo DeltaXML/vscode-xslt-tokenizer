@@ -6,7 +6,7 @@ import { Position } from "vscode";
 
 // -------------
 let testXslt: string =
-`<xsl:attribute name="a{$var1}b{"/>`;
+`<xsl:test><mynewelement this="{$abc}"/></xsl:test>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
