@@ -352,7 +352,10 @@ export class XslLexer {
                                 xpLexer.analyse('', exit, p);
                                 // need to process right double-quote
                                 this.lineNumber = p.line;
-                                this.charCount = p.documentOffset - 1;
+                                let newCharCount = p.documentOffset - 1;
+                                if (newCharCount > this.charCount) {
+                                    this.charCount = newCharCount;
+                                }
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
                                 isXPathAttribute = false;
@@ -373,7 +376,10 @@ export class XslLexer {
                                 xpLexer.analyse('', exit, p);
                                 // need to process right double-quote
                                 this.lineNumber = p.line;
-                                this.charCount = p.documentOffset - 1;
+                                let newCharCount = p.documentOffset - 1;
+                                if (newCharCount > this.charCount) {
+                                    this.charCount = newCharCount;
+                                }
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
                                 nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
