@@ -6,7 +6,7 @@ import { Position } from "vscode";
 
 // -------------
 let testXslt: string =
-`<xsl:test><mynewelement this="{$abc}"/></xsl:test>`;
+`<a expand-text='yes'>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

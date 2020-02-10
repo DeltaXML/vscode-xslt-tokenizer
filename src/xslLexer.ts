@@ -261,6 +261,8 @@ export class XslLexer {
         let storeToken = false;
         let isXslElement = false;
         let isXPathAttribute = false;
+        let isExpandTextAttribute = false;
+        let expandTextValue = false;
         
         if (this.debug) {
             console.log("xsl: " + xsl);
@@ -320,17 +322,18 @@ export class XslLexer {
                             tokenChars = [];
                             break;
                         case XMLCharState.lAn:
-                            if (isXslElement) {
-                                tokenChars.push(currentChar);
-                                storeToken = true;
-                            } else {
-                                storeToken = false;
-                            }
+                            tokenChars.push(currentChar);
+                            storeToken = true;
                             break;
                         case XMLCharState.lStEq:
                             // we dont check if xslElement here:
                             attName = tokenChars.join('');
-                            isXPathAttribute = this.isExpressionAtt(attName);
+                            if (attName === 'expand-text') {
+                                isXPathAttribute = false;
+                                isExpandTextAttribute = true;
+                            } else {
+                                isXPathAttribute = this.isExpressionAtt(attName);
+                            }
 
                             tokenChars = [];
                             storeToken = false;
@@ -341,9 +344,20 @@ export class XslLexer {
                             break;
                         case XMLCharState.rCt:
                             break;
+                        case XMLCharState.rSq:
+                        case XMLCharState.rDq:
+                            if (isExpandTextAttribute) {
+                                let attValue = tokenChars.join('');
+                                expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
+                            }
+                            tokenChars = [];
+                            storeToken = false;
+                            break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (isXPathAttribute) {
+                            if (isExpandTextAttribute) {
+                                storeToken = true;
+                            } else if (isXPathAttribute) {
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
 
                                 let exit: ExitCondition;
