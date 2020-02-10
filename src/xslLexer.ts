@@ -33,7 +33,6 @@ export enum XMLCharState {
     escDqAvt,  // attribute value template
     escSqAvt,
     tvt,
-    escTvt,  // text value template
     lStWs,
     lsElementNameWs,
     wsAfterAttName,
@@ -232,8 +231,12 @@ export class XslLexer {
                         rc = XMLCharState.lSt;                 
                 }
                 break;
+            case '{':
+                rc = XMLCharState.tvt;
+                break;
             default:
-                rc = existing;
+                rc = XMLCharState.init;
+                break;
         }
         return rc;
     }
@@ -419,8 +422,26 @@ export class XslLexer {
                                 nextChar = xsl.charAt(this.charCount);
                                 nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             }
+                            break;
+                        case XMLCharState.tvt:
+                            let useTvt = xmlElementStack.length > 0 &&
+                            xmlElementStack[xmlElementStack.length - 1].expandText;
 
-                            break;                          
+                            if (useTvt) {
+                                let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
+                                
+                                xpLexer.analyse('', ExitCondition.CurlyBrace, p);
+                                // need to process right double-quote
+                                this.lineNumber = p.line;
+                                let newCharCount = p.documentOffset - 1;
+                                if (newCharCount > this.charCount) {
+                                    this.charCount = newCharCount;
+                                }
+                                this.lineCharCount = p.startCharacter;
+                                nextChar = xsl.charAt(this.charCount);
+                                nextState = XMLCharState.init;
+                            }
+                            break;                         
                     }
                 }
                 currentState = nextState;
