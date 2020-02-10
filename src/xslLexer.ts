@@ -52,11 +52,14 @@ export interface XslToken extends BaseToken {
     error?: boolean;
 }
 
+interface XmlElement {
+    expandText: boolean;
+}
+
 export class XslLexer {
     public debug: boolean = false;
     public flatten: boolean = false;
     public timerOn: boolean = false;
-    private elementStack: XslToken[] = [];
     private latestRealToken: XslToken|null = null;
     private lineNumber: number = 0;
     private tokenCharNumber: number = 0;
@@ -262,7 +265,8 @@ export class XslLexer {
         let isXslElement = false;
         let isXPathAttribute = false;
         let isExpandTextAttribute = false;
-        let expandTextValue = false;
+        let expandTextValue: boolean|null = false;
+        let xmlElementStack: XmlElement[] = [];
         
         if (this.debug) {
             console.log("xsl: " + xsl);
@@ -302,6 +306,7 @@ export class XslLexer {
                         case XMLCharState.lSt:
                             break;
                         case XMLCharState.lEn:
+                            expandTextValue = null;
                             if (tokenChars.length < 5) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
@@ -310,7 +315,6 @@ export class XslLexer {
                             }
                             break;
                         case XMLCharState.lsElementNameWs:
-                        case XMLCharState.rStNoAtt:
                         case XMLCharState.rCtNoAtt:
                             isXslElement =
                             tokenChars.length > 4 &&
@@ -334,15 +338,28 @@ export class XslLexer {
                             } else {
                                 isXPathAttribute = this.isExpressionAtt(attName);
                             }
-
                             tokenChars = [];
                             storeToken = false;
                             break;
                         case XMLCharState.rSt:
+                        case XMLCharState.rStNoAtt:
+                            if (expandTextValue === null) {
+                                if (xmlElementStack.length > 0) {
+                                    expandTextValue = xmlElementStack[xmlElementStack.length - 1].expandText;
+                                } else {
+                                    expandTextValue = false;
+                                }
+                            }
+                            xmlElementStack.push({"expandText": expandTextValue});
+                            storeToken = false;
+                            tokenChars = [];
                             break;
                         case XMLCharState.lCt:
                             break;
                         case XMLCharState.rCt:
+                            if (xmlElementStack.length > 0) {
+                                xmlElementStack.pop();
+                            }
                             break;
                         case XMLCharState.rSq:
                         case XMLCharState.rDq:

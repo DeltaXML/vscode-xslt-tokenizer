@@ -6,7 +6,7 @@ import { Position } from "vscode";
 
 // -------------
 let testXslt: string =
-`<a expand-text='yes'>`;
+`<a expand-text='yes'>a{$b}c</a>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
