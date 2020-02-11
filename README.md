@@ -1,6 +1,14 @@
-# XPath 3.1 Semantic tokens sample
+# XSLT 3.0 / XPath 3.1 Semantic tokens
 
-This project builds on the Semantic tokens VSCode Extensions sample to work with an XPath 3.1 lexer. This semantic tokens provider always returns all the tokens in a file.
+_This project exploits the proposed API for Semantic Tokens VSCode Extensions._
+
+This is a VSCode extension for the semantic highlighting of XSLT and XPath.
+
+Currently, conventional token types are used, semantic tokens will be added later. The tokens are used for XPath syntax highlighting, either for standalone XPath files or for XPath expressions embedded within XSLT.
+
+The XSLT demo file loaded in VSCode with the extension running:
+
+![Screenshot](xslt-demo.png)
 
 The XPath demo file loaded in VSCode with the extension running:
 
@@ -15,6 +23,7 @@ From terminal, run:
 
 Settings.json (in application directory)
 
+```json
 {
 	"[typescript]": {},
 	"git.enableSmartCommit": true,
@@ -29,6 +38,7 @@ Settings.json (in application directory)
 		"editor.semanticHighlighting.enabled":true
 	}
 }
+```
 
 ## How to run
 
@@ -56,11 +66,7 @@ From terminal, run:
 
 ## State of development
 
-- This is currently a work in progress. Main XPath 3.1 tokenization is complete.
-
-- Next step is to add semantic tokens for XPath. 
-
-- The intention is to then add an XSLT lexer that delegates to the XPath lexer when required. Basic evaluation context will be passed from the XSLT lexer to the XPath lexer.
+- This is currently a work in progress. Main XPath 3.1 tokenization using standard token types is complete.
 
 ## XPath 3.1 lexer summary
 
@@ -70,4 +76,3 @@ From terminal, run:
 - Single pass with character lookahead
 - Disambiguates token based on previous/next token
 - Manages evaluation context scope
-- Intended for highlighting unused variables etc.
