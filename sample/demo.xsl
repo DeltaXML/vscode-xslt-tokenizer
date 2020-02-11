@@ -1,2 +1,3 @@
-<xsl:variable
-select="$a div $b[@node eq 'abc']"/>
+<xsl:s expand-text="yes">
+    <a/>
+{$abc + 2}

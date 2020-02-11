@@ -21,7 +21,8 @@ export enum XMLCharState {
 	lWs,  // 13 whitspace char start
 	lCt,  // 1 left close tag
     rCt,  // 2 right close tag
-    rCtNoAtt,
+    rSelfCtNoAtt, // self-close no att
+    rSelfCt, // self-close
 	lEn,  // left element-name
 	rEn,  // right element-name
 	lAn,  // left atrribute-name
@@ -128,7 +129,7 @@ export class XslLexer {
                 } else if (char === '>') {
                     rc = XMLCharState.rStNoAtt;                
                 } else if (char === '/' && nextChar === '>') {
-                    rc = XMLCharState.rCtNoAtt;
+                    rc = XMLCharState.rSelfCtNoAtt;
                 }
                 break;
             // whitespace after element name (or after att-value)
@@ -143,7 +144,7 @@ export class XslLexer {
                 } else if (char === '>') {
                     rc = XMLCharState.rSt;
                 } else if (char === '/' && nextChar === '>') {
-                    rc = XMLCharState.rCt;
+                    rc = XMLCharState.rSelfCt;
                 } else {
                     rc = XMLCharState.lAn;
                 }
@@ -318,7 +319,7 @@ export class XslLexer {
                             }
                             break;
                         case XMLCharState.lsElementNameWs:
-                        case XMLCharState.rCtNoAtt:
+                        case XMLCharState.rSelfCtNoAtt:
                             isXslElement =
                             tokenChars.length > 4 &&
                             tokenChars[0] === 'x' &&
