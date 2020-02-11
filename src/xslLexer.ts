@@ -104,6 +104,8 @@ export class XslLexer {
                     rc = XMLCharState.lCd;
                 } else if (char === '-' && nextChar === '-') {
                     rc = XMLCharState.lC;
+                } else if (char === '>') {
+                    rc = XMLCharState.rDtd;
                 }
                 // TODO: Handle internal DTD subset
                 break;
@@ -406,7 +408,11 @@ export class XslLexer {
                         case XMLCharState.dqAvt:
                             let exit;
                             if (isXslElement) {
-                                exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
+                                if (exit = attName.startsWith('_')) {
+                                    exit = this.isExpressionAtt(attName.substring(1))? ExitCondition.CurlyBrace: ExitCondition.None;
+                                } else {
+                                    exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
+                                }
                             } else {
                                 exit = ExitCondition.CurlyBrace;
                             }
