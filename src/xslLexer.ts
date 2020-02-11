@@ -333,13 +333,15 @@ export class XslLexer {
                             storeToken = true;
                             break;
                         case XMLCharState.lStEq:
-                            // we dont check if xslElement here:
-                            attName = tokenChars.join('');
-                            if (attName === 'expand-text') {
-                                isXPathAttribute = false;
-                                isExpandTextAttribute = true;
-                            } else {
-                                isXPathAttribute = this.isExpressionAtt(attName);
+                            if (isXslElement) {
+                                attName = tokenChars.join('');
+                                if (attName === 'expand-text') {
+                                    isXPathAttribute = false;
+                                    isExpandTextAttribute = true;
+                                } else {
+                                    isExpandTextAttribute = false;
+                                    isXPathAttribute = this.isExpressionAtt(attName);
+                                }
                             }
                             tokenChars = [];
                             storeToken = false;
