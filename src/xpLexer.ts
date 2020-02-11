@@ -759,6 +759,8 @@ export class XPathLexer {
             prevToken.tokenType = TokenLevelState.SimpleType;
         } else if (Data.nodeTypes.indexOf(prevToken.value) > -1) {
             prevToken.tokenType = TokenLevelState.NodeType;
+        } else if (Data.keywords.indexOf(prevToken.value) > -1) {
+            // should already be marked operator
         } else {
             prevToken.tokenType = TokenLevelState.Function;
         }

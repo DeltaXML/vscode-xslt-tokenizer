@@ -5,7 +5,7 @@ import { Position } from "vscode";
 
 // -------------
 let testXpath: string =
-`map { 'a': 'c' }?*`;
+`$a and ($b)`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
