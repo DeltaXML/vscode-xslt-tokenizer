@@ -4,7 +4,7 @@ _This project exploits the proposed API for Semantic Tokens VSCode Extensions._
 
 This is a VSCode extension for the semantic highlighting of XSLT and XPath.
 
-Currently, conventional token types are used, semantic tokens will be added later. The tokens are used for XPath syntax highlighting, either for standalone XPath files or for XPath expressions embedded within XSLT.
+Currently, semantic token types are provided, semantic token modifiers will be added later. The tokens are used for XPath syntax highlighting, either for standalone XPath files or for XPath expressions embedded within XSLT.
 
 The XSLT demo file loaded in VSCode with the extension running:
 
@@ -73,6 +73,7 @@ From terminal, run:
 - Hand-crafted lexer
 - No regular expressions
 - Iterates character by character
-- Single pass with character lookahead
+- Single pass with 1-character lookahead
 - Disambiguates token based on previous/next token
-- Manages evaluation context scope
+- Uses stack to manages evaluation context scope
+- No Abstract Syntax Tree
