@@ -756,7 +756,7 @@ export class XPathLexer {
         } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
             prevToken.tokenType = TokenLevelState.Declaration;
         } else if (Data.nonFunctionTypes.indexOf(prevToken.value) > -1) {
-            prevToken.tokenType = TokenLevelState.SimpleType;
+            prevToken.tokenType = TokenLevelState.Operator;
         } else if (Data.nodeTypes.indexOf(prevToken.value) > -1) {
             prevToken.tokenType = TokenLevelState.NodeType;
         } else if (Data.keywords.indexOf(prevToken.value) > -1) {
