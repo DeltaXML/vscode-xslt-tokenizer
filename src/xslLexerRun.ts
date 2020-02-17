@@ -2,8 +2,6 @@
 import { Token, TokenLevelState, ExitCondition, LexPosition, BaseToken } from "./xpLexer";
 import { XslLexer, XslToken } from "./xslLexer";
 
-import { Position } from "vscode";
-
 // -------------
 let testXslt: string =
 `<xsl:f select="$a" expand-text="yes"><xsl:a select="$b"`;

@@ -1,5 +1,4 @@
 import { Debug } from "./diagnostics";
-import { Position } from "vscode";
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();

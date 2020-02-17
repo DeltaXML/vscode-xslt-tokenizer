@@ -41,7 +41,7 @@
 					".xslt"
 				],
 				"configuration": "./xsl-language-configuration.json"
-			}			
+			}
 		]
 	},
 	"scripts": {
