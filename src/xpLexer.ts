@@ -751,18 +751,16 @@ export class XPathLexer {
     }
 
     private updateTokenBeforeBrackets(prevToken: Token) {
-        if (prevToken.tokenType === TokenLevelState.Declaration){
-            // keep
-        } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
-            prevToken.tokenType = TokenLevelState.Declaration;
-        } else if (Data.nonFunctionTypes.indexOf(prevToken.value) > -1) {
-            prevToken.tokenType = TokenLevelState.Operator;
-        } else if (Data.nodeTypes.indexOf(prevToken.value) > -1) {
-            prevToken.tokenType = TokenLevelState.NodeType;
-        } else if (Data.keywords.indexOf(prevToken.value) > -1) {
-            // should already be marked operator
-        } else {
-            prevToken.tokenType = TokenLevelState.Function;
+        if (prevToken.tokenType === TokenLevelState.Name) { 
+            if (Data.nodeTypes.indexOf(prevToken.value) > -1) {           
+                prevToken.tokenType = TokenLevelState.NodeType;
+            } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
+                prevToken.tokenType = TokenLevelState.Declaration;
+            } else if (prevToken.value === 'function') {
+                prevToken.tokenType = TokenLevelState.Operator;
+            } else {
+                prevToken.tokenType = TokenLevelState.Function;
+            }
         }
     }
 
