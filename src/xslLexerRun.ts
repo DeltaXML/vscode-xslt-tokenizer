@@ -1,6 +1,6 @@
 // tslint:disable
-import { Token, TokenLevelState, ExitCondition, LexPosition, BaseToken } from "./xpLexer";
-import { XslLexer, XslToken } from "./xslLexer";
+import { BaseToken } from "./xpLexer";
+import { XslLexer } from "./xslLexer";
 
 // -------------
 let testXslt: string =
