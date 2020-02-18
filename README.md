@@ -68,6 +68,11 @@ From terminal, run:
 
 - This is currently a work in progress. Main XPath 3.1 tokenization using standard token types is complete.
 
+To do:
+- Tokenize non-XSLT element names
+- Use XSLT namespace instead of xsl: prefix
+- Add XPath tests for anonymous functions
+
 ## XPath 3.1 lexer summary
 
 - Hand-crafted lexer
