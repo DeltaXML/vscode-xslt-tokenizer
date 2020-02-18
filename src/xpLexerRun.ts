@@ -5,9 +5,9 @@ import { Position } from "vscode";
 
 // -------------
 let testXpath: string =
-`$a and ($b)`;
+`let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a`;
 let testTitle = `declaration`;
-let generateTest = false;
+let generateTest = true;
 let timerOnly = false;
 let flatten = false; // set true for vscode extension tokens
 // =============

@@ -1610,4 +1610,170 @@ startCharacter: 11
 },]
   expect (r).toEqual(ts);
 });
+        
+test(`declaration`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = false;
+  let rx: Token[] = l.analyse(`let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a`, ExitCondition.None, pos);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `let`,
+tokenType: TokenLevelState.Declaration,
+line: 0,
+length: 3,
+startCharacter: 0
+},
+{value: `$ac`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 3,
+startCharacter: 4
+},
+{value: `:=`,
+tokenType: TokenLevelState.Declaration,
+children:[
+{value: `function`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 8,
+startCharacter: 11
+},
+{value: `(`,
+tokenType: TokenLevelState.Operator,
+children:[
+{value: `$a`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 20
+},],
+line: 0,
+length: 1,
+startCharacter: 19
+},
+{value: `)`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 1,
+startCharacter: 22
+},
+{value: `as`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 2,
+startCharacter: 24
+},
+{value: `function`,
+tokenType: TokenLevelState.SimpleType,
+line: 0,
+length: 8,
+startCharacter: 27
+},
+{value: `(`,
+tokenType: TokenLevelState.Operator,
+children:[
+{value: `*`,
+tokenType: TokenLevelState.NodeType,
+line: 0,
+length: 1,
+startCharacter: 36
+},],
+line: 0,
+length: 1,
+startCharacter: 35
+},
+{value: `)`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 1,
+startCharacter: 37
+},
+{value: `{`,
+tokenType: TokenLevelState.Operator,
+children:[
+{value: `function`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 8,
+startCharacter: 40
+},
+{value: `(`,
+tokenType: TokenLevelState.Operator,
+children:[
+{value: `$b`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 49
+},],
+line: 0,
+length: 1,
+startCharacter: 48
+},
+{value: `)`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 1,
+startCharacter: 51
+},
+{value: `{`,
+tokenType: TokenLevelState.Operator,
+children:[
+{value: `$b`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 54
+},
+{value: `+`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 1,
+startCharacter: 57
+},
+{value: `1`,
+tokenType: TokenLevelState.Number,
+line: 0,
+length: 1,
+startCharacter: 59
+},],
+line: 0,
+length: 1,
+startCharacter: 53
+},
+{value: `}`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 1,
+startCharacter: 60
+},],
+line: 0,
+length: 1,
+startCharacter: 39
+},
+{value: `}`,
+tokenType: TokenLevelState.Operator,
+line: 0,
+length: 1,
+startCharacter: 61
+},
+{value: `return`,
+tokenType: TokenLevelState.Declaration,
+children:[
+{value: `$a`,
+tokenType: TokenLevelState.Variable,
+line: 0,
+length: 2,
+startCharacter: 70
+},],
+line: 0,
+length: 6,
+startCharacter: 63
+},],
+line: 0,
+length: 2,
+startCharacter: 8
+},]
+  expect (r).toEqual(ts);
+});
 
