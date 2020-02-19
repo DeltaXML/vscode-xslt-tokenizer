@@ -69,12 +69,13 @@ From terminal, run:
 - This is currently a work in progress. Main XPath 3.1 tokenization using standard token types is complete.
 
 To do:
-- Tokenize non-XSLT element names
+- Highlight non-XSLT element names
 - Use XSLT namespace instead of xsl: prefix
-- Add XPath tests for anonymous functions
+- Configure XSL language for matching-brackets
 
 ## XPath 3.1 lexer summary
 
+### Main Features
 - Hand-crafted lexer
 - No regular expressions
 - Iterates character by character
@@ -82,3 +83,46 @@ To do:
 - Disambiguates token based on previous/next token
 - Uses stack to manages evaluation context scope
 - No Abstract Syntax Tree
+- Optional 'Context' Tree (not used by semantic highlighter)
+
+### Diagnostics / Testing
+- Set of high-level tests - uses jest/ts-jest
+- Generate tests from XPath expressions
+- XPath Diagnosticts Tool
+	- Lists all tokens for given XPath
+	- Each token type and main properties
+
+## Sample Diagnostics:
+
+### Character-level:
+```
+path: let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a
+===============================================================================================================
+Cached Real Token                                 New Token       Value                         Start:Length
+===============================================================================================================
+                                                  lName           let_                              0:0
+lName           let_                              lWs              _                                0:3
+lName           let_                              lVar            $ac_                              0:4
+lVar            $ac_                              lWs              _                                0:7
+lVar            $ac_                              dSep            :=_                               0:8
+dSep            :=_                               lWs              _                                0:10
+dSep            :=_                               lName           function_                         0:11
+```
+### Token-level (Context enabled):
+
+```
+Value           Char-Type       Token-type
+-------------------------------------------
+let             lName           Declaration
+$ac             lVar            Variable
+:=              dSep            Declaration
+--- children-start---
+function        lName           Operator
+(               lB              Operator
+--- children-start---
+$a              lVar            Variable
+--- children-end ----
+)               rB              Operator
+as              lName           Operator
+function        lName           SimpleType
+(               lB              Operator

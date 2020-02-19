@@ -34,7 +34,7 @@
 		{
             "type": "node",
             "request": "launch",
-            "name": "Run Diagnostics Tool",
+            "name": "Run XPath Diagnostics",
             "skipFiles": [
                 "<node_internals>/**"
             ],
@@ -47,7 +47,7 @@
 		{
             "type": "node",
             "request": "launch",
-            "name": "Run XSL Diagnostics Tool",
+            "name": "Run XSL Diagnostics",
             "skipFiles": [
                 "<node_internals>/**"
             ],
