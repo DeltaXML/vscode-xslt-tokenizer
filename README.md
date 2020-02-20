@@ -98,7 +98,7 @@ To do:
 ```
 path: let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a
 ===============================================================================================================
-Cached Real Token                                 New Token       Value                         Start:Length
+Cached Real Token                                 New Token       Value                         line:startChar
 ===============================================================================================================
                                                   lName           let_                              0:0
 lName           let_                              lWs              _                                0:3
