@@ -1,7 +1,6 @@
 // tslint:disable
 import { XPathLexer, Token, TokenLevelState, ExitCondition, LexPosition } from "./xpLexer";
 import { Debug } from "./diagnostics";
-import { Position } from "vscode";
 
 // -------------
 let testXpath: string =
@@ -9,7 +8,7 @@ let testXpath: string =
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
-let flatten = false; // set true for vscode extension tokens
+let flatten = true; // set true for vscode extension tokens
 // =============
 
 generateTest = timerOnly? false: generateTest;
@@ -41,21 +40,7 @@ if (generateTest) {
 	Debug.printResultTokens(tokens);
 	if (flatten) {
 		console.log('===============');
-		printTokenValues(testXpath);
-	}
-}
-
-function printTokenValues(xpathExpr: string) {
-	let lines = xpathExpr.split(/\r\n|\r|\n/);
-	console.log('line count: ' + lines.length);
-	console.log('token count: ' + tokens.length);
-	for (let i = 0; i < tokens.length; i++) {
-		let t: Token = tokens[i];
-		if (t.tokenType.valueOf() !== TokenLevelState.Whitespace.valueOf()) {
-			let line = lines[t.line];
-			let sc = t.startCharacter ? t.startCharacter : 0;
-			console.log(line.substr(sc, t.length) + '_');
-		}
+		Debug.printTokenValues(testXpath, tokens);
 	}
 }
 

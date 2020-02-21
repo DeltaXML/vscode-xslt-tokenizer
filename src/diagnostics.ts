@@ -22,6 +22,21 @@ export class Debug {
         console.log(preamble + result + postamble);
     }
 
+    public static printTokenValues(xpathExpr: string, resultTokens: Token[]) {
+        let lines = xpathExpr.split(/\r\n|\r|\n/);
+        console.log('-----------------')
+        console.log('line count: ' + lines.length);
+        console.log('token count: ' + resultTokens.length);
+        for (let i = 0; i < resultTokens.length; i++) {
+            let t: Token = resultTokens[i];
+            if (t.tokenType.valueOf() !== TokenLevelState.Whitespace.valueOf()) {
+                let line = lines[t.line];
+                let sc = t.startCharacter ? t.startCharacter : 0;
+                console.log(i + '. ' + line.substr(sc, t.length) + '_');
+            }
+        }
+    }
+
     private static serializeTokens = function(accumulator: any, token: Token|null): any {
         if (!token) {
             return accumulator;
