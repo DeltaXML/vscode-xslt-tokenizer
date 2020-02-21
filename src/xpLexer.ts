@@ -56,10 +56,14 @@ export enum CharLevelState {
     rDqEnt,  // 34
 }
 
+/*
+    Enum for Token Types.
+    Note that these names correspond either directly
+    to Semantic Token types or they are mapped to
+    Semantic Tokens types via semanticTokenStyleDefaults
+    property in package.json
+*/
 export enum TokenLevelState {
-    // where name does not correspond to semantic token name.
-    // the comment shows the adopted name
-    // where state is also used in XSLT, (xsl) is shown
     attributeNameTest,    // struct
     comment,
     number,
