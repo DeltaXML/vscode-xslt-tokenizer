@@ -161,7 +161,6 @@ export class XPathLexer {
         let keyCount: number = Object.keys(TokenLevelState).length / 2;
         for (let i = 0; i < keyCount; i++) {
             textmateTypes.push(TokenLevelState[i]);
-            let enumString = TokenLevelState[i];
         }
         return textmateTypes;
     }
