@@ -27,13 +27,13 @@ test(`numeric operator`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `1`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `+`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `2`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
   expect (r).toEqual(ts);
 });
@@ -44,13 +44,13 @@ test(`stringLiteral escaping`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `'fir''st'`,
-tokenType: TokenLevelState.String
+tokenType: TokenLevelState.string
 },
 {value: `||`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `"seco""nd"`,
-tokenType: TokenLevelState.String
+tokenType: TokenLevelState.string
 },]
   expect (r).toEqual(ts);
 });
@@ -61,13 +61,13 @@ test(`number token`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `255.7e-2`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `+`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `union`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -78,26 +78,26 @@ test(`parenthesis sum`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `255`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `+`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$union`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `+`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `28`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
   expect (r).toEqual(ts);
 });
@@ -110,55 +110,55 @@ test(`resolve ambiguous keywords`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `union`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `union`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `union`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `div`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$var`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `div`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `/`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `and`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `/`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `union`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `..`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `union`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -171,16 +171,16 @@ test(`literal uri`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `eq`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `Q{http://example.com}`,
-tokenType: TokenLevelState.UriLiteral
+tokenType: TokenLevelState.uriLiteral
 },
 {value: `div`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -191,22 +191,22 @@ test(`attribute castable as simple type`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `@myatt`,
-tokenType: TokenLevelState.Attribute
+tokenType: TokenLevelState.attributeNameTest
 },
 {value: `castable`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `as`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `xs:integer`,
-tokenType: TokenLevelState.SimpleType
+tokenType: TokenLevelState.simpleType
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
   expect (r).toEqual(ts);
 });
@@ -219,34 +219,34 @@ test(`axis and nodetype`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `ancestor`,
-tokenType: TokenLevelState.Axis
+tokenType: TokenLevelState.axisName
 },
 {value: `::`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `node`,
-tokenType: TokenLevelState.NodeType
+tokenType: TokenLevelState.nodeType
 },
 {value: `()`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `union`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `parent`,
-tokenType: TokenLevelState.Axis
+tokenType: TokenLevelState.axisName
 },
 {value: `::`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `table`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `/`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `@name`,
-tokenType: TokenLevelState.Attribute
+tokenType: TokenLevelState.attributeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -259,34 +259,34 @@ test(`axis and attribute shorthand`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `ancestor`,
-tokenType: TokenLevelState.Axis
+tokenType: TokenLevelState.axisName
 },
 {value: `::`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `node`,
-tokenType: TokenLevelState.NodeType
+tokenType: TokenLevelState.nodeType
 },
 {value: `()`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `union`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `parent`,
-tokenType: TokenLevelState.Axis
+tokenType: TokenLevelState.axisName
 },
 {value: `::`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `table`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `/`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `@name`,
-tokenType: TokenLevelState.Attribute
+tokenType: TokenLevelState.attributeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -297,17 +297,17 @@ test(`function call`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `count`,
-tokenType: TokenLevelState.Function
+tokenType: TokenLevelState.function
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: "$a",
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
   expect (r).toEqual(ts);
 });
@@ -318,13 +318,13 @@ test(`* wildcard 1`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `*`,
-tokenType: TokenLevelState.NodeType
+tokenType: TokenLevelState.nodeType
 },
 {value: `union`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
   expect (r).toEqual(ts);
 });
@@ -335,16 +335,16 @@ test(`* wildcard 2`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `pre`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `:*`,
-tokenType: TokenLevelState.NodeType
+tokenType: TokenLevelState.nodeType
 },
 {value: `union`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
   expect (r).toEqual(ts);
 });
@@ -355,19 +355,19 @@ test(`* wildcard 3`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `/`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `*:`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `name`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `div`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
   expect (r).toEqual(ts);
 });
@@ -378,16 +378,16 @@ test(`* wildcard 4`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `Q{http://example.com}`,
-tokenType: TokenLevelState.UriLiteral
+tokenType: TokenLevelState.uriLiteral
 },
 {value: `*`,
-tokenType: TokenLevelState.NodeType
+tokenType: TokenLevelState.nodeType
 },
 {value: `eq`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
   expect (r).toEqual(ts);
 });
@@ -398,13 +398,13 @@ test(`* multiplication`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$var`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `*`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `8`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
   expect (r).toEqual(ts);
 });
@@ -415,17 +415,17 @@ test(`array curly brace`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `array`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `{`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: "1",
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
 },
 {value: `}`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
   expect (r).toEqual(ts);
 });
@@ -436,17 +436,17 @@ test(`array square brace`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `array`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `[`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: "1",
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
 },
 {value: `]`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
   expect (r).toEqual(ts);
 });
@@ -457,23 +457,23 @@ test(`declaration`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `map`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `{`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: "25",
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: ":",
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: "first",
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
 },
 {value: `}`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
   expect (r).toEqual(ts);
 });
@@ -484,13 +484,13 @@ test(`valid names`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$pre:var22.5a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `||`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `pre:name22.5b`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -501,13 +501,13 @@ test(`valid names 2`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$_pre:var22.5a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `||`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `_pre:name22.5b`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -518,36 +518,36 @@ test(`if then else`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `eq`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `5`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `else`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },]
 },
 {value: `union`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -558,13 +558,13 @@ test(`numeric literals with dot chars`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `.55`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `+`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `1.`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
   expect (r).toEqual(ts);
 });
@@ -575,32 +575,32 @@ test(`map type`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$M`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `instance`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `of`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `map`,
-tokenType: TokenLevelState.SimpleType
+tokenType: TokenLevelState.simpleType
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `xs:integer`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `xs:string`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
   expect (r).toEqual(ts);
 });
@@ -611,53 +611,53 @@ test(`if else if else`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `level1`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `1`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `else`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },]
 },
 {value: `if`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `level2`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `2`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `else`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },]
 },
 {value: `0`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
   expect (r).toEqual(ts);
 });
@@ -668,53 +668,53 @@ test(`if if else else`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `level1`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `if`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `level1.1`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `1.1`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `else`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },]
 },
 {value: `1.0`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `else`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },]
 },
 {value: `0`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
   expect (r).toEqual(ts);
 });
@@ -725,37 +725,37 @@ test(`comma inside if expr - error`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `1`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `,`,
 error: true,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `2`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `else`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },]
 },
 {value: `1`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },]
   expect (r).toEqual(ts);
 });
@@ -767,22 +767,22 @@ test(`simple let expression`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `let`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `2`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `return`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
 },]
 },]
@@ -795,47 +795,47 @@ test(`nested let expression`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `let`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `2`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `3`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `return`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
 },]
 },]
@@ -849,68 +849,68 @@ test(`nested for loop`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `for`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `in`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `1`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `to`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `5`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `in`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `1`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `to`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `5`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `return`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `concat`,
-tokenType: TokenLevelState.Function
+tokenType: TokenLevelState.function
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `'.'`,
-tokenType: TokenLevelState.String
+tokenType: TokenLevelState.string
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
 },]
 },]
@@ -925,49 +925,49 @@ test(`nested let expression with sequence concatanation`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `let`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `1`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `2`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `return`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `+`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `2`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
 },]
 },]
 },
 {value: `union`,
-tokenType: TokenLevelState.Name
+tokenType: TokenLevelState.nodeNameTest
 },]
   expect (r).toEqual(ts);
 });
@@ -978,36 +978,36 @@ test(`everyExpr with sequence concatanation`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `every`,
-tokenType: TokenLevelState.Declaration
+tokenType: TokenLevelState.complexExpression
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `in`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `*`,
-tokenType: TokenLevelState.NodeType
+tokenType: TokenLevelState.nodeType
 },
 {value: `satisfies`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `>`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `0`,
-tokenType: TokenLevelState.Number
+tokenType: TokenLevelState.number
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },]
 },]
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
   expect (r).toEqual(ts);
 });
@@ -1018,19 +1018,19 @@ test(`comment included in a sequence`, () => {
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `$a`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `(:comment:)`,
-tokenType: TokenLevelState.Comment
+tokenType: TokenLevelState.comment
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable
+tokenType: TokenLevelState.variable
 },]
   expect (r).toEqual(ts);
 });
@@ -1044,19 +1044,19 @@ three" || "new"`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens(rx);
   let ts: TokenLight[] = [
 {value: `"one`,
-tokenType: TokenLevelState.String
+tokenType: TokenLevelState.string
 },
 {value: `two`,
-tokenType: TokenLevelState.String
+tokenType: TokenLevelState.string
 },
 {value: `three"`,
-tokenType: TokenLevelState.String
+tokenType: TokenLevelState.string
 },
 {value: `||`,
-tokenType: TokenLevelState.Operator
+tokenType: TokenLevelState.operator
 },
 {value: `"new"`,
-tokenType: TokenLevelState.String
+tokenType: TokenLevelState.string
 },]
   expect (r).toEqual(ts);
 });
@@ -1072,16 +1072,16 @@ else $c`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `if`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 line: 0,
 length: 2,
 startCharacter: 0
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 4
@@ -1091,34 +1091,34 @@ length: 1,
 startCharacter: 3
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 6
 },
 {value: `then`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `$b`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 1,
 length: 2,
 startCharacter: 0
 },
 {value: `(:some`,
-tokenType: TokenLevelState.Comment,
+tokenType: TokenLevelState.comment,
 line: 1,
 length: 6,
 startCharacter: 3
 },
 {value: `thing:)`,
-tokenType: TokenLevelState.Comment,
+tokenType: TokenLevelState.comment,
 line: 2,
 length: 7,
 startCharacter: 0
 },
 {value: `else`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 line: 3,
 length: 4,
 startCharacter: 0
@@ -1128,7 +1128,7 @@ length: 4,
 startCharacter: 8
 },
 {value: `$c`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 3,
 length: 2,
 startCharacter: 5
@@ -1143,13 +1143,13 @@ split:)`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `(:comment`,
-tokenType: TokenLevelState.Comment,
+tokenType: TokenLevelState.comment,
 line: 0,
 length: 9,
 startCharacter: 0
 },
 {value: `split:)`,
-tokenType: TokenLevelState.Comment,
+tokenType: TokenLevelState.comment,
 line: 1,
 length: 7,
 startCharacter: 0
@@ -1165,25 +1165,25 @@ $a`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `'multi-line`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 0,
 length: 11,
 startCharacter: 0
 },
 {value: `string'`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 1,
 length: 7,
 startCharacter: 0
 },
 {value: `eq`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 1,
 length: 2,
 startCharacter: 8
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 2,
 length: 2,
 startCharacter: 0
@@ -1197,19 +1197,19 @@ let rx: Token[] = l.analyse(`author,\n\ttitle`,  ExitCondition.None, pos);
 let r: Token[] = Utilities.minimiseTokens2(rx);
 let ts: TokenLight[] = [
 {value: `author`,
-tokenType: TokenLevelState.Name,
+tokenType: TokenLevelState.nodeNameTest,
 line: 0,
 length: 6,
 startCharacter: 0
 },
 {value: `,`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 6
 },
 {value: `title`,
-tokenType: TokenLevelState.Name,
+tokenType: TokenLevelState.nodeNameTest,
 line: 1,
 length: 5,
 startCharacter: 1
@@ -1223,46 +1223,46 @@ test(`multiline map`, () => {
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `map`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 3,
 startCharacter: 0
 },
 {value: `{`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `abc:`,
-tokenType: TokenLevelState.Name,
+tokenType: TokenLevelState.nodeNameTest,
 line: 1,
 length: 4,
 startCharacter: 1
 },
 {value: `2`,
-tokenType: TokenLevelState.Number,
+tokenType: TokenLevelState.number,
 line: 1,
 length: 1,
 startCharacter: 6
 },
 {value: `def:`,
-tokenType: TokenLevelState.Name,
+tokenType: TokenLevelState.nodeNameTest,
 line: 2,
 length: 4,
 startCharacter: 1
 },
 {value: `23`,
-tokenType: TokenLevelState.Number,
+tokenType: TokenLevelState.number,
 line: 2,
 length: 2,
 startCharacter: 6
 },
 {value: `hij:`,
-tokenType: TokenLevelState.Name,
+tokenType: TokenLevelState.nodeNameTest,
 line: 3,
 length: 4,
 startCharacter: 1
 },
 {value: `24`,
-tokenType: TokenLevelState.Number,
+tokenType: TokenLevelState.number,
 line: 3,
 length: 2,
 startCharacter: 6
@@ -1272,7 +1272,7 @@ length: 1,
 startCharacter: 4
 },
 {value: `}`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 4,
 length: 1,
 startCharacter: 0
@@ -1287,25 +1287,25 @@ test(`flatten token structure`, () => {
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
 {value: `count`,
-tokenType: TokenLevelState.Function,
+tokenType: TokenLevelState.function,
 line: 0,
 length: 5,
 startCharacter: 0
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 5
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 6
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 8
@@ -1320,49 +1320,49 @@ test(`return declaration preceding number`, () => {
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `let`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 line: 0,
 length: 3,
 startCharacter: 0
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 4
 },
 {value: `:=`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 line: 0,
 length: 2,
 startCharacter: 7
 },
 {value: `2`,
-tokenType: TokenLevelState.Number,
+tokenType: TokenLevelState.number,
 line: 0,
 length: 1,
 startCharacter: 10
 },
 {value: `return`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 line: 0,
 length: 6,
 startCharacter: 12
 },
 {value: `9`,
-tokenType: TokenLevelState.Number,
+tokenType: TokenLevelState.number,
 line: 0,
 length: 1,
 startCharacter: 19
 },
 {value: `+`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 21
 },
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 23
@@ -1380,19 +1380,19 @@ test(`entity-ref-lt`, () => {
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$this`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 5,
 startCharacter: 0
 },
 {value: `&lt;`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 4,
 startCharacter: 6
 },
 {value: `$that`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 5,
 startCharacter: 11
@@ -1407,19 +1407,19 @@ test(`entity-ref-number-default`, () => {
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `22`,
-tokenType: TokenLevelState.Number,
+tokenType: TokenLevelState.number,
 line: 0,
 length: 2,
 startCharacter: 0
 },
 {value: `&lt;`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 4,
 startCharacter: 2
 },
 {value: `22`,
-tokenType: TokenLevelState.Number,
+tokenType: TokenLevelState.number,
 line: 0,
 length: 2,
 startCharacter: 6
@@ -1434,31 +1434,31 @@ test(`double quote char ref string`, () => {
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 0
 },
 {value: `eq`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 2,
 startCharacter: 3
 },
 {value: `&quot;n&quot;`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 0,
 length: 13,
 startCharacter: 6
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 3,
 startCharacter: 20
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 24
@@ -1473,31 +1473,31 @@ test(`double quote char ref string`, () => {
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 0
 },
 {value: `eq`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 2,
 startCharacter: 3
 },
 {value: `&apos;n&apos;`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 0,
 length: 13,
 startCharacter: 6
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 3,
 startCharacter: 20
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 24
@@ -1514,43 +1514,43 @@ the quick brown
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 0
 },
 {value: `eq`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 2,
 startCharacter: 3
 },
 {value: `&apos;`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 0,
 length: 6,
 startCharacter: 6
 },
 {value: `the quick brown`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 1,
 length: 15,
 startCharacter: 0
 },
 {value: `&apos;`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 2,
 length: 6,
 startCharacter: 0
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 2,
 length: 3,
 startCharacter: 7
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 2,
 length: 2,
 startCharacter: 11
@@ -1567,43 +1567,43 @@ the quick brown
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 0
 },
 {value: `eq`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 2,
 startCharacter: 3
 },
 {value: `&quot;`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 0,
 length: 6,
 startCharacter: 6
 },
 {value: `the quick brown`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 1,
 length: 15,
 startCharacter: 0
 },
 {value: `&quot;`,
-tokenType: TokenLevelState.String,
+tokenType: TokenLevelState.string,
 line: 2,
 length: 6,
 startCharacter: 0
 },
 {value: `and`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 2,
 length: 3,
 startCharacter: 7
 },
 {value: `$b`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 2,
 length: 2,
 startCharacter: 11
@@ -1618,31 +1618,31 @@ test(`declaration`, () => {
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
 {value: `let`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 line: 0,
 length: 3,
 startCharacter: 0
 },
 {value: `$ac`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 3,
 startCharacter: 4
 },
 {value: `:=`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `function`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 8,
 startCharacter: 11
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 20
@@ -1652,28 +1652,28 @@ length: 1,
 startCharacter: 19
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 22
 },
 {value: `as`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 2,
 startCharacter: 24
 },
 {value: `function`,
-tokenType: TokenLevelState.SimpleType,
+tokenType: TokenLevelState.simpleType,
 line: 0,
 length: 8,
 startCharacter: 27
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `*`,
-tokenType: TokenLevelState.NodeType,
+tokenType: TokenLevelState.nodeType,
 line: 0,
 length: 1,
 startCharacter: 36
@@ -1683,25 +1683,25 @@ length: 1,
 startCharacter: 35
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 37
 },
 {value: `{`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `function`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 8,
 startCharacter: 40
 },
 {value: `(`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$b`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 49
@@ -1711,28 +1711,28 @@ length: 1,
 startCharacter: 48
 },
 {value: `)`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 51
 },
 {value: `{`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 children:[
 {value: `$b`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 54
 },
 {value: `+`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 57
 },
 {value: `1`,
-tokenType: TokenLevelState.Number,
+tokenType: TokenLevelState.number,
 line: 0,
 length: 1,
 startCharacter: 59
@@ -1742,7 +1742,7 @@ length: 1,
 startCharacter: 53
 },
 {value: `}`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 60
@@ -1752,16 +1752,16 @@ length: 1,
 startCharacter: 39
 },
 {value: `}`,
-tokenType: TokenLevelState.Operator,
+tokenType: TokenLevelState.operator,
 line: 0,
 length: 1,
 startCharacter: 61
 },
 {value: `return`,
-tokenType: TokenLevelState.Declaration,
+tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `$a`,
-tokenType: TokenLevelState.Variable,
+tokenType: TokenLevelState.variable,
 line: 0,
 length: 2,
 startCharacter: 70

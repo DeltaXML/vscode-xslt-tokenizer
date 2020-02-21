@@ -60,21 +60,21 @@ export enum TokenLevelState {
     // where name does not correspond to semantic token name
     // the comment shows the adopted name
     // where state is also used in XSLT, (xsl) is shown
-    Attribute,    // struct
-    Comment,
-    Number,
+    attributeNameTest,    // struct
+    comment,
+    number,
     Unset,       // macro
-    Operator,
-    Variable,   // (xsl)
+    operator,
+    variable,   // (xsl)
     Whitespace, // not used
-    String,
-    UriLiteral, // constant
-    NodeType,   // parameter
-    SimpleType, // parameterType
-    Axis,       // label
-    Name,        // (xsl) class
-    Declaration, // (xsl) keyword
-    Function,
+    string,
+    uriLiteral, // constant
+    nodeType,   // parameter
+    simpleType, // parameterType
+    axisName,       // label
+    nodeNameTest,        // (xsl) class
+    complexExpression, // (xsl) keyword
+    function,
 }
 
 export enum ExitCondition {
@@ -89,25 +89,6 @@ export interface LexPosition {
     startCharacter: number,
     documentOffset: number
 }
-
-const tokenTypeLookup: [string, string][] = 
-[
-    ['Attribute', 'attributeNodeTest'], // 'struct'
-    ['Comment', 'comment'],
-    ['Number', 'number'],
-    ['Unset', 'parameterType'], // not used
-    ['Operator', 'operator'],
-    ['Variable', 'variable'],
-    ['Whitespace', 'whitespace'], // not used
-    ['String','string'],
-    ['UriLiteral', 'uriLiteral'], // 'constant' but this is not coloured!
-    ['NodeType', 'nodeType'], // 'parameter'
-    ['SimpleType', 'simpleType'], // duplicate - was parameterType
-    ['Axis', 'axisName'], // 'label' but this is not coloured!
-    ['Name', 'elementNodeTest'], // 'class'//
-    ['Declaration', 'complexExpression'], // 'keyword'
-    ['Function', 'function']
-];
 
 export type TokenTypeStrings = keyof typeof TokenLevelState;
 
@@ -145,9 +126,9 @@ class Data {
     public static setAsOperatorIfKeyword(token: Token) {
         if (token.value === 'return' || token.value === 'satisfies' || token.value === 'in' || 
         Data.nonFunctionConditional.indexOf(token.value) > -1) {
-            token.tokenType = TokenLevelState.Declaration// TODO: this should be set to Declaration but causes test failures
+            token.tokenType = TokenLevelState.complexExpression// TODO: this should be set to Declaration but causes test failures
         } else if (Data.keywords.indexOf(token.value) > -1) {
-            token.tokenType = TokenLevelState.Operator;
+            token.tokenType = TokenLevelState.operator;
         }
     }
 
@@ -193,15 +174,10 @@ export class XPathLexer {
 
     public static getTextmateTypeLegend(): string[] {
         let textmateTypes: string[] = [];
-
-        let conversionMap = new Map(tokenTypeLookup);
-        let keyCount: number = tokenTypeLookup.length;
+        let keyCount: number = Object.keys(TokenLevelState).length / 2;
         for (let i = 0; i < keyCount; i++) {
+            textmateTypes.push(TokenLevelState[i]);
             let enumString = TokenLevelState[i];
-            let r: string|undefined = conversionMap.get(enumString);
-            if (r !== undefined) {
-                textmateTypes.push(r);
-            }
         }
         return textmateTypes;
     }
@@ -702,7 +678,7 @@ export class XPathLexer {
             let prevToken = this.latestRealToken;
             this.setLabelForLastTokenOnly(prevToken, newToken);
             this.setLabelsUsingCurrentToken(prevToken, newToken);
-            if (XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.Operator) || XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.Declaration)) {
+            if (XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.operator) || XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.complexExpression)) {
                 if (newTokenValue === 'then' || newTokenValue === 'in' || newTokenValue === ':=' || newTokenValue === 'return' || newTokenValue === 'satisfies') {
                     if (!this.flatten) {
                         newToken.children = [];
@@ -750,15 +726,15 @@ export class XPathLexer {
     }
 
     private updateTokenBeforeBrackets(prevToken: Token) {
-        if (prevToken.tokenType === TokenLevelState.Name) { 
+        if (prevToken.tokenType === TokenLevelState.nodeNameTest) { 
             if (Data.nodeTypes.indexOf(prevToken.value) > -1) {           
-                prevToken.tokenType = TokenLevelState.NodeType;
+                prevToken.tokenType = TokenLevelState.nodeType;
             } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
-                prevToken.tokenType = TokenLevelState.Declaration;
+                prevToken.tokenType = TokenLevelState.complexExpression;
             } else if (prevToken.value === 'function') {
-                prevToken.tokenType = TokenLevelState.Operator;
+                prevToken.tokenType = TokenLevelState.operator;
             } else {
-                prevToken.tokenType = TokenLevelState.Function;
+                prevToken.tokenType = TokenLevelState.function;
             }
         }
     }
@@ -772,7 +748,7 @@ export class XPathLexer {
                     case CharLevelState.lVar:
                         if (Data.rangeVars.indexOf(prevToken.value) > -1) {
                                 // every, for, let, some
-                                prevToken.tokenType = TokenLevelState.Declaration;
+                                prevToken.tokenType = TokenLevelState.complexExpression;
                         }
                         break;
                     case CharLevelState.lB:
@@ -780,19 +756,19 @@ export class XPathLexer {
                         break;
                     case CharLevelState.dSep:
                         if (currentToken.value === '::' && Data.axes.indexOf(prevToken.value) > -1) {
-                            prevToken.tokenType = TokenLevelState.Axis;
+                            prevToken.tokenType = TokenLevelState.axisName;
                         } else if (currentToken.value === '()') {
                             this.updateTokenBeforeBrackets(prevToken);
                         }
                         break;
                     case CharLevelState.lPr:
                         if (prevToken.value ===  'array') {
-                            prevToken.tokenType = TokenLevelState.Operator;
+                            prevToken.tokenType = TokenLevelState.operator;
                         }
                         break;
                     case CharLevelState.lBr:
                         if (prevToken.value === 'map' || prevToken.value === 'array') {
-                            prevToken.tokenType = TokenLevelState.Operator;
+                            prevToken.tokenType = TokenLevelState.operator;
                         }
                         break;
                 }
@@ -803,7 +779,7 @@ export class XPathLexer {
     private setLabelsUsingCurrentToken(prevToken: Token|null, currentToken: Token) {
         if (!(prevToken)) {
             prevToken = new BasicToken(',', CharLevelState.sep);
-            prevToken.tokenType = TokenLevelState.Operator;
+            prevToken.tokenType = TokenLevelState.operator;
         }
         let currentValue = currentToken.value;
 
@@ -816,17 +792,17 @@ export class XPathLexer {
                         // previous token was lName and current token is lName
                         if (Data.secondParts.indexOf(currentValue) > -1 && XPathLexer.isPartOperator(prevToken.value, currentValue)) {
                             // castable as etc.
-                            prevToken.tokenType = TokenLevelState.Operator;
-                            currentToken.tokenType = TokenLevelState.Operator;                               
-                        } else if (XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.Operator)) {
+                            prevToken.tokenType = TokenLevelState.operator;
+                            currentToken.tokenType = TokenLevelState.operator;                               
+                        } else if (XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.operator)) {
                             // don't set to name because it may be a function etc.
                             //currentToken.tokenType = TokenLevelState.Name;
                             if (prevToken.value === 'as' || prevToken.value === 'of') {
                                 // e.g. castable as xs:integer
                                 // TODO: check if value equals xs:integer or element?
-                                currentToken.tokenType = TokenLevelState.SimpleType;
+                                currentToken.tokenType = TokenLevelState.simpleType;
                             }
-                        } else if (XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.Name) || XPathLexer.isTokenTypeAType(prevToken)) {
+                        } else if (XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.nodeNameTest) || XPathLexer.isTokenTypeAType(prevToken)) {
                             Data.setAsOperatorIfKeyword(currentToken);
                         } 
                         break;
@@ -856,14 +832,14 @@ export class XPathLexer {
 
                         if (XPathLexer.isTokenTypeUnset(prevToken)
                              && Data.keywords.indexOf(currentValue) > -1) {
-                            currentToken.tokenType = TokenLevelState.Operator;
+                            currentToken.tokenType = TokenLevelState.operator;
                         } else if (XPathLexer.isCharTypeEqual(prevToken, CharLevelState.dSep) 
                                     && prevToken.value === '()' 
                                     && Data.keywords.indexOf(currentValue) > -1) {
-                            currentToken.tokenType = TokenLevelState.Operator;
-                        } else if (XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.Operator) && 
+                            currentToken.tokenType = TokenLevelState.operator;
+                        } else if (XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.operator) && 
                             (prevToken.value === 'as' || prevToken.value === 'of')) {
-                            currentToken.tokenType = TokenLevelState.SimpleType;
+                            currentToken.tokenType = TokenLevelState.simpleType;
                         }
                         break;
                 }
@@ -872,18 +848,18 @@ export class XPathLexer {
                 let prevTokenT = prevToken.tokenType;
                 if (currentToken.value === '*' && 
                 (
-                    prevTokenT === TokenLevelState.Operator || 
-                    prevTokenT === TokenLevelState.Declaration || 
-                    prevTokenT === TokenLevelState.UriLiteral
+                    prevTokenT === TokenLevelState.operator || 
+                    prevTokenT === TokenLevelState.complexExpression || 
+                    prevTokenT === TokenLevelState.uriLiteral
                 )) {
                     currentToken.charType = CharLevelState.lName;
-                    currentToken.tokenType = TokenLevelState.NodeType;
+                    currentToken.tokenType = TokenLevelState.nodeType;
                 }
                 break;
             case CharLevelState.dSep:
                 if (currentToken.value === ':*') {
                     currentToken.charType = CharLevelState.lName;
-                    currentToken.tokenType = TokenLevelState.NodeType;
+                    currentToken.tokenType = TokenLevelState.nodeType;
                 }
                 break;
         }
@@ -1005,8 +981,8 @@ export class XPathLexer {
     }
 
     private static isTokenTypeAType(token: Token): boolean {
-        return token.tokenType === TokenLevelState.SimpleType ||
-                token.tokenType=== TokenLevelState.NodeType;
+        return token.tokenType === TokenLevelState.simpleType ||
+                token.tokenType=== TokenLevelState.nodeType;
     }
 
     private static isTokenTypeUnset(token: Token): boolean {
@@ -1085,10 +1061,10 @@ class BasicToken implements Token {
                 this.tokenType = TokenLevelState.Whitespace;
                 break;
             case CharLevelState.lName:
-                this.tokenType = TokenLevelState.Name;
+                this.tokenType = TokenLevelState.nodeNameTest;
                 break;
             case CharLevelState.dSep:
-                this.tokenType = value === ':='? TokenLevelState.Declaration: TokenLevelState.Operator;
+                this.tokenType = value === ':='? TokenLevelState.complexExpression: TokenLevelState.operator;
                 break;
             case CharLevelState.sep:
             case CharLevelState.lB:
@@ -1097,16 +1073,16 @@ class BasicToken implements Token {
             case CharLevelState.rB:
             case CharLevelState.rBr:
             case CharLevelState.rPr:
-                this.tokenType = TokenLevelState.Operator;
+                this.tokenType = TokenLevelState.operator;
                 break;
             case CharLevelState.lAttr:
-                this.tokenType = TokenLevelState.Attribute;
+                this.tokenType = TokenLevelState.attributeNameTest;
                 break;
             case CharLevelState.lNl:
-                this.tokenType = TokenLevelState.Number;
+                this.tokenType = TokenLevelState.number;
                 break;
             case CharLevelState.lVar:
-                this.tokenType = TokenLevelState.Variable;
+                this.tokenType = TokenLevelState.variable;
                 break;
             case CharLevelState.lSq:
             case CharLevelState.lDq:
@@ -1114,13 +1090,13 @@ class BasicToken implements Token {
             case CharLevelState.lDqEnt:
             case CharLevelState.rDqEnt:
             case CharLevelState.rSqEnt:
-                this.tokenType = TokenLevelState.String;
+                this.tokenType = TokenLevelState.string;
                 break;
             case CharLevelState.lUri:
-                this.tokenType = TokenLevelState.UriLiteral;
+                this.tokenType = TokenLevelState.uriLiteral;
                 break;
             case CharLevelState.lC:
-                this.tokenType = TokenLevelState.Comment;
+                this.tokenType = TokenLevelState.comment;
                 break;
             default:
                 this.tokenType = TokenLevelState.Unset;
@@ -1141,7 +1117,7 @@ class FlattenedToken implements Token {
     constructor(value: string, type: CharLevelState, context: Token|null) {
         this.value = value;
         this.charType = type;
-        this.tokenType = TokenLevelState.Operator;
+        this.tokenType = TokenLevelState.operator;
         this.context = context;
     }
 }
@@ -1160,7 +1136,7 @@ class ContainerToken implements Token {
         this.children = [];
         this.value = value;
         this.charType = type;
-        this.tokenType = TokenLevelState.Operator;
+        this.tokenType = TokenLevelState.operator;
         this.context = context;
     }
 }
