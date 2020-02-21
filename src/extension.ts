@@ -31,6 +31,7 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		const lexPosition: LexPosition = {line: 0, startCharacter: 0, documentOffset: 0};
+		this.xpLexer.documentTokens = [];
 		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition);
 		const builder = new vscode.SemanticTokensBuilder();
 		allTokens.forEach((token) => {
