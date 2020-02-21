@@ -57,7 +57,7 @@ export enum CharLevelState {
 }
 
 export enum TokenLevelState {
-    // where name does not correspond to semantic token name
+    // where name does not correspond to semantic token name.
     // the comment shows the adopted name
     // where state is also used in XSLT, (xsl) is shown
     attributeNameTest,    // struct
