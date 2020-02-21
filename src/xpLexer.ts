@@ -1,25 +1,5 @@
 import { Debug } from "./diagnostics";
 
-const tokenTypes = new Map<string, number>();
-const tokenModifiers = new Map<string, number>();
-
-const legend = (function () {
-    const tokenTypesLegend = [
-        'comment', 'string', 'keyword', 'number', 'regexp', 'operator', 'namespace',
-        'type', 'struct', 'class', 'interface', 'enum', 'parameterType', 'function',
-        'macro', 'variable', 'constant', 'parameter', 'property', 'label'
-    ];
-    tokenTypesLegend.forEach((tokenType, index) => tokenTypes.set(tokenType, index));
-
-    const tokenModifiersLegend = [
-        'declaration', 'documentation', 'member', 'static', 'abstract', 'deprecated',
-        'modification', 'async'
-    ];
-    tokenModifiersLegend.forEach((tokenModifier, index) => tokenModifiers.set(tokenModifier, index));
-
-    //return new vscode.SemanticTokensLegend(tokenTypesLegend, tokenModifiersLegend);
-})();
-
 export enum CharLevelState {
     init,// 0 initial state
     lB,  // 1 left bracket
