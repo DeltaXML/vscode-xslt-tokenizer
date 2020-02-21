@@ -92,7 +92,7 @@ export interface LexPosition {
 
 const tokenTypeLookup: [string, string][] = 
 [
-    ['Attribute', 'struct'],
+    ['Attribute', 'attributeNodeTest'], // 'struct'
     ['Comment', 'comment'],
     ['Number', 'number'],
     ['Unset', 'parameterType'], // not used
@@ -100,12 +100,12 @@ const tokenTypeLookup: [string, string][] =
     ['Variable', 'variable'],
     ['Whitespace', 'whitespace'], // not used
     ['String','string'],
-    ['UriLiteral', 'constant'],
-    ['NodeType', 'parameter'],
-    ['SimpleType', 'parameter'], // duplicate - was parameterType
-    ['Axis', 'label'],
-    ['Name', 'class'],
-    ['Declaration', 'keyword'],
+    ['UriLiteral', 'uriLiteral'], // 'constant' but this is not coloured!
+    ['NodeType', 'nodeType'], // 'parameter'
+    ['SimpleType', 'simpleType'], // duplicate - was parameterType
+    ['Axis', 'axisName'], // 'label' but this is not coloured!
+    ['Name', 'elementNodeTest'], // 'class'//
+    ['Declaration', 'complexExpression'], // 'keyword'
     ['Function', 'function']
 ];
 

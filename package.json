@@ -17,6 +17,65 @@
 	"enableProposedApi": true,
 	"main": "./out/extension.js",
 	"contributes": {
+		"semanticTokenTypes": [{
+			"id": "attributeNodeTest", 
+			"description": "An attribute node test in a step expression"
+		},
+		{
+			"id": "elementNodeTest", 
+			"description": "An attribute node test in a step expression"
+		},
+		{
+			"id": "uriLiteral", 
+			"description": "A URI literal of the form: Q{uri}"
+		},
+		{
+			"id": "nodeType", 
+			"description": "type of node, e.g. element()"
+		},
+		{
+			"id": "simpleType", 
+			"description": "type of value, e.g. xs:integer"
+		},
+		{
+			"id": "axisName", 
+			"description": "XPath axis, e.g. descendant::"
+		},
+		{
+			"id": "complexExpression",
+			"description": "multi-part expression keyword, e.g. let,:=,return"
+		}
+		],
+		"semanticTokenStyleDefaults": [
+			{
+				"selector": "elementNodeTest",
+				"scope": [ "support.class" ]
+			},
+			{
+				"selector": "attributeNodeTest",
+				"scope": ["storage.type.struct"]
+			},
+			{
+				"selector": "uriLiteral",
+				"scope": ["constant"]
+			},
+			{
+				"selector": "nodeType",
+				"scope": ["variable.parameter"]
+			},
+			{
+				"selector": "simpleType",
+				"scope": ["variable.parameter"]
+			},
+			{
+				"selector": "axisName",
+				"scope": ["label"]
+			},
+			{
+				"selector": "complexExpression",
+				"scope": ["keyword.control"]
+			}
+		],
 		"languages": [
 			{
 				"id": "xpath",
