@@ -262,6 +262,7 @@ export class XslLexer {
 
         let xpLexer: XPathLexer = new XPathLexer();
         xpLexer.documentText = xsl;
+        xpLexer.documentTokens = result;
         xpLexer.debug = this.debug;
         xpLexer.flatten = true;
         xpLexer.timerOn = this.timerOn;

@@ -183,6 +183,7 @@ export class XPathLexer {
     public timerOn: boolean = false;
     public entityRefOn: boolean = true;
     public documentText: string = '';
+    public documentTokens: BaseToken[] = [];
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
@@ -410,7 +411,7 @@ export class XPathLexer {
         let currentState: [CharLevelState, number] = [CharLevelState.init, 0];
         let currentChar: string = '';
         let tokenChars: string[] = [];
-        let result: BaseToken[] = [];
+        let result = this.documentTokens;
         let nestedTokenStack: Token[] = [];
 
         if (this.debug) {
