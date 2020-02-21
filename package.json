@@ -18,12 +18,12 @@
 	"main": "./out/extension.js",
 	"contributes": {
 		"semanticTokenTypes": [{
-			"id": "attributeNodeTest", 
+			"id": "attributeNameTest", 
 			"description": "An attribute node test in a step expression"
 		},
 		{
-			"id": "elementNodeTest", 
-			"description": "An attribute node test in a step expression"
+			"id": "nodeNameTest", 
+			"description": "A node test in a step expression"
 		},
 		{
 			"id": "uriLiteral", 
@@ -48,11 +48,11 @@
 		],
 		"semanticTokenStyleDefaults": [
 			{
-				"selector": "elementNodeTest",
+				"selector": "nodeNameTest",
 				"scope": [ "support.class" ]
 			},
 			{
-				"selector": "attributeNodeTest",
+				"selector": "attributeNameTest",
 				"scope": ["storage.type.struct"]
 			},
 			{
