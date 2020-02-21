@@ -41,6 +41,18 @@ export enum XMLCharState {
     lStEq
 }
 
+// for compatibility with legend - add count of XPath enums to this
+export enum XSLTokenLevelState {
+    attributeName = 1, 
+    attributeValue,
+    elementName,
+    elementValue,
+    processingInstrName,
+    processingInstrValue,
+    entityRef,
+    xslElementName
+}
+
 export interface XslToken extends BaseToken {
     line: number;
     startCharacter: number;
@@ -60,13 +72,21 @@ export class XslLexer {
     public debug: boolean = false;
     public flatten: boolean = false;
     public timerOn: boolean = false;
-    private latestRealToken: XslToken|null = null;
     private lineNumber: number = 0;
     private tokenCharNumber: number = 0;
     private charCount = 0;
     private lineCharCount = 0;
-    private wsNewLine = false;
-    private deferWsNewLine= false;
+    private static xpathLegend = XPathLexer.getTextmateTypeLegend();
+    private static xpathLegendLength = XslLexer.xpathLegend.length;
+
+    public static getTextmateTypeLegend(): string[] {
+        let textmateTypes: string[] = this.xpathLegend;
+        let keyCount: number = Object.keys(XSLTokenLevelState).length / 2;
+        for (let i = 0; i < keyCount; i++) {
+            textmateTypes.push(TokenLevelState[i]);
+        }
+        return textmateTypes;
+    }   
 
     private isWhitespace (isCurrentCharNewLine: boolean, char: string) {
         return isCurrentCharNewLine || char === ' ' || char == '\t' || char === '\r';
@@ -248,7 +268,6 @@ export class XslLexer {
         if (this.timerOn) {
             console.time('xslLexer.analyse');
         }
-        this.latestRealToken = null;
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.charCount = -1;
