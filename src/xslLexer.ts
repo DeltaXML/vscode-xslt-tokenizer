@@ -394,6 +394,7 @@ export class XslLexer {
                         }
                         if (addToken !== null) {
                             this.addNewTokenToResult(tokenStartChar, addToken, result);
+
                             tokenStartChar = 0;
                         }
                     } else if (storeToken) {
@@ -442,7 +443,8 @@ export class XslLexer {
                             break;
                         case XMLCharState.rComment:
                             let startChar = tokenStartChar > 0? tokenStartChar -2: 0;
-                            this.addNewTokenToResult(startChar, XSLTokenLevelState.xmlComment, result);          
+                            this.addNewTokenToResult(startChar, XSLTokenLevelState.xmlComment, result); 
+                            break;         
                         case XMLCharState.lAn:
                             tokenChars.push(currentChar);
                             storeToken = true;

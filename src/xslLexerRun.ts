@@ -5,7 +5,7 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`<!--ab\npg\nrs--> else`;
+`<!--c--><xsl:template/>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
