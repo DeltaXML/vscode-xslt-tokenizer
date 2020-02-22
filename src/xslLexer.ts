@@ -351,10 +351,10 @@ export class XslLexer {
             if (currentChar) {
                 let isCurrentCharNewLIne = currentChar === '\n';
             
-                if (isCurrentCharNewLIne) {
-                    this.lineNumber++;
-                    this.lineCharCount = 0;
-                } 
+                // if (isCurrentCharNewLIne) {
+                //     this.lineNumber++;
+                //     this.lineCharCount = 0;
+                // } 
 
                 nextState = this.calcNewState(
                     isCurrentCharNewLIne,
@@ -365,11 +365,22 @@ export class XslLexer {
 
                 if (nextState === currentState) {
                     if (isCurrentCharNewLIne) {
-                        // do nothing yet
+                        // we must split multi-line tokens:
+                        let addToken: XSLTokenLevelState|null = null;
+                        switch (nextState) {
+                            case XMLCharState.lPiValue:
+                                addToken = XSLTokenLevelState.processingInstrValue;
+                                break
+                        }
+                        if (addToken !== null) {
+                            this.addNewTokenToResult(tokenStartChar, addToken, result);
+                            tokenStartChar = 0;
+                        }
                     } else if (storeToken) {
                         tokenChars.push(currentChar);
                     }
                 } else {
+                    
                     switch (nextState) {
                         case XMLCharState.lSt:
                             break;
@@ -405,6 +416,9 @@ export class XslLexer {
                             break;
                         case XMLCharState.rPiName:
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrName, result);
+                            break;
+                        case XMLCharState.rPi:
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrValue, result);
                             break;
                         case XMLCharState.lAn:
                             tokenChars.push(currentChar);
@@ -518,6 +532,10 @@ export class XslLexer {
                     tokenStartChar = this.lineCharCount - 1;
                     tokenStartLine = this.lineNumber;
                 } // else ends
+                if (isCurrentCharNewLIne) {
+                    this.lineNumber++;
+                    this.lineCharCount = 0;
+                } 
                 currentState = nextState;
             } 
             currentChar = nextChar;
