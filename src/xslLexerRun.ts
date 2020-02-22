@@ -5,7 +5,7 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`<?pname pvalue1\npvalue2 ?>`;
+`<!--ab\npg\nrs--> else`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

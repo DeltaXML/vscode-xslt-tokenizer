@@ -5,8 +5,8 @@ export enum XMLCharState {
     lSt,  // 1 left start tag
     rSt,  // 2 right start tag
     rStNoAtt, // no attribute right start tag
-    lC,  // 3 left comment
-	rC,  // 4 right comment
+    lComment,  // 3 left comment
+    rComment,  // 4 right comment
     lPi, // 5 left processing instruction
     lPi2,
     lPiName,
@@ -20,7 +20,7 @@ export enum XMLCharState {
     wsBeforeAttname,
     rSq,
     rDq,
-    lDtd, // 8 left dtd declaration
+    lExclam, // 8 left dtd declaration
     rDtd, // 10 right dtd declaration
 	lWs,  // 13 whitspace char start
     lCt,  // 1 left close tag
@@ -84,6 +84,7 @@ export class XslLexer {
     private lineCharCount = 0;
     private static xpathLegend = XPathLexer.getTextmateTypeLegend();
     private static xpathLegendLength = XslLexer.xpathLegend.length;
+    private commentCharCount = 0;
 
     public static getTextmateTypeLegend(): string[] {
         // concat xsl legend to xpath legend
@@ -156,17 +157,34 @@ export class XslLexer {
                     rc = XMLCharState.rPi;
                 }
                 break;
-            case XMLCharState.lC:
-                if (char === '-' && nextChar === '-') {
-                    rc = XMLCharState.rC;
+            case XMLCharState.lComment:
+                if (this.commentCharCount === 0) {
+                    // char === '-' we've already processed <!-
+                    this.commentCharCount++;
+                } else if (this.commentCharCount === 1) {
+                    // if commendCharCount === 1 then we're just in the comment value
+                    if (char === '-' && nextChar === '-') {
+                        this.commentCharCount++;
+                    }
+                } else if (this.commentCharCount === 2) {
+                    // we're on the second '-' at comment end
+                    this.commentCharCount++;
+                } else if (this.commentCharCount === 3) {
+                    // we're expecting the '>' at the comment end
+                    if (char === '>') {
+                        rc = XMLCharState.rComment;
+                    }
+                    // stop checking as '--' already encountered without '>'
+                    this.commentCharCount = 4;
                 }
                 break;
-            case XMLCharState.lDtd:
+            case XMLCharState.lExclam:
                 // assume  <![CDATA[
                 if (char === '[' && nextChar === 'C') {
                     rc = XMLCharState.lCd;
                 } else if (char === '-' && nextChar === '-') {
-                    rc = XMLCharState.lC;
+                    rc = XMLCharState.lComment;
+                    this.commentCharCount = 0;
                 } else if (char === '>') {
                     rc = XMLCharState.rDtd;
                 }
@@ -285,10 +303,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lDtd;
-                        break;
-                    case '-':
-                        rc = XMLCharState.lC;
+                        rc = XMLCharState.lExclam;
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -370,7 +385,10 @@ export class XslLexer {
                         switch (nextState) {
                             case XMLCharState.lPiValue:
                                 addToken = XSLTokenLevelState.processingInstrValue;
-                                break
+                                break;
+                            case XMLCharState.lComment:
+                                addToken = XSLTokenLevelState.xmlComment;
+                                break;
                         }
                         if (addToken !== null) {
                             this.addNewTokenToResult(tokenStartChar, addToken, result);
@@ -420,6 +438,9 @@ export class XslLexer {
                         case XMLCharState.rPi:
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrValue, result);
                             break;
+                        case XMLCharState.rComment:
+                            let startChar = tokenStartChar > 0? tokenStartChar -2: 0;
+                            this.addNewTokenToResult(startChar, XSLTokenLevelState.xmlComment, result);          
                         case XMLCharState.lAn:
                             tokenChars.push(currentChar);
                             storeToken = true;
@@ -549,10 +570,15 @@ export class XslLexer {
     }
 
     private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[]) {
+        let tokenLength = (this.lineCharCount - 1) - tokenStartChar;
+        let localTokenStartChar = tokenStartChar;
+        if (newTokenType === XSLTokenLevelState.xmlComment) {
+            tokenLength++;
+        }
         let tkn: BaseToken = {
             line: this.lineNumber,
-            length: (this.lineCharCount - 1) - tokenStartChar,
-            startCharacter: tokenStartChar,
+            length: tokenLength,
+            startCharacter: localTokenStartChar,
             value: '',
             tokenType: newTokenType + XslLexer.xpathLegendLength
         };

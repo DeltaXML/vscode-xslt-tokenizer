@@ -2,7 +2,7 @@
     version="3.0"
     expand-text="yes">
 
-    <!-- comment -->
+    <!-- comment --
 
     <?myproc processing instruction?>
  
