@@ -5,7 +5,7 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`<xsl:f select="$a" expand-text="yes"><xsl:a select="$b"`;
+`<xsl:f>t</xsl:f>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

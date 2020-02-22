@@ -7,7 +7,9 @@ export enum XMLCharState {
     rStNoAtt, // no attribute right start tag
     lC,  // 3 left comment
 	rC,  // 4 right comment
-	lPi, // 5 left processing instruction
+    lPi, // 5 left processing instruction
+    lPi2,
+    lPiName,
 	rPi, // 6 right processing instruction
 	lCd, // 7 left cdata
 	rCd, // 8 right cdata
@@ -19,7 +21,9 @@ export enum XMLCharState {
     lDtd, // 8 left dtd declaration
     rDtd, // 10 right dtd declaration
 	lWs,  // 13 whitspace char start
-	lCt,  // 1 left close tag
+    lCt,  // 1 left close tag
+    lCt2,
+    lCtName,
     rCt,  // 2 right close tag
     rSelfCtNoAtt, // self-close no att
     rSelfCt, // self-close
@@ -84,7 +88,6 @@ export class XslLexer {
         let textmateTypes: string[] = this.xpathLegend;
         let keyCount: number = Object.keys(XSLTokenLevelState).length / 2;
         for (let i = 0; i < keyCount; i++) {
-            console.log((XslLexer.xpathLegendLength + i) + '.' + XSLTokenLevelState[i])
             textmateTypes.push(XSLTokenLevelState[i]);
         }
         return textmateTypes;
@@ -115,6 +118,23 @@ export class XslLexer {
         let firstCharOfToken = true;
 
         switch (existing) {
+            case XMLCharState.lCt:
+                rc = XMLCharState.lCt2;
+                break;
+            case XMLCharState.lCt2:
+                rc = XMLCharState.lCtName;
+                break;
+            case XMLCharState.lCtName:
+                if (char === '>') {
+                    rc = XMLCharState.rCt;
+                }
+                break;
+            case XMLCharState.lPi:
+                rc = XMLCharState.lPi2;
+                break;
+            case XMLCharState.lPi2:
+                rc = XMLCharState.lPiName;
+                break;
             case XMLCharState.lC:
                 if (char === '-' && nextChar === '-') {
                     rc = XMLCharState.rC;
@@ -299,10 +319,9 @@ export class XslLexer {
         
         if (this.debug) {
             console.log("xsl: " + xsl);
-            XslLexer.getTextmateTypeLegend();
         }
 
-        while (this.charCount < xslLength) {
+        while (this.charCount < xslLength + 1) {
             this.charCount++;
             this.lineCharCount++;
             let nextState: XMLCharState = XMLCharState.init;
@@ -333,6 +352,7 @@ export class XslLexer {
                     switch (nextState) {
                         case XMLCharState.lSt:
                             break;
+                        case XMLCharState.lCtName:
                         case XMLCharState.lEn:
                             expandTextValue = null;
                             if (tokenChars.length < 5) {
@@ -342,14 +362,20 @@ export class XslLexer {
                                 storeToken = false;
                             }
                             break;
+                        case XMLCharState.rStNoAtt:
+                            expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
+                            // cascade, so no-break intentional
                         case XMLCharState.lsElementNameWs:
                         case XMLCharState.rSelfCtNoAtt:
-                            isXslElement =
-                            tokenChars.length > 4 &&
-                            tokenChars[0] === 'x' &&
-                            tokenChars[1] === 's' &&
-                            tokenChars[2] === 'l' &&
-                            tokenChars[3] === ':';
+                        case XMLCharState.rCt:
+                            isXslElement = this.isXslMatch(tokenChars);
+
+                            if (nextState === XMLCharState.rCt) {
+                                if (xmlElementStack.length > 0) {
+                                    xmlElementStack.pop();
+                                }
+                            }
+
                             storeToken = false;
                             tokenChars = [];
 
@@ -383,24 +409,12 @@ export class XslLexer {
                             storeToken = false;
                             break;
                         case XMLCharState.rSt:
-                        case XMLCharState.rStNoAtt:
-                            if (expandTextValue === null) {
-                                if (xmlElementStack.length > 0) {
-                                    expandTextValue = xmlElementStack[xmlElementStack.length - 1].expandText;
-                                } else {
-                                    expandTextValue = false;
-                                }
-                            }
-                            xmlElementStack.push({"expandText": expandTextValue});
+                            expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
                             storeToken = false;
                             tokenChars = [];
                             break;
                         case XMLCharState.lCt:
-                            break;
-                        case XMLCharState.rCt:
-                            if (xmlElementStack.length > 0) {
-                                xmlElementStack.pop();
-                            }
+                        case XMLCharState.lCt2:
                             break;
                         case XMLCharState.rSq:
                         case XMLCharState.rDq:
@@ -499,7 +513,30 @@ export class XslLexer {
         }
         return result;
     }
+
+    private addToElementStack(expandTextValue: boolean | null, xmlElementStack: XmlElement[]) {
+        if (expandTextValue === null) {
+            if (xmlElementStack.length > 0) {
+                expandTextValue = xmlElementStack[xmlElementStack.length - 1].expandText;
+            }
+            else {
+                expandTextValue = false;
+            }
+        }
+        xmlElementStack.push({ "expandText": expandTextValue });
+        return expandTextValue;
+    }
+
+    private isXslMatch(tokenChars: string[]): boolean {
+        return (
+        tokenChars.length > 4 &&
+        tokenChars[0] === 'x' &&
+        tokenChars[1] === 's' &&
+        tokenChars[2] === 'l' &&
+        tokenChars[3] === ':');
+    }
 }
+
 
 export interface InnerLexerResult {
     charCount: number;

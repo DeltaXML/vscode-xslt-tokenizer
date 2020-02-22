@@ -121,7 +121,7 @@
 			},
 			{
 				"selector": "elementName",
-				"scope": []
+				"scope": ["support.class"]
 			},
 			{
 				"selector": "elementValue",
