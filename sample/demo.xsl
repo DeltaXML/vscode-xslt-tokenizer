@@ -2,9 +2,12 @@
     version="3.0"
     expand-text="yes">
 
-    <!-- comment --
+    <!--c-->
 
-    <?myproc processing instruction?>
+    <?myproc 
+    processing 
+    instruction
+    ?>
  
  <xsl:template match="TITLE">
 <h1>{for $a in 1 to 20 return descendant::NAME[@id eq 'tqs'] || $a}</h1>

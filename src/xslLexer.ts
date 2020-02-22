@@ -385,9 +385,11 @@ export class XslLexer {
                         switch (nextState) {
                             case XMLCharState.lPiValue:
                                 addToken = XSLTokenLevelState.processingInstrValue;
+                                this.addNewTokenToResult(tokenStartChar, addToken, result);
                                 break;
                             case XMLCharState.lComment:
                                 addToken = XSLTokenLevelState.xmlComment;
+                                tokenStartChar = tokenStartChar === 0? tokenStartChar: tokenStartChar - 2;
                                 break;
                         }
                         if (addToken !== null) {
