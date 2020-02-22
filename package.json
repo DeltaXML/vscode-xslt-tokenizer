@@ -137,11 +137,11 @@
 			},
 			{
 				"selector": "entityRef",
-				"scope": []
+				"scope": ["storage.type.struct"]
 			},
 			{
 				"selector": "xmlComment",
-				"scope": []
+				"scope": ["comment.block"]
 			},
 			{
 				"selector": "xslElementName",

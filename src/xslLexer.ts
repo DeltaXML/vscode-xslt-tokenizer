@@ -10,6 +10,8 @@ export enum XMLCharState {
     lPi, // 5 left processing instruction
     lPi2,
     lPiName,
+    rPiName,
+    lPiValue,
 	rPi, // 6 right processing instruction
 	lCd, // 7 left cdata
 	rCd, // 8 right cdata
@@ -134,6 +136,25 @@ export class XslLexer {
                 break;
             case XMLCharState.lPi2:
                 rc = XMLCharState.lPiName;
+                break;
+            case XMLCharState.lPiName:
+                if (this.isWhitespace(isCurrentCharNewLine, char)) {
+                    rc = XMLCharState.rPiName;
+                }
+                break;
+            case XMLCharState.rPiName:
+                if (this.isWhitespace(isCurrentCharNewLine, char)) {
+                    // no change
+                } else if (char === '?' && nextChar === '>') {
+                    rc = XMLCharState.rPi;
+                } else {
+                    rc = XMLCharState.lPiValue;
+                }
+                break;
+            case XMLCharState.lPiValue:
+                if (char === '?' && nextChar === '>') {
+                    rc = XMLCharState.rPi;
+                }
                 break;
             case XMLCharState.lC:
                 if (char === '-' && nextChar === '-') {
@@ -380,15 +401,10 @@ export class XslLexer {
                             tokenChars = [];
 
                             let newTokenType = isXslElement? XSLTokenLevelState.xslElementName: XSLTokenLevelState.elementName;
-
-                            let tkn: BaseToken = { 
-                                line: this.lineNumber,
-                                length: (this.lineCharCount - 1) - tokenStartChar, 
-                                startCharacter: tokenStartChar, 
-                                value: '', 
-                                tokenType: newTokenType + XslLexer.xpathLegendLength};
-                            result.push(tkn);
-
+                            this.addNewTokenToResult(tokenStartChar, newTokenType, result);
+                            break;
+                        case XMLCharState.rPiName:
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrName, result);
                             break;
                         case XMLCharState.lAn:
                             tokenChars.push(currentChar);
@@ -512,6 +528,17 @@ export class XslLexer {
             console.timeEnd('xslLexer.analyse');
         }
         return result;
+    }
+
+    private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[]) {
+        let tkn: BaseToken = {
+            line: this.lineNumber,
+            length: (this.lineCharCount - 1) - tokenStartChar,
+            startCharacter: tokenStartChar,
+            value: '',
+            tokenType: newTokenType + XslLexer.xpathLegendLength
+        };
+        result.push(tkn);
     }
 
     private addToElementStack(expandTextValue: boolean | null, xmlElementStack: XmlElement[]) {
