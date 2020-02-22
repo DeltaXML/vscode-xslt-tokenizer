@@ -6,7 +6,7 @@ const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
 
 const legend = (function () {
-	const tokenTypesLegend = XPathLexer.getTextmateTypeLegend();
+	const tokenTypesLegend = XslLexer.getTextmateTypeLegend();
 
 	const tokenModifiersLegend = [
 		'declaration', 'documentation', 'member', 'static', 'abstract', 'deprecated',

@@ -43,13 +43,14 @@ export enum XMLCharState {
 
 // for compatibility with legend - add count of XPath enums to this
 export enum XSLTokenLevelState {
-    attributeName = 1, 
+    attributeName, 
     attributeValue,
     elementName,
     elementValue,
     processingInstrName,
     processingInstrValue,
     entityRef,
+    xmlComment,
     xslElementName
 }
 
@@ -73,17 +74,18 @@ export class XslLexer {
     public flatten: boolean = false;
     public timerOn: boolean = false;
     private lineNumber: number = 0;
-    private tokenCharNumber: number = 0;
     private charCount = 0;
     private lineCharCount = 0;
     private static xpathLegend = XPathLexer.getTextmateTypeLegend();
     private static xpathLegendLength = XslLexer.xpathLegend.length;
 
     public static getTextmateTypeLegend(): string[] {
+        // concat xsl legend to xpath legend
         let textmateTypes: string[] = this.xpathLegend;
         let keyCount: number = Object.keys(XSLTokenLevelState).length / 2;
         for (let i = 0; i < keyCount; i++) {
-            textmateTypes.push(TokenLevelState[i]);
+            console.log((XslLexer.xpathLegendLength + i) + '.' + XSLTokenLevelState[i])
+            textmateTypes.push(XSLTokenLevelState[i]);
         }
         return textmateTypes;
     }   
@@ -108,7 +110,7 @@ export class XslLexer {
         return XslLexer.expressionAtts.indexOf(name) > -1;
     }
 
-    private calcNewState (isFirstChar: boolean, isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
+    private calcNewState (isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
         let rc: XMLCharState = existing;
         let firstCharOfToken = true;
 
@@ -227,12 +229,12 @@ export class XslLexer {
                 break;
             default:
                 // awaiting a new node
-                rc = this.testChar(existing, isFirstChar, char, nextChar);
+                rc = this.testChar(char, nextChar);
         }
         return rc;
     }
 
-    private testChar (existing: XMLCharState, isFirstChar: boolean, char: string, nextChar: string): XMLCharState {
+    private testChar (char: string, nextChar: string): XMLCharState {
         let rc: XMLCharState;
 
         switch (char) {
@@ -292,16 +294,18 @@ export class XslLexer {
         let isExpandTextAttribute = false;
         let expandTextValue: boolean|null = false;
         let xmlElementStack: XmlElement[] = [];
+        let tokenStartChar = -1;
+        let tokenStartLine = -1;
         
         if (this.debug) {
             console.log("xsl: " + xsl);
+            XslLexer.getTextmateTypeLegend();
         }
 
         while (this.charCount < xslLength) {
             this.charCount++;
             this.lineCharCount++;
             let nextState: XMLCharState = XMLCharState.init;
-            let isFirstTokenChar = this.tokenCharNumber === 0;
             let nextChar: string = xsl.charAt(this.charCount);
 
             if (currentChar) {
@@ -313,7 +317,6 @@ export class XslLexer {
                 } 
 
                 nextState = this.calcNewState(
-                    isFirstTokenChar,
                     isCurrentCharNewLIne,
                     currentChar,
                     nextChar,
@@ -349,6 +352,17 @@ export class XslLexer {
                             tokenChars[3] === ':';
                             storeToken = false;
                             tokenChars = [];
+
+                            let newTokenType = isXslElement? XSLTokenLevelState.xslElementName: XSLTokenLevelState.elementName;
+
+                            let tkn: BaseToken = { 
+                                line: this.lineNumber,
+                                length: (this.lineCharCount - 1) - tokenStartChar, 
+                                startCharacter: tokenStartChar, 
+                                value: '', 
+                                tokenType: newTokenType + XslLexer.xpathLegendLength};
+                            result.push(tkn);
+
                             break;
                         case XMLCharState.lAn:
                             tokenChars.push(currentChar);
@@ -471,7 +485,9 @@ export class XslLexer {
                             }
                             break;                         
                     }
-                }
+                    tokenStartChar = this.lineCharCount - 1;
+                    tokenStartLine = this.lineNumber;
+                } // else ends
                 currentState = nextState;
             } 
             currentChar = nextChar;

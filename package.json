@@ -44,6 +44,42 @@
 		{
 			"id": "complexExpression",
 			"description": "multi-part expression keyword, e.g. let,:=,return"
+		},
+		{
+			"id": "attributeName",
+			"description": "XML attribute name"
+		},
+		{
+			"id": "attributeValue",
+			"description": "XML attribute value"
+		},
+		{
+			"id": "elementName",
+			"description": "XML element name"
+		},
+		{
+			"id": "elementValue",
+			"description": "XML element text node"
+		},
+		{
+			"id": "processingInstrName",
+			"description": "Processing Instruction name"
+		},
+		{
+			"id": "processingInstrValue",
+			"description": "Processing Instruction value"
+		},
+		{
+			"id": "entityRef",
+			"description": "XML Entity Reference - e.g. '&lt;'"
+		},
+		{
+			"id": "xmlComment",
+			"description": "XML Comment"
+		},
+		{
+			"id": "xslElementName",
+			"description": "Name of XSLT Element"
 		}
 		],
 		"semanticTokenStyleDefaults": [
@@ -74,6 +110,42 @@
 			{
 				"selector": "complexExpression",
 				"scope": ["keyword.control"]
+			},
+			{
+				"selector": "attributeName",
+				"scope": []
+			},
+			{
+				"selector": "attributeValue",
+				"scope": []
+			},
+			{
+				"selector": "elementName",
+				"scope": []
+			},
+			{
+				"selector": "elementValue",
+				"scope": []
+			},
+			{
+				"selector": "processingInstrName",
+				"scope": ["storage.type.struct"]
+			},
+			{
+				"selector": "processingInstrValue",
+				"scope": []
+			},
+			{
+				"selector": "entityRef",
+				"scope": []
+			},
+			{
+				"selector": "xmlComment",
+				"scope": []
+			},
+			{
+				"selector": "xslElementName",
+				"scope": ["storage.type.struct"]
 			}
 		],
 		"languages": [

@@ -1,6 +1,7 @@
 // tslint:disable
 import { BaseToken } from "./xpLexer";
 import { XslLexer } from "./xslLexer";
+import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
@@ -26,4 +27,9 @@ lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
 
 let tokens: BaseToken[] = lexer.analyse(testXslt);
+Debug.printResultTokens(tokens);
+if (flatten) {
+	console.log('===============');
+	Debug.printTokenValues(testXslt, tokens);
+}
 
