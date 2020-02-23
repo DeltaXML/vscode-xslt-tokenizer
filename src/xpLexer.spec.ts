@@ -1776,4 +1776,52 @@ startCharacter: 8
 },]
   expect (r).toEqual(ts);
 });
+        
+test(`empty line in xpath`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = false;
+  let rx: Token[] = l.analyse(`c,
+
+d(b)`, ExitCondition.None, pos);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `c`,
+tokenType: TokenLevelState.nodeNameTest,
+line: 0,
+length: 1,
+startCharacter: 0
+},
+{value: `,`,
+tokenType: TokenLevelState.operator,
+line: 0,
+length: 1,
+startCharacter: 1
+},
+{value: `d`,
+tokenType: TokenLevelState.function,
+line: 2,
+length: 1,
+startCharacter: 0
+},
+{value: `(`,
+tokenType: TokenLevelState.operator,
+children:[
+{value: `b`,
+tokenType: TokenLevelState.nodeNameTest,
+line: 2,
+length: 1,
+startCharacter: 2
+},],
+line: 2,
+length: 1,
+startCharacter: 1
+},
+{value: `)`,
+tokenType: TokenLevelState.operator,
+line: 2,
+length: 1,
+startCharacter: 3
+},]
+  expect (r).toEqual(ts);
+});
 

@@ -6,9 +6,9 @@ import { Debug } from "./diagnostics";
 let testXpath: string =
 `c,\n\nd(b)`;
 let testTitle = `declaration`;
-let generateTest = false;
+let generateTest = true;
 let timerOnly = false;
-let flatten = true; // set true for vscode extension tokens
+let flatten = false; // set true for vscode extension tokens
 // =============
 
 generateTest = timerOnly? false: generateTest;

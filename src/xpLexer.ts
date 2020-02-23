@@ -640,7 +640,12 @@ export class XPathLexer {
                 }
                 this.deferWsNewLine = false;        
             } else if (this.wsNewLine) {
-                this.tokenCharNumber = this.wsCharNumber;
+                if (isWhitespace) {
+                    this.tokenCharNumber = this.wsCharNumber;
+                } else {
+                    this.tokenCharNumber = this.wsCharNumber + newTokenValue.length;
+                }
+
                 this.wsNewLine = false;
             } else {
                 this.tokenCharNumber += newTokenValue.length;
