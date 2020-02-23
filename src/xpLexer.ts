@@ -455,6 +455,7 @@ export class XPathLexer {
                         case CharLevelState.lName:
                         case CharLevelState.lEnt:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                            tokenChars = [];
                             tokenChars.push(currentChar);
                             break;
                         case CharLevelState.exp:
