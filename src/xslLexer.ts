@@ -535,7 +535,7 @@ export class XslLexer {
                             let exit;
                             if (isXslElement) {
                                 if (exit = attName.startsWith('_')) {
-                                    exit = this.isExpressionAtt(attName.substring(1))? ExitCondition.CurlyBrace: ExitCondition.None;
+                                    exit = ExitCondition.CurlyBrace;
                                 } else {
                                     exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
                                 }
@@ -544,8 +544,7 @@ export class XslLexer {
                             }
 
                             if (exit !== ExitCondition.None) {
-                                //this.addCharTokenToResult(tokenStartChar + 1, 3, XSLTokenLevelState.attributeValue, result);
-                                this.addNewTokenToResult(tokenStartChar + 1, XSLTokenLevelState.attributeValue, result);
+                                this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result);
 
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
@@ -558,8 +557,8 @@ export class XslLexer {
                                 }
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
-                                nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             }
+                            nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             break;
                         case XMLCharState.tvt:
                             let useTvt = xmlElementStack.length > 0 &&
