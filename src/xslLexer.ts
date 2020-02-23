@@ -405,6 +405,7 @@ export class XslLexer {
                     
                     switch (nextState) {
                         case XMLCharState.lSt:
+                            this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result);
                             break;
                         case XMLCharState.lCtName:
                         case XMLCharState.lEn:
