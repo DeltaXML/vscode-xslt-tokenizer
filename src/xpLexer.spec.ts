@@ -1825,3 +1825,49 @@ startCharacter: 3
   expect (r).toEqual(ts);
 });
 
+
+        
+test(`blank line plus indent char`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = true;
+  let rx: Token[] = l.analyse(`c,\n\n d(b)`, ExitCondition.None, pos);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `c`,
+tokenType: TokenLevelState.nodeNameTest,
+line: 0,
+length: 1,
+startCharacter: 0
+},
+{value: `,`,
+tokenType: TokenLevelState.operator,
+line: 0,
+length: 1,
+startCharacter: 1
+},
+{value: `d`,
+tokenType: TokenLevelState.function,
+line: 2,
+length: 1,
+startCharacter: 1
+},
+{value: `(`,
+tokenType: TokenLevelState.operator,
+line: 2,
+length: 1,
+startCharacter: 2
+},
+{value: `b`,
+tokenType: TokenLevelState.nodeNameTest,
+line: 2,
+length: 1,
+startCharacter: 3
+},
+{value: `)`,
+tokenType: TokenLevelState.operator,
+line: 2,
+length: 1,
+startCharacter: 4
+},]
+  expect (r).toEqual(ts);
+});

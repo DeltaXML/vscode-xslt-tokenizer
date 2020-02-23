@@ -650,7 +650,9 @@ export class XPathLexer {
             } else {
                 this.tokenCharNumber += newTokenValue.length;
             }
-            this.wsCharNumber = 0;
+            if (!isWhitespace) {
+                this.wsCharNumber = 0;
+            }
 
             let addStackTokens =  !this.flatten && stack.length > 0;
             if (!isWhitespace) {

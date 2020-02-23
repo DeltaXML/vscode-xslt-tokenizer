@@ -4,11 +4,11 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`c,\n\nd(b)`;
+`c,\n\n d(b)`;
 let testTitle = `declaration`;
 let generateTest = true;
 let timerOnly = false;
-let flatten = false; // set true for vscode extension tokens
+let flatten = true; // set true for vscode extension tokens
 // =============
 
 generateTest = timerOnly? false: generateTest;
