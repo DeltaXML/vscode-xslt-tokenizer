@@ -13,6 +13,10 @@
     ?>
 
   <basic>the quick</basic>
+
+  <self-close/>
+
+  <self-close name="also"/>
  
  <xsl:template match="TITLE">
     <h1>{for $a in 1 to 20 return descendant::NAME[@id eq 'tqs'] || $a}</h1>
