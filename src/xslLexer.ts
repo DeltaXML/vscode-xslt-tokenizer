@@ -479,6 +479,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.rSt:
                             expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
+                            this.addCharTokenToResult(tokenStartChar + 1, 1, XSLTokenLevelState.xmlPunctuation, result);
                             storeToken = false;
                             tokenChars = [];
                             break;
