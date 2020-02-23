@@ -80,9 +80,17 @@
 		{
 			"id": "xslElementName",
 			"description": "Name of XSLT Element"
+		},
+		{
+			"id": "xmlPunctuation",
+			"description": "XML angle-brackets etc."
 		}
 		],
 		"semanticTokenStyleDefaults": [
+			{
+				"selector": "xmlPunctuation",
+				"scope": ["punctuation.definition.tag"]
+			},
 			{
 				"selector": "nodeNameTest",
 				"scope": [ "support.class" ]
@@ -113,15 +121,15 @@
 			},
 			{
 				"selector": "attributeName",
-				"scope": []
+				"scope": ["entity.other.attribute-name"]
 			},
 			{
 				"selector": "attributeValue",
-				"scope": []
+				"scope": ["string"]
 			},
 			{
 				"selector": "elementName",
-				"scope": ["support.class"]
+				"scope": ["entity.name.tag"]
 			},
 			{
 				"selector": "elementValue",
@@ -129,15 +137,15 @@
 			},
 			{
 				"selector": "processingInstrName",
-				"scope": ["storage.type.struct"]
+				"scope": ["entity.name.tag"]
 			},
 			{
 				"selector": "processingInstrValue",
-				"scope": ["variable"]
+				"scope": ["entity.other.attribute-name"]
 			},
 			{
 				"selector": "entityRef",
-				"scope": ["storage.type.struct"]
+				"scope": ["constant.character"]
 			},
 			{
 				"selector": "xmlComment",

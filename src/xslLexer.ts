@@ -352,6 +352,7 @@ export class XslLexer {
         let xmlElementStack: XmlElement[] = [];
         let tokenStartChar = -1;
         let tokenStartLine = -1;
+        let attributeNameTokenAdded = false;
         
         if (this.debug) {
             console.log("xsl: " + xsl);
@@ -444,10 +445,15 @@ export class XslLexer {
                         case XMLCharState.rComment:
                             let startChar = tokenStartChar > 0? tokenStartChar -2: 0;
                             this.addNewTokenToResult(startChar, XSLTokenLevelState.xmlComment, result); 
-                            break;         
+                            break;
+                        case XMLCharState.wsAfterAttName:
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result);
+                            attributeNameTokenAdded = true;
+                            break;      
                         case XMLCharState.lAn:
                             tokenChars.push(currentChar);
                             storeToken = true;
+                            attributeNameTokenAdded = false;
                             break;
                         case XMLCharState.lStEq:
                             if (isXslElement) {
@@ -459,6 +465,9 @@ export class XslLexer {
                                     isExpandTextAttribute = false;
                                     isXPathAttribute = this.isExpressionAtt(attName);
                                 }
+                            }
+                            if (!attributeNameTokenAdded) {
+                                this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result);
                             }
                             tokenChars = [];
                             storeToken = false;
