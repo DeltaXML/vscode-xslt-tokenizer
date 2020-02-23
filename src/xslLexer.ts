@@ -366,11 +366,6 @@ export class XslLexer {
 
             if (currentChar) {
                 let isCurrentCharNewLIne = currentChar === '\n';
-            
-                // if (isCurrentCharNewLIne) {
-                //     this.lineNumber++;
-                //     this.lineCharCount = 0;
-                // } 
 
                 nextState = this.calcNewState(
                     isCurrentCharNewLIne,
@@ -391,6 +386,10 @@ export class XslLexer {
                             case XMLCharState.lComment:
                                 addToken = XSLTokenLevelState.xmlComment;
                                 tokenStartChar = tokenStartChar === 0? tokenStartChar: tokenStartChar - 2;
+                                break;
+                            case XMLCharState.lDq:
+                            case XMLCharState.lSq:
+                                addToken = XSLTokenLevelState.attributeValue;
                                 break;
                         }
                         if (addToken !== null) {
@@ -486,6 +485,7 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
                             }
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result);
                             tokenChars = [];
                             storeToken = false;
                             break;
@@ -494,6 +494,7 @@ export class XslLexer {
                             if (isExpandTextAttribute) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
+                                this.addCharTokenToResult(tokenStartChar + 1, XSLTokenLevelState.attributeValue, result);
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
 
                                 let exit: ExitCondition;
@@ -504,7 +505,7 @@ export class XslLexer {
                                 }
 
                                 xpLexer.analyse('', exit, p);
-                                // need to process right double-quote
+                                // need to process right double-quote/single-quote
                                 this.lineNumber = p.line;
                                 let newCharCount = p.documentOffset - 1;
                                 if (newCharCount > this.charCount) {
@@ -585,9 +586,23 @@ export class XslLexer {
     private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[]) {
         let tokenLength = (this.lineCharCount - 1) - tokenStartChar;
         let localTokenStartChar = tokenStartChar;
-        if (newTokenType === XSLTokenLevelState.xmlComment) {
+        if (newTokenType === XSLTokenLevelState.xmlComment || newTokenType === XSLTokenLevelState.attributeValue) {
             tokenLength++;
         }
+        let tkn: BaseToken = {
+            line: this.lineNumber,
+            length: tokenLength,
+            startCharacter: localTokenStartChar,
+            value: '',
+            tokenType: newTokenType + XslLexer.xpathLegendLength
+        };
+        result.push(tkn);
+    }
+
+    private addCharTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[]) {
+        let tokenLength = 1;
+        let localTokenStartChar = tokenStartChar;
+
         let tkn: BaseToken = {
             line: this.lineNumber,
             length: tokenLength,
