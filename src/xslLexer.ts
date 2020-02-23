@@ -544,6 +544,9 @@ export class XslLexer {
                             }
 
                             if (exit !== ExitCondition.None) {
+                                //this.addCharTokenToResult(tokenStartChar + 1, 3, XSLTokenLevelState.attributeValue, result);
+                                this.addNewTokenToResult(tokenStartChar + 1, XSLTokenLevelState.attributeValue, result);
+
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
                                 xpLexer.analyse('', exit, p);

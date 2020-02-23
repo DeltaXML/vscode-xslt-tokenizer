@@ -12,7 +12,7 @@
     instruction
     ?>
 
-  <basic>the quick</basic>
+  <basic name="section-{$qrt} block-{$wnt}">the quick</b>
 
   <self-close/>
 
