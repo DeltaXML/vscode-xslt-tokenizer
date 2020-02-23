@@ -441,6 +441,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.rPi:
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrValue, result);
+                            this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result);
                             break;
                         case XMLCharState.rComment:
                             let startChar = tokenStartChar > 0? tokenStartChar -2: 0;
@@ -478,6 +479,9 @@ export class XslLexer {
                             tokenChars = [];
                             break;
                         case XMLCharState.lCt:
+                        case XMLCharState.lPi:
+                            this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result);
+                            break;
                         case XMLCharState.lCt2:
                             break;
                         case XMLCharState.rSq:
@@ -495,7 +499,7 @@ export class XslLexer {
                             if (isExpandTextAttribute) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
-                                this.addCharTokenToResult(tokenStartChar + 1, XSLTokenLevelState.attributeValue, result);
+                                this.addCharTokenToResult(tokenStartChar + 1, 1, XSLTokenLevelState.attributeValue, result);
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
 
                                 let exit: ExitCondition;
@@ -600,14 +604,12 @@ export class XslLexer {
         result.push(tkn);
     }
 
-    private addCharTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[]) {
-        let tokenLength = 1;
-        let localTokenStartChar = tokenStartChar;
+    private addCharTokenToResult(tokenStartChar: number, tokenLength: number, newTokenType: XSLTokenLevelState, result: BaseToken[]) {
 
         let tkn: BaseToken = {
             line: this.lineNumber,
             length: tokenLength,
-            startCharacter: localTokenStartChar,
+            startCharacter: tokenStartChar,
             value: '',
             tokenType: newTokenType + XslLexer.xpathLegendLength
         };
