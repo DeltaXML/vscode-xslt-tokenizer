@@ -488,6 +488,9 @@ export class XslLexer {
                         case XMLCharState.lPi:
                             this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result);
                             break;
+                        case XMLCharState.rSelfCt:
+                            this.addCharTokenToResult(tokenStartChar + 1, 2, XSLTokenLevelState.xmlPunctuation, result);
+                            break;
                         case XMLCharState.lCt2:
                             break;
                         case XMLCharState.rSq:
