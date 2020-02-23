@@ -437,7 +437,8 @@ export class XslLexer {
                             let newTokenType = isXslElement? XSLTokenLevelState.xslElementName: XSLTokenLevelState.elementName;
                             this.addNewTokenToResult(tokenStartChar, newTokenType, result);
                             if (nextState !== XMLCharState.lsElementNameWs) {
-                                this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result);
+                                let punctuationLength = nextState === XMLCharState.rCt || nextState === XMLCharState.rStNoAtt? 1: 2;
+                                this.addCharTokenToResult(this.lineCharCount - 1, punctuationLength, XSLTokenLevelState.xmlPunctuation, result);
                             }
                             break;
                         case XMLCharState.rPiName:
