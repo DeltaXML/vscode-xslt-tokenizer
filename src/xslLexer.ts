@@ -57,6 +57,7 @@ export enum XSLTokenLevelState {
     processingInstrValue,
     entityRef,
     xmlComment,
+    xmlPunctuation,
     xslElementName
 }
 

@@ -129,7 +129,7 @@
 			},
 			{
 				"selector": "elementName",
-				"scope": ["entity.name.tag"]
+				"scope": [ "support.class" ]
 			},
 			{
 				"selector": "elementValue",
@@ -153,7 +153,7 @@
 			},
 			{
 				"selector": "xslElementName",
-				"scope": ["storage.type.struct"]
+				"scope": ["entity.name.tag"]
 			}
 		],
 		"languages": [
