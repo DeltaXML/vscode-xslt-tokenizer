@@ -1,9 +1,16 @@
 {
-	"name": "xslt-tokenizer",
-	"displayName": "xslt-tokenizer",
-	"description": "Showing the Semantic Tokens Provider API being used for XPath3.1",
+	"name": "xml-spectrum",
+	"displayName": "XML Spectrum",
+	"description": "Syntax Highlighter and tools for XSLT and other XPath-based languages",
 	"version": "0.0.1",
-	"publisher": "pgfearo",
+	"publisher": "DeltaXML Ltd",
+	"keywords": [
+		"xml",
+		"xslt",
+		"xsl",
+		"xpath",
+		"highlighter"
+	],
 	"engines": {
 		"vscode": "^1.41.0"
 	},
