@@ -1,3 +1,12 @@
+/**
+ *  Copyright (c) 2020 DeltaXML Ltd. and others.
+ *  All rights reserved. This program and the accompanying materials
+ *  are made available under the terms of the MIT license
+ *  which accompanies this distribution.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
+ */
 import * as vscode from 'vscode';
 import {Token, XPathLexer, ExitCondition, LexPosition} from "./xpLexer";
 import {XslLexer} from "./xslLexer";

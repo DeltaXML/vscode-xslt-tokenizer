@@ -1,3 +1,13 @@
+/**
+ *  Copyright (c) 2020 DeltaXML Ltd. and others.
+ *  All rights reserved. This program and the accompanying materials
+ *  are made available under the terms of the MIT license
+ *  which accompanies this distribution.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
+ */
+
 import { Debug } from "./diagnostics";
 
 export enum CharLevelState {
