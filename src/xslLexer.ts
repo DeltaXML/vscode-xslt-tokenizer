@@ -54,7 +54,9 @@ export enum XMLCharState {
     lsElementNameWs,
     wsAfterAttName,
     lsEqWs,
-    lStEq
+    lStEq,
+    lEntity,
+    rEntity
 }
 
 // for compatibility with legend - add count of XPath enums to this
@@ -297,6 +299,14 @@ export class XslLexer {
             case XMLCharState.escSqAvt:
                 rc = XMLCharState.lSq;
                 break;
+            case XMLCharState.lEntity:
+                 if (char === ';') {
+                    rc = XMLCharState.rEntity;
+                } else if (this.isWhitespace(isCurrentCharNewLine, char)) {
+                    // TODO: show error
+                    rc = XMLCharState.init;
+                }
+                break;
             default:
                 // awaiting a new node
                 rc = this.testChar(char, nextChar);
@@ -325,6 +335,10 @@ export class XslLexer {
                 break;
             case '{':
                 rc = XMLCharState.tvt;
+                break;
+            case '&':
+                // TODO: check next char is not ';'
+                rc = XMLCharState.lEntity;
                 break;
             default:
                 rc = XMLCharState.init;
@@ -588,7 +602,11 @@ export class XslLexer {
                                 nextChar = xsl.charAt(this.charCount);
                                 nextState = XMLCharState.init;
                             }
-                            break;                         
+                            break;
+                        case XMLCharState.rEntity:
+                            this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar,
+                                                         XSLTokenLevelState.entityRef, result);
+                            break;                        
                     }
                     tokenStartChar = this.lineCharCount - 1;
                     tokenStartLine = this.lineNumber;
@@ -600,8 +618,6 @@ export class XslLexer {
                 currentState = nextState;
             } 
             currentChar = nextChar;
-
-
         } 
         if (this.timerOn) {
             console.timeEnd('xslLexer.analyse');
