@@ -5,7 +5,7 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`<a>t&amp;s</a>`;
+`<a c="t&amp;"/>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

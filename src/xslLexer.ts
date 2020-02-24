@@ -56,7 +56,13 @@ export enum XMLCharState {
     lsEqWs,
     lStEq,
     lEntity,
-    rEntity
+    rEntity,
+}
+
+enum EntityPosition {
+    text,
+    attrDq,
+    attrSq
 }
 
 // for compatibility with legend - add count of XPath enums to this
@@ -98,6 +104,7 @@ export class XslLexer {
     private static xpathLegend = XPathLexer.getTextmateTypeLegend();
     private static xpathLegendLength = XslLexer.xpathLegend.length;
     private commentCharCount = 0;
+    private entityContext = EntityPosition.text;
 
     public static getTextmateTypeLegend(): string[] {
         // concat xsl legend to xpath legend
@@ -280,6 +287,9 @@ export class XslLexer {
                     } else {
                         rc = XMLCharState.dqAvt;
                     }
+                } else if (char === '&') {
+                    rc = XMLCharState.lEntity;
+                    this.entityContext = EntityPosition.attrDq;
                 }
                 break; 
             case XMLCharState.lSq:
@@ -291,6 +301,9 @@ export class XslLexer {
                     } else {
                         rc = XMLCharState.sqAvt;
                     }
+                } else if (char === '&') {
+                    rc = XMLCharState.lEntity;
+                    this.entityContext = EntityPosition.attrSq;
                 }
                 break; 
             case XMLCharState.escDqAvt:
@@ -338,6 +351,7 @@ export class XslLexer {
                 break;
             case '&':
                 // TODO: check next char is not ';'
+                this.entityContext = EntityPosition.text;
                 rc = XMLCharState.lEntity;
                 break;
             default:
@@ -606,6 +620,17 @@ export class XslLexer {
                         case XMLCharState.rEntity:
                             this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar,
                                                          XSLTokenLevelState.entityRef, result);
+                            switch (this.entityContext) {
+                                case EntityPosition.text:
+                                    nextState = XMLCharState.init;
+                                    break;
+                                case EntityPosition.attrSq:
+                                    nextState = XMLCharState.lSq;
+                                    break;
+                                case EntityPosition.attrDq:
+                                    nextState = XMLCharState.lDq;
+                                    break;
+                            }
                             break;                        
                     }
                     tokenStartChar = this.lineCharCount - 1;
