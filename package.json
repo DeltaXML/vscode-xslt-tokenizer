@@ -3,7 +3,7 @@
 	"displayName": "XML Spectrum",
 	"description": "Syntax Highlighter and tools for XSLT and other XPath-based languages",
 	"version": "0.0.1",
-	"publisher": "DeltaXML Ltd",
+	"publisher": "deltaxml",
 	"keywords": [
 		"xml",
 		"xslt",
