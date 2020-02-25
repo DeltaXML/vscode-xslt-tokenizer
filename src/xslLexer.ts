@@ -351,8 +351,8 @@ export class XslLexer {
                 break;
             case '&':
                 // TODO: check next char is not ';'
-                this.entityContext = EntityPosition.text;
                 rc = XMLCharState.lEntity;
+                this.entityContext = EntityPosition.text;
                 break;
             default:
                 rc = XMLCharState.init;
@@ -618,9 +618,11 @@ export class XslLexer {
                             }
                             break;
                         case XMLCharState.lEntity:
-                            // if (this.entityContext !== EntityPosition.text) {
-                            //     this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result);;
-                            // }
+                            if (this.entityContext !== EntityPosition.text) {
+                                this.addCharTokenToResult(tokenStartChar, (this.lineCharCount - 1) - tokenStartChar,
+                                    XSLTokenLevelState.attributeValue, result);
+                            }
+                            break;
                         case XMLCharState.rEntity:
                             this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar,
                                                          XSLTokenLevelState.entityRef, result);
