@@ -15,12 +15,13 @@
 		"vscode": "^1.41.0"
 	},
 	"categories": [
-		"Other"
+		"Programming Languages"
 	],
 	"activationEvents": [
 		"onLanguage:xpath",
 		"onLanguage:xslt"
 	],
+	"license": "SEE LICENSE IN: LICENSE.txt",
 	"enableProposedApi": true,
 	"main": "./out/extension.js",
 	"contributes": {
