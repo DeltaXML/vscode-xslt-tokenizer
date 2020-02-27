@@ -690,7 +690,7 @@ export class XslLexer {
                             }
                             break;
                         case XMLCharState.lCdataEnd:
-                            this.addCharTokenToResult(tokenStartChar - 2, 8, XSLTokenLevelState.xmlPunctuation, result);
+                            this.addCharTokenToResult(tokenStartChar - 2, 9, XSLTokenLevelState.xmlPunctuation, result);
                             break;
                         case XMLCharState.rCdataEnd:
                             this.addCharTokenToResult(tokenStartChar, 3, XSLTokenLevelState.xmlPunctuation, result);
