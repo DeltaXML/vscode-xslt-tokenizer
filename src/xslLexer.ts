@@ -23,8 +23,10 @@ export enum XMLCharState {
     rPiName,
     lPiValue,
 	rPi, // 6 right processing instruction
-	lCd, // 7 left cdata
-	rCd, // 8 right cdata
+    lCd, // 7 left cdata
+    lCdataEnd,
+    rCd, // 8 right cdata
+    rCdataEnd,
     lSq, // 9 left single quote att
     lDq, // 11 left double quote att
     wsBeforeAttname,
@@ -104,6 +106,7 @@ export class XslLexer {
     private static xpathLegend = XPathLexer.getTextmateTypeLegend();
     private static xpathLegendLength = XslLexer.xpathLegend.length;
     private commentCharCount = 0;
+    private cdataCharCount = 0;
     private entityContext = EntityPosition.text;
 
     public static getTextmateTypeLegend(): string[] {
@@ -201,6 +204,7 @@ export class XslLexer {
             case XMLCharState.lExclam:
                 // assume  <![CDATA[
                 if (char === '[' && nextChar === 'C') {
+                    this.cdataCharCount = 0;
                     rc = XMLCharState.lCd;
                 } else if (char === '-' && nextChar === '-') {
                     rc = XMLCharState.lComment;
@@ -211,11 +215,58 @@ export class XslLexer {
                 // TODO: Handle internal DTD subset
                 break;
             case XMLCharState.lCd:
-                if (char === ']' && nextChar === ']') {
-                    rc = XMLCharState.rCd;                   
+                switch (this.cdataCharCount) {
+                    case 0:
+                        // [C  of <![CDATA[ already checked
+                    case 2:
+                        // DA already checked
+                    case 4:
+                        // TA already checked
+                        this.cdataCharCount++;
+                        break;
+                    case 1:
+                        if (char === 'D' && nextChar === 'A') {
+                            this.cdataCharCount++;
+                        } else {
+                            rc = XMLCharState.init;
+                        }
+                        break;
+                    case 3:
+                        if (char === 'T' && nextChar === 'A') {
+                            this.cdataCharCount++;
+                        } else {
+                            rc = XMLCharState.init;
+                        }
+                        break;
+                    case 5:
+                        if (char === '[') {
+                            this.cdataCharCount = 0;
+                            rc = XMLCharState.lCdataEnd;
+                        } else {
+                            rc = XMLCharState.init;
+                        }
+                        break;                    
                 }
                 break;
-            // left-start-tag
+            case XMLCharState.lCdataEnd:
+                if (char === ']' && nextChar === ']') {
+                    this.cdataCharCount = 0;
+                    rc = XMLCharState.rCd;
+                }
+                // otherwise continue awaiting ]]>
+                break;
+            case XMLCharState.rCd:
+                if (this.cdataCharCount === 0) {
+                    this.cdataCharCount++;
+                } else if (char === '>') {
+                    this.cdataCharCount = 0;
+                    rc = XMLCharState.rCdataEnd;
+                } else {
+                    // TODO: ]] not permited on its own in CDATA, show error
+                    this.cdataCharCount = 0;
+                    rc = XMLCharState.init;
+                }
+                break;
             case XMLCharState.lSt:
                 if (char === '>') {
                     // error for: '<>'
@@ -619,7 +670,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lEntity:
                             if (this.entityContext !== EntityPosition.text) {
-                                this.addCharTokenToResult(tokenStartChar, (this.lineCharCount - 1) - tokenStartChar,
+                                this.addCharTokenToResult(tokenStartChar - 2, (this.lineCharCount - 1) - tokenStartChar,
                                     XSLTokenLevelState.attributeValue, result);
                             }
                             break;
@@ -637,7 +688,14 @@ export class XslLexer {
                                     nextState = XMLCharState.lDq;
                                     break;
                             }
-                            break;                        
+                            break;
+                        case XMLCharState.lCdataEnd:
+                            this.addCharTokenToResult(tokenStartChar - 2, 8, XSLTokenLevelState.xmlPunctuation, result);
+                            break;
+                        case XMLCharState.rCdataEnd:
+                            this.addCharTokenToResult(tokenStartChar, 3, XSLTokenLevelState.xmlPunctuation, result);
+                            break;
+
                     }
                     tokenStartChar = this.lineCharCount - 1;
                     tokenStartLine = this.lineNumber;
