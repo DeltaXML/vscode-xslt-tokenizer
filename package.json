@@ -153,7 +153,7 @@
 			},
 			{
 				"selector": "entityRef",
-				"scope": ["constant.character"]
+				"scope": ["punctuation.definition.tag"]
 			},
 			{
 				"selector": "xmlComment",
