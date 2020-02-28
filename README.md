@@ -66,7 +66,6 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 - Disambiguates token based on previous/next token
 - Uses stack to manages evaluation context scope
 - No Abstract Syntax Tree
-- Stacks used to track expression-tree scope 
 
 ### Diagnostics / Testing
 - A set of high-level tests for XPath 3.1 expressions
