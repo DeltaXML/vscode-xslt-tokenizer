@@ -1,10 +1,14 @@
 # XSLT 3.0 / XPath 3.1 Semantic tokens
 
-_This project exploits the proposed API for Semantic Tokens VSCode Extensions._
+_This project uses the proposed API for Semantic Tokens VSCode Extensions._
 
-This is a VSCode extension for the semantic highlighting of XSLT and XPath.
+This is a VSCode extension for the syntax and semantic highlighting of XSLT and XPath.
 
-Currently, semantic token types are provided, semantic token modifiers will be added later. The tokens are used for XPath syntax highlighting, either for standalone XPath files or for XPath expressions embedded within XSLT.
+The [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview) provides for tokens with two main attributes:
+- Token Types - such as *keyword*, *variable*
+- Token Modifiers - e.g. *public*, *static* 
+
+Currently, the XSLT/XPath lexers provide only semantic token types, semantic token modifiers will be added later. 
 
 The XSLT demo file loaded in VSCode with the extension running:
 
@@ -25,40 +29,23 @@ Settings.json (in application directory)
 
 ```json
 {
-	"[typescript]": {},
-	"git.enableSmartCommit": true,
-	"git.autofetch": true,
+	...
 	"[XPath]": {
 		"editor.matchBrackets": "always",
 		"editor.semanticHighlighting.enabled":true
 	},
-	"window.zoomLevel": 0,
-	"editor.matchBrackets": "always",
 	"[xsl]": {
 		"editor.semanticHighlighting.enabled":true
 	}
+	...
 }
 ```
 
 ## How to run
 
-Launch the extension and open the file `sample/basic.xpath`.
+The VSCode Insiders release is required. Launch the extension and open the file `sample/basic.xpath`.
 
-(Once the semantics tokens are complete) use the following settings:
-
-```json
-"editor.tokenColorCustomizationsExperimental": {
-	"*.static": {
-		"foreground": "#ff0000",
-		"fontStyle": "bold"
-	},
-	"type": {
-		"foreground": "#00aa00"
-	}
-}
-```
-
-## How to test XPath Lexer
+## How to run XPath Lexer tests
 
 From terminal, run:
 
@@ -66,14 +53,12 @@ From terminal, run:
 
 ## State of development
 
-- This is currently a work in progress. Main XPath 3.1 tokenization using standard token types is complete.
+- The XSLT and XPath lexers now conform to the XSLT 3.0 and XPath 3.1 specifications to create appropiate semtantic token types. The types used are mapped to TM Grammar Scopes in the configuration in *package.json*. 
 
-To do:
-- Highlight non-XSLT element names
-- Use XSLT namespace instead of xsl: prefix
-- Configure XSL language for matching-brackets
+The TM Scopes used by this project are sufficient for the popular general-purpose syntax highlighting themes to provide effective syntax highlighting. These scopes will be refined later to provide more granularity to allow color themes to provide language-specfic highlighting.
 
-## XPath 3.1 lexer summary
+
+## XSLT 3.0 and XPath 3.1 lexer summary
 
 ### Main Features
 - Hand-crafted lexer
@@ -83,14 +68,16 @@ To do:
 - Disambiguates token based on previous/next token
 - Uses stack to manages evaluation context scope
 - No Abstract Syntax Tree
-- Optional 'Context' Tree (not used by semantic highlighter)
+- Stacks used to track expression-tree scope 
 
 ### Diagnostics / Testing
-- Set of high-level tests - uses jest/ts-jest
+- A set of high-level tests for XPath 3.1 expressions
 - Generate tests from XPath expressions
 - XPath Diagnosticts Tool
 	- Lists all tokens for given XPath
 	- Each token type and main properties
+- XSLT Diagnostics Tool
+	- Currently, only lists values for each XSLT token
 
 ## Sample Diagnostics:
 
