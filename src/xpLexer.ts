@@ -851,7 +851,8 @@ export class XPathLexer {
                 (
                     prevTokenT === TokenLevelState.operator || 
                     prevTokenT === TokenLevelState.complexExpression || 
-                    prevTokenT === TokenLevelState.uriLiteral
+                    prevTokenT === TokenLevelState.uriLiteral ||
+                    prevTokenT === TokenLevelState.attributeNameTest
                 )) {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;

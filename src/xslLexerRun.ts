@@ -5,7 +5,7 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`ab<![CDATA[this<abc/>test]]>this<start/>`;
+`<t t="the quic&amp;text"/>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

@@ -4,7 +4,7 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`c,\n\n d(b)`;
+`//* except r,/* except s`;
 let testTitle = `declaration`;
 let generateTest = true;
 let timerOnly = false;

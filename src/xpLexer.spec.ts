@@ -1871,3 +1871,136 @@ startCharacter: 4
 },]
   expect (r).toEqual(ts);
 });
+
+test(`wildcard following attribute axis shortcut: @`, () => {
+  let l: XPathLexer = new XPathLexer();
+  l.flatten = true;
+  let rx: Token[] = l.analyse(`@* except @q,child::* except r`, ExitCondition.None, pos);
+  let r: Token[] = Utilities.minimiseTokens2(rx);
+  let ts: Token[] = [
+{value: `@`,
+tokenType: TokenLevelState.attributeNameTest,
+line: 0,
+length: 1,
+startCharacter: 0
+},
+{value: `*`,
+tokenType: TokenLevelState.nodeType,
+line: 0,
+length: 1,
+startCharacter: 1
+},
+{value: `except`,
+tokenType: TokenLevelState.operator,
+line: 0,
+length: 6,
+startCharacter: 3
+},
+{value: `@q`,
+tokenType: TokenLevelState.attributeNameTest,
+line: 0,
+length: 2,
+startCharacter: 10
+},
+{value: `,`,
+tokenType: TokenLevelState.operator,
+line: 0,
+length: 1,
+startCharacter: 12
+},
+{value: `child`,
+tokenType: TokenLevelState.axisName,
+line: 0,
+length: 5,
+startCharacter: 13
+},
+{value: `::`,
+tokenType: TokenLevelState.operator,
+line: 0,
+length: 2,
+startCharacter: 18
+},
+{value: `*`,
+tokenType: TokenLevelState.nodeType,
+line: 0,
+length: 1,
+startCharacter: 20
+},
+{value: `except`,
+tokenType: TokenLevelState.operator,
+line: 0,
+length: 6,
+startCharacter: 22
+},
+{value: `r`,
+tokenType: TokenLevelState.nodeNameTest,
+line: 0,
+length: 1,
+startCharacter: 29
+},]
+  expect (r).toEqual(ts);
+});
+      
+        test(`declaration`, () => {
+        let l: XPathLexer = new XPathLexer();
+        l.flatten = true;
+        let rx: Token[] = l.analyse(`//* except r,/* except s`, ExitCondition.None, pos);
+        let r: Token[] = Utilities.minimiseTokens2(rx);
+        let ts: Token[] = [
+    {value: `//`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 2,
+    startCharacter: 0
+    },
+    {value: `*`,
+    tokenType: TokenLevelState.nodeType,
+    line: 0,
+    length: 1,
+    startCharacter: 2
+    },
+    {value: `except`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 6,
+    startCharacter: 4
+    },
+    {value: `r`,
+    tokenType: TokenLevelState.nodeNameTest,
+    line: 0,
+    length: 1,
+    startCharacter: 11
+    },
+    {value: `,`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 1,
+    startCharacter: 12
+    },
+    {value: `/`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 1,
+    startCharacter: 13
+    },
+    {value: `*`,
+    tokenType: TokenLevelState.nodeType,
+    line: 0,
+    length: 1,
+    startCharacter: 14
+    },
+    {value: `except`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 6,
+    startCharacter: 16
+    },
+    {value: `s`,
+    tokenType: TokenLevelState.nodeNameTest,
+    line: 0,
+    length: 1,
+    startCharacter: 23
+    },]
+        expect (r).toEqual(ts);
+    });
+
