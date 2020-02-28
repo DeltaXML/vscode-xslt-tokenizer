@@ -6,7 +6,7 @@ This is a VSCode extension for the syntax and semantic highlighting of XSLT and 
 
 The [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview) provides for tokens with two main attributes:
 - Token Types - such as *keyword*, *variable*
-- Token Modifiers - e.g. *public*, *static* 
+- Token Modifiers - e.g. *documentation*, *static* 
 
 Currently, the XSLT/XPath lexers provide only semantic token types, semantic token modifiers will be added later. 
 
