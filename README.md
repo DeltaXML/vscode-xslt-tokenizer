@@ -29,7 +29,6 @@ Settings.json (in application directory)
 
 ```json
 {
-	...
 	"[XPath]": {
 		"editor.matchBrackets": "always",
 		"editor.semanticHighlighting.enabled":true
@@ -37,7 +36,6 @@ Settings.json (in application directory)
 	"[xsl]": {
 		"editor.semanticHighlighting.enabled":true
 	}
-	...
 }
 ```
 
