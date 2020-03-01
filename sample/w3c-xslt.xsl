@@ -194,20 +194,40 @@
     <xsl:function name="j:escape" as="xs:string" visibility="final">
         <xsl:param name="in" as="xs:string"/>
         <xsl:sequence select="
-            for $s in string-to-codepoints($in) return
-                if ($s gt 65535) then
-                    concat('\u', j:hex4((. - 65536) idiv 1024 + 55296)),
-                    concat('\u', j:hex4((. - 65536) mod 1024 + 56320))
-                else if ($s = 34) then '\'
-                else if ($s = 92) then '\\'
-                else if ($s = 08) then '\b'
-                else if ($s = 09) then '\t'
-                else if ($s = 10) then '\n'
-                else if ($s = 12) then '\f' 
-                else if ($s = 13) then '\r'
-                else if ($s lt 32 or ($s ge 127 and $s le 160)) then '\u' || j:hex4($s)
-                else codepoints-to-string(.)                              
+        $duplicates-handler := map {
+            'use-first':   function($a, $b) {$a},
+            'use-last:'    function($a, $b) {$b},
+            'combine':     function($a, $b) {$a, $b},
+            'reject':      function($a, $b) {fn:error($FOJS0003)},
+            'unspecified': function($a, $b) {fn:random-number-generator()?permute(($a, $b))[1]}
+        },
+
+        $combine-maps := function($A as map(*), $B as map(*), $deduplicator as function(*)) {
+            fn:fold-left(map:keys($B), $A, function($z, $k){ 
+                if (map:contains($z, $k))
+                then map:put($z, $k, $deduplicator($z($k), $B($k)))
+                else map:put($z, $k, $B($k))
+            })
+        }
+        return fn:fold-left($MAPS, map{}, 
+            $combine-maps(?, ?, $duplicates-handler(($OPTIONS?duplicates, 'use-first')[1]))
         "/>
+        <xsl:sequence select="
+			let $in := descendant::axr:bst[3]/tsv/child::*[@id = 'pst'] return
+                for $s in string-to-codepoints($in) return
+                    if ($s gt 65535) then
+                        concat('\u', j:hex4((. - 65536) idiv 1024 + 55296)),
+                        concat('\u', j:hex4((. - 65536) mod 1024 + 56320))
+                    else if ($s = 34) then '\'
+                    else if ($s = 92) then '\\'
+                    else if ($s = 08) then '\b'
+                    else if ($s = 09) then '\t'
+                    else if ($s = 10) then '\n'
+                    else if ($s = 12) then '\f' 
+                    else if ($s = 13) then '\r'
+                    else if ($s lt 32 or ($s ge 127 and $s le 160)) then '\u' || j:hex4($s)
+                    else codepoints-to-string(.)                              
+            "/>
         <xsl:value-of>
             <xsl:for-each select="string-to-codepoints($in)">
                 <xsl:choose>
