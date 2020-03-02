@@ -194,7 +194,7 @@
     <xsl:function name="j:escape" as="xs:string" visibility="final">
         <xsl:param name="in" as="xs:string"/>
         <xsl:sequence select="
-        $duplicates-handler := map {
+        let $duplicates-handler := map {
             'use-first':   function($a, $b) {$a},
             'use-last:'    function($a, $b) {$b},
             'combine':     function($a, $b) {$a, $b},
