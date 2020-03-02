@@ -653,7 +653,7 @@ export class XPathLexer {
                 if (isWhitespace) {
                     this.tokenCharNumber = this.wsCharNumber;
                 } else {
-                    this.tokenCharNumber = this.wsCharNumber + newTokenValue.length;
+                    this.tokenCharNumber += newTokenValue.length;
                 }
 
                 this.wsNewLine = false;

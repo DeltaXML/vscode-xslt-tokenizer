@@ -2003,4 +2003,86 @@ startCharacter: 29
     },]
         expect (r).toEqual(ts);
     });
+      
+        test(`empty-line before indent`, () => {
+        let l: XPathLexer = new XPathLexer();
+        l.flatten = true;
+        let rx: Token[] = l.analyse(`let $a:= 1,\n\n  $b := 2 return $a+$b`, ExitCondition.None, pos);
+        let r: Token[] = Utilities.minimiseTokens2(rx);
+        let ts: Token[] = [
+    {value: `let`,
+    tokenType: TokenLevelState.complexExpression,
+    line: 0,
+    length: 3,
+    startCharacter: 0
+    },
+    {value: `$a:`,
+    tokenType: TokenLevelState.variable,
+    line: 0,
+    length: 3,
+    startCharacter: 4
+    },
+    {value: `=`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 1,
+    startCharacter: 7
+    },
+    {value: `1`,
+    tokenType: TokenLevelState.number,
+    line: 0,
+    length: 1,
+    startCharacter: 9
+    },
+    {value: `,`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 1,
+    startCharacter: 10
+    },
+    {value: `$b`,
+    tokenType: TokenLevelState.variable,
+    line: 2,
+    length: 2,
+    startCharacter: 2
+    },
+    {value: `:=`,
+    tokenType: TokenLevelState.complexExpression,
+    line: 2,
+    length: 2,
+    startCharacter: 5
+    },
+    {value: `2`,
+    tokenType: TokenLevelState.number,
+    line: 2,
+    length: 1,
+    startCharacter: 8
+    },
+    {value: `return`,
+    tokenType: TokenLevelState.complexExpression,
+    line: 2,
+    length: 6,
+    startCharacter: 10
+    },
+    {value: `$a`,
+    tokenType: TokenLevelState.variable,
+    line: 2,
+    length: 2,
+    startCharacter: 17
+    },
+    {value: `+`,
+    tokenType: TokenLevelState.operator,
+    line: 2,
+    length: 1,
+    startCharacter: 19
+    },
+    {value: `$b`,
+    tokenType: TokenLevelState.variable,
+    line: 2,
+    length: 2,
+    startCharacter: 20
+    },]
+        expect (r).toEqual(ts);
+    });
+
 
