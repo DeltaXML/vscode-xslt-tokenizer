@@ -12,7 +12,7 @@ Currently, the XSLT/XPath lexers provide only semantic token types, semantic tok
 
 The XSLT demo file loaded in VSCode with the extension running:
 
-![Screenshot](xslt-demo.png)
+![Screenshot](xslt-demo2.png)
 
 The XPath demo file loaded in VSCode with the extension running:
 
