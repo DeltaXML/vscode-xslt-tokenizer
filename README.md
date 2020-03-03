@@ -65,7 +65,7 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 - Single pass with 1-character lookahead
 - Disambiguates token based on previous/next token
 - Uses stack to manages evaluation context scope
-- No Abstract Syntax Tree
+- No Abstract Syntax Tree.
 
 ### Diagnostics / Testing
 - A set of high-level tests for XPath 3.1 expressions
