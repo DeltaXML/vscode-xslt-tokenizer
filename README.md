@@ -14,6 +14,8 @@ The XSLT demo file loaded in VSCode with the extension running:
 
 ![Screenshot](xslt-demo2.png)
 
+![Screenshot](xslt-demo3.png)
+
 The XPath demo file loaded in VSCode with the extension running:
 
 ![Screenshot](xpath-demo.png)
