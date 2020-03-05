@@ -1,14 +1,9 @@
-# XSLT 3.0 / XPath 3.1 Semantic tokens
+# XPath Rising
 
 _This project uses the proposed API for Semantic Tokens VSCode Extensions._
 
-This is a VSCode extension for the syntax and semantic highlighting of XSLT and XPath.
+*XPath Rising* is a VSCode extension for the syntax highlighting of XSLT and XPath.
 
-The [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview) provides for tokens with two main attributes:
-- Token Types - such as *keyword*, *variable*
-- Token Modifiers - e.g. *documentation*, *static* 
-
-Currently, the XSLT/XPath lexers provide only semantic token types, semantic token modifiers will be added later. 
 
 The XSLT demo file loaded in VSCode with the extension running:
 
@@ -77,6 +72,12 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 	- Each token type and main properties
 - XSLT Diagnostics Tool
 	- Currently, only lists values for each XSLT token
+	
+## Implementation Details:
+
+The [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview) provides for tokens with two main attributes:
+- Token Types - such as *keyword*, *variable*
+- Token Modifiers - e.g. *documentation*, *static* 
 
 ## Sample Diagnostics:
 
