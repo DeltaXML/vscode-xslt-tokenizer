@@ -1,12 +1,12 @@
 {
-	"name": "xml-spectrum",
-	"displayName": "XML Spectrum",
+	"name": "xpath-embedded",
+	"displayName": "XPath Embedded",
 	"description": "Syntax Highlighter and tools for XSLT and other XPath-based languages",
 	"version": "0.0.1",
 	"publisher": "deltaxml",
 	"repository": {
 		"type": "git",
-        "url": "https://github.com/pgfearo/vscode-xslt-tokenizer"
+        "url": "https://github.com/DeltaXML/xpath-embedded"
 	},
 	"keywords": [
 		"xml",
@@ -16,7 +16,7 @@
 		"highlighter"
 	],
 	"engines": {
-		"vscode": "^1.41.0"
+		"vscode": "^1.43.0"
 	},
 	"categories": [
 		"Programming Languages"
