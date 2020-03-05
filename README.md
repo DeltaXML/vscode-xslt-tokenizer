@@ -1,50 +1,35 @@
 # XPath Rising
 
-_This project uses the proposed API for Semantic Tokens VSCode Extensions._
+A VSCode extension for the syntax highlighting of XPath 3.1, XSLT 3.0 and other languages that host XPath.
 
-*XPath Rising* is a VSCode extension for the syntax highlighting of XSLT and XPath.
+This project uses the proposed API for Semantic Tokens VSCode Extensions. XPath Rising will be published to the VSCode Extension MarketPlace once the proposed API is incorporated into a stable release of VSCode.
 
-
-The XSLT demo file loaded in VSCode with the extension running:
+_An XSLT sample file loaded in VSCode with the extension running:_
 
 ![Screenshot](xslt-demo2.png)
 
+_Use your preferred highlighting theme:_
+
 ![Screenshot](xslt-demo3.png)
-
-The XPath demo file loaded in VSCode with the extension running:
-
-![Screenshot](xpath-demo.png)
-
-## To install dependencies
-From terminal, run:
-
- ``npm install``
-
-## Settings
-
-Settings.json (in application directory)
-
-```json
-{
-	"[XPath]": {
-		"editor.matchBrackets": "always",
-		"editor.semanticHighlighting.enabled":true
-	},
-	"[xsl]": {
-		"editor.semanticHighlighting.enabled":true
-	}
-}
-```
 
 ## How to run
 
-The VSCode Insiders release is required. Launch the extension and open the file `sample/basic.xpath`.
+The VSCode Insiders release is required. 
+
+First launch VSCode Insiders. Then from the menu-bar, select *Run* > *Run Without Debugging*:
+
+![Screenshot](run-extension.png)
 
 ## How to run XPath Lexer tests
 
-From terminal, run:
+From terminal in project directory (when using for the first time):
 
-``npm test``
+ ```npm install```
+
+ then:
+
+ ```npm test```
+
 
 ## State of development
 
@@ -75,8 +60,8 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 	
 ## Implementation Details:
 
-The [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview) provides for tokens with two main attributes:
-- Token Types - such as *keyword*, *variable*
+The [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview) used by *XPath Rising* provides for tokens with two main categories:
+- Token Types - e.g. *keyword*, *variable*
 - Token Modifiers - e.g. *documentation*, *static* 
 
 ## Sample Diagnostics:
