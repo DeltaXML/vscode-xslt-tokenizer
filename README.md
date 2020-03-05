@@ -16,7 +16,15 @@ _Use your preferred highlighting theme:_
 
 The VSCode Insiders release is required. 
 
-First launch VSCode Insiders. Then from the menu-bar, select *Run* > *Run Without Debugging*:
+1. Download this project directory
+2. Launch VSCode Insiders.  
+3. From the menu-bar, select *File* > *Open...* and then select this project directory
+4. Then from the menu-bar, select *Run* > *Run Without Debugging*:
+5. A new *Extension Development Host* VSCode instance will now open
+
+The *Extension Development Host* should now show XPath-level syntax-highlighting when any .xsl file is opened.
+
+*Screenshot showing how to launch the *Extension Development Host*:
 
 ![Screenshot](run-extension.png)
 
