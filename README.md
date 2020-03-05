@@ -1,8 +1,12 @@
 # XPath Rising
 
-A VSCode extension for the syntax highlighting of XPath 3.1, XSLT 3.0 and other languages that host XPath.
+A VSCode extension for syntax highlighting XPath 3.1, XSLT 3.0 and other languages that host XPath.
+
+## Background
 
 This project uses the proposed API for Semantic Tokens VSCode Extensions. XPath Rising will be published to the VSCode Extension MarketPlace once the proposed API is incorporated into a stable release of VSCode.
+
+## Syntax Highlighting Examples
 
 _An XSLT sample file loaded in VSCode with the extension running:_
 
