@@ -53,13 +53,16 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 ## XSLT 3.0 and XPath 3.1 lexer summary
 
 ### Main Features
-- Hand-crafted lexer
-- No regular expressions
-- Iterates character by character
-- Single pass with 1-character lookahead
-- Disambiguates token based on previous/next token
-- Uses stack to manages evaluation context scope
-- No Abstract Syntax Tree.
+- Syntax Highlighting of XSLT 3.0 and embedded XPath 3.1
+- Bracket-matching inside XPath expressions
+- Lexer Details:
+	- Hand-crafted lexer
+	- No regular expressions
+	- Iterates character by character
+	- Single pass with 1-character lookahead
+	- Disambiguates token based on previous/next token
+	- Uses stack to manage evaluation context scope
+	- No Abstract Syntax Tree.
 
 ### Diagnostics / Testing
 - A set of high-level tests for XPath 3.1 expressions
