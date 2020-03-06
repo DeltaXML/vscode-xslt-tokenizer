@@ -2084,5 +2084,27 @@ startCharacter: 29
     },]
         expect (r).toEqual(ts);
     });
+       
+        test(`empty map constructor`, () => {
+        let l: XPathLexer = new XPathLexer();
+        l.flatten = true;
+        let rx: Token[] = l.analyse(`map{}`, ExitCondition.None, pos);
+        let r: Token[] = Utilities.minimiseTokens2(rx);
+        let ts: Token[] = [
+    {value: `map`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 3,
+    startCharacter: 0
+    },
+    {value: `{}`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 2,
+    startCharacter: 3
+    },]
+        expect (r).toEqual(ts);
+    });
+
 
 

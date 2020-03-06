@@ -760,7 +760,10 @@ export class XPathLexer {
                             prevToken.tokenType = TokenLevelState.axisName;
                         } else if (currentToken.value === '()') {
                             this.updateTokenBeforeBrackets(prevToken);
-                        }
+                        } else if (currentToken.value === '{}' && 
+                        (prevToken.value === 'map' || prevToken.value === 'array')) {
+                        prevToken.tokenType = TokenLevelState.operator;
+                    }
                         break;
                     case CharLevelState.lPr:
                         if (prevToken.value ===  'array') {
