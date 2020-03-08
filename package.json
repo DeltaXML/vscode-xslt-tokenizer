@@ -101,7 +101,9 @@
 		"semanticTokenStyleDefaults": [
 			{
 				"selector": "xmlPunctuation",
-				"scope": ["punctuation.definition.tag"]
+				"scope": ["punctuation.definition.tag"],
+				"light": { "foreground": "#000000C0" },
+				"dark": { "foreground": "#ffffff40" }
 			},
 			{
 				"selector": "nodeNameTest",
@@ -157,7 +159,7 @@
 			},
 			{
 				"selector": "entityRef",
-				"scope": ["punctuation.definition.tag"]
+				"scope": [ "comment.block" ]
 			},
 			{
 				"selector": "xmlComment",
