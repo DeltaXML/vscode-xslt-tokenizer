@@ -52,6 +52,7 @@ export enum XMLCharState {
     escDqAvt,  // attribute value template
     escSqAvt,
     tvt,
+    tvtCdata,
     lStWs,
     lsElementNameWs,
     wsAfterAttName,
@@ -252,9 +253,11 @@ export class XslLexer {
                 if (char === ']' && nextChar === ']') {
                     this.cdataCharCount = 0;
                     rc = XMLCharState.rCd;
+                } else if (char === '{') {
+                    rc = XMLCharState.tvtCdata;
                 }
-                // otherwise continue awaiting ]]>
                 break;
+                // otherwise continue awaiting ]]>
             case XMLCharState.rCd:
                 if (this.cdataCharCount === 0) {
                     this.cdataCharCount++;
@@ -650,6 +653,7 @@ export class XslLexer {
                             nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             break;
                         case XMLCharState.tvt:
+                        case XMLCharState.tvtCdata:
                             let useTvt = xmlElementStack.length > 0 &&
                             xmlElementStack[xmlElementStack.length - 1].expandText;
 
@@ -665,7 +669,11 @@ export class XslLexer {
                                 }
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
-                                nextState = XMLCharState.init;
+                                if (nextState === XMLCharState.tvtCdata) {
+                                    nextState = XMLCharState.lCdataEnd;
+                                } else {
+                                    nextState = XMLCharState.init;
+                                }
                             }
                             break;
                         case XMLCharState.lEntity:
