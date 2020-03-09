@@ -5,7 +5,7 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`<xsl:test>a<![CDATA[t{{r}}s]]> continued</xsl:test>`;
+`<a><![CDATA[p{q}ab<cd]]></a>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
