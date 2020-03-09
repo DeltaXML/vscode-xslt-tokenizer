@@ -53,6 +53,8 @@ export enum XMLCharState {
     escSqAvt,
     tvt,
     tvtCdata,
+    escTvt,
+    escTvtCdata,
     lStWs,
     lsElementNameWs,
     wsAfterAttName,
@@ -254,7 +256,11 @@ export class XslLexer {
                     this.cdataCharCount = 0;
                     rc = XMLCharState.rCd;
                 } else if (char === '{') {
-                    rc = XMLCharState.tvtCdata;
+                    if (nextChar === '{') {
+                        rc = XMLCharState.escTvtCdata
+                    } else {
+                        rc = XMLCharState.tvtCdata;
+                    }
                 }
                 break;
                 // otherwise continue awaiting ]]>
@@ -366,6 +372,12 @@ export class XslLexer {
             case XMLCharState.escSqAvt:
                 rc = XMLCharState.lSq;
                 break;
+            case XMLCharState.escTvt:
+                rc = XMLCharState.init;
+                break;
+            case XMLCharState.escTvtCdata:
+                rc = XMLCharState.lCdataEnd;
+                break;
             case XMLCharState.lEntity:
                  if (char === ';') {
                     rc = XMLCharState.rEntity;
@@ -401,7 +413,11 @@ export class XslLexer {
                 }
                 break;
             case '{':
-                rc = XMLCharState.tvt;
+                if (nextChar === '{') {
+                    rc = XMLCharState.escTvt;
+                } else {
+                    rc = XMLCharState.tvt;
+                }
                 break;
             case '&':
                 // TODO: check next char is not ';'
