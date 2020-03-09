@@ -49,6 +49,8 @@ From terminal in project directory (when using for the first time):
 
 The TM Scopes used by this project are sufficient for the popular general-purpose syntax highlighting themes to provide effective syntax highlighting. These scopes will be refined later to provide more granularity to allow color themes to provide language-specfic highlighting.
 
+Experimenting with formatting...
+
 
 ## XSLT 3.0 and XPath 3.1 lexer summary
 
