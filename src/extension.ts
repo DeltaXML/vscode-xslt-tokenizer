@@ -27,8 +27,22 @@ const legend = (function () {
 })();
 
 export function activate(context: vscode.ExtensionContext) {
+	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
+    // formatter
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', {
+	provideDocumentFormattingEdits(document: vscode.TextDocument): vscode.TextEdit[] {
+	  console.log('formatter!!');
+	  const firstLine = document.lineAt(0);
+	  if (firstLine.text !== '42') {
+		return [vscode.TextEdit.insert(firstLine.range.start, '42\n')];
+	  } else {
+		  return [];
+	  }
+
+	}
+  }))
 }
 
 class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
@@ -74,6 +88,7 @@ class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvide
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const builder = new vscode.SemanticTokensBuilder();
+		console.log('highlighter!');
 		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
