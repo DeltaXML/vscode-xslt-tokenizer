@@ -692,6 +692,8 @@ export class XslLexer {
                                 } else {
                                     nextState = XMLCharState.init;
                                 }
+                            } else if (nextState === XMLCharState.tvtCdata) {
+                                nextState = XMLCharState.awaitingRcdata;
                             }
                             break;
                         case XMLCharState.lEntity:
