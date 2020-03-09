@@ -27,6 +27,7 @@ export enum XMLCharState {
     lCdataEnd,
     rCd, // 8 right cdata
     rCdataEnd,
+    awaitingRcdata,
     lSq, // 9 left single quote att
     lDq, // 11 left double quote att
     wsBeforeAttname,
@@ -252,6 +253,7 @@ export class XslLexer {
                 }
                 break;
             case XMLCharState.lCdataEnd:
+            case XMLCharState.awaitingRcdata:
                 if (char === ']' && nextChar === ']') {
                     this.cdataCharCount = 0;
                     rc = XMLCharState.rCd;
@@ -376,7 +378,7 @@ export class XslLexer {
                 rc = XMLCharState.init;
                 break;
             case XMLCharState.escTvtCdata:
-                rc = XMLCharState.lCdataEnd;
+                rc = XMLCharState.awaitingRcdata;
                 break;
             case XMLCharState.lEntity:
                  if (char === ';') {
@@ -686,7 +688,7 @@ export class XslLexer {
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
                                 if (nextState === XMLCharState.tvtCdata) {
-                                    nextState = XMLCharState.lCdataEnd;
+                                    nextState = XMLCharState.awaitingRcdata;
                                 } else {
                                     nextState = XMLCharState.init;
                                 }
