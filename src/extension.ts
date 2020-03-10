@@ -55,13 +55,6 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 		return new vscode.SemanticTokens(builder.build());
 	}
 
-	private _encodeTokenType(tokenType: string): number {
-		if (!tokenTypes.has(tokenType)) {
-			return 0;
-		}
-		return tokenTypes.get(tokenType)!;
-	}
-
 	private _encodeTokenModifiers(strTokenModifiers: string[]): number {
 		let result = 0;
 		for (let i = 0; i < strTokenModifiers.length; i++) {
