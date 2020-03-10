@@ -27,6 +27,7 @@ export enum XMLCharState {
     lCdataEnd,
     rCd, // 8 right cdata
     rCdataEnd,
+    awaitingRcdata,
     lSq, // 9 left single quote att
     lDq, // 11 left double quote att
     wsBeforeAttname,
@@ -53,6 +54,8 @@ export enum XMLCharState {
     escSqAvt,
     tvt,
     tvtCdata,
+    escTvt,
+    escTvtCdata,
     lStWs,
     lsElementNameWs,
     wsAfterAttName,
@@ -250,11 +253,16 @@ export class XslLexer {
                 }
                 break;
             case XMLCharState.lCdataEnd:
+            case XMLCharState.awaitingRcdata:
                 if (char === ']' && nextChar === ']') {
                     this.cdataCharCount = 0;
                     rc = XMLCharState.rCd;
                 } else if (char === '{') {
-                    rc = XMLCharState.tvtCdata;
+                    if (nextChar === '{') {
+                        rc = XMLCharState.escTvtCdata
+                    } else {
+                        rc = XMLCharState.tvtCdata;
+                    }
                 }
                 break;
                 // otherwise continue awaiting ]]>
@@ -366,6 +374,12 @@ export class XslLexer {
             case XMLCharState.escSqAvt:
                 rc = XMLCharState.lSq;
                 break;
+            case XMLCharState.escTvt:
+                rc = XMLCharState.init;
+                break;
+            case XMLCharState.escTvtCdata:
+                rc = XMLCharState.awaitingRcdata;
+                break;
             case XMLCharState.lEntity:
                  if (char === ';') {
                     rc = XMLCharState.rEntity;
@@ -401,7 +415,11 @@ export class XslLexer {
                 }
                 break;
             case '{':
-                rc = XMLCharState.tvt;
+                if (nextChar === '{') {
+                    rc = XMLCharState.escTvt;
+                } else {
+                    rc = XMLCharState.tvt;
+                }
                 break;
             case '&':
                 // TODO: check next char is not ';'
@@ -670,10 +688,12 @@ export class XslLexer {
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
                                 if (nextState === XMLCharState.tvtCdata) {
-                                    nextState = XMLCharState.lCdataEnd;
+                                    nextState = XMLCharState.awaitingRcdata;
                                 } else {
                                     nextState = XMLCharState.init;
                                 }
+                            } else if (nextState === XMLCharState.tvtCdata) {
+                                nextState = XMLCharState.awaitingRcdata;
                             }
                             break;
                         case XMLCharState.lEntity:
