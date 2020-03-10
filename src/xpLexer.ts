@@ -1004,6 +1004,7 @@ export interface BaseToken {
     tokenType: number;
     context?: BaseToken|null;
     error?: boolean;
+    nesting?: number;
 }
 
 export interface Token extends BaseToken {
