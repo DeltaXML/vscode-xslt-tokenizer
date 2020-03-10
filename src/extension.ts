@@ -8,8 +8,9 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
-import {Token, XPathLexer, ExitCondition, LexPosition} from "./xpLexer";
-import {XslLexer} from "./xslLexer";
+import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
+import {XslLexer} from './xslLexer';
+import {XsltFormatter} from './xsltFormatter'
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
@@ -30,19 +31,10 @@ export function activate(context: vscode.ExtensionContext) {
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
-    // formatter
-	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', {
-	provideDocumentFormattingEdits(document: vscode.TextDocument): vscode.TextEdit[] {
-	  console.log('formatter!!');
-	  const firstLine = document.lineAt(0);
-	  if (firstLine.text !== '42') {
-		return [vscode.TextEdit.insert(firstLine.range.start, '42\n')];
-	  } else {
-		  return [];
-	  }
-
-	}
-  }))
+	// formatter
+	let xsltFormatter = new XsltFormatter();
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', 
+		xsltFormatter));
 }
 
 class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
