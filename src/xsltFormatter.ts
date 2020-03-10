@@ -34,7 +34,7 @@ export class XsltFormatter {
 					if (indentLengthDiff > 0) {
 						vscode.TextEdit.insert(currentLine.range.start, indentString.repeat(indentLengthDiff));
 					} else {
-						let endPos = new vscode.Position(lineNumber, indentLengthDiff);
+						let endPos = new vscode.Position(lineNumber, 0 - indentLengthDiff);
 						let deletionRange = currentLine.range.with(currentLine.range.start, endPos);
 						vscode.TextEdit.delete(deletionRange);
 					}
