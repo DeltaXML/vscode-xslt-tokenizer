@@ -42,12 +42,6 @@ export class XsltFormatter {
 				lineNumber = token.line;
 			}
 		});
-		const firstLine = document.lineAt(0);
-		if (firstLine.text !== '42') {
-			return [vscode.TextEdit.insert(firstLine.range.start, '42\n')];
-		} else {
-			return [];
-		}
-
+		return result;
 	}
 }
