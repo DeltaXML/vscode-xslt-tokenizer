@@ -121,7 +121,11 @@ export class XslLexer {
             textmateTypes.push(XSLTokenLevelState[i]);
         }
         return textmateTypes;
-    }   
+    }
+    
+    public static getXsltStartTokenNumber() {
+        return this.xpathLegend.length;
+    }
 
     private isWhitespace (isCurrentCharNewLine: boolean, char: string) {
         return isCurrentCharNewLine || char === ' ' || char == '\t' || char === '\r';

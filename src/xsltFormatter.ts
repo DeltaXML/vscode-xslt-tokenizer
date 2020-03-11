@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
-import {XslLexer} from './xslLexer';
+import {XslLexer, XMLCharState, XSLTokenLevelState} from './xslLexer';
+import {CharLevelState} from './xpLexer';
 
 export class XsltFormatter {
 	private xslLexer = new XslLexer();
 	private useTabs = false;
 	private spaceIndentSize = 2;
+	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
 
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument): vscode.TextEdit[] => {
@@ -21,16 +23,26 @@ export class XsltFormatter {
 
 		let allTokens = this.xslLexer.analyse(document.getText());
 		let lineNumber = -1;
+		let nestingLevel = 0;
+		let stringLengthOffset = 0;
+		let xmlSpacePreserveStack: boolean[] = [];
 		allTokens.forEach((token) => {
 			if (token.line > lineNumber) {
 				lineNumber = token.line;
 				let actualIndentLength = token.startCharacter;
-				let nesting = (token.nesting)? token.nesting : 0; 
-				let requiredIndentLength = nesting * indentCharLength;
+				const currentLine = document.lineAt(lineNumber);
+
+				let requiredIndentLength = nestingLevel * indentCharLength;
+				let isXsltToken = token.tokenType >= XsltFormatter.xsltStartTokenNumber;
+				if (isXsltToken && token.tokenType === XSLTokenLevelState.xmlPunctuation) {
+
+				} else {
+					let xpathCharType: CharLevelState = <CharLevelState>token.tokenType;
+				}
 
 				if (actualIndentLength !== requiredIndentLength) {
 					let indentLengthDiff = requiredIndentLength - actualIndentLength;
-					const currentLine = document.lineAt(lineNumber);
+
 					if (indentLengthDiff > 0) {
 						vscode.TextEdit.insert(currentLine.range.start, indentString.repeat(indentLengthDiff));
 					} else {
