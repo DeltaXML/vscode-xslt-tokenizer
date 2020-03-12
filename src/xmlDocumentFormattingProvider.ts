@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import {XslLexer, XMLCharState, XSLTokenLevelState} from './xslLexer';
-import {CharLevelState} from './xpLexer';
+import {CharLevelState, TokenLevelState} from './xpLexer';
 
 export class XMLDocumentFormattingProvider {
 	private xslLexer = new XslLexer();
@@ -38,10 +38,26 @@ export class XMLDocumentFormattingProvider {
 
 				let requiredIndentLength = nestingLevel * indentCharLength;
 				let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
-				if (isXsltToken && token.tokenType === XSLTokenLevelState.xmlPunctuation) {
+				if (isXsltToken) {
+					let xmlCharType = <XMLCharState>token.charType;
+					let xmlTokenType = <XSLTokenLevelState>(token.tokenType -  XMLDocumentFormattingProvider.xsltStartTokenNumber);
+					switch (xmlTokenType) {
+						case XSLTokenLevelState.xmlPunctuation:
+							switch (xmlCharType) {
+								case XMLCharState.lSt:
+									nestingLevel++;
+									break;
+								case XMLCharState.rSelfCt:
+								case XMLCharState.lCt:
+									nestingLevel--;
+									break;
+							}
+							break;
+					}
 
 				} else {
-					let xpathCharType: CharLevelState = <CharLevelState>token.tokenType;
+					let xpathCharType = <CharLevelState>token.charType;
+					let xpathTokenType = <TokenLevelState>token.tokenType;
 				}
 
 				if (actualIndentLength !== requiredIndentLength) {
