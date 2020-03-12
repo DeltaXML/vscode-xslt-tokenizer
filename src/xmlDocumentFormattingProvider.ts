@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import {XslLexer, XMLCharState, XSLTokenLevelState} from './xslLexer';
 import {CharLevelState} from './xpLexer';
 
-export class XsltFormatter {
+export class XMLDocumentFormattingProvider {
 	private xslLexer = new XslLexer();
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
@@ -37,7 +37,7 @@ export class XsltFormatter {
 				const currentLine = document.lineAt(lineNumber);
 
 				let requiredIndentLength = nestingLevel * indentCharLength;
-				let isXsltToken = token.tokenType >= XsltFormatter.xsltStartTokenNumber;
+				let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 				if (isXsltToken && token.tokenType === XSLTokenLevelState.xmlPunctuation) {
 
 				} else {

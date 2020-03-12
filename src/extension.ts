@@ -10,7 +10,7 @@
 import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
 import {XslLexer} from './xslLexer';
-import {XsltFormatter} from './xsltFormatter'
+import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider'
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 	// formatter
-	let xsltFormatter = new XsltFormatter();
+	let xsltFormatter = new XMLDocumentFormattingProvider();
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', 
 		xsltFormatter));
 }
