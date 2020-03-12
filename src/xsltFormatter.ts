@@ -4,20 +4,24 @@ import {CharLevelState} from './xpLexer';
 
 export class XsltFormatter {
 	private xslLexer = new XslLexer();
-	private useTabs = false;
-	private spaceIndentSize = 2;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
+	constructor() {
+		this.xslLexer.provideCharLevelState = true;
+	}
 
-	public provideDocumentFormattingEdits = (document: vscode.TextDocument): vscode.TextEdit[] => {
+
+	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		let result: vscode.TextEdit[] = [];
 		console.log('formatter!!');
 		let indentString = '';
+		let useTabs = !(options.insertSpaces);
+		let spaceIndentSize = options.tabSize;
 		// using non-whitespace for testing only!!
-		if (this.useTabs) {
+		if (useTabs) {
 			indentString = 't';
 		} else {
-			indentString = 's'.repeat(this.spaceIndentSize);
+			indentString = 's'.repeat(spaceIndentSize);
 		}
 		let indentCharLength = indentString.length;
 

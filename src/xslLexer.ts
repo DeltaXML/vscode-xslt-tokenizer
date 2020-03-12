@@ -104,6 +104,7 @@ export class XslLexer {
     public debug: boolean = false;
     public flatten: boolean = false;
     public timerOn: boolean = false;
+    public provideCharLevelState = false;
     private lineNumber: number = 0;
     private charCount = 0;
     private lineCharCount = 0;
@@ -496,7 +497,7 @@ export class XslLexer {
                         switch (nextState) {
                             case XMLCharState.lPiValue:
                                 addToken = XSLTokenLevelState.processingInstrValue;
-                                this.addNewTokenToResult(tokenStartChar, addToken, result);
+                                this.addNewTokenToResult(tokenStartChar, addToken, result, nextState);
                                 break;
                             case XMLCharState.lComment:
                                 addToken = XSLTokenLevelState.xmlComment;
@@ -508,7 +509,7 @@ export class XslLexer {
                                 break;
                         }
                         if (addToken !== null) {
-                            this.addNewTokenToResult(tokenStartChar, addToken, result);
+                            this.addNewTokenToResult(tokenStartChar, addToken, result, nextState);
 
                             tokenStartChar = 0;
                         }
@@ -519,7 +520,7 @@ export class XslLexer {
                     
                     switch (nextState) {
                         case XMLCharState.lSt:
-                            this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result);
+                            this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
                         case XMLCharState.lCtName:
                         case XMLCharState.lEn:
@@ -549,25 +550,25 @@ export class XslLexer {
                             tokenChars = [];
 
                             let newTokenType = isXslElement? XSLTokenLevelState.xslElementName: XSLTokenLevelState.elementName;
-                            this.addNewTokenToResult(tokenStartChar, newTokenType, result);
+                            this.addNewTokenToResult(tokenStartChar, newTokenType, result, nextState);
                             if (nextState !== XMLCharState.lsElementNameWs) {
                                 let punctuationLength = nextState === XMLCharState.rCt || nextState === XMLCharState.rStNoAtt? 1: 2;
-                                this.addCharTokenToResult(this.lineCharCount - 1, punctuationLength, XSLTokenLevelState.xmlPunctuation, result);
+                                this.addCharTokenToResult(this.lineCharCount - 1, punctuationLength, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             }
                             break;
                         case XMLCharState.rPiName:
-                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrName, result);
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrName, result, nextState);
                             break;
                         case XMLCharState.rPi:
-                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrValue, result);
-                            this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result);
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrValue, result, currentState);
+                            this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
                         case XMLCharState.rComment:
                             let startChar = tokenStartChar > 0? tokenStartChar -2: 0;
-                            this.addNewTokenToResult(startChar, XSLTokenLevelState.xmlComment, result); 
+                            this.addNewTokenToResult(startChar, XSLTokenLevelState.xmlComment, result, nextState); 
                             break;
                         case XMLCharState.wsAfterAttName:
-                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result);
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result, nextState);
                             attributeNameTokenAdded = true;
                             break;      
                         case XMLCharState.lAn:
@@ -587,23 +588,23 @@ export class XslLexer {
                                 }
                             }
                             if (!attributeNameTokenAdded) {
-                                this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result);
+                                this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result, nextState);
                             }
                             tokenChars = [];
                             storeToken = false;
                             break;
                         case XMLCharState.rSt:
                             expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
-                            this.addCharTokenToResult(tokenStartChar + 1, 1, XSLTokenLevelState.xmlPunctuation, result);
+                            this.addCharTokenToResult(tokenStartChar + 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             storeToken = false;
                             tokenChars = [];
                             break;
                         case XMLCharState.lCt:
                         case XMLCharState.lPi:
-                            this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result);
+                            this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
                         case XMLCharState.rSelfCt:
-                            this.addCharTokenToResult(tokenStartChar + 1, 2, XSLTokenLevelState.xmlPunctuation, result);
+                            this.addCharTokenToResult(tokenStartChar + 1, 2, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
                         case XMLCharState.lCt2:
                             break;
@@ -613,7 +614,7 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
                             }
-                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result);
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
                             tokenChars = [];
                             storeToken = false;
                             break;
@@ -622,7 +623,7 @@ export class XslLexer {
                             if (isExpandTextAttribute) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
-                                this.addCharTokenToResult(tokenStartChar + 1, 1, XSLTokenLevelState.attributeValue, result);
+                                this.addCharTokenToResult(tokenStartChar + 1, 1, XSLTokenLevelState.attributeValue, result, nextState);
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
 
                                 let exit: ExitCondition;
@@ -658,7 +659,7 @@ export class XslLexer {
                             }
 
                             if (exit !== ExitCondition.None) {
-                                this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result);
+                                this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
 
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
@@ -703,12 +704,12 @@ export class XslLexer {
                         case XMLCharState.lEntity:
                             if (this.entityContext !== EntityPosition.text) {
                                 this.addCharTokenToResult(tokenStartChar - 2, (this.lineCharCount + 1) - tokenStartChar,
-                                    XSLTokenLevelState.attributeValue, result);
+                                    XSLTokenLevelState.attributeValue, result, nextState);
                             }
                             break;
                         case XMLCharState.rEntity:
                             this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar,
-                                                         XSLTokenLevelState.entityRef, result);
+                                                         XSLTokenLevelState.entityRef, result, nextState);
                             switch (this.entityContext) {
                                 case EntityPosition.text:
                                     nextState = XMLCharState.init;
@@ -722,10 +723,10 @@ export class XslLexer {
                             }
                             break;
                         case XMLCharState.lCdataEnd:
-                            this.addCharTokenToResult(tokenStartChar - 2, 9, XSLTokenLevelState.xmlPunctuation, result);
+                            this.addCharTokenToResult(tokenStartChar - 2, 9, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
                         case XMLCharState.rCdataEnd:
-                            this.addCharTokenToResult(tokenStartChar, 3, XSLTokenLevelState.xmlPunctuation, result);
+                            this.addCharTokenToResult(tokenStartChar, 3, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
 
                     }
@@ -746,7 +747,7 @@ export class XslLexer {
         return result;
     }
 
-    private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[]) {
+    private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState) {
         let tokenLength = (this.lineCharCount - 1) - tokenStartChar;
         let localTokenStartChar = tokenStartChar;
         if (newTokenType === XSLTokenLevelState.xmlComment || newTokenType === XSLTokenLevelState.attributeValue) {
@@ -759,10 +760,13 @@ export class XslLexer {
             value: '',
             tokenType: newTokenType + XslLexer.xpathLegendLength
         };
+        if (this.provideCharLevelState) {
+            tkn['charType'] = charLevelState;
+        }
         result.push(tkn);
     }
 
-    private addCharTokenToResult(tokenStartChar: number, tokenLength: number, newTokenType: XSLTokenLevelState, result: BaseToken[]) {
+    private addCharTokenToResult(tokenStartChar: number, tokenLength: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState) {
 
         let tkn: BaseToken = {
             line: this.lineNumber,
@@ -771,6 +775,9 @@ export class XslLexer {
             value: '',
             tokenType: newTokenType + XslLexer.xpathLegendLength
         };
+        if (this.provideCharLevelState) {
+            tkn['charType'] = charLevelState;
+        }
         result.push(tkn);
     }
 
