@@ -33,8 +33,6 @@ export class XMLDocumentFormattingProvider {
 		let xmlSpacePreserveStack: boolean[] = [];
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
-			let actualIndentLength = token.startCharacter;
-
 
 			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let outDent = 0;
@@ -61,13 +59,23 @@ export class XMLDocumentFormattingProvider {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 			}
-			let requiredIndentLength = nestingLevel * indentCharLength - (outDent * indentCharLength);
+
 			let lineNumberDiff = lineNumber - prevLineNumber;
 
 			if (lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
 				for (let i = lineNumberDiff - 1; i > -1; i--) {
 					const currentLine = document.lineAt(lineNumber - i);
+					// token may not be at start of line
+					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
+
+					let requiredIndentLength: number;
+					if (i > 0) {
+						// on a missed line, ignore outdent
+						requiredIndentLength = nestingLevel * indentCharLength
+					} else {
+						requiredIndentLength = (nestingLevel * indentCharLength) - (outDent * indentCharLength);
+					}
 
 					if (actualIndentLength !== requiredIndentLength) {
 						let indentLengthDiff = requiredIndentLength - actualIndentLength;
