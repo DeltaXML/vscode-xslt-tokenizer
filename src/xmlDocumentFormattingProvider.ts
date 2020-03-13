@@ -26,7 +26,9 @@ export class XMLDocumentFormattingProvider {
 
 		let allTokens = this.xslLexer.analyse(document.getText());
 		let lineNumber = -1;
+		let prevLineNumber = -1;
 		let nestingLevel = 0;
+		let newNestingLevel = 0;
 		let stringLengthOffset = 0;
 		let xmlSpacePreserveStack: boolean[] = [];
 		allTokens.forEach((token) => {
@@ -34,8 +36,8 @@ export class XMLDocumentFormattingProvider {
 			let actualIndentLength = token.startCharacter;
 			const currentLine = document.lineAt(lineNumber);
 
-			let requiredIndentLength = nestingLevel * indentCharLength;
 			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
+			let outDent = 0;
 			if (isXsltToken) {
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
@@ -43,11 +45,13 @@ export class XMLDocumentFormattingProvider {
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
-								nestingLevel++;
+								newNestingLevel++;
 								break;
-							case XMLCharState.rSelfCt:
 							case XMLCharState.lCt:
-								nestingLevel--;
+								outDent = 1;
+								// intentional no-break;
+							case XMLCharState.rSelfCt:
+								newNestingLevel--;
 								break;
 						}
 						break;
@@ -57,7 +61,9 @@ export class XMLDocumentFormattingProvider {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 			}
-			if (token.line > lineNumber) {
+			let requiredIndentLength = nestingLevel * indentCharLength - (outDent * indentCharLength);
+
+			if (lineNumber > prevLineNumber) {
 				if (actualIndentLength !== requiredIndentLength) {
 					let indentLengthDiff = requiredIndentLength - actualIndentLength;
 
@@ -70,7 +76,8 @@ export class XMLDocumentFormattingProvider {
 					}
 				}
 			}
-			lineNumber = token.line;
+			prevLineNumber = lineNumber;
+			nestingLevel = newNestingLevel;
 		});
 		return result;
 	}
