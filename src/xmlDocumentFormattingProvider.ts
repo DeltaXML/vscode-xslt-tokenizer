@@ -34,7 +34,7 @@ export class XMLDocumentFormattingProvider {
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
 			let actualIndentLength = token.startCharacter;
-			const currentLine = document.lineAt(lineNumber);
+
 
 			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let outDent = 0;
@@ -62,17 +62,23 @@ export class XMLDocumentFormattingProvider {
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 			}
 			let requiredIndentLength = nestingLevel * indentCharLength - (outDent * indentCharLength);
+			let lineNumberDiff = lineNumber - prevLineNumber;
 
-			if (lineNumber > prevLineNumber) {
-				if (actualIndentLength !== requiredIndentLength) {
-					let indentLengthDiff = requiredIndentLength - actualIndentLength;
+			if (lineNumberDiff > 0) {
+				// process any skipped lines (text not in tokens):
+				for (let i = lineNumberDiff - 1; i > -1; i--) {
+					const currentLine = document.lineAt(lineNumber - i);
 
-					if (indentLengthDiff > 0) {
-						result.push(vscode.TextEdit.insert(currentLine.range.start, indentString.repeat(indentLengthDiff)));
-					} else {
-						let endPos = new vscode.Position(lineNumber, 0 - indentLengthDiff);
-						let deletionRange = currentLine.range.with(currentLine.range.start, endPos);
-						result.push(vscode.TextEdit.delete(deletionRange));
+					if (actualIndentLength !== requiredIndentLength) {
+						let indentLengthDiff = requiredIndentLength - actualIndentLength;
+
+						if (indentLengthDiff > 0) {
+							result.push(vscode.TextEdit.insert(currentLine.range.start, indentString.repeat(indentLengthDiff)));
+						} else {
+							let endPos = new vscode.Position(lineNumber, 0 - indentLengthDiff);
+							let deletionRange = currentLine.range.with(currentLine.range.start, endPos);
+							result.push(vscode.TextEdit.delete(deletionRange));
+						}
 					}
 				}
 			}
