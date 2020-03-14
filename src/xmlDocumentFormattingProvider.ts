@@ -75,6 +75,11 @@ export class XMLDocumentFormattingProvider {
 							case XMLCharState.rSelfCt:
 								newNestingLevel--;
 								break;
+							case XMLCharState.rCt:
+								if (stackLength > 0) {
+									xmlSpacePreserveStack.pop();
+								}
+								break;
 						}
 						break;
 					case XSLTokenLevelState.attributeName:
@@ -116,12 +121,11 @@ export class XMLDocumentFormattingProvider {
 					const currentLine = document.lineAt(lineNumber - i);
 					// token may not be at start of line
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
+					let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 
 					let requiredIndentLength: number;
-					let preserveSpace = false;
 					if (i > 0) {
 						// on a missed line, ignore outdent
-						preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 						requiredIndentLength = nestingLevel * indentCharLength
 					} else {
 						requiredIndentLength = (nestingLevel * indentCharLength) + (indent * indentCharLength);
