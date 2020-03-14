@@ -35,6 +35,7 @@ export class XMLDocumentFormattingProvider {
 		let xmlSpacePreserveStack: boolean[] = [];
 		let xmlSpaceAttributeValue: boolean|null = null;
 		let awaitingXmlSpaceAttributeValue = false;
+		let isPreserveSpaceElement = false;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -49,6 +50,10 @@ export class XMLDocumentFormattingProvider {
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
 				switch (xmlTokenType) {
+					case XSLTokenLevelState.xslElementName:
+						let elementName = this.getTextForToken(lineNumber, token, document);
+						isPreserveSpaceElement = elementName === 'xsl:text';
+						break;
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
@@ -71,11 +76,14 @@ export class XMLDocumentFormattingProvider {
 							case XMLCharState.lCt:
 								// outdent:
 								indent = -1;
-								// intentional no-break;
+								newNestingLevel--;
+								break;
 							case XMLCharState.rSelfCt:
+								isPreserveSpaceElement = false;
 								newNestingLevel--;
 								break;
 							case XMLCharState.rCt:
+								isPreserveSpaceElement = false;
 								if (stackLength > 0) {
 									xmlSpacePreserveStack.pop();
 								}
@@ -131,7 +139,7 @@ export class XMLDocumentFormattingProvider {
 						requiredIndentLength = (nestingLevel * indentCharLength) + (indent * indentCharLength);
 					}
 
-					if (!preserveSpace && actualIndentLength !== requiredIndentLength) {
+					if (!(preserveSpace || isPreserveSpaceElement) && actualIndentLength !== requiredIndentLength) {
 						let indentLengthDiff = requiredIndentLength - actualIndentLength;
 
 						if (indentLengthDiff > 0) {
