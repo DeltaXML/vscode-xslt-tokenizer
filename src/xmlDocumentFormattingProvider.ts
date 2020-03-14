@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState } from './xslLexer';
-import { CharLevelState, TokenLevelState } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
 
 export class XMLDocumentFormattingProvider {
 	private xslLexer = new XslLexer();
@@ -33,8 +33,12 @@ export class XMLDocumentFormattingProvider {
 		let multiLineState = MultiLineState.None;
 
 		let xmlSpacePreserveStack: boolean[] = [];
+		let xmlSpaceAttributeValue: boolean|null = null;
+		let awaitingXmlSpaceAttributeValue = false;
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
+			let stackLength = xmlSpacePreserveStack.length;
+			let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 			tokenIndex++;
 			lineNumber = token.line;
 
@@ -47,7 +51,18 @@ export class XMLDocumentFormattingProvider {
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
+								xmlSpaceAttributeValue = null;
 								newNestingLevel++;
+								break;
+							case XMLCharState.rStNoAtt:
+								xmlSpacePreserveStack.push(preserveSpace);
+								break;
+							case XMLCharState.rSt:
+								if (xmlSpaceAttributeValue === null) {
+									xmlSpacePreserveStack.push(preserveSpace);
+								} else {
+									xmlSpacePreserveStack.push(xmlSpaceAttributeValue);
+								}
 								break;
 							case XMLCharState.lCt:
 								// outdent:
@@ -58,8 +73,18 @@ export class XMLDocumentFormattingProvider {
 								break;
 						}
 						break;
-					case XSLTokenLevelState.elementName:
-
+					case XSLTokenLevelState.attributeName:
+						// test: xml:space
+						if (token.length === 9) {
+							let valueText = this.getTextForToken(lineNumber, token, document);
+							awaitingXmlSpaceAttributeValue = (valueText === 'xml:space');
+						}
+						break;
+					case XSLTokenLevelState.attributeValue:
+						if (awaitingXmlSpaceAttributeValue) {
+							let preserveValue = this.getTextForToken(lineNumber, token, document);
+							xmlSpacePreserveStack[stackLength - 1] = preserveValue === 'preserve';
+						}
 						break;
 					case XSLTokenLevelState.processingInstrValue:
 					case XSLTokenLevelState.xmlComment:
@@ -112,6 +137,15 @@ export class XMLDocumentFormattingProvider {
 			multiLineState = newMultiLineState;
 		});
 		return result;
+	}
+
+	private getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
+		let startPos = new vscode.Position(lineNumber, token.startCharacter);
+		let endPos = new vscode.Position(lineNumber, token.startCharacter + token.length);
+		const currentLine = document.lineAt(lineNumber);
+		let valueRange = currentLine.range.with(startPos, endPos);
+		let valueText = document.getText(valueRange);
+		return valueText;
 	}
 }
 
