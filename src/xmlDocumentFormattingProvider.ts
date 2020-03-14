@@ -82,10 +82,12 @@ export class XMLDocumentFormattingProvider {
 								newNestingLevel--;
 								break;
 							case XMLCharState.rSelfCt:
+								attributeNameOffset = 0;
 								isPreserveSpaceElement = false;
 								newNestingLevel--;
 								break;
 							case XMLCharState.rCt:
+								attributeNameOffset = 0;
 								isPreserveSpaceElement = false;
 								if (stackLength > 0) {
 									xmlSpacePreserveStack.pop();
