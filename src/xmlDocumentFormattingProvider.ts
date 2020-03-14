@@ -35,11 +35,8 @@ export class XMLDocumentFormattingProvider {
 		let xmlSpacePreserveStack: boolean[] = [];
 		let xmlSpaceAttributeValue: boolean|null = null;
 		let awaitingXmlSpaceAttributeValue = false;
-<<<<<<< HEAD
 		let attributeNameOffset = 0;
-=======
 		let isPreserveSpaceElement = false;
->>>>>>> formatting
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
