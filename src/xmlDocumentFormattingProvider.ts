@@ -39,7 +39,7 @@ export class XMLDocumentFormattingProvider {
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
 			let stackLength = xmlSpacePreserveStack.length;
-			let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
+
 			tokenIndex++;
 			lineNumber = token.line;
 
@@ -56,10 +56,12 @@ export class XMLDocumentFormattingProvider {
 								newNestingLevel++;
 								break;
 							case XMLCharState.rStNoAtt:
+								let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 								xmlSpacePreserveStack.push(preserveSpace);
 								break;
 							case XMLCharState.rSt:
 								if (xmlSpaceAttributeValue === null) {
+									let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 									xmlSpacePreserveStack.push(preserveSpace);
 								} else {
 									xmlSpacePreserveStack.push(xmlSpaceAttributeValue);
@@ -116,14 +118,16 @@ export class XMLDocumentFormattingProvider {
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
 
 					let requiredIndentLength: number;
+					let preserveSpace = false;
 					if (i > 0) {
 						// on a missed line, ignore outdent
+						preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 						requiredIndentLength = nestingLevel * indentCharLength
 					} else {
 						requiredIndentLength = (nestingLevel * indentCharLength) + (indent * indentCharLength);
 					}
 
-					if (actualIndentLength !== requiredIndentLength) {
+					if (!preserveSpace && actualIndentLength !== requiredIndentLength) {
 						let indentLengthDiff = requiredIndentLength - actualIndentLength;
 
 						if (indentLengthDiff > 0) {
