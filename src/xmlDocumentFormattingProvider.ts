@@ -35,6 +35,7 @@ export class XMLDocumentFormattingProvider {
 		let xmlSpacePreserveStack: boolean[] = [];
 		let xmlSpaceAttributeValue: boolean|null = null;
 		let awaitingXmlSpaceAttributeValue = false;
+
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
 			let stackLength = xmlSpacePreserveStack.length;
@@ -62,6 +63,7 @@ export class XMLDocumentFormattingProvider {
 									xmlSpacePreserveStack.push(preserveSpace);
 								} else {
 									xmlSpacePreserveStack.push(xmlSpaceAttributeValue);
+									xmlSpaceAttributeValue = null;
 								}
 								break;
 							case XMLCharState.lCt:
@@ -82,8 +84,10 @@ export class XMLDocumentFormattingProvider {
 						break;
 					case XSLTokenLevelState.attributeValue:
 						if (awaitingXmlSpaceAttributeValue) {
-							let preserveValue = this.getTextForToken(lineNumber, token, document);
-							xmlSpacePreserveStack[stackLength - 1] = preserveValue === 'preserve';
+							let preserveToken = this.getTextForToken(lineNumber, token, document);
+							// token includes surrounding quotes
+							xmlSpaceAttributeValue = preserveToken === '\"preserve\"' || preserveToken === '\'preserve\'';
+							awaitingXmlSpaceAttributeValue = false;
 						}
 						break;
 					case XSLTokenLevelState.processingInstrValue:

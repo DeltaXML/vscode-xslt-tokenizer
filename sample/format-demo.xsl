@@ -1,6 +1,4 @@
-<root att="
-val1
-val2"
+<root xml:space="preserve"
 att2="abc">
 <this>can</this>
 <new name="pf">
