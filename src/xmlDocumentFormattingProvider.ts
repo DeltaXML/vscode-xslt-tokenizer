@@ -32,7 +32,6 @@ export class XMLDocumentFormattingProvider {
 		let tokenIndex = -1;
 		let multiLineState = MultiLineState.None;
 
-		let stringLengthOffset = 0;
 		let xmlSpacePreserveStack: boolean[] = [];
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -58,6 +57,9 @@ export class XMLDocumentFormattingProvider {
 								newNestingLevel--;
 								break;
 						}
+						break;
+					case XSLTokenLevelState.elementName:
+
 						break;
 					case XSLTokenLevelState.processingInstrValue:
 					case XSLTokenLevelState.xmlComment:
