@@ -18,9 +18,9 @@ export class XMLDocumentFormattingProvider {
 		let useTabs = !(options.insertSpaces);
 		// using non-whitespace for testing only!!
 		if (useTabs) {
-			indentString = 't';
+			indentString = '\t';
 		} else {
-			indentString = 's';
+			indentString = ' ';
 		}
 		let indentCharLength = useTabs? 1: options.tabSize;
 
@@ -29,13 +29,18 @@ export class XMLDocumentFormattingProvider {
 		let prevLineNumber = -1;
 		let nestingLevel = 0;
 		let newNestingLevel = 0;
+		let tokenIndex = -1;
+		let multiLineState = MultiLineState.None;
+
 		let stringLengthOffset = 0;
 		let xmlSpacePreserveStack: boolean[] = [];
 		allTokens.forEach((token) => {
+			let newMultiLineState = MultiLineState.None;
+			tokenIndex++;
 			lineNumber = token.line;
 
 			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
-			let outDent = 0;
+			let indent = 0;
 			if (isXsltToken) {
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
@@ -46,11 +51,21 @@ export class XMLDocumentFormattingProvider {
 								newNestingLevel++;
 								break;
 							case XMLCharState.lCt:
-								outDent = 1;
+								// outdent:
+								indent = -1;
 								// intentional no-break;
 							case XMLCharState.rSelfCt:
 								newNestingLevel--;
 								break;
+						}
+						break;
+					case XSLTokenLevelState.processingInstrValue:
+					case XSLTokenLevelState.xmlComment:
+					case XSLTokenLevelState.processingInstrName:
+						newMultiLineState = (multiLineState === MultiLineState.Start)? MultiLineState.Middle : MultiLineState.Start;
+						// TODO: outdent ?> on separate line - when token value is only whitespace
+						if (newMultiLineState === MultiLineState.Middle && token.length > 0) {
+							indent = 1;
 						}
 						break;
 				}
@@ -74,7 +89,7 @@ export class XMLDocumentFormattingProvider {
 						// on a missed line, ignore outdent
 						requiredIndentLength = nestingLevel * indentCharLength
 					} else {
-						requiredIndentLength = (nestingLevel * indentCharLength) - (outDent * indentCharLength);
+						requiredIndentLength = (nestingLevel * indentCharLength) + (indent * indentCharLength);
 					}
 
 					if (actualIndentLength !== requiredIndentLength) {
@@ -92,7 +107,14 @@ export class XMLDocumentFormattingProvider {
 			}
 			prevLineNumber = lineNumber;
 			nestingLevel = newNestingLevel;
+			multiLineState = newMultiLineState;
 		});
 		return result;
 	}
+}
+
+enum MultiLineState {
+	None,
+	Start,
+	Middle
 }
