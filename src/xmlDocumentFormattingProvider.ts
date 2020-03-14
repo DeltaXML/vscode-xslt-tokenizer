@@ -35,6 +35,7 @@ export class XMLDocumentFormattingProvider {
 		let xmlSpacePreserveStack: boolean[] = [];
 		let xmlSpaceAttributeValue: boolean|null = null;
 		let awaitingXmlSpaceAttributeValue = false;
+		let attributeNameOffset = 0;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -42,6 +43,7 @@ export class XMLDocumentFormattingProvider {
 
 			tokenIndex++;
 			lineNumber = token.line;
+			let lineNumberDiff = lineNumber - prevLineNumber;
 
 			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
@@ -60,6 +62,7 @@ export class XMLDocumentFormattingProvider {
 								xmlSpacePreserveStack.push(preserveSpace);
 								break;
 							case XMLCharState.rSt:
+								attributeNameOffset = 0;
 								if (xmlSpaceAttributeValue === null) {
 									let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 									xmlSpacePreserveStack.push(preserveSpace);
@@ -88,6 +91,8 @@ export class XMLDocumentFormattingProvider {
 							let valueText = this.getTextForToken(lineNumber, token, document);
 							awaitingXmlSpaceAttributeValue = (valueText === 'xml:space');
 						}
+						const attNameLine = document.lineAt(lineNumber);
+						attributeNameOffset = lineNumberDiff > 0? attributeNameOffset: token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
 						break;
 					case XSLTokenLevelState.attributeValue:
 						if (awaitingXmlSpaceAttributeValue) {
@@ -113,8 +118,6 @@ export class XMLDocumentFormattingProvider {
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 			}
 
-			let lineNumberDiff = lineNumber - prevLineNumber;
-
 			if (lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
 				for (let i = lineNumberDiff - 1; i > -1; i--) {
@@ -123,12 +126,14 @@ export class XMLDocumentFormattingProvider {
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
 					let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 
-					let requiredIndentLength: number;
+					let requiredIndentLength = attributeNameOffset + (nestingLevel * indentCharLength);
+					if (attributeNameOffset > 0) {
+						indent = -1;
+					}
 					if (i > 0) {
 						// on a missed line, ignore outdent
-						requiredIndentLength = nestingLevel * indentCharLength
 					} else {
-						requiredIndentLength = (nestingLevel * indentCharLength) + (indent * indentCharLength);
+						requiredIndentLength+= (indent * indentCharLength);
 					}
 
 					if (!preserveSpace && actualIndentLength !== requiredIndentLength) {
