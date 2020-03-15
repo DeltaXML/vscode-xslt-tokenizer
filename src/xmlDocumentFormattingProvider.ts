@@ -155,12 +155,14 @@ export class XMLDocumentFormattingProvider {
 						let valueText = this.getTextForToken(lineNumber, token, document);
 						switch (valueText) {
 							case 'then':
-							case 'every':
 							case 'some':
+							case 'in':
+							case 'return':
+							case 'satisfies':
 								indent = -1;
 								break;
 							case 'else':
-								xpathNestingLevel++;
+								//xpathNestingLevel++;
 								break;
 						}
 						break;
@@ -169,11 +171,18 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
-								indent = -1;
+								//indent = -1;
 								break;
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
+								//indent = 1;
+								break;
+							case CharLevelState.dSep:
+								let valueText = this.getTextForToken(lineNumber, token, document);
+								if (valueText === ':=') {
+									indent = -1;
+								}
 								break;
 						}
 						break;

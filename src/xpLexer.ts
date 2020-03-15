@@ -636,9 +636,6 @@ export class XPathLexer {
             newToken.length = newTokenValue.length;
             newToken.line = this.lineNumber;
             newToken.startCharacter = this.tokenCharNumber;
-            if (this.provideNestingLevel) {
-                newToken['nesting'] = stack.length;
-            }
 
             let isWhitespace = newToken.charType === CharLevelState.lWs;
 
@@ -692,6 +689,9 @@ export class XPathLexer {
                 } else {
                     this.conditionallyPopStack(stack, newToken);
                 }
+            }
+            if (this.provideNestingLevel) {
+                newToken['nesting'] = stack.length;
             }
 
             if (!(state === CharLevelState.lC || state === CharLevelState.lWs)) {
