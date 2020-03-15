@@ -232,6 +232,19 @@ export class XMLDocumentFormattingProvider {
 		return result;
 	}
 
+	private indentCharsOk(document: vscode.TextDocument, lineNumber: number) {
+		const currentLine = document.lineAt(lineNumber);
+
+		let startPos = currentLine.range.start;
+		let endPos = new vscode.Position(lineNumber, currentLine.firstNonWhitespaceCharacterIndex);
+		let valueRange = currentLine.range.with(startPos, endPos);
+		let valueText = document.getText(valueRange);
+		if this.
+		return valueText.co
+
+
+	}
+
 	private getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
 		let startPos = new vscode.Position(lineNumber, token.startCharacter);
 		let endPos = new vscode.Position(lineNumber, token.startCharacter + token.length);
