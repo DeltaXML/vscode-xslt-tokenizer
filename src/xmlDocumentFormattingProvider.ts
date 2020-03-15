@@ -149,18 +149,19 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
+				xpathNestingLevel = token.nesting? token.nesting: 0;
 				switch (xpathTokenType) {
 					case TokenLevelState.complexExpression:
 						let valueText = this.getTextForToken(lineNumber, token, document);
 						switch (valueText) {
 							case 'then':
-							case 'else':
-							case 'return':
 							case 'every':
 							case 'some':
 								indent = -1;
+								break;
+							case 'else':
 								xpathNestingLevel++;
-								break
+								break;
 						}
 						break;
 					case TokenLevelState.operator:
@@ -169,12 +170,10 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
 								indent = -1;
-								xpathNestingLevel++;
 								break;
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
-								xpathNestingLevel--;
 								break;
 						}
 						break;
@@ -194,7 +193,7 @@ export class XMLDocumentFormattingProvider {
 
 					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + xpathNestingLevel) * indentCharLength);
 					if (totalAttributeOffset > 0) {
-						indent = -1;
+						indent = -1 + indent;
 					}
 					if (i > 0) {
 						// on a missed line, ignore outdent

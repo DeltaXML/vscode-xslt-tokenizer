@@ -159,6 +159,7 @@ export class XPathLexer {
     public entityRefOn: boolean = true;
     public documentText: string = '';
     public documentTokens: BaseToken[] = [];
+    public provideNestingLevel = false;
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
@@ -635,6 +636,9 @@ export class XPathLexer {
             newToken.length = newTokenValue.length;
             newToken.line = this.lineNumber;
             newToken.startCharacter = this.tokenCharNumber;
+            if (this.provideNestingLevel) {
+                newToken['nesting'] = stack.length;
+            }
 
             let isWhitespace = newToken.charType === CharLevelState.lWs;
 
@@ -1004,6 +1008,7 @@ export interface BaseToken {
     tokenType: number;
     context?: BaseToken|null;
     error?: boolean;
+    nesting?: number;
 }
 
 export interface Token extends BaseToken {
