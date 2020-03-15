@@ -147,7 +147,9 @@ export class XMLDocumentFormattingProvider {
 			if (lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
 				for (let i = lineNumberDiff - 1; i > -1; i--) {
-					const currentLine = document.lineAt(lineNumber - i);
+					let loopLineNumber = lineNumber - i;
+					const currentLine = document.lineAt(loopLineNumber);
+					let x = currentLine.text.length;
 					// token may not be at start of line
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
 					let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
@@ -168,7 +170,7 @@ export class XMLDocumentFormattingProvider {
 						if (indentLengthDiff > 0) {
 							result.push(vscode.TextEdit.insert(currentLine.range.start, indentString.repeat(indentLengthDiff)));
 						} else {
-							let endPos = new vscode.Position(lineNumber, 0 - indentLengthDiff);
+							let endPos = new vscode.Position(loopLineNumber, 0 - indentLengthDiff);
 							let deletionRange = currentLine.range.with(currentLine.range.start, endPos);
 							result.push(vscode.TextEdit.delete(deletionRange));
 						}
