@@ -149,7 +149,6 @@ export class XMLDocumentFormattingProvider {
 				for (let i = lineNumberDiff - 1; i > -1; i--) {
 					let loopLineNumber = lineNumber - i;
 					const currentLine = document.lineAt(loopLineNumber);
-					let x = currentLine.text.length;
 					// token may not be at start of line
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
 					let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
