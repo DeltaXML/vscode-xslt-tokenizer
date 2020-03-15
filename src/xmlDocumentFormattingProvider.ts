@@ -69,6 +69,7 @@ export class XMLDocumentFormattingProvider {
 								break;
 							case XMLCharState.rSt:
 								attributeNameOffset = 0;
+								attributeValueOffset = 0;
 								if (xmlSpaceAttributeValue === null) {
 									let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 									xmlSpacePreserveStack.push(preserveSpace);
@@ -84,11 +85,13 @@ export class XMLDocumentFormattingProvider {
 								break;
 							case XMLCharState.rSelfCt:
 								attributeNameOffset = 0;
+								attributeValueOffset = 0;
 								isPreserveSpaceElement = false;
 								newNestingLevel--;
 								break;
 							case XMLCharState.rCt:
 								attributeNameOffset = 0;
+								attributeValueOffset = 0;
 								isPreserveSpaceElement = false;
 								if (stackLength > 0) {
 									xmlSpacePreserveStack.pop();
@@ -111,7 +114,10 @@ export class XMLDocumentFormattingProvider {
 						let attValueText = this.getTextForToken(lineNumber, token, document);
 						// token constains single/double quotes also
 						let textOnFirstLine = token.length > 1 && attValueText.trim().length > 1;
-						let newValueOffset = textOnFirstLine? 1 + (token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex): indentCharLength;
+						let indentRemainder = attributeNameOffset % indentCharLength;
+						let adjustedIndentChars = indentCharLength + (indentCharLength - indentRemainder);
+
+						let newValueOffset = textOnFirstLine? 1 + (token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex): adjustedIndentChars;
 						attributeValueOffset = lineNumberDiff > 0? attributeValueOffset: newValueOffset;
 					break;
 					case XSLTokenLevelState.attributeValue:

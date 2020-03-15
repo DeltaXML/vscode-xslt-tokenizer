@@ -1,6 +1,5 @@
-<element name="a" 
-         athisisquitedifficult2="
-             pqrs
-             tuv"
-         namespace="bc
-                    de"/>
+
+    
+<!-- Check that no row is wider than the table it is in. -->
+
+  
