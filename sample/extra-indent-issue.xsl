@@ -53,13 +53,14 @@
             <xsl:when test="$options('indent') eq true()">
                 <xsl:apply-templates select="$input" mode="indent">
                     <xsl:with-param name="fallback" as="(function(element()) as xs:string)?"
-                                                    select="$options('fallback')" tunnel="yes"/>
+                                    select="$options('fallback')" tunnel="yes"
+                                    extra="true"/>
                 </xsl:apply-templates>
             </xsl:when>
             <xsl:otherwise>
                 <xsl:apply-templates select="$input" mode="no-indent">
                     <xsl:with-param name="fallback" as="(function(element()) as xs:string)?"
-                                                    select="$options('fallback')" tunnel="yes"/>
+                                    select="$options('fallback')" tunnel="yes"/>
                 </xsl:apply-templates>
             </xsl:otherwise>
         </xsl:choose>
@@ -176,7 +177,7 @@
     <!-- Template matching "invalid" elements -->
     <xsl:template match="*" mode="indent no-indent">
         <xsl:param name="fallback" as="(function(element()) as xs:string)?"
-                                   tunnel="yes" required="yes"/>
+                   tunnel="yes" required="yes"/>
         <xsl:choose>
             <xsl:when test="exists($fallback)">
                 <xsl:value-of select="$fallback(snapshot(.))"/>

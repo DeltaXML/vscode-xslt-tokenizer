@@ -111,7 +111,9 @@ export class XMLDocumentFormattingProvider {
 						}
 						const attNameLine = document.lineAt(lineNumber);
 						attributeNameOnNewLine = lineNumberDiff > 0;
-						attributeNameOffset = attributeNameOnNewLine? attributeNameOffset : token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
+						if (!attributeNameOnNewLine && attributeNameOffset === 0) {
+							attributeNameOffset = token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
+						} 
 						break;
 					case XSLTokenLevelState.attributeValue:
 						const attValueLine = document.lineAt(lineNumber);
