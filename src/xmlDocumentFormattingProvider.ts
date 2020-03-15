@@ -38,6 +38,7 @@ export class XMLDocumentFormattingProvider {
 		let awaitingXmlSpaceAttributeValue = false;
 		let attributeNameOffset = 0;
 		let attributeValueOffset = 0;
+		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
 
 		allTokens.forEach((token) => {
@@ -109,7 +110,8 @@ export class XMLDocumentFormattingProvider {
 							awaitingXmlSpaceAttributeValue = (valueText === 'xml:space');
 						}
 						const attNameLine = document.lineAt(lineNumber);
-						attributeNameOffset = lineNumberDiff > 0 ? attributeNameOffset : token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
+						attributeNameOnNewLine = lineNumberDiff > 0;
+						attributeNameOffset = attributeNameOnNewLine? attributeNameOffset : token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
 						break;
 					case XSLTokenLevelState.attributeValue:
 						const attValueLine = document.lineAt(lineNumber);
@@ -117,9 +119,12 @@ export class XMLDocumentFormattingProvider {
 						// token constains single/double quotes also
 						let textOnFirstLine = token.length > 1 && attValueText.trim().length > 1;
 						let indentRemainder = attributeNameOffset % indentCharLength;
-						let adjustedIndentChars = indentCharLength + (indentCharLength - indentRemainder);
+						let adjustedIndentChars = attributeNameOffset + (indentCharLength - indentRemainder);
 
-						let newValueOffset = textOnFirstLine ? 1 + (token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex) : adjustedIndentChars;
+						let calcOffset =  token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex;
+						calcOffset = attributeNameOnNewLine? calcOffset + attributeNameOffset: calcOffset;
+
+						let newValueOffset = textOnFirstLine ? 1 + calcOffset : adjustedIndentChars;
 						attributeValueOffset = lineNumberDiff > 0 ? attributeValueOffset : newValueOffset;
 						break;
 					case XSLTokenLevelState.attributeValue:
