@@ -36,6 +36,7 @@ export class XMLDocumentFormattingProvider {
 		let xmlSpaceAttributeValue: boolean|null = null;
 		let awaitingXmlSpaceAttributeValue = false;
 		let attributeNameOffset = 0;
+		let attributeValueOffset = 0;
 		let isPreserveSpaceElement = false;
 
 		allTokens.forEach((token) => {
@@ -97,6 +98,7 @@ export class XMLDocumentFormattingProvider {
 						break;
 					case XSLTokenLevelState.attributeName:
 						// test: xml:space
+						attributeValueOffset = 0;
 						if (token.length === 9) {
 							let valueText = this.getTextForToken(lineNumber, token, document);
 							awaitingXmlSpaceAttributeValue = (valueText === 'xml:space');
@@ -104,6 +106,14 @@ export class XMLDocumentFormattingProvider {
 						const attNameLine = document.lineAt(lineNumber);
 						attributeNameOffset = lineNumberDiff > 0? attributeNameOffset: token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
 						break;
+					case XSLTokenLevelState.attributeValue:
+						const attValueLine = document.lineAt(lineNumber);
+						let attValueText = this.getTextForToken(lineNumber, token, document);
+						// token constains single/double quotes also
+						let textOnFirstLine = token.length > 1 && attValueText.trim().length > 1;
+						let newValueOffset = textOnFirstLine? 1 + (token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex): indentCharLength;
+						attributeValueOffset = lineNumberDiff > 0? attributeValueOffset: newValueOffset;
+					break;
 					case XSLTokenLevelState.attributeValue:
 						if (awaitingXmlSpaceAttributeValue) {
 							let preserveToken = this.getTextForToken(lineNumber, token, document);
@@ -136,8 +146,8 @@ export class XMLDocumentFormattingProvider {
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
 					let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 
-					let requiredIndentLength = attributeNameOffset + (nestingLevel * indentCharLength);
-					if (attributeNameOffset > 0) {
+					let requiredIndentLength = attributeNameOffset + attributeValueOffset + (nestingLevel * indentCharLength);
+					if (attributeNameOffset + attributeValueOffset > 0) {
 						indent = -1;
 					}
 					if (i > 0) {
