@@ -22,7 +22,7 @@ export class XMLDocumentFormattingProvider {
 		} else {
 			indentString = ' ';
 		}
-		let indentCharLength = useTabs? 1: options.tabSize;
+		let indentCharLength = useTabs ? 1 : options.tabSize;
 
 		let allTokens = this.xslLexer.analyse(document.getText());
 		let lineNumber = -1;
@@ -34,7 +34,7 @@ export class XMLDocumentFormattingProvider {
 		let multiLineState = MultiLineState.None;
 
 		let xmlSpacePreserveStack: boolean[] = [];
-		let xmlSpaceAttributeValue: boolean|null = null;
+		let xmlSpaceAttributeValue: boolean | null = null;
 		let awaitingXmlSpaceAttributeValue = false;
 		let attributeNameOffset = 0;
 		let attributeValueOffset = 0;
@@ -66,14 +66,14 @@ export class XMLDocumentFormattingProvider {
 								newNestingLevel++;
 								break;
 							case XMLCharState.rStNoAtt:
-								let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
+								let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 								xmlSpacePreserveStack.push(preserveSpace);
 								break;
 							case XMLCharState.rSt:
 								attributeNameOffset = 0;
 								attributeValueOffset = 0;
 								if (xmlSpaceAttributeValue === null) {
-									let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
+									let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 									xmlSpacePreserveStack.push(preserveSpace);
 								} else {
 									xmlSpacePreserveStack.push(xmlSpaceAttributeValue);
@@ -109,7 +109,7 @@ export class XMLDocumentFormattingProvider {
 							awaitingXmlSpaceAttributeValue = (valueText === 'xml:space');
 						}
 						const attNameLine = document.lineAt(lineNumber);
-						attributeNameOffset = lineNumberDiff > 0? attributeNameOffset: token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
+						attributeNameOffset = lineNumberDiff > 0 ? attributeNameOffset : token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
 						break;
 					case XSLTokenLevelState.attributeValue:
 						const attValueLine = document.lineAt(lineNumber);
@@ -119,8 +119,8 @@ export class XMLDocumentFormattingProvider {
 						let indentRemainder = attributeNameOffset % indentCharLength;
 						let adjustedIndentChars = indentCharLength + (indentCharLength - indentRemainder);
 
-						let newValueOffset = textOnFirstLine? 1 + (token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex): adjustedIndentChars;
-						attributeValueOffset = lineNumberDiff > 0? attributeValueOffset: newValueOffset;
+						let newValueOffset = textOnFirstLine ? 1 + (token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex) : adjustedIndentChars;
+						attributeValueOffset = lineNumberDiff > 0 ? attributeValueOffset : newValueOffset;
 						break;
 					case XSLTokenLevelState.attributeValue:
 						if (awaitingXmlSpaceAttributeValue) {
@@ -133,7 +133,7 @@ export class XMLDocumentFormattingProvider {
 					case XSLTokenLevelState.processingInstrValue:
 					case XSLTokenLevelState.xmlComment:
 					case XSLTokenLevelState.processingInstrName:
-						newMultiLineState = (multiLineState === MultiLineState.Start)? MultiLineState.Middle : MultiLineState.Start;
+						newMultiLineState = (multiLineState === MultiLineState.Start) ? MultiLineState.Middle : MultiLineState.Start;
 						// TODO: outdent ?> on separate line - when token value is only whitespace
 						if (newMultiLineState === MultiLineState.Middle && token.length > 0) {
 							indent = 1;
@@ -153,7 +153,7 @@ export class XMLDocumentFormattingProvider {
 							case 'return':
 							case 'every':
 							case 'some':
-								indent = -1;
+								//indent = -1;
 								xpathNestingLevel++;
 								break
 						}
@@ -163,7 +163,7 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
-								indent = -1;
+								//indent = -1;
 								xpathNestingLevel++;
 								break;
 							case CharLevelState.rB:
@@ -183,17 +183,18 @@ export class XMLDocumentFormattingProvider {
 					const currentLine = document.lineAt(loopLineNumber);
 					// token may not be at start of line
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
-					let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
+					let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 
-					let requiredIndentLength = attributeNameOffset + attributeValueOffset 
-						+ ((nestingLevel + 0) * indentCharLength);
-					if (attributeNameOffset + attributeValueOffset > 0) {
+					let totalAttributeOffset = attributeValueOffset > 0? attributeValueOffset: attributeNameOffset;
+
+					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + 0) * indentCharLength);
+					if (totalAttributeOffset > 0) {
 						indent = -1;
 					}
 					if (i > 0) {
 						// on a missed line, ignore outdent
 					} else {
-						requiredIndentLength+= (indent * indentCharLength);
+						requiredIndentLength += (indent * indentCharLength);
 					}
 
 					if (!(preserveSpace || isPreserveSpaceElement) && actualIndentLength !== requiredIndentLength) {
