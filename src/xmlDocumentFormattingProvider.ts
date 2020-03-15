@@ -28,6 +28,7 @@ export class XMLDocumentFormattingProvider {
 		let lineNumber = -1;
 		let prevLineNumber = -1;
 		let nestingLevel = 0;
+		let xpathNestingLevel = 0;
 		let newNestingLevel = 0;
 		let tokenIndex = -1;
 		let multiLineState = MultiLineState.None;
@@ -50,6 +51,7 @@ export class XMLDocumentFormattingProvider {
 			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
 			if (isXsltToken) {
+				let xpathNestingLevel = 0;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
 				switch (xmlTokenType) {
@@ -119,7 +121,7 @@ export class XMLDocumentFormattingProvider {
 
 						let newValueOffset = textOnFirstLine? 1 + (token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex): adjustedIndentChars;
 						attributeValueOffset = lineNumberDiff > 0? attributeValueOffset: newValueOffset;
-					break;
+						break;
 					case XSLTokenLevelState.attributeValue:
 						if (awaitingXmlSpaceAttributeValue) {
 							let preserveToken = this.getTextForToken(lineNumber, token, document);
@@ -142,6 +144,36 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
+				switch (xpathTokenType) {
+					case TokenLevelState.complexExpression:
+						let valueText = this.getTextForToken(lineNumber, token, document);
+						switch (valueText) {
+							case 'then':
+							case 'else':
+							case 'return':
+							case 'every':
+							case 'some':
+								indent = -1;
+								xpathNestingLevel++;
+								break
+						}
+						break;
+					case TokenLevelState.operator:
+						switch (xpathCharType) {
+							case CharLevelState.lB:
+							case CharLevelState.lPr:
+							case CharLevelState.lBr:
+								indent = -1;
+								xpathNestingLevel++;
+								break;
+							case CharLevelState.rB:
+							case CharLevelState.rPr:
+							case CharLevelState.rBr:
+								xpathNestingLevel--;
+								break;
+						}
+						break;
+				}
 			}
 
 			if (lineNumberDiff > 0) {
@@ -153,7 +185,8 @@ export class XMLDocumentFormattingProvider {
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
 					let preserveSpace = stackLength > 0? xmlSpacePreserveStack[stackLength - 1] : false;
 
-					let requiredIndentLength = attributeNameOffset + attributeValueOffset + (nestingLevel * indentCharLength);
+					let requiredIndentLength = attributeNameOffset + attributeValueOffset 
+						+ ((nestingLevel + 0) * indentCharLength);
 					if (attributeNameOffset + attributeValueOffset > 0) {
 						indent = -1;
 					}

@@ -1,10 +1,20 @@
-<xsl:element name="{name($row-or-element)}" namespace="{namespace-uri($row-or-element)}">
-  <xsl:apply-templates select="$row-or-element/@*" mode="#default"/>
-  <xsl:for-each select="
-                $morerows-versions">
-    <xsl:if test="$morerows[index-of($morerows-versions, current())] gt 1">
-      <xsl:attribute name="{concat('html:overlapped-',string-join(tokenize(lower-case(current()),'='),'-'))}" select="'true'"/>
-    </xsl:if>
-  </xsl:for-each>
-  <xsl:apply-templates select="$row-or-element/node()" mode="overlap"/>
-</xsl:element>
+<xsl:variable name="var1" 
+              select="
+                  if ($a) then
+                  $b
+                  else
+                  $c"/>
+
+<xsl:variable name="var1" 
+              select="
+                  for $a in 1 to 25
+                  return
+                  $abc
+                  "/>
+
+<xsl:variable name="var1" 
+              select="
+                  every $a in $coll
+                  satisfies $a lt 200
+                  and $a gt 20
+                  "/>
