@@ -52,7 +52,7 @@ export class XMLDocumentFormattingProvider {
 			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
 			if (isXsltToken) {
-				let xpathNestingLevel = 0;
+				xpathNestingLevel = 0;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
 				switch (xmlTokenType) {
@@ -158,7 +158,7 @@ export class XMLDocumentFormattingProvider {
 							case 'return':
 							case 'every':
 							case 'some':
-								//indent = -1;
+								indent = -1;
 								xpathNestingLevel++;
 								break
 						}
@@ -168,7 +168,7 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
-								//indent = -1;
+								indent = -1;
 								xpathNestingLevel++;
 								break;
 							case CharLevelState.rB:
@@ -192,7 +192,7 @@ export class XMLDocumentFormattingProvider {
 
 					let totalAttributeOffset = attributeValueOffset > 0? attributeValueOffset: attributeNameOffset;
 
-					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + 0) * indentCharLength);
+					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + xpathNestingLevel) * indentCharLength);
 					if (totalAttributeOffset > 0) {
 						indent = -1;
 					}
