@@ -5,6 +5,7 @@ import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
 export class XMLDocumentFormattingProvider {
 
 	public replaceIndendation = true;
+	public minimiseXPathIndents = true;
 	private xslLexer = new XslLexer();
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
@@ -198,7 +199,12 @@ export class XMLDocumentFormattingProvider {
 					let actualIndentLength = currentLine.firstNonWhitespaceCharacterIndex;
 					let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 
-					let totalAttributeOffset = attributeValueOffset > 0? attributeValueOffset: attributeNameOffset;
+					let totalAttributeOffset;
+					if (!isXsltToken && this.minimiseXPathIndents) {
+						totalAttributeOffset = 0;
+					} else {
+						totalAttributeOffset = attributeValueOffset > 0? attributeValueOffset: attributeNameOffset;
+					}
 
 					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + xpathNestingLevel) * indentCharLength);
 					if (totalAttributeOffset > 0) {
