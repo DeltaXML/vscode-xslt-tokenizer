@@ -3,6 +3,8 @@ import { XslLexer, XMLCharState, XSLTokenLevelState } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
 
 export class XMLDocumentFormattingProvider {
+
+	public replaceIndendation = true;
 	private xslLexer = new XslLexer();
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
@@ -156,15 +158,11 @@ export class XMLDocumentFormattingProvider {
 					case TokenLevelState.complexExpression:
 						let valueText = this.getTextForToken(lineNumber, token, document);
 						switch (valueText) {
-							case 'then':
 							case 'some':
 							case 'in':
 							case 'return':
 							case 'satisfies':
 								indent = -1;
-								break;
-							case 'else':
-								//xpathNestingLevel++;
 								break;
 						}
 						break;
@@ -212,15 +210,19 @@ export class XMLDocumentFormattingProvider {
 						requiredIndentLength += (indent * indentCharLength);
 					}
 
-					if (!(preserveSpace || isPreserveSpaceElement) && actualIndentLength !== requiredIndentLength) {
-						let indentLengthDiff = requiredIndentLength - actualIndentLength;
-
-						if (indentLengthDiff > 0) {
-							result.push(vscode.TextEdit.insert(currentLine.range.start, indentString.repeat(indentLengthDiff)));
-						} else {
-							let endPos = new vscode.Position(loopLineNumber, 0 - indentLengthDiff);
-							let deletionRange = currentLine.range.with(currentLine.range.start, endPos);
-							result.push(vscode.TextEdit.delete(deletionRange));
+					if (!(preserveSpace || isPreserveSpaceElement)) {
+						if (this.replaceIndendation) {
+							let replacementString = indentString.repeat(requiredIndentLength);
+							result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+						} else if (actualIndentLength !== requiredIndentLength) {
+							let indentLengthDiff = requiredIndentLength - actualIndentLength;
+							if (indentLengthDiff > 0) {
+								result.push(vscode.TextEdit.insert(currentLine.range.start, indentString.repeat(indentLengthDiff)));
+							} else {
+								let endPos = new vscode.Position(loopLineNumber, 0 - indentLengthDiff);
+								let deletionRange = currentLine.range.with(currentLine.range.start, endPos);
+								result.push(vscode.TextEdit.delete(deletionRange));
+							}
 						}
 					}
 				}
@@ -232,17 +234,15 @@ export class XMLDocumentFormattingProvider {
 		return result;
 	}
 
-	private indentCharsOk(document: vscode.TextDocument, lineNumber: number) {
-		const currentLine = document.lineAt(lineNumber);
-
+	private getReplaceLineIndentTextEdit = (currentLine: vscode.TextLine, indentString: string): vscode.TextEdit => {
 		let startPos = currentLine.range.start;
-		let endPos = new vscode.Position(lineNumber, currentLine.firstNonWhitespaceCharacterIndex);
-		let valueRange = currentLine.range.with(startPos, endPos);
-		let valueText = document.getText(valueRange);
-		if this.
-		return valueText.co
-
-
+		if (currentLine.firstNonWhitespaceCharacterIndex === 0) {
+			return vscode.TextEdit.insert(startPos, indentString);
+		} else {
+			let endPos = new vscode.Position(currentLine.lineNumber, currentLine.firstNonWhitespaceCharacterIndex);
+			let valueRange = currentLine.range.with(startPos, endPos);
+			return vscode.TextEdit.replace(valueRange, indentString)
+		}
 	}
 
 	private getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
