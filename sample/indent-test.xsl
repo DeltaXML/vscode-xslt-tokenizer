@@ -14,14 +14,23 @@
             new
         else
             oldF
+    else
+        $c"/>
+
+<xsl:variable name="var1" select="
+    if ($a) then
+        a 
+    else if ($b) then $b 
         else
             $c"/>
 
 <xsl:variable name="var1" select="
     if ($a) then
         a 
-    else if ($b) then $b 
-        else $c"/>
+    else 
+        if ($b) then $b 
+        else
+            $c"/>
 
 <xsl:variable name="var1" 
               select="
@@ -37,7 +46,7 @@
               select="
     for $a in
         1 to 25
-    return
+        return
         $abc,
         $def
                 "/>

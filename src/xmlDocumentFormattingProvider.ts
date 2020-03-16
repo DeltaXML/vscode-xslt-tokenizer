@@ -43,6 +43,7 @@ export class XMLDocumentFormattingProvider {
 		let attributeValueOffset = 0;
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
+		let expectedElse = false;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -158,14 +159,22 @@ export class XMLDocumentFormattingProvider {
 					case TokenLevelState.complexExpression:
 						let valueText = this.getTextForToken(lineNumber, token, document);
 						switch (valueText) {
-							case 'if':
+							case 'then':
+								expectedElse = true;
 							case 'in':
 							case ':=':
 								xpathNestingLevel++;
 								break;
 							case 'return':
+								break;
 							case 'else':
+								if (expectedElse) {
+									// do nothing
+								} else {
+									xpathNestingLevel--;
+								}
 								indent = -1;
+								expectedElse = false;
 								break;
 						}
 						break;
@@ -174,6 +183,7 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
+								expectedElse = false;
 								xpathNestingLevel++;
 								indent = -1;
 								break;
