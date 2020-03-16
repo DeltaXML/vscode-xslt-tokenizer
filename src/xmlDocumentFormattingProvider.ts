@@ -44,6 +44,7 @@ export class XMLDocumentFormattingProvider {
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
 		let expectedElse = false;
+		let elseLineNumber = -1;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -56,6 +57,8 @@ export class XMLDocumentFormattingProvider {
 			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
 			if (isXsltToken) {
+				let expectedElse = false;
+				let elseLineNumber = -1;
 				xpathNestingLevel = 0;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
@@ -159,6 +162,12 @@ export class XMLDocumentFormattingProvider {
 					case TokenLevelState.complexExpression:
 						let valueText = this.getTextForToken(lineNumber, token, document);
 						switch (valueText) {
+							case 'if':
+								if (lineNumber === elseLineNumber) {
+									xpathNestingLevel--;
+								}
+								elseLineNumber = -1;
+								break;
 							case 'then':
 								expectedElse = true;
 							case 'in':
@@ -168,6 +177,7 @@ export class XMLDocumentFormattingProvider {
 							case 'return':
 								break;
 							case 'else':
+								elseLineNumber = lineNumber;
 								if (expectedElse) {
 									// do nothing
 								} else {

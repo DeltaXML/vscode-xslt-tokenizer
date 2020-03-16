@@ -21,14 +21,15 @@
     if ($a) then
         a 
     else if ($b) then $b 
-        else
-            $c"/>
+    else
+        $c"/>
 
 <xsl:variable name="var1" select="
     if ($a) then
         a 
     else 
-        if ($b) then $b 
+        if ($b) then
+            $b 
         else
             $c"/>
 
