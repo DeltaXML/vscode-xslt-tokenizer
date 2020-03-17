@@ -73,7 +73,6 @@ class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvide
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const builder = new vscode.SemanticTokensBuilder();
-		console.log('highlighter!');
 		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});

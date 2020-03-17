@@ -16,7 +16,6 @@ export class XMLDocumentFormattingProvider {
 
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		let result: vscode.TextEdit[] = [];
-		console.log('formatter!!');
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
 		// using non-whitespace for testing only!!
