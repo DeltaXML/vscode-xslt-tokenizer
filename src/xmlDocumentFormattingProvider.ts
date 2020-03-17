@@ -44,6 +44,8 @@ export class XMLDocumentFormattingProvider {
 		let isPreserveSpaceElement = false;
 		let expectedElse = false;
 		let elseLineNumber = -1;
+		let isXSLTStartTag = false;
+		let nameIndentRequired = false;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -53,9 +55,9 @@ export class XMLDocumentFormattingProvider {
 			lineNumber = token.line;
 			let lineNumberDiff = lineNumber - prevLineNumber;
 
-			let isXsltToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
+			let isXMLToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
-			if (isXsltToken) {
+			if (isXMLToken) {
 				let expectedElse = false;
 				let elseLineNumber = -1;
 				xpathNestingLevel = 0;
@@ -63,8 +65,12 @@ export class XMLDocumentFormattingProvider {
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
+						isXSLTStartTag = true;
 						let elementName = this.getTextForToken(lineNumber, token, document);
 						isPreserveSpaceElement = elementName === 'xsl:text';
+						break;
+					case XSLTokenLevelState.elementName:
+						isXSLTStartTag = false;
 						break;
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
@@ -111,13 +117,17 @@ export class XMLDocumentFormattingProvider {
 					case XSLTokenLevelState.attributeName:
 						// test: xml:space
 						attributeValueOffset = 0;
-						if (token.length === 9) {
+						attributeNameOnNewLine = lineNumberDiff > 0;
+						nameIndentRequired = true;
+						if (token.length === 9 || (isXSLTStartTag && this.minimiseXPathIndents)) {
 							let valueText = this.getTextForToken(lineNumber, token, document);
 							awaitingXmlSpaceAttributeValue = (valueText === 'xml:space');
+							nameIndentRequired = !(isXSLTStartTag && attributeNameOnNewLine && this.xslLexer.isExpressionAtt(valueText));
 						}
 						const attNameLine = document.lineAt(lineNumber);
-						attributeNameOnNewLine = lineNumberDiff > 0;
-						if (!attributeNameOnNewLine && attributeNameOffset === 0) {
+						if (!nameIndentRequired) {
+							attributeNameOffset = 0;
+						} else if (!attributeNameOnNewLine && attributeNameOffset === 0) {
 							attributeNameOffset = token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
 						} 
 						break;
@@ -159,6 +169,7 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
+
 				switch (xpathTokenType) {
 					case TokenLevelState.complexExpression:
 						let valueText = this.getTextForToken(lineNumber, token, document);
@@ -224,13 +235,14 @@ export class XMLDocumentFormattingProvider {
 					let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 
 					let totalAttributeOffset;
-					if (!isXsltToken && this.minimiseXPathIndents) {
+					if (!isXMLToken && this.minimiseXPathIndents) {
 						totalAttributeOffset = 0;
 					} else {
 						totalAttributeOffset = attributeValueOffset > 0? attributeValueOffset: attributeNameOffset;
 					}
 
-					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + xpathNestingLevel) * indentCharLength);
+				    let indentExtraAsNoNameIndent = (!nameIndentRequired && !isXMLToken)? 1 : 0; // TODO:
+					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + xpathNestingLevel + indentExtraAsNoNameIndent) * indentCharLength);
 					if (totalAttributeOffset > 0) {
 						indent = -1 + indent;
 					}

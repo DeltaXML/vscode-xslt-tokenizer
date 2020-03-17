@@ -140,11 +140,11 @@ export class XslLexer {
      'lang', 'letter-value', 'media-type', 'method', 'name', 'namespace', 'normalization-form', 'omit-xml-declaration', 'order', 'ordinal', 'ordinal-type', 'output-version',
      'parameter-document', 'regex', 'separator', 'schema-aware', 'stable', 'standalone', 'suppress-indentaion', 'terminate', 'undeclar-prefixes', 'start-at'];
 
-    private isAvtAtt(name: string) {
+    public isAvtAtt(name: string) {
         return XslLexer.avtAtts.indexOf(name) > -1;
     }
 
-    private isExpressionAtt(name: string) {
+    public isExpressionAtt(name: string) {
         return XslLexer.expressionAtts.indexOf(name) > -1;
     }
 
