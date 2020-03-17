@@ -139,7 +139,7 @@ export class XMLDocumentFormattingProvider {
 					case XSLTokenLevelState.attributeValue:
 						if (awaitingXmlSpaceAttributeValue) {
 							let preserveToken = this.getTextForToken(lineNumber, token, document);
-							// token includes surrounding quotes
+							// token includes surrounding quotes.
 							xmlSpaceAttributeValue = preserveToken === '\"preserve\"' || preserveToken === '\'preserve\'';
 							awaitingXmlSpaceAttributeValue = false;
 						}
@@ -147,9 +147,11 @@ export class XMLDocumentFormattingProvider {
 					case XSLTokenLevelState.processingInstrValue:
 					case XSLTokenLevelState.xmlComment:
 					case XSLTokenLevelState.processingInstrName:
-						newMultiLineState = (multiLineState === MultiLineState.Start) ? MultiLineState.Middle : MultiLineState.Start;
+						newMultiLineState = (multiLineState === MultiLineState.None) ? MultiLineState.Start : MultiLineState.Middle;
 						// TODO: outdent ?> on separate line - when token value is only whitespace
-						if (newMultiLineState === MultiLineState.Middle && token.length > 0) {
+						let multiLineToken = this.getTextForToken(lineNumber, token, document);
+
+						if (newMultiLineState === MultiLineState.Middle && token.length > 0 && !multiLineToken.includes('--')) {
 							indent = 1;
 						}
 						break;

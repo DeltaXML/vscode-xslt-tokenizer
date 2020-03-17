@@ -1,3 +1,8 @@
+<!--
+abc
+$def
+-->
+
 <abc name="foo
            bar"/>
 
