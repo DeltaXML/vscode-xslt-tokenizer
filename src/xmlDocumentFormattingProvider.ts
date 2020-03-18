@@ -255,8 +255,10 @@ export class XMLDocumentFormattingProvider {
 						totalAttributeOffset = attributeValueOffset > 0? attributeValueOffset: attributeNameOffset;
 					}
 
-				    let indentExtraAsNoNameIndent = (!nameIndentRequired && !isXMLToken)? 1 : 0; // TODO:
-					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + xpathNestingLevel + indentExtraAsNoNameIndent) * indentCharLength);
+					let indentExtraAsNoNameIndent = (!nameIndentRequired && !isXMLToken)? 1 : 0;
+					// guard against attempt to indent negative:
+					let guardedNestingLevel = xpathNestingLevel > -1? xpathNestingLevel: 0;
+					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + guardedNestingLevel + indentExtraAsNoNameIndent) * indentCharLength);
 					if (totalAttributeOffset > 0) {
 						indent = -1 + indent;
 					}
