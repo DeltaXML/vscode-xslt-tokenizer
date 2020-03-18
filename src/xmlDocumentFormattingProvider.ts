@@ -42,7 +42,8 @@ export class XMLDocumentFormattingProvider {
 		let attributeValueOffset = 0;
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
-		let expectedElse = false;
+		let xpathExpectedStack: XPathExpected[] = [];
+		let xpathExpectedCurrent: XPathExpected = {elseExpected: false, returnExpected: false, satisfiesExpected: false};
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
@@ -169,6 +170,8 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
+				let { elseExpected, returnExpected, satisfiesExpected } = xpathExpectedCurrent;
+				let refreshExpected = false;
 
 				switch (xpathTokenType) {
 					case TokenLevelState.complexExpression:
@@ -181,22 +184,24 @@ export class XMLDocumentFormattingProvider {
 								elseLineNumber = -1;
 								break;
 							case 'then':
-								expectedElse = true;
+								elseExpected = true;
 							case 'in':
 							case ':=':
 								xpathNestingLevel++;
 								break;
 							case 'return':
+							case 'satisfies':
+								indent = -1;
 								break;
 							case 'else':
 								elseLineNumber = lineNumber;
-								if (expectedElse) {
+								if (elseExpected) {
 									// do nothing
 								} else {
 									xpathNestingLevel--;
 								}
 								indent = -1;
-								expectedElse = false;
+								elseExpected = false;
 								break;
 						}
 						break;
@@ -205,14 +210,20 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
-								expectedElse = false;
+								xpathExpectedStack.push(xpathExpectedCurrent);
+								elseExpected = false;
+								returnExpected = false;
+								satisfiesExpected = false;
 								xpathNestingLevel++;
 								indent = -1;
 								break;
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
-								xpathNestingLevel--
+								xpathExpectedStack.pop;
+								refreshExpected = true;
+								xpathExpectedCurrent = xpathExpectedStack.length > 0? xpathExpectedStack[xpathExpectedStack.length - 1]: xpathExpectedCurrent;
+								xpathNestingLevel--;
 								break;
 							case CharLevelState.dSep:
 								let valueText = this.getTextForToken(lineNumber, token, document);
@@ -222,6 +233,11 @@ export class XMLDocumentFormattingProvider {
 								break;
 						}
 						break;
+				}
+				if (refreshExpected) {
+					xpathExpectedCurrent = xpathExpectedStack.length > 0? xpathExpectedStack[xpathExpectedStack.length - 1]: xpathExpectedCurrent;
+				} else {
+					xpathExpectedCurrent = {elseExpected: elseExpected, returnExpected: returnExpected, satisfiesExpected: satisfiesExpected};
 				}
 			}
 
@@ -295,6 +311,12 @@ export class XMLDocumentFormattingProvider {
 		let valueText = document.getText(valueRange);
 		return valueText;
 	}
+}
+
+interface XPathExpected {
+	elseExpected: boolean,
+	returnExpected: boolean,
+	satisfiesExpected: boolean,
 }
 
 enum MultiLineState {

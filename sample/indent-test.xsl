@@ -61,7 +61,7 @@
     select="
         for $a in
             1 to 25
-            return
+        return
             $abc,
             $def
     "/>
@@ -70,6 +70,6 @@
     select="
         every $a in $coll,
             $b in $a * 5
-                satisfies $a lt 200
+            satisfies $a lt 200
                 and $a gt 20
     "/>
