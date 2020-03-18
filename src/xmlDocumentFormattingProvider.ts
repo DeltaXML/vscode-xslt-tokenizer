@@ -171,7 +171,7 @@ export class XMLDocumentFormattingProvider {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 				let { elseExpected, returnExpected, satisfiesExpected } = xpathExpectedCurrent;
-				let refreshExpected = false;
+				let expectedStackPopped = false;
 
 				switch (xpathTokenType) {
 					case TokenLevelState.complexExpression:
@@ -221,7 +221,7 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
 								xpathExpectedStack.pop;
-								refreshExpected = true;
+								expectedStackPopped = true;
 								xpathExpectedCurrent = xpathExpectedStack.length > 0? xpathExpectedStack[xpathExpectedStack.length - 1]: xpathExpectedCurrent;
 								xpathNestingLevel--;
 								break;
@@ -234,9 +234,7 @@ export class XMLDocumentFormattingProvider {
 						}
 						break;
 				}
-				if (refreshExpected) {
-					xpathExpectedCurrent = xpathExpectedStack.length > 0? xpathExpectedStack[xpathExpectedStack.length - 1]: xpathExpectedCurrent;
-				} else {
+				if (!expectedStackPopped) {
 					xpathExpectedCurrent = {elseExpected: elseExpected, returnExpected: returnExpected, satisfiesExpected: satisfiesExpected};
 				}
 			}
