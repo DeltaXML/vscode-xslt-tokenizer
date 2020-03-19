@@ -16,21 +16,54 @@
             86
     "/>
 
-<xsl:variable name="var1" 
+  <xsl:variable name="var1"
     select="
+      let $abc := 1,
+        $def := 2,
+        $jkl := 3
+      return
         (
-            for $table in 1 to 10
+        if ($abc) then
+          if ($def) then
+            if ($jkl) then
+              1
+            else
+              2
+          else
+            3
+        else
+          4,
+        5
+        )
+      "/>
+
+  <xsl:variable name="var2"
+    select="
+      
+      (
+      for $table in 1 to 10
+      return
+        for $row in 5 to 8
+        return
+          for $cell in 20 to 30
+          return
+            for $cell-part in 8 to 12
             return
-                for $row in 5 to 8
-                return
-                    for $cell in 20 to 30
-                    return
-                        for $cell-part in 8 to 12
-                        return
-                            $table + $row + $cell
-                        )
-                        258
-    "/>
+              $table + $row + $cell
+      ),
+      258
+      "/>
+
+
+  <xsl:variable name="var3" select="
+      (
+      true(),
+      every $n in 1 to 20
+        satisfies
+        $n eq 5,
+      false()
+      )
+      "/>
 
 <xsl:variable name="var1" 
     select="
@@ -85,24 +118,6 @@
             ]
         ]
     "/>
-
-<xsl:variable name="var1" 
-    select="
-        (
-            if ($abc) then
-                if ($def) then
-                    if ($jkl) then
-                        1
-                    else
-                        2
-                else
-                    3
-            else
-                4,
-                5
-            )
-    "/>
-
 
 
 <xsl:variable name="var1" 
