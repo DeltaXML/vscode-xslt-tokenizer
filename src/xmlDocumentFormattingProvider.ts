@@ -185,13 +185,37 @@ export class XMLDocumentFormattingProvider {
 								break;
 							case 'then':
 								elseExpected = true;
-							case 'in':
-							case ':=':
 								xpathNestingLevel++;
 								break;
-							case 'return':
-							case 'satisfies':
+							case 'every':
+							case 'some':
+								satisfiesExpected = true;
+								xpathNestingLevel++;
 								indent = -1;
+								break;
+							case 'let':
+							case 'for':
+								returnExpected = true;
+								xpathNestingLevel++;
+								indent = -1;
+								break;
+							case 'return':
+								if (returnExpected) {
+									// do nothing
+								} else {
+									xpathNestingLevel--;
+								}
+								returnExpected = false;
+								indent = -1;
+								break;
+							case 'satisfies':
+								if (satisfiesExpected) {
+									// do nothing
+								} else {
+									xpathNestingLevel--;
+								}
+								indent = -1;
+								satisfiesExpected = false;
 								break;
 							case 'else':
 								elseLineNumber = lineNumber;
@@ -212,6 +236,8 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.lBr:
 								xpathExpectedStack.push(xpathExpectedCurrent);
 								elseExpected = false;
+								returnExpected = false;
+								satisfiesExpected = false;
 								returnExpected = false;
 								satisfiesExpected = false;
 								xpathNestingLevel++;

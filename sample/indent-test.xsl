@@ -5,6 +5,35 @@
 
 <xsl:variable name="var1" 
     select="
+        22,
+        (
+            for $table in 1 to 10,
+                $row in 5 to 8,
+                $cell in 20 to 30
+            return
+                $table + $row + $cell
+            ),
+            86
+    "/>
+
+<xsl:variable name="var1" 
+    select="
+        (
+            for $table in 1 to 10
+            return
+                for $row in 5 to 8
+                return
+                    for $cell in 20 to 30
+                    return
+                        for $cell-part in 8 to 12
+                        return
+                            $table + $row + $cell
+                        )
+                        258
+    "/>
+
+<xsl:variable name="var1" 
+    select="
         [abc
             [ght
                 [ppp                                        
@@ -70,6 +99,6 @@
     select="
         every $a in $coll,
             $b in $a * 5
-            satisfies $a lt 200
-                and $a gt 20
+        satisfies $a lt 200
+            and $a gt 20
     "/>
