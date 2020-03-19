@@ -88,6 +88,25 @@
 
 <xsl:variable name="var1" 
     select="
+        (
+            if ($abc) then
+                if ($def) then
+                    if ($jkl) then
+                        1
+                    else
+                        2
+                else
+                    3
+            else
+                4,
+                5
+            )
+    "/>
+
+
+
+<xsl:variable name="var1" 
+    select="
         for $a in
             1 to 25
         return
