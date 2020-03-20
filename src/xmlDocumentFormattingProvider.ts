@@ -42,7 +42,7 @@ export class XMLDocumentFormattingProvider {
 		let attributeValueOffset = 0;
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
-		let complexStateStack: number[] = [];
+		let complexStateStack: [number, boolean][] = [];
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
@@ -167,7 +167,8 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				let currentStateLevel: number = complexStateStack.length > 0? complexStateStack[complexStateStack.length] : 0;
+				let currentStackItem: [number, boolean] = complexStateStack.length > 0? complexStateStack[complexStateStack.length] : [0, true];
+				let [currentStateLevel, isPart1] = currentStackItem;
 				let expectedStackPopped = false;
 
 				switch (xpathTokenType) {
@@ -187,7 +188,7 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								// no-break;
 							case 'then':
-								complexStateStack.push(nestingLevel)
+								complexStateStack.push([nestingLevel, true])
 								xpathNestingLevel++;
 								break;
 							case 'return':
@@ -218,8 +219,6 @@ export class XMLDocumentFormattingProvider {
 								break;
 							case CharLevelState.rB:
 								if (nestingLevel === currentStateLevel) {
-									let sepText = this.getTextForToken(lineNumber, token, document);
-									if (sepText === ',') {
 										if (!isPart1) {
 											// we're in part 2 of if/else etc. so clear the stack and reset nesting level
 											if (complexStateStack.length > 0) {
@@ -228,7 +227,6 @@ export class XMLDocumentFormattingProvider {
 											}
 											xpathNestingLevel = currentStateLevel;
 										}
-									}
 								}
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
