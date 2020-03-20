@@ -42,7 +42,7 @@ export class XMLDocumentFormattingProvider {
 		let attributeValueOffset = 0;
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
-		let complexStateStack: ComplexState[] = [];
+		let complexStateStack: number[] = [];
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
@@ -167,9 +167,7 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				let currentComplexState: ComplexState = complexStateStack.length > 0? complexStateStack[complexStateStack.length] : {isPart1: true, startLevel: 0};
-				let {isPart1, startLevel} = currentComplexState;
-				let newIsPart1 = true;
+				let currentStateLevel: number = complexStateStack.length > 0? complexStateStack[complexStateStack.length] : 0;
 				let expectedStackPopped = false;
 
 				switch (xpathTokenType) {
@@ -182,46 +180,31 @@ export class XMLDocumentFormattingProvider {
 								}
 								elseLineNumber = -1;
 								break;
-							case 'then':
-								xpathNestingLevel++;
-								break;
 							case 'every':
-							case 'some':
-								xpathNestingLevel++;
-								indent = -1;
-								break;
-							case 'let':
 							case 'for':
-								xpathNestingLevel++;
+							case 'let':
+							case 'some':
 								indent = -1;
+								// no-break;
+							case 'then':
+								complexStateStack.push(nestingLevel)
+								xpathNestingLevel++;
 								break;
 							case 'return':
-								if (isPart1) {
-									// do nothing
-								} else {
-									xpathNestingLevel--;
-								}
-								newIsPart1 = false;
-								indent = -1;
-								break;
 							case 'satisfies':
-								if (isPart1) {
-									// do nothing
-								} else {
-									xpathNestingLevel--;
-								}
-								indent = -1;
-								newIsPart1 = false;
-								break;
 							case 'else':
 								elseLineNumber = lineNumber;
+								if (complexStateStack.length > 0) {
+									complexStateStack.pop();
+								}
 								if (isPart1) {
 									// do nothing
 								} else {
+									// we're in part 2 of if/else etc.
+									xpathNestingLevel = currentStateLevel;
 									xpathNestingLevel--;
 								}
 								indent = -1;
-								newIsPart1 = false;
 								break;
 						}
 						break;
@@ -234,6 +217,19 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								break;
 							case CharLevelState.rB:
+								if (nestingLevel === currentStateLevel) {
+									let sepText = this.getTextForToken(lineNumber, token, document);
+									if (sepText === ',') {
+										if (!isPart1) {
+											// we're in part 2 of if/else etc. so clear the stack and reset nesting level
+											if (complexStateStack.length > 0) {
+												// remove stack parts going back to where startLevel === nestingLevel
+												complexStateStack.pop();
+											}
+											xpathNestingLevel = currentStateLevel;
+										}
+									}
+								}
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
 								expectedStackPopped = true;
@@ -324,10 +320,6 @@ export class XMLDocumentFormattingProvider {
 	}
 }
 
-interface ComplexState {
-	startLevel: number,
-	isPart1: boolean
-}
 
 enum MultiLineState {
 	None,
