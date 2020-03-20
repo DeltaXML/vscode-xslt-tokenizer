@@ -37,6 +37,25 @@
         )
       "/>
 
+
+  <xsl:variable name="var1" select="
+      'p',
+      (
+      if (1) then
+        'a'
+      else
+        if (2) then
+          'b'
+        else
+          if (3) then
+            'c'
+          else
+            if (4) then
+              'd'
+            else
+              'e')
+      , 'q'"/>
+
   <xsl:variable name="var2"
     select="
       
@@ -49,7 +68,7 @@
           return
             for $cell-part in 8 to 12
             return
-              $table + $row + $cell
+              $table + $row + $cell, 289
       ),
       258
       "/>
