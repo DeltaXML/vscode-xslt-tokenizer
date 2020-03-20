@@ -42,7 +42,7 @@ export class XMLDocumentFormattingProvider {
 		let attributeValueOffset = 0;
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
-		let complexStateStack: [number, boolean][] = [];
+		let complexStateStack: number[] = [];
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
@@ -167,10 +167,8 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				let currentStackItem: [number, boolean] = complexStateStack.length > 0? complexStateStack[complexStateStack.length] : [0, true];
-				let [currentStateLevel, isPart1] = currentStackItem;
+				let currentStateLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length] : 0;
 				let expectedStackPopped = false;
-
 				switch (xpathTokenType) {
 					case TokenLevelState.complexExpression:
 						let valueText = this.getTextForToken(lineNumber, token, document);
@@ -188,8 +186,8 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								// no-break;
 							case 'then':
-								complexStateStack.push([nestingLevel, true])
 								xpathNestingLevel++;
+								complexStateStack.push(nestingLevel)
 								break;
 							case 'return':
 							case 'satisfies':
@@ -198,12 +196,12 @@ export class XMLDocumentFormattingProvider {
 								if (complexStateStack.length > 0) {
 									complexStateStack.pop();
 								}
-								if (isPart1) {
-									// do nothing
+								if (currentStateLevel === xpathNestingLevel) {
+									// this is still part 1 so do nothing
 								} else {
 									// we're in part 2 of if/else etc.
+									// so need to reduce to previous if/else etc.
 									xpathNestingLevel = currentStateLevel;
-									xpathNestingLevel--;
 								}
 								indent = -1;
 								break;
