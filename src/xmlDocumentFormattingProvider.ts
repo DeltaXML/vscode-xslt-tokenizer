@@ -201,7 +201,7 @@ export class XMLDocumentFormattingProvider {
 								} else {
 									// we're in part 2 of if/else etc.
 									// so need to reduce to previous if/else etc.
-									xpathNestingLevel = currentStateLevel;
+									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1]: 0;
 								}
 								indent = -1;
 								break;
@@ -216,6 +216,9 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								break;
 							case CharLevelState.rB:
+								if (complexStateStack.length > 0) {
+									complexStateStack.pop();
+								}
 								if (nestingLevel === currentStateLevel) {
 										if (!isPart1) {
 											// we're in part 2 of if/else etc. so clear the stack and reset nesting level
