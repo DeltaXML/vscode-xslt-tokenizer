@@ -42,8 +42,7 @@ export class XMLDocumentFormattingProvider {
 		let attributeValueOffset = 0;
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
-		let xpathExpectedStack: XPathExpected[] = [];
-		let xpathExpectedCurrent: XPathExpected = {elseExpected: false, returnExpected: false, satisfiesExpected: false};
+		let complexStateStack: ComplexState[] = [];
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
@@ -59,8 +58,6 @@ export class XMLDocumentFormattingProvider {
 			let isXMLToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
 			if (isXMLToken) {
-				let expectedElse = false;
-				let elseLineNumber = -1;
 				xpathNestingLevel = 0;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
@@ -170,7 +167,9 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				let { elseExpected, returnExpected, satisfiesExpected } = xpathExpectedCurrent;
+				let currentComplexState: ComplexState = complexStateStack.length > 0? complexStateStack[complexStateStack.length] : {isPart1: true, startLevel: 0};
+				let {isPart1, startLevel} = currentComplexState;
+				let newIsPart1 = true;
 				let expectedStackPopped = false;
 
 				switch (xpathTokenType) {
@@ -184,48 +183,45 @@ export class XMLDocumentFormattingProvider {
 								elseLineNumber = -1;
 								break;
 							case 'then':
-								elseExpected = true;
 								xpathNestingLevel++;
 								break;
 							case 'every':
 							case 'some':
-								satisfiesExpected = true;
 								xpathNestingLevel++;
 								indent = -1;
 								break;
 							case 'let':
 							case 'for':
-								returnExpected = true;
 								xpathNestingLevel++;
 								indent = -1;
 								break;
 							case 'return':
-								if (returnExpected) {
+								if (isPart1) {
 									// do nothing
 								} else {
 									xpathNestingLevel--;
 								}
-								returnExpected = false;
+								newIsPart1 = false;
 								indent = -1;
 								break;
 							case 'satisfies':
-								if (satisfiesExpected) {
+								if (isPart1) {
 									// do nothing
 								} else {
 									xpathNestingLevel--;
 								}
 								indent = -1;
-								satisfiesExpected = false;
+								newIsPart1 = false;
 								break;
 							case 'else':
 								elseLineNumber = lineNumber;
-								if (elseExpected) {
+								if (isPart1) {
 									// do nothing
 								} else {
 									xpathNestingLevel--;
 								}
 								indent = -1;
-								elseExpected = false;
+								newIsPart1 = false;
 								break;
 						}
 						break;
@@ -234,21 +230,13 @@ export class XMLDocumentFormattingProvider {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
-								xpathExpectedStack.push(xpathExpectedCurrent);
-								elseExpected = false;
-								returnExpected = false;
-								satisfiesExpected = false;
-								returnExpected = false;
-								satisfiesExpected = false;
 								xpathNestingLevel++;
 								indent = -1;
 								break;
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
-								xpathExpectedStack.pop;
 								expectedStackPopped = true;
-								xpathExpectedCurrent = xpathExpectedStack.length > 0? xpathExpectedStack[xpathExpectedStack.length - 1]: xpathExpectedCurrent;
 								xpathNestingLevel--;
 								break;
 							case CharLevelState.dSep:
@@ -259,9 +247,6 @@ export class XMLDocumentFormattingProvider {
 								break;
 						}
 						break;
-				}
-				if (!expectedStackPopped) {
-					xpathExpectedCurrent = {elseExpected: elseExpected, returnExpected: returnExpected, satisfiesExpected: satisfiesExpected};
 				}
 			}
 
@@ -339,10 +324,9 @@ export class XMLDocumentFormattingProvider {
 	}
 }
 
-interface XPathExpected {
-	elseExpected: boolean,
-	returnExpected: boolean,
-	satisfiesExpected: boolean,
+interface ComplexState {
+	startLevel: number,
+	isPart1: boolean
 }
 
 enum MultiLineState {
