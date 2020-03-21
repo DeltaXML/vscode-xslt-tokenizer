@@ -209,7 +209,7 @@ export class XMLDocumentFormattingProvider {
 										// remove stack parts going back to where startLevel === nestingLevel
 										complexStateStack.pop();
 									}
-									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1]: xpathNestingLevel;
+									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1] + 1: xpathNestingLevel;
 								}
 								indent = -1;
 								break;
