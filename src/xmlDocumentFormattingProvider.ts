@@ -221,7 +221,7 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								break;
 							case CharLevelState.rB:
-								if (currentStateLevel > 0 && nestingLevel === currentStateLevel) {
+								if (currentStateLevel > 0 && xpathNestingLevel === currentStateLevel) {
 									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1]: xpathNestingLevel;
 									// need to reset if/else block indents
 									if (complexStateStack.length > 0) {
