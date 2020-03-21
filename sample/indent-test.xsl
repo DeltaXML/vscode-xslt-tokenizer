@@ -75,12 +75,13 @@
           if (4) then
             'd'
           else
-            'e')
+            'e'
+      )
       , 'q'"/>
 
 <xsl:variable name="var2"
   select="
-      
+    229
     (
       for $table in 1 to 10
       return
@@ -102,7 +103,7 @@
     every $n in 1 to 20
     satisfies
       $n eq 5,
-      false()
+      false
       )
                 "/>
 
