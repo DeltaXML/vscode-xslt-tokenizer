@@ -4,23 +4,26 @@
 -->
 
 <xsl:variable name="var1" select="
+  if ($a) then
+    if ($b) then
+  new
+else
+  oldF
+else
+  $c"/>
+
+<xsl:variable name="var1" select="
   'p',
   (
     if (1) then
       'a'
     else
-      'b'
-    )
-    , 'q'"/>
-
-<xsl:variable name="var1" select="
-  if ($a) then
-    if ($b) then
-      new
-    else
-      oldF
-  else
-    $c"/>
+      if (2) then
+        'b'
+      else
+        'c'
+  )
+  , 'q'"/>
 
 <xsl:variable name="var1" 
   select="
@@ -31,8 +34,8 @@
         $cell in 20 to 30
       return
         $table + $row + $cell
-      ),
-      86
+    ),
+    86
   "/>
 
 <xsl:variable name="var1"
@@ -44,16 +47,16 @@
       (
         if ($abc) then
           if ($def) then
-            if ($jkl) then
-              1
-            else
-              2
-          else
-            3
-        else
-          4,
-          5
-        )
+        if ($jkl) then
+      1
+    else
+      2
+    else
+      3
+  else
+    4,
+    5
+    )
   "/>
 
 
@@ -73,7 +76,7 @@
             'd'
           else
             'e')
-          , 'q'"/>
+      , 'q'"/>
 
 <xsl:variable name="var2"
   select="
@@ -88,8 +91,8 @@
             for $cell-part in 8 to 12
             return
               $table + $row + $cell, 289
-            ),
-            258
+        ),
+        258
   "/>
 
 
@@ -100,7 +103,7 @@
     satisfies
       $n eq 5,
       false()
-    )
+      )
                 "/>
 
 <xsl:variable name="var1" 
@@ -125,11 +128,11 @@
 <xsl:variable name="var1" select="
   if ($a) then
     if ($b) then
-      new
-    else
-      oldF
-  else
-    $c"/>
+  new
+else
+  oldF
+else
+  $c"/>
 
 <xsl:variable name="var1" select="
   if ($a) then
