@@ -188,7 +188,6 @@ export class XMLDocumentFormattingProvider {
 								// no-break;
 							case 'then':
 								preThen = false;
-								complexStateStack.push(xpathNestingLevel);
 								xpathNestingLevel++;
 								complexStateStack.push(xpathNestingLevel);
 								break;
@@ -196,20 +195,15 @@ export class XMLDocumentFormattingProvider {
 							case 'satisfies':
 							case 'else':
 								elseLineNumber = lineNumber;
-								if (complexStateStack.length > 0) {
-									complexStateStack.pop();
-								}
 								if (currentStateLevel === xpathNestingLevel) {
 									// this is still part 1 of if/end block (i.e. 'if' part) so do nothing
 								} else {
 									// we're in part 2 of if/else etc.
 									// so need to reduce to previous if/else etc.
-									// need to reset if/else block indents
-									if (complexStateStack.length > 0) {
-										// remove stack parts going back to where startLevel === nestingLevel
-										complexStateStack.pop();
-									}
 									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1] + 1: xpathNestingLevel;
+								}
+								if (complexStateStack.length > 0) {
+									complexStateStack.pop();
 								}
 								indent = -1;
 								break;
@@ -219,22 +213,30 @@ export class XMLDocumentFormattingProvider {
 						switch (xpathCharType) {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
-							case CharLevelState.lBr:
+							case CharLevelState.lBr:								
 								xpathNestingLevel++;
+								complexStateStack.push(xpathNestingLevel);
 								indent = -1;
 								break;
 							case CharLevelState.rB:
 								if (!preThen && currentStateLevel > 0 && xpathNestingLevel -1 === currentStateLevel) {
-									// need to reset if/else block indents
-									if (complexStateStack.length > 0) {
-										// remove stack parts going back to where startLevel === nestingLevel
-										complexStateStack.pop();
-									}
 									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1]: xpathNestingLevel;
+								} else {
+									xpathNestingLevel--;
 								}
-								// no-break;
+								// need to reset if/else block indents
+								if (complexStateStack.length > 0) {
+									// remove stack parts going back to where startLevel === nestingLevel
+									complexStateStack.pop();
+								}
+								break;
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
+								// need to reset if/else block indents
+								if (complexStateStack.length > 0) {
+									// remove stack parts going back to where startLevel === nestingLevel
+									complexStateStack.pop();
+								}
 								xpathNestingLevel--;
 								break;
 							case CharLevelState.dSep:
