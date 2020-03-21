@@ -46,6 +46,7 @@ export class XMLDocumentFormattingProvider {
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
+		let preThen = false;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -177,6 +178,7 @@ export class XMLDocumentFormattingProvider {
 									xpathNestingLevel--;
 								}
 								elseLineNumber = -1;
+								preThen = true;
 								break;
 							case 'every':
 							case 'for':
@@ -185,6 +187,7 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								// no-break;
 							case 'then':
+								preThen = false;
 								complexStateStack.push(xpathNestingLevel);
 								xpathNestingLevel++;
 								complexStateStack.push(xpathNestingLevel);
@@ -221,7 +224,7 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								break;
 							case CharLevelState.rB:
-								if (currentStateLevel > 0 && xpathNestingLevel -1 === currentStateLevel) {
+								if (!preThen && currentStateLevel > 0 && xpathNestingLevel -1 === currentStateLevel) {
 									// need to reset if/else block indents
 									if (complexStateStack.length > 0) {
 										// remove stack parts going back to where startLevel === nestingLevel
