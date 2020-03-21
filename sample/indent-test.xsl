@@ -6,11 +6,11 @@
 <xsl:variable name="var1" select="
   if ($a) then
     if ($b) then
-  new
-else
-  oldF
-else
-  $c"/>
+      new
+    else
+      oldF
+  else
+    $c"/>
 
 <xsl:variable name="var1" select="
   'p',
@@ -47,15 +47,15 @@ else
       (
         if ($abc) then
           if ($def) then
-        if ($jkl) then
-      1
-    else
-      2
-    else
-      3
-  else
-    4,
-    5
+            if ($jkl) then
+              1
+            else
+              2
+          else
+            3
+        else
+          4,
+          5
     )
   "/>
 
@@ -128,11 +128,11 @@ else
 <xsl:variable name="var1" select="
   if ($a) then
     if ($b) then
-  new
-else
-  oldF
-else
-  $c"/>
+      new
+    else
+      oldF
+  else
+    $c"/>
 
 <xsl:variable name="var1" select="
   if ($a) then
