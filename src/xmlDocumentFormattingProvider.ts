@@ -185,8 +185,11 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								// no-break;
 							case 'then':
+								if (complexStateStack.length === 0) {
+									complexStateStack.push(xpathNestingLevel);
+								}
 								xpathNestingLevel++;
-								complexStateStack.push(xpathNestingLevel)
+								complexStateStack.push(xpathNestingLevel);
 								break;
 							case 'return':
 							case 'satisfies':
@@ -216,12 +219,12 @@ export class XMLDocumentFormattingProvider {
 								break;
 							case CharLevelState.rB:
 								if (currentStateLevel > 0 && nestingLevel === currentStateLevel) {
+									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1]: xpathNestingLevel;
 									// need to reset if/else block indents
 									if (complexStateStack.length > 0) {
 										// remove stack parts going back to where startLevel === nestingLevel
 										complexStateStack.pop();
 									}
-									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1] - 1: xpathNestingLevel;
 								}
 								// no-break;
 							case CharLevelState.rPr:
