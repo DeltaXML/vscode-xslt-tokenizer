@@ -167,7 +167,7 @@ export class XMLDocumentFormattingProvider {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				let currentStateLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length] : 0;
+				let currentStateLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1] : 0;
 				let expectedStackPopped = false;
 				switch (xpathTokenType) {
 					case TokenLevelState.complexExpression:
