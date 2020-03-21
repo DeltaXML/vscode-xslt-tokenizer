@@ -9,8 +9,8 @@
     new
   else
     oldF
-  else
-    $c"/>
+else
+  $c"/>
 
 <xsl:variable name="var1" select="
   'p',
@@ -48,8 +48,8 @@
               1
             else
               2
-        else
-          3
+          else
+            3
         else
           4,
           5
@@ -70,10 +70,10 @@
       'c'
     else
       if (4) then
-        'd'
-      else
-        'e')
-      , 'q'"/>
+    'd'
+  else
+    'e')
+  , 'q'"/>
 
 <xsl:variable name="var2"
   select="
@@ -100,7 +100,7 @@
     satisfies
       $n eq 5,
       false()
-    )
+  )
                 "/>
 
 <xsl:variable name="var1" 
@@ -128,8 +128,8 @@
     new
   else
     oldF
-  else
-    $c"/>
+else
+  $c"/>
 
 <xsl:variable name="var1" select="
   if ($a) then

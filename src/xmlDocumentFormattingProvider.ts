@@ -185,9 +185,7 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								// no-break;
 							case 'then':
-								if (complexStateStack.length === 0) {
-									complexStateStack.push(xpathNestingLevel);
-								}
+								complexStateStack.push(xpathNestingLevel);
 								xpathNestingLevel++;
 								complexStateStack.push(xpathNestingLevel);
 								break;
