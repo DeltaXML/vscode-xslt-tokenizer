@@ -168,7 +168,6 @@ export class XMLDocumentFormattingProvider {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 				let currentStateLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1] : 0;
-				let expectedStackPopped = false;
 				switch (xpathTokenType) {
 					case TokenLevelState.complexExpression:
 						let valueText = this.getTextForToken(lineNumber, token, document);
@@ -187,7 +186,7 @@ export class XMLDocumentFormattingProvider {
 								// no-break;
 							case 'then':
 								xpathNestingLevel++;
-								complexStateStack.push(nestingLevel)
+								complexStateStack.push(xpathNestingLevel)
 								break;
 							case 'return':
 							case 'satisfies':
@@ -201,7 +200,7 @@ export class XMLDocumentFormattingProvider {
 								} else {
 									// we're in part 2 of if/else etc.
 									// so need to reduce to previous if/else etc.
-									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1]: 0;
+									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1]: xpathNestingLevel;
 								}
 								indent = -1;
 								break;
@@ -216,20 +215,17 @@ export class XMLDocumentFormattingProvider {
 								indent = -1;
 								break;
 							case CharLevelState.rB:
-								if (complexStateStack.length > 0) {
-									complexStateStack.pop();
-								}
 								if (currentStateLevel > 0 && nestingLevel === currentStateLevel) {
 									// need to reset if/else block indents
 									if (complexStateStack.length > 0) {
 										// remove stack parts going back to where startLevel === nestingLevel
 										complexStateStack.pop();
 									}
-									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1]: 0;
+									xpathNestingLevel = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1] - 1: xpathNestingLevel;
 								}
+								// no-break;
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
-								expectedStackPopped = true;
 								xpathNestingLevel--;
 								break;
 							case CharLevelState.dSep:
