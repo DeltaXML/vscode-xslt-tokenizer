@@ -32,8 +32,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let indentCharLength = useTabs ? 1 : options.tabSize;
 
 		let startFormattingLineNumber = range.start.line;
+		const firstLine = document.lineAt(0);
+        const adjustedStartRange = new vscode.Range(firstLine.range.start, range.end);
 
-		let allTokens = this.xslLexer.analyse(document.getText(range));
+		let allTokens = this.xslLexer.analyse(document.getText(adjustedStartRange));
 		let lineNumber = -1;
 		let prevLineNumber = -1;
 		let nestingLevel = 0;
@@ -244,6 +246,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						}
 						break;
 				}
+			}
+			if (lineNumberDiff > 0) {
+				console.log('line: ' + lineNumber);
 			}
 
 			if (lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
