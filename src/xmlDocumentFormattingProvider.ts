@@ -247,9 +247,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						break;
 				}
 			}
-			if (lineNumberDiff > 0) {
-				console.log('line: ' + lineNumber);
-			}
 
 			if (lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
