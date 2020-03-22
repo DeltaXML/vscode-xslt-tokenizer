@@ -2,24 +2,48 @@ import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
 
-export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingEditProvider, vscode.DocumentRangeFormattingEditProvider {
+export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingEditProvider, vscode.DocumentRangeFormattingEditProvider, vscode.OnTypeFormattingEditProvider {
 
 	public replaceIndendation = true;
 	public minimiseXPathIndents = true;
 	private xslLexer = new XslLexer();
+	private provideOnType = false;
+	private onTypeCh = '';
+	private onTypePosition: vscode.Position | null = null;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
 	constructor() {
 		this.xslLexer.provideCharLevelState = true;
 	}
 
+	public provideOnTypeFormattingEdits = (document: vscode.TextDocument, pos: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
+		if (ch.indexOf('\n') > -1) {
+			const lastLine = document.lineAt(pos.line);
+			const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
+			this.onTypeCh = ch;
+			this.provideOnType = true;
+			return [];			
+		} else {
+			return [];
+		}
+	}
+
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
         const lastLine = document.lineAt(document.lineCount - 1);
         const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
+		this.provideOnType = false;
         return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
 	}
 
 	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
+		this.provideOnType = false;
+		return this.provideAllFormattingEdits(document, range, options, token);
+	}
+
+
+
+
+	public provideAllFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		let result: vscode.TextEdit[] = [];
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
