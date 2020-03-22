@@ -196,9 +196,6 @@ export class XMLDocumentFormattingProvider {
 								preThen = false;
 								xpathNestingLevel++;
 								ifElseStack.push(xpathNestingLevel);
-								// if (complexStateStack.length > 0) {
-								// 	complexStateStack[complexStateStack.length - 1][1] = ifElseStack;
-								// }
 								break;
 							case 'return':
 							case 'satisfies':
@@ -208,10 +205,6 @@ export class XMLDocumentFormattingProvider {
 								if (ifElseStack.length > 0) {
 									ifElseStack.pop();
 								}
-								//ifElseStack.push(xpathNestingLevel);
-								// if (complexStateStack.length > 0) {
-								// 	complexStateStack[complexStateStack.length - 1][1] = ifElseStack;
-								// }
 								indent = -1;
 								break;
 						}

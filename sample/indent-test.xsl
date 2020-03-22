@@ -25,8 +25,8 @@
             for $cell-part in 8 to 12
             return
               $table + $row + $cell, 289
-        ),
-        258
+    ),
+    258
   "/>
 
 <xsl:variable name="var1" select="
@@ -45,9 +45,9 @@
             'd'
           else
             'e'
-      )
-      ,
-       'q'"/>
+  )
+  ,
+  'q'"/>
 
 <xsl:variable name="var1" select="
   'p',
@@ -65,8 +65,8 @@
             'd'
           else
             'e'
-      )
-      , 'q'"/>
+  )
+  , 'q'"/>
 
 <xsl:variable name="var1" select="
   if ($a) then
@@ -121,7 +121,7 @@
         else
           4,
           5
-    )
+      )
   "/>
 
 
@@ -133,7 +133,7 @@
     satisfies
       $n eq 5,
       false
-      )
+  )
                 "/>
 
 <xsl:variable name="var1" 
