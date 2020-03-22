@@ -3,6 +3,15 @@
   $def
 -->
 
+<xsl:variable name="var1" select="
+  if ($a) then
+    if ($b) then
+      new
+    else
+      oldF
+  else
+    $c"/>
+
 <xsl:variable name="var2"
   select="
     229
