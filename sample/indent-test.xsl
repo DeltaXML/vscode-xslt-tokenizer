@@ -12,6 +12,21 @@
   else
     $c"/>
 
+<xsl:variable name="var1" select="
+  'p',
+  (
+    if (1) then
+      'a'
+    else if (2) then
+      'b'
+    else if (3) then
+      'c'
+    else
+      'd'
+  )
+  , 'q'"/>
+
+
 <xsl:variable name="var2"
   select="
     229
@@ -28,26 +43,6 @@
     ),
     258
   "/>
-
-<xsl:variable name="var1" select="
-  'p',
-  (
-    if (1) then
-      'a'
-    else
-      if (2) then
-        'b'
-      else
-        if (3) then
-          'c'
-        else
-          if (4) then
-            'd'
-          else
-            'e'
-  )
-  ,
-  'q'"/>
 
 <xsl:variable name="var1" select="
   'p',
