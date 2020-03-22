@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
 
-export class XMLDocumentFormattingProvider {
+export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingEditProvider, vscode.DocumentRangeFormattingEditProvider {
 
 	public replaceIndendation = true;
 	public minimiseXPathIndents = true;
@@ -13,8 +13,13 @@ export class XMLDocumentFormattingProvider {
 		this.xslLexer.provideCharLevelState = true;
 	}
 
-
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
+        const lastLine = document.lineAt(document.lineCount - 1);
+        const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
+        return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+	}
+
+	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		let result: vscode.TextEdit[] = [];
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
@@ -26,7 +31,9 @@ export class XMLDocumentFormattingProvider {
 		}
 		let indentCharLength = useTabs ? 1 : options.tabSize;
 
-		let allTokens = this.xslLexer.analyse(document.getText());
+		let startFormattingLineNumber = range.start.line;
+
+		let allTokens = this.xslLexer.analyse(document.getText(range));
 		let lineNumber = -1;
 		let prevLineNumber = -1;
 		let nestingLevel = 0;
@@ -239,7 +246,7 @@ export class XMLDocumentFormattingProvider {
 				}
 			}
 
-			if (lineNumberDiff > 0) {
+			if (lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
 				for (let i = lineNumberDiff - 1; i > -1; i--) {
 					let loopLineNumber = lineNumber - i;
