@@ -18,9 +18,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 	public provideOnTypeFormattingEdits = (document: vscode.TextDocument, pos: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		if (ch.indexOf('\n') > -1) {
-			if (pos.line > 0 && false){
-				const prevLine = document.lineAt(pos.line - 1);
-				const newLine = document.lineAt(pos.line);
+			if (pos.line > 0){
+				//const prevLine = document.lineAt(pos.line);
+				const newLine = document.lineAt(pos.line + 1);
 				const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
 				return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
 			}
@@ -302,6 +302,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					} else {
 						requiredIndentLength += (indent * indentCharLength);
 					}
+					requiredIndentLength = requiredIndentLength < 0? 0: requiredIndentLength;
 
 					if (!(preserveSpace || isPreserveSpaceElement)) {
 						if (this.replaceIndendation) {
