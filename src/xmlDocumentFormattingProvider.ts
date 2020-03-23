@@ -134,6 +134,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								indent = -1;
 								newNestingLevel--;
 								break;
+							case XMLCharState.rSelfCtNoAtt:
 							case XMLCharState.rSelfCt:
 								attributeNameOffset = 0;
 								attributeValueOffset = 0;
