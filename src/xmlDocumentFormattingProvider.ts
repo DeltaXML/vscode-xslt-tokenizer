@@ -18,10 +18,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 	public provideOnTypeFormattingEdits = (document: vscode.TextDocument, pos: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		if (ch.indexOf('\n') > -1) {
-			const lastLine = document.lineAt(pos.line);
-			const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
-			this.onTypeCh = ch;
-			this.provideOnType = true;
+			if (pos.line > 0 && false){
+				const prevLine = document.lineAt(pos.line - 1);
+				const newLine = document.lineAt(pos.line);
+				const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
+				return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+			}
 			return [];			
 		} else {
 			return [];
@@ -332,7 +334,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		} else {
 			let endPos = new vscode.Position(currentLine.lineNumber, currentLine.firstNonWhitespaceCharacterIndex);
 			let valueRange = currentLine.range.with(startPos, endPos);
-			return vscode.TextEdit.replace(valueRange, indentString)
+			return vscode.TextEdit.replace(valueRange, indentString);
 		}
 	}
 

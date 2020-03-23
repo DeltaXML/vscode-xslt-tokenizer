@@ -52,6 +52,7 @@
     else
       if (2) then
         'b'
+        
       else
         if (3) then
           'c'
@@ -95,7 +96,11 @@
       return
         $table + $row + $cell
     ),
-    86
+    for $a in 1 to 20
+      return
+      this/is/cool
+
+
   "/>
 
 <xsl:variable name="var1"
