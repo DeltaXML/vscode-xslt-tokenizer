@@ -731,7 +731,7 @@ export class XslLexer {
                             break;
 
                     }
-                    tokenStartChar = this.lineCharCount - 1;
+                    tokenStartChar = this.lineCharCount > 0? this.lineCharCount - 1: 0;
                     tokenStartLine = this.lineNumber;
                 } // else ends
                 if (isCurrentCharNewLIne) {
