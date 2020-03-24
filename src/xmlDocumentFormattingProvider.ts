@@ -20,6 +20,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	public provideOnTypeFormattingEdits = (document: vscode.TextDocument, pos: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		if (ch.indexOf('\n') > -1) {
 			if (pos.line > 0){
+				//const prevLine = document.lineAt(pos.line - 1);
 				const newLine = document.lineAt(pos.line);
 				this.onTypeLineEmpty = newLine.text.trim().length === 0;
 				const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
@@ -63,7 +64,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let stringForTokens: string
 		if (this.onTypeLineEmpty) {
 			// add extra char to make token on newline - so it can be indented
-			stringForTokens = document.getText(adjustedStartRange) + '-';
+			stringForTokens = document.getText(adjustedStartRange) + '< ';
 		} else {
 			stringForTokens = document.getText(adjustedStartRange);
 		}
