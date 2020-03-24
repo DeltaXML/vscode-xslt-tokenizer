@@ -7,7 +7,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	public replaceIndendation = true;
 	public minimiseXPathIndents = true;
 	private xslLexer = new XslLexer();
-	private provideOnType = false;
+	public provideOnType = false;
+	private onTypeLineEmpty = false;
 	private onTypeCh = '';
 	private onTypePosition: vscode.Position | null = null;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
@@ -19,8 +20,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	public provideOnTypeFormattingEdits = (document: vscode.TextDocument, pos: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		if (ch.indexOf('\n') > -1) {
 			if (pos.line > 0){
-				//const prevLine = document.lineAt(pos.line);
-				const newLine = document.lineAt(pos.line + 1);
+				const newLine = document.lineAt(pos.line);
+				this.onTypeLineEmpty = newLine.text.trim().length === 0;
 				const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
 				return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
 			}
@@ -33,12 +34,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
         const lastLine = document.lineAt(document.lineCount - 1);
         const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
-		this.provideOnType = false;
         return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
 	}
 
 	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
-		this.provideOnType = false;
 		return this.provideAllFormattingEdits(document, range, options, token);
 	}
 
@@ -61,7 +60,15 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		const firstLine = document.lineAt(0);
         const adjustedStartRange = new vscode.Range(firstLine.range.start, range.end);
 
-		let allTokens = this.xslLexer.analyse(document.getText(adjustedStartRange));
+		let stringForTokens: string
+		if (this.onTypeLineEmpty) {
+			// add extra char to make token on newline - so it can be indented
+			stringForTokens = document.getText(adjustedStartRange) + '-';
+		} else {
+			stringForTokens = document.getText(adjustedStartRange);
+		}
+		let allTokens = this.xslLexer.analyse(stringForTokens);
+
 		let lineNumber = -1;
 		let prevLineNumber = -1;
 		let nestingLevel = 0;

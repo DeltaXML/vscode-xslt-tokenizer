@@ -33,12 +33,15 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider();
+	let xsltFormatterOnType = new XMLDocumentFormattingProvider();
+	xsltFormatterOnType.provideOnType = true;
+
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', 
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xslt', 
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt', 
-		xsltFormatter, '\n'));
+		xsltFormatterOnType, '\n'));
 }
 
 class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
