@@ -576,14 +576,20 @@ export class XslLexer {
                             attributeNameTokenAdded = false;
                             break;
                         case XMLCharState.lStEq:
+                            attName = tokenChars.join('');
                             if (isXslElement) {
-                                attName = tokenChars.join('');
                                 if (attName === 'expand-text') {
                                     isXPathAttribute = false;
                                     isExpandTextAttribute = true;
                                 } else {
                                     isExpandTextAttribute = false;
                                     isXPathAttribute = this.isExpressionAtt(attName);
+                                }
+                            } else {
+                                if (attName === 'xsl:expand-text') {
+                                    isExpandTextAttribute = true;
+                                } else {
+                                    isExpandTextAttribute = false;
                                 }
                             }
                             if (!attributeNameTokenAdded) {
