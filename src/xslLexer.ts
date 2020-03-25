@@ -56,7 +56,6 @@ export enum XMLCharState {
     tvtCdata,
     escTvt,
     escTvtCdata,
-    lStWs,
     lsElementNameWs,
     wsAfterAttName,
     lsEqWs,
@@ -511,14 +510,13 @@ export class XslLexer {
                         }
                         if (addToken !== null) {
                             this.addNewTokenToResult(tokenStartChar, addToken, result, nextState);
-
                             tokenStartChar = 0;
+
                         }
                     } else if (storeToken) {
                         tokenChars.push(currentChar);
                     }
                 } else {
-                    
                     switch (nextState) {
                         case XMLCharState.lSt:
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
@@ -596,7 +594,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.rSt:
                             expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
-                            this.addCharTokenToResult(tokenStartChar + 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
+                            this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             storeToken = false;
                             tokenChars = [];
                             break;
@@ -605,7 +603,7 @@ export class XslLexer {
                             this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
                         case XMLCharState.rSelfCt:
-                            this.addCharTokenToResult(tokenStartChar + 1, 2, XSLTokenLevelState.xmlPunctuation, result, nextState);
+                            this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
                         case XMLCharState.lCt2:
                             break;
@@ -735,6 +733,8 @@ export class XslLexer {
                     tokenStartLine = this.lineNumber;
                 } // else ends
                 if (isCurrentCharNewLIne) {
+                    tokenStartChar = 0;
+                    tokenStartLine = 0;
                     this.lineNumber++;
                     this.lineCharCount = 0;
                 } 

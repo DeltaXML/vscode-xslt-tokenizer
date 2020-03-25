@@ -5,7 +5,9 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`<a><![CDATA[p{q}ab<cd]]></a>`;
+`<new 
+name="pgf"
+>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
