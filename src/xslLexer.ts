@@ -578,7 +578,9 @@ export class XslLexer {
                         case XMLCharState.lStEq:
                             attName = tokenChars.join('');
                             if (isXslElement) {
-                                if (attName === 'expand-text') {
+                                if (attName === 'saxon:options') {
+                                    isXPathAttribute = true;
+                                } else if (attName === 'expand-text') {
                                     isXPathAttribute = false;
                                     isExpandTextAttribute = true;
                                 } else {
