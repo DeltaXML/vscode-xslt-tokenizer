@@ -131,8 +131,9 @@ export class XslLexer {
         return isCurrentCharNewLine || char === ' ' || char == '\t' || char === '\r';
     }
 
-    public static expressionAtts = ['context-item', 'count', 'from', 'group-adjacent', 'group-by', 'group-ending-with', 'group-starting-with', 'from', 'for-each-item', 'for-each-source', 'initial-value', 
-    'key', 'match', 'namespace-context', 'select', 'test', 'use', 'use-when', 'value', 'with-params', 'xpath' ];
+    // Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
+    public static expressionAtts = ['context-item', 'count', 'else', 'from', 'group-adjacent', 'group-by', 'group-ending-with', 'group-starting-with', 'from', 'for-each-item', 'for-each-source', 'initial-value', 
+    'key', 'match', 'namespace-context', 'on-duplicates', 'select', 'test', 'then', 'use', 'use-when', 'value', 'with-params', 'xpath' ];
 
     public static avtAtts = ['allow-duplicate-names', 'base-uri', 'build-tree', 'byte-order-mark', 'case-order', 'cdata-section-elements', 'collation', 'data-type', 'doctype-public', 'doctype-system', 'encoding', 'error-code',
      'escape-uri-attributes', 'flags', 'format', 'grouping-separator', 'grouping-size', 'href', 'html-version', 'include-context-type', 'indent', 'item-separator', 'json-node-output-method',

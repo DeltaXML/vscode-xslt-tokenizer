@@ -102,15 +102,17 @@ class Data {
     public static nodeTypes = [ "attribute", 
                                 "comment", "document-node", "element", "empty-sequence", "item", "namespace-node", "node", 
                                 "processing-instruction", 
-                                "schema-attribute", "schema-element", "text"];                        
+                                "schema-attribute", "schema-element", "text"]; 
 
+    // note: 'otherwise' is a Saxon extension operator:
     public static keywords = [ "and", "array", "as", "div", 
                                 "else", "eq", "except",
                                 "function", "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
-                                "lt", "map", "mod", "ne", "of", "or", "return", "satisfies",
+                                "lt", "map", "mod", "ne", "of", "or", "otherwise", "return", "satisfies",
                                 "then", "to", "treat", "union", "&lt;", "&gt;"];
 
-    public static rangeVars = ["every", "for", "let", "some", "return"];
+    // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
+    public static rangeVars = ["every", "for", "let", "member", "some", "return"];
     public static firstParts = [ "cast", "castable", "instance"];
     public static secondParts = ["as", "of"];
 
@@ -777,6 +779,11 @@ export class XPathLexer {
                     case CharLevelState.lBr:
                         if (prevToken.value === 'map' || prevToken.value === 'array') {
                             prevToken.tokenType = TokenLevelState.operator;
+                        }
+                        break;
+                    case CharLevelState.lName:
+                        if (currentToken.value === 'member' && prevToken.value === 'for') {
+                            prevToken.tokenType = TokenLevelState.complexExpression;
                         }
                         break;
                 }
