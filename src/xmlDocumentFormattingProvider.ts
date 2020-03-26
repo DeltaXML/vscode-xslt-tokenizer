@@ -222,7 +222,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						let trimLine = commentLineText.trimLeft();
 
 						let doIndent = newMultiLineState === MultiLineState.Middle 
-							&& token.length > 0 && !trimLine.startsWith('-->');
+							&& token.length > 0 && !trimLine.startsWith('-->') && !trimLine.startsWith('<!--');
 						indent = doIndent? 1 : 0;
 						attributeNameOffset = doIndent? 5 : 0;
 						break;
