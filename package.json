@@ -6,7 +6,7 @@
 	"publisher": "deltaxml",
 	"repository": {
 		"type": "git",
-        "url": "https://github.com/DeltaXML/xpath-embedded"
+		"url": "https://github.com/DeltaXML/xpath-embedded"
 	},
 	"keywords": [
 		"xml",
@@ -29,145 +29,184 @@
 	"enableProposedApi": true,
 	"main": "./out/extension.js",
 	"contributes": {
-		"semanticTokenTypes": [{
-			"id": "attributeNameTest", 
-			"description": "An attribute node test in a step expression"
-		},
-		{
-			"id": "nodeNameTest", 
-			"description": "A node test in a step expression"
-		},
-		{
-			"id": "uriLiteral", 
-			"description": "A URI literal of the form: Q{uri}"
-		},
-		{
-			"id": "nodeType", 
-			"description": "type of node, e.g. element()"
-		},
-		{
-			"id": "simpleType", 
-			"description": "type of value, e.g. xs:integer"
-		},
-		{
-			"id": "axisName", 
-			"description": "XPath axis, e.g. descendant::"
-		},
-		{
-			"id": "complexExpression",
-			"description": "multi-part expression keyword, e.g. let,:=,return"
-		},
-		{
-			"id": "attributeName",
-			"description": "XML attribute name"
-		},
-		{
-			"id": "attributeValue",
-			"description": "XML attribute value"
-		},
-		{
-			"id": "elementName",
-			"description": "XML element name"
-		},
-		{
-			"id": "elementValue",
-			"description": "XML element text node"
-		},
-		{
-			"id": "processingInstrName",
-			"description": "Processing Instruction name"
-		},
-		{
-			"id": "processingInstrValue",
-			"description": "Processing Instruction value"
-		},
-		{
-			"id": "entityRef",
-			"description": "XML Entity Reference - e.g. '&lt;'"
-		},
-		{
-			"id": "xmlComment",
-			"description": "XML Comment"
-		},
-		{
-			"id": "xslElementName",
-			"description": "Name of XSLT Element"
-		},
-		{
-			"id": "xmlPunctuation",
-			"description": "XML angle-brackets etc."
-		}
+		"semanticTokenTypes": [
+			{
+				"id": "attributeNameTest",
+				"description": "An attribute node test in a step expression"
+			},
+			{
+				"id": "nodeNameTest",
+				"description": "A node test in a step expression"
+			},
+			{
+				"id": "uriLiteral",
+				"description": "A URI literal of the form: Q{uri}"
+			},
+			{
+				"id": "nodeType",
+				"description": "type of node, e.g. element()"
+			},
+			{
+				"id": "simpleType",
+				"description": "type of value, e.g. xs:integer"
+			},
+			{
+				"id": "axisName",
+				"description": "XPath axis, e.g. descendant::"
+			},
+			{
+				"id": "complexExpression",
+				"description": "multi-part expression keyword, e.g. let,:=,return"
+			},
+			{
+				"id": "attributeName",
+				"description": "XML attribute name"
+			},
+			{
+				"id": "attributeValue",
+				"description": "XML attribute value"
+			},
+			{
+				"id": "elementName",
+				"description": "XML element name"
+			},
+			{
+				"id": "elementValue",
+				"description": "XML element text node"
+			},
+			{
+				"id": "processingInstrName",
+				"description": "Processing Instruction name"
+			},
+			{
+				"id": "processingInstrValue",
+				"description": "Processing Instruction value"
+			},
+			{
+				"id": "entityRef",
+				"description": "XML Entity Reference - e.g. '&lt;'"
+			},
+			{
+				"id": "xmlComment",
+				"description": "XML Comment"
+			},
+			{
+				"id": "xslElementName",
+				"description": "Name of XSLT Element"
+			},
+			{
+				"id": "xmlPunctuation",
+				"description": "XML angle-brackets etc."
+			}
 		],
 		"semanticTokenStyleDefaults": [
 			{
 				"selector": "xmlPunctuation",
-				"scope": ["punctuation.definition.tag"],
-				"light": { "foreground": "#000000C0" },
-				"dark": { "foreground": "#ffffff40" }
+				"scope": [
+					"punctuation.definition.tag"
+				],
+				"light": {
+					"foreground": "#000000C0"
+				},
+				"dark": {
+					"foreground": "#ffffff40"
+				}
 			},
 			{
 				"selector": "nodeNameTest",
-				"scope": [ "support.class" ]
+				"scope": [
+					"support.class"
+				]
 			},
 			{
 				"selector": "attributeNameTest",
-				"scope": ["storage.type.struct"]
+				"scope": [
+					"storage.type.struct"
+				]
 			},
 			{
 				"selector": "uriLiteral",
-				"scope": ["constant"]
+				"scope": [
+					"constant"
+				]
 			},
 			{
 				"selector": "nodeType",
-				"scope": ["variable.parameter"]
+				"scope": [
+					"variable.parameter"
+				]
 			},
 			{
 				"selector": "simpleType",
-				"scope": ["variable.parameter"]
+				"scope": [
+					"variable.parameter"
+				]
 			},
 			{
 				"selector": "axisName",
-				"scope": ["label"]
+				"scope": [
+					"label"
+				]
 			},
 			{
 				"selector": "complexExpression",
-				"scope": ["keyword.control"]
+				"scope": [
+					"keyword.control"
+				]
 			},
 			{
 				"selector": "attributeName",
-				"scope": ["entity.other.attribute-name"]
+				"scope": [
+					"entity.other.attribute-name"
+				]
 			},
 			{
 				"selector": "attributeValue",
-				"scope": ["string"]
+				"scope": [
+					"string"
+				]
 			},
 			{
 				"selector": "elementName",
-				"scope": [ "support.class" ]
+				"scope": [
+					"support.class"
+				]
 			},
 			{
 				"selector": "elementValue",
-				"scope": ["string"]
+				"scope": [
+					"string"
+				]
 			},
 			{
 				"selector": "processingInstrName",
-				"scope": ["entity.name.tag"]
+				"scope": [
+					"entity.name.tag"
+				]
 			},
 			{
 				"selector": "processingInstrValue",
-				"scope": ["entity.other.attribute-name"]
+				"scope": [
+					"entity.other.attribute-name"
+				]
 			},
 			{
 				"selector": "entityRef",
-				"scope": [ "comment.block" ]
+				"scope": [
+					"comment.block"
+				]
 			},
 			{
 				"selector": "xmlComment",
-				"scope": ["comment.block"]
+				"scope": [
+					"comment.block"
+				]
 			},
 			{
 				"selector": "xslElementName",
-				"scope": ["entity.name.tag"]
+				"scope": [
+					"entity.name.tag"
+				]
 			}
 		],
 		"languages": [
@@ -205,12 +244,12 @@
 		"test": "jest"
 	},
 	"devDependencies": {
-		"@types/jest": "^24.0.25",
-		"@types/node": "^10.14.17",
-		"@types/vscode": "^1.32.0",
+		"@types/jest": "^24.9.1",
+		"@types/node": "^10.17.17",
+		"@types/vscode": "^1.43.0",
 		"jest": "^24.9.0",
 		"ts-jest": "^24.3.0",
-		"tslint": "^5.16.0",
-		"typescript": "^3.5.1"
+		"tslint": "^5.20.1",
+		"typescript": "^3.8.3"
 	}
 }
