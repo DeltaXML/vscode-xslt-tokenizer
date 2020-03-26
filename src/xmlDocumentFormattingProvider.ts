@@ -42,9 +42,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		return this.provideAllFormattingEdits(document, range, options, token);
 	}
 
-
-
-
 	public provideAllFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		let result: vscode.TextEdit[] = [];
 		let indentString = '';
@@ -119,6 +116,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
+								attributeNameOffset = 0;
+								attributeValueOffset = 0;
 								xmlSpaceAttributeValue = null;
 								newNestingLevel++;
 								break;
@@ -156,6 +155,13 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								if (stackLength > 0) {
 									xmlSpacePreserveStack.pop();
 								}
+								break;
+							case XMLCharState.lPi:
+								attributeNameOffset = 0;
+								attributeValueOffset = 0;
+								break;
+							case XMLCharState.rPi:
+								indent = 0;
 								break;
 						}
 						break;
@@ -199,15 +205,26 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						}
 						break;
 					case XSLTokenLevelState.processingInstrValue:
-					case XSLTokenLevelState.xmlComment:
 					case XSLTokenLevelState.processingInstrName:
+						attributeNameOffset = 0;
 						newMultiLineState = (multiLineState === MultiLineState.None) ? MultiLineState.Start : MultiLineState.Middle;
 						// TODO: outdent ?> on separate line - when token value is only whitespace
-						let multiLineToken = this.getTextForToken(lineNumber, token, document);
+						let piText = this.getTextForToken(lineNumber, token, document);
+						let trimPi = piText.trim();
 
-						if (newMultiLineState === MultiLineState.Middle && token.length > 0 && !multiLineToken.includes('--')) {
+						if (newMultiLineState === MultiLineState.Middle && trimPi.length > 0) {
 							indent = 1;
 						}
+						break;
+					case XSLTokenLevelState.xmlComment:
+						newMultiLineState = (multiLineState === MultiLineState.None) ? MultiLineState.Start : MultiLineState.Middle;
+						let commentLineText = this.getTextForToken(lineNumber, token, document);
+						let trimLine = commentLineText.trimLeft();
+
+						let doIndent = newMultiLineState === MultiLineState.Middle 
+							&& token.length > 0 && !trimLine.startsWith('-->');
+						indent = doIndent? 1 : 0;
+						attributeNameOffset = doIndent? 5 : 0;
 						break;
 				}
 
