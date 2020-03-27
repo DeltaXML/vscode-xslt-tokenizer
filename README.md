@@ -7,7 +7,8 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and other languages that host XPath.
 - XSLT 3.0 and XPath 3.1 Formatting
   - Document Formatting
   - Selection Formatting
-  - On Type Newline Indentation
+  - On Type: New line Indentation
+- Bracket Matching
 
 ## Background
 
@@ -52,11 +53,21 @@ From terminal in project directory (when using for the first time):
 
 ## State of development
 
-- The XSLT and XPath lexers now conform to the XSLT 3.0 and XPath 3.1 specifications to create appropiate semtantic token types. The types used are mapped to TM Grammar Scopes in the configuration in *package.json*. 
+- The XSLT and XPath lexers now conform to the XSLT 3.0 and XPath 3.1 specifications to create appropiate semtantic token types. The types used are mapped to TM Grammar Scopes in the configuration in *package.json*.
 
+### Proposed XSLT 4.0 Support
+Operators like 'otherwise' are supported. As is the ability to have the *select* attribute on more XSLT instruction elements (
+
+### Textmate Scopes 
 The TM Scopes used by this project are sufficient for the popular general-purpose syntax highlighting themes to provide effective syntax highlighting. These scopes will be refined later to provide more granularity to allow color themes to provide language-specfic highlighting.
 
-Experimenting with formatting...
+### Formatting
+- XSLT
+  - Attribute Name Alignment
+  - Attribute Value Alignment
+  - Node Nesting
+-XPath
+  - Follows Expression Tree Nesting
 
 
 ## XSLT 3.0 and XPath 3.1 lexer summary
