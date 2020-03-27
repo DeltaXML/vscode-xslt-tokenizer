@@ -472,7 +472,7 @@ export class XslLexer {
         let attributeNameTokenAdded = false;
         
         if (this.debug) {
-            console.log("xsl: " + xsl);
+            console.log("xsl:\n" + xsl);
         }
 
         while (this.charCount < xslLength + 1) {

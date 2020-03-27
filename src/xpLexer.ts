@@ -387,7 +387,7 @@ export class XPathLexer {
         let nestedTokenStack: Token[] = [];
 
         if (this.debug) {
-            console.log("xpath: " + xpath);
+            console.log("xpath:\n" + xpath);
             Debug.debugHeading();
         }
     
