@@ -10,6 +10,11 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and other languages that host XPath.
   - On Type: New line Indentation
 - Bracket Matching
 
+### VSCode FormattingCommand Keyboard Shortcut
+On Windows Shift + Alt + F.
+On Mac Shift + Option + F.
+On Ubuntu Ctrl + Shift + I.
+
 ### Available Editor Settings For Formatting
 {
   "[xslt]": {
