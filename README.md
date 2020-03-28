@@ -11,7 +11,13 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and other languages that host XPath.
 - Bracket Matching
 
 ### Editor Settings
-[VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
+{
+  "[xslt]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true
+  }
+}
+See [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
 ## Background
 
