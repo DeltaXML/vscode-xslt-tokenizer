@@ -19,6 +19,7 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 ```
 {
   "[xslt]": {
+    "editor.defaultFormatter": "deltaxml.xpath-embedded",
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
     "editor.formatOnType": true
