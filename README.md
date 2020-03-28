@@ -11,9 +11,9 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and other languages that host XPath.
 - Bracket Matching
 
 ### VSCode FormattingCommand Keyboard Shortcut
-1. On Windows Shift + Alt + F.
-2. On Mac Shift + Option + F.
-3. On Ubuntu Ctrl + Shift + I.
+1. *On Windows* Shift + Alt + F.
+2. *On Mac* Shift + Option + F.
+3. *On Ubuntu* Ctrl + Shift + I.
 
 ### Available Editor Settings For Formatting
 {
