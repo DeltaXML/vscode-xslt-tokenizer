@@ -2,8 +2,12 @@
 .vscode-test/**
 out/test/**
 out/**/*.map
+out/**/*.spec.js
+out/xpLexerRun.js
+out/xslLexerRun.js
 src/**
 resources/**
+sample/**
 .gitignore
 tsconfig.json
 jest.config.js
