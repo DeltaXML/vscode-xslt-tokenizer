@@ -16,13 +16,15 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and other languages that host XPath.
 3. *On Ubuntu* Ctrl + Shift + I.
 
 ### Available Editor Settings For Formatting
-```{
+```
+{
   "[xslt]": {
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
     "editor.formatOnType": true
-  }```
+  }
 }
+```
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
 ## Background
