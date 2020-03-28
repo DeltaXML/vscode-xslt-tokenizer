@@ -10,6 +10,9 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and other languages that host XPath.
   - On Type: New line Indentation
 - Bracket Matching
 
+### Editor Settings
+[VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
+
 ## Background
 
 This project uses the proposed API for Semantic Tokens VSCode Extensions. XPath-Embedded will be published to the VSCode Extension MarketPlace once the proposed API is incorporated into a stable release of VSCode.
