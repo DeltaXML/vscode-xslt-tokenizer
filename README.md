@@ -1,6 +1,6 @@
 # XPath-Embedded
 
-A VSCode extension for XPath 3.1, XSLT 3.0 and other languages that host XPath.
+A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 
 ### Main Features
 - XSLT 3.0 and XPath 3.1 Syntax highlighting
