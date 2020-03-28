@@ -10,14 +10,15 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and other languages that host XPath.
   - On Type: New line Indentation
 - Bracket Matching
 
-### Editor Settings
+### Available Editor Settings For Formatting
 {
   "[xslt]": {
     "editor.formatOnSave": true,
-    "editor.formatOnPaste": true
+    "editor.formatOnPaste": true,
+    "editor.formatOnType": true
   }
 }
-See [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
+See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
 ## Background
 
