@@ -18,11 +18,11 @@ This project uses the proposed API for Semantic Tokens VSCode Extensions. XPath-
 
 _An XSLT sample file loaded in VSCode with the extension running:_
 
-![Screenshot](xslt-demo2.png)
+![Screenshot](resources/images/xslt-demo2.png)
 
 _Use your preferred highlighting theme:_
 
-![Screenshot](xslt-demo3.png)
+![Screenshot](resources/images/xslt-demo3.png)
 
 ## How to run
 
@@ -38,7 +38,7 @@ The *Extension Development Host* should now show XPath-level syntax-highlighting
 
 *Screenshot showing how to launch the *Extension Development Host*:
 
-![Screenshot](run-extension.png)
+![Screenshot](resources/images/run-extension.png)
 
 ## How to run XPath Lexer tests
 

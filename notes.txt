@@ -1,5 +1,0 @@
-// switch (nextChar) {
-// 	case XMLCharState.lPi:
-// 	case XMLCharState.lExclam:
-// 	case XMLCharState.lCt:
-//  case XMLCharState.lSt; 
