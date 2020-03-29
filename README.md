@@ -101,11 +101,19 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 - XSLT Diagnostics Tool
 	- Currently, only lists values for each XSLT token
 	
-## Implementation Details:
+## Implementation Details
 
 *XPath Embedded* uses the (proposed) [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview). This API provides for tokens in two categories:
 - Token Types - e.g. *keyword*, *variable*
 - Token Modifiers - e.g. *documentation*, *static* 
+
+### Rationale for using Semantic Tokens API vs TextMate Grammar
+
+- Maintainability
+- Performance
+- Accurate conformance to language specification
+
+See: [VSCode Issue #77140](https://github.com/microsoft/vscode/issues/77140)
 
 ## Sample Diagnostics:
 
