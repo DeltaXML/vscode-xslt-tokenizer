@@ -14,10 +14,10 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 
 See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XPath-Embedded)
 
-### VSCode FormattingCommand Keyboard Shortcut
-1. *On Windows* Shift + Alt + F.
-2. *On Mac* Shift + Option + F.
-3. *On Ubuntu* Ctrl + Shift + I.
+### VSCode Formatting Command Keyboard Shortcuts
+1. *On Windows* - ```Shift + Alt + F```.
+2. *On Mac* - ```Shift + Option + F```.
+3. *On Ubuntu* - ```Ctrl + Shift + I```.
 
 ### Editor Settings For Formatting
 ```json
