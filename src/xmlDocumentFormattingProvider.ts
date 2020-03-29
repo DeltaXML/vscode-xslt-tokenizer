@@ -195,12 +195,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 						let newValueOffset = textOnFirstLine ? 1 + calcOffset : adjustedIndentChars;
 						attributeValueOffset = lineNumberDiff > 0 ? attributeValueOffset : newValueOffset;
-						break;
-					case XSLTokenLevelState.attributeValue:
 						if (awaitingXmlSpaceAttributeValue) {
-							let preserveToken = this.getTextForToken(lineNumber, token, document);
 							// token includes surrounding quotes.
-							xmlSpaceAttributeValue = preserveToken === '\"preserve\"' || preserveToken === '\'preserve\'';
+							xmlSpaceAttributeValue = attValueText === '\"preserve\"' || attValueText === '\'preserve\'';
 							awaitingXmlSpaceAttributeValue = false;
 						}
 						break;

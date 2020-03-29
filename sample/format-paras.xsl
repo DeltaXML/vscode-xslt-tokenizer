@@ -17,7 +17,12 @@
     because this is the convention
     </xsl:text>
     <demo xml:space="preserve">
-        and observe
-        preserv-space
+      keep
+        this
+          indent
+        <demo2 xml:space="none">
+            and observe
+            preserv-space
+        </demo2>
     </demo>
 </xsl:template>
