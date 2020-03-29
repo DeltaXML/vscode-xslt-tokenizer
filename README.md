@@ -10,6 +10,10 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
   - On Type: New line Indentation
 - Bracket Matching
 
+## Sample Screenshots
+
+See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XPath-Embedded)
+
 ### VSCode FormattingCommand Keyboard Shortcut
 1. *On Windows* Shift + Alt + F.
 2. *On Mac* Shift + Option + F.
@@ -28,13 +32,9 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 ```
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
-## Syntax Highlighting Examples
-
-See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XPath-Embedded)
-
 ## How to run
 
-VSIX Only, the VSCode Insiders release is required. MacOS Example:
+VSIX Only (until propsed API is in stable VSCode release), the VSCode Insiders release is required. MacOS Example:
 
 ```
 "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code" --enable-proposed-api deltaxml.xpath-embedded &
@@ -84,18 +84,13 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 
 
 ## XSLT 3.0 and XPath 3.1 lexer summary
-
-### Main Features
-- Syntax Highlighting of XSLT 3.0 and embedded XPath 3.1
-- Bracket-matching inside XPath expressions
-- Lexer Details:
-	- Hand-crafted lexer
-	- No regular expressions
-	- Iterates character by character
-	- Single pass with 1-character lookahead
-	- Disambiguates token based on previous/next token
-	- Uses stack to manage evaluation context scope
-	- No Abstract Syntax Tree.
+- Hand-crafted lexer
+- No regular expressions
+- Iterates character by character
+- Single pass with 1-character lookahead
+- Disambiguates token based on previous/next token
+- Uses stack to manage evaluation context scope
+- No Abstract Syntax Tree.
 
 ### Diagnostics / Testing
 - A set of high-level tests for XPath 3.1 expressions
@@ -108,7 +103,7 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 	
 ## Implementation Details:
 
-The [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview) used by *XPath Rising* provides for tokens with two main categories:
+*XPath Embedded* uses the (proposed) [Semantic Tokens API](https://github.com/microsoft/vscode/wiki/Semantic-Highlighting-Overview). This API provides for tokens in two categories:
 - Token Types - e.g. *keyword*, *variable*
 - Token Modifiers - e.g. *documentation*, *static* 
 
