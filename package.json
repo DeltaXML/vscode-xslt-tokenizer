@@ -98,9 +98,19 @@
 			{
 				"id": "xmlPunctuation",
 				"description": "XML angle-brackets etc."
+			},
+			{
+				"id": "xmlText",
+				"description": "XML Text Node"
 			}
 		],
 		"semanticTokenStyleDefaults": [
+			{
+				"selector": "xmlText",
+				"scope": [
+					"text.xml"
+				]
+			},
 			{
 				"selector": "xmlPunctuation",
 				"scope": [

@@ -5,9 +5,7 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`<new 
-name="pgf"
->`;
+`<xsl:t expand-text="yes">{{b}}</new>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

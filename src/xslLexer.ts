@@ -62,6 +62,7 @@ export enum XMLCharState {
     lStEq,
     lEntity,
     rEntity,
+    lText
 }
 
 enum EntityPosition {
@@ -81,7 +82,8 @@ export enum XSLTokenLevelState {
     entityRef,
     xmlComment,
     xmlPunctuation,
-    xslElementName
+    xslElementName,
+    xmlText
 }
 
 export interface XslToken extends BaseToken {
@@ -389,21 +391,35 @@ export class XslLexer {
                  if (char === ';') {
                     rc = XMLCharState.rEntity;
                 } else if (this.isWhitespace(isCurrentCharNewLine, char)) {
-                    // TODO: show error
-                    rc = XMLCharState.init;
+                    rc = this.testChar(char, nextChar, false);
                 }
+                break;
+            case XMLCharState.lText:
+                rc = this.testChar(char, nextChar, true);
                 break;
             default:
                 // awaiting a new node
-                rc = this.testChar(char, nextChar);
+                rc = this.testChar(char, nextChar, false);
         }
         return rc;
     }
 
-    private testChar (char: string, nextChar: string): XMLCharState {
+    private testChar (char: string, nextChar: string, isText: boolean): XMLCharState {
         let rc: XMLCharState;
 
         switch (char) {
+            case ' ':
+            case '\t':
+            case '\r':
+                if (isText) {
+                    rc = XMLCharState.lText;
+                } else {
+                    rc = XMLCharState.lWs;
+                }
+                break;
+            case '\n':
+                rc = XMLCharState.lWs;
+                break;
             case '<':
                 switch (nextChar) {
                     case '?':
@@ -432,7 +448,7 @@ export class XslLexer {
                 this.entityContext = EntityPosition.text;
                 break;
             default:
-                rc = XMLCharState.init;
+                rc = XMLCharState.lText;
                 break;
         }
         return rc;
@@ -518,6 +534,15 @@ export class XslLexer {
                         tokenChars.push(currentChar);
                     }
                 } else {
+                    if (currentState === XMLCharState.lText) {
+                        if (nextState === XMLCharState.escTvt) {
+                            this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar, XSLTokenLevelState.xmlText, result, currentState);
+                        } else {
+                            this.addCharTokenToResult(tokenStartChar, (this.lineCharCount - 1) - tokenStartChar, XSLTokenLevelState.xmlText, result, currentState);
+                        }
+                    } else if (currentState === XMLCharState.escTvt) {
+                        this.addCharTokenToResult(tokenStartChar, 2, XSLTokenLevelState.xmlText, result, currentState);
+                    }
                     switch (nextState) {
                         case XMLCharState.lSt:
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
@@ -684,6 +709,7 @@ export class XslLexer {
                             nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             break;
                         case XMLCharState.tvt:
+                            this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlText, result, currentState);
                         case XMLCharState.tvtCdata:
                             let useTvt = xmlElementStack.length > 0 &&
                             xmlElementStack[xmlElementStack.length - 1].expandText;
