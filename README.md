@@ -15,8 +15,8 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 2. *On Mac* Shift + Option + F.
 3. *On Ubuntu* Ctrl + Shift + I.
 
-### Available Editor Settings For Formatting
-```
+### Editor Settings For Formatting
+```json
 {
   "[xslt]": {
     "editor.defaultFormatter": "deltaxml.xpath-embedded",
@@ -28,53 +28,48 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 ```
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
-## Background
-
-This project uses the proposed API for Semantic Tokens VSCode Extensions. XPath-Embedded will be published to the VSCode Extension MarketPlace once the proposed API is incorporated into a stable release of VSCode.
-
 ## Syntax Highlighting Examples
 
-_An XSLT sample file loaded in VSCode with the extension running:_
-
-![Screenshot](resources/images/xslt-demo2.png)
-
-_Use your preferred highlighting theme:_
-
-![Screenshot](resources/images/xslt-demo3.png)
+See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XPath-Embedded)
 
 ## How to run
 
-The VSCode Insiders release is required. 
+VSIX Only, the VSCode Insiders release is required. MacOS Example:
 
-1. Download this project directory
-2. Launch VSCode Insiders.  
-3. From the menu-bar, select *File* > *Open...* and then select this project directory
-4. Then from the menu-bar, select *Run* > *Run Without Debugging*:
-5. A new *Extension Development Host* VSCode instance will now open
+```
+"/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code" --enable-proposed-api deltaxml.xpath-embedded &
 
-The *Extension Development Host* should now show XPath-level syntax-highlighting when any .xsl file is opened.
+```
 
-*Screenshot showing how to launch the *Extension Development Host*:
-
-![Screenshot](resources/images/run-extension.png)
+See: [bash script](resources/launch-scripts/code-insiders-xe)
 
 ## How to run XPath Lexer tests
 
 From terminal in project directory (when using for the first time):
 
- ```npm install```
-
- then:
-
- ```npm test```
+ ```
+ npm install
+ npm test
+ ```
 
 
 ## State of development
 
 - The XSLT and XPath lexers now conform to the XSLT 3.0 and XPath 3.1 specifications to create appropiate semtantic token types. The types used are mapped to TM Grammar Scopes in the configuration in *package.json*.
 
-### Proposed XSLT 4.0 Support
-Operators like 'otherwise' are supported. As is the ability to have the *select* attribute on more XSLT instruction elements (
+### XSLT 4.0 (Proposed) Support
+See:
+
+- [A Proposal for XSLT 4.0](http://www.saxonica.com/papers/xmlprague-2020mhk.pdf)
+- [Saxon: XPath/XQuery Extensions](http://www.saxonica.com/documentation/index.html#!extensions/syntax-extensions)
+- [Saxon: XSLT Extensions](http://www.saxonica.com/documentation/index.html#!extensions/xslt-syntax-extensions)
+
+Extension operators: ```otherwise``` and ```for member```:
+```
+chapter[title='Introduction'] otherwise chapter[1],
+for member $m in [(3,5,6), (8,12)] return sum($m)
+```
+
 
 ### Textmate Scopes 
 The TM Scopes used by this project are sufficient for the popular general-purpose syntax highlighting themes to provide effective syntax highlighting. These scopes will be refined later to provide more granularity to allow color themes to provide language-specfic highlighting.
