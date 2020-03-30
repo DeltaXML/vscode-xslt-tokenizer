@@ -91,7 +91,6 @@ The TM Scopes used by this project are sufficient for the popular general-purpos
 - Iterates character by character
 - Single pass with 1-character lookahead
 - Disambiguates token based on previous/next token
-- Uses stack to manage evaluation context scope
 - No Abstract Syntax Tree.
 
 ### Diagnostics / Testing
