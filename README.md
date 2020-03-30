@@ -14,6 +14,8 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 
 See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XPath-Embedded)
 
+## Formatting
+
 ### VSCode Formatting Command Keyboard Shortcuts
 1. *On Windows* - ```Shift + Alt + F```.
 2. *On Mac* - ```Shift + Option + F```.
