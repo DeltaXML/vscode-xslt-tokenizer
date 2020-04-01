@@ -14,7 +14,8 @@
 		"xslt",
 		"xsl",
 		"xpath",
-		"highlighter"
+		"highlighter",
+		"formatter"
 	],
 	"engines": {
 		"vscode": "^1.44.0"
