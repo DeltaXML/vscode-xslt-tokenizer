@@ -42,6 +42,11 @@ export function activate(context: vscode.ExtensionContext) {
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt', 
 		xsltFormatterOnType, '\n'));
+
+	// context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
+	// 	console.log('onDidOpenTextDocument: ' + e.fileName);
+
+	// }));
 }
 
 class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
@@ -68,11 +73,14 @@ class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvide
 	private xslLexer = new XslLexer();
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
+		//console.log('xslt: provideDocumentSemanticTokens: ' + document.fileName);
+
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const builder = new vscode.SemanticTokensBuilder();
 		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
+		//console.log('return tokens count: ' + allTokens.length);
 		return builder.build();
 	}
 }
