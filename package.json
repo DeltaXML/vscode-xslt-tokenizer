@@ -34,193 +34,95 @@
 		"semanticTokenTypes": [
 			{
 				"id": "attributeNameTest",
+				"superType": "struct",
 				"description": "An attribute node test in a step expression"
 			},
 			{
 				"id": "nodeNameTest",
+				"superType": "class",
 				"description": "A node test in a step expression"
 			},
 			{
 				"id": "uriLiteral",
+				"superType": "property.readonly",
 				"description": "A URI literal of the form: Q{uri}"
 			},
 			{
 				"id": "nodeType",
+				"superType": "parameter",
 				"description": "type of node, e.g. element()"
 			},
 			{
 				"id": "simpleType",
+				"superType": "parameter",
 				"description": "type of value, e.g. xs:integer"
 			},
 			{
 				"id": "axisName",
+				"superType": "label",
 				"description": "XPath axis, e.g. descendant::"
 			},
 			{
 				"id": "complexExpression",
+				"superType": "keyword",
 				"description": "multi-part expression keyword, e.g. let,:=,return"
 			},
 			{
 				"id": "attributeName",
+				"superType": "variable",
 				"description": "XML attribute name"
 			},
 			{
 				"id": "attributeValue",
+				"superType": "string",
 				"description": "XML attribute value"
 			},
 			{
 				"id": "elementName",
+				"superType": "class",
 				"description": "XML element name"
 			},
 			{
 				"id": "elementValue",
+				"superType": "string",
 				"description": "XML element text node"
 			},
 			{
 				"id": "processingInstrName",
+				"superType": "struct",
 				"description": "Processing Instruction name"
 			},
 			{
 				"id": "processingInstrValue",
+				"superType": "event",
 				"description": "Processing Instruction value"
 			},
 			{
 				"id": "entityRef",
+				"superType": "function",
 				"description": "XML Entity Reference - e.g. '&lt;'"
 			},
 			{
 				"id": "xmlComment",
+				"superType": "comment",
 				"description": "XML Comment"
 			},
 			{
 				"id": "xslElementName",
+				"superType": "struct",
 				"description": "Name of XSLT Element"
 			},
 			{
 				"id": "xmlPunctuation",
+				"superType": "struct",
 				"description": "XML angle-brackets etc."
 			},
 			{
 				"id": "xmlText",
+				"superType": "number",
 				"description": "XML Text Node"
 			}
-		],
-		"semanticTokenStyleDefaults": [
-			{
-				"selector": "xmlText",
-				"scope": [
-					"text.xml"
-				]
-			},
-			{
-				"selector": "xmlPunctuation",
-				"scope": [
-					"punctuation.definition.tag"
-				],
-				"light": {
-					"foreground": "#000000C0"
-				},
-				"dark": {
-					"foreground": "#ffffff40"
-				}
-			},
-			{
-				"selector": "nodeNameTest",
-				"scope": [
-					"support.class"
-				]
-			},
-			{
-				"selector": "attributeNameTest",
-				"scope": [
-					"storage.type.struct"
-				]
-			},
-			{
-				"selector": "uriLiteral",
-				"scope": [
-					"constant"
-				]
-			},
-			{
-				"selector": "nodeType",
-				"scope": [
-					"variable.parameter"
-				]
-			},
-			{
-				"selector": "simpleType",
-				"scope": [
-					"variable.parameter"
-				]
-			},
-			{
-				"selector": "axisName",
-				"scope": [
-					"label"
-				]
-			},
-			{
-				"selector": "complexExpression",
-				"scope": [
-					"keyword.control"
-				]
-			},
-			{
-				"selector": "attributeName",
-				"scope": [
-					"entity.other.attribute-name"
-				]
-			},
-			{
-				"selector": "attributeValue",
-				"scope": [
-					"string"
-				]
-			},
-			{
-				"selector": "elementName",
-				"scope": [
-					"support.class"
-				]
-			},
-			{
-				"selector": "elementValue",
-				"scope": [
-					"string"
-				]
-			},
-			{
-				"selector": "processingInstrName",
-				"scope": [
-					"entity.name.tag"
-				]
-			},
-			{
-				"selector": "processingInstrValue",
-				"scope": [
-					"entity.other.attribute-name"
-				]
-			},
-			{
-				"selector": "entityRef",
-				"scope": [
-					"comment.block"
-				]
-			},
-			{
-				"selector": "xmlComment",
-				"scope": [
-					"comment.block"
-				]
-			},
-			{
-				"selector": "xslElementName",
-				"scope": [
-					"entity.name.tag"
-				]
-			}
-		],
+		],		
 		"languages": [
 			{
 				"id": "xpath",
@@ -247,6 +149,14 @@
 			}
 		]
 	},
+	"semanticTokenScopes": [
+		{
+			"language": "xslt",
+			"scopes": {
+				"xmlPunctuation": ["punctuation.definition.tag", "meta.tag.xml", "text.xml"]
+			}
+		}
+	],
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"postinstall": "node ./node_modules/vscode/bin/install",
