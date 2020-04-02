@@ -59,18 +59,8 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
-		return new vscode.SemanticTokens(builder.build());
-	}
-
-	private _encodeTokenModifiers(strTokenModifiers: string[]): number {
-		let result = 0;
-		for (let i = 0; i < strTokenModifiers.length; i++) {
-			const tokenModifier = strTokenModifiers[i];
-			if (tokenModifiers.has(tokenModifier)) {
-				result = result | (1 << tokenModifiers.get(tokenModifier)!);
-			}
-		}
-		return result;
+		builder
+		return builder.build();
 	}
 }
 
@@ -83,6 +73,6 @@ class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvide
 		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
-		return new vscode.SemanticTokens(builder.build());
+		return builder.build();
 	}
 }

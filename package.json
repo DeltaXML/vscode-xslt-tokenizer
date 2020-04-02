@@ -44,7 +44,7 @@
 			},
 			{
 				"id": "uriLiteral",
-				"superType": "property.readonly",
+				"superType": "struct",
 				"description": "A URI literal of the form: Q{uri}"
 			},
 			{
