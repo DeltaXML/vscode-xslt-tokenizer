@@ -28,7 +28,6 @@
 		"onLanguage:xslt"
 	],
 	"license": "SEE LICENSE IN: LICENSE.txt",
-	"enableProposedApi": true,
 	"main": "./out/extension.js",
 	"contributes": {
 		"semanticTokenTypes": [
