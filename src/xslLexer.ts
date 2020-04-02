@@ -659,7 +659,7 @@ export class XslLexer {
                             if (isExpandTextAttribute) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
-                                this.addCharTokenToResult(tokenStartChar + 1, 1, XSLTokenLevelState.attributeValue, result, nextState);
+                                this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeValue, result, nextState);
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
 
                                 let exit: ExitCondition;

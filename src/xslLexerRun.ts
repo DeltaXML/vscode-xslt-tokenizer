@@ -5,7 +5,7 @@ import { Debug} from "./diagnostics";
 
 // -------------
 let testXslt: string =
-`<xsl:t select   \n\n  ="$abc + 28">`;
+`<xsl:t select=  "$abc + 28">`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;
