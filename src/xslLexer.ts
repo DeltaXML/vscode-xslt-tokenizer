@@ -593,6 +593,7 @@ export class XslLexer {
                             this.addNewTokenToResult(startChar, XSLTokenLevelState.xmlComment, result, nextState); 
                             break;
                         case XMLCharState.wsAfterAttName:
+                            storeToken = false;
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result, nextState);
                             attributeNameTokenAdded = true;
                             break;      
