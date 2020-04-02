@@ -120,6 +120,11 @@
 				"id": "xmlText",
 				"superType": "number",
 				"description": "XML Text Node"
+			},
+			{
+				"id": "attributeEquals",
+				"superType": "macro",
+				"description": "XML attribute value assignment"
 			}
 		],		
 		"languages": [

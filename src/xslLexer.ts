@@ -73,7 +73,8 @@ enum EntityPosition {
 
 // for compatibility with legend - add count of XPath enums to this
 export enum XSLTokenLevelState {
-    attributeName, 
+    attributeName,
+    attributeEquals,
     attributeValue,
     elementName,
     elementValue,
@@ -624,6 +625,7 @@ export class XslLexer {
                             if (!attributeNameTokenAdded) {
                                 this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result, nextState);
                             }
+                            this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeEquals, result, nextState);
                             tokenChars = [];
                             storeToken = false;
                             break;
