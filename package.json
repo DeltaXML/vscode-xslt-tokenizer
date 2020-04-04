@@ -25,11 +25,59 @@
 	],
 	"activationEvents": [
 		"onLanguage:xpath",
-		"onLanguage:xslt"
+		"onLanguage:xslt",
+		"onCommand:workbench.action.tasks.runTask"
 	],
 	"license": "SEE LICENSE IN: LICENSE.txt",
 	"main": "./out/extension.js",
 	"contributes": {
+		"taskDefinitions": [
+			{
+				"type": "xslt",
+				"required": [
+					"task"
+				],
+				"properties": {
+					"task": {
+						"type": "string",
+						"description": "The task name"
+					},
+					"xsltFile": {
+						"type": "string",
+						"description": "The path to the XSLT stylesheet"
+					},
+					"xmlSource": {
+						"type": "string",
+						"description": "The path to the XML source file"
+					},
+					"resultPath": {
+						"type": "string",
+						"description": "The destination path for the XSLT result"
+					}
+				}
+			}
+		],
+		"problemMatchers": [
+			{
+				"name": "saxon-xslt",
+				"owner": "xslt",
+				"fileLocation": ["relative", "${file}/.."],
+				"pattern": [
+				  {
+					"regexp": "^(Error|Warning|Info)\\s+(?:on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+					"line": 3,
+					"column": 4,
+					"severity": 1,
+					"file": 5
+				  },
+				  {
+					  "regexp": "^\\s+(\\w{4}\\d{4})\\s+(.*)",
+					  "code": 1,
+					  "message": 2
+				  }
+				]
+			}
+		],
 		"semanticTokenTypes": [
 			{
 				"id": "attributeNameTest",

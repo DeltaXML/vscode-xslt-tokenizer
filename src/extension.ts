@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
 import {XslLexer} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider'
+import {SaxonTaskProvider} from './saxonTaskProvider'
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
@@ -27,6 +28,9 @@ const legend = (function () {
 	return new vscode.SemanticTokensLegend(tokenTypesLegend, tokenModifiersLegend);
 })();
 
+let customTaskProvider: vscode.Disposable | undefined;
+
+
 export function activate(context: vscode.ExtensionContext) {
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
@@ -42,6 +46,12 @@ export function activate(context: vscode.ExtensionContext) {
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt', 
 		xsltFormatterOnType, '\n'));
+
+	let workspaceRoot = vscode.workspace.rootPath;
+	if (!workspaceRoot) {
+		return;
+	}
+	customTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
 
 	// context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
 	// 	console.log('onDidOpenTextDocument: ' + e.fileName);
