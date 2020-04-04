@@ -40,3 +40,7 @@ See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getst
 VSCode uses Tasks to integrate with external tools. Described in [Tasks in Visual Studio Code](https://code.visualstudio.com/docs/editor/tasks)
 
 This extension provides a 'Saxon XSLT' task that will be shown when a workspace folder is open and the **Create Task** command is invoked from VSCode.
+
+A Saxon XSLT task is first created with default settings for an XSLT transform. The default settings can be edited later within the ```tasks.json``` file.
+
+To use the Saxon XSLT task, you must also have Saxon and Java installed on your machine. The Saxon task file values can make use of VSCode built-in variables. The built-in variables supported are described in the [VS Code Variables Reference](https://code.visualstudio.com/docs/editor/variables-reference). 
