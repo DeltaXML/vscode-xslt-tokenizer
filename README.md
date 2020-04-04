@@ -2,13 +2,14 @@
 
 A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 
-### Main Features
+### Main £ditor Features
 - XSLT 3.0 and XPath 3.1 Syntax highlighting
 - XSLT 3.0 and XPath 3.1 Formatting
   - Document Formatting
   - Selection Formatting
   - On Type: New line Indentation
 - Bracket Matching
+- XSLT Transform Task Provider for Saxon (Java version)
 
 ## Sample Screenshots
 
@@ -33,3 +34,9 @@ See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wik
 }
 ```
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
+
+### Creating XSLT Transform Tasks
+
+VSCode uses Tasks to integrate with external tools. Described in [Tasks in Visual Studio Code](https://code.visualstudio.com/docs/editor/tasks)
+
+This extension provides a 'Saxon XSLT' task that will be shown when a workspace folder is open and the **Create Task** command is invoked from VSCode.
