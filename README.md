@@ -9,7 +9,7 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
   - Selection Formatting
   - On Type: New line Indentation
 - Bracket Matching
-- XSLT Transform Task Provider for Saxon (Java version)
+- *Saxon XSLT* Transform Task Provider (requires Java)
 
 ## Sample Screenshots
 
