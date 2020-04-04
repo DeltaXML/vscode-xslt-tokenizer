@@ -43,4 +43,6 @@ This extension provides a 'Saxon XSLT' task that will be shown when a workspace 
 
 A Saxon XSLT task is first created with default settings for an XSLT transform. The default settings can be edited later within the ```tasks.json``` file.
 
-To use the Saxon XSLT task, you must also have Saxon and Java installed on your machine. The Saxon task file values can make use of VSCode built-in variables. The built-in variables supported are described in the [VS Code Variables Reference](https://code.visualstudio.com/docs/editor/variables-reference). 
+To use the Saxon XSLT task, you must also have Saxon and Java installed on your machine. The Saxon task file values can make use of VSCode built-in variables. The built-in variables supported are described in the [VSCode Variables Reference](https://code.visualstudio.com/docs/editor/variables-reference).
+
+Compile-time or run-time errors encountered when the Saxon XSLT task runs will be listed in the Problems pane in the VSCode editor. Selecting a 'problem' item, will open and highlight the location in the XSLT file where the problem occurs. Problem XSLT file names are also highlighted in the Files pane in VSCode.
