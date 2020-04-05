@@ -53,6 +53,15 @@
 					"resultPath": {
 						"type": "string",
 						"description": "The destination path for the XSLT result"
+					},
+					"group": {
+						"type": "object",
+						"properties": {
+							"kind": {
+								"type": "string",
+								"description": "The kind of task. E.g. 'build'"
+							}
+						}
 					}
 				}
 			}

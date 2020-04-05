@@ -3,6 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+
 
 interface CustomBuildTaskDefinition extends vscode.TaskDefinition {
 	/**
@@ -16,6 +19,14 @@ interface CustomBuildTaskDefinition extends vscode.TaskDefinition {
 	flags?: string[];
 }
 
+function exists(file: string): Promise<boolean> {
+	return new Promise<boolean>((resolve, _reject) => {
+		fs.exists(file, (value) => {
+			resolve(value);
+		});
+	});
+}
+
 export class SaxonTaskProvider implements vscode.TaskProvider {
 	static SaxonBuildScriptType: string = 'custombuildscript';
 	private tasks: vscode.Task[] = [];
@@ -23,6 +34,13 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 	constructor(private workspaceRoot: string) { }
 
 	public async provideTasks(): Promise<vscode.Task[]> {
+        let rootPath = vscode.workspace.rootPath? vscode.workspace.rootPath: '/';
+        let tasksPath = path.join(rootPath, '.vscode', 'tasks.json');
+        let tasksObject = undefined;
+        if (await exists(tasksPath)) {
+            tasksObject = require(tasksPath);
+        }
+
 		this.tasks = [];
 		return this.getTasks();
 	}
@@ -51,7 +69,10 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 			xsltFile: xsltFilePath,
 			xmlSource: xmlSourceValue,
 			resultPath: resultPathValue,
-			task: taskName
+            task: taskName,
+            group: {
+                kind: 'build'
+            }
 		};
 		let problemMatcher = "$saxon-xslt";
 

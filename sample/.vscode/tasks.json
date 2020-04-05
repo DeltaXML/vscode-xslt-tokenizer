@@ -3,18 +3,17 @@
 	"tasks": [
 		{
 			"type": "xslt",
-			"label": "xslt: Saxon Transform",
+			"task": "Saxon Transform",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
 			"resultPath": "saxon-result.xml",
-			"task": "Saxon Transform",
+			"group": {
+				"kind": "build"
+			},
 			"problemMatcher": [
 				"$saxon-xslt"
 			],
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			}
+			"label": "xslt: Saxon Transform"
 		}
 	]
 }
