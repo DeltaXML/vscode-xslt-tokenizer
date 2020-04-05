@@ -1,3 +1,9 @@
+/**
+ *  Copyright (c) 2020 DeltaXML Ltd. and others.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd. - xmlDocumentFormattingProvider
+ */
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
