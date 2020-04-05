@@ -1,7 +1,9 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
+/**
+ *  Copyright (c) 2020 DeltaXML Ltd. and others.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd. - saxonTaskProvider
+ */
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
