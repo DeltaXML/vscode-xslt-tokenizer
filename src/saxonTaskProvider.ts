@@ -27,6 +27,22 @@ function exists(file: string): Promise<boolean> {
 	});
 }
 
+interface XSLTTasks {
+    tasks: GenericTask[]
+}
+
+interface XSLTTask {
+    type: string,
+    task: string,
+    xsltFile: string,
+    xmlSource: string,
+    resultPath: string
+}
+
+interface GenericTask {
+    type: string
+}
+
 export class SaxonTaskProvider implements vscode.TaskProvider {
 	static SaxonBuildScriptType: string = 'custombuildscript';
 	private tasks: vscode.Task[] = [];
@@ -38,30 +54,45 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         let tasksPath = path.join(rootPath, '.vscode', 'tasks.json');
         let tasksObject = undefined;
         if (await exists(tasksPath)) {
+            delete require.cache[tasksPath];
             tasksObject = require(tasksPath);
         }
 
 		this.tasks = [];
-		return this.getTasks();
+		return this.getTasks(tasksObject);
 	}
 
 	public resolveTask(_task: vscode.Task): vscode.Task | undefined {		
 		return this.getTask();
 	}
 
-	private getTasks(): vscode.Task[] {
-		this.tasks.push(this.getTask());
+	private getTasks(tasksObject: any): vscode.Task[] {
+		this.tasks.push(this.getTask(tasksObject));
 		return this.tasks;
 	}
 
-	private getTask(): vscode.Task {
+	private getTask(tasksObject?: any): vscode.Task {
 
 		let taskName = 'Saxon Transform';
 		let saxonJar = '/Users/philipf/Documents/github/SaxonHE10-0J/saxon-he-10.0.jar';
 		let source = 'xslt';
 		let xmlSourceValue = '${file}';
 		let xsltFilePath = '${file}';
-		let resultPathValue = 'saxon-result.xml';
+        let resultPathValue = 'saxon-result.xml';
+        
+        if (tasksObject !== undefined) {
+            let tasks: GenericTask[] = tasksObject.tasks;
+            tasks.forEach((value, index) => {
+                if (value.type === 'xslt') {
+                    let xsltTask: XSLTTask = <XSLTTask>value;
+                    taskName = xsltTask.task;
+                    //saxonJar = xsltTask.
+                    xmlSourceValue = xsltTask.xmlSource;
+                    xsltFilePath = xsltTask.xsltFile;
+                    resultPathValue = xsltTask.resultPath;                   
+                }
+            });
+        }
 
 		let kind: vscode.TaskDefinition = {
 			type: 'xslt',

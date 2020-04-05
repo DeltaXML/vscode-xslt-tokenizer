@@ -6,7 +6,7 @@
 			"task": "Saxon Transform",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
-			"resultPath": "saxon-result.xml",
+			"resultPath": "saxon-result-4.xml",
 			"group": {
 				"kind": "build"
 			},
