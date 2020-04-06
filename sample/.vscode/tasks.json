@@ -44,7 +44,7 @@
 			"label": "xslt: Saxon Transform 3",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
-			"resultPath": "saxon-result.xml",
+			"resultPath": "saxon-result3.xml",
 			"group": {
 				"kind": "build"
 			},

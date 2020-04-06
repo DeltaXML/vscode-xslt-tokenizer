@@ -25,7 +25,20 @@ interface XSLTTask {
     label: string,
     xsltFile: string,
     xmlSource: string,
-    resultPath: string
+    resultPath: string,
+    parameters?: XSLTParameter[],
+    initialTemplate?: string,
+    initialMode?: string,
+    group?: TaskGroup
+}
+
+interface TaskGroup {
+    kind: string
+}
+
+interface XSLTParameter {
+    name: string,
+    value: string
 }
 
 interface GenericTask {
@@ -72,7 +85,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         let addNewTask = true;
         
         for (let i = 0; i < tasks.length + 1; i++) {
-            let value: GenericTask;
+            let genericTask: GenericTask;
             if (i === tasks.length) {
                 if (addNewTask) {
                     let xsltTask: XSLTTask = {
@@ -82,85 +95,32 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         xmlSource: xmlSourceValue,
                         resultPath: resultPathValue
                     };
-                    value = xsltTask;
+                    genericTask = xsltTask;
                 } else {
-                    value = {type: 'ignore'};
+                    genericTask = {type: 'ignore'};
                 }
             } else {
-                value = tasks[i];
+                genericTask = tasks[i];
             }
-            if (value.type === 'xslt') {
-                let xsltTask: XSLTTask = <XSLTTask> value;
+            if (genericTask.type === 'xslt') {
+                let xsltTask: XSLTTask = <XSLTTask> genericTask;
                 if (xsltTask.label === 'xslt: ' + newTaskLabel || xsltTask.label === newTaskLabel) {
                     // do not add a new task if there's already a task with the 'new' task label
                     addNewTask = false;
                 }
-                value['group'] = {
+                xsltTask.group = {
                     kind: 'build'
                 }                
                 
                 let problemMatcher = "$saxon-xslt";
 
-                let commandline = `java -jar ${saxonJar} -xsl:${xsltFilePath} -s:${xmlSourceValue} -o:${resultPathValue}`;
+                let commandline = `java -jar ${saxonJar} -xsl:${xsltTask.xsltFile} -s:${xsltTask.xmlSource} -o:${xsltTask.resultPath}`;
 
-                this.tasks.push(new vscode.Task(value, newTaskLabel, source, new vscode.ShellExecution(commandline), problemMatcher));
+                this.tasks.push(new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher));
             }
         }
 
 		return this.tasks;
 
 	}
-
-	/*
-{
-    // See https://go.microsoft.com/fwlink/?LinkId=733558
-    // for the documentation about the tasks.json format
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "saxon-xslt",
-            "type": "shell",
-            "command": "java",
-            "args": [
-                "-jar",
-                "/Users/philipf/Documents/github/SaxonHE10-0J/saxon-he-10.0.jar",
-                "-xsl:${file}",
-                "-s:${file}",
-                "-o:${workspaceFolder}/saxon.xslt.result.xml"
-            ],
-            "problemMatcher": {
-                "owner": "xslt",
-                "fileLocation": ["relative", "${file}/.."],
-                "pattern": [
-                  {
-                    "regexp": "^(Error|Warning|Info)\\s+(?:on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-                    "line": 3,
-                    "column": 4,
-                    "severity": 1,
-                    "file": 5
-                  },
-                  {
-                      "regexp": "^\\s+(\\w{4}\\d{4})\\s+(.*)",
-                      "code": 1,
-                      "message": 2
-                  }
-                ]
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "dedicated",
-                "showReuseMessage": true,
-                "clear": true
-            }
-        }
-    ]
-}
-	*/
-
 }
