@@ -31,6 +31,16 @@
 	"license": "SEE LICENSE IN: LICENSE.txt",
 	"main": "./out/extension.js",
 	"contributes": {
+		"configuration": {
+			"title": "XPath Embedded",
+			"properties": {
+				"xpe.tasks.saxonJar": {
+					"type": "string",
+					"description": "Path of the installed Saxon jar file",
+					"default": "/usr/local/java/SaxonPE9-9-1-3J/saxon9pe.jar"
+				}
+			}
+		},
 		"taskDefinitions": [
 			{
 				"type": "xslt",
@@ -38,12 +48,17 @@
 					"label",
 					"xsltFile",
 					"xmlSource",
-					"resultPath"
+					"resultPath",
+					"saxonJar"
 				],
 				"properties": {
 					"label": {
 						"type": "string",
 						"description": "The user interface label. Change this to uniquely identify the task"
+					},
+					"saxonJar": {
+						"type": "string",
+						"description": "`Path of the installed Saxon jar file"
 					},
 					"xsltFile": {
 						"type": "string",
@@ -103,7 +118,7 @@
 				"fileLocation": ["relative", "${file}/.."],
 				"pattern": [
 				  {
-					"regexp": "^(Error|Warning|Info)\\s+(?:on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+					"regexp": "^(?:Syntax |Static |Dynamic )?(error|Error|Warning|Info)\\s+(?:on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
 					"line": 3,
 					"column": 4,
 					"severity": 1,

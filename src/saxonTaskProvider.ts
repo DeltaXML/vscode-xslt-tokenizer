@@ -23,6 +23,7 @@ interface TasksObject {
 interface XSLTTask {
     type: string,
     label: string,
+    saxonJar: string,
     xsltFile: string,
     xmlSource: string,
     resultPath: string,
@@ -75,11 +76,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         this.tasks = [];
 
 		let newTaskLabel = 'Saxon Transform (New)';
-		let saxonJar = '/Users/philipf/Documents/github/SaxonHE10-0J/saxon-he-10.0.jar';
+		let saxonJarDefault = '${config:xpe.tasks.saxonJar}'  //'/Users/philipf/Documents/github/SaxonHE10-0J/saxon-he-10.0.jar';
 		let source = 'xslt';
 		let xmlSourceValue = '${file}';
 		let xsltFilePath = '${file}';
-        let resultPathValue = 'saxon-result.xml';
+        let resultPathValue = '${workspaceFolder}/xslt-out/result1.xml';
 
         let tasks: GenericTask[] = tasksObject.tasks;
         let addNewTask = true;
@@ -90,6 +91,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 if (addNewTask) {
                     let xsltTask: XSLTTask = {
                         type: 'xslt',
+                        saxonJar: saxonJarDefault,
                         label: newTaskLabel,
                         xsltFile: xsltFilePath,
                         xmlSource: xmlSourceValue,
@@ -114,7 +116,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 
                 let problemMatcher = "$saxon-xslt";
 
-                let commandline = `java -jar ${saxonJar} -xsl:${xsltTask.xsltFile} -s:${xsltTask.xmlSource} -o:${xsltTask.resultPath}`;
+                let commandline = `java -jar ${xsltTask.saxonJar} -xsl:${xsltTask.xsltFile} -s:${xsltTask.xmlSource} -o:${xsltTask.resultPath}`;
 
                 this.tasks.push(new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher));
             }

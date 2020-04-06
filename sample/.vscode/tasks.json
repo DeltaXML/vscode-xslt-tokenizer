@@ -3,61 +3,11 @@
 	"tasks": [
 		{
 			"type": "xslt",
-			"label": "Test Transform",
-			"xsltFile": "${file}",
-			"xmlSource": "${file}",
-			"resultPath": "saxon-result.xml",
-			"parameters": [
-				{
-					"name": "param1",
-					"value": "test11"
-				},
-				{
-					"name": "param2",
-					"value": "test22"
-				}
-			],
-			"initialMode": "{abc}mode1",
-			"initialTemplate": "templateName1",
-			"group": {
-				"kind": "build"
-			},
-			"problemMatcher": [
-				"$saxon-xslt"
-			]
-		},
-		{
-			"type": "xslt",
-			"label": "xslt: Saxon Transform 2",
-			"xsltFile": "${file}",
-			"xmlSource": "${file}",
-			"resultPath": "saxon-result.xml",
-			"group": {
-				"kind": "build"
-			},
-			"problemMatcher": [
-				"$saxon-xslt"
-			]
-		},
-		{
-			"type": "xslt",
-			"label": "xslt: Saxon Transform 3",
-			"xsltFile": "${file}",
-			"xmlSource": "${file}",
-			"resultPath": "saxon-result3.xml",
-			"group": {
-				"kind": "build"
-			},
-			"problemMatcher": [
-				"$saxon-xslt"
-			]
-		},
-		{
-			"type": "xslt",
 			"label": "xslt: Saxon Transform (New)",
+			"saxonJar": "${config:xpe.tasks.saxonJar}",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
-			"resultPath": "saxon-result.xml",
+			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
 			"group": {
 				"kind": "build"
 			},
