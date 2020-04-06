@@ -8,19 +8,6 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 
-
-interface CustomBuildTaskDefinition extends vscode.TaskDefinition {
-	/**
-	 * The build flavor. Should be either '32' or '64'.
-	 */
-	flavor: string;
-
-	/**
-	 * Additional build flags
-	 */
-	flags?: string[];
-}
-
 function exists(file: string): Promise<boolean> {
 	return new Promise<boolean>((resolve, _reject) => {
 		fs.exists(file, (value) => {
@@ -29,13 +16,13 @@ function exists(file: string): Promise<boolean> {
 	});
 }
 
-interface XSLTTasks {
+interface TasksObject {
     tasks: GenericTask[]
 }
 
 interface XSLTTask {
     type: string,
-    task: string,
+    label: string,
     xsltFile: string,
     xmlSource: string,
     resultPath: string
@@ -58,60 +45,78 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         if (await exists(tasksPath)) {
             delete require.cache[tasksPath];
             tasksObject = require(tasksPath);
+        } else {
+            tasksObject = {tasks: []};
         }
 
-		this.tasks = [];
 		return this.getTasks(tasksObject);
 	}
 
-	public resolveTask(_task: vscode.Task): vscode.Task | undefined {		
-		return this.getTask();
+	public resolveTask(_task: vscode.Task): vscode.Task | undefined {	
+        return undefined;	
+		//return this.getTask();
 	}
 
-	private getTasks(tasksObject: any): vscode.Task[] {
-		this.tasks.push(this.getTask(tasksObject));
-		return this.tasks;
-	}
+	private getTasks(tasksObject: TasksObject): vscode.Task[] {
+        this.tasks = [];
 
-	private getTask(tasksObject?: any): vscode.Task {
-
-		let taskName = 'Saxon Transform';
+		let taskLabel = 'Saxon Transform';
 		let saxonJar = '/Users/philipf/Documents/github/SaxonHE10-0J/saxon-he-10.0.jar';
 		let source = 'xslt';
 		let xmlSourceValue = '${file}';
 		let xsltFilePath = '${file}';
         let resultPathValue = 'saxon-result.xml';
+
+        let tasks: GenericTask[] = tasksObject.tasks;
         
-        if (tasksObject !== undefined) {
-            let tasks: GenericTask[] = tasksObject.tasks;
+        if (tasks.length > 0) {
             tasks.forEach((value, index) => {
                 if (value.type === 'xslt') {
                     let xsltTask: XSLTTask = <XSLTTask>value;
-                    taskName = xsltTask.task;
+                    // skip 'xslt: ' prefix added internally
+                    taskLabel = xsltTask.label;
                     //saxonJar = xsltTask.
                     xmlSourceValue = xsltTask.xmlSource;
                     xsltFilePath = xsltTask.xsltFile;
-                    resultPathValue = xsltTask.resultPath;                   
+                    resultPathValue = xsltTask.resultPath;                    
+                    
+                    let kind: vscode.TaskDefinition = {
+                        type: 'xslt',
+                        label: taskLabel,
+                        xsltFile: xsltFilePath,
+                        xmlSource: xmlSourceValue,
+                        resultPath: resultPathValue,
+                        group: {
+                            kind: 'build'
+                        }
+                    };
+                    let problemMatcher = "$saxon-xslt";
+
+                    let commandline = `java -jar ${saxonJar} -xsl:${xsltFilePath} -s:${xmlSourceValue} -o:${resultPathValue}`;
+
+                    this.tasks.push(new vscode.Task(kind, taskLabel, source, new vscode.ShellExecution(commandline), problemMatcher));
                 }
             });
+        } else {
+            let kind: vscode.TaskDefinition = {
+                type: 'xslt',
+                label: taskLabel,
+                xsltFile: xsltFilePath,
+                xmlSource: xmlSourceValue,
+                resultPath: resultPathValue,
+                group: {
+                    kind: 'build'
+                }
+            };
+            let problemMatcher = "$saxon-xslt";
+    
+            let commandline = `java -jar ${saxonJar} -xsl:${xsltFilePath} -s:${xmlSourceValue} -o:${resultPathValue}`;
+
+            this.tasks.push(new vscode.Task(kind, taskLabel, source, new vscode.ShellExecution(commandline), problemMatcher));
+
         }
 
-		let kind: vscode.TaskDefinition = {
-			type: 'xslt',
-			label: 'saxon',
-			xsltFile: xsltFilePath,
-			xmlSource: xmlSourceValue,
-			resultPath: resultPathValue,
-            task: taskName,
-            group: {
-                kind: 'build'
-            }
-		};
-		let problemMatcher = "$saxon-xslt";
-
-		let commandline = `java -jar ${saxonJar} -xsl:${xsltFilePath} -s:${xmlSourceValue} -o:${resultPathValue}`;
-
-		return new vscode.Task(kind, taskName, source, new vscode.ShellExecution(commandline), problemMatcher);
+		return this.tasks;
 
 	}
 

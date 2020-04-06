@@ -35,12 +35,15 @@
 			{
 				"type": "xslt",
 				"required": [
-					"task"
+					"label",
+					"xsltFile",
+					"xmlSource",
+					"resultPath"
 				],
 				"properties": {
-					"task": {
+					"label": {
 						"type": "string",
-						"description": "The task name"
+						"description": "The label shown in the user interface"
 					},
 					"xsltFile": {
 						"type": "string",
