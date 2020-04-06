@@ -2,7 +2,7 @@
 
 A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 
-### Main £ditor Features
+### Main Editor Features
 - XSLT 3.0 and XPath 3.1 Syntax highlighting
 - XSLT 3.0 and XPath 3.1 Formatting
   - Document Formatting
