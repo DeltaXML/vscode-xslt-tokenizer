@@ -13,7 +13,7 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 
 ## Sample Screenshots
 
-See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XPath-Embedded)
+See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
 
 ## Formatting
 
