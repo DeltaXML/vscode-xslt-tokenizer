@@ -29,7 +29,8 @@ interface XSLTTask {
 }
 
 interface GenericTask {
-    type: string
+    type: string,
+    group?: object
 }
 
 export class SaxonTaskProvider implements vscode.TaskProvider {
@@ -60,7 +61,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 	private getTasks(tasksObject: TasksObject): vscode.Task[] {
         this.tasks = [];
 
-		let taskLabel = 'Saxon Transform';
+		let newTaskLabel = 'Saxon Transform (New)';
 		let saxonJar = '/Users/philipf/Documents/github/SaxonHE10-0J/saxon-he-10.0.jar';
 		let source = 'xslt';
 		let xmlSourceValue = '${file}';
@@ -68,52 +69,42 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         let resultPathValue = 'saxon-result.xml';
 
         let tasks: GenericTask[] = tasksObject.tasks;
+        let addNewTask = true;
         
-        if (tasks.length > 0) {
-            tasks.forEach((value, index) => {
-                if (value.type === 'xslt') {
-                    let xsltTask: XSLTTask = <XSLTTask>value;
-                    // skip 'xslt: ' prefix added internally
-                    taskLabel = xsltTask.label;
-                    //saxonJar = xsltTask.
-                    xmlSourceValue = xsltTask.xmlSource;
-                    xsltFilePath = xsltTask.xsltFile;
-                    resultPathValue = xsltTask.resultPath;                    
-                    
-                    let kind: vscode.TaskDefinition = {
+        for (let i = 0; i < tasks.length + 1; i++) {
+            let value: GenericTask;
+            if (i === tasks.length) {
+                if (addNewTask) {
+                    let xsltTask: XSLTTask = {
                         type: 'xslt',
-                        label: taskLabel,
+                        label: newTaskLabel,
                         xsltFile: xsltFilePath,
                         xmlSource: xmlSourceValue,
-                        resultPath: resultPathValue,
-                        group: {
-                            kind: 'build'
-                        }
+                        resultPath: resultPathValue
                     };
-                    let problemMatcher = "$saxon-xslt";
-
-                    let commandline = `java -jar ${saxonJar} -xsl:${xsltFilePath} -s:${xmlSourceValue} -o:${resultPathValue}`;
-
-                    this.tasks.push(new vscode.Task(kind, taskLabel, source, new vscode.ShellExecution(commandline), problemMatcher));
+                    value = xsltTask;
+                } else {
+                    value = {type: 'ignore'};
                 }
-            });
-        } else {
-            let kind: vscode.TaskDefinition = {
-                type: 'xslt',
-                label: taskLabel,
-                xsltFile: xsltFilePath,
-                xmlSource: xmlSourceValue,
-                resultPath: resultPathValue,
-                group: {
+            } else {
+                value = tasks[i];
+            }
+            if (value.type === 'xslt') {
+                let xsltTask: XSLTTask = <XSLTTask> value;
+                if (xsltTask.label === 'xslt: ' + newTaskLabel || xsltTask.label === newTaskLabel) {
+                    // do not add a new task if there's already a task with the 'new' task label
+                    addNewTask = false;
+                }
+                value['group'] = {
                     kind: 'build'
-                }
-            };
-            let problemMatcher = "$saxon-xslt";
-    
-            let commandline = `java -jar ${saxonJar} -xsl:${xsltFilePath} -s:${xmlSourceValue} -o:${resultPathValue}`;
+                }                
+                
+                let problemMatcher = "$saxon-xslt";
 
-            this.tasks.push(new vscode.Task(kind, taskLabel, source, new vscode.ShellExecution(commandline), problemMatcher));
+                let commandline = `java -jar ${saxonJar} -xsl:${xsltFilePath} -s:${xmlSourceValue} -o:${resultPathValue}`;
 
+                this.tasks.push(new vscode.Task(value, newTaskLabel, source, new vscode.ShellExecution(commandline), problemMatcher));
+            }
         }
 
 		return this.tasks;
