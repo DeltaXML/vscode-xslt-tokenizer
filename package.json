@@ -34,10 +34,9 @@
 		"configuration": {
 			"title": "XPath Embedded",
 			"properties": {
-				"xpe.tasks.saxonJar": {
+				"XSLT.tasks.saxonJar": {
 					"type": "string",
-					"description": "Path of the installed Saxon jar file",
-					"default": "/usr/local/java/SaxonPE9-9-1-3J/saxon9pe.jar"
+					"description": "Path of the installed Saxon jar file"
 				}
 			}
 		},
