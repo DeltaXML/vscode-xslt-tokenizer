@@ -3,10 +3,22 @@
 	"tasks": [
 		{
 			"type": "xslt",
-			"label": "My Transform",
+			"label": "Test Transform",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
 			"resultPath": "saxon-result.xml",
+			"parameters": [
+				{
+					"name": "param1",
+					"value": "test11"
+				},
+				{
+					"name": "param2",
+					"value": "test22"
+				}
+			],
+			"initialMode": "{abc}mode1",
+			"initialTemplate": "templateName1",
 			"group": {
 				"kind": "build"
 			},

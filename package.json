@@ -43,7 +43,7 @@
 				"properties": {
 					"label": {
 						"type": "string",
-						"description": "The label shown in the user interface"
+						"description": "The user interface label. Change this to uniquely identify the task"
 					},
 					"xsltFile": {
 						"type": "string",
@@ -53,9 +53,36 @@
 						"type": "string",
 						"description": "The path to the XML source file"
 					},
+					"initialTemplate": {
+						"type": "string",
+						"description": "The named template to be executed. Namespaced templates can be written as {uri}localname. Default is xsl:initial-template"
+					},
+					"initialMode": {
+						"type": "string",
+						"description": "The initial mode for the transformation. Namespaced modes can be written as {uri}localname"
+					},
 					"resultPath": {
 						"type": "string",
 						"description": "The destination path for the XSLT result"
+					}, 
+					"parameters": {
+						"description": "The xsl:param values for the XSLT",
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "The xsl:param name. Namespaced params can be written as {uri}localname"
+								},
+								"value": {
+									"type": "string",
+									"description": "The xsl:param value. Special leading characters are: '?' (XPath), '!' (xsl:output), '+' (filename): See: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+								}
+							},
+							"required": ["name", "value"]
+						},
+						"minItems": 1
 					},
 					"group": {
 						"type": "object",
