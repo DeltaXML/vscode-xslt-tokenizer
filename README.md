@@ -22,6 +22,19 @@ See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wik
 2. *On Mac* - ```Shift + Option + F```.
 3. *On Ubuntu* - ```Ctrl + Shift + I```.
 
+### Editor Settings for Highlighting in Color Theme Extensions
+
+Syntax highlighting is currently only enabled in built-in themes. This is because the 'Semantic Highlighting' used by XPath Embedded does not work well with some languages and some themes.
+
+To enable syntax highighting for a custom them you need to change User Settings. For example, to enable syntax highlighting for XSLT in the *City Lights* theme use:
+```json
+	"editor.tokenColorCustomizations": {
+		"[City Lights]": {
+			"semanticHighlighting": true
+		}
+	}
+  ```
+
 ### Editor Settings For Formatting
 ```json
 {
