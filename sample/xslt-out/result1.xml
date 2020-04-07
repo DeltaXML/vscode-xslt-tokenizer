@@ -1,1 +1,1 @@
-<?xml version="1.0" encoding="UTF-8"?><root test="count: 4">test</root>
+<?xml version="1.0" encoding="UTF-8"?><root test="count: 6" p1="p1value" p2="p2value">test</root>

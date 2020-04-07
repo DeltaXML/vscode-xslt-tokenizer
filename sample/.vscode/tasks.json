@@ -8,6 +8,10 @@
 			"xsltFile": "${workspaceFolder}/basic.xsl",
 			"xmlSource": "${workspaceFolder}/basic.xsl",
 			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
+			"parameters": [
+				{"name": "p1", "value": "p1value"},
+				{"name": "p2", "value": "p2value"}
+			],
 			"group": {
 				"kind": "build"
 			},

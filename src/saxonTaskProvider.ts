@@ -70,7 +70,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 	public resolveTask(_task: vscode.Task): vscode.Task | undefined {	
         return undefined;	
 		//return this.getTask();
-	}
+    }
+    
+    private getProp(obj: any, prop: string): string {
+        return obj[prop];
+    }
 
 	private getTasks(tasksObject: TasksObject): vscode.Task[] {
         this.tasks = [];
@@ -112,11 +116,45 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 }
                 xsltTask.group = {
                     kind: 'build'
-                }                
+                }
+
+                let commandLineArgs: string[] = [];
+                let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
+
+                let xsltParametersCommand: string[] = []
+                for (const param of xsltParameters) {
+                    xsltParametersCommand.push(param.name + '=' + param.value);
+                }
+                
+                for (const propName in xsltTask) {
+                    let propValue = this.getProp(xsltTask, propName);
+                    switch (propName) {
+                        case 'xsltFile': 
+                            commandLineArgs.push('-xsl:' + propValue);
+                            break
+                        case 'xmlSource':
+                            commandLineArgs.push('-s:' + propValue);
+                            break;
+                        case 'resultPath': 
+                            commandLineArgs.push('-o:' + propValue);
+                            break
+                        case 'initialTemplate':
+                            commandLineArgs.push('-it:' + propValue);
+                            break;
+                        case 'initialMode': 
+                            commandLineArgs.push('-im:' + propValue);
+                            break;
+                    }
+                }
+
+                if (xsltParametersCommand.length > 0) {
+                    commandLineArgs.push(xsltParametersCommand.join(' '));
+                }
+                let resolvedCommandLine = commandLineArgs.join(' ');
                 
                 let problemMatcher = "$saxon-xslt";
 
-                let commandline = `java -jar ${xsltTask.saxonJar} -xsl:${xsltTask.xsltFile} -s:${xsltTask.xmlSource} -o:${xsltTask.resultPath}`;
+                let commandline = `java -jar ${xsltTask.saxonJar} ${resolvedCommandLine}`;
 
                 this.tasks.push(new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher));
             }
