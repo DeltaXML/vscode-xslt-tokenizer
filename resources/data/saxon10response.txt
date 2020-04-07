@@ -1,0 +1,14 @@
+> Executing task: java -jar /usr/local/opt/SaxonHE10-0J/saxon-he-10.0.jar -xsl:/Users/philipf/Documents/github/vscode-xslt-tokenizer/sample/w3c-xslt.xsl -s:/Users/philipf/Documents/github/vscode-xslt-tokenizer/sample/w3c-xslt.xsl -o:/Users/philipf/Documents/github/vscode-xslt-tokenizer/sample/xslt-out/result1.xml 2>&1 <
+
+Warning at xsl:mode on line 30 column 78 of w3c-xslt.xsl:
+  SXST0068  Request for streaming ignored: this Saxon configuration does not support streaming
+Warning at xsl:mode on line 31 column 81 of w3c-xslt.xsl:
+  SXST0068  Request for streaming ignored: this Saxon configuration does not support streaming
+Error near {... 'use-last:' function($} at char 139 in xsl:sequence/@select on line 215 column 29 of w3c-xslt.xsl:
+  XPST0003  expected ":", found "<node-type>()"
+Error near {...t $in := descendant::axr:bs...} at char 43 in xsl:sequence/@select on line 231 column 29 of w3c-xslt.xsl:
+  XPST0081  Namespace prefix 'axr' has not been declared
+Error at xsl:package on line 21 column 82 of w3c-xslt.xsl:
+  XTSE3085  The default mode j:xml-to-json has not been declared in an xsl:mode declaration
+Errors were reported during stylesheet compilation
+The terminal process terminated with exit code: 2
