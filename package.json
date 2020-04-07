@@ -117,7 +117,7 @@
 				"fileLocation": ["relative", "${file}/.."],
 				"pattern": [
 				  {
-					"regexp": "^(?:Syntax |Static |Dynamic )?(error|Error|Warning|Info)\\s+(?:on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+					"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
 					"line": 3,
 					"column": 4,
 					"severity": 1,

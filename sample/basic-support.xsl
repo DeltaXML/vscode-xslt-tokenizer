@@ -3,17 +3,12 @@
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:fn="http://www.w3.org/2005/xpath-functions"
     xmlns:j="http://www.w3.org/2013/XSLT/xml-to-json"
+    xmlns:ext="com.example.functions"
     exclude-result-prefixes="xs fn j" version="3.0">
     
-    <xsl:import href="basic-support.xsl"/>
-    
-    <xsl:param name="p1"/>
-    <xsl:param name="p2"/>
-    
-    <xsl:template match='/'>
-        <root test="count: {count(//*)}" p1="{$p1}" p2="{$p2}">
-            <xsl:sequence select="'test'"/>
-        </root>
-    </xsl:template>
+   <xsl:function name="ext:test" as="xs:string">
+        <xsl:sequence select="22 + (8 * 15)"/>
+    </xsl:function>
+
     
 </xsl:stylesheet>

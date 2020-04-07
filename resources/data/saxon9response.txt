@@ -12,3 +12,8 @@ Static error at xsl:package on line 21 column 82 of w3c-xslt.xsl:
   XTSE3085: The default mode j:xml-to-json has not been declared in an xsl:mode declaration
 Errors were reported during stylesheet compilation
 The terminal process terminated with exit code: 2
+
+Type error at char 0 in expression in xsl:sequence/@select on line 10 column 47 of basic-support.xsl:
+  XTTE0780  The required item type of the result of a call to ext:test#0 is xs:string. The
+  supplied value is of type xs:integer
+Errors were reported during stylesheet compilation
