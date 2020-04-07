@@ -69,7 +69,6 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 
 	public resolveTask(_task: vscode.Task): vscode.Task | undefined {	
         return undefined;	
-		//return this.getTask();
     }
     
     private getProp(obj: any, prop: string): string {
@@ -80,7 +79,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         this.tasks = [];
 
 		let newTaskLabel = 'Saxon Transform (New)';
-		let saxonJarDefault = '${config:XSLT.tasks.saxonJar}'  //'/Users/philipf/Documents/github/SaxonHE10-0J/saxon-he-10.0.jar';
+		let saxonJarDefault = '${config:XSLT.tasks.saxonJar}'
 		let source = 'xslt';
 		let xmlSourceValue = '${file}';
 		let xsltFilePath = '${file}';
