@@ -28,11 +28,13 @@ Syntax highlighting is currently only enabled in built-in themes. This is becaus
 
 To enable syntax highighting for a custom them you need to change User Settings. For example, to enable syntax highlighting for XSLT in the *City Lights* theme use:
 ```json
+{
 	"editor.tokenColorCustomizations": {
 		"[City Lights]": {
 			"semanticHighlighting": true
 		}
 	}
+}
   ```
 
 ### Editor Settings For Formatting
