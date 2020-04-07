@@ -13,7 +13,7 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 
 ## Sample Screenshots
 
-See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XPath-Embedded)
+See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
 
 ## Formatting
 
@@ -35,14 +35,4 @@ See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wik
 ```
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
-### Creating XSLT Transform Tasks
 
-VSCode uses Tasks to integrate with external tools. Described in [Tasks in Visual Studio Code](https://code.visualstudio.com/docs/editor/tasks)
-
-This extension provides a 'Saxon XSLT' task that will be shown when a workspace folder is open and the **Create Task** command is invoked from VSCode.
-
-A Saxon XSLT task is first created with default settings for an XSLT transform. The default settings can be edited later within the ```tasks.json``` file.
-
-To use the Saxon XSLT task, you must also have Saxon and Java installed on your machine. The Saxon task file values can make use of VSCode built-in variables. The built-in variables supported are described in the [VSCode Variables Reference](https://code.visualstudio.com/docs/editor/variables-reference).
-
-Compile-time or run-time errors encountered when the Saxon XSLT task runs will be listed in the Problems pane in the VSCode editor. Selecting a 'problem' item, will open and highlight the location in the XSLT file where the problem occurs. Problem XSLT file names are also highlighted in the Files pane in VSCode.
