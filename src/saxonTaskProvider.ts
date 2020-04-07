@@ -173,7 +173,6 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 let problemMatcher = "$saxon-xslt";
                 let commandline = `java -cp ${classPathString} net.sf.saxon.Transform ${resolvedCommandLine}`;
                 let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
-                newTask.presentationOptions.clear = true;
                 this.tasks.push(newTask);
             }
         }

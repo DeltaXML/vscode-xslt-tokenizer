@@ -9,8 +9,27 @@
 			"xmlSource": "${workspaceFolder}/basic.xsl",
 			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
 			"parameters": [
-				{"name": "p1", "value": "p1value"},
-				{"name": "p2", "value": "p2value"}
+				{
+					"name": "p1",
+					"value": "p1value"
+				},
+				{
+					"name": "p2",
+					"value": "p2value"
+				}
+			],
+			"initialMode": "main",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": true,
+				"clear": false
+			},
+			"classPathEntries": [
+				"/xrc/utilitiy.class1",
+				"/xrc/utility.class2"
 			],
 			"group": {
 				"kind": "build"
@@ -22,6 +41,20 @@
 		{
 			"type": "xslt",
 			"label": "Compile Active XSLT File",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${file}",
+			"xmlSource": "${file}",
+			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
+			"group": {
+				"kind": "build"
+			},
+			"problemMatcher": [
+				"$saxon-xslt"
+			]
+		},
+		{
+			"type": "xslt",
+			"label": "xslt: Saxon Transform (New)",
 			"saxonJar": "${config:XSLT.tasks.saxonJar}",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
