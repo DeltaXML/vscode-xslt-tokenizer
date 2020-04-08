@@ -67,9 +67,21 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         let rootPath = vscode.workspace.rootPath? vscode.workspace.rootPath: '/';
         let tasksPath = path.join(rootPath, '.vscode', 'tasks.json');
         let tasksObject = undefined;
+
         if (await exists(tasksPath)) {
-            delete require.cache[tasksPath];
-            tasksObject = require(tasksPath);
+            const tasksText = fs.readFileSync(tasksPath).toString('utf-8');
+            const taskLines = tasksText.split("\n");
+            const jsonTaskLines: string[] = [];
+            taskLines.forEach((taskLine) =>  {
+                if (taskLine.trimLeft().startsWith('//')) {
+                    // don't add comment
+                } else {
+                    jsonTaskLines.push(taskLine);
+                }
+            });
+            const jsonString = jsonTaskLines.join('\n');
+            tasksObject = JSON.parse(jsonString);
+
         } else {
             tasksObject = {tasks: []};
         }
