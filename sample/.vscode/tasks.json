@@ -6,6 +6,7 @@
 			"label": "Basic Transform",
 			"saxonJar": "${config:XSLT.tasks.saxonJar}",
 			"xsltFile": "${workspaceFolder}/basic.xsl",
+			"useWorkspace": true,
 			"xmlSource": "${workspaceFolder}/basic.xsl",
 			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
 			"parameters": [

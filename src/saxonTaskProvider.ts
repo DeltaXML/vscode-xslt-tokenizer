@@ -39,7 +39,8 @@ interface XSLTTask {
     parameters?: XSLTParameter[],
     initialTemplate?: string,
     initialMode?: string,
-    classPathEntries?: string[]
+    classPathEntries?: string[],
+    useWorkspace?: boolean,
     group?: TaskGroup
 }
 
@@ -180,9 +181,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                     commandLineArgs.push(xsltParametersCommand.join(' '));
                 }
 
+                let useWorkspaceResolving = xsltTask.useWorkspace? xsltTask.useWorkspace: false;
+
                 let classPathString = classPaths.join(pathSeparator());
                 let resolvedCommandLine = commandLineArgs.join(' ');               
-                let problemMatcher = "$saxon-xslt";
+                let problemMatcher = useWorkspaceResolving? "saxon-xslt-workspace": "$saxon-xslt";
                 let commandline = `java -cp ${classPathString} net.sf.saxon.Transform ${resolvedCommandLine}`;
                 let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
                 this.tasks.push(newTask);
