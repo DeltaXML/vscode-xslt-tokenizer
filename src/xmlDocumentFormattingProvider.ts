@@ -7,12 +7,15 @@
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
+import {XSLTConfiguration} from './languageConfigurations';
+
 
 export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingEditProvider, vscode.DocumentRangeFormattingEditProvider, vscode.OnTypeFormattingEditProvider {
 
 	public replaceIndendation = true;
 	public minimiseXPathIndents = true;
-	private xslLexer = new XslLexer();
+	private xslLexer = new XslLexer(XSLTConfiguration.configuration);
+
 	public provideOnType = false;
 	private onTypeLineEmpty = false;
 	private onTypeCh = '';

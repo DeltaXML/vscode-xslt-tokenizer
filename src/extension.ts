@@ -9,9 +9,10 @@
  */
 import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
-import {XslLexer} from './xslLexer';
+import {XslLexer, LanguageConfiguration} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider'
-import {SaxonTaskProvider} from './saxonTaskProvider'
+import {SaxonTaskProvider} from './saxonTaskProvider';
+import {XSLTConfiguration} from './languageConfigurations';
 
 const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
@@ -79,8 +80,9 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 	}
 }
 
-class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
-	private xslLexer = new XslLexer();
+export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
+	
+	private xslLexer = new XslLexer(XSLTConfiguration.configuration);
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		//console.log('xslt: provideDocumentSemanticTokens: ' + document.fileName);

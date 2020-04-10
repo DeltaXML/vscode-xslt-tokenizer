@@ -1,7 +1,10 @@
 // tslint:disable
 import { BaseToken } from "./xpLexer";
 import { XslLexer } from "./xslLexer";
-import { Debug} from "./diagnostics";
+import { Debug } from "./diagnostics";
+import { XsltSemanticTokensProvider } from "./extension";
+import {XSLTConfiguration} from './languageConfigurations';
+
 
 // -------------
 let testXslt: string =
@@ -21,7 +24,10 @@ if (timerOnly) {
 	debugOn = !generateTest;
 }
 
-let lexer: XslLexer = new XslLexer();
+let xp = new XsltSemanticTokensProvider();
+
+let lexer = new XslLexer(XSLTConfiguration.configuration);
+
 lexer.debug = debugOn;
 lexer.flatten = flatten;
 lexer.timerOn = timerOnly;

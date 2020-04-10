@@ -102,6 +102,12 @@ interface XmlElement {
     expandText: boolean;
 }
 
+export interface LanguageConfiguration {
+    expressionAtts?: string[],
+    avtAtts?: string[],
+    nativePrefix: string
+}
+
 export class XslLexer {
     public debug: boolean = false;
     public flatten: boolean = false;
@@ -115,6 +121,11 @@ export class XslLexer {
     private commentCharCount = 0;
     private cdataCharCount = 0;
     private entityContext = EntityPosition.text;
+    private languageConfiguration: LanguageConfiguration;
+
+    constructor(languageConfiguration: LanguageConfiguration) {
+        this.languageConfiguration = languageConfiguration;
+    }
 
     public static getTextmateTypeLegend(): string[] {
         // concat xsl legend to xpath legend
@@ -134,21 +145,13 @@ export class XslLexer {
         return isCurrentCharNewLine || char === ' ' || char == '\t' || char === '\r';
     }
 
-    // Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
-    public static expressionAtts = ['context-item', 'count', 'else', 'from', 'group-adjacent', 'group-by', 'group-ending-with', 'group-starting-with', 'from', 'for-each-item', 'for-each-source', 'initial-value', 
-    'key', 'match', 'namespace-context', 'on-duplicates', 'select', 'test', 'then', 'use', 'use-when', 'value', 'with-params', 'xpath' ];
-
-    public static avtAtts = ['allow-duplicate-names', 'base-uri', 'build-tree', 'byte-order-mark', 'case-order', 'cdata-section-elements', 'collation', 'data-type', 'doctype-public', 'doctype-system', 'encoding', 'error-code',
-     'escape-uri-attributes', 'flags', 'format', 'grouping-separator', 'grouping-size', 'href', 'html-version', 'include-context-type', 'indent', 'item-separator', 'json-node-output-method',
-     'lang', 'letter-value', 'media-type', 'method', 'name', 'namespace', 'normalization-form', 'omit-xml-declaration', 'order', 'ordinal', 'ordinal-type', 'output-version',
-     'parameter-document', 'regex', 'separator', 'schema-aware', 'stable', 'standalone', 'suppress-indentaion', 'terminate', 'undeclar-prefixes', 'start-at'];
-
+    
     public isAvtAtt(name: string) {
-        return XslLexer.avtAtts.indexOf(name) > -1;
+        return this.languageConfiguration.avtAtts? this.languageConfiguration.avtAtts.indexOf(name) > -1: false;
     }
 
     public isExpressionAtt(name: string) {
-        return XslLexer.expressionAtts.indexOf(name) > -1;
+        return this.languageConfiguration.expressionAtts? this.languageConfiguration.expressionAtts.indexOf(name) > -1: false;
     }
 
     private calcNewState (isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
@@ -834,12 +837,7 @@ export class XslLexer {
     }
 
     private isXslMatch(tokenChars: string[]): boolean {
-        return (
-        tokenChars.length > 4 &&
-        tokenChars[0] === 'x' &&
-        tokenChars[1] === 's' &&
-        tokenChars[2] === 'l' &&
-        tokenChars[3] === ':');
+        return tokenChars.length > 4 && tokenChars.join('').startsWith(this.languageConfiguration.nativePrefix + ':');
     }
 }
 
