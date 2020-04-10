@@ -482,7 +482,7 @@ export class XslLexer {
         xpLexer.provideNestingLevel = this.provideCharLevelState;
         let xslLength = xsl.length - 1;
         let storeToken = false;
-        let isXslElement = false;
+        let isNativeElement = false;
         let isXPathAttribute = false;
         let isExpandTextAttribute = false;
         let expandTextValue: boolean|null = false;
@@ -567,7 +567,7 @@ export class XslLexer {
                         case XMLCharState.lsElementNameWs:
                         case XMLCharState.rSelfCtNoAtt:
                         case XMLCharState.rCt:
-                            isXslElement = this.isXslMatch(tokenChars);
+                            isNativeElement = this.isNativeElement(tokenChars);
 
                             if (nextState === XMLCharState.rCt) {
                                 if (xmlElementStack.length > 0) {
@@ -578,7 +578,7 @@ export class XslLexer {
                             storeToken = false;
                             tokenChars = [];
 
-                            let newTokenType = isXslElement? XSLTokenLevelState.xslElementName: XSLTokenLevelState.elementName;
+                            let newTokenType = isNativeElement? XSLTokenLevelState.xslElementName: XSLTokenLevelState.elementName;
                             this.addNewTokenToResult(tokenStartChar, newTokenType, result, nextState);
                             if (nextState !== XMLCharState.lsElementNameWs) {
                                 let punctuationLength = nextState === XMLCharState.rCt || nextState === XMLCharState.rStNoAtt? 1: 2;
@@ -608,7 +608,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lStEq:
                             attName = tokenChars.join('');
-                            if (isXslElement) {
+                            if (isNativeElement) {
                                 if (attName === 'saxon:options') {
                                     isXPathAttribute = true;
                                 } else if (attName === 'expand-text') {
@@ -687,7 +687,7 @@ export class XslLexer {
                         case XMLCharState.sqAvt:
                         case XMLCharState.dqAvt:
                             let exit;
-                            if (isXslElement) {
+                            if (isNativeElement) {
                                 if (exit = attName.startsWith('_')) {
                                     exit = ExitCondition.CurlyBrace;
                                 } else {
@@ -836,7 +836,7 @@ export class XslLexer {
         return expandTextValue;
     }
 
-    private isXslMatch(tokenChars: string[]): boolean {
+    private isNativeElement(tokenChars: string[]): boolean {
         return tokenChars.length > 4 && tokenChars.join('').startsWith(this.languageConfiguration.nativePrefix + ':');
     }
 }
