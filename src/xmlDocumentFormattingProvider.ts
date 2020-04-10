@@ -5,16 +5,14 @@
  *  DeltaXML Ltd. - xmlDocumentFormattingProvider
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState } from './xslLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
-import {XSLTConfiguration} from './languageConfigurations';
-
 
 export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingEditProvider, vscode.DocumentRangeFormattingEditProvider, vscode.OnTypeFormattingEditProvider {
 
 	public replaceIndendation = true;
 	public minimiseXPathIndents = true;
-	private xslLexer = new XslLexer(XSLTConfiguration.configuration);
+	private xslLexer: XslLexer;
 
 	public provideOnType = false;
 	private onTypeLineEmpty = false;
@@ -22,7 +20,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	private onTypePosition: vscode.Position | null = null;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
-	constructor() {
+	constructor(xsltConfiguration: LanguageConfiguration) {
+		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 	}
 

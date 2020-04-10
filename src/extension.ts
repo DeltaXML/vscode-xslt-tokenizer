@@ -37,8 +37,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 	// formatter
-	let xsltFormatter = new XMLDocumentFormattingProvider();
-	let xsltFormatterOnType = new XMLDocumentFormattingProvider();
+	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
+	let xsltFormatterOnType = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
 	xsltFormatterOnType.provideOnType = true;
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', 
