@@ -181,11 +181,10 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                     commandLineArgs.push(xsltParametersCommand.join(' '));
                 }
 
-                let useWorkspaceResolving = xsltTask.useWorkspace? xsltTask.useWorkspace: false;
-
                 let classPathString = classPaths.join(pathSeparator());
-                let resolvedCommandLine = commandLineArgs.join(' ');               
-                let problemMatcher = useWorkspaceResolving? "saxon-xslt-workspace": "$saxon-xslt";
+                let resolvedCommandLine = commandLineArgs.join(' ');         
+                // this is overriden if problemMatcher is set in the tasks.json file      
+                let problemMatcher = "$saxon-xslt";
                 let commandline = `java -cp ${classPathString} net.sf.saxon.Transform ${resolvedCommandLine}`;
                 let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
                 this.tasks.push(newTask);

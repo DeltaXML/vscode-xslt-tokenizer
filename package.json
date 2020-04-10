@@ -63,10 +63,6 @@
 						"type": "string",
 						"description": "The path to the XSLT stylesheet"
 					},
-					"useWorkspace": {
-						"type": "boolean",
-						"description": "Resolve file-paths from workspace folder"
-					},
 					"xmlSource": {
 						"type": "string",
 						"description": "The path to the XML source file"
@@ -143,7 +139,7 @@
 				]
 			},
 			{
-				"name": "saxon-xslt-workspace",
+				"name": "saxon-xslt.workspace",
 				"owner": "xslt",
 				"fileLocation": ["relative", "${workspaceFolder}"],
 				"pattern": [
@@ -160,6 +156,79 @@
 					  "message": 2
 				  }
 				]
+			},
+			{
+				"name": "saxon-xslt.workspace.src",
+				"owner": "xslt",
+				"fileLocation": ["relative", "${workspaceFolder}/src"],
+				"pattern": [
+				  {
+					"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+					"line": 3,
+					"column": 4,
+					"severity": 1,
+					"file": 5
+				  },
+				  {
+					  "regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+					  "code": 1,
+					  "message": 2
+				  }
+				]
+			},
+			{
+				"name": "saxon-xslt.workspace.src.xsl",
+				"owner": "xslt",
+				"fileLocation": ["relative", "${workspaceFolder}/src/xsl"],
+				"pattern": [
+					{
+					  "regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+					  "line": 3,
+					  "column": 4,
+					  "severity": 1,
+					  "file": 5
+					},
+					{
+						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"code": 1,
+						"message": 2
+					}
+				  ]
+			},
+			{
+				"name": "saxon-xslt.workspace.resources.xsl",
+				"owner": "xslt",
+				"fileLocation": ["relative", "${workspaceFolder}/resources/xsl"],
+				"pattern": [
+				  {
+					"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+					"line": 3,
+					"column": 4,
+					"severity": 1,
+					"file": 5
+				  },
+				  {
+					  "regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+					  "code": 1,
+					  "message": 2
+				  }
+				]
+			}
+		],
+		"problemPatterns": [
+			{
+				"name": "error.line",
+				"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+				"line": 3,
+				"column": 4,
+				"severity": 1,
+				"file": 5
+			},
+			{
+				"name": "message.line",
+				"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+				"code": 1,
+				"message": 2
 			}
 		],
 		"semanticTokenTypes": [

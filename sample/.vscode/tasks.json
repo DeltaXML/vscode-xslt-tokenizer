@@ -5,10 +5,9 @@
 			"type": "xslt",
 			"label": "Basic Transform",
 			"saxonJar": "${config:XSLT.tasks.saxonJar}",
-			"xsltFile": "${workspaceFolder}/basic.xsl",
-			"useWorkspace": true,
-			"xmlSource": "${workspaceFolder}/basic.xsl",
-			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
+			"xsltFile": "${workspaceFolder}/src/xsl/basic.xsl",
+			"xmlSource": "${workspaceFolder}/src/xsl/basic.xsl",
+			"resultPath": "${workspaceFolder}/out/${fileBasenameNoExtension}.xml",
 			"parameters": [
 				{
 					"name": "p1",
@@ -19,7 +18,6 @@
 					"value": "p2value"
 				}
 			],
-			"initialMode": "main",
 			"presentation": {
 				"echo": true,
 				"reveal": "always",
@@ -35,9 +33,7 @@
 			"group": {
 				"kind": "build"
 			},
-			"problemMatcher": [
-				"$saxon-xslt"
-			]
+			"problemMatcher": "$saxon-xslt.workspace.src.xsl"
 		},
 		{
 			"type": "xslt",
@@ -45,13 +41,11 @@
 			"saxonJar": "${config:XSLT.tasks.saxonJar}",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
-			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
+			"resultPath": "${workspaceFolder}/out/${fileBasenameNoExtension}.xml",
 			"group": {
 				"kind": "build"
 			},
-			"problemMatcher": [
-				"$saxon-xslt"
-			]
+			"problemMatcher": "$saxon-xslt"
 		},
 		{
 			"type": "xslt",
@@ -63,9 +57,7 @@
 			"group": {
 				"kind": "build"
 			},
-			"problemMatcher": [
-				"$saxon-xslt"
-			]
+			"problemMatcher": "$saxon-xslt"
 		}
 	]
 }
