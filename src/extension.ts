@@ -9,12 +9,11 @@
  */
 import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
-import {XslLexer, LanguageConfiguration} from './xslLexer';
+import {XslLexer} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider'
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration} from './languageConfigurations';
 
-const tokenTypes = new Map<string, number>();
 const tokenModifiers = new Map<string, number>();
 
 const legend = (function () {
