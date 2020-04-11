@@ -8,10 +8,17 @@ import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
 
+enum HasCharacteristic {
+	unknown,
+	yes,
+	no
+}
+
 export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingEditProvider, vscode.DocumentRangeFormattingEditProvider, vscode.OnTypeFormattingEditProvider {
 
 	public replaceIndendation = true;
 	public minimiseXPathIndents = true;
+	public indentMixedContent = false;
 	private xslLexer: XslLexer;
 
 	public provideOnType = false;
@@ -54,6 +61,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let result: vscode.TextEdit[] = [];
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
+		let newLineString = (document.eol === vscode.EndOfLine.CRLF) ? "\r\n" : "\n"
 		// using non-whitespace for testing only!!
 		if (useTabs) {
 			indentString = '\t';
@@ -95,10 +103,15 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
 		let preThen = false;
+		let documenthasNewLines: HasCharacteristic = HasCharacteristic.unknown;
+		let awaitingSecondStartTag: HasCharacteristic = HasCharacteristic.unknown;
+		let firstStartTagLineNumber = -1;
+		let prevToken: BaseToken|null = null;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
 			let stackLength = xmlSpacePreserveStack.length;
+			let addNewLine = false;
 
 			tokenIndex++;
 			lineNumber = token.line;
@@ -128,6 +141,15 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								attributeValueOffset = 0;
 								xmlSpaceAttributeValue = null;
 								newNestingLevel++;
+								if (awaitingSecondStartTag === HasCharacteristic.unknown) {
+									firstStartTagLineNumber = lineNumber;
+									awaitingSecondStartTag = HasCharacteristic.yes;
+								} else if (awaitingSecondStartTag === HasCharacteristic.yes) {
+									documenthasNewLines = lineNumber > firstStartTagLineNumber? HasCharacteristic.yes: HasCharacteristic.no;
+									awaitingSecondStartTag = HasCharacteristic.no;
+								}
+								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken);
+
 								break;
 							case XMLCharState.rStNoAtt:
 								let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
@@ -148,6 +170,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								// outdent:
 								indent = -1;
 								newNestingLevel--;
+								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken);
 								break;
 							case XMLCharState.rSelfCtNoAtt:
 							case XMLCharState.rSelfCt:
@@ -305,6 +328,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 				}
 			}
 
+			if (addNewLine && lineNumberDiff == 0) {
+				lineNumberDiff = 1;
+			}
+
 			if (lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
 				for (let i = lineNumberDiff - 1; i > -1; i--) {
@@ -337,8 +364,16 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 					if (!(preserveSpace || isPreserveSpaceElement)) {
 						if (this.replaceIndendation) {
-							let replacementString = indentString.repeat(requiredIndentLength);
-							result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+							if (addNewLine) {
+								// TODO: cant just use currentLine - need to create a position:
+								let editPos = new vscode.Position(loopLineNumber, token.startCharacter);
+								//let valueRange = currentLine.range.with(editPos, editPos);
+								let replacementString = newLineString + indentString.repeat(requiredIndentLength);
+								result.push(vscode.TextEdit.insert(editPos, replacementString));
+							} else {
+								let replacementString = indentString.repeat(requiredIndentLength);
+								result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+							}
 						} else if (actualIndentLength !== requiredIndentLength) {
 							let indentLengthDiff = requiredIndentLength - actualIndentLength;
 							if (indentLengthDiff > 0) {
@@ -355,7 +390,24 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			prevLineNumber = lineNumber;
 			nestingLevel = newNestingLevel;
 			multiLineState = newMultiLineState;
+			prevToken = token;
 		});
+		return result;
+	}
+
+	private shouldAddNewLine(documenthasNewLines: HasCharacteristic, prevToken: BaseToken| null): boolean {
+		let result = false
+		if (documenthasNewLines === HasCharacteristic.no) {
+			if (this.indentMixedContent) {
+				result = true;
+			} else {
+				// TODO!!! check if prevtoken was a right-close-tag or a self-closing tag or comment????
+				let pct= prevToken?.charType;
+				result  = pct === XMLCharState.rSelfCt || pct === XMLCharState.rSt || pct === XMLCharState.rCt ||
+				  pct === XMLCharState.rSelfCtNoAtt || pct === XMLCharState.rStNoAtt || 				  
+				  pct === XMLCharState.rComment || pct === XMLCharState.rPi
+			}
+		}
 		return result;
 	}
 

@@ -26,6 +26,7 @@
 	"activationEvents": [
 		"onLanguage:xpath",
 		"onLanguage:xslt",
+		"onLanguage:xml",
 		"onCommand:workbench.action.tasks.runTask"
 	],
 	"license": "SEE LICENSE IN: LICENSE.txt",
