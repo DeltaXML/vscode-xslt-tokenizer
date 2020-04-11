@@ -12,7 +12,7 @@ import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
 import {XslLexer} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider'
 import {SaxonTaskProvider} from './saxonTaskProvider';
-import {XSLTConfiguration} from './languageConfigurations';
+import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
 
 const tokenModifiers = new Map<string, number>();
 
@@ -40,12 +40,24 @@ export function activate(context: vscode.ExtensionContext) {
 	let xsltFormatterOnType = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
 	xsltFormatterOnType.provideOnType = true;
 
+	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
+	let xmlFormatterOnType = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
+	xmlFormatterOnType.provideOnType = true;
+
+
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', 
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xslt', 
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt', 
 		xsltFormatterOnType, '\n'));
+
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xml', 
+		xmlFormatter));
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xml', 
+		xmlFormatter));
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xml', 
+		xmlFormatterOnType, '\n'));
 
 	let workspaceRoot = vscode.workspace.rootPath;
 	if (!workspaceRoot) {
