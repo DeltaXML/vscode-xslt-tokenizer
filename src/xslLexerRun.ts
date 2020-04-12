@@ -7,7 +7,7 @@ import {XSLTConfiguration} from './languageConfigurations';
 
 // -------------
 let testXslt: string =
-`<?xml version="1.0" encoding="UTF-8"?><root/>`;
+`<?x c"?><r><s n="a"/></r>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

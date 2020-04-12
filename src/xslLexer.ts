@@ -122,6 +122,7 @@ export class XslLexer {
     private cdataCharCount = 0;
     private entityContext = EntityPosition.text;
     private languageConfiguration: LanguageConfiguration;
+    private skipTokenChar = false;
 
     constructor(languageConfiguration: LanguageConfiguration) {
         this.languageConfiguration = languageConfiguration;
@@ -186,6 +187,7 @@ export class XslLexer {
                     // no change
                 } else if (char === '?' && nextChar === '>') {
                     rc = XMLCharState.rPi;
+                    this.skipTokenChar = true;
                 } else {
                     rc = XMLCharState.lPiValue;
                 }
@@ -193,6 +195,16 @@ export class XslLexer {
             case XMLCharState.lPiValue:
                 if (char === '?' && nextChar === '>') {
                     rc = XMLCharState.rPi;
+                    this.skipTokenChar = true;
+                }
+                break;
+            case XMLCharState.rPi:
+            case XMLCharState.rSelfCt:
+            case XMLCharState.rSelfCtNoAtt:
+                if (this.skipTokenChar) {
+                    this.skipTokenChar = false;
+                } else {
+                    rc = this.testChar(char, nextChar, false);
                 }
                 break;
             case XMLCharState.lComment:
@@ -306,6 +318,7 @@ export class XslLexer {
                     rc = XMLCharState.rStNoAtt;                
                 } else if (char === '/' && nextChar === '>') {
                     rc = XMLCharState.rSelfCtNoAtt;
+                    this.skipTokenChar = true;
                 }
                 break;
             // whitespace after element name (or after att-value)
@@ -321,6 +334,7 @@ export class XslLexer {
                     rc = XMLCharState.rSt;
                 } else if (char === '/' && nextChar === '>') {
                     rc = XMLCharState.rSelfCt;
+                    this.skipTokenChar = true;
                 } else {
                     rc = XMLCharState.lAn;
                 }
