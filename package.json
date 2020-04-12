@@ -41,6 +41,12 @@
 				}
 			}
 		},
+		"snippets": [
+			{
+				"language": "xslt",
+				"path": "./xsltSnippets.json"
+			}
+		],
 		"taskDefinitions": [
 			{
 				"type": "xslt",

@@ -1,0 +1,120 @@
+{
+	"xsl:stylesheet": {
+		"prefix": "xss",
+		"body": [
+			"<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+			"<xsl:stylesheet xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\"",
+			"                xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"",
+			"                exclude-result-prefixes=\"#all\"",
+			"                expand=text=\"yes\"",
+			"                version=\"3.0\">",
+			"",
+			"\t<xsl:output method=\"xml\" indent=\"yes\"/>  ",
+			"\t<xsl:mode on-no-match=\"shallow-copy\"/>",
+			"",
+			"\t<xsl:template match=\"$1\" mode=\"#all\">",
+			"\t\t<xsl:copy>",
+			"\t\t\t<xsl:apply-templates select=\"$2\" mode=\"#current\"/>",
+			"\t\t</xsl:copy>",
+			"\t</xsl:template>",
+			"",
+			"</xsl:stylesheet>"
+		],
+		"description": "xsl:stylesheet"
+	},
+	"xsl:variable": {
+		"prefix": "xvr",
+		"body": [
+			"<xsl:variable name=\"$1\" as=\"$2\"",
+			"\tselect=\"$3\"/>"
+		],
+		"description": "xsl:variable"
+	},
+	"xsl:param": {
+		"prefix": "xpm",
+		"body": [
+			"<xsl:param name=\"$1\" as=\"$2\" select=\"$3\"/>"
+		],
+		"description": "xsl:param"
+	},
+	"xsl:sequence": {
+		"prefix": "xsq",
+		"body": [
+			"<xsl:sequence select=\"$1\"/>"
+		],
+		"description": "xsl:sequence"
+	},
+	"xsl:value-of": {
+		"prefix": "xvo",
+		"body": [
+			"<xsl:value-of select=\"$1\"/>"
+		],
+		"description": "xsl:sequence"
+	},
+	"xsl:attribute": {
+		"prefix": "xat",
+		"body": [
+			"<xsl:attribute name=\"$1\" name=\"{$2}\" namespace\"{$3}\"/>"
+		],
+		"description": "xsl:attribute"
+	},
+	"xsl:element": {
+		"prefix": "xel",
+		"body": [
+			"<xsl:element name=\"$1\" name=\"{$2}\" namespace\"{$3}\"/>"
+		],
+		"description": "xsl:element"
+	},
+	"xsl:function": {
+		"prefix": "xfn",
+		"body": [
+			"<xsl:function name=\"$1\" as=\"$2\">",
+			"\t<xsl:param name=\"$3\" as=\"$4\"/>",
+			"</xsl:function>"
+		],
+		"description": "xsl:function"
+	},
+	"literal-element": {
+		"prefix": "xle",
+		"body": [
+			"<$1 $2=\"$3\" $4=\"$5\">",
+			"$6",
+			"</$1>"
+		],
+		"description": "literal element"
+	},
+	
+	"xsl:for-each": {
+		"prefix": "xfe",
+		"body": [
+			"<xsl:for-each select=\"$1\">",
+			"\t<xsl:sequence select=\"$2\"/>",
+			"</xsl:for-each>"
+		],
+		"description": "xsl:for-each"
+	},
+
+	"xsl:call-template": {
+		"prefix": "xct",
+		"body": [
+			"<xsl:call-template name=\"$1\">",
+			"\t<xsl:with-param name=\"$2\" as=\"$3\"/>",
+			"</xsl:call-template>"
+		],
+		"description": "xsl:call-template"
+	},
+	"xsl:choose": {
+		"prefix": "xch",
+		"body": [
+			"<xsl:choose>",
+			"\t<xsl:when test=\"$1\">",
+			"\t\t$2",
+			"\t</xsl:when>",
+			"\t<xsl:otherwise>",
+			"\t\t$3",
+			"\t</xsl:otherwise>",
+			"</xsl:choose>"
+		],
+		"description": "xsl:choose"
+	}
+}
