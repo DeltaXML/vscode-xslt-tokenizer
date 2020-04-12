@@ -188,6 +188,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								}
 								break;
 							case XMLCharState.lPi:
+								// may be xml-declaration:
+								if (awaitingSecondStartTag === HasCharacteristic.unknown) {
+									firstStartTagLineNumber = lineNumber;
+									awaitingSecondStartTag = HasCharacteristic.yes;
+								}
 								attributeNameOffset = 0;
 								attributeValueOffset = 0;
 								break;

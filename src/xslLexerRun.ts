@@ -8,7 +8,7 @@ import {XSLTConfiguration} from './languageConfigurations';
 
 // -------------
 let testXslt: string =
-`<xsl:t select=  "$abc + 28">`;
+`<?xml version="1.0" encoding="UTF-8"?><root/>`;
 let testTitle = `declaration`;
 let generateTest = false;
 let timerOnly = false;

@@ -29,7 +29,7 @@
 		"onLanguage:xml",
 		"onCommand:workbench.action.tasks.runTask"
 	],
-	"license": "SEE LICENSE IN: LICENSE.txt",
+	"license": "MIT",
 	"main": "./out/extension.js",
 	"contributes": {
 		"configuration": {
@@ -79,7 +79,7 @@
 					"resultPath": {
 						"type": "string",
 						"description": "The destination path for the XSLT result"
-					}, 
+					},
 					"parameters": {
 						"description": "The xsl:param values for the XSLT",
 						"type": "array",
@@ -95,7 +95,10 @@
 									"description": "The xsl:param value. Special leading characters are: '?' (XPath), '!' (xsl:output), '+' (filename): See: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
 								}
 							},
-							"required": ["name", "value"]
+							"required": [
+								"name",
+								"value"
+							]
 						},
 						"minItems": 1
 					},
@@ -123,96 +126,111 @@
 			{
 				"name": "saxon-xslt",
 				"owner": "xslt",
-				"fileLocation": ["relative", "${file}/.."],
-				"pattern": [
-				  {
-					"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-					"line": 3,
-					"column": 4,
-					"severity": 1,
-					"file": 5
-				  },
-				  {
-					  "regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
-					  "code": 1,
-					  "message": 2
-				  }
-				]
-			},
-			{
-				"name": "saxon-xslt.workspace",
-				"owner": "xslt",
-				"fileLocation": ["relative", "${workspaceFolder}"],
-				"pattern": [
-				  {
-					"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-					"line": 3,
-					"column": 4,
-					"severity": 1,
-					"file": 5
-				  },
-				  {
-					  "regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
-					  "code": 1,
-					  "message": 2
-				  }
-				]
-			},
-			{
-				"name": "saxon-xslt.workspace.src",
-				"owner": "xslt",
-				"fileLocation": ["relative", "${workspaceFolder}/src"],
-				"pattern": [
-				  {
-					"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-					"line": 3,
-					"column": 4,
-					"severity": 1,
-					"file": 5
-				  },
-				  {
-					  "regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
-					  "code": 1,
-					  "message": 2
-				  }
-				]
-			},
-			{
-				"name": "saxon-xslt.workspace.src.xsl",
-				"owner": "xslt",
-				"fileLocation": ["relative", "${workspaceFolder}/src/xsl"],
+				"fileLocation": [
+					"relative",
+					"${file}/.."
+				],
 				"pattern": [
 					{
-					  "regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-					  "line": 3,
-					  "column": 4,
-					  "severity": 1,
-					  "file": 5
+						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+						"line": 3,
+						"column": 4,
+						"severity": 1,
+						"file": 5
 					},
 					{
 						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
 						"code": 1,
 						"message": 2
 					}
-				  ]
+				]
+			},
+			{
+				"name": "saxon-xslt.workspace",
+				"owner": "xslt",
+				"fileLocation": [
+					"relative",
+					"${workspaceFolder}"
+				],
+				"pattern": [
+					{
+						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+						"line": 3,
+						"column": 4,
+						"severity": 1,
+						"file": 5
+					},
+					{
+						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"code": 1,
+						"message": 2
+					}
+				]
+			},
+			{
+				"name": "saxon-xslt.workspace.src",
+				"owner": "xslt",
+				"fileLocation": [
+					"relative",
+					"${workspaceFolder}/src"
+				],
+				"pattern": [
+					{
+						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+						"line": 3,
+						"column": 4,
+						"severity": 1,
+						"file": 5
+					},
+					{
+						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"code": 1,
+						"message": 2
+					}
+				]
+			},
+			{
+				"name": "saxon-xslt.workspace.src.xsl",
+				"owner": "xslt",
+				"fileLocation": [
+					"relative",
+					"${workspaceFolder}/src/xsl"
+				],
+				"pattern": [
+					{
+						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+						"line": 3,
+						"column": 4,
+						"severity": 1,
+						"file": 5
+					},
+					{
+						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"code": 1,
+						"message": 2
+					}
+				]
 			},
 			{
 				"name": "saxon-xslt.workspace.resources.xsl",
 				"owner": "xslt",
-				"fileLocation": ["relative", "${workspaceFolder}/resources/xsl"],
+				"fileLocation": [
+					"relative",
+					"${workspaceFolder}/resources/xsl"
+				],
 				"pattern": [
-				  {
-					"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-					"line": 3,
-					"column": 4,
-					"severity": 1,
-					"file": 5
-				  },
-				  {
-					  "regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
-					  "code": 1,
-					  "message": 2
-				  }
+					{
+						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+						"line": 3,
+						"column": 4,
+						"severity": 1,
+						"file": 5
+					},
+					{
+						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"code": 1,
+						"message": 2
+					}
 				]
 			}
 		],
@@ -328,7 +346,7 @@
 				"superType": "macro",
 				"description": "XML attribute value assignment"
 			}
-		],		
+		],
 		"languages": [
 			{
 				"id": "xpath",
@@ -427,13 +445,16 @@
 		{
 			"language": "xslt",
 			"scopes": {
-				"xmlPunctuation": ["punctuation.definition.tag", "meta.tag.xml", "text.xml"]
+				"xmlPunctuation": [
+					"punctuation.definition.tag",
+					"meta.tag.xml",
+					"text.xml"
+				]
 			}
 		}
 	],
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
-		"postinstall": "node ./node_modules/vscode/bin/install",
 		"compile": "tsc -p ./",
 		"lint": "tslint -p ./",
 		"watch": "tsc -watch -p ./",
