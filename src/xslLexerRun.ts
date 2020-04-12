@@ -2,7 +2,6 @@
 import { BaseToken } from "./xpLexer";
 import { XslLexer } from "./xslLexer";
 import { Debug } from "./diagnostics";
-import { XsltSemanticTokensProvider } from "./extension";
 import {XSLTConfiguration} from './languageConfigurations';
 
 
@@ -23,8 +22,6 @@ if (timerOnly) {
 } else {
 	debugOn = !generateTest;
 }
-
-let xp = new XsltSemanticTokensProvider();
 
 let lexer = new XslLexer(XSLTConfiguration.configuration);
 
