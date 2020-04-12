@@ -104,7 +104,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let nameIndentRequired = false;
 		let preThen = false;
 		let documenthasNewLines: HasCharacteristic = HasCharacteristic.unknown;
-		let awaitingSecondStartTag: HasCharacteristic = HasCharacteristic.unknown;
+		let awaitingSecondTag: HasCharacteristic = HasCharacteristic.unknown;
 		let firstStartTagLineNumber = -1;
 		let prevToken: BaseToken|null = null;
 
@@ -141,15 +141,14 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								attributeValueOffset = 0;
 								xmlSpaceAttributeValue = null;
 								newNestingLevel++;
-								if (awaitingSecondStartTag === HasCharacteristic.unknown) {
+								if (awaitingSecondTag === HasCharacteristic.unknown) {
 									firstStartTagLineNumber = lineNumber;
-									awaitingSecondStartTag = HasCharacteristic.yes;
-								} else if (awaitingSecondStartTag === HasCharacteristic.yes) {
+									awaitingSecondTag = HasCharacteristic.yes;
+								} else if (awaitingSecondTag === HasCharacteristic.yes) {
 									documenthasNewLines = lineNumber > firstStartTagLineNumber? HasCharacteristic.yes: HasCharacteristic.no;
-									awaitingSecondStartTag = HasCharacteristic.no;
+									awaitingSecondTag = HasCharacteristic.no;
 								}
 								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken);
-
 								break;
 							case XMLCharState.rStNoAtt:
 								let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
@@ -189,9 +188,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								break;
 							case XMLCharState.lPi:
 								// may be xml-declaration:
-								if (awaitingSecondStartTag === HasCharacteristic.unknown) {
+								if (awaitingSecondTag === HasCharacteristic.unknown) {
 									firstStartTagLineNumber = lineNumber;
-									awaitingSecondStartTag = HasCharacteristic.yes;
+									awaitingSecondTag = HasCharacteristic.yes;
 								}
 								attributeNameOffset = 0;
 								attributeValueOffset = 0;
