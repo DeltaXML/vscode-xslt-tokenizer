@@ -292,6 +292,11 @@
 				"description": "XML attribute name"
 			},
 			{
+				"id": "xmlnsName",
+				"superType": "number",
+				"description": "First part of an XML Namespace Declaration"
+			},
+			{
 				"id": "attributeValue",
 				"superType": "string",
 				"description": "XML attribute value"

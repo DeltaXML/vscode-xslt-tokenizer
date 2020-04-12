@@ -76,6 +76,7 @@ export enum XSLTokenLevelState {
     attributeName,
     attributeEquals,
     attributeValue,
+    xmlnsName,
     elementName,
     elementValue,
     processingInstrName,
@@ -621,13 +622,19 @@ export class XslLexer {
                             attributeNameTokenAdded = false;
                             break;
                         case XMLCharState.lStEq:
+                            let isXMLNSattribute = false;
                             attName = tokenChars.join('');
+                            let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
                                 if (attName === 'saxon:options') {
                                     isXPathAttribute = true;
                                 } else if (attName === 'expand-text') {
                                     isXPathAttribute = false;
                                     isExpandTextAttribute = true;
+                                } else if (attName.startsWith('xmlns')) {
+                                    isExpandTextAttribute = false;
+                                    isXMLNSattribute = true;
+                                    attributeNameToken = XSLTokenLevelState.xmlnsName;
                                 } else {
                                     isExpandTextAttribute = false;
                                     isXPathAttribute = this.isExpressionAtt(attName);
@@ -635,12 +642,18 @@ export class XslLexer {
                             } else {
                                 if (attName === 'xsl:expand-text') {
                                     isExpandTextAttribute = true;
+                                } else if (attName.startsWith('xmlns')) {
+                                    isExpandTextAttribute = false;
+                                    isXMLNSattribute = true;
+                                    attributeNameToken = XSLTokenLevelState.xmlnsName;
                                 } else {
                                     isExpandTextAttribute = false;
                                 }
                             }
                             if (!attributeNameTokenAdded) {
-                                this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result, nextState);
+                                this.addNewTokenToResult(tokenStartChar, attributeNameToken, result, nextState);
+                            } else if (isXMLNSattribute) {
+                                result[result.length - 1].tokenType = attributeNameToken;
                             }
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeEquals, result, nextState);
                             tokenChars = [];
