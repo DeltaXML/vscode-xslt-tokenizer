@@ -23,7 +23,7 @@ if (timerOnly) {
 	debugOn = !generateTest;
 }
 
-let lexer = new XslLexer(XSLTConfiguration.configuration);
+let lexer = new XslLexer(XSLTConfiguration.configuration, () => {});
 
 lexer.debug = debugOn;
 lexer.flatten = flatten;

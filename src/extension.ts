@@ -8,7 +8,7 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
-import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
+import {XPathLexer, ExitCondition, LexPosition, BaseToken} from './xpLexer';
 import {XslLexer} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider'
 import {SaxonTaskProvider} from './saxonTaskProvider';
@@ -32,8 +32,14 @@ let customTaskProvider: vscode.Disposable | undefined;
 
 
 export function activate(context: vscode.ExtensionContext) {
+
+	const collection = vscode.languages.createDiagnosticCollection('xslt');
+	let diagnosticsListener: (param: BaseToken[]) => void = (baseTokens: BaseToken[]) => {
+		console.log(baseTokens.length);
+	}
+
 	// syntax highlighters
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(diagnosticsListener), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
@@ -92,15 +98,23 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 }
 
 export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
-	
-	private xslLexer = new XslLexer(XSLTConfiguration.configuration);
+
+	public diagnosticsListener: (param: BaseToken[]) => void;
+	private xslLexer: XslLexer;
+	private allTokens: BaseToken[] = [];
+
+	public constructor(callback: (param: BaseToken[]) => void) {
+		this.diagnosticsListener = callback;
+		this.xslLexer = new XslLexer(XSLTConfiguration.configuration, this.diagnosticsListener);
+	}
+
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		//console.log('xslt: provideDocumentSemanticTokens: ' + document.fileName);
 
-		const allTokens = this.xslLexer.analyse(document.getText());
+		this.allTokens = this.xslLexer.analyse(document.getText());
 		const builder = new vscode.SemanticTokensBuilder();
-		allTokens.forEach((token) => {
+		this.allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
 		//console.log('return tokens count: ' + allTokens.length);
