@@ -1,6 +1,6 @@
 {
 	"xsl:stylesheet": {
-		"prefix": "xss",
+		"prefix": "root-stylesheet",
 		"body": [
 			"<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
 			"<xsl:stylesheet xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\"",
@@ -18,12 +18,15 @@
 			"\t\t</xsl:copy>",
 			"\t</xsl:template>",
 			"",
+			"\t$0",
+			"",
 			"</xsl:stylesheet>"
 		],
 		"description": "xsl:stylesheet"
 	},
+
 	"xsl:variable": {
-		"prefix": "xvr",
+		"prefix": ["xsl-variable"],
 		"body": [
 			"<xsl:variable name=\"$1\" as=\"$2\"",
 			"\tselect=\"$3\"/>"
@@ -31,90 +34,156 @@
 		"description": "xsl:variable"
 	},
 	"xsl:param": {
-		"prefix": "xpm",
+		"prefix": ["xsl-parameter"],
 		"body": [
 			"<xsl:param name=\"$1\" as=\"$2\" select=\"$3\"/>"
 		],
 		"description": "xsl:param"
 	},
-	"xsl:sequence": {
-		"prefix": "xsq",
+	"xsl:mode": {
+		"prefix": ["xsl-mode"],
 		"body": [
-			"<xsl:sequence select=\"$1\"/>"
+			"<xsl:mode name=\"$1\" on-no-match=\"${2|shallow-copy,deep-copy,shallow-skip,deep-skip,text-only-copy,fail|}\" ${3|streamable,use-accumulators,warning-on-multiple-match,typed,visibility|}=\"$4\"/>",
+			"$0"
+		],
+		"description": "xsl:mode"
+	},
+	"xsl:sequence": {
+		"prefix": "xsl-sequence",
+		"body": [
+			"<xsl:sequence select=\"${1:xpath}\"/>",
+			"$0"
 		],
 		"description": "xsl:sequence"
 	},
 	"xsl:value-of": {
-		"prefix": "xvo",
+		"prefix": "xsl-value-of",
 		"body": [
-			"<xsl:value-of select=\"$1\"/>"
+			"<xsl:value-of select=\"${1:xpath}\"/>"
 		],
-		"description": "xsl:sequence"
+		"description": "xsl:value-of"
 	},
 	"xsl:attribute": {
-		"prefix": "xat",
+		"prefix": "xsl-attribute",
 		"body": [
-			"<xsl:attribute name=\"$1\" name=\"{$2}\" namespace\"{$3}\"/>"
+			"<xsl:attribute name=\"{${1:xpath}}\" select=\"${2:xpath}\"/>",
+			"$0"
 		],
 		"description": "xsl:attribute"
 	},
 	"xsl:element": {
-		"prefix": "xel",
+		"prefix": "xsl-element",
 		"body": [
-			"<xsl:element name=\"$1\" name=\"{$2}\" namespace\"{$3}\"/>"
+			"<xsl:element name=\"$1\" name=\"{$2}\" namespace=\"{$3}\"/>",
+			"$0"
 		],
 		"description": "xsl:element"
 	},
 	"xsl:function": {
-		"prefix": "xfn",
+		"prefix": "xsl-function",
 		"body": [
-			"<xsl:function name=\"$1\" as=\"$2\">",
-			"\t<xsl:param name=\"$3\" as=\"$4\"/>",
-			"</xsl:function>"
+			"<xsl:function name=\"${1:fn:name}\" as=\"${2:xs:string}\">",
+			"\t<xsl:param name=\"${3:p1}\" as=\"${4:node()}\"/>",
+			"\t$0",
+			"</xsl:function>",
+			""
 		],
 		"description": "xsl:function"
 	},
-	"literal-element": {
-		"prefix": "xle",
+	"xsl:template": {
+		"prefix": "xsl-template",
 		"body": [
-			"<$1 $2=\"$3\" $4=\"$5\">",
-			"$6",
-			"</$1>"
+			"<xsl:template match=\"${1:pattern}\" mode=\"${2|#default,#all|}\">",
+			"\t<xsl:param name=\"${3:p1}\" as=\"${4:node()}\"/>",
+			"\t<xsl:copy>",
+			"\t\t<xsl:apply-templates select=\"${5:@*, node()}\" mode=\"${6:#current}\"/>",
+			"\t</xsl:copy>",
+			"\t$0",
+			"</xsl:template>",
+			""
 		],
-		"description": "literal element"
+		"description": "xsl:template"
+	},
+	"element": {
+		"prefix": "xml-element-wrapper",
+		"body": [
+			"<${1:element} ${2:name}=\"${3:value}\">",
+			"\t$0",
+			"</${1:element}>"
+		],
+		"description": "xml element wrapper"
+	},
+	"element-closed": {
+		"prefix": "xml-element-closed",
+		"body": [
+			"<${1:element} ${2:name1}=\"${3:value1}\" ${4:name2}=\"${5:value2}\"$0/>"
+		],
+		"description": "xml element self-closed"
+	},
+	"literal-attribute": {
+		"prefix": "xml-attributes",
+		"body": [
+			" ${1:name1}=\"${2:value1}\" ${3:name2}=\"${4:value2}\"$0"
+		],
+		"description": "xml attribute"
 	},
 	
 	"xsl:for-each": {
-		"prefix": "xfe",
+		"prefix": ["xsl-for-each"],
 		"body": [
 			"<xsl:for-each select=\"$1\">",
 			"\t<xsl:sequence select=\"$2\"/>",
+			"\t$0",
 			"</xsl:for-each>"
 		],
 		"description": "xsl:for-each"
 	},
 
 	"xsl:call-template": {
-		"prefix": "xct",
+		"prefix": "xsl-call-template",
 		"body": [
 			"<xsl:call-template name=\"$1\">",
 			"\t<xsl:with-param name=\"$2\" as=\"$3\"/>",
+			"\t$0",
 			"</xsl:call-template>"
 		],
 		"description": "xsl:call-template"
 	},
 	"xsl:choose": {
-		"prefix": "xch",
+		"prefix": "xsl-choose",
 		"body": [
 			"<xsl:choose>",
-			"\t<xsl:when test=\"$1\">",
-			"\t\t$2",
+			"\t<xsl:when test=\"${1:xpath-condition}\">",
+			"\t\t$0",
 			"\t</xsl:when>",
 			"\t<xsl:otherwise>",
-			"\t\t$3",
+			"",
 			"\t</xsl:otherwise>",
-			"</xsl:choose>"
+			"</xsl:choose>",
+			""
 		],
 		"description": "xsl:choose"
+	},
+	"xsl:iterate": {
+		"prefix": "xsl-iterate-while",
+		"body": [
+			"<xsl:iterate select=\"transactions/transaction\">",
+			"\t<xsl:param name=\"${1:p1}\" select=\"${2:v1}\" as=\"${3:xs:string*}\"/>",
+			"\t<xsl:param name=\"${4:p2}\" select=\"${5:v2}\" as=\"${6:xs:string*}\"/>",
+			"\t<xsl:choose>",
+			"\t\t<xsl:when test=\"(\\$$1,\\$$4)\">",
+			"\t\t\t<xsl:next-iteration>",
+			"\t\t\t\t<xsl:with-param name=\"$1\" select=\"$7\"/>",
+			"\t\t\t\t<xsl:with-param name=\"$4\" select=\"$8\"/>",
+			"\t\t\t</xsl:next-iteration>",
+			"\t\t</xsl:when>",
+			"\t<xsl:otherwise>",
+			"\t\t<xsl:break/>",
+			"\t</xsl:otherwise>",
+			"\t</xsl:choose>",
+			"</xsl:iterate>",
+			"$0"
+		],
+		"description": "iterate while condition true"
 	}
 }
