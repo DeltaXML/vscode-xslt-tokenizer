@@ -1,0 +1,9 @@
+{
+	"xsl:variable": {
+		"prefix": ["xp-for-range"],
+		"body": [
+			"for \\$${1:name} in ${2:foo/bar} return ${3:\\$$1}"
+		],
+		"description": "xpath for $var"
+	}
+}
