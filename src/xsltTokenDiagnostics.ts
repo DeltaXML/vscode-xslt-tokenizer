@@ -41,7 +41,9 @@ interface VariableData {
 export class XsltTokenDiagnostics {
 
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
-	private static readonly xslVariable = 'xsl:variable';
+	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
+	private static readonly xslFunction = 'xsl:function';
+
 	private static readonly xslNameAtt = 'name';
 
 	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[]): vscode.Diagnostic[] => {
@@ -67,7 +69,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.xslElementName:
 						if (tagType === TagType.Start) {
 							tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							tagType = tagElementName === XsltTokenDiagnostics.xslVariable? TagType.XSLTvar: TagType.XSLTstart;
+							tagType = (XsltTokenDiagnostics.xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
 						}
 						break;
 					case XSLTokenLevelState.elementName:
