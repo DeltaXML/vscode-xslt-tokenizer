@@ -96,7 +96,7 @@ export interface XslToken extends BaseToken {
     charType?: XMLCharState;
     tokenType: TokenLevelState;
     context?: XslToken|null;
-    error?: boolean;
+    error?: any;
 }
 
 interface XmlElement {

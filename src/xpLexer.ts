@@ -523,10 +523,10 @@ export class XPathLexer {
                                     if (XPathLexer.closeMatchesOpen(nextLabelState, nestedTokenStack)) {
                                         nestedTokenStack.pop();
                                     } else {
-                                        newToken['error'] = true;
+                                        newToken['error'] = ErrorType.XPathUnexpected;
                                     }
                                 } else {
-                                    newToken['error'] = true;
+                                    newToken['error'] = ErrorType.XPathUnexpected;
                                 }
                                 this.updateResult(nestedTokenStack, result, newToken);
                                 tokenChars = [];
@@ -728,7 +728,7 @@ export class XPathLexer {
                         break;
                     }
                 }
-            } else if (isPart2) {if (matchesPart1) {stack.pop();} else token['error'] = true;}
+            } else if (isPart2) {if (matchesPart1) {stack.pop();} else token['error'] = ErrorType.XPathUnexpected;}
         }
     }
 
@@ -1006,6 +1006,12 @@ export class XPathLexer {
     }
 }
 
+export enum ErrorType {
+    None,
+    UnusedVariable,
+    XPathUnexpected
+}
+
 export interface BaseToken {
     line: number;
     startCharacter: number;
@@ -1014,8 +1020,9 @@ export interface BaseToken {
     charType?: number;
     tokenType: number;
     context?: BaseToken|null;
-    error?: boolean;
+    error?: ErrorType;
     nesting?: number;
+    referenced?: boolean;
 }
 
 export interface Token extends BaseToken {
@@ -1023,7 +1030,7 @@ export interface Token extends BaseToken {
     tokenType: TokenLevelState;
     context?: Token|null;
     children?: Token[];
-    error?: boolean;
+    error?: ErrorType;
 }
 
 export class Utilities {

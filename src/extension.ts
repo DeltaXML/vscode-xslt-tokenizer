@@ -13,7 +13,7 @@ import {XslLexer} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider'
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
-import {TokenDiagnostics} from './tokenDiagnostics';
+import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 
 const tokenModifiers = new Map<string, number>();
 
@@ -36,7 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const collection = vscode.languages.createDiagnosticCollection('xslt');
 	let diagnosticsListener = (document: vscode.TextDocument, allTokens: BaseToken[]) => {
-		TokenDiagnostics.calculateDiagnostics(document, allTokens);
+		XsltTokenDiagnostics.calculateDiagnostics(document, allTokens);
 	}
 
 	// syntax highlighters
