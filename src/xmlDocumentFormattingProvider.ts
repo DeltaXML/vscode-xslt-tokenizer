@@ -21,15 +21,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	public indentMixedContent = false;
 	private xslLexer: XslLexer;
 
-
-	public provideOnType = false;
 	private onTypeLineEmpty = false;
-	private onTypeCh = '';
-	private onTypePosition: vscode.Position | null = null;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
 	constructor(xsltConfiguration: LanguageConfiguration) {
-		this.xslLexer = new XslLexer(xsltConfiguration, () => {});
+		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 	}
 

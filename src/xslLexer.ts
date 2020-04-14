@@ -125,12 +125,9 @@ export class XslLexer {
     private entityContext = EntityPosition.text;
     private languageConfiguration: LanguageConfiguration;
     private skipTokenChar = false;
-    private diagnostics: BaseToken[] = [];
-    public fetchDiagnosticTokens:  (param: BaseToken[]) => void;
 
-    constructor(languageConfiguration: LanguageConfiguration, fetchDiagnostics: (param: BaseToken[]) => void) {
+    constructor(languageConfiguration: LanguageConfiguration) {
         this.languageConfiguration = languageConfiguration;
-        this.fetchDiagnosticTokens = fetchDiagnostics;
     }
 
     public static getTextmateTypeLegend(): string[] {
@@ -816,9 +813,6 @@ export class XslLexer {
         } 
         if (this.timerOn) {
             console.timeEnd('xslLexer.analyse');
-        }
-        if (this.fetchDiagnosticTokens) {
-            this.fetchDiagnosticTokens(result);
         }
         return result;
     }

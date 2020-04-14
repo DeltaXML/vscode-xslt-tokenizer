@@ -34,8 +34,8 @@ let customTaskProvider: vscode.Disposable | undefined;
 export function activate(context: vscode.ExtensionContext) {
 
 	const collection = vscode.languages.createDiagnosticCollection('xslt');
-	let diagnosticsListener: (param: BaseToken[]) => void = (baseTokens: BaseToken[]) => {
-		console.log(baseTokens.length);
+	let diagnosticsListener = (document: vscode.TextDocument, baseTokens: BaseToken[]) => {
+		console.log(document.uri.toString() + ' ' + baseTokens.length);
 	}
 
 	// syntax highlighters
@@ -43,12 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
-	let xsltFormatterOnType = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
-	xsltFormatterOnType.provideOnType = true;
-
 	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
-	let xmlFormatterOnType = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
-	xmlFormatterOnType.provideOnType = true;
 
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', 
@@ -56,14 +51,14 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xslt', 
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt', 
-		xsltFormatterOnType, '\n'));
+		xsltFormatter, '\n'));
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xml', 
 		xmlFormatter));
 	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xml', 
 		xmlFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xml', 
-		xmlFormatterOnType, '\n'));
+		xmlFormatter, '\n'));
 
 	let workspaceRoot = vscode.workspace.rootPath;
 	if (!workspaceRoot) {
@@ -99,25 +94,25 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 
 export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 
-	public diagnosticsListener: (param: BaseToken[]) => void;
 	private xslLexer: XslLexer;
-	private allTokens: BaseToken[] = [];
+	private callback: (document: vscode.TextDocument, tokens: BaseToken[]) => void
 
-	public constructor(callback: (param: BaseToken[]) => void) {
-		this.diagnosticsListener = callback;
-		this.xslLexer = new XslLexer(XSLTConfiguration.configuration, this.diagnosticsListener);
+	public constructor(callback: (document: vscode.TextDocument, tokens: BaseToken[]) => void) {
+		this.callback = callback;
+		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
+		this.xslLexer.provideCharLevelState = true;
 	}
 
-
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
-		//console.log('xslt: provideDocumentSemanticTokens: ' + document.fileName);
-
-		this.allTokens = this.xslLexer.analyse(document.getText());
+		const allTokens = this.xslLexer.analyse(document.getText());
+		// delay callback to allow rendering of semantic tokens first:
+		setTimeout(() => {
+			this.callback(document, allTokens);
+		}, 5);
 		const builder = new vscode.SemanticTokensBuilder();
-		this.allTokens.forEach((token) => {
+		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
-		//console.log('return tokens count: ' + allTokens.length);
 		return builder.build();
 	}
 }
