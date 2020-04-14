@@ -36,7 +36,13 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const collection = vscode.languages.createDiagnosticCollection('xslt');
 	let diagnosticsListener = (document: vscode.TextDocument, allTokens: BaseToken[]) => {
-		XsltTokenDiagnostics.calculateDiagnostics(document, allTokens);
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens);
+		if (diagnostics.length > 0) {
+			collection.set(document.uri, diagnostics);
+		} else {
+			collection.clear();
+		}
+
 	}
 
 	// syntax highlighters

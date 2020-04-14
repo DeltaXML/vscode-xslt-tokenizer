@@ -44,9 +44,7 @@ export class XsltTokenDiagnostics {
 	private static readonly xslVariable = 'xsl:variable';
 	private static readonly xslNameAtt = 'name';
 
-	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[]): boolean => {
-		let result: vscode.TextEdit[] = [];
-
+	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 
 		let inScopeVariablesList: VariableData[] = [];
@@ -56,6 +54,7 @@ export class XsltTokenDiagnostics {
 		let tagElementName = '';
 		let preXPathVariable = false;
 		let variableData: VariableData|null = null;
+		let xsltVariableDeclarations: BaseToken[] = [];
 
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
@@ -86,6 +85,7 @@ export class XsltTokenDiagnostics {
 								// start-tag ended, we're now within the new element scope:
 								if (variableData != null) {
 									elementStack.push({currentVariable: variableData, variables: inScopeVariablesList});
+									xsltVariableDeclarations.push(variableData.token);
 								} else {
 									elementStack.push({variables: inScopeVariablesList});
 								}
@@ -95,7 +95,9 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 								// it may be a self-closed variable:
 								if (variableData != null) {
-									inScopeVariablesList.push(variableData);								}
+									inScopeVariablesList.push(variableData);
+									xsltVariableDeclarations.push(variableData.token);
+								}
 								break;
 							case XMLCharState.lCt:
 								// start of an element close-tag:
@@ -132,10 +134,8 @@ export class XsltTokenDiagnostics {
 
 				switch (xpathTokenType) {
 					case TokenLevelState.variable:
-						let fullVarName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						let varName = fullVarName.substr(1);
 						if (!preXPathVariable) {
-							XsltTokenDiagnostics.resolveVariableReference(varName, inScopeVariablesList, elementStack);
+							XsltTokenDiagnostics.resolveVariableReference(document, token, inScopeVariablesList, elementStack);
 						}
 						preXPathVariable = false;
 						break;
@@ -185,7 +185,7 @@ export class XsltTokenDiagnostics {
 				}
 			}
 		});
-		return true;
+		return XsltTokenDiagnostics.getProblemTokens(xsltVariableDeclarations);
 	}
 
 	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
@@ -197,7 +197,10 @@ export class XsltTokenDiagnostics {
 		return valueText;
 	}
 
-	private static resolveVariableReference(varName: string, inScopeVariables: VariableData[], elementStack: ElementData[]) {
+	private static resolveVariableReference(document: vscode.TextDocument, variableReference: BaseToken, inScopeVariables: VariableData[], elementStack: ElementData[]) {
+		let fullVarName = XsltTokenDiagnostics.getTextForToken(variableReference.line, variableReference, document);
+		let varName = fullVarName.substr(1);
+
 		let resolved = false;
 		for (let data of inScopeVariables) {
 			if (data.name === varName) {
@@ -216,9 +219,23 @@ export class XsltTokenDiagnostics {
 						break;
 					}
 				}
+				if (resolved) {
+					break;
+				}
 			}			
 		}
 	}
+
+	private static getProblemTokens(tokens: BaseToken[]): vscode.Diagnostic[] {
+		let result = [];
+		for (let token of tokens) {
+			if (token.referenced === undefined) {
+				result.push(this.createDiagnostic(token));
+			}
+		}
+		return result;
+	}
+
 
 	private static createDiagnostic(token: BaseToken): vscode.Diagnostic {
 		let line = token.line;
