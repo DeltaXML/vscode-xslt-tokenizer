@@ -161,15 +161,22 @@ export class XsltTokenDiagnostics {
 								preXPathVariable = true;
 								break;
 							case 'then':
-								//ifElseVariablesStack.push
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
 							case 'satisfies':
 								preXPathVariable = false;
+								break;
 							case 'else':
-								// if (ifElseStack.length > 0) {
-								// 	ifElseStack.pop();
-								// }
+								if (xpathStack.length > 0) {
+									let poppedData = xpathStack.pop();
+									inScopeXPathVariablesList = (poppedData)? poppedData.variables: [];
+									preXPathVariable = false;
+								} else {
+									inScopeXPathVariablesList = [];
+									preXPathVariable = false;
+								}
 								break;
 						}
 						break;
@@ -206,35 +213,6 @@ export class XsltTokenDiagnostics {
 		let valueRange = currentLine.range.with(startPos, endPos);
 		let valueText = document.getText(valueRange);
 		return valueText;
-	}
-
-	private static resolveVariableReference(document: vscode.TextDocument, variableReference: BaseToken, inScopeVariables: VariableData[], elementStack: ElementData[]) {
-		let fullVarName = XsltTokenDiagnostics.getTextForToken(variableReference.line, variableReference, document);
-		let varName = fullVarName.substr(1);
-
-		let resolved = false;
-		for (let data of inScopeVariables) {
-			if (data.name === varName) {
-				resolved = true;
-				data.token['referenced'] = true;
-				break;
-			}
-		}
-		if (!resolved) {
-			for (let i = elementStack.length - 1; i > -1; i--) {
-				let inheritedVariables = elementStack[i].variables;
-				for (let data of inheritedVariables) {
-					if (data.name === varName) {
-						resolved = true;
-						data.token['referenced'] = true;
-						break;
-					}
-				}
-				if (resolved) {
-					break;
-				}
-			}			
-		}
 	}
 
 	static resolveXPathVariableReference(document: vscode.TextDocument, token: BaseToken, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]) {
