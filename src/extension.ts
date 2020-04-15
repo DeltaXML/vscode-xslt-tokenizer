@@ -10,7 +10,7 @@
 import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition, BaseToken} from './xpLexer';
 import {XslLexer} from './xslLexer';
-import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider'
+import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
@@ -43,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
 			collection.clear();
 		}
 
-	}
+	};
 
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(diagnosticsListener), legend));
@@ -94,7 +94,6 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
-		builder
 		return builder.build();
 	}
 }
@@ -102,7 +101,7 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 
 	private xslLexer: XslLexer;
-	private callback: (document: vscode.TextDocument, tokens: BaseToken[]) => void
+	private callback: (document: vscode.TextDocument, tokens: BaseToken[]) => void;
 
 	public constructor(callback: (document: vscode.TextDocument, tokens: BaseToken[]) => void) {
 		this.callback = callback;
