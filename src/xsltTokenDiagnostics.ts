@@ -33,6 +33,7 @@ interface ElementData {
 }
 interface XPathData {
 	variables: VariableData[];
+	preXPathVariable: boolean;
 }
 
 interface VariableData {
@@ -177,7 +178,7 @@ export class XsltTokenDiagnostics {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:	
-								xpathStack.push({variables: inScopeXPathVariablesList});	
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});	
 								inScopeXPathVariablesList = [];						
 								break;
 							case CharLevelState.rB:
@@ -186,13 +187,8 @@ export class XsltTokenDiagnostics {
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
 									inScopeXPathVariablesList = (poppedData)? poppedData.variables: [];
+									preXPathVariable = (poppedData)? poppedData.preXPathVariable: false;
 								} else {
-								}
-								break;
-							case CharLevelState.dSep:
-								let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-								if (valueText === ':=') {
-
 								}
 								break;
 						}

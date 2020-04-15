@@ -16,7 +16,7 @@
 
     <xsl:template match="book" mode="#all">
         <xsl:variable name="var2" as="xs:integer"
-            select="(let $var2 := 25 return (let $var2 := 28 return $var2)), $var2j"/>
+            select="(let $var2 := 25, $var3 return $var3, $var2, (let $var2 := 28 return $var2)), $var2"/>
         <xsl:copy>
             <xsl:apply-templates select="$var2" mode="#current"/>
         </xsl:copy>
