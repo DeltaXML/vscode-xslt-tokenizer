@@ -30,7 +30,9 @@ enum AttributeType {
 interface ElementData {
 	variables: VariableData[]
 	currentVariable?: VariableData,
-
+}
+interface XPathData {
+	variables: VariableData[];
 }
 
 interface VariableData {
@@ -39,7 +41,6 @@ interface VariableData {
 }
 
 export class XsltTokenDiagnostics {
-
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
 	private static readonly xslFunction = 'xsl:function';
@@ -51,6 +52,8 @@ export class XsltTokenDiagnostics {
 
 		let inScopeVariablesList: VariableData[] = [];
 		let elementStack: ElementData[] = [];
+		let inScopeXPathVariablesList: VariableData[] = [];
+		let xpathStack: XPathData[] = [];
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
@@ -58,11 +61,15 @@ export class XsltTokenDiagnostics {
 		let variableData: VariableData|null = null;
 		let xsltVariableDeclarations: BaseToken[] = [];
 
+
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
 
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			if (isXMLToken) {
+				inScopeXPathVariablesList = [];
+				xpathStack = [];
+				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
 				switch (xmlTokenType) {
@@ -133,13 +140,15 @@ export class XsltTokenDiagnostics {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 
-
 				switch (xpathTokenType) {
 					case TokenLevelState.variable:
-						if (!preXPathVariable) {
-							XsltTokenDiagnostics.resolveVariableReference(document, token, inScopeVariablesList, elementStack);
+						if (preXPathVariable) {
+							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							inScopeXPathVariablesList.push({token: token, name: fullVariableName.substring(1)});
+							xsltVariableDeclarations.push(token);
+						} else {
+							XsltTokenDiagnostics.resolveXPathVariableReference(document, token, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
 						}
-						preXPathVariable = false;
 						break;
 					case TokenLevelState.complexExpression:
 						let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
@@ -149,11 +158,13 @@ export class XsltTokenDiagnostics {
 							case 'let':
 							case 'some':
 								preXPathVariable = true;
+								break;
 							case 'then':
-								//ifElseStack.push(1);
+								//ifElseVariablesStack.push
 								break;
 							case 'return':
 							case 'satisfies':
+								preXPathVariable = false;
 							case 'else':
 								// if (ifElseStack.length > 0) {
 								// 	ifElseStack.pop();
@@ -166,15 +177,17 @@ export class XsltTokenDiagnostics {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:	
-								//complexStateStack.push([0, []]);							
+								xpathStack.push({variables: inScopeXPathVariablesList});	
+								inScopeXPathVariablesList = [];						
 								break;
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
-								// if (complexStateStack.length > 0) {
-								// 	complexStateStack.pop();
-								// } else {
-								// }
+								if (xpathStack.length > 0) {
+									let poppedData = xpathStack.pop();
+									inScopeXPathVariablesList = (poppedData)? poppedData.variables: [];
+								} else {
+								}
 								break;
 							case CharLevelState.dSep:
 								let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
@@ -226,6 +239,56 @@ export class XsltTokenDiagnostics {
 				}
 			}			
 		}
+	}
+
+	static resolveXPathVariableReference(document: vscode.TextDocument, token: BaseToken, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]) {
+		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
+		let varName = fullVarName.substr(1);
+
+		let resolved = this.resolveVariableName(inScopeXPathVariablesList, varName);
+
+		if (!resolved) {
+			resolved = this.resolveStackVariableName(xpathStack, varName);			
+		}
+
+		if (!resolved) {
+			resolved = this.resolveVariableName(inScopeVariablesList, varName);			
+		}
+
+		if (!resolved) {
+			resolved = this.resolveStackVariableName(elementStack, varName);			
+		}
+
+	}
+
+	private static resolveVariableName(variableList: VariableData[], varName: string): boolean {
+		let resolved = false;
+		for (let data of variableList) {
+			if (data.name === varName) {
+				resolved = true;
+				data.token['referenced'] = true;
+				break;
+			}
+		}
+		return resolved;
+	}
+
+	private static resolveStackVariableName(elementStack: ElementData[]|XPathData[], varName: string): boolean {
+		let resolved = false;
+		for (let i = elementStack.length - 1; i > -1; i--) {
+			let inheritedVariables = elementStack[i].variables;
+			for (let data of inheritedVariables) {
+				if (data.name === varName) {
+					resolved = true;
+					data.token['referenced'] = true;
+					break;
+				}
+			}
+			if (resolved) {
+				break;
+			}
+		}
+		return resolved;
 	}
 
 	private static getProblemTokens(tokens: BaseToken[]): vscode.Diagnostic[] {
