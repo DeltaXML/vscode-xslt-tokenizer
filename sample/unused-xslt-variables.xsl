@@ -17,6 +17,16 @@
     <xsl:template match="book" mode="#all">
         <xsl:variable name="var2" as="xs:integer"
             select="let $var2 := 25 return $var2 + $varP"/>
+        <book>
+            this is better
+        </book>
+        <nest>
+            <nest>
+                <nest>
+                    abcd
+                </nest>
+            </nest>
+        </nest>
         <xsl:copy>
             <xsl:apply-templates select="$var2" mode="#current"/>
         </xsl:copy>
