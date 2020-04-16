@@ -1633,7 +1633,7 @@ startCharacter: 4
 tokenType: TokenLevelState.complexExpression,
 children:[
 {value: `function`,
-tokenType: TokenLevelState.operator,
+tokenType: TokenLevelState.anonymousFunction,
 line: 0,
 length: 8,
 startCharacter: 11
@@ -1692,7 +1692,7 @@ startCharacter: 37
 tokenType: TokenLevelState.operator,
 children:[
 {value: `function`,
-tokenType: TokenLevelState.operator,
+tokenType: TokenLevelState.anonymousFunction,
 line: 0,
 length: 8,
 startCharacter: 40

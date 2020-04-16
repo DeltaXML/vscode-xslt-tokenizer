@@ -69,6 +69,7 @@ export enum TokenLevelState {
     nodeNameTest,        // (xsl) class
     complexExpression, // (xsl) keyword
     function,
+    anonymousFunction
 }
 
 export enum ExitCondition {
@@ -739,7 +740,7 @@ export class XPathLexer {
             } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
                 prevToken.tokenType = TokenLevelState.complexExpression;
             } else if (prevToken.value === 'function') {
-                prevToken.tokenType = TokenLevelState.operator;
+                prevToken.tokenType = TokenLevelState.anonymousFunction;
             } else {
                 prevToken.tokenType = TokenLevelState.function;
             }

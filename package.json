@@ -337,6 +337,11 @@
 				"description": "XML Entity Reference - e.g. '&lt;'"
 			},
 			{
+				"id": "anonymousFunction",
+				"superType": "struct",
+				"description": "Declaration of anonymous XPath Function"
+			},
+			{
 				"id": "xmlComment",
 				"superType": "comment",
 				"description": "XML Comment"
