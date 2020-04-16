@@ -149,8 +149,7 @@ export class XsltTokenDiagnostics {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							if (preXPathVariable) {
 								inScopeVariablesList.push({token: token, name: fullVariableName.substring(1)});
-							}
-							if (anonymousFunctionParams) {
+							} else if (anonymousFunctionParams) {
 								anonymousFunctionParamList.push({token: token, name: fullVariableName.substring(1)});
 							}
 							xsltVariableDeclarations.push(token);
@@ -192,6 +191,7 @@ export class XsltTokenDiagnostics {
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
 								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								preXPathVariable = false;
 								if (anonymousFunctionParams) {	
 									// handle case: function($a) {$a + 8} pass params to inside '{...}'				
 									inScopeXPathVariablesList = anonymousFunctionParamList;
@@ -202,10 +202,16 @@ export class XsltTokenDiagnostics {
 								}	
 								break;
 							case CharLevelState.lB:
-								anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
-								// no break intentional	
+								// handle case: function($a)
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								preXPathVariable = false;								
+								if (!anonymousFunctionParams && prevToken?.tokenType !== TokenLevelState.nodeType) {
+									anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
+								}
+								break;	
 							case CharLevelState.lPr:
 								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								preXPathVariable = false;	
 								inScopeXPathVariablesList = [];
 								break;
 							case CharLevelState.rB:
