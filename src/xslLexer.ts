@@ -677,6 +677,8 @@ export class XslLexer {
                             break;
                         case XMLCharState.rSq:
                         case XMLCharState.rDq:
+                        case XMLCharState.escDqAvt:
+                        case XMLCharState.escSqAvt:
                             if (isExpandTextAttribute) {
                                 let attValue = tokenChars.join('');
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
