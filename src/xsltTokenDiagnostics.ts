@@ -147,14 +147,16 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.variable:
 						if (preXPathVariable || anonymousFunctionParams) {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							if (preXPathVariable) {
-								inScopeVariablesList.push({token: token, name: fullVariableName.substring(1)});
-							} else if (anonymousFunctionParams) {
-								anonymousFunctionParamList.push({token: token, name: fullVariableName.substring(1)});
+						    if (anonymousFunctionParams) {
+							    anonymousFunctionParamList.push({token: token, name: fullVariableName.substring(1)});
+							} else if (preXPathVariable) {
+								inScopeXPathVariablesList.push({token: token, name: fullVariableName.substring(1)});
 							}
 							xsltVariableDeclarations.push(token);
 						} else {
-							XsltTokenDiagnostics.resolveXPathVariableReference(document, token, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
+							// TODO: don't include pending variable declarations when resolving
+							let inScopeVariables = (preXPathVariable)? []: inScopeXPathVariablesList;
+							XsltTokenDiagnostics.resolveXPathVariableReference(document, token, inScopeVariables, xpathStack, inScopeVariablesList, elementStack);
 						}
 						break;
 					case TokenLevelState.complexExpression:
@@ -172,7 +174,6 @@ export class XsltTokenDiagnostics {
 								break;
 							case 'return':
 							case 'satisfies':
-							case ':=':
 								preXPathVariable = false;
 								break;
 							case 'else':

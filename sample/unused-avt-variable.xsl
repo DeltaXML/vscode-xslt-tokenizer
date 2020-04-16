@@ -1,4 +1,4 @@
-<xsl:sequence select="let $q := function($a, $b) {$a + $b + $q} return $qa"/>
+<xsl:sequence select="let $q := function($a) {$q} return $qa"/>
 
 
 
