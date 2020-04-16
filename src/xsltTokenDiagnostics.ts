@@ -54,14 +54,16 @@ export class XsltTokenDiagnostics {
 		let inScopeVariablesList: VariableData[] = [];
 		let elementStack: ElementData[] = [];
 		let inScopeXPathVariablesList: VariableData[] = [];
+		let anonymousFunctionParamList: VariableData[] = [];
 		let xpathStack: XPathData[] = [];
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
 		let preXPathVariable = false;
+		let anonymousFunctionParams = false;
 		let variableData: VariableData|null = null;
 		let xsltVariableDeclarations: BaseToken[] = [];
-
+		let prevToken: BaseToken|null = null;
 
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
@@ -143,9 +145,14 @@ export class XsltTokenDiagnostics {
 
 				switch (xpathTokenType) {
 					case TokenLevelState.variable:
-						if (preXPathVariable) {
+						if (preXPathVariable || anonymousFunctionParams) {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							inScopeXPathVariablesList.push({token: token, name: fullVariableName.substring(1)});
+							if (preXPathVariable) {
+								inScopeVariablesList.push({token: token, name: fullVariableName.substring(1)});
+							}
+							if (anonymousFunctionParams) {
+								anonymousFunctionParamList.push({token: token, name: fullVariableName.substring(1)});
+							}
 							xsltVariableDeclarations.push(token);
 						} else {
 							XsltTokenDiagnostics.resolveXPathVariableReference(document, token, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
@@ -166,6 +173,7 @@ export class XsltTokenDiagnostics {
 								break;
 							case 'return':
 							case 'satisfies':
+							case ':=':
 								preXPathVariable = false;
 								break;
 							case 'else':
@@ -182,11 +190,23 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.operator:
 						switch (xpathCharType) {
+							case CharLevelState.lBr:
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								if (anonymousFunctionParams) {	
+									// handle case: function($a) {$a + 8} pass params to inside '{...}'				
+									inScopeXPathVariablesList = anonymousFunctionParamList;
+									anonymousFunctionParamList = [];
+									anonymousFunctionParams = false;
+								} else {
+									inScopeXPathVariablesList = [];
+								}	
+								break;
 							case CharLevelState.lB:
+								anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
+								// no break intentional	
 							case CharLevelState.lPr:
-							case CharLevelState.lBr:	
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});	
-								inScopeXPathVariablesList = [];						
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								inScopeXPathVariablesList = [];
 								break;
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
@@ -202,6 +222,7 @@ export class XsltTokenDiagnostics {
 						break;
 				}
 			}
+			prevToken = token;
 		});
 		return XsltTokenDiagnostics.getProblemTokens(xsltVariableDeclarations);
 	}
