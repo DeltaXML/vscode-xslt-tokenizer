@@ -10,7 +10,7 @@ interface TokenLight {
   tokenType: TokenLevelState;
   context?: TokenLight|null;
   children?: TokenLight[];
-  error?: boolean;
+  error?: number;
 }
 
 let pos: LexPosition = {line: 0, startCharacter: 0, documentOffset: 0};
@@ -744,7 +744,7 @@ children:[
 tokenType: TokenLevelState.number
 },
 {value: `,`,
-error: true,
+error: 2,
 tokenType: TokenLevelState.operator
 },
 {value: `2`,
