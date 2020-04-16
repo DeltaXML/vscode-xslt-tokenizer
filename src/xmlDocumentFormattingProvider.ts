@@ -198,6 +198,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						}
 						break;
 					case XSLTokenLevelState.attributeName:
+					case XSLTokenLevelState.xmlnsName:
 						// test: xml:space
 						attributeValueOffset = 0;
 						attributeNameOnNewLine = lineNumberDiff > 0;
