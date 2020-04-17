@@ -289,12 +289,11 @@ export class XsltTokenDiagnostics {
 
 	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean): boolean {
 		let resolved = false;
-		let index = 0;
 		let decrementedLength = variableList.length - 1;
 		// last items in list of declared parameters must be resolved first:
 		for (let i = decrementedLength; i > -1; i--) {
 			let data = variableList[i];
-			if (xpathVariableCurrentlyBeingDefined && index === decrementedLength) {
+			if (xpathVariableCurrentlyBeingDefined && i === decrementedLength) {
 				// do nothing: we skip last item in list as it's currently being defined
 			} else if (data.name === varName) {
 				resolved = true;
