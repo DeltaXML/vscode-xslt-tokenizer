@@ -1010,6 +1010,7 @@ export class XPathLexer {
 export enum ErrorType {
     None,
     UnusedVariable,
+    UnresolvedVarReference,
     XPathUnexpected
 }
 

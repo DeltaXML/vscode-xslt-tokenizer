@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState} from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType } from './xpLexer';
 
 enum HasCharacteristic {
 	unknown,
@@ -47,6 +47,8 @@ export class XsltTokenDiagnostics {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
 	private static readonly xslFunction = 'xsl:function';
+	private static xsltVariableReferences: BaseToken[] = [];
+
 
 	private static readonly xslNameAtt = 'name';
 
@@ -66,6 +68,7 @@ export class XsltTokenDiagnostics {
 		let anonymousFunctionParams = false;
 		let variableData: VariableData|null = null;
 		let xsltVariableDeclarations: BaseToken[] = [];
+		let xsltVariableReferences: BaseToken[] = [];
 		let prevToken: BaseToken|null = null;
 
 		allTokens.forEach((token) => {
@@ -161,7 +164,11 @@ export class XsltTokenDiagnostics {
 								xsltVariableDeclarations.push(token);
 							} else if (xpathVariableCurrentlyBeingDefined) {
 								// e.g.  with 'let $b := $a' the 'let $b' part has already occurred, the $a part needs to be resolved -  preXPathVariable is true also
-								XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
+								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+									xpathStack, inScopeVariablesList, elementStack);
+								if (unResolvedToken != null) {
+									xsltVariableReferences.push(unResolvedToken);
+								}
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
@@ -257,7 +264,7 @@ export class XsltTokenDiagnostics {
 			}
 			prevToken = token;
 		});
-		return XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(xsltVariableDeclarations);
+		return XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, xsltVariableReferences);
 	}
 
 	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
@@ -269,9 +276,10 @@ export class XsltTokenDiagnostics {
 		return valueText;
 	}
 
-	static resolveXPathVariableReference(document: vscode.TextDocument, token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]) {
+	static resolveXPathVariableReference(document: vscode.TextDocument, token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken|null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.substr(1);
+		let result: BaseToken|null = null;
 
 		let resolved = this.resolveVariableName(inScopeXPathVariablesList, varName, xpathVariableCurrentlyBeingDefined);
 		if (!resolved) {
@@ -283,7 +291,11 @@ export class XsltTokenDiagnostics {
 		if (!resolved) {
 			resolved = this.resolveStackVariableName(elementStack, varName);			
 		}
-		// TODO: add diagnostic for unresolved token
+		if (!resolved) {
+			token['error'] = ErrorType.UnresolvedVarReference;
+			result = token;
+		}
+		return result;
 
 	}
 
@@ -318,12 +330,15 @@ export class XsltTokenDiagnostics {
 		return resolved;
 	}
 
-	private static getDiagnosticsFromUnusedVariableTokens(tokens: BaseToken[]): vscode.Diagnostic[] {
+	private static getDiagnosticsFromUnusedVariableTokens(document: vscode.TextDocument, unusedVariableTokens: BaseToken[], unresolvedVariableTokens: BaseToken[]): vscode.Diagnostic[] {
 		let result = [];
-		for (let token of tokens) {
+		for (let token of unusedVariableTokens) {
 			if (token.referenced === undefined) {
 				result.push(this.createUnusedVarDiagnostic(token));
 			}
+		}
+		for (let token of unresolvedVariableTokens) {
+				result.push(this.createUnresolvedVarDiagnostic(document, token));
 		}
 		return result;
 	}
@@ -347,14 +362,9 @@ export class XsltTokenDiagnostics {
 		let endChar = token.startCharacter + token.length;
 		return {
 			code: '',
-			message: 'variable is unused',
+			message: `Cannot find variable/parmeter for: ${token.value}`,
 			range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
-			severity: vscode.DiagnosticSeverity.Hint,
-			tags: [vscode.DiagnosticTag.Unnecessary],
-			source: '',
-			relatedInformation: [
-				new vscode.DiagnosticRelatedInformation(new vscode.Location(document.uri, new vscode.Range(new vscode.Position(1, 8), new vscode.Position(1, 9))), 'first assignment to `x`')
-			]
+			severity: vscode.DiagnosticSeverity.Warning,
 		}
 	}
 }
