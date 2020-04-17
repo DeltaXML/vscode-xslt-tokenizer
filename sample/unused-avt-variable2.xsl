@@ -20,7 +20,7 @@
                         'only-one':    function($a) {$a}
                     } 
                 return $try"/>
-        <xsl:s select="let $init := 5, let $a := function($p1 as map(*), $init) {$p1} return $a, $init"/>
+        <xsl:sequence select="let $init1 := 5, $a := function($p1, $in) {$p1} return $a, $init1"/>
     </xsl:template>
     
     

@@ -34,6 +34,8 @@ let customTaskProvider: vscode.Disposable | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 
+	let updateDiagnostics 
+
 	const collection = vscode.languages.createDiagnosticCollection('xslt');
 	let diagnosticsListener = (document: vscode.TextDocument, allTokens: BaseToken[]) => {
 		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens);
@@ -41,9 +43,23 @@ export function activate(context: vscode.ExtensionContext) {
 			collection.set(document.uri, diagnostics);
 		} else {
 			collection.clear();
-		}
+		};
 
 	};
+
+	let xslLexerForDiagnostics = new XslLexer(XSLTConfiguration.configuration);
+
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
+		if (editor) {
+			xslLexerForDiagnostics.provideCharLevelState = true;
+			let tokensForDiagnostics = xslLexerForDiagnostics.analyse(editor.document.getText())
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(editor.document, tokensForDiagnostics);
+			if (diagnostics.length > 0) {
+				collection.set(editor.document.uri, diagnostics);
+			} else {
+				collection.clear();
+			};		}
+	}));
 
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(diagnosticsListener), legend));
