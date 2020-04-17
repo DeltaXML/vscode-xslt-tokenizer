@@ -2,13 +2,13 @@
 
 
 <!-- 
-    * This is a stylesheet for converting XML to JSON. 
-    * It expects the XML to be in the format produced by the XSLT 3.0 function
-    * fn:json-to-xml(), but is designed to be highly customizable.
-    *
-    * The stylesheet is made available under the terms of the W3C software notice and license
-    * at http://www.w3.org/Consortium/Legal/copyright-software-19980720
-    *
+     * This is a stylesheet for converting XML to JSON. 
+     * It expects the XML to be in the format produced by the XSLT 3.0 function
+     * fn:json-to-xml(), but is designed to be highly customizable.
+     *
+     * The stylesheet is made available under the terms of the W3C software notice and license
+     * at http://www.w3.org/Consortium/Legal/copyright-software-19980720
+     *
 -->    
 
 <xsl:package
@@ -135,13 +135,13 @@
     </xsl:template>
     
     <!-- Template rule for fn:string elements in which 
-    special characters are already escaped -->
+         special characters are already escaped -->
     <xsl:template match="fn:string[@escaped='true']" mode="indent no-indent">
         <xsl:sequence select="concat($quot, ., $quot)"/>
     </xsl:template>
     
     <!-- Template rule for fn:string elements in which 
-    special characters need to be escaped -->
+         special characters need to be escaped -->
     <xsl:template match="fn:string[not(@escaped='true')]" mode="indent no-indent">
         <xsl:sequence select="concat($quot, j:escape(.), $quot)"/>
     </xsl:template>
@@ -162,13 +162,13 @@
     </xsl:template>
     
     <!-- Template rule matching a key within a map where 
-    special characters in the key are already escaped -->
+         special characters in the key are already escaped -->
     <xsl:template match="fn:*[@key-escaped='true']/@key" mode="key-attribute">
         <xsl:value-of select="concat($quot, ., $quot)"/>
     </xsl:template>
     
     <!-- Template rule matching a key within a map where 
-    special characters in the key need to be escaped -->
+         special characters in the key need to be escaped -->
     <xsl:template match="fn:*[not(@key-escaped='true')]/@key" mode="key-attribute">
         <xsl:value-of select="concat($quot, j:escape(.), $quot)"/>
     </xsl:template>
@@ -267,7 +267,7 @@
     </xsl:function>
     
     <!-- Function to output whitespace indentation based on 
-    the depth of the node supplied as a parameter -->
+         the depth of the node supplied as a parameter -->
     
     <xsl:function name="j:indent" as="text()" visibility="public">
         <xsl:param name="depth" as="xs:integer"/>

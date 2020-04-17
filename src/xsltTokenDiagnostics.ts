@@ -2,10 +2,10 @@
  *  Copyright (c) 2020 DeltaXML Ltd. and others.
  *
  *  Contributors:
- *  DeltaXML Ltd. - xmlDocumentFormattingProvider
+ *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration} from './xslLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
 
 enum HasCharacteristic {
@@ -30,10 +30,12 @@ enum AttributeType {
 interface ElementData {
 	variables: VariableData[]
 	currentVariable?: VariableData,
+	xpathVariableCurrentlyBeingDefined?: boolean;
 }
 interface XPathData {
 	variables: VariableData[];
 	preXPathVariable: boolean;
+	xpathVariableCurrentlyBeingDefined: boolean;
 }
 
 interface VariableData {
@@ -52,7 +54,7 @@ export class XsltTokenDiagnostics {
 		let lineNumber = -1;
 
 		let inScopeVariablesList: VariableData[] = [];
-		let xpathVariableCurrentlyBeingDefined: VariableData| null = null;
+		let xpathVariableCurrentlyBeingDefined: boolean;
 		let elementStack: ElementData[] = [];
 		let inScopeXPathVariablesList: VariableData[] = [];
 		let anonymousFunctionParamList: VariableData[] = [];
@@ -72,7 +74,7 @@ export class XsltTokenDiagnostics {
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
-				xpathVariableCurrentlyBeingDefined = null;
+				xpathVariableCurrentlyBeingDefined = false;
 				xpathStack = [];
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
@@ -154,13 +156,12 @@ export class XsltTokenDiagnostics {
 							    anonymousFunctionParamList.push(currentVariable);
 							} else if (preXPathVariable) {
 								inScopeXPathVariablesList.push(currentVariable);
-								xpathVariableCurrentlyBeingDefined = currentVariable;
+								xpathVariableCurrentlyBeingDefined = true;
 							}
 							xsltVariableDeclarations.push(token);
 						} else {
-							// TODO: don't include pending variable declarations when resolving
-							// let inScopeVariables = (preXPathVariable)? []: inScopeXPathVariablesList;
-							XsltTokenDiagnostics.resolveXPathVariableReference(document, token, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
+							// don't include any current pending variable declarations when resolving
+							XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
 						}
 						break;
 					case TokenLevelState.complexExpression:
@@ -173,12 +174,12 @@ export class XsltTokenDiagnostics {
 								preXPathVariable = true;
 								break;
 							case 'then':
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
 							case 'satisfies':
-								xpathVariableCurrentlyBeingDefined = null;
+								xpathVariableCurrentlyBeingDefined = false;
 								preXPathVariable = false;
 								break;
 							case 'else':
@@ -196,42 +197,49 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.operator:
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								if (anonymousFunctionParams) {	
 									// handle case: function($a) {$a + 8} pass params to inside '{...}'				
 									inScopeXPathVariablesList = anonymousFunctionParamList;
 									anonymousFunctionParamList = [];
 									anonymousFunctionParams = false;
-									if (preXPathVariable && inScopeXPathVariablesList.length > 0) {
-										// the current variable being defined must not yet be considered 'in scope' for the anonymous function:
-										//xpathVariableCurrentlyBeingDefined = inScopeXPathVariablesList[inScopeXPathVariablesList.length -1];
-									}
 								} else {
 									inScopeXPathVariablesList = [];
 								}	
 								preXPathVariable = false;
+								xpathVariableCurrentlyBeingDefined = false;
 								break;
 							case CharLevelState.lB:
 								// handle case: function($a)
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
-								preXPathVariable = false;								
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+								preXPathVariable = false;	
+								xpathVariableCurrentlyBeingDefined = false;							
 								if (!anonymousFunctionParams && prevToken?.tokenType !== TokenLevelState.nodeType) {
 									anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
 								}
 								break;	
 							case CharLevelState.lPr:
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable});
+								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								preXPathVariable = false;	
 								inScopeXPathVariablesList = [];
+								xpathVariableCurrentlyBeingDefined = false;
 								break;
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
-									inScopeXPathVariablesList = (poppedData)? poppedData.variables: [];
-									preXPathVariable = (poppedData)? poppedData.preXPathVariable: false;
+									if (poppedData) {
+										inScopeXPathVariablesList = poppedData.variables
+										preXPathVariable = poppedData.preXPathVariable
+										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
+									} else {
+										inScopeXPathVariablesList =  [];
+										preXPathVariable = false;
+										xpathVariableCurrentlyBeingDefined = false;
+									}
 								} else {
+									// TODO: add diagnostics for missing close
 								}
 								break;
 						}
@@ -252,30 +260,33 @@ export class XsltTokenDiagnostics {
 		return valueText;
 	}
 
-	static resolveXPathVariableReference(document: vscode.TextDocument, token: BaseToken, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]) {
+	static resolveXPathVariableReference(document: vscode.TextDocument, token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]) {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.substr(1);
 
-		let resolved = this.resolveVariableName(inScopeXPathVariablesList, varName);
-
+		let resolved = this.resolveVariableName(inScopeXPathVariablesList, varName, xpathVariableCurrentlyBeingDefined);
 		if (!resolved) {
 			resolved = this.resolveStackVariableName(xpathStack, varName);			
 		}
-
 		if (!resolved) {
-			resolved = this.resolveVariableName(inScopeVariablesList, varName);			
+			resolved = this.resolveVariableName(inScopeVariablesList, varName, false);			
 		}
-
 		if (!resolved) {
 			resolved = this.resolveStackVariableName(elementStack, varName);			
 		}
+		// TODO: add diagnostic for unresolved token
 
 	}
 
-	private static resolveVariableName(variableList: VariableData[], varName: string): boolean {
+	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean): boolean {
 		let resolved = false;
+		let index = 0;
+		let length = variableList.length;
 		for (let data of variableList) {
-			if (data.name === varName) {
+			index++;
+			if (xpathVariableCurrentlyBeingDefined && index === length) {
+				// do nothing: we skip last item in list as it's currently being defined
+			} else if (data.name === varName) {
 				resolved = true;
 				data.token['referenced'] = true;
 				break;
@@ -288,13 +299,9 @@ export class XsltTokenDiagnostics {
 		let resolved = false;
 		for (let i = elementStack.length - 1; i > -1; i--) {
 			let inheritedVariables = elementStack[i].variables;
-			for (let data of inheritedVariables) {
-				if (data.name === varName) {
-					resolved = true;
-					data.token['referenced'] = true;
-					break;
-				}
-			}
+			let beingDefinedInit = elementStack[i].xpathVariableCurrentlyBeingDefined;
+			let beingDefined = !(beingDefinedInit === undefined || beingDefinedInit === false);
+			resolved = this.resolveVariableName(inheritedVariables, varName, beingDefined)
 			if (resolved) {
 				break;
 			}
