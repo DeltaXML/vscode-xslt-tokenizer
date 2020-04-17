@@ -38,7 +38,7 @@
                 <xsl:sequence select="$v1"/>
                 <xsl:sequence select="
                     let $a := 1,
-                        $b := 3 + $a return $a, $b"/>
+                        $b := 3 + $b return $bx"/>
             </xsl:template>
             
         </xsl:stylesheet>
