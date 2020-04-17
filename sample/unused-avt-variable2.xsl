@@ -12,7 +12,7 @@
         
         <xsl:sequence 
             select="
-                let $try map {
+                let $try := map {
                         'use-first':   function($a, $b, $c) {$a},
                         'use-middle':  function($a, $b, $c) {$b},
                         'use-last':    function($a, $b, $c) {$c},
@@ -20,7 +20,7 @@
                         'only-one':    function($a) {$a}
                     } 
                 return $try"/>
-        <xsl:s select="let $a := function($p1 as map(*), $p2) {$p1} return $c, $p2"/>
+        <xsl:s select="let $init := 5, let $a := function($p1 as map(*), $init) {$p1} return $a, $init"/>
     </xsl:template>
     
     
