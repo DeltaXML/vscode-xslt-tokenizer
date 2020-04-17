@@ -257,7 +257,7 @@ export class XsltTokenDiagnostics {
 			}
 			prevToken = token;
 		});
-		return XsltTokenDiagnostics.getProblemTokens(xsltVariableDeclarations);
+		return XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(xsltVariableDeclarations);
 	}
 
 	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
@@ -318,18 +318,18 @@ export class XsltTokenDiagnostics {
 		return resolved;
 	}
 
-	private static getProblemTokens(tokens: BaseToken[]): vscode.Diagnostic[] {
+	private static getDiagnosticsFromUnusedVariableTokens(tokens: BaseToken[]): vscode.Diagnostic[] {
 		let result = [];
 		for (let token of tokens) {
 			if (token.referenced === undefined) {
-				result.push(this.createDiagnostic(token));
+				result.push(this.createUnusedVarDiagnostic(token));
 			}
 		}
 		return result;
 	}
 
 
-	private static createDiagnostic(token: BaseToken): vscode.Diagnostic {
+	private static createUnusedVarDiagnostic(token: BaseToken): vscode.Diagnostic {
 		let line = token.line;
 		let endChar = token.startCharacter + token.length;
 		return {
@@ -342,7 +342,7 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static createDiagnosticExtra(document: vscode.TextDocument, token: BaseToken): vscode.Diagnostic {
+	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken): vscode.Diagnostic {
 		let line = token.line;
 		let endChar = token.startCharacter + token.length;
 		return {
