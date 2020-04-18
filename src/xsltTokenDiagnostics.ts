@@ -33,6 +33,7 @@ interface ElementData {
 	xpathVariableCurrentlyBeingDefined?: boolean;
 }
 interface XPathData {
+	token: BaseToken;
 	variables: VariableData[];
 	preXPathVariable: boolean;
 	xpathVariableCurrentlyBeingDefined: boolean;
@@ -75,6 +76,7 @@ export class XsltTokenDiagnostics {
 		let xsltVariableReferences: BaseToken[] = [];
 		let prevToken: BaseToken|null = null;
 		let includeOrImport = false;
+		let problemTokens: BaseToken[] = []
 
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
@@ -83,6 +85,12 @@ export class XsltTokenDiagnostics {
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
 				xpathVariableCurrentlyBeingDefined = false;
+				if(xpathStack.length > 0) {
+					// report last issue with nesting in each xpath:
+					let lastLeftOver = xpathStack[xpathStack.length - 1].token;
+					lastLeftOver['error'] = ErrorType.BracketNesting;
+					problemTokens.push(lastLeftOver);
+				};
 				xpathStack = [];
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
@@ -196,7 +204,7 @@ export class XsltTokenDiagnostics {
 								preXPathVariable = true;
 								break;
 							case 'then':
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
@@ -219,7 +227,7 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.operator:
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								if (anonymousFunctionParams) {	
 									// handle case: function($a) {$a + 8} pass params to inside '{...}'				
 									inScopeXPathVariablesList = anonymousFunctionParamList;
@@ -238,7 +246,7 @@ export class XsltTokenDiagnostics {
 								}
 								// intentionally no-break;	
 							case CharLevelState.lPr:
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								preXPathVariable = false;	
 								inScopeXPathVariablesList = [];
 								xpathVariableCurrentlyBeingDefined = false;
@@ -257,8 +265,10 @@ export class XsltTokenDiagnostics {
 										preXPathVariable = false;
 										xpathVariableCurrentlyBeingDefined = false;
 									}
-								} else {
-									// TODO: add diagnostics for missing close
+								}
+								if (token.error) {
+									// any error should already have been added by lexer:
+									problemTokens.push(token);
 								}
 								break;
 							case CharLevelState.sep:
@@ -272,7 +282,9 @@ export class XsltTokenDiagnostics {
 			}
 			prevToken = token;
 		});
-		return XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, xsltVariableReferences, includeOrImport);
+		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, xsltVariableReferences, includeOrImport);
+		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
+		return allDiagnostics;
 	}
 
 	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
@@ -300,11 +312,9 @@ export class XsltTokenDiagnostics {
 			resolved = this.resolveStackVariableName(elementStack, varName);			
 		}
 		if (!resolved) {
-			token['error'] = ErrorType.UnresolvedVarReference;
 			result = token;
 		}
 		return result;
-
 	}
 
 	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean): boolean {
@@ -349,6 +359,62 @@ export class XsltTokenDiagnostics {
 				result.push(this.createUnresolvedVarDiagnostic(document, token, includeOrImport));
 		}
 		return result;
+	}
+
+	private static appendDiagnosticsFromProblemTokens(variableRefDiagnostics: vscode.Diagnostic[], tokens: BaseToken[]): vscode.Diagnostic[] {
+		tokens.forEach(token => {
+			let line = token.line;
+			let endChar = token.startCharacter + token.length;
+			let tokenValue = token.value;
+			let matchingChar: any = XsltTokenDiagnostics.getMatchingSymbol(tokenValue);
+			let msg = matchingChar.length === 0? `No match found for '${tokenValue}'`: `'${tokenValue}' has no matching '${matchingChar}'`;
+			        ``;
+			variableRefDiagnostics.push({
+				code: '',
+				message: msg,
+				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
+				severity: vscode.DiagnosticSeverity.Error,
+				tags: [vscode.DiagnosticTag.Unnecessary],
+				source: ''
+			});
+		});
+		return variableRefDiagnostics;
+	}
+
+
+
+	private static getMatchingSymbol(text: string) {
+		let r = '';
+		switch(text) {
+			case '(':
+				r = ')';
+				break;
+			case '[':
+				r = ']';
+				break;
+			case '{':
+				r = '}';
+				break;
+			case ')':
+				r = '(';
+				break;
+			case ']':
+				r = '[';
+				break;
+			case '}':
+				r = '{';
+				break;
+			case 'then':
+				r = 'else';
+				break;
+			case 'else':
+				r = 'then';
+				break;
+			default:
+				r = '';
+				break;				
+		}
+		return r;	
 	}
 
 

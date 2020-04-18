@@ -1,1 +1,1 @@
-<xsl:t select=  "$abc + 28">
+<xsl:t select=  "if((true) then abc else true">

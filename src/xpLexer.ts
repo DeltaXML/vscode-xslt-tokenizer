@@ -123,7 +123,7 @@ class Data {
     public static setAsOperatorIfKeyword(token: Token) {
         if (token.value === 'return' || token.value === 'satisfies' || token.value === 'in' || 
         Data.nonFunctionConditional.indexOf(token.value) > -1) {
-            token.tokenType = TokenLevelState.complexExpression// TODO: this should be set to Declaration but causes test failures
+            token.tokenType = TokenLevelState.complexExpression
         } else if (Data.keywords.indexOf(token.value) > -1) {
             token.tokenType = TokenLevelState.operator;
         }
@@ -524,10 +524,10 @@ export class XPathLexer {
                                     if (XPathLexer.closeMatchesOpen(nextLabelState, nestedTokenStack)) {
                                         nestedTokenStack.pop();
                                     } else {
-                                        newToken['error'] = ErrorType.XPathUnexpected;
+                                        newToken['error'] = ErrorType.BracketNesting;
                                     }
                                 } else {
-                                    newToken['error'] = ErrorType.XPathUnexpected;
+                                    newToken['error'] = ErrorType.BracketNesting;
                                 }
                                 this.updateResult(nestedTokenStack, result, newToken);
                                 tokenChars = [];
@@ -1011,7 +1011,8 @@ export enum ErrorType {
     None,
     UnusedVariable,
     UnresolvedVarReference,
-    XPathUnexpected
+    XPathUnexpected,
+    BracketNesting
 }
 
 export interface BaseToken {
