@@ -172,7 +172,10 @@ export class XsltTokenDiagnostics {
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
-							XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
+							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
+							if (unResolvedToken != null) {
+								xsltVariableReferences.push(unResolvedToken);
+							}
 						}
 						break;
 					case TokenLevelState.complexExpression:

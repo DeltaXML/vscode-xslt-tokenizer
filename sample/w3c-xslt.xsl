@@ -196,7 +196,7 @@
         <xsl:sequence select="
             let $duplicates-handler := map {
                     'use-first':   function($a, $b) {$a},
-                    'use-last:'    function($a, $b) {$b},
+                    'use-last':    function($a, $b) {$b},
                     'combine':     function($a, $b) {$a, $b},
                     'reject':      function($a, $b) {fn:error($FOJS0003)},
                     'unspecified': function($a, $b) {fn:random-number-generator()?permute(($a, $b))[1]}
