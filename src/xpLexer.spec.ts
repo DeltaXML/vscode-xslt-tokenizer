@@ -744,7 +744,7 @@ children:[
 tokenType: TokenLevelState.number
 },
 {value: `,`,
-error: 2,
+error: 3,
 tokenType: TokenLevelState.operator
 },
 {value: `2`,
