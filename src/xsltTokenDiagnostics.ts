@@ -46,6 +46,10 @@ interface VariableData {
 export class XsltTokenDiagnostics {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
+	private static readonly xslInclude = 'xsl:include';
+	private static readonly xslImport = 'xsl:import';
+
+
 	private static readonly xslFunction = 'xsl:function';
 	private static xsltVariableReferences: BaseToken[] = [];
 
@@ -70,6 +74,7 @@ export class XsltTokenDiagnostics {
 		let xsltVariableDeclarations: BaseToken[] = [];
 		let xsltVariableReferences: BaseToken[] = [];
 		let prevToken: BaseToken|null = null;
+		let includeOrImport = false;
 
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
@@ -87,6 +92,9 @@ export class XsltTokenDiagnostics {
 						if (tagType === TagType.Start) {
 							tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							tagType = (XsltTokenDiagnostics.xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
+							if (!includeOrImport && tagType != TagType.XSLTvar && elementStack.length === 1) {
+								includeOrImport = tagElementName === XsltTokenDiagnostics.xslImport || tagElementName === XsltTokenDiagnostics.xslInclude;
+							}
 						}
 						break;
 					case XSLTokenLevelState.elementName:
@@ -224,14 +232,11 @@ export class XsltTokenDiagnostics {
 								xpathVariableCurrentlyBeingDefined = false;
 								break;
 							case CharLevelState.lB:
-								// handle case: function($a)
-								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
-								preXPathVariable = false;	
-								xpathVariableCurrentlyBeingDefined = false;							
+								// handle case: function($a)						
 								if (!anonymousFunctionParams && prevToken?.tokenType !== TokenLevelState.nodeType) {
 									anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
 								}
-								break;	
+								// intentionally no-break;	
 							case CharLevelState.lPr:
 								xpathStack.push({variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								preXPathVariable = false;	
@@ -267,7 +272,7 @@ export class XsltTokenDiagnostics {
 			}
 			prevToken = token;
 		});
-		return XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, xsltVariableReferences);
+		return XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, xsltVariableReferences, includeOrImport);
 	}
 
 	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
@@ -333,7 +338,7 @@ export class XsltTokenDiagnostics {
 		return resolved;
 	}
 
-	private static getDiagnosticsFromUnusedVariableTokens(document: vscode.TextDocument, unusedVariableTokens: BaseToken[], unresolvedVariableTokens: BaseToken[]): vscode.Diagnostic[] {
+	private static getDiagnosticsFromUnusedVariableTokens(document: vscode.TextDocument, unusedVariableTokens: BaseToken[], unresolvedVariableTokens: BaseToken[], includeOrImport: boolean): vscode.Diagnostic[] {
 		let result = [];
 		for (let token of unusedVariableTokens) {
 			if (token.referenced === undefined) {
@@ -341,7 +346,7 @@ export class XsltTokenDiagnostics {
 			}
 		}
 		for (let token of unresolvedVariableTokens) {
-				result.push(this.createUnresolvedVarDiagnostic(document, token));
+				result.push(this.createUnresolvedVarDiagnostic(document, token, includeOrImport));
 		}
 		return result;
 	}
@@ -360,14 +365,23 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken): vscode.Diagnostic {
+	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken, includeOrImport: boolean): vscode.Diagnostic {
 		let line = token.line;
 		let endChar = token.startCharacter + token.length;
-		return {
-			code: '',
-			message: `Cannot find variable/parmeter for: ${token.value}`,
-			range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
-			severity: vscode.DiagnosticSeverity.Warning,
+		if (includeOrImport) {
+			return {
+				code: '',
+				message: `The variable/parameter: ${token.value} cannot be resolved here, but it may be defined in an external module.`,
+				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
+				severity: vscode.DiagnosticSeverity.Warning
+			}
+		} else {
+			return {
+				code: '',
+				message: `The variable/parameter ${token.value} cannot be resolved`,
+				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
+				severity: vscode.DiagnosticSeverity.Error
+			}
 		}
 	}
 }
