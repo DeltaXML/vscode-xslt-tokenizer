@@ -157,7 +157,7 @@ class Data {
 export class XPathLexer {
 
     public debug: boolean = false;
-    public flatten: boolean = false;
+    public flatten: boolean = true;
     public timerOn: boolean = false;
     public entityRefOn: boolean = true;
     public documentText: string = '';

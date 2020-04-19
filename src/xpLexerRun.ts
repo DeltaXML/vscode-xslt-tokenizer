@@ -4,7 +4,7 @@ import { Debug } from "./diagnostics";
 
 // -------------
 let testXpath: string =
-`map{}`;
+`let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a`;
 let testTitle = `declaration`;
 let generateTest = true;
 let timerOnly = false;

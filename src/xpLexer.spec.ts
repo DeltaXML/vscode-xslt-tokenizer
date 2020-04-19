@@ -9,7 +9,6 @@ interface TokenLight {
   charType?: CharLevelState;
   tokenType: TokenLevelState;
   context?: TokenLight|null;
-  children?: TokenLight[];
   error?: number;
 }
 
@@ -70,39 +69,57 @@ tokenType: TokenLevelState.operator
 tokenType: TokenLevelState.nodeNameTest
 },]
   expect (r).toEqual(ts);
-});
-
-test(`parenthesis sum`, () => {
-  let l: XPathLexer = new XPathLexer();
-  let rx: Token[] = l.analyse(`255+($union+28)`,  ExitCondition.None, pos);
-  let r: Token[] = Utilities.minimiseTokens(rx);
-  let ts: TokenLight[] = [
-{value: `255`,
-tokenType: TokenLevelState.number
-},
-{value: `+`,
-tokenType: TokenLevelState.operator
-},
-{value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
-{value: `$union`,
-tokenType: TokenLevelState.variable
-},
-{value: `+`,
-tokenType: TokenLevelState.operator
-},
-{value: `28`,
-tokenType: TokenLevelState.number
-},]
-},
-{value: `)`,
-tokenType: TokenLevelState.operator
-},]
-  expect (r).toEqual(ts);
-});
-
-
+});        
+        test(`parenthesis sum`, () => {
+        let l: XPathLexer = new XPathLexer();
+        l.flatten = true;
+        let rx: Token[] = l.analyse(`255+($union+28)`, ExitCondition.None, pos);
+        let r: Token[] = Utilities.minimiseTokens2(rx);
+        let ts: Token[] = [
+    {value: `255`,
+    tokenType: TokenLevelState.number,
+    line: 0,
+    length: 3,
+    startCharacter: 0
+    },
+    {value: `+`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 1,
+    startCharacter: 3
+    },
+    {value: `(`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 1,
+    startCharacter: 4
+    },
+    {value: `$union`,
+    tokenType: TokenLevelState.variable,
+    line: 0,
+    length: 6,
+    startCharacter: 5
+    },
+    {value: `+`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 1,
+    startCharacter: 11
+    },
+    {value: `28`,
+    tokenType: TokenLevelState.number,
+    line: 0,
+    length: 2,
+    startCharacter: 12
+    },
+    {value: `)`,
+    tokenType: TokenLevelState.operator,
+    line: 0,
+    length: 1,
+    startCharacter: 14
+    },]
+        expect (r).toEqual(ts);
+    });
         
 test(`resolve ambiguous keywords`, () => {
   let l: XPathLexer = new XPathLexer();
@@ -300,11 +317,10 @@ test(`function call`, () => {
 tokenType: TokenLevelState.function
 },
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: "$a",
 tokenType: TokenLevelState.variable
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
@@ -418,11 +434,10 @@ test(`array curly brace`, () => {
 tokenType: TokenLevelState.operator
 },
 {value: `{`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: "1",
 tokenType: TokenLevelState.number
-},]
 },
 {value: `}`,
 tokenType: TokenLevelState.operator
@@ -439,11 +454,10 @@ test(`array square brace`, () => {
 tokenType: TokenLevelState.operator
 },
 {value: `[`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: "1",
 tokenType: TokenLevelState.number
-},]
 },
 {value: `]`,
 tokenType: TokenLevelState.operator
@@ -460,8 +474,8 @@ test(`declaration`, () => {
 tokenType: TokenLevelState.operator
 },
 {value: `{`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: "25",
 tokenType: TokenLevelState.number
 },
@@ -470,7 +484,6 @@ tokenType: TokenLevelState.operator
 },
 {value: "first",
 tokenType: TokenLevelState.nodeNameTest
-},]
 },
 {value: `}`,
 tokenType: TokenLevelState.operator
@@ -521,8 +534,8 @@ test(`if then else`, () => {
 tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: `$a`,
 tokenType: TokenLevelState.variable
 },
@@ -531,20 +544,18 @@ tokenType: TokenLevelState.operator
 },
 {value: `5`,
 tokenType: TokenLevelState.number
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
 },
 {value: `then`,
 tokenType: TokenLevelState.complexExpression,
-children:[
+},
 {value: `$a`,
 tokenType: TokenLevelState.variable
 },
 {value: `else`,
 tokenType: TokenLevelState.complexExpression
-},]
 },
 {value: `union`,
 tokenType: TokenLevelState.nodeNameTest
@@ -587,8 +598,8 @@ tokenType: TokenLevelState.operator
 tokenType: TokenLevelState.simpleType
 },
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: `xs:integer`,
 tokenType: TokenLevelState.nodeNameTest
 },
@@ -597,7 +608,6 @@ tokenType: TokenLevelState.operator
 },
 {value: `xs:string`,
 tokenType: TokenLevelState.nodeNameTest
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
@@ -614,47 +624,42 @@ test(`if else if else`, () => {
 tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
-{value: `level1`,
+tokenType: TokenLevelState.operator
+},{value: `level1`,
 tokenType: TokenLevelState.nodeNameTest
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `1`,
 tokenType: TokenLevelState.number
 },
 {value: `else`,
 tokenType: TokenLevelState.complexExpression
-},]
 },
 {value: `if`,
 tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: `level2`,
 tokenType: TokenLevelState.nodeNameTest
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `2`,
 tokenType: TokenLevelState.number
 },
 {value: `else`,
 tokenType: TokenLevelState.complexExpression
-},]
 },
 {value: `0`,
 tokenType: TokenLevelState.number
@@ -671,47 +676,43 @@ test(`if if else else`, () => {
 tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: `level1`,
 tokenType: TokenLevelState.nodeNameTest
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `if`,
 tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: `level1.1`,
 tokenType: TokenLevelState.nodeNameTest
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `1.1`,
 tokenType: TokenLevelState.number
 },
 {value: `else`,
 tokenType: TokenLevelState.complexExpression
-},]
 },
 {value: `1.0`,
 tokenType: TokenLevelState.number
 },
 {value: `else`,
 tokenType: TokenLevelState.complexExpression
-},]
 },
 {value: `0`,
 tokenType: TokenLevelState.number
@@ -728,23 +729,21 @@ test(`comma inside if expr - error`, () => {
 tokenType: TokenLevelState.complexExpression
 },
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: `$a`,
 tokenType: TokenLevelState.variable
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
 },
 {value: `then`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `1`,
 tokenType: TokenLevelState.number
 },
 {value: `,`,
-error: 3,
 tokenType: TokenLevelState.operator
 },
 {value: `2`,
@@ -752,7 +751,6 @@ tokenType: TokenLevelState.number
 },
 {value: `else`,
 tokenType: TokenLevelState.complexExpression
-},]
 },
 {value: `1`,
 tokenType: TokenLevelState.number
@@ -773,18 +771,16 @@ tokenType: TokenLevelState.complexExpression
 tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `2`,
 tokenType: TokenLevelState.number
 },
 {value: `return`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `$a`,
 tokenType: TokenLevelState.variable
-},]
-},]
 },]
   expect (r).toEqual(ts);
 });
@@ -801,8 +797,8 @@ tokenType: TokenLevelState.complexExpression
 tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `2`,
 tokenType: TokenLevelState.number
 },
@@ -813,17 +809,17 @@ tokenType: TokenLevelState.operator
 tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `3`,
 tokenType: TokenLevelState.number
 },
 {value: `return`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
+tokenType: TokenLevelState.operator
+},
 {value: `$a`,
 tokenType: TokenLevelState.variable
 },
@@ -832,13 +828,9 @@ tokenType: TokenLevelState.operator
 },
 {value: `$b`,
 tokenType: TokenLevelState.variable
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
-},]
-},]
-},]
 },]
   expect (r).toEqual(ts);
 });
@@ -856,7 +848,7 @@ tokenType: TokenLevelState.variable
 },
 {value: `in`,
 tokenType: TokenLevelState.complexExpression,
-children:[
+},
 {value: `1`,
 tokenType: TokenLevelState.number
 },
@@ -873,8 +865,8 @@ tokenType: TokenLevelState.operator
 tokenType: TokenLevelState.variable
 },
 {value: `in`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `1`,
 tokenType: TokenLevelState.number
 },
@@ -885,14 +877,14 @@ tokenType: TokenLevelState.operator
 tokenType: TokenLevelState.number
 },
 {value: `return`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `concat`,
 tokenType: TokenLevelState.function
 },
 {value: `(`,
 tokenType: TokenLevelState.operator,
-children:[
+},
 {value: `$a`,
 tokenType: TokenLevelState.variable
 },
@@ -907,13 +899,9 @@ tokenType: TokenLevelState.operator
 },
 {value: `$b`,
 tokenType: TokenLevelState.variable
-},]
 },
 {value: `)`,
 tokenType: TokenLevelState.operator
-},]
-},]
-},]
 },]
   expect (r).toEqual(ts);
 });
@@ -931,8 +919,8 @@ tokenType: TokenLevelState.complexExpression
 tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `1`,
 tokenType: TokenLevelState.number
 },
@@ -943,14 +931,14 @@ tokenType: TokenLevelState.operator
 tokenType: TokenLevelState.variable
 },
 {value: `:=`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `2`,
 tokenType: TokenLevelState.number
 },
 {value: `return`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `$a`,
 tokenType: TokenLevelState.variable
 },
@@ -962,9 +950,6 @@ tokenType: TokenLevelState.number
 },
 {value: `,`,
 tokenType: TokenLevelState.operator
-},]
-},]
-},]
 },
 {value: `union`,
 tokenType: TokenLevelState.nodeNameTest
@@ -984,14 +969,14 @@ tokenType: TokenLevelState.complexExpression
 tokenType: TokenLevelState.variable
 },
 {value: `in`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `*`,
 tokenType: TokenLevelState.nodeType
 },
 {value: `satisfies`,
-tokenType: TokenLevelState.complexExpression,
-children:[
+tokenType: TokenLevelState.complexExpression
+},
 {value: `$a`,
 tokenType: TokenLevelState.variable
 },
@@ -1003,8 +988,6 @@ tokenType: TokenLevelState.number
 },
 {value: `,`,
 tokenType: TokenLevelState.operator
-},]
-},]
 },
 {value: `$b`,
 tokenType: TokenLevelState.variable
@@ -1079,16 +1062,15 @@ startCharacter: 0
 },
 {value: `(`,
 tokenType: TokenLevelState.operator,
-children:[
-{value: `$a`,
-tokenType: TokenLevelState.variable,
-line: 0,
-length: 2,
-startCharacter: 4
-},],
 line: 0,
 length: 1,
 startCharacter: 3
+},
+  {value: `$a`,
+  tokenType: TokenLevelState.variable,
+  line: 0,
+  length: 2,
+  startCharacter: 4
 },
 {value: `)`,
 tokenType: TokenLevelState.operator,
@@ -1098,7 +1080,10 @@ startCharacter: 6
 },
 {value: `then`,
 tokenType: TokenLevelState.complexExpression,
-children:[
+line: 0,
+length: 4,
+startCharacter: 8
+},
 {value: `$b`,
 tokenType: TokenLevelState.variable,
 line: 1,
@@ -1122,10 +1107,6 @@ tokenType: TokenLevelState.complexExpression,
 line: 3,
 length: 4,
 startCharacter: 0
-},],
-line: 0,
-length: 4,
-startCharacter: 8
 },
 {value: `$c`,
 tokenType: TokenLevelState.variable,
@@ -1230,7 +1211,10 @@ startCharacter: 0
 },
 {value: `{`,
 tokenType: TokenLevelState.operator,
-children:[
+line: 0,
+length: 1,
+startCharacter: 4
+},
 {value: `abc:`,
 tokenType: TokenLevelState.nodeNameTest,
 line: 1,
@@ -1266,10 +1250,6 @@ tokenType: TokenLevelState.number,
 line: 3,
 length: 2,
 startCharacter: 6
-},],
-line: 0,
-length: 1,
-startCharacter: 4
 },
 {value: `}`,
 tokenType: TokenLevelState.operator,
@@ -1609,173 +1589,166 @@ length: 2,
 startCharacter: 11
 },]
   expect (r).toEqual(ts);
-});
-        
-test(`declaration`, () => {
-  let l: XPathLexer = new XPathLexer();
-  l.flatten = false;
-  let rx: Token[] = l.analyse(`let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a`, ExitCondition.None, pos);
-  let r: Token[] = Utilities.minimiseTokens2(rx);
-  let ts: Token[] = [
-{value: `let`,
-tokenType: TokenLevelState.complexExpression,
-line: 0,
-length: 3,
-startCharacter: 0
-},
-{value: `$ac`,
-tokenType: TokenLevelState.variable,
-line: 0,
-length: 3,
-startCharacter: 4
-},
-{value: `:=`,
-tokenType: TokenLevelState.complexExpression,
-children:[
-{value: `function`,
-tokenType: TokenLevelState.anonymousFunction,
-line: 0,
-length: 8,
-startCharacter: 11
-},
-{value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
-{value: `$a`,
-tokenType: TokenLevelState.variable,
-line: 0,
-length: 2,
-startCharacter: 20
-},],
-line: 0,
-length: 1,
-startCharacter: 19
-},
-{value: `)`,
-tokenType: TokenLevelState.operator,
-line: 0,
-length: 1,
-startCharacter: 22
-},
-{value: `as`,
-tokenType: TokenLevelState.operator,
-line: 0,
-length: 2,
-startCharacter: 24
-},
-{value: `function`,
-tokenType: TokenLevelState.simpleType,
-line: 0,
-length: 8,
-startCharacter: 27
-},
-{value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
-{value: `*`,
-tokenType: TokenLevelState.nodeType,
-line: 0,
-length: 1,
-startCharacter: 36
-},],
-line: 0,
-length: 1,
-startCharacter: 35
-},
-{value: `)`,
-tokenType: TokenLevelState.operator,
-line: 0,
-length: 1,
-startCharacter: 37
-},
-{value: `{`,
-tokenType: TokenLevelState.operator,
-children:[
-{value: `function`,
-tokenType: TokenLevelState.anonymousFunction,
-line: 0,
-length: 8,
-startCharacter: 40
-},
-{value: `(`,
-tokenType: TokenLevelState.operator,
-children:[
-{value: `$b`,
-tokenType: TokenLevelState.variable,
-line: 0,
-length: 2,
-startCharacter: 49
-},],
-line: 0,
-length: 1,
-startCharacter: 48
-},
-{value: `)`,
-tokenType: TokenLevelState.operator,
-line: 0,
-length: 1,
-startCharacter: 51
-},
-{value: `{`,
-tokenType: TokenLevelState.operator,
-children:[
-{value: `$b`,
-tokenType: TokenLevelState.variable,
-line: 0,
-length: 2,
-startCharacter: 54
-},
-{value: `+`,
-tokenType: TokenLevelState.operator,
-line: 0,
-length: 1,
-startCharacter: 57
-},
-{value: `1`,
-tokenType: TokenLevelState.number,
-line: 0,
-length: 1,
-startCharacter: 59
-},],
-line: 0,
-length: 1,
-startCharacter: 53
-},
-{value: `}`,
-tokenType: TokenLevelState.operator,
-line: 0,
-length: 1,
-startCharacter: 60
-},],
-line: 0,
-length: 1,
-startCharacter: 39
-},
-{value: `}`,
-tokenType: TokenLevelState.operator,
-line: 0,
-length: 1,
-startCharacter: 61
-},
-{value: `return`,
-tokenType: TokenLevelState.complexExpression,
-children:[
-{value: `$a`,
-tokenType: TokenLevelState.variable,
-line: 0,
-length: 2,
-startCharacter: 70
-},],
-line: 0,
-length: 6,
-startCharacter: 63
-},],
-line: 0,
-length: 2,
-startCharacter: 8
-},]
-  expect (r).toEqual(ts);
-});
+});           
+            test(`declaration`, () => {
+            let l: XPathLexer = new XPathLexer();
+            l.flatten = true;
+            let rx: Token[] = l.analyse(`let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a`, ExitCondition.None, pos);
+            let r: Token[] = Utilities.minimiseTokens2(rx);
+            let ts: Token[] = [
+        {value: `let`,
+        tokenType: TokenLevelState.complexExpression,
+        line: 0,
+        length: 3,
+        startCharacter: 0
+        },
+        {value: `$ac`,
+        tokenType: TokenLevelState.variable,
+        line: 0,
+        length: 3,
+        startCharacter: 4
+        },
+        {value: `:=`,
+        tokenType: TokenLevelState.complexExpression,
+        line: 0,
+        length: 2,
+        startCharacter: 8
+        },
+        {value: `function`,
+        tokenType: TokenLevelState.anonymousFunction,
+        line: 0,
+        length: 8,
+        startCharacter: 11
+        },
+        {value: `(`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 19
+        },
+        {value: `$a`,
+        tokenType: TokenLevelState.variable,
+        line: 0,
+        length: 2,
+        startCharacter: 20
+        },
+        {value: `)`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 22
+        },
+        {value: `as`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 2,
+        startCharacter: 24
+        },
+        {value: `function`,
+        tokenType: TokenLevelState.simpleType,
+        line: 0,
+        length: 8,
+        startCharacter: 27
+        },
+        {value: `(`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 35
+        },
+        {value: `*`,
+        tokenType: TokenLevelState.nodeType,
+        line: 0,
+        length: 1,
+        startCharacter: 36
+        },
+        {value: `)`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 37
+        },
+        {value: `{`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 39
+        },
+        {value: `function`,
+        tokenType: TokenLevelState.anonymousFunction,
+        line: 0,
+        length: 8,
+        startCharacter: 40
+        },
+        {value: `(`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 48
+        },
+        {value: `$b`,
+        tokenType: TokenLevelState.variable,
+        line: 0,
+        length: 2,
+        startCharacter: 49
+        },
+        {value: `)`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 51
+        },
+        {value: `{`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 53
+        },
+        {value: `$b`,
+        tokenType: TokenLevelState.variable,
+        line: 0,
+        length: 2,
+        startCharacter: 54
+        },
+        {value: `+`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 57
+        },
+        {value: `1`,
+        tokenType: TokenLevelState.number,
+        line: 0,
+        length: 1,
+        startCharacter: 59
+        },
+        {value: `}`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 60
+        },
+        {value: `}`,
+        tokenType: TokenLevelState.operator,
+        line: 0,
+        length: 1,
+        startCharacter: 61
+        },
+        {value: `return`,
+        tokenType: TokenLevelState.complexExpression,
+        line: 0,
+        length: 6,
+        startCharacter: 63
+        },
+        {value: `$a`,
+        tokenType: TokenLevelState.variable,
+        line: 0,
+        length: 2,
+        startCharacter: 70
+        },]
+            expect (r).toEqual(ts);
+        });
+    
         
 test(`empty line in xpath`, () => {
   let l: XPathLexer = new XPathLexer();
