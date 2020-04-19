@@ -57,7 +57,7 @@ export class XsltTokenDiagnostics {
 
 	private static readonly xslNameAtt = 'name';
 
-	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 
 		let inScopeVariablesList: VariableData[] = [];
