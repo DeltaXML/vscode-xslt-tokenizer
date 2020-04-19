@@ -9,7 +9,7 @@
  */
 import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition, BaseToken} from './xpLexer';
-import {XslLexer} from './xslLexer';
+import {XslLexer, XSLTokenLevelState} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
@@ -138,6 +138,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection;
 	public symbols: vscode.DocumentSymbol[] = [];
+	private allTokens: BaseToken[] = [];
 
 	public constructor(collection: vscode.DiagnosticCollection) {
 		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
@@ -145,6 +146,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public diagnosticsListener = (document: vscode.TextDocument, allTokens: BaseToken[]) => {
+		this.allTokens = allTokens;
 		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, this.symbols);
 		if (diagnostics.length > 0) {
 			this.collection.set(document.uri, diagnostics);
@@ -154,7 +156,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	};
 
-	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
+	public provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
 		console.log('provideDocumentSymbols: ' + document.uri);
 		// const allTokens = this.xslLexer.analyse(document.getText());
 
@@ -162,21 +164,39 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// 	//builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		// });
 		// const result: vscode.DocumentSymbol[] = [];
-		// let startPos = new vscode.Position(0, 0);
-		// let lastLine = document.lineAt(document.lineCount - 1);
-		// let endPos = lastLine.range.end;
-		// let wholeRange = new vscode.Range(startPos, endPos);
+		let startXMLNumber = XslLexer.getXsltStartTokenNumber();
+		return new Promise((resolve, reject) => {
+			if (this.allTokens.length > 0) {
+				this.symbols = [];
+				let i = 0;
+				this.allTokens.forEach((currentToken) => {
+					i++;
+					let isXMLToken = currentToken.tokenType >= startXMLNumber;
+					if (isXMLToken) {
+						let xmlTokenType = <XSLTokenLevelState>(currentToken.tokenType - startXMLNumber);
+						if (xmlTokenType === XSLTokenLevelState.elementName) {
+							let startPos = new vscode.Position(currentToken.line, currentToken.startCharacter);
+							let endPos = new vscode.Position(currentToken.line, currentToken.startCharacter + currentToken.length);
+							let tokenRange = new vscode.Range(startPos, endPos);
+			
+							let ds: vscode.DocumentSymbol = {
+								name: 'root' + i,
+								detail: 'something on root',
+								kind: vscode.SymbolKind.Package,
+								range: tokenRange,
+								selectionRange: tokenRange,
+								children: []
+							}
+							this.symbols.push(ds);
+						}
+					}
+				});
 
-		// let ds: vscode.DocumentSymbol = {
-		// 	name: 'root',
-		// 	detail: '',
-		// 	kind: vscode.SymbolKind.Variable,
-		// 	range: wholeRange,
-		// 	selectionRange: document.lineAt(0).range,
-		// 	children: []
-		// }
-		//this.symbols.push(ds);
-		return undefined;
+				resolve(this.symbols);
+			} else {
+				resolve(undefined);
+			}
+		});
 
 	}
 }
