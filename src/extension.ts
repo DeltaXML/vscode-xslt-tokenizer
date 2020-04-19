@@ -33,9 +33,6 @@ let customTaskProvider: vscode.Disposable | undefined;
 
 
 export function activate(context: vscode.ExtensionContext) {
-
-	let updateDiagnostics 
-
 	const collection = vscode.languages.createDiagnosticCollection('xslt');
 	let diagnosticsListener = (document: vscode.TextDocument, allTokens: BaseToken[]) => {
 		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens);
