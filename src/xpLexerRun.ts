@@ -8,7 +8,6 @@ let testXpath: string =
 let testTitle = `declaration`;
 let generateTest = true;
 let timerOnly = false;
-let flatten = true; // set true for vscode extension tokens
 // =============
 
 generateTest = timerOnly? false: generateTest;
@@ -22,7 +21,6 @@ if (timerOnly) {
 
 let lexer: XPathLexer = new XPathLexer();
 lexer.debug = debugOn;
-lexer.flatten = flatten;
 lexer.timerOn = timerOnly;
 let pos: LexPosition = {line: 0, startCharacter: 0, documentOffset: 0};
 let tokens: Token[] = lexer.analyse(testXpath, ExitCondition.CurlyBrace, pos);
@@ -38,9 +36,7 @@ if (generateTest) {
 	console.log(testXpath);
 	console.log('---------------');
 	Debug.printResultTokens(tokens);
-	if (flatten) {
-		console.log('===============');
-		Debug.printTokenValues(testXpath, tokens);
-	}
+	console.log('===============');
+	Debug.printTokenValues(testXpath, tokens);
 }
 

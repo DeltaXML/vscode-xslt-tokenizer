@@ -493,7 +493,6 @@ export class XslLexer {
         xpLexer.documentText = xsl;
         xpLexer.documentTokens = result;
         xpLexer.debug = this.debug;
-        xpLexer.flatten = true;
         xpLexer.timerOn = this.timerOn;
         let xslLength = xsl.length - 1;
         let storeToken = false;

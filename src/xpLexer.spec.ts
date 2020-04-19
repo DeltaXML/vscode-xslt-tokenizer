@@ -72,7 +72,6 @@ tokenType: TokenLevelState.nodeNameTest
 });        
         test(`parenthesis sum`, () => {
         let l: XPathLexer = new XPathLexer();
-        l.flatten = true;
         let rx: Token[] = l.analyse(`255+($union+28)`, ExitCondition.None, pos);
         let r: Token[] = Utilities.minimiseTokens2(rx);
         let ts: Token[] = [
@@ -1262,7 +1261,7 @@ startCharacter: 0
         
 test(`flatten token structure`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`count($a)`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: TokenLight[] = [
@@ -1295,7 +1294,7 @@ startCharacter: 8
               
 test(`return declaration preceding number`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`let $a := 2 return 9 + $a`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
@@ -1354,7 +1353,7 @@ startCharacter: 23
         
 test(`entity-ref-lt`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   l.entityRefOn = true;
   let rx: Token[] = l.analyse(`$this &lt; $that`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
@@ -1382,7 +1381,7 @@ startCharacter: 11
                
 test(`entity-ref-number-default`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`22&lt;22`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
@@ -1409,7 +1408,7 @@ startCharacter: 6
         
 test(`double quote char ref string`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`$a eq &quot;n&quot; and $b`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
@@ -1448,7 +1447,7 @@ startCharacter: 24
         
 test(`double quote char ref string`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`$a eq &apos;n&apos; and $b`,  ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
@@ -1487,7 +1486,7 @@ startCharacter: 24
         
 test(`multiline char ref single quote test`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`$a eq &apos;
 the quick brown
 &apos; and $b`,  ExitCondition.None, pos);
@@ -1540,7 +1539,7 @@ startCharacter: 11
         
 test(`multiline char ref double quote test`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`$a eq &quot;
 the quick brown
 &quot; and $b`,  ExitCondition.None, pos);
@@ -1592,8 +1591,7 @@ startCharacter: 11
 });           
             test(`declaration`, () => {
             let l: XPathLexer = new XPathLexer();
-            l.flatten = true;
-            let rx: Token[] = l.analyse(`let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a`, ExitCondition.None, pos);
+                let rx: Token[] = l.analyse(`let $ac := function($a) as function(*) {function($b) {$b + 1}} return $a`, ExitCondition.None, pos);
             let r: Token[] = Utilities.minimiseTokens2(rx);
             let ts: Token[] = [
         {value: `let`,
@@ -1752,7 +1750,7 @@ startCharacter: 11
         
 test(`empty line in xpath`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = false;
+
   let rx: Token[] = l.analyse(`c,
 
 d(b)`, ExitCondition.None, pos);
@@ -1802,7 +1800,7 @@ startCharacter: 3
         
 test(`blank line plus indent char`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`c,\n\n d(b)`, ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
@@ -1847,7 +1845,7 @@ startCharacter: 4
 
 test(`wildcard following attribute axis shortcut: @`, () => {
   let l: XPathLexer = new XPathLexer();
-  l.flatten = true;
+
   let rx: Token[] = l.analyse(`@* except @q,child::* except r`, ExitCondition.None, pos);
   let r: Token[] = Utilities.minimiseTokens2(rx);
   let ts: Token[] = [
@@ -1916,7 +1914,6 @@ startCharacter: 29
       
         test(`declaration`, () => {
         let l: XPathLexer = new XPathLexer();
-        l.flatten = true;
         let rx: Token[] = l.analyse(`//* except r,/* except s`, ExitCondition.None, pos);
         let r: Token[] = Utilities.minimiseTokens2(rx);
         let ts: Token[] = [
@@ -1979,7 +1976,6 @@ startCharacter: 29
       
         test(`empty-line before indent`, () => {
         let l: XPathLexer = new XPathLexer();
-        l.flatten = true;
         let rx: Token[] = l.analyse(`let $a:= 1,\n\n  $b := 2 return $a+$b`, ExitCondition.None, pos);
         let r: Token[] = Utilities.minimiseTokens2(rx);
         let ts: Token[] = [
@@ -2060,7 +2056,6 @@ startCharacter: 29
        
         test(`empty map constructor`, () => {
         let l: XPathLexer = new XPathLexer();
-        l.flatten = true;
         let rx: Token[] = l.analyse(`map{}`, ExitCondition.None, pos);
         let r: Token[] = Utilities.minimiseTokens2(rx);
         let ts: Token[] = [

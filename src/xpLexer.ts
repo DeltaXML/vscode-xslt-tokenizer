@@ -157,7 +157,6 @@ class Data {
 export class XPathLexer {
 
     public debug: boolean = false;
-    public flatten: boolean = true;
     public timerOn: boolean = false;
     public entityRefOn: boolean = true;
     public documentText: string = '';
@@ -500,11 +499,7 @@ export class XPathLexer {
                         case CharLevelState.lPr:
                             this.update(nestedTokenStack, result, tokenChars, currentLabelState);
                             let currentToken: Token;
-                            if (this.flatten) {
-                                currentToken = new FlattenedToken(currentChar, nextLabelState, this.latestRealToken);
-                            } else {
-                                currentToken = new ContainerToken(currentChar, nextLabelState, this.latestRealToken);
-                            }
+                            currentToken = new FlattenedToken(currentChar, nextLabelState, this.latestRealToken);
 
                             this.updateResult(nestedTokenStack, result, currentToken);
                             // add to nesting level
@@ -667,16 +662,8 @@ export class XPathLexer {
                 this.wsCharNumber = 0;
             }
 
-            let addStackTokens =  !this.flatten && stack.length > 0;
             if (!isWhitespace) {
-                let targetArray: Token[];
-                if (addStackTokens) {
-                    let initToken: Token|undefined = stack[stack.length - 1];
-                    targetArray = initToken.children? initToken.children: result;
-                } else {
-                    targetArray = result;
-                }
-                targetArray.push(newToken);
+                result.push(newToken);
             }
 
             let prevToken = this.latestRealToken;
@@ -1138,25 +1125,6 @@ class FlattenedToken implements Token {
     context: Token|null;
 
     constructor(value: string, type: CharLevelState, context: Token|null) {
-        this.value = value;
-        this.charType = type;
-        this.tokenType = TokenLevelState.operator;
-        this.context = context;
-    }
-}
-
-class ContainerToken implements Token {
-    line = 0;
-    startCharacter = 0 ;
-    length = 0;
-    value: string;
-    charType: CharLevelState;
-    children: Token[];
-    tokenType: TokenLevelState;
-    context: Token|null;
-
-    constructor(value: string, type: CharLevelState, context: Token|null) {
-        this.children = [];
         this.value = value;
         this.charType = type;
         this.tokenType = TokenLevelState.operator;
