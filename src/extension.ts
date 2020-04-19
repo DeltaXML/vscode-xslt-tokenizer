@@ -16,6 +16,7 @@ import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 
 const tokenModifiers = new Map<string, number>();
+const diagnosticsLanguages = ['xslt'];
 
 const legend = (function () {
 	const tokenTypesLegend = XslLexer.getTextmateTypeLegend();
@@ -48,14 +49,17 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
 		if (editor) {
-			xslLexerForDiagnostics.provideCharLevelState = true;
-			let tokensForDiagnostics = xslLexerForDiagnostics.analyse(editor.document.getText())
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(editor.document, tokensForDiagnostics);
-			if (diagnostics.length > 0) {
-				collection.set(editor.document.uri, diagnostics);
-			} else {
-				collection.clear();
-			};		}
+			if (diagnosticsLanguages.indexOf(editor.document.languageId) > -1){
+				xslLexerForDiagnostics.provideCharLevelState = true;
+				let tokensForDiagnostics = xslLexerForDiagnostics.analyse(editor.document.getText())
+				let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(editor.document, tokensForDiagnostics);
+				if (diagnostics.length > 0) {
+					collection.set(editor.document.uri, diagnostics);
+				} else {
+					collection.clear();
+				};
+			}
+		}
 	}));
 
 	// syntax highlighters
