@@ -166,21 +166,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// 	//builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		// });
 		// const result: vscode.DocumentSymbol[] = [];
-		let startPos = new vscode.Position(0, 0);
-		let lastLine = document.lineAt(document.lineCount - 1);
-		let endPos = lastLine.range.end;
-		let wholeRange = new vscode.Range(startPos, endPos);
+		// let startPos = new vscode.Position(0, 0);
+		// let lastLine = document.lineAt(document.lineCount - 1);
+		// let endPos = lastLine.range.end;
+		// let wholeRange = new vscode.Range(startPos, endPos);
 
-		let ds: vscode.DocumentSymbol = {
-			name: 'root',
-			detail: '',
-			kind: vscode.SymbolKind.Variable,
-			range: wholeRange,
-			selectionRange: document.lineAt(0).range,
-			children: []
-		}
-		this.symbols.push(ds);
-		return this.symbols;
+		// let ds: vscode.DocumentSymbol = {
+		// 	name: 'root',
+		// 	detail: '',
+		// 	kind: vscode.SymbolKind.Variable,
+		// 	range: wholeRange,
+		// 	selectionRange: document.lineAt(0).range,
+		// 	children: []
+		// }
+		//this.symbols.push(ds);
+		return undefined;
 
 	}
 }

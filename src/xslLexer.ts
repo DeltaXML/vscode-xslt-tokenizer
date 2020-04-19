@@ -495,7 +495,6 @@ export class XslLexer {
         xpLexer.debug = this.debug;
         xpLexer.flatten = true;
         xpLexer.timerOn = this.timerOn;
-        xpLexer.provideNestingLevel = this.provideCharLevelState;
         let xslLength = xsl.length - 1;
         let storeToken = false;
         let isNativeElement = false;

@@ -162,7 +162,6 @@ export class XPathLexer {
     public entityRefOn: boolean = true;
     public documentText: string = '';
     public documentTokens: BaseToken[] = [];
-    public provideNestingLevel = false;
     private latestRealToken: Token|null = null;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
@@ -683,19 +682,16 @@ export class XPathLexer {
             let prevToken = this.latestRealToken;
             this.setLabelForLastTokenOnly(prevToken, newToken);
             this.setLabelsUsingCurrentToken(prevToken, newToken);
-            if (XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.operator) || XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.complexExpression)) {
-                if (newTokenValue === 'then' || newTokenValue === 'in' || newTokenValue === ':=' || newTokenValue === 'return' || newTokenValue === 'satisfies') {
-                    if (!this.flatten) {
-                        newToken.children = [];
-                    }
-                    stack.push(newToken);
-                } else {
-                    this.conditionallyPopStack(stack, newToken);
-                }
-            }
-            if (this.provideNestingLevel) {
-                newToken['nesting'] = stack.length;
-            }
+            // if (XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.operator) || XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.complexExpression)) {
+            //     if (newTokenValue === 'then' || newTokenValue === 'in' || newTokenValue === ':=') {
+            //         if (!this.flatten) {
+            //             newToken.children = [];
+            //         }
+            //         stack.push(newToken);
+            //     } else {
+            //         this.conditionallyPopStack(stack, newToken);
+            //     }
+            // }
 
             if (!(state === CharLevelState.lC || state === CharLevelState.lWs)) {
                 this.latestRealToken = newToken;
