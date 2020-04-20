@@ -132,7 +132,7 @@ export class XslLexer {
 
     public static getTextmateTypeLegend(): string[] {
         // concat xsl legend to xpath legend
-        let textmateTypes: string[] = this.xpathLegend;
+        let textmateTypes: string[] = this.xpathLegend.slice(0);
         let keyCount: number = Object.keys(XSLTokenLevelState).length / 2;
         for (let i = 0; i < keyCount; i++) {
             textmateTypes.push(XSLTokenLevelState[i]);

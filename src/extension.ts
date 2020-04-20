@@ -137,7 +137,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection;
-	public symbols: vscode.DocumentSymbol[] = [];
 	private allTokens: BaseToken[] = [];
 
 	public constructor(collection: vscode.DiagnosticCollection) {
@@ -147,7 +146,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	public diagnosticsListener = (document: vscode.TextDocument, allTokens: BaseToken[]) => {
 		this.allTokens = allTokens;
-		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, this.symbols);
+		let symbols: vscode.DocumentSymbol[] = [];
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, symbols);
 		if (diagnostics.length > 0) {
 			this.collection.set(document.uri, diagnostics);
 		} else {
@@ -156,9 +156,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	};
 
-	public provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
+	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
 		console.log('provideDocumentSymbols: ' + document.uri);
-		// const allTokens = this.xslLexer.analyse(document.getText());
+		const allTokens = this.xslLexer.analyse(document.getText());
 
 		// allTokens.forEach((token) => {
 		// 	//builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
@@ -166,10 +166,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// const result: vscode.DocumentSymbol[] = [];
 		let startXMLNumber = XslLexer.getXsltStartTokenNumber();
 		return new Promise((resolve, reject) => {
-			if (this.allTokens.length > 0) {
-				this.symbols = [];
+			let symbols: vscode.DocumentSymbol[] = [];
+
+			if (allTokens.length > 0) {
 				let i = 0;
-				this.allTokens.forEach((currentToken) => {
+				allTokens.forEach((currentToken) => {
 					i++;
 					let isXMLToken = currentToken.tokenType >= startXMLNumber;
 					if (isXMLToken) {
@@ -177,22 +178,25 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (xmlTokenType === XSLTokenLevelState.elementName) {
 							let startPos = new vscode.Position(currentToken.line, currentToken.startCharacter);
 							let endPos = new vscode.Position(currentToken.line, currentToken.startCharacter + currentToken.length);
-							let tokenRange = new vscode.Range(startPos, endPos);
-			
-							let ds: vscode.DocumentSymbol = {
-								name: 'root' + i,
-								detail: 'something on root',
-								kind: vscode.SymbolKind.Package,
-								range: tokenRange,
-								selectionRange: tokenRange,
-								children: []
-							}
-							this.symbols.push(ds);
+							let startPos2 = new vscode.Position(currentToken.line, currentToken.startCharacter + 1);
+							let endPos2 = new vscode.Position(currentToken.line, currentToken.startCharacter + currentToken.length - 1);
+							let fullRange = new vscode.Range(startPos, endPos);
+							let identifierRange = new vscode.Range(startPos2, endPos2);
+							let name = 'root' + i;
+							let detail = 'detail' + i;
+							let kind = vscode.SymbolKind.Variable;
+
+							let ds = new vscode.DocumentSymbol(name,detail,kind,fullRange, identifierRange);
+							symbols.push(ds);
 						}
 					}
 				});
-
-				resolve(this.symbols);
+				console.log('symbol count:' + symbols.length + ' allTokens count: '  + allTokens.length);
+				if (symbols.length > 0) {
+					resolve(symbols);
+				} else {
+					resolve(undefined);
+				}
 			} else {
 				resolve(undefined);
 			}
