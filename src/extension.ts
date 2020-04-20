@@ -175,7 +175,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					let isXMLToken = currentToken.tokenType >= startXMLNumber;
 					if (isXMLToken) {
 						let xmlTokenType = <XSLTokenLevelState>(currentToken.tokenType - startXMLNumber);
-						if (xmlTokenType === XSLTokenLevelState.elementName) {
+						if (xmlTokenType === XSLTokenLevelState.elementName || xmlTokenType === XSLTokenLevelState.xslElementName) {
 							let startPos = new vscode.Position(currentToken.line, currentToken.startCharacter);
 							let endPos = new vscode.Position(currentToken.line, currentToken.startCharacter + currentToken.length);
 							let startPos2 = new vscode.Position(currentToken.line, currentToken.startCharacter + 1);
