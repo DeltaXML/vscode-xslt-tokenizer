@@ -156,10 +156,19 @@ export class XsltTokenDiagnostics {
 								// end of an element close-tag:
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
-									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens
-									inScopeVariablesList = (poppedData)? poppedData.variables: [];
-									if (poppedData?.currentVariable) {
-										inScopeVariablesList.push(poppedData.currentVariable);
+									if (poppedData) {
+										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.identifierValue, poppedData.identifierToken,token);
+										symbol.children = poppedData.childSymbols;
+										// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
+										if (elementStack.length > 0) {
+											elementStack[elementStack.length - 1].childSymbols.push(symbol);
+										} else {
+											topLevelSymbols.push(symbol);
+										}
+										inScopeVariablesList = (poppedData)? poppedData.variables: [];
+										if (poppedData.currentVariable) {
+											inScopeVariablesList.push(poppedData.currentVariable);
+										}
 									}
 								} else {
 
