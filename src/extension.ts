@@ -59,7 +59,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 
 	// syntax highlighters
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(xsltSymbolProvider.diagnosticsListener), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(() => {}), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
@@ -138,16 +138,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection;
 	private allTokens: BaseToken[] = [];
+	private symbols: vscode.DocumentSymbol[] = [];
 
 	public constructor(collection: vscode.DiagnosticCollection) {
 		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
 		this.collection = collection;
 	}
 
-	public diagnosticsListener = (document: vscode.TextDocument, allTokens: BaseToken[]) => {
-		this.allTokens = allTokens;
-		let symbols: vscode.DocumentSymbol[] = [];
-		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, symbols);
+	public diagnosticsListener = (document: vscode.TextDocument, symbols: vscode.DocumentSymbol[]) => {
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, this.allTokens, this.symbols);
 		if (diagnostics.length > 0) {
 			this.collection.set(document.uri, diagnostics);
 		} else {
@@ -158,7 +157,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
 		console.log('provideDocumentSymbols: ' + document.uri);
-		const allTokens = this.xslLexer.analyse(document.getText());
+		this.allTokens = this.xslLexer.analyse(document.getText());
+		this.symbols = [];
+		this.diagnosticsListener(document, this.symbols);
 
 		// allTokens.forEach((token) => {
 		// 	//builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
@@ -168,9 +169,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
 
-			if (allTokens.length > 0) {
+			if (this.allTokens.length > 0) {
 				let i = 0;
-				allTokens.forEach((currentToken) => {
+				this.allTokens.forEach((currentToken) => {
 					i++;
 					let isXMLToken = currentToken.tokenType >= startXMLNumber;
 					if (isXMLToken) {
@@ -191,7 +192,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						}
 					}
 				});
-				console.log('symbol count:' + symbols.length + ' allTokens count: '  + allTokens.length);
+				console.log('symbol count:' + symbols.length + ' allTokens count: '  + this.allTokens.length);
 				if (symbols.length > 0) {
 					resolve(symbols);
 				} else {
