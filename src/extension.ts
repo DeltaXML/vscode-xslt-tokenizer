@@ -141,6 +141,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	public constructor(collection: vscode.DiagnosticCollection) {
 		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
+		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
 	}
 
