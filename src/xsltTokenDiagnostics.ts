@@ -112,7 +112,11 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.elementName:
-						if (tagType === TagType.Start) tagType = TagType.XMLstart;
+						if (tagType === TagType.Start) {
+							tagType = TagType.XMLstart;
+							startTagToken = token;
+							tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						}
 						break;
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
@@ -364,7 +368,7 @@ export class XsltTokenDiagnostics {
 		let fullRange = new vscode.Range(startPos, endPos);
 		let innerRange = new vscode.Range(innerStartPos, innerEndPos);
 		let detail = '';
-		let kind = vscode.SymbolKind.Variable;
+		let kind = vscode.SymbolKind.Package;
 
 		let ds = new vscode.DocumentSymbol(name,detail,kind,fullRange, innerRange);
 		return ds;
