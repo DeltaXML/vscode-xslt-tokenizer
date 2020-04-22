@@ -31,6 +31,9 @@ interface ElementData {
 	variables: VariableData[]
 	currentVariable?: VariableData,
 	xpathVariableCurrentlyBeingDefined?: boolean;
+	identifierToken: BaseToken;
+	symbolName: string;
+	childSymbols: vscode.DocumentSymbol[]
 }
 interface XPathData {
 	token: BaseToken;
@@ -69,6 +72,7 @@ export class XsltTokenDiagnostics {
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
+		let startTagToken: BaseToken|null = null;
 		let preXPathVariable = false;
 		let anonymousFunctionParams = false;
 		let variableData: VariableData|null = null;
@@ -76,7 +80,8 @@ export class XsltTokenDiagnostics {
 		let xsltVariableReferences: BaseToken[] = [];
 		let prevToken: BaseToken|null = null;
 		let includeOrImport = false;
-		let problemTokens: BaseToken[] = []
+		let problemTokens: BaseToken[] = [];
+		let topLevelSymbols: vscode.DocumentSymbol[] = symbols;
 
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
@@ -98,6 +103,7 @@ export class XsltTokenDiagnostics {
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
 						if (tagType === TagType.Start) {
+							startTagToken = token;
 							tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							tagType = (XsltTokenDiagnostics.xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
 							if (!includeOrImport && tagType != TagType.XSLTvar && elementStack.length === 1) {
@@ -119,10 +125,13 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSt:
 								// start-tag ended, we're now within the new element scope:
 								if (variableData != null) {
-									elementStack.push({currentVariable: variableData, variables: inScopeVariablesList});
+									if (startTagToken){
+										elementStack.push({currentVariable: variableData, variables: inScopeVariablesList, 
+											symbolName: tagElementName, identifierToken: startTagToken, childSymbols: []});
+									}
 									xsltVariableDeclarations.push(variableData.token);
-								} else {
-									elementStack.push({variables: inScopeVariablesList});
+								} else if (startTagToken) {
+									elementStack.push({variables: inScopeVariablesList, symbolName: tagElementName, identifierToken: startTagToken, childSymbols: []});
 								}
 								inScopeVariablesList = [];
 								tagType = TagType.NonStart;
@@ -133,15 +142,37 @@ export class XsltTokenDiagnostics {
 									inScopeVariablesList.push(variableData);
 									xsltVariableDeclarations.push(variableData.token);
 								}
+								if (startTagToken) {
+									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, startTagToken, token);
+									if (elementStack.length > 1) {
+										elementStack[elementStack.length - 1].childSymbols.push(symbol);
+									} else {
+										topLevelSymbols.push(symbol);
+									}
+								} else {
+
+								}
 								break;
-							case XMLCharState.lCt:
-								// start of an element close-tag:
+							case XMLCharState.rCt:
+								// end of an element close-tag:
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
-									inScopeVariablesList = (poppedData)? poppedData.variables: [];
-									if (poppedData?.currentVariable) {
-										inScopeVariablesList.push(poppedData.currentVariable);
+									if (poppedData) {
+										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.identifierToken, token);
+										symbol.children = poppedData.childSymbols;
+										// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
+										if (elementStack.length > 0) {
+											elementStack[elementStack.length - 1].childSymbols.push(symbol);
+										} else {
+											topLevelSymbols.push(symbol);
+										}
+										inScopeVariablesList = (poppedData)? poppedData.variables: [];
+										if (poppedData.currentVariable) {
+											inScopeVariablesList.push(poppedData.currentVariable);
+										}
 									}
+								} else {
+
 								}
 								break;
 						}
@@ -315,6 +346,28 @@ export class XsltTokenDiagnostics {
 			result = token;
 		}
 		return result;
+	}
+
+	private static createSymbolFromElementTokens(name: string, fullStartToken: BaseToken, fullEndToken: BaseToken, innerToken?: BaseToken) {
+		// innerToken to be used if its an attribute-value for example
+		let startPos = new vscode.Position(fullStartToken.line, fullStartToken.startCharacter - 1);
+		let endPos = new vscode.Position(fullEndToken.line, fullEndToken.startCharacter + fullEndToken.length + 1);
+		let innerStartPos;
+		let innerEndPos;
+		if (innerToken) {
+			innerStartPos = new vscode.Position(innerToken.line, innerToken.startCharacter);
+			innerEndPos = new vscode.Position(innerToken.line, innerToken.startCharacter + innerToken.length);		
+		} else {
+			innerStartPos = new vscode.Position(fullStartToken.line, fullStartToken.startCharacter);
+			innerEndPos = new vscode.Position(fullEndToken.line, fullStartToken.startCharacter + fullStartToken.length);	
+		}
+		let fullRange = new vscode.Range(startPos, endPos);
+		let innerRange = new vscode.Range(innerStartPos, innerEndPos);
+		let detail = '';
+		let kind = vscode.SymbolKind.Variable;
+
+		let ds = new vscode.DocumentSymbol(name,detail,kind,fullRange, innerRange);
+		return ds;
 	}
 
 	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean): boolean {
