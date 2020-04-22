@@ -146,7 +146,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public diagnosticsListener = (document: vscode.TextDocument, symbols: vscode.DocumentSymbol[]) => {
-		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, this.allTokens, this.symbols);
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, this.allTokens, symbols);
 		if (diagnostics.length > 0) {
 			this.collection.set(document.uri, diagnostics);
 		} else {
@@ -167,37 +167,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// const result: vscode.DocumentSymbol[] = [];
 		let startXMLNumber = XslLexer.getXsltStartTokenNumber();
 		return new Promise((resolve, reject) => {
-			let symbols: vscode.DocumentSymbol[] = [];
-
-			if (this.allTokens.length > 0) {
-				let i = 0;
-				this.allTokens.forEach((currentToken) => {
-					i++;
-					let isXMLToken = currentToken.tokenType >= startXMLNumber;
-					if (isXMLToken) {
-						let xmlTokenType = <XSLTokenLevelState>(currentToken.tokenType - startXMLNumber);
-						if (xmlTokenType === XSLTokenLevelState.elementName || xmlTokenType === XSLTokenLevelState.xslElementName) {
-							let startPos = new vscode.Position(currentToken.line, currentToken.startCharacter);
-							let endPos = new vscode.Position(currentToken.line, currentToken.startCharacter + currentToken.length);
-							let startPos2 = new vscode.Position(currentToken.line, currentToken.startCharacter + 1);
-							let endPos2 = new vscode.Position(currentToken.line, currentToken.startCharacter + currentToken.length - 1);
-							let fullRange = new vscode.Range(startPos, endPos);
-							let identifierRange = new vscode.Range(startPos2, endPos2);
-							let name = 'root' + i;
-							let detail = 'detail' + i;
-							let kind = vscode.SymbolKind.Variable;
-
-							let ds = new vscode.DocumentSymbol(name,detail,kind,fullRange, identifierRange);
-							symbols.push(ds);
-						}
-					}
-				});
-				console.log('symbol count:' + symbols.length + ' allTokens count: '  + this.allTokens.length);
-				if (symbols.length > 0) {
-					resolve(symbols);
-				} else {
-					resolve(undefined);
-				}
+			console.log('symbol count:' + this.symbols.length + ' allTokens count: '  + this.allTokens.length);
+			if (this.symbols.length > 0) {
+				resolve(this.symbols);
 			} else {
 				resolve(undefined);
 			}

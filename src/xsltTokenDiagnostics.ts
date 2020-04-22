@@ -32,7 +32,7 @@ interface ElementData {
 	currentVariable?: VariableData,
 	xpathVariableCurrentlyBeingDefined?: boolean;
 	identifierToken: BaseToken;
-	identifierValue: string;
+	symbolName: string;
 	childSymbols: vscode.DocumentSymbol[]
 }
 interface XPathData {
@@ -81,7 +81,7 @@ export class XsltTokenDiagnostics {
 		let prevToken: BaseToken|null = null;
 		let includeOrImport = false;
 		let problemTokens: BaseToken[] = [];
-		let topLevelSymbols: vscode.DocumentSymbol[] = [];
+		let topLevelSymbols: vscode.DocumentSymbol[] = symbols;
 
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
@@ -126,11 +126,11 @@ export class XsltTokenDiagnostics {
 								if (variableData != null) {
 									if (startTagToken){
 										elementStack.push({currentVariable: variableData, variables: inScopeVariablesList, 
-											identifierValue: tagElementName, identifierToken: startTagToken, childSymbols: []});
+											symbolName: tagElementName, identifierToken: startTagToken, childSymbols: []});
 									}
 									xsltVariableDeclarations.push(variableData.token);
 								} else if (startTagToken) {
-									elementStack.push({variables: inScopeVariablesList, identifierValue: tagElementName, identifierToken: startTagToken, childSymbols: []});
+									elementStack.push({variables: inScopeVariablesList, symbolName: tagElementName, identifierToken: startTagToken, childSymbols: []});
 								}
 								inScopeVariablesList = [];
 								tagType = TagType.NonStart;
@@ -157,7 +157,7 @@ export class XsltTokenDiagnostics {
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
 									if (poppedData) {
-										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.identifierValue, poppedData.identifierToken,token);
+										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.identifierToken, token);
 										symbol.children = poppedData.childSymbols;
 										// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
 										if (elementStack.length > 0) {
@@ -348,6 +348,7 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static createSymbolFromElementTokens(name: string, fullStartToken: BaseToken, fullEndToken: BaseToken, innerToken?: BaseToken) {
+		// innerToken to be used if its an attribute-value for example
 		let startPos = new vscode.Position(fullStartToken.line, fullStartToken.startCharacter - 1);
 		let endPos = new vscode.Position(fullEndToken.line, fullEndToken.startCharacter + fullEndToken.length + 1);
 		let innerStartPos;
@@ -365,7 +366,6 @@ export class XsltTokenDiagnostics {
 		let kind = vscode.SymbolKind.Variable;
 
 		let ds = new vscode.DocumentSymbol(name,detail,kind,fullRange, innerRange);
-		ds.s
 		return ds;
 	}
 
