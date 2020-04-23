@@ -139,7 +139,7 @@ export class XsltTokenDiagnostics {
 								// start-tag ended, we're now within the new element scope:
 								if (variableData !== null) {
 									if (startTagToken){
-										let symbolName = (variableData === null)? tagElementName: tagElementName + ' ' + variableData.name;
+										let symbolName = (tagIdentifierName !== '')? tagElementName + ' ' + tagIdentifierName: tagElementName;
 										elementStack.push({currentVariable: variableData, variables: inScopeVariablesList, 
 											symbolName: symbolName, identifierToken: startTagToken, childSymbols: []});
 									}
