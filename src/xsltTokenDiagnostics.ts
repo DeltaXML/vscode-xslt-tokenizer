@@ -137,15 +137,16 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rStNoAtt:
 							case XMLCharState.rSt:
 								// start-tag ended, we're now within the new element scope:
+								let newSymbolName = (tagIdentifierName !== '')? tagElementName + ' ' + tagIdentifierName: tagElementName;
+
 								if (variableData !== null) {
 									if (startTagToken){
-										let symbolName = (tagIdentifierName !== '')? tagElementName + ' ' + tagIdentifierName: tagElementName;
 										elementStack.push({currentVariable: variableData, variables: inScopeVariablesList, 
-											symbolName: symbolName, identifierToken: startTagToken, childSymbols: []});
+											symbolName: newSymbolName, identifierToken: startTagToken, childSymbols: []});
 									}
 									xsltVariableDeclarations.push(variableData.token);
 								} else if (startTagToken) {
-									elementStack.push({variables: inScopeVariablesList, symbolName: tagElementName, identifierToken: startTagToken, childSymbols: []});
+									elementStack.push({variables: inScopeVariablesList, symbolName: newSymbolName, identifierToken: startTagToken, childSymbols: []});
 								}
 								inScopeVariablesList = [];
 								tagType = TagType.NonStart;
