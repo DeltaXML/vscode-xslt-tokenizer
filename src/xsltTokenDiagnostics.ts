@@ -86,6 +86,7 @@ export class XsltTokenDiagnostics {
 		let includeOrImport = false;
 		let problemTokens: BaseToken[] = [];
 		let topLevelSymbols: vscode.DocumentSymbol[] = symbols;
+		let tagIdentifierName: string = '';
 
 		allTokens.forEach((token) => {
 			lineNumber = token.line;
@@ -128,6 +129,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
+								tagIdentifierName = '';
 								variableData = null;
 								tagElementName = '';
 								tagType = TagType.Start;
@@ -137,8 +139,9 @@ export class XsltTokenDiagnostics {
 								// start-tag ended, we're now within the new element scope:
 								if (variableData !== null) {
 									if (startTagToken){
+										let symbolName = (variableData === null)? tagElementName: tagElementName + ' ' + variableData.name;
 										elementStack.push({currentVariable: variableData, variables: inScopeVariablesList, 
-											symbolName: tagElementName, identifierToken: startTagToken, childSymbols: []});
+											symbolName: symbolName, identifierToken: startTagToken, childSymbols: []});
 									}
 									xsltVariableDeclarations.push(variableData.token);
 								} else if (startTagToken) {
@@ -154,7 +157,8 @@ export class XsltTokenDiagnostics {
 									xsltVariableDeclarations.push(variableData.token);
 								}
 								if (startTagToken) {
-									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, startTagToken, token);
+									let symbolName = (tagIdentifierName !== null)? tagElementName + ' ' + tagIdentifierName: tagElementName;
+									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(symbolName, startTagToken, token);
 									if (elementStack.length > 0) {
 										elementStack[elementStack.length - 1].childSymbols.push(symbol);
 									} else {
@@ -198,6 +202,7 @@ export class XsltTokenDiagnostics {
 						if (attType === AttributeType.Variable) {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
+							tagIdentifierName = variableName;
 							variableData = {token: token, name: variableName};
 						}
 						attType = AttributeType.None;
