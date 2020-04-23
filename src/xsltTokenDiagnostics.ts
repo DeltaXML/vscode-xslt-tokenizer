@@ -27,11 +27,15 @@ enum AttributeType {
 	Variable
 }
 
+interface XSLTToken extends BaseToken {
+	tagType?: TagType
+}
+
 interface ElementData {
 	variables: VariableData[]
 	currentVariable?: VariableData,
 	xpathVariableCurrentlyBeingDefined?: boolean;
-	identifierToken: BaseToken;
+	identifierToken: XSLTToken;
 	symbolName: string;
 	childSymbols: vscode.DocumentSymbol[]
 }
@@ -72,7 +76,7 @@ export class XsltTokenDiagnostics {
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
-		let startTagToken: BaseToken|null = null;
+		let startTagToken: XSLTToken|null = null;
 		let preXPathVariable = false;
 		let anonymousFunctionParams = false;
 		let variableData: VariableData|null = null;
@@ -103,10 +107,13 @@ export class XsltTokenDiagnostics {
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
 						if (tagType === TagType.Start) {
-							startTagToken = token;
 							tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							tagType = (XsltTokenDiagnostics.xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
-							if (!includeOrImport && tagType != TagType.XSLTvar && elementStack.length === 1) {
+							let xsltToken: XSLTToken = token;
+							xsltToken['tagType'] = tagType;
+							startTagToken = token;
+
+							if (!includeOrImport && tagType !== TagType.XSLTvar && elementStack.length === 1) {
 								includeOrImport = tagElementName === XsltTokenDiagnostics.xslImport || tagElementName === XsltTokenDiagnostics.xslInclude;
 							}
 						}
@@ -128,7 +135,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rStNoAtt:
 							case XMLCharState.rSt:
 								// start-tag ended, we're now within the new element scope:
-								if (variableData != null) {
+								if (variableData !== null) {
 									if (startTagToken){
 										elementStack.push({currentVariable: variableData, variables: inScopeVariablesList, 
 											symbolName: tagElementName, identifierToken: startTagToken, childSymbols: []});
@@ -142,13 +149,13 @@ export class XsltTokenDiagnostics {
 								break;
 							case XMLCharState.rSelfCt:
 								// it may be a self-closed variable:
-								if (variableData != null) {
+								if (variableData !== null) {
 									inScopeVariablesList.push(variableData);
 									xsltVariableDeclarations.push(variableData.token);
 								}
 								if (startTagToken) {
 									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, startTagToken, token);
-									if (elementStack.length > 1) {
+									if (elementStack.length > 0) {
 										elementStack[elementStack.length - 1].childSymbols.push(symbol);
 									} else {
 										topLevelSymbols.push(symbol);
@@ -217,14 +224,14 @@ export class XsltTokenDiagnostics {
 								// e.g.  with 'let $b := $a' the 'let $b' part has already occurred, the $a part needs to be resolved -  preXPathVariable is true also
 								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
 									xpathStack, inScopeVariablesList, elementStack);
-								if (unResolvedToken != null) {
+								if (unResolvedToken !== null) {
 									xsltVariableReferences.push(unResolvedToken);
 								}
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
 							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack);
-							if (unResolvedToken != null) {
+							if (unResolvedToken !== null) {
 								xsltVariableReferences.push(unResolvedToken);
 							}
 						}
@@ -352,8 +359,40 @@ export class XsltTokenDiagnostics {
 		return result;
 	}
 
-	private static createSymbolFromElementTokens(name: string, fullStartToken: BaseToken, fullEndToken: BaseToken, innerToken?: BaseToken) {
+	private static createSymbolFromElementTokens(name: string, fullStartToken: XSLTToken, fullEndToken: BaseToken, innerToken?: BaseToken) {
 		// innerToken to be used if its an attribute-value for example
+		let kind: vscode.SymbolKind;
+		switch (fullStartToken.tagType) {
+			case TagType.XSLTvar:
+				kind = name === 'xsl:variable'? vscode.SymbolKind.Variable: vscode.SymbolKind.Enum;
+				break;
+			case TagType.XSLTstart:
+				switch (name) {
+					case 'xsl:package':
+					case 'xsl:stylesheet':
+					case 'xsl:transform':
+						kind = vscode.SymbolKind.Package;
+						break;
+					case 'xsl:function':
+						kind = vscode.SymbolKind.Function;
+						break;
+					case 'xsl:template':
+						kind = vscode.SymbolKind.Interface;
+						break;
+					default:
+						kind = vscode.SymbolKind.Struct;
+						break;
+				}
+				break;
+			case TagType.XMLstart:
+				kind = vscode.SymbolKind.Object;
+				break;
+			default:
+				kind = vscode.SymbolKind.Null;
+				break;
+
+		}
+
 		let startPos = new vscode.Position(fullStartToken.line, fullStartToken.startCharacter - 1);
 		let endPos = new vscode.Position(fullEndToken.line, fullEndToken.startCharacter + fullEndToken.length + 1);
 		let innerStartPos;
@@ -368,7 +407,6 @@ export class XsltTokenDiagnostics {
 		let fullRange = new vscode.Range(startPos, endPos);
 		let innerRange = new vscode.Range(innerStartPos, innerEndPos);
 		let detail = '';
-		let kind = vscode.SymbolKind.Package;
 
 		let ds = new vscode.DocumentSymbol(name,detail,kind,fullRange, innerRange);
 		return ds;
