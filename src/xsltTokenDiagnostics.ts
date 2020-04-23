@@ -24,7 +24,8 @@ enum TagType {
 
 enum AttributeType {
 	None,
-	Variable
+	Variable,
+	InstructionName
 }
 
 interface XSLTToken extends BaseToken {
@@ -197,6 +198,9 @@ export class XsltTokenDiagnostics {
 						if (tagType === TagType.XSLTvar) {
 							let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt? AttributeType.Variable: AttributeType.None;
+						} else if (tagType === TagType.XSLTstart) {
+							let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							attType = attNameText === XsltTokenDiagnostics.xslNameAtt? AttributeType.InstructionName: AttributeType.None;
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
@@ -205,6 +209,10 @@ export class XsltTokenDiagnostics {
 							let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
 							tagIdentifierName = variableName;
 							variableData = {token: token, name: variableName};
+						} else if (attType === AttributeType.InstructionName) {
+							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
+							tagIdentifierName = variableName;
 						}
 						attType = AttributeType.None;
 						break;
