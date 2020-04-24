@@ -1,1 +1,3 @@
-<xsl:t select=  "if((true) then abc else true">
+<xsl:a>
+    <xsl:c t="abc"/>
+</xsl:a>

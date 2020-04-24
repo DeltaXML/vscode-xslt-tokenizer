@@ -88,8 +88,9 @@ export class XsltTokenDiagnostics {
 		let problemTokens: BaseToken[] = [];
 		let topLevelSymbols: vscode.DocumentSymbol[] = symbols;
 		let tagIdentifierName: string = '';
+		let lastTokenIndex = allTokens.length - 1;
 
-		allTokens.forEach((token) => {
+		allTokens.forEach((token, index) => {
 			lineNumber = token.line;
 
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
@@ -153,6 +154,7 @@ export class XsltTokenDiagnostics {
 								tagType = TagType.NonStart;
 								break;
 							case XMLCharState.rSelfCt:
+							case XMLCharState.rSelfCtNoAtt:
 								// it may be a self-closed variable:
 								if (variableData !== null) {
 									inScopeVariablesList.push(variableData);
@@ -337,6 +339,35 @@ export class XsltTokenDiagnostics {
 				}
 			}
 			prevToken = token;
+			if (index === lastTokenIndex && elementStack.length > 0) {
+				// xml is now well-nested if items still on the stack at the end
+				// but try to keep some part of the tree:
+				let usedtoken = false;
+				while (elementStack.length > 0) {
+					let poppedData = elementStack.pop();
+					let endToken: BaseToken;
+					if (poppedData) {
+						if (usedtoken) {
+							// use final token as we don't know what the end token is 
+							// but reduce lendth by one on each iteration - so its well nested
+							endToken = token;
+							endToken.length = endToken.length - 1;
+						} else {
+							endToken = token;
+							usedtoken = true;
+						}
+						let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.identifierToken, endToken);
+						if (elementStack.length > 0) {
+							console.log('**' + elementStack.length)
+							elementStack[elementStack.length - 1].childSymbols.push(symbol);
+						} else {
+							console.log('-----tidied up------')
+							topLevelSymbols.push(symbol);
+						}
+					}
+
+				}
+			}
 		});
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, xsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
