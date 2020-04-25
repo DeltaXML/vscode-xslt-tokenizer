@@ -528,9 +528,16 @@ export class XsltTokenDiagnostics {
 			let line = token.line;
 			let endChar = token.startCharacter + token.length;
 			let tokenValue = token.value;
-			let matchingChar: any = XsltTokenDiagnostics.getMatchingSymbol(tokenValue);
-			let msg = matchingChar.length === 0? `No match found for '${tokenValue}'`: `'${tokenValue}' has no matching '${matchingChar}'`;
-			        ``;
+			let msg: string;
+			switch (token.error) {
+				case ErrorType.BracketNesting:
+					let matchingChar: any = XsltTokenDiagnostics.getMatchingSymbol(tokenValue);
+					msg = matchingChar.length === 0? `No match found for '${tokenValue}'`: `'${tokenValue}' has no matching '${matchingChar}'`;
+					break;
+				default:
+					msg = 'Unexepected Error';
+			}
+
 			variableRefDiagnostics.push({
 				code: '',
 				message: msg,
