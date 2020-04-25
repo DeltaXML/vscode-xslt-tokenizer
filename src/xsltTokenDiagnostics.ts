@@ -25,7 +25,8 @@ enum TagType {
 enum AttributeType {
 	None,
 	Variable,
-	InstructionName
+	InstructionName,
+	InstructionMode
 }
 
 interface XSLTToken extends BaseToken {
@@ -65,6 +66,8 @@ export class XsltTokenDiagnostics {
 
 
 	private static readonly xslNameAtt = 'name';
+	private static readonly xslModeAtt = 'mode';
+
 
 	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
@@ -188,7 +191,7 @@ export class XsltTokenDiagnostics {
 										}
 								    }
 									if (poppedData) {
-										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, tagIdentifierName, poppedData.identifierToken, token);
+										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, token);
 										if (symbol !== null) {
 											symbol.children = poppedData.childSymbols;
 											// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
@@ -215,7 +218,13 @@ export class XsltTokenDiagnostics {
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt? AttributeType.Variable: AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
 							let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							attType = attNameText === XsltTokenDiagnostics.xslNameAtt? AttributeType.InstructionName: AttributeType.None;
+							if (attNameText === XsltTokenDiagnostics.xslNameAtt) {
+								attType = AttributeType.InstructionName;
+							} else if (attNameText === XsltTokenDiagnostics.xslModeAtt) {
+								attType = AttributeType.InstructionMode;
+							} else {
+								attType = AttributeType.None;
+							}
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
@@ -225,6 +234,15 @@ export class XsltTokenDiagnostics {
 							tagIdentifierName = variableName;
 							variableData = {token: token, name: variableName};
 						} else if (attType === AttributeType.InstructionName) {
+							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
+							let slashPos = variableName.lastIndexOf('/');
+							if (slashPos > 0) {
+								// package name may be URI
+								variableName = variableName.substring(slashPos + 1);
+							}
+							tagIdentifierName = variableName;
+						} else if (attType === AttributeType.InstructionMode && tagIdentifierName === '') {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
 							tagIdentifierName = variableName;
