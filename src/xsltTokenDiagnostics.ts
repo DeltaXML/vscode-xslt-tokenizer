@@ -445,7 +445,7 @@ export class XsltTokenDiagnostics {
 		}
 		switch (fullStartToken.tagType) {
 			case TagType.XSLTvar:
-				kind = name === 'xsl:variable'? vscode.SymbolKind.Variable: vscode.SymbolKind.Enum;
+				kind = vscode.SymbolKind.Enum;
 				break;
 			case TagType.XSLTstart:
 				switch (name) {
@@ -460,8 +460,35 @@ export class XsltTokenDiagnostics {
 					case 'xsl:template':
 						kind = vscode.SymbolKind.Interface;
 						break;
+					case 'xsl:if':
+					case 'xsl:when':
+					case 'xsl:otherwise':
+						kind = vscode.SymbolKind.Namespace;
+						break;
+					case 'xsl:key':
+						kind = vscode.SymbolKind.Key;
+						break;
+					case 'xsl:sequence':
+						kind = vscode.SymbolKind.Module;
+						break;
+					case 'xsl:value-of':
+					case 'xsl:text':
+						kind = vscode.SymbolKind.String;
+						break;
+					case 'xsl:for-each':
+					case 'xsl:for-each-group':
+					case 'xsl:apply-templates':
+						kind = vscode.SymbolKind.EnumMember;
+						break;
+					case 'xsl:import':
+					case 'xsl:include':
+						kind = vscode.SymbolKind.File;
+						break;
+					case 'xsl:choose':
+						kind = vscode.SymbolKind.TypeParameter;
+						break;
 					default:
-						kind = vscode.SymbolKind.Struct;
+						kind = vscode.SymbolKind.Object;
 						break;
 				}
 				break;
