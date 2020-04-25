@@ -163,13 +163,13 @@ export class XsltTokenDiagnostics {
 								if (startTagToken) {
 									let symbolName = (tagIdentifierName !== null)? tagElementName + ' ' + tagIdentifierName: tagElementName;
 									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(symbolName, startTagToken, token);
-									if (elementStack.length > 0) {
-										elementStack[elementStack.length - 1].childSymbols.push(symbol);
-									} else {
-										topLevelSymbols.push(symbol);
+									if (symbol !== null) {
+										if (elementStack.length > 0) {
+											elementStack[elementStack.length - 1].childSymbols.push(symbol);
+										} else {
+											topLevelSymbols.push(symbol);
+										}
 									}
-								} else {
-
 								}
 								break;
 							case XMLCharState.rCt:
@@ -178,12 +178,14 @@ export class XsltTokenDiagnostics {
 									let poppedData = elementStack.pop();
 									if (poppedData) {
 										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.identifierToken, token);
-										symbol.children = poppedData.childSymbols;
-										// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
-										if (elementStack.length > 0) {
-											elementStack[elementStack.length - 1].childSymbols.push(symbol);
-										} else {
-											topLevelSymbols.push(symbol);
+										if (symbol !== null) {
+											symbol.children = poppedData.childSymbols;
+											// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
+											if (elementStack.length > 0) {
+												elementStack[elementStack.length - 1].childSymbols.push(symbol);
+											} else {
+												topLevelSymbols.push(symbol);
+											}
 										}
 										inScopeVariablesList = (poppedData)? poppedData.variables: [];
 										if (poppedData.currentVariable) {
@@ -357,12 +359,14 @@ export class XsltTokenDiagnostics {
 							usedtoken = true;
 						}
 						let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.identifierToken, endToken);
-						if (elementStack.length > 0) {
-							console.log('**' + elementStack.length)
-							elementStack[elementStack.length - 1].childSymbols.push(symbol);
-						} else {
-							console.log('-----tidied up------')
-							topLevelSymbols.push(symbol);
+						if (symbol !== null) {
+							if (elementStack.length > 0) {
+								console.log('**' + elementStack.length)
+								elementStack[elementStack.length - 1].childSymbols.push(symbol);
+							} else {
+								console.log('-----tidied up------')
+								topLevelSymbols.push(symbol);
+							}
 						}
 					}
 
@@ -407,6 +411,9 @@ export class XsltTokenDiagnostics {
 	private static createSymbolFromElementTokens(name: string, fullStartToken: XSLTToken, fullEndToken: BaseToken, innerToken?: BaseToken) {
 		// innerToken to be used if its an attribute-value for example
 		let kind: vscode.SymbolKind;
+		if (name.trim().length === 0) {
+			return null;
+		}
 		switch (fullStartToken.tagType) {
 			case TagType.XSLTvar:
 				kind = name === 'xsl:variable'? vscode.SymbolKind.Variable: vscode.SymbolKind.Enum;
@@ -437,8 +444,8 @@ export class XsltTokenDiagnostics {
 				break;
 
 		}
-
-		let startPos = new vscode.Position(fullStartToken.line, fullStartToken.startCharacter - 1);
+		let startCharPos = fullStartToken.startCharacter > 0? fullStartToken.startCharacter - 1: 0;
+		let startPos = new vscode.Position(fullStartToken.line, startCharPos);
 		let endPos = new vscode.Position(fullEndToken.line, fullEndToken.startCharacter + fullEndToken.length + 1);
 		let innerStartPos;
 		let innerEndPos;
@@ -451,10 +458,19 @@ export class XsltTokenDiagnostics {
 		}
 		let fullRange = new vscode.Range(startPos, endPos);
 		let innerRange = new vscode.Range(innerStartPos, innerEndPos);
+		// check for error!
+		if (!fullRange.contains(innerRange)) {
+			innerStartPos = new vscode.Position(fullStartToken.line, fullStartToken.startCharacter);
+			innerEndPos= new vscode.Position(fullStartToken.line, fullStartToken.startCharacter + fullStartToken.length);
+			innerRange = new vscode.Range(innerStartPos, innerEndPos);
+		}
 		let detail = '';
 
-		let ds = new vscode.DocumentSymbol(name,detail,kind,fullRange, innerRange);
-		return ds;
+		if (fullRange.contains(innerRange)) {
+			return new vscode.DocumentSymbol(name,detail,kind,fullRange, innerRange);
+		} else {
+			return null;
+		}
 	}
 
 	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean): boolean {
