@@ -110,8 +110,8 @@ export class XsltTokenDiagnostics {
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
+						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
-							tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							tagType = (XsltTokenDiagnostics.xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
@@ -123,10 +123,10 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.elementName:
+						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
 							tagType = TagType.XMLstart;
 							startTagToken = token;
-							tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						}
 						break;
 					case XSLTokenLevelState.xmlPunctuation:
@@ -174,6 +174,13 @@ export class XsltTokenDiagnostics {
 								// end of an element close-tag:
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
+									if (poppedData?.symbolName !== tagElementName) {
+										// not well-nested
+										if (elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === tagElementName) {
+											// recover for benefit of outline view
+											poppedData = elementStack.pop();
+										}
+									}
 									if (poppedData) {
 										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, tagIdentifierName, poppedData.identifierToken, token);
 										if (symbol !== null) {
