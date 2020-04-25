@@ -269,11 +269,16 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.attributeName:
+						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						let isValidAttName = XsltTokenDiagnostics.validateName(attNameText, nameStartCharRgx, nameCharRgx);
+						if (!isValidAttName) {
+							token['error'] = ErrorType.XMLName;
+							token['value'] = attNameText;
+							problemTokens.push(token);
+						}
 						if (tagType === TagType.XSLTvar) {
-							let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt? AttributeType.Variable: AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
-							let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							if (attNameText === XsltTokenDiagnostics.xslNameAtt) {
 								attType = AttributeType.InstructionName;
 							} else if (attNameText === XsltTokenDiagnostics.xslModeAtt) {
