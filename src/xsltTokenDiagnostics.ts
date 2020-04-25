@@ -38,6 +38,7 @@ interface ElementData {
 	xpathVariableCurrentlyBeingDefined?: boolean;
 	identifierToken: XSLTToken;
 	symbolName: string;
+	symbolID: string,
 	childSymbols: vscode.DocumentSymbol[]
 }
 interface XPathData {
@@ -139,16 +140,14 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rStNoAtt:
 							case XMLCharState.rSt:
 								// start-tag ended, we're now within the new element scope:
-								let newSymbolName = (tagIdentifierName !== '')? tagElementName + ' ' + tagIdentifierName: tagElementName;
-
 								if (variableData !== null) {
 									if (startTagToken){
 										elementStack.push({currentVariable: variableData, variables: inScopeVariablesList, 
-											symbolName: newSymbolName, identifierToken: startTagToken, childSymbols: []});
+											symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 									}
 									xsltVariableDeclarations.push(variableData.token);
 								} else if (startTagToken) {
-									elementStack.push({variables: inScopeVariablesList, symbolName: newSymbolName, identifierToken: startTagToken, childSymbols: []});
+									elementStack.push({variables: inScopeVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 								}
 								inScopeVariablesList = [];
 								tagType = TagType.NonStart;
@@ -161,8 +160,7 @@ export class XsltTokenDiagnostics {
 									xsltVariableDeclarations.push(variableData.token);
 								}
 								if (startTagToken) {
-									let symbolName = (tagIdentifierName !== null)? tagElementName + ' ' + tagIdentifierName: tagElementName;
-									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(symbolName, startTagToken, token);
+									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, tagIdentifierName, startTagToken, token);
 									if (symbol !== null) {
 										if (elementStack.length > 0) {
 											elementStack[elementStack.length - 1].childSymbols.push(symbol);
@@ -177,7 +175,7 @@ export class XsltTokenDiagnostics {
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
 									if (poppedData) {
-										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.identifierToken, token);
+										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, tagIdentifierName, poppedData.identifierToken, token);
 										if (symbol !== null) {
 											symbol.children = poppedData.childSymbols;
 											// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
@@ -358,7 +356,7 @@ export class XsltTokenDiagnostics {
 							endToken = token;
 							usedtoken = true;
 						}
-						let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.identifierToken, endToken);
+						let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
 						if (symbol !== null) {
 							if (elementStack.length > 0) {
 								console.log('**' + elementStack.length)
@@ -408,7 +406,7 @@ export class XsltTokenDiagnostics {
 		return result;
 	}
 
-	private static createSymbolFromElementTokens(name: string, fullStartToken: XSLTToken, fullEndToken: BaseToken, innerToken?: BaseToken) {
+	private static createSymbolFromElementTokens(name: string, id: string, fullStartToken: XSLTToken, fullEndToken: BaseToken, innerToken?: BaseToken) {
 		// innerToken to be used if its an attribute-value for example
 		let kind: vscode.SymbolKind;
 		if (name.trim().length === 0) {
@@ -465,9 +463,10 @@ export class XsltTokenDiagnostics {
 			innerRange = new vscode.Range(innerStartPos, innerEndPos);
 		}
 		let detail = '';
+		let fullSymbolName = id.length > 0? name + ' ' + id: name;
 
 		if (fullRange.contains(innerRange)) {
-			return new vscode.DocumentSymbol(name,detail,kind,fullRange, innerRange);
+			return new vscode.DocumentSymbol(fullSymbolName, detail, kind, fullRange, innerRange);
 		} else {
 			return null;
 		}
