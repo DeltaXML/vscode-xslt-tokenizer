@@ -996,6 +996,7 @@ export enum ErrorType {
     UnresolvedVarReference,
     ElementNesting,
     XMLName,
+    XMLAttNameSyntax,
     XPathUnexpected,
     BracketNesting
 }

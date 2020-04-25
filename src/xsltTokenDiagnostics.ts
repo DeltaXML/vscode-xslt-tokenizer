@@ -270,6 +270,13 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.attributeName:
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						if (prevToken) {
+							if (token.startCharacter - (prevToken.startCharacter + prevToken.length) === 0) {
+								token['error'] = ErrorType.XMLAttNameSyntax;
+								token['value'] = attNameText;
+								problemTokens.push(token);
+							}
+						}
 						let isValidAttName = XsltTokenDiagnostics.validateName(attNameText, nameStartCharRgx, nameCharRgx);
 						if (!isValidAttName) {
 							token['error'] = ErrorType.XMLName;
@@ -651,6 +658,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLName:
 					msg = `XML: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.XMLAttNameSyntax:
+					msg = `XML: Missing whitespace before attribute '${tokenValue}'`;
 					break;
 				default:
 					msg = 'Unexepected Error';
