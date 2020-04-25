@@ -174,13 +174,19 @@ export class XsltTokenDiagnostics {
 								// end of an element close-tag:
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
-									if (poppedData?.symbolName !== tagElementName) {
-										// not well-nested
-										if (elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === tagElementName) {
-											// recover for benefit of outline view
-											poppedData = elementStack.pop();
+									if (poppedData) {
+										if (poppedData.symbolName !== tagElementName) {
+											let errorToken = poppedData.identifierToken;
+											errorToken['error'] = ErrorType.ElementNesting;
+											errorToken['value'] = poppedData.symbolName;
+											problemTokens.push(errorToken);
+											// not well-nested
+											if (elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === tagElementName) {
+												// recover for benefit of outline view
+												poppedData = elementStack.pop();
+											}
 										}
-									}
+								    }
 									if (poppedData) {
 										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, tagIdentifierName, poppedData.identifierToken, token);
 										if (symbol !== null) {
@@ -532,10 +538,14 @@ export class XsltTokenDiagnostics {
 			switch (token.error) {
 				case ErrorType.BracketNesting:
 					let matchingChar: any = XsltTokenDiagnostics.getMatchingSymbol(tokenValue);
-					msg = matchingChar.length === 0? `No match found for '${tokenValue}'`: `'${tokenValue}' has no matching '${matchingChar}'`;
+					msg = matchingChar.length === 0? `XPath: No match found for '${tokenValue}'`: `'${tokenValue}' has no matching '${matchingChar}'`;
+					break;
+				case ErrorType.ElementNesting:
+					msg = `XML: Start tag '${tokenValue} has no matching close tag`;
 					break;
 				default:
 					msg = 'Unexepected Error';
+					break;
 			}
 
 			variableRefDiagnostics.push({
