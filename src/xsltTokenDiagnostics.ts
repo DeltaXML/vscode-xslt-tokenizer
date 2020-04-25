@@ -183,14 +183,23 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSt:
 								// start-tag ended, we're now within the new element scope:
 								let isValidName = XsltTokenDiagnostics.validateName(tagElementName, nameStartCharRgx, nameCharRgx);
-								console.log(isValidName);
 								if (variableData !== null) {
 									if (startTagToken){
+										if (!isValidName) {
+											startTagToken['error'] = ErrorType.XMLName;
+											startTagToken['value'] = tagElementName;
+											problemTokens.push(startTagToken);
+										}
 										elementStack.push({currentVariable: variableData, variables: inScopeVariablesList, 
 											symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 									}
 									xsltVariableDeclarations.push(variableData.token);
 								} else if (startTagToken) {
+									if (!isValidName) {
+										startTagToken['error'] = ErrorType.XMLName;
+										startTagToken['value'] = tagElementName;
+										problemTokens.push(startTagToken);
+									}
 									elementStack.push({variables: inScopeVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 								}
 								inScopeVariablesList = [];
@@ -198,12 +207,18 @@ export class XsltTokenDiagnostics {
 								break;
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
-								// it may be a self-closed variable:
+								let isValidSelfName = XsltTokenDiagnostics.validateName(tagElementName, nameStartCharRgx, nameCharRgx);
+
 								if (variableData !== null) {
 									inScopeVariablesList.push(variableData);
 									xsltVariableDeclarations.push(variableData.token);
 								}
 								if (startTagToken) {
+									if (!isValidSelfName) {
+										startTagToken['error'] = ErrorType.XMLName;
+										startTagToken['value'] = tagElementName;
+										problemTokens.push(startTagToken);
+									}
 									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, tagIdentifierName, startTagToken, token);
 									if (symbol !== null) {
 										if (elementStack.length > 0) {
@@ -629,6 +644,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.ElementNesting:
 					msg = `XML: Start tag '${tokenValue} has no matching close tag`;
 					break;
+				case ErrorType.XMLName:
+					msg = `XML: Invalid name: '${tokenValue}'`;
+					break;
 				default:
 					msg = 'Unexepected Error';
 					break;
@@ -702,14 +720,14 @@ export class XsltTokenDiagnostics {
 		if (includeOrImport) {
 			return {
 				code: '',
-				message: `The variable/parameter: ${token.value} cannot be resolved here, but it may be defined in an external module.`,
+				message: `XPath: The variable/parameter: ${token.value} cannot be resolved here, but it may be defined in an external module.`,
 				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 				severity: vscode.DiagnosticSeverity.Warning
 			}
 		} else {
 			return {
 				code: '',
-				message: `The variable/parameter ${token.value} cannot be resolved`,
+				message: `XPath: The variable/parameter ${token.value} cannot be resolved`,
 				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 				severity: vscode.DiagnosticSeverity.Error
 			}
