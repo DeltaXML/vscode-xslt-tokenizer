@@ -476,7 +476,7 @@ export class XsltTokenDiagnostics {
 			innerRange = new vscode.Range(innerStartPos, innerEndPos);
 		}
 		let detail = '';
-		let fullSymbolName = id.length > 0? name + ' ' + id: name;
+		let fullSymbolName = id.length > 0? name + ' \u203A ' + id: name;
 
 		if (fullRange.contains(innerRange)) {
 			return new vscode.DocumentSymbol(fullSymbolName, detail, kind, fullRange, innerRange);
