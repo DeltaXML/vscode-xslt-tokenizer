@@ -9,7 +9,7 @@
  */
 import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition, BaseToken} from './xpLexer';
-import {XslLexer, XSLTokenLevelState} from './xslLexer';
+import {XslLexer} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
