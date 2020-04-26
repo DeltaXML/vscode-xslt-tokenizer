@@ -9,14 +9,13 @@
  */
 import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition, BaseToken} from './xpLexer';
-import {XslLexer} from './xslLexer';
+import {XslLexer, LanguageConfiguration} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 
 const tokenModifiers = new Map<string, number>();
-const diagnosticsLanguages = ['xslt'];
 
 const legend = (function () {
 	const tokenTypesLegend = XslLexer.getTextmateTypeLegend();
@@ -34,8 +33,11 @@ let customTaskProvider: vscode.Disposable | undefined;
 
 
 export function activate(context: vscode.ExtensionContext) {
-	const collection = vscode.languages.createDiagnosticCollection('xslt');
-	const xsltSymbolProvider = new XsltSymbolProvider(collection);
+	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
+	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
+
+	const xmlDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xml');
+	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection);
 
 	// context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
 	// 	if (editor) {
@@ -44,6 +46,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// }));
 
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt'}, xsltSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml'}, xmlSymbolProvider));
+
 
 
 	// syntax highlighters
@@ -119,10 +123,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection;
-	private allTokens: BaseToken[] = [];
 
-	public constructor(collection: vscode.DiagnosticCollection) {
-		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
+	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
+		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
 	}
