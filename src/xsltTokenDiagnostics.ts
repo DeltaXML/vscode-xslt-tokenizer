@@ -281,7 +281,7 @@ export class XsltTokenDiagnostics {
 								problemTokens.push(token);
 							}
 						}
-						if (!problemReported && token.charType === XMLCharState.syntaxError && prevToken) {
+						if (!problemReported && token.charType === XMLCharState.syntaxError && prevToken && !prevToken.error) {
 							problemReported = true;
 							prevToken['error'] = ErrorType.XMLAttEqualExpected;
 							prevToken['value'] = XsltTokenDiagnostics.getTextForToken(prevToken.line, prevToken, document);
