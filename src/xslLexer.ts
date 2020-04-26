@@ -107,7 +107,8 @@ interface XmlElement {
 export interface LanguageConfiguration {
     expressionAtts?: string[],
     avtAtts?: string[],
-    nativePrefix: string
+    nativePrefix: string,
+    tvtAttributes: string[]
 }
 
 export class XslLexer {
@@ -125,9 +126,15 @@ export class XslLexer {
     private entityContext = EntityPosition.text;
     private languageConfiguration: LanguageConfiguration;
     private skipTokenChar = false;
+    private nativeTvtAttributes: string[] = [];
+    private genericTvtAttributes: string[] = [];
 
     constructor(languageConfiguration: LanguageConfiguration) {
         this.languageConfiguration = languageConfiguration;
+        this.languageConfiguration.tvtAttributes.forEach(tvtAttribute => {
+            this.nativeTvtAttributes.push(this.languageConfiguration.nativePrefix + ':' + tvtAttribute);
+        });
+        this.genericTvtAttributes = this.languageConfiguration.tvtAttributes;
     }
 
     public static getTextmateTypeLegend(): string[] {
@@ -146,6 +153,14 @@ export class XslLexer {
 
     private isWhitespace (isCurrentCharNewLine: boolean, char: string) {
         return isCurrentCharNewLine || char === ' ' || char == '\t' || char === '\r';
+    }
+
+    private isAvtAttribute(isNative: boolean) {
+        if (isNative) {
+
+        } else {
+
+        }
     }
 
     
@@ -627,7 +642,7 @@ export class XslLexer {
                             if (isNativeElement) {
                                 if (attName === 'saxon:options') {
                                     isXPathAttribute = true;
-                                } else if (attName === 'expand-text') {
+                                } else if (this.genericTvtAttributes.indexOf(attName) > -1) {
                                     isXPathAttribute = false;
                                     isExpandTextAttribute = true;
                                 } else if (attName.startsWith('xmlns')) {
@@ -639,7 +654,7 @@ export class XslLexer {
                                     isXPathAttribute = this.isExpressionAtt(attName);
                                 }
                             } else {
-                                if (attName === 'xsl:expand-text') {
+                                if (this.nativeTvtAttributes.indexOf(attName) > -1) {
                                     isExpandTextAttribute = true;
                                 } else if (attName.startsWith('xmlns')) {
                                     isExpandTextAttribute = false;

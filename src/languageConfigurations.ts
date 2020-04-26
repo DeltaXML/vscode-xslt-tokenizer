@@ -11,15 +11,21 @@ export class XSLTConfiguration {
 		'lang', 'letter-value', 'media-type', 'method', 'name', 'namespace', 'normalization-form', 'omit-xml-declaration', 'order', 'ordinal', 'ordinal-type', 'output-version',
 		'parameter-document', 'regex', 'separator', 'schema-aware', 'stable', 'standalone', 'suppress-indentaion', 'terminate', 'undeclar-prefixes', 'start-at'];
 
-	public static configuration: LanguageConfiguration = {
+	static xsltPrefix = 'xsl';
+
+	static configuration: LanguageConfiguration = {
 		expressionAtts: XSLTConfiguration.expressionAtts,
 		avtAtts: XSLTConfiguration.avtAtts,
-		nativePrefix: 'xsl'
+		nativePrefix: XSLTConfiguration.xsltPrefix,
+		tvtAttributes: ['expand-text']
 	} 
 }
 
 export class XMLConfiguration {
+	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {
-		nativePrefix: ''
+		expressionAtts: ['select', 'test'],
+		nativePrefix: 'p',
+		tvtAttributes: ['expand-text', 'inline-expand-text']
 	} 
 }
