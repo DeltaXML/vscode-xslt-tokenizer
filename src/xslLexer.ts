@@ -58,6 +58,7 @@ export enum XMLCharState {
     escTvtCdata,
     lsElementNameWs,
     wsAfterAttName,
+    syntaxError,
     lsEqWs,
     lStEq,
     lEntity,
@@ -368,6 +369,9 @@ export class XslLexer {
             case XMLCharState.wsAfterAttName:
                 if (char === '=') {
                     rc = XMLCharState.lStEq;
+                } else if (!this.isWhitespace(isCurrentCharNewLine, char)) {
+                    // TODO: force error - guessing intended end of start tag
+                    rc = XMLCharState.syntaxError;
                 }
                 break;
             // '=' char after attribute name or
@@ -626,6 +630,7 @@ export class XslLexer {
                             this.addNewTokenToResult(startChar, XSLTokenLevelState.xmlComment, result, nextState); 
                             break;
                         case XMLCharState.wsAfterAttName:
+                        case XMLCharState.syntaxError:
                             storeToken = false;
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeName, result, nextState);
                             attributeNameTokenAdded = true;

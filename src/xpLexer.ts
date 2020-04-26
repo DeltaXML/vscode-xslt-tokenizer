@@ -997,6 +997,7 @@ export enum ErrorType {
     ElementNesting,
     XMLName,
     XMLAttNameSyntax,
+    XMLAttEqualExpected,
     XMLDupllicateAtt,
     XPathUnexpected,
     BracketNesting

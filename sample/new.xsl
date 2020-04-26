@@ -1,5 +1,5 @@
 <xsl:template match="pattern" mode="#default">
-    <xsl:param name="p1" as="node()"/>
+    <xsl:param name="p1" as="node()" ab
     <xsl:copy>
         <xsl:apply-templates select="@*, node(), $p1" mode="#current"/>
     </xsl:copy>,

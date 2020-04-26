@@ -272,26 +272,36 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.attributeName:
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						let problemReported = false;
 						if (prevToken) {
 							if (token.startCharacter - (prevToken.startCharacter + prevToken.length) === 0) {
+								problemReported = true;
 								token['error'] = ErrorType.XMLAttNameSyntax;
 								token['value'] = attNameText;
 								problemTokens.push(token);
 							}
 						}
-						let isValidAttName = XsltTokenDiagnostics.validateName(attNameText, nameStartCharRgx, nameCharRgx);
-						if (isValidAttName) {
-							if (tagAttributeNames.indexOf(attNameText) > -1) {
-								token['error'] = ErrorType.XMLDupllicateAtt;
+						if (!problemReported && token.charType === XMLCharState.syntaxError && prevToken) {
+							problemReported = true;
+							prevToken['error'] = ErrorType.XMLAttEqualExpected;
+							prevToken['value'] = XsltTokenDiagnostics.getTextForToken(prevToken.line, prevToken, document);
+							problemTokens.push(prevToken);
+						}
+						if (!problemReported) {
+							let isValidAttName = XsltTokenDiagnostics.validateName(attNameText, nameStartCharRgx, nameCharRgx);
+							if (isValidAttName) {
+								if (tagAttributeNames.indexOf(attNameText) > -1) {
+									token['error'] = ErrorType.XMLDupllicateAtt;
+									token['value'] = attNameText;
+									problemTokens.push(token);
+								} else {
+									tagAttributeNames.push(attNameText);
+								}
+							} else {
+								token['error'] = ErrorType.XMLName;
 								token['value'] = attNameText;
 								problemTokens.push(token);
-							} else {
-								tagAttributeNames.push(attNameText);
 							}
-						} else {
-							token['error'] = ErrorType.XMLName;
-							token['value'] = attNameText;
-							problemTokens.push(token);
 						}
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt? AttributeType.Variable: AttributeType.None;
@@ -449,8 +459,8 @@ export class XsltTokenDiagnostics {
 			}
 			prevToken = token;
 			if (index === lastTokenIndex && elementStack.length > 0) {
-				// xml is now well-nested if items still on the stack at the end
-				// but try to keep some part of the tree:
+				// xml is not well-nested if items still on the stack at the end
+				// but report errors and try to keep some part of the tree:
 				let usedtoken = false;
 				while (elementStack.length > 0) {
 					let poppedData = elementStack.pop();
@@ -465,13 +475,13 @@ export class XsltTokenDiagnostics {
 							endToken = token;
 							usedtoken = true;
 						}
+						poppedData.identifierToken['error'] = ErrorType.ElementNesting;
+						problemTokens.push(poppedData.identifierToken);
 						let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
 						if (symbol !== null) {
 							if (elementStack.length > 0) {
-								console.log('**' + elementStack.length)
 								elementStack[elementStack.length - 1].childSymbols.push(symbol);
 							} else {
-								console.log('-----tidied up------')
 								topLevelSymbols.push(symbol);
 							}
 						}
@@ -671,6 +681,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLAttNameSyntax:
 					msg = `XML: Missing whitespace before attribute '${tokenValue}'`;
+					break;
+				case ErrorType.XMLAttEqualExpected:
+					msg = `XML: Missing '=' after attribute '${tokenValue}'`;
 					break;
 				case ErrorType.XMLDupllicateAtt:
 					msg = `XML: Attribute '${tokenValue}' is a duplicate`;
