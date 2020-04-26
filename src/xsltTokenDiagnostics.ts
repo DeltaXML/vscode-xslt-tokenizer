@@ -199,7 +199,10 @@ export class XsltTokenDiagnostics {
 								break;
 							case XMLCharState.rStNoAtt:
 							case XMLCharState.rSt:
+							case XMLCharState.rSelfCt:
+							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
+								let orginalPrefixes = inheritedPrefixes.slice();
 								tagXmlnsNames.forEach((attName) => {
 									// only need 'xmlns:pfx' - not default xmlns
 									if (attName.length > 6) {
@@ -239,52 +242,40 @@ export class XsltTokenDiagnostics {
 									}
 								}
 
-								let inheritedPrefixesCopy = inheritedPrefixes.slice();
-								if (variableData !== null) {
-									if (startTagToken){
-										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: inScopeVariablesList, 
-											symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
-									}
-									xsltVariableDeclarations.push(variableData.token);
-								} else if (startTagToken) {
-									elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: inScopeVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
-								}
-								inScopeVariablesList = [];
-								tagType = TagType.NonStart;
-								break;
-							case XMLCharState.rSelfCt:
-							case XMLCharState.rSelfCtNoAtt:
-								let xmlnsSelfPrefixes: string[] = [];
-								tagXmlnsNames.forEach((attName) => {
-									// only need 'xmlns:pfx' - not default xmlns
-									if (attName.length > 6) {
-										let prefix = attName.substring(6);
-										if (inheritedPrefixes.indexOf(prefix) > -1) {
-											inheritedPrefixes.push(prefix);
+								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
+									// on a start tag
+									let inheritedPrefixesCopy = inheritedPrefixes.slice();
+									if (variableData !== null) {
+										if (startTagToken){
+											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: inScopeVariablesList, 
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 										}
+										xsltVariableDeclarations.push(variableData.token);
+									} else if (startTagToken) {
+										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: inScopeVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 									}
-								});
-								let isValidSelfName = XsltTokenDiagnostics.validateName(tagElementName, nameStartCharRgx, nameCharRgx, xmlnsSelfPrefixes);
+									inScopeVariablesList = [];
+									tagType = TagType.NonStart;
 
-								if (variableData !== null) {
-									inScopeVariablesList.push(variableData);
-									xsltVariableDeclarations.push(variableData.token);
-								}
-								if (startTagToken) {
-									if (!isValidSelfName) {
-										startTagToken['error'] = ErrorType.XMLName;
-										startTagToken['value'] = tagElementName;
-										problemTokens.push(startTagToken);
+								} else {
+									// self-closed tag: xmlns declarations on this are no longer in scope
+									inheritedPrefixes = orginalPrefixes;
+									if (variableData !== null) {
+										inScopeVariablesList.push(variableData);
+										xsltVariableDeclarations.push(variableData.token);
 									}
-									let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, tagIdentifierName, startTagToken, token);
-									if (symbol !== null) {
-										if (elementStack.length > 0) {
-											elementStack[elementStack.length - 1].childSymbols.push(symbol);
-										} else {
-											topLevelSymbols.push(symbol);
+									if (startTagToken) {
+										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, tagIdentifierName, startTagToken, token);
+										if (symbol !== null) {
+											if (elementStack.length > 0) {
+												elementStack[elementStack.length - 1].childSymbols.push(symbol);
+											} else {
+												topLevelSymbols.push(symbol);
+											}
 										}
 									}
 								}
+
 								break;
 							case XMLCharState.rCt:
 								// end of an element close-tag:
