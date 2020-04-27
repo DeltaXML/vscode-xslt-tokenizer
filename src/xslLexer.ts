@@ -102,7 +102,6 @@ export interface XslToken extends BaseToken {
 
 interface XmlElement {
     expandText: boolean;
-    variableTokens: BaseToken[]
 }
 
 export interface LanguageConfiguration {
@@ -595,7 +594,7 @@ export class XslLexer {
                             }
                             break;
                         case XMLCharState.rStNoAtt:
-                            expandTextValue = this.addToElementStack(expandTextValue, [], xmlElementStack);
+                            expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
                             // cascade, so no-break intentional
                         case XMLCharState.lsElementNameWs:
                         case XMLCharState.rSelfCtNoAtt:
@@ -679,7 +678,7 @@ export class XslLexer {
                             storeToken = false;
                             break;
                         case XMLCharState.rSt:
-                            expandTextValue = this.addToElementStack(expandTextValue, [], xmlElementStack);
+                            expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             storeToken = false;
                             tokenChars = [];
@@ -871,7 +870,7 @@ export class XslLexer {
         result.push(tkn);
     }
 
-    private addToElementStack(expandTextValue: boolean | null, variableTokens: BaseToken[], xmlElementStack: XmlElement[]) {
+    private addToElementStack(expandTextValue: boolean | null, xmlElementStack: XmlElement[]) {
         if (expandTextValue === null) {
             if (xmlElementStack.length > 0) {
                 expandTextValue = xmlElementStack[xmlElementStack.length - 1].expandText;
@@ -880,7 +879,7 @@ export class XslLexer {
                 expandTextValue = false;
             }
         }
-        xmlElementStack.push({ "expandText": expandTextValue, "variableTokens": variableTokens });
+        xmlElementStack.push({ "expandText": expandTextValue });
         return expandTextValue;
     }
 
