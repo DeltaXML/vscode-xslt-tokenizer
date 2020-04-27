@@ -1,6 +1,6 @@
 <root>
     <basic this="abcd{anc}" so="isthis">
-        <new select="this/text"
+        <new select="this/text">
             this is going
             ok but how will this continue <b>when</b> mixed content happens
         </new>

@@ -61,6 +61,12 @@ enum NameValidationError {
 	NameError
 }
 
+enum ValidationType {
+	XMLAttribute,
+	PrefixedName,
+	Name
+}
+
 export class XsltTokenDiagnostics {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
@@ -75,10 +81,15 @@ export class XsltTokenDiagnostics {
 	private static readonly xslNameAtt = 'name';
 	private static readonly xslModeAtt = 'mode';
 
-	private static validateName(name: string, startCharRgx: RegExp, charRgx: RegExp, xmlnsPrefixes: string[]): NameValidationError {
+	private static validateName(name: string, type: ValidationType, startCharRgx: RegExp, charRgx: RegExp, xmlnsPrefixes: string[]): NameValidationError {
 		let valid = NameValidationError.None
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
+		}
+		if (type === ValidationType.XMLAttribute) {
+			if (name === 'xml:space' || name === 'xml:lang') {
+				return NameValidationError.None;
+			}
 		}
 		let nameParts = name.split(':');
 		if (nameParts.length > 2) {
@@ -215,7 +226,7 @@ export class XsltTokenDiagnostics {
 								let attsWithXmlnsErrors: string[] = [];
 								let attsWithNameErrors: string[] = [];
 								tagAttributeNames.forEach((attName) => {
-									let validateResult = XsltTokenDiagnostics.validateName(attName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+									let validateResult = XsltTokenDiagnostics.validateName(attName, ValidationType.XMLAttribute, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
 									if (validateResult === NameValidationError.NameError) {
 										attsWithNameErrors.push(attName);
 									} else if (validateResult === NameValidationError.NamespaceError) {
@@ -233,7 +244,7 @@ export class XsltTokenDiagnostics {
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
 										problemTokens.push(startTagToken);
 									} else {
-										let validationError = XsltTokenDiagnostics.validateName(tagElementName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+										let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.PrefixedName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
 										if (validationError !== NameValidationError.None) {
 											startTagToken['error'] = validationError === NameValidationError.NameError? ErrorType.XMLName: ErrorType.XMLXMLNS;
 											startTagToken['value'] = tagElementName;
