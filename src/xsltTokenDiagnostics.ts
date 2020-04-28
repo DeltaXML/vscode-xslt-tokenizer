@@ -262,8 +262,9 @@ export class XsltTokenDiagnostics {
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
 									// on a start tag
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
-									//let newVariablesList = elementStack.length === 1? globalVariableData: inScopeVariablesList;
-									let newVariablesList = inScopeVariablesList;
+									// if top-level element add global variables - these include following variables also:
+									let newVariablesList = elementStack.length === 0? globalVariableData: inScopeVariablesList;
+									//let newVariablesList = inScopeVariablesList;
 									if (variableData !== null) {
 										if (startTagToken){
 											// TODO: if a top-level element, use global variables instad of inScopeVariablesList;

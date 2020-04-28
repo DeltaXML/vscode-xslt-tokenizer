@@ -721,7 +721,8 @@ export class XslLexer {
                             let newToken = this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
                             if (isGlobalInstructionName) {
                                 let attValue = tokenChars.join('');
-                                this.globalInstructionData.push({type: globalInstructionType, name: attValue, token: newToken});
+                                let newTokenCopy = Object.assign({}, newToken);
+                                this.globalInstructionData.push({type: globalInstructionType, name: attValue, token: newTokenCopy});
                             }
                             tokenChars = [];
                             storeToken = false;
