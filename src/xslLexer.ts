@@ -111,11 +111,17 @@ export interface LanguageConfiguration {
     tvtAttributes: string[]
 }
 
+export interface GlobalInstructionData {
+    name: string,
+    type: GlobalInstructionType
+}
+
 export class XslLexer {
     public debug: boolean = false;
     public flatten: boolean = false;
     public timerOn: boolean = false;
     public provideCharLevelState = false;
+    public globalInstructionData: GlobalInstructionData[] = [];
     private lineNumber: number = 0;
     private charCount = 0;
     private lineCharCount = 0;
@@ -496,6 +502,7 @@ export class XslLexer {
         if (this.timerOn) {
             console.time('xslLexer.analyse');
         }
+        this.globalInstructionData = [];
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.charCount = -1;
@@ -515,8 +522,10 @@ export class XslLexer {
         let xslLength = xsl.length - 1;
         let storeToken = false;
         let isNativeElement = false;
+        let globalInstructionType = GlobalInstructionType.Unknown;
         let isXPathAttribute = false;
         let isExpandTextAttribute = false;
+        let isGlobalInstructionName = false;
         let expandTextValue: boolean|null = false;
         let xmlElementStack: XmlElement[] = [];
         let tokenStartChar = -1;
@@ -599,9 +608,13 @@ export class XslLexer {
                         case XMLCharState.lsElementNameWs:
                         case XMLCharState.rSelfCtNoAtt:
                         case XMLCharState.rCt:
-                            isNativeElement = this.isNativeElement(tokenChars);
+                            let isCloseTag = nextState === XMLCharState.rCt;
+                            let isRootChildStartTag = !isCloseTag && xmlElementStack.length === 1;
+                            let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
+                            isNativeElement = elementProperties.isNative;
+                            globalInstructionType = elementProperties.instructionType;
 
-                            if (nextState === XMLCharState.rCt) {
+                            if (isCloseTag) {
                                 if (xmlElementStack.length > 0) {
                                     xmlElementStack.pop();
                                 }
@@ -641,6 +654,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lStEq:
                             let isXMLNSattribute = false;
+                            isGlobalInstructionName = false;
                             attName = tokenChars.join('');
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
@@ -653,6 +667,9 @@ export class XslLexer {
                                     isExpandTextAttribute = false;
                                     isXMLNSattribute = true;
                                     attributeNameToken = XSLTokenLevelState.xmlnsName;
+                                } else if (globalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
+                                    isExpandTextAttribute = false;
+                                    isGlobalInstructionName = true;
                                 } else {
                                     isExpandTextAttribute = false;
                                     isXPathAttribute = this.isExpressionAtt(attName);
@@ -700,13 +717,17 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
                             }
+                            if (isGlobalInstructionName) {
+                                let attValue = tokenChars.join('');
+                                this.globalInstructionData.push({type: globalInstructionType, name: attValue});
+                            }
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
                             tokenChars = [];
                             storeToken = false;
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (isExpandTextAttribute) {
+                            if (isExpandTextAttribute || isGlobalInstructionName) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
                                 this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeValue, result, nextState);
@@ -883,10 +904,42 @@ export class XslLexer {
         return expandTextValue;
     }
 
-    private isNativeElement(tokenChars: string[]): boolean {
-        return tokenChars.length > 4 && tokenChars.join('').startsWith(this.languageConfiguration.nativePrefix + ':');
+    private getElementProperties(tokenChars: string[], isRootChild: boolean): ElementProperties {
+        let elementName= tokenChars.join('');
+        let isNative = tokenChars.length > 4 && elementName.startsWith(this.languageConfiguration.nativePrefix + ':');
+        let instructionType = GlobalInstructionType.Unknown;
+        if (isNative && isRootChild) {
+            let instructionName = elementName.substring(elementName.indexOf(':') + 1);
+            switch (instructionName) {
+                case ('variable'):
+                    instructionType = GlobalInstructionType.Variable;
+                    break;
+                case ('param'):
+                    instructionType = GlobalInstructionType.Parameter;
+                    break;
+                case ('function'):
+                    instructionType = GlobalInstructionType.Function;
+                    break;
+            }
+        }
+        return {isNative: isNative, instructionType: instructionType};
     }
+// class ends
 }
+
+
+export interface ElementProperties {
+    isNative: boolean;
+    instructionType: GlobalInstructionType;
+}
+
+export enum GlobalInstructionType {
+    Variable,
+    Parameter,
+    Function,
+    Unknown
+}
+
 
 
 export interface InnerLexerResult {
