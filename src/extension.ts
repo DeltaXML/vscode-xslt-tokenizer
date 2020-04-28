@@ -8,7 +8,7 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
-import {XPathLexer, ExitCondition, LexPosition, BaseToken} from './xpLexer';
+import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
 import {XslLexer, LanguageConfiguration} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
@@ -133,10 +133,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
 		console.log('provideDocumentSymbols: ' + document.uri);
 		const allTokens = this.xslLexer.analyse(document.getText());
+		const globalInstructionData = this.xslLexer.globalInstructionData;
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, symbols);
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, symbols);
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
 			} else {

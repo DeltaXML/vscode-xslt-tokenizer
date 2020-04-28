@@ -5,7 +5,7 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState} from './xslLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType } from './xpLexer';
 
 enum HasCharacteristic {
@@ -129,7 +129,7 @@ export class XsltTokenDiagnostics {
 	}
 
 
-	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 
 		let inScopeVariablesList: VariableData[] = [];
@@ -156,6 +156,12 @@ export class XsltTokenDiagnostics {
 		let tagAttributeNames: string[] = [];
 		let tagXmlnsNames: string[] = [];
 		let inheritedPrefixes: string[] = [];
+		let globalVariableData: VariableData[] = [];
+		globalInstructionData.forEach((instruction) => {
+			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
+				globalVariableData.push({token: instruction.token, name: instruction.name })
+			}
+		});
 		let nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 		let nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
@@ -256,14 +262,17 @@ export class XsltTokenDiagnostics {
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
 									// on a start tag
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
+									//let newVariablesList = elementStack.length === 1? globalVariableData: inScopeVariablesList;
+									let newVariablesList = inScopeVariablesList;
 									if (variableData !== null) {
 										if (startTagToken){
-											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: inScopeVariablesList, 
+											// TODO: if a top-level element, use global variables instad of inScopeVariablesList;
+											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList, 
 												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 										}
 										xsltVariableDeclarations.push(variableData.token);
 									} else if (startTagToken) {
-										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: inScopeVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
+										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 									}
 									inScopeVariablesList = [];
 									tagType = TagType.NonStart;

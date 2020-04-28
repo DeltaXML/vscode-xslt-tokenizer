@@ -113,7 +113,8 @@ export interface LanguageConfiguration {
 
 export interface GlobalInstructionData {
     name: string,
-    type: GlobalInstructionType
+    type: GlobalInstructionType,
+    token: BaseToken
 }
 
 export class XslLexer {
@@ -717,11 +718,11 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
                             }
+                            let newToken = this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
                             if (isGlobalInstructionName) {
                                 let attValue = tokenChars.join('');
-                                this.globalInstructionData.push({type: globalInstructionType, name: attValue});
+                                this.globalInstructionData.push({type: globalInstructionType, name: attValue, token: newToken});
                             }
-                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
                             tokenChars = [];
                             storeToken = false;
                             break;
@@ -857,7 +858,7 @@ export class XslLexer {
         return result;
     }
 
-    private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState) {
+    private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState): BaseToken {
         let tokenLength = (this.lineCharCount - 1) - tokenStartChar;
         let localTokenStartChar = tokenStartChar;
         if (newTokenType === XSLTokenLevelState.xmlComment || newTokenType === XSLTokenLevelState.attributeValue) {
@@ -874,6 +875,7 @@ export class XslLexer {
             tkn['charType'] = charLevelState;
         }
         result.push(tkn);
+        return tkn;
     }
 
     private addCharTokenToResult(tokenStartChar: number, tokenLength: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState) {
