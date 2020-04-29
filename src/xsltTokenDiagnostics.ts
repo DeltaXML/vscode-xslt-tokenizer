@@ -101,7 +101,7 @@ export class XsltTokenDiagnostics {
 			}
 			if (valid === NameValidationError.None) {
 				nameParts.forEach(namePart => {
-					if (valid) {
+					if (valid === NameValidationError.None) {
 						let charsOK = true;
 						let firstChar = true;
 						let charExists = false;
