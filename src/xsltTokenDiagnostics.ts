@@ -576,16 +576,17 @@ export class XsltTokenDiagnostics {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.substr(1);
 		let result: BaseToken|null = null;
+		let globalVariable = null;
 
-		let resolved = this.resolveVariableName(inScopeXPathVariablesList, varName, xpathVariableCurrentlyBeingDefined);
+		let resolved = this.resolveVariableName(inScopeXPathVariablesList, varName, xpathVariableCurrentlyBeingDefined, globalVariable);
 		if (!resolved) {
 			resolved = this.resolveStackVariableName(xpathStack, varName);			
 		}
 		if (!resolved) {
-			resolved = this.resolveVariableName(inScopeVariablesList, varName, false);			
+			resolved = this.resolveVariableName(inScopeVariablesList, varName, false, globalVariable);			
 		}
 		if (!resolved) {
-			resolved = this.resolveStackVariableName(elementStack, varName);			
+			resolved = this.resolveStackVariableName(elementStack, varName);		
 		}
 		if (!resolved) {
 			result = token;
@@ -686,15 +687,16 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean): boolean {
+	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData|null): boolean {
 		let resolved = false;
 		let decrementedLength = variableList.length - 1;
+		let globalVariableName = globalXsltVariable?.name;
 		// last items in list of declared parameters must be resolved first:
 		for (let i = decrementedLength; i > -1; i--) {
 			let data = variableList[i];
 			if (xpathVariableCurrentlyBeingDefined && i === decrementedLength) {
 				// do nothing: we skip last item in list as it's currently being defined
-			} else if (data.name === varName) {
+			} else if (data.name === varName && globalVariableName !== data.name) {
 				resolved = true;
 				data.token['referenced'] = true;
 				break;
@@ -705,11 +707,22 @@ export class XsltTokenDiagnostics {
 
 	private static resolveStackVariableName(elementStack: ElementData[]|XPathData[], varName: string): boolean {
 		let resolved = false;
+		let globalXsltVariable: VariableData|null = null;
+
 		for (let i = elementStack.length - 1; i > -1; i--) {
 			let inheritedVariables = elementStack[i].variables;
-			let beingDefinedInit = elementStack[i].xpathVariableCurrentlyBeingDefined;
-			let beingDefined = !(beingDefinedInit === undefined || beingDefinedInit === false);
-			resolved = this.resolveVariableName(inheritedVariables, varName, beingDefined)
+			let xpathBeingDefinedInit = elementStack[i].xpathVariableCurrentlyBeingDefined;
+			let xpathBeingDefined = !(xpathBeingDefinedInit === undefined || xpathBeingDefinedInit === false);
+			if (i === 1) {
+				// at the level of a global variable declaration
+				let elementData: ElementData = <ElementData>elementStack[i];
+				let currentVar = elementData.currentVariable;
+				if (currentVar) {
+					// must be inside a global variable declaration - keep this:
+					globalXsltVariable = currentVar;
+				}
+			}
+			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable)
 			if (resolved) {
 				break;
 			}
