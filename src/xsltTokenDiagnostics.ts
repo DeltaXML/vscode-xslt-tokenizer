@@ -75,8 +75,6 @@ export class XsltTokenDiagnostics {
 
 
 	private static readonly xslFunction = 'xsl:function';
-	private static xsltVariableReferences: BaseToken[] = [];
-
 
 	private static readonly xslNameAtt = 'name';
 	private static readonly xslModeAtt = 'mode';
@@ -146,7 +144,7 @@ export class XsltTokenDiagnostics {
 		let anonymousFunctionParams = false;
 		let variableData: VariableData|null = null;
 		let xsltVariableDeclarations: BaseToken[] = [];
-		let xsltVariableReferences: BaseToken[] = [];
+		let unresolvedXsltVariableReferences: BaseToken[] = [];
 		let prevToken: BaseToken|null = null;
 		let includeOrImport = false;
 		let problemTokens: BaseToken[] = [];
@@ -426,7 +424,7 @@ export class XsltTokenDiagnostics {
 								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
 									xpathStack, inScopeVariablesList, elementStack);
 								if (unResolvedToken !== null) {
-									xsltVariableReferences.push(unResolvedToken);
+									unresolvedXsltVariableReferences.push(unResolvedToken);
 								}
 							}
 						} else {
@@ -434,7 +432,7 @@ export class XsltTokenDiagnostics {
 							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
 								xpathStack, inScopeVariablesList, elementStack);
 							if (unResolvedToken !== null) {
-								xsltVariableReferences.push(unResolvedToken);
+								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
 						}
 						break;
@@ -557,7 +555,7 @@ export class XsltTokenDiagnostics {
 				}
 			}
 		});
-		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, xsltVariableReferences, includeOrImport);
+		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
 	}

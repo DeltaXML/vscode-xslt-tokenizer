@@ -1,5 +1,4 @@
 <xsl:template xmlns:xsl="abc" xmlns:xslt="abcd" xslt:test="abcd" match="pattern" mode="#default">
-    <t!est/>
     <root>
         <xsl:param name="p1" as="node()"/>
         <xsl:variable name="a" as="xs:integer" select="5"/>
