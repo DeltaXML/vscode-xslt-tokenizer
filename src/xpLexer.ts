@@ -994,6 +994,8 @@ export enum ErrorType {
     None,
     UnusedVariable,
     UnresolvedVarReference,
+    DuplicateVarName,
+    DuplicateFnName,
     ElementNesting,
     XMLName,
     XMLXMLNS,

@@ -155,10 +155,28 @@ export class XsltTokenDiagnostics {
 		let tagXmlnsNames: string[] = [];
 		let inheritedPrefixes: string[] = [];
 		let globalVariableData: VariableData[] = [];
+		let checkedGlobalVarNames: string[] = [];
+		let checkedGlobalFnNames: string[] = [];
+
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
+				if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
+					checkedGlobalVarNames.push(instruction.name);
+				} else {
+					instruction.token['error'] = ErrorType.DuplicateVarName;
+					instruction.token.value = instruction.name;
+					problemTokens.push(instruction.token);
+				}
 				globalVariableData.push({token: instruction.token, name: instruction.name })
 				xsltVariableDeclarations.push(instruction.token);
+			} else if (instruction.type === GlobalInstructionType.Function) {
+				if (checkedGlobalFnNames.indexOf(instruction.name) < 0) {
+					checkedGlobalFnNames.push(instruction.name);
+				} else {
+					instruction.token['error'] = ErrorType.DuplicateFnName;
+					instruction.token.value = instruction.name;
+					problemTokens.push(instruction.token);
+				}				
 			}
 		});
 		let nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
@@ -783,6 +801,12 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLAttributeXMLNS:
 					msg = `XML: Invalid prefix for attribute on element '${tokenValue}'`;
+					break;
+				case ErrorType.DuplicateVarName:
+					msg = `XSLT: Duplicate global variable/parameter name: '${tokenValue}'`;
+					break;
+				case ErrorType.DuplicateFnName:
+					msg = `XSLT: Duplicate function name: '${tokenValue}'`;
 					break;
 				default:
 					msg = 'Unexepected Error';
