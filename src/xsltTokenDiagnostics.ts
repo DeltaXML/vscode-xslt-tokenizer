@@ -169,15 +169,17 @@ export class XsltTokenDiagnostics {
 				}
 				globalVariableData.push({token: instruction.token, name: instruction.name })
 				xsltVariableDeclarations.push(instruction.token);
-			} else if (instruction.type === GlobalInstructionType.Function) {
-				if (checkedGlobalFnNames.indexOf(instruction.name) < 0) {
-					checkedGlobalFnNames.push(instruction.name);
-				} else {
-					instruction.token['error'] = ErrorType.DuplicateFnName;
-					instruction.token.value = instruction.name;
-					problemTokens.push(instruction.token);
-				}				
-			}
+			} 
+			// TODO: function names should have arity to allow de-duping
+			// else if (instruction.type === GlobalInstructionType.Function) {
+			// 	if (checkedGlobalFnNames.indexOf(instruction.name) < 0) {
+			// 		checkedGlobalFnNames.push(instruction.name);
+			// 	} else {
+			// 		instruction.token['error'] = ErrorType.DuplicateFnName;
+			// 		instruction.token.value = instruction.name;
+			// 		problemTokens.push(instruction.token);
+			// 	}				
+			// }
 		});
 		let nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 		let nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
@@ -406,14 +408,13 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
+						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
+
 						if (attType === AttributeType.Variable) {
-							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
 							tagIdentifierName = variableName;
 							variableData = {token: token, name: variableName};
 						} else if (attType === AttributeType.InstructionName) {
-							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
 							let slashPos = variableName.lastIndexOf('/');
 							if (slashPos > 0) {
 								// package name may be URI
@@ -421,9 +422,16 @@ export class XsltTokenDiagnostics {
 							}
 							tagIdentifierName = variableName;
 						} else if (attType === AttributeType.InstructionMode && tagIdentifierName === '') {
-							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
 							tagIdentifierName = variableName;
+						}
+
+						if (attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
+							let validateResult = XsltTokenDiagnostics.validateName(variableName, ValidationType.PrefixedName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+							if (validateResult !== NameValidationError.None) {
+								token['error'] = validateResult === NameValidationError.NameError? ErrorType.XSLTName: ErrorType.XSLTPrefix;
+								token['value'] = fullVariableName;
+								problemTokens.push(token);
+							}
 						}
 						attType = AttributeType.None;
 						break;
@@ -783,6 +791,12 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLName:
 					msg = `XML: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.XSLTName:
+					msg = `XSLT: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.XSLTPrefix:
+					msg = `XSLT: Undeclared prefix in name: '${tokenValue}'`;
 					break;
 				case ErrorType.XMLAttNameSyntax:
 					msg = `XML: Missing whitespace before attribute '${tokenValue}'`;
