@@ -5,6 +5,8 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 ### Main Editor Features
 - XSLT 3.0 and XPath 3.1 Syntax highlighting
 - XSLT 3.0 and XPath 3.1 Formatting
+- XSLT Outline View
+- XSLT/XPath Symbol-lookup
 - XML Well-Formedness Checking (wip)
 - XSLT Static Code Checking (wip)
 - XPath Static Code Checking (wip)
