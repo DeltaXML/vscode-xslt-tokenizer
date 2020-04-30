@@ -159,7 +159,6 @@ export class XsltTokenDiagnostics {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
 				globalVariableData.push({token: instruction.token, name: instruction.name })
 				xsltVariableDeclarations.push(instruction.token);
-				console.log('global-name: ' + instruction.name);
 			}
 		});
 		let nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
@@ -270,7 +269,7 @@ export class XsltTokenDiagnostics {
 											xsltVariableDeclarations.push(variableData.token);
 										}
 										if (startTagToken){
-											// TODO: if a top-level element, use global variables instad of inScopeVariablesList;
+											// if a top-level element, use global variables instad of inScopeVariablesList;
 											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList, 
 												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
 										}
@@ -704,10 +703,8 @@ export class XsltTokenDiagnostics {
 			if (xpathVariableCurrentlyBeingDefined && i === decrementedLength) {
 				// do nothing: we skip last item in list as it's currently being defined
 			} else if (data.name === varName && globalVariableName !== data.name) {
-				console.log('resolved: ' + varName + ' line: ' + data.token.line);
 				resolved = true;
 				data.token['referenced'] = true;
-				console.log('confirmed: ' + data.token.referenced)
 				break;
 			}
 		}
@@ -742,7 +739,6 @@ export class XsltTokenDiagnostics {
 	private static getDiagnosticsFromUnusedVariableTokens(document: vscode.TextDocument, unusedVariableTokens: BaseToken[], unresolvedVariableTokens: BaseToken[], includeOrImport: boolean): vscode.Diagnostic[] {
 		let result = [];
 		for (let token of unusedVariableTokens) {
-			console.log('testing ' + 	XsltTokenDiagnostics.getTextForToken(token.line, token, document) + ' ' + token.referenced)
 			if (token.referenced === undefined) {
 				result.push(this.createUnusedVarDiagnostic(token));
 			}

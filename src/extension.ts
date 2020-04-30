@@ -78,10 +78,10 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 	customTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
 
-	context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
-		console.log('onDidOpenTextDocument: ' + e.fileName);
+	// context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
+	// 	console.log('onDidOpenTextDocument: ' + e.fileName);
 
-	}));
+	// }));
 }
 
 class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
@@ -109,7 +109,7 @@ export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokens
 	}
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
-		console.log('provideDocumentSemanticTokens');
+		// console.log('provideDocumentSemanticTokens');
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const builder = new vscode.SemanticTokensBuilder();
 		allTokens.forEach((token) => {
@@ -131,7 +131,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
-		console.log('provideDocumentSymbols: ' + document.uri);
+		// console.log('provideDocumentSymbols: ' + document.uri);
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 
