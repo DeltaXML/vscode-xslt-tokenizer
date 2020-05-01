@@ -555,8 +555,16 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
-						let tokenValue = xpathTokenType === TokenLevelState.nodeNameTest? token.value: token.value.substr(1);
-						let validateResult = XsltTokenDiagnostics.validateName(tokenValue, ValidationType.PrefixedName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+						let tokenValue;
+						let validationType;
+						if (xpathTokenType === TokenLevelState.nodeNameTest) {
+							tokenValue = token.value;
+							validationType = ValidationType.PrefixedName;
+						} else {
+							tokenValue = token.value.substr(1);
+							validationType= ValidationType.XMLAttribute;
+						}
+						let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
 						if (validateResult !== NameValidationError.None) {
 							token['error'] = validateResult === NameValidationError.NameError? ErrorType.XPathName: ErrorType.XPathPrefix;
 							token['value'] = token.value;
