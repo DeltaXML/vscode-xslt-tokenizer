@@ -114,7 +114,8 @@ export interface LanguageConfiguration {
 export interface GlobalInstructionData {
     name: string,
     type: GlobalInstructionType,
-    token: BaseToken
+    token: BaseToken,
+    idNumber: number
 }
 
 export class XslLexer {
@@ -135,8 +136,10 @@ export class XslLexer {
     private skipTokenChar = false;
     private nativeTvtAttributes: string[] = [];
     private genericTvtAttributes: string[] = [];
+    private nativePrefixLength = 0;
 
     constructor(languageConfiguration: LanguageConfiguration) {
+        this.nativePrefixLength = languageConfiguration.nativePrefix.length + 1;
         this.languageConfiguration = languageConfiguration;
         this.languageConfiguration.tvtAttributes.forEach(tvtAttribute => {
             this.nativeTvtAttributes.push(this.languageConfiguration.nativePrefix + ':' + tvtAttribute);
@@ -523,7 +526,8 @@ export class XslLexer {
         let xslLength = xsl.length - 1;
         let storeToken = false;
         let isNativeElement = false;
-        let globalInstructionType = GlobalInstructionType.Unknown;
+        let tagGlobalInstructionType = GlobalInstructionType.Unknown;
+        let contextGlobalInstructionType = GlobalInstructionType.Unknown;
         let isXPathAttribute = false;
         let isExpandTextAttribute = false;
         let isGlobalInstructionName = false;
@@ -613,7 +617,17 @@ export class XslLexer {
                             let isRootChildStartTag = !isCloseTag && xmlElementStack.length === 1;
                             let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
                             isNativeElement = elementProperties.isNative;
-                            globalInstructionType = elementProperties.instructionType;
+                            tagGlobalInstructionType = elementProperties.instructionType;
+                            if (xmlElementStack.length === 1) {
+                                contextGlobalInstructionType = tagGlobalInstructionType;
+                            } else if (xmlElementStack.length === 2 
+                                && contextGlobalInstructionType === GlobalInstructionType.Function
+                                && isNativeElement && elementProperties.nativeName === 'param') {
+                                if (this.globalInstructionData.length > 0) {
+                                    let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                    gd.idNumber++;
+                                }
+                            }
 
                             if (isCloseTag) {
                                 if (xmlElementStack.length > 0) {
@@ -668,7 +682,7 @@ export class XslLexer {
                                     isExpandTextAttribute = false;
                                     isXMLNSattribute = true;
                                     attributeNameToken = XSLTokenLevelState.xmlnsName;
-                                } else if (globalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
+                                } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionName = true;
                                 } else {
@@ -722,7 +736,7 @@ export class XslLexer {
                             if (isGlobalInstructionName) {
                                 let attValue = tokenChars.join('');
                                 let newTokenCopy = Object.assign({}, newToken);
-                                this.globalInstructionData.push({type: globalInstructionType, name: attValue, token: newTokenCopy});
+                                this.globalInstructionData.push({type: tagGlobalInstructionType, name: attValue, token: newTokenCopy, idNumber: 0});
                             }
                             tokenChars = [];
                             storeToken = false;
@@ -909,23 +923,29 @@ export class XslLexer {
 
     private getElementProperties(tokenChars: string[], isRootChild: boolean): ElementProperties {
         let elementName= tokenChars.join('');
-        let isNative = tokenChars.length > 4 && elementName.startsWith(this.languageConfiguration.nativePrefix + ':');
+        let isNative = tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.languageConfiguration.nativePrefix + ':');
         let instructionType = GlobalInstructionType.Unknown;
-        if (isNative && isRootChild) {
-            let instructionName = elementName.substring(elementName.indexOf(':') + 1);
-            switch (instructionName) {
-                case ('variable'):
-                    instructionType = GlobalInstructionType.Variable;
-                    break;
-                case ('param'):
-                    instructionType = GlobalInstructionType.Parameter;
-                    break;
-                case ('function'):
-                    instructionType = GlobalInstructionType.Function;
-                    break;
+        let nativeName = '';
+        if (isNative) {
+            nativeName = elementName.substring(this.nativePrefixLength);
+            if (isRootChild) {
+                switch (nativeName) {
+                    case ('variable'):
+                        instructionType = GlobalInstructionType.Variable;
+                        break;
+                    case ('param'):
+                        instructionType = GlobalInstructionType.Parameter;
+                        break;
+                    case ('function'):
+                        instructionType = GlobalInstructionType.Function;
+                        break;
+                    case ('template'):
+                        instructionType = GlobalInstructionType.Template;
+                        break;
+                }
             }
         }
-        return {isNative: isNative, instructionType: instructionType};
+        return {isNative: isNative, instructionType: instructionType, nativeName: nativeName};
     }
 // class ends
 }
@@ -934,12 +954,14 @@ export class XslLexer {
 export interface ElementProperties {
     isNative: boolean;
     instructionType: GlobalInstructionType;
+    nativeName: string;
 }
 
 export enum GlobalInstructionType {
     Variable,
     Parameter,
     Function,
+    Template,
     Unknown
 }
 
