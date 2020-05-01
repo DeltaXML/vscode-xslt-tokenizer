@@ -553,6 +553,16 @@ export class XsltTokenDiagnostics {
 								break;
 						}
 						break;
+					case TokenLevelState.attributeNameTest:
+					case TokenLevelState.nodeNameTest:
+						let tokenValue = xpathTokenType === TokenLevelState.nodeNameTest? token.value: token.value.substr(1);
+						let validateResult = XsltTokenDiagnostics.validateName(tokenValue, ValidationType.PrefixedName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+						if (validateResult !== NameValidationError.None) {
+							token['error'] = validateResult === NameValidationError.NameError? ErrorType.XPathName: ErrorType.XPathPrefix;
+							token['value'] = token.value;
+							problemTokens.push(token);
+						}
+						break;
 				}
 			}
 			prevToken = token;
@@ -780,10 +790,12 @@ export class XsltTokenDiagnostics {
 			let endChar = token.startCharacter + token.length;
 			let tokenValue = token.value;
 			let msg: string;
+			let diagnosticMetadata: vscode.DiagnosticTag[] = [];
 			switch (token.error) {
 				case ErrorType.BracketNesting:
 					let matchingChar: any = XsltTokenDiagnostics.getMatchingSymbol(tokenValue);
 					msg = matchingChar.length === 0? `XPath: No match found for '${tokenValue}'`: `'${tokenValue}' has no matching '${matchingChar}'`;
+					diagnosticMetadata = [vscode.DiagnosticTag.Unnecessary];
 					break;
 				case ErrorType.ElementNesting:
 					msg = `XML: Start tag '${tokenValue} has no matching close tag`;
@@ -796,6 +808,12 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XSLTPrefix:
 					msg = `XSLT: Undeclared prefix in name: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathName:
+					msg = `XPath: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathPrefix:
+					msg = `XPath: Undeclared prefix in name: '${tokenValue}'`;
 					break;
 				case ErrorType.XMLAttNameSyntax:
 					msg = `XML: Missing whitespace before attribute '${tokenValue}'`;
@@ -831,7 +849,7 @@ export class XsltTokenDiagnostics {
 				message: msg,
 				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 				severity: vscode.DiagnosticSeverity.Error,
-				tags: [vscode.DiagnosticTag.Unnecessary],
+				tags: diagnosticMetadata,
 				source: ''
 			});
 		});
