@@ -126,6 +126,8 @@ class Data {
             token.tokenType = TokenLevelState.complexExpression
         } else if (Data.keywords.indexOf(token.value) > -1) {
             token.tokenType = TokenLevelState.operator;
+        } else {
+            token['error'] = ErrorType.XPathKeyword;
         }
     }
 
@@ -1006,6 +1008,7 @@ export enum ErrorType {
     XSLTPrefix,
     XPathName,
     XPathPrefix,
+    XPathKeyword,
     XMLXMLNS,
     XMLAttributeName,
     XMLAttributeXMLNS,

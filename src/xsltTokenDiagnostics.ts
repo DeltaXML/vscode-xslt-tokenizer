@@ -442,6 +442,7 @@ export class XsltTokenDiagnostics {
 
 				switch (xpathTokenType) {
 					case TokenLevelState.axisName:
+					case TokenLevelState.nodeNameTest:
 						if (token.error) {
 							problemTokens.push(token);
 						}
@@ -815,6 +816,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ElementNesting:
 					msg = `XML: Start tag '${tokenValue} has no matching close tag`;
+					break;
+				case ErrorType.XPathKeyword:
+					msg = `XPath: Found: '${tokenValue}' expected keyword or operator`;
 					break;
 				case ErrorType.XMLName:
 					msg = `XML: Invalid name: '${tokenValue}'`;
