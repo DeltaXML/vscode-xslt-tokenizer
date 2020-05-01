@@ -734,7 +734,7 @@ export class XPathLexer {
         let currentState = currentToken.charType;
 
         if (prevToken) {
-            if (XPathLexer.isCharTypeEqual(prevToken, CharLevelState.lName)) {
+            if (prevToken.charType === CharLevelState.lName) {
                 switch (currentState) {
                     case CharLevelState.lVar:
                         if (Data.rangeVars.indexOf(prevToken.value) > -1) {
@@ -746,7 +746,10 @@ export class XPathLexer {
                         this.updateTokenBeforeBrackets(prevToken);
                         break;
                     case CharLevelState.dSep:
-                        if (currentToken.value === '::' && Data.axes.indexOf(prevToken.value) > -1) {
+                        if (currentToken.value === '::') {
+                            if (Data.axes.indexOf(prevToken.value) < 0) {
+                                prevToken['error'] = ErrorType.AxisName;
+                            }
                             prevToken.tokenType = TokenLevelState.axisName;
                         } else if (currentToken.value === '()') {
                             this.updateTokenBeforeBrackets(prevToken);
@@ -992,6 +995,7 @@ export class XPathLexer {
 
 export enum ErrorType {
     None,
+    AxisName,
     UnusedVariable,
     UnresolvedVarReference,
     DuplicateVarName,

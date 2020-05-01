@@ -441,6 +441,11 @@ export class XsltTokenDiagnostics {
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 
 				switch (xpathTokenType) {
+					case TokenLevelState.axisName:
+						if (token.error) {
+							problemTokens.push(token);
+						}
+						break;
 					case TokenLevelState.variable:
 						if (preXPathVariable || anonymousFunctionParams) {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
@@ -800,6 +805,9 @@ export class XsltTokenDiagnostics {
 			let msg: string;
 			let diagnosticMetadata: vscode.DiagnosticTag[] = [];
 			switch (token.error) {
+				case ErrorType.AxisName:
+					msg = `XPath: Invalid axis name: '${tokenValue}`;
+					break;
 				case ErrorType.BracketNesting:
 					let matchingChar: any = XsltTokenDiagnostics.getMatchingSymbol(tokenValue);
 					msg = matchingChar.length === 0? `XPath: No match found for '${tokenValue}'`: `'${tokenValue}' has no matching '${matchingChar}'`;
