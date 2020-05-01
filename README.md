@@ -5,10 +5,13 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 ### Main Editor Features
 - XSLT 3.0 and XPath 3.1 Syntax highlighting
 - XSLT 3.0 and XPath 3.1 Formatting
-  - Document Formatting
-  - Selection Formatting
-  - On Type: New line Indentation
-- Bracket Matching
+- XSLT Outline View
+- XSLT/XPath Symbol-lookup
+- XML Well-Formedness Checking (wip)
+- XSLT Static Code Checking (wip)
+- XPath Static Code Checking (wip)
+- Mark unused variables
+- Show invalid variable references as errors
 - *Saxon XSLT* Transform Task Provider (requires Java)
 
 ## Sample Screenshots
