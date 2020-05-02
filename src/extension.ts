@@ -9,11 +9,12 @@
  */
 import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
-import {XslLexer, LanguageConfiguration} from './xslLexer';
+import {XslLexer, LanguageConfiguration, GlobalInstructionData} from './xslLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
+import {GlobalsProvider} from './globalsProvider';
 
 const tokenModifiers = new Map<string, number>();
 
@@ -123,6 +124,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection;
+	private gp = new GlobalsProvider();
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
@@ -134,6 +136,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// console.log('provideDocumentSymbols: ' + document.uri);
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
+		let includedData: GlobalInstructionData[] = [];
+
+		await this.gp.provideGlobals().then((globals) => {
+			includedData = globals;
+		});
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];

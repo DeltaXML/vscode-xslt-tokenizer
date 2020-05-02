@@ -66,7 +66,7 @@ export enum XMLCharState {
     lText
 }
 
-enum EntityPosition {
+export enum EntityPosition {
     text,
     attrDq,
     attrSq
@@ -128,10 +128,10 @@ export class XslLexer {
     private charCount = 0;
     private lineCharCount = 0;
     private static xpathLegend = XPathLexer.getTextmateTypeLegend();
-    private static xpathLegendLength = XslLexer.xpathLegend.length;
+    protected static xpathLegendLength = XslLexer.xpathLegend.length;
     private commentCharCount = 0;
     private cdataCharCount = 0;
-    private entityContext = EntityPosition.text;
+    protected entityContext = EntityPosition.text;
     private languageConfiguration: LanguageConfiguration;
     private skipTokenChar = false;
     private nativeTvtAttributes: string[] = [];
@@ -182,7 +182,7 @@ export class XslLexer {
         return this.languageConfiguration.expressionAtts? this.languageConfiguration.expressionAtts.indexOf(name) > -1: false;
     }
 
-    private calcNewState (isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
+    protected calcNewState (isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
         let rc: XMLCharState = existing;
         let firstCharOfToken = true;
 
@@ -921,7 +921,7 @@ export class XslLexer {
         return expandTextValue;
     }
 
-    private getElementProperties(tokenChars: string[], isRootChild: boolean): ElementProperties {
+    protected getElementProperties(tokenChars: string[], isRootChild: boolean): ElementProperties {
         let elementName= tokenChars.join('');
         let isNative = tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.languageConfiguration.nativePrefix + ':');
         let instructionType = GlobalInstructionType.Unknown;
