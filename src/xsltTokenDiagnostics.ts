@@ -425,11 +425,13 @@ export class XsltTokenDiagnostics {
 						}
 
 						if (attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
-							let validateResult = XsltTokenDiagnostics.validateName(variableName, ValidationType.PrefixedName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
-							if (validateResult !== NameValidationError.None) {
-								token['error'] = validateResult === NameValidationError.NameError? ErrorType.XSLTName: ErrorType.XSLTPrefix;
-								token['value'] = fullVariableName;
-								problemTokens.push(token);
+							if (!fullVariableName.includes('{')) {
+								let validateResult = XsltTokenDiagnostics.validateName(variableName, ValidationType.PrefixedName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+								if (validateResult !== NameValidationError.None) {
+									token['error'] = validateResult === NameValidationError.NameError? ErrorType.XSLTName: ErrorType.XSLTPrefix;
+									token['value'] = fullVariableName;
+									problemTokens.push(token);
+								}
 							}
 						}
 						attType = AttributeType.None;
@@ -563,18 +565,22 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.nodeNameTest:
 						let tokenValue;
 						let validationType;
+						let skipValidation = false;
 						if (xpathTokenType === TokenLevelState.nodeNameTest) {
 							tokenValue = token.value;
 							validationType = ValidationType.PrefixedName;
 						} else {
 							tokenValue = token.value.substr(1);
 							validationType= ValidationType.XMLAttribute;
+							skipValidation = token.value === '@';
 						}
-						let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
-						if (validateResult !== NameValidationError.None) {
-							token['error'] = validateResult === NameValidationError.NameError? ErrorType.XPathName: ErrorType.XPathPrefix;
-							token['value'] = token.value;
-							problemTokens.push(token);
+						if (!skipValidation) {
+							let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+							if (validateResult !== NameValidationError.None) {
+								token['error'] = validateResult === NameValidationError.NameError? ErrorType.XPathName: ErrorType.XPathPrefix;
+								token['value'] = token.value;
+								problemTokens.push(token);
+							}
 						}
 						break;
 				}
