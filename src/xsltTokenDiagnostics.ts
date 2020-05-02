@@ -444,7 +444,6 @@ export class XsltTokenDiagnostics {
 
 				switch (xpathTokenType) {
 					case TokenLevelState.axisName:
-					case TokenLevelState.nodeNameTest:
 						if (token.error) {
 							problemTokens.push(token);
 						}
@@ -563,23 +562,27 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
-						let tokenValue;
-						let validationType;
-						let skipValidation = false;
-						if (xpathTokenType === TokenLevelState.nodeNameTest) {
-							tokenValue = token.value;
-							validationType = ValidationType.PrefixedName;
+						if (token.error) {
+							problemTokens.push(token);
 						} else {
-							tokenValue = token.value.substr(1);
-							validationType= ValidationType.XMLAttribute;
-							skipValidation = token.value === '@';
-						}
-						if (!skipValidation) {
-							let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
-							if (validateResult !== NameValidationError.None) {
-								token['error'] = validateResult === NameValidationError.NameError? ErrorType.XPathName: ErrorType.XPathPrefix;
-								token['value'] = token.value;
-								problemTokens.push(token);
+							let tokenValue;
+							let validationType;
+							let skipValidation = false;
+							if (xpathTokenType === TokenLevelState.nodeNameTest) {
+								tokenValue = token.value;
+								validationType = ValidationType.PrefixedName;
+							} else {
+								tokenValue = token.value.substr(1);
+								validationType= ValidationType.XMLAttribute;
+								skipValidation = token.value === '@';
+							}
+							if (!skipValidation) {
+								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+								if (validateResult !== NameValidationError.None) {
+									token['error'] = validateResult === NameValidationError.NameError? ErrorType.XPathName: ErrorType.XPathPrefix;
+									token['value'] = token.value;
+									problemTokens.push(token);
+								}
 							}
 						}
 						break;
