@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData} from './xslLexer';
-import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 import {GlobalsProvider} from './globalsProvider';
 
