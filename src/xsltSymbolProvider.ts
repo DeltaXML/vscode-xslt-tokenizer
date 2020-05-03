@@ -26,11 +26,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 		let importHrefs: string[] = [];
 
-		globalInstructionData.forEach((data) => {
-			if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-				importHrefs.push(this.gp.resolveHref(data.name));
-			}
-		});
+		this.accumulateImportHrefs(globalInstructionData, importHrefs);
 
 		// TODO: import recursively if imports include imports etc.
 		let importedGlobals = await this.fetchImportedGlobals(importHrefs);
@@ -50,8 +46,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 
+	private accumulateImportHrefs(globalInstructionData: GlobalInstructionData[], importHrefs: string[]) {
+		globalInstructionData.forEach((data) => {
+			if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
+				importHrefs.push(this.gp.resolveHref(data.name));
+			}
+		});
+	}
+
 	private async fetchImportedGlobals(hrefs: string[]): Promise<ImportedGlobals[]> {
 		let result: ImportedGlobals[] = [];
+		let accumulatedImports: string[] = [];
 		let lastIndex = hrefs.length - 1;
 		if (lastIndex < 0) {
 			return result;
@@ -60,6 +65,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				hrefs.forEach((href, index) => {
 					this.gp.provideGlobals(href).then((globals) => {
 						result.push({href: href, data: globals});
+						accumulatedImports.push(href);
 						if (index === lastIndex) {
 							resolve(result);
 						}
