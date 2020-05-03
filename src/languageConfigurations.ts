@@ -29,3 +29,12 @@ export class XMLConfiguration {
 		tvtAttributes: ['expand-text', 'inline-expand-text']
 	} 
 }
+
+export class XSLTLightConfiguration {
+	// used for global instruction processing only
+	public static configuration: LanguageConfiguration = {
+		expressionAtts: [],
+		nativePrefix: 'xsl',
+		tvtAttributes: []
+	} 
+}
