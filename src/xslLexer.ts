@@ -682,6 +682,10 @@ export class XslLexer {
                                     isExpandTextAttribute = false;
                                     isXMLNSattribute = true;
                                     attributeNameToken = XSLTokenLevelState.xmlnsName;
+                                } else if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
+                                     && attName === 'href') {
+                                    isExpandTextAttribute = false;
+                                    isGlobalInstructionName = true;
                                 } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionName = true;
@@ -942,6 +946,12 @@ export class XslLexer {
                     case ('template'):
                         instructionType = GlobalInstructionType.Template;
                         break;
+                    case ('import'):
+                        instructionType = GlobalInstructionType.Import;
+                        break;
+                    case ('include'):
+                        instructionType = GlobalInstructionType.Include;
+                        break;
                 }
             }
         }
@@ -962,6 +972,8 @@ export enum GlobalInstructionType {
     Parameter,
     Function,
     Template,
+    Include,
+    Import,
     Unknown
 }
 

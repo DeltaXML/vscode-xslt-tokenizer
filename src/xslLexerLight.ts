@@ -122,7 +122,10 @@ export class XslLexerLight extends XslLexer {
                             break;
                         case XMLCharState.lStEq:
                             attName = tokenChars.join('');
-                            if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
+                            if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
+                             && attName === 'href') {
+                                isGlobalInstructionName = true;
+                            } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                 isGlobalInstructionName = true;
                             }
                             console.log('attName: ', attName);
