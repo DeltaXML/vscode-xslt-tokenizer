@@ -91,7 +91,6 @@ export class XslLexerLight extends XslLexer {
                             tagGlobalInstructionType = elementProperties.instructionType;
                             if (xmlElementStack === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
-                                console.log('context: ', contextGlobalInstructionType);
                             } else if (xmlElementStack === 2 
                                 && contextGlobalInstructionType === GlobalInstructionType.Function
                                 && isNativeElement && elementProperties.nativeName === 'param') {
@@ -115,7 +114,8 @@ export class XslLexerLight extends XslLexer {
                             storeToken = false;
                             break;      
                         case XMLCharState.lAn:
-                            if (xmlElementStack === 1 || xmlElementStack === 2 && isGlobalInstructionName) {
+                            if ((xmlElementStack === 1 && tagGlobalInstructionType !== GlobalInstructionType.Unknown) ||
+                                xmlElementStack === 2 && tagGlobalInstructionType === GlobalInstructionType.Function) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             }
@@ -152,6 +152,7 @@ export class XslLexerLight extends XslLexer {
                                 console.log({type: tagGlobalInstructionType, name: attValue, token: tkn, idNumber: 0});
                                 this.globalInstructionData.push({type: tagGlobalInstructionType, name: attValue, token: tkn, idNumber: 0});
                                 isGlobalInstructionName = false;
+                                tagGlobalInstructionType = GlobalInstructionType.Unknown;
                             }
                             tokenChars = [];
                             storeToken = false;
