@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 import {GlobalsProvider} from './globalsProvider';
+import * as path from 'path';
+
 
 interface ImportedGlobals {
 	href: string,
@@ -24,12 +26,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// console.log('provideDocumentSymbols: ' + document.uri);
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
-		let importHrefs: string[] = [];
-
-		this.accumulateImportHrefs(globalInstructionData, importHrefs);
 
 		// TODO: import recursively if imports include imports etc.
-		let importedGlobals = await this.fetchImportedGlobals(importHrefs);
+		let fullDocPath = document.fileName;
+		let importedGlobals = await this.fetchImportedGlobals(globalInstructionData, [], fullDocPath);
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
@@ -46,26 +46,41 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 
-	private accumulateImportHrefs(globalInstructionData: GlobalInstructionData[], importHrefs: string[]) {
+	private accumulateImportHrefs(globalInstructionData: GlobalInstructionData[], existingHrefs: string[], docHref: string): string[] {
+		let result: string[] = [];
 		globalInstructionData.forEach((data) => {
 			if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-				importHrefs.push(this.gp.resolveHref(data.name));
+				let resolvedName = this.resolvePath(data.name, docHref);
+				if (existingHrefs.indexOf(resolvedName) < 0) {
+					result.push(resolvedName);
+				}
 			}
 		});
+		return result;
 	}
 
-	private async fetchImportedGlobals(hrefs: string[]): Promise<ImportedGlobals[]> {
+	private resolvePath(href: string, documentPath: string) {
+
+		if (path.isAbsolute(href)) {
+			return href;
+		} else {
+			let basePath = path.dirname(documentPath);
+			let joinedPath = path.join(basePath, href);
+			return path.normalize(joinedPath);
+		}
+	}
+
+	private async fetchImportedGlobals(globalInstructionData: GlobalInstructionData[], existingHrefs: string[], docHref: string): Promise<ImportedGlobals[]> {
 		let result: ImportedGlobals[] = [];
-		let accumulatedImports: string[] = [];
-		let lastIndex = hrefs.length - 1;
+		let inputHrefs: string[] = this.accumulateImportHrefs(globalInstructionData, existingHrefs, docHref);
+		let lastIndex = inputHrefs.length - 1;
 		if (lastIndex < 0) {
 			return result;
 		} else {
 			return new Promise((resolve, reject) => {
-				hrefs.forEach((href, index) => {
+				inputHrefs.forEach((href, index) => {
 					this.gp.provideGlobals(href).then((globals) => {
 						result.push({href: href, data: globals});
-						accumulatedImports.push(href);
 						if (index === lastIndex) {
 							resolve(result);
 						}
