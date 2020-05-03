@@ -32,10 +32,8 @@ export class XslLexerLight extends XslLexer {
         let isNativeElement = false;
         let tagGlobalInstructionType = GlobalInstructionType.Unknown;
         let contextGlobalInstructionType = GlobalInstructionType.Unknown;
-        let isExpandTextAttribute = false;
         let isGlobalInstructionName = false;
         let xmlElementStack: number = 0;
-        let attributeNameTokenAdded = false;
         let lCharCount = -1;
         let lineNumber = 0;
         let lineNumberChar = -1;
@@ -71,10 +69,10 @@ export class XslLexerLight extends XslLexer {
 
                     switch (nextState) {
                         case XMLCharState.lSt:
-                            break;
                         case XMLCharState.lCtName:
+                            break;
                         case XMLCharState.lEn:
-                            if (tokenChars.length < 5) {
+                            if (xmlElementStack === 1 || xmlElementStack === 2 && tokenChars.length < 5) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             } else {
@@ -82,6 +80,7 @@ export class XslLexerLight extends XslLexer {
                             }
                             break;
                         case XMLCharState.rStNoAtt:
+                            xmlElementStack++;
                         case XMLCharState.lsElementNameWs:
                         case XMLCharState.rSelfCtNoAtt:
                         case XMLCharState.rCt:
@@ -92,6 +91,7 @@ export class XslLexerLight extends XslLexer {
                             tagGlobalInstructionType = elementProperties.instructionType;
                             if (xmlElementStack === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
+                                console.log('context: ', contextGlobalInstructionType);
                             } else if (xmlElementStack === 2 
                                 && contextGlobalInstructionType === GlobalInstructionType.Function
                                 && isNativeElement && elementProperties.nativeName === 'param') {
@@ -113,20 +113,24 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.wsAfterAttName:
                         case XMLCharState.syntaxError:
                             storeToken = false;
-                            attributeNameTokenAdded = true;
                             break;      
                         case XMLCharState.lAn:
-                            tokenChars.push(currentChar);
-                            storeToken = true;
-                            attributeNameTokenAdded = false;
+                            if (xmlElementStack === 1 || xmlElementStack === 2 && isGlobalInstructionName) {
+                                tokenChars.push(currentChar);
+                                storeToken = true;
+                            }
                             break;
                         case XMLCharState.lStEq:
-                            isGlobalInstructionName = false;
                             attName = tokenChars.join('');
+                            if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
+                                isGlobalInstructionName = true;
+                            }
+                            console.log('attName: ', attName);
                             tokenChars = [];
                             storeToken = false;
                             break;
                         case XMLCharState.rSt:
+                            xmlElementStack++;
                             storeToken = false;
                             tokenChars = [];
                             break;
@@ -137,6 +141,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.escSqAvt:
                             if (isGlobalInstructionName) {
                                 let attValue = tokenChars.join('');
+                                console.log('attValue: ' + attValue);
                                 let tkn: BaseToken = {
                                     line: lineNumber,
                                     length: attValue.length,
@@ -144,14 +149,16 @@ export class XslLexerLight extends XslLexer {
                                     value: attValue,
                                     tokenType: XSLTokenLevelState.attributeValue
                                 };
+                                console.log({type: tagGlobalInstructionType, name: attValue, token: tkn, idNumber: 0});
                                 this.globalInstructionData.push({type: tagGlobalInstructionType, name: attValue, token: tkn, idNumber: 0});
+                                isGlobalInstructionName = false;
                             }
                             tokenChars = [];
                             storeToken = false;
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (isExpandTextAttribute || isGlobalInstructionName) {
+                            if (isGlobalInstructionName) {
                                 storeToken = true;
                             }
                            break;
