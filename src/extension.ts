@@ -144,6 +144,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
+			console.log(includedData);
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, symbols);
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
