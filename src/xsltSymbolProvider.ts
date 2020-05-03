@@ -3,6 +3,7 @@ import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructio
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
+import { promises } from 'dns';
 
 
 interface ImportedGlobals {
@@ -29,7 +30,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 		// TODO: import recursively if imports include imports etc.
 		let fullDocPath = document.fileName;
-		let importedGlobals = await this.fetchImportedGlobals(globalInstructionData, [], fullDocPath);
+		let startLoop = true;
+		let existingHrefs: string[] = []
+		let importedGlobals1 = await this.fetchImportedGlobals(globalInstructionData, existingHrefs, fullDocPath);
+
+
+		let importedGlobals2 = await this.fetchImportedGlobals(globalInstructionData, [], fullDocPath);
+		await Promise.all([importedGlobals1, importedGlobals2]);
+
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
