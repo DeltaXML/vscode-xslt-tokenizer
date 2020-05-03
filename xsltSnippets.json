@@ -33,6 +33,23 @@
 		],
 		"description": "xsl:variable"
 	},
+	"xsl:include": {
+		"prefix": ["xsl-include"],
+		"body": [
+			"<xsl:include href=\"$1\"/>",
+			"$0"
+		],
+		"description": "xsl:include"
+	},
+	"xsl:import": {
+		"prefix": ["xsl-import"],
+		"body": [
+			"<xsl:import href=\"$1\"/>",
+			"$0"
+		],
+		"description": "xsl:import"
+	},
+
 	"xsl:param": {
 		"prefix": ["xsl-parameter"],
 		"body": [
