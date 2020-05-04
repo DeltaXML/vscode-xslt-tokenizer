@@ -30,18 +30,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 		// TODO: import recursively if imports include imports etc.
 		let fullDocPath = document.fileName;
-		let startLoop = true;
-		let existingHrefs: string[] = []
-		let importedGlobals1 = await this.fetchImportedGlobals(globalInstructionData, existingHrefs, fullDocPath);
-
-
-		let importedGlobals2 = await this.fetchImportedGlobals(globalInstructionData, [], fullDocPath);
-		await Promise.all([importedGlobals1, importedGlobals2]);
-
+		let level1Hrefs = this.accumulateImportHrefs(globalInstructionData, [], fullDocPath);
+		let importedGlobals1 = await this.fetchImportedGlobals(level1Hrefs);
+		let level2Globals: Promise<ImportedGlobals[]>[] = [];
+		importedGlobals1.forEach((importedG) => {
+			let level2Hrefs = this.accumulateImportHrefs(importedG.data, level1Hrefs, importedG.href);
+			level2Globals.push(this.fetchImportedGlobals(level2Hrefs));
+		})
+		let importedGlobals2Array = await Promise.all(level2Globals);
+		importedGlobals2Array.forEach((importedGlobals2) => {
+			importedGlobals1 = importedGlobals1.concat(importedGlobals2);
+		});
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
-			console.log(importedGlobals);
+			console.log(importedGlobals1);
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, symbols);
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
@@ -78,9 +81,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	private async fetchImportedGlobals(globalInstructionData: GlobalInstructionData[], existingHrefs: string[], docHref: string): Promise<ImportedGlobals[]> {
+	private async fetchImportedGlobals(inputHrefs: string[]): Promise<ImportedGlobals[]> {
 		let result: ImportedGlobals[] = [];
-		let inputHrefs: string[] = this.accumulateImportHrefs(globalInstructionData, existingHrefs, docHref);
+		//let inputHrefs: string[] = this.accumulateImportHrefs(globalInstructionData, existingHrefs, docHref);
 		let lastIndex = inputHrefs.length - 1;
 		if (lastIndex < 0) {
 			return result;
