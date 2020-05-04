@@ -32,15 +32,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let fullDocPath = document.fileName;
 		let level1Hrefs = this.accumulateImportHrefs(globalInstructionData, [], fullDocPath);
 		let importedGlobals1 = await this.fetchImportedGlobals(level1Hrefs);
-		let level2Globals: Promise<ImportedGlobals[]>[] = [];
-		importedGlobals1.forEach((importedG) => {
-			let level2Hrefs = this.accumulateImportHrefs(importedG.data, level1Hrefs, importedG.href);
-			level2Globals.push(this.fetchImportedGlobals(level2Hrefs));
-		})
-		let importedGlobals2Array = await Promise.all(level2Globals);
-		importedGlobals2Array.forEach((importedGlobals2) => {
-			importedGlobals1 = importedGlobals1.concat(importedGlobals2);
-		});
+		importedGlobals1 = await this.processImportedGlobals(importedGlobals1, level1Hrefs);
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
@@ -56,6 +48,18 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
+	private async processImportedGlobals(importedGlobals1: ImportedGlobals[], level1Hrefs: string[]): Promise<ImportedGlobals[]> {
+		let level2Globals: Promise<ImportedGlobals[]>[] = [];
+		importedGlobals1.forEach((importedG) => {
+			let level2Hrefs = this.accumulateImportHrefs(importedG.data, level1Hrefs, importedG.href);
+			level2Globals.push(this.fetchImportedGlobals(level2Hrefs));
+		});
+		let importedGlobals2Array = await Promise.all(level2Globals);
+		importedGlobals2Array.forEach((importedGlobals2) => {
+			importedGlobals1 = importedGlobals1.concat(importedGlobals2);
+		});
+		return importedGlobals1;
+	}
 
 	private accumulateImportHrefs(globalInstructionData: GlobalInstructionData[], existingHrefs: string[], docHref: string): string[] {
 		let result: string[] = [];
