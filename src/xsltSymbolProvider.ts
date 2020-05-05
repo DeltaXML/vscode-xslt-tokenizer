@@ -11,6 +11,11 @@ interface ImportedGlobals {
 	data: GlobalInstructionData[]
 }
 
+interface GlobalsSummary {
+	globals: ImportedGlobals[],
+	hrefs: string[]
+}
+
 export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
@@ -30,14 +35,22 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 		// TODO: import recursively if imports include imports etc.
 		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName};
-		let level1Hrefs = this.accumulateImportHrefs([importedG], []);
-		let importedGlobals1 = await this.fetchImportedGlobals(level1Hrefs);
+		let importedGlobals1 = [importedG];
+		let accumulatedHrefs: string[] = [];
 
-		importedGlobals1 = await this.processImportedGlobals(importedGlobals1, level1Hrefs);
+
+		let globalsSummary0 = {globals: importedGlobals1, hrefs: []}
+
+		let globalsSummary1 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs);
+
+		let globalsSummary2 = await this.processImportedGlobals(globalsSummary1.globals, accumulatedHrefs);
+
+		let globalsSummary3 = await this.processImportedGlobals(globalsSummary2.globals, accumulatedHrefs);
+
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
-			console.log(importedGlobals1);
+			console.log(globalsSummary3.globals);
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, symbols);
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
@@ -49,7 +62,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
-	private async processImportedGlobals(importedGlobals1: ImportedGlobals[], level1Hrefs: string[]): Promise<ImportedGlobals[]> {
+	private async processImportedGlobals(importedGlobals1: ImportedGlobals[], level1Hrefs: string[]): Promise<GlobalsSummary> {
 		let level2Globals: Promise<ImportedGlobals[]>[] = [];
 		let level2Hrefs = this.accumulateImportHrefs(importedGlobals1, level1Hrefs);
 
@@ -60,7 +73,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		importedGlobals2Array.forEach((importedGlobals2) => {
 			importedGlobals1 = importedGlobals1.concat(importedGlobals2);
 		});
-		return importedGlobals1;
+		return {globals: importedGlobals1, hrefs: level2Hrefs};
 	}
 
 	private accumulateImportHrefs(importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
