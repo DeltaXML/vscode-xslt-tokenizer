@@ -443,7 +443,8 @@ export class XsltTokenDiagnostics {
 
 						if (attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
 							if (!fullVariableName.includes('{')) {
-								let validateResult = XsltTokenDiagnostics.validateName(variableName, ValidationType.PrefixedName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+								let vType = tagElementName.endsWith(':attribute')? ValidationType.XMLAttribute: ValidationType.PrefixedName;
+								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError? ErrorType.XSLTName: ErrorType.XSLTPrefix;
 									token['value'] = fullVariableName;
