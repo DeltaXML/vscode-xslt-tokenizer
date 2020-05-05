@@ -40,13 +40,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 
 		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs};
-		let isTopLevel = true;
+		const maxImportLevel = 20;
 
 		let processNestedGlobals = async () => {
 			let level = 0;
-			while (globalsSummary0.hrefs.length > 0 && level < 20) {
-				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs, isTopLevel);
-				isTopLevel = false;
+			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel) {
+				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs, level === 0);
 				level++;
 			}
 		};
