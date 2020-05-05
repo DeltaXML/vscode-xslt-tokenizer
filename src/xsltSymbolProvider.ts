@@ -39,12 +39,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let accumulatedHrefs: string[] = [importedG.href];
 
 
-		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs}
+		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs};
+		let isTopLevel = true;
 
 		let processNestedGlobals = async () => {
 			let level = 0;
 			while (globalsSummary0.hrefs.length > 0 && level < 20) {
-				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs);
+				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs, isTopLevel);
+				isTopLevel = false;
 				level++;
 			}
 		};
@@ -53,18 +55,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
-			let flattenedGlobals: GlobalInstructionData[] = [];
+			let allImportedGlobals: GlobalInstructionData[] = [];
 			globalsSummary0.globals.forEach((globals) => {
 				globals.data.forEach((global) => {
-					flattenedGlobals.push(global);
+					global['href'] = globals.href;
+					allImportedGlobals.push(global);
 				});
 			});
 			console.log('---- top-level globals-----');
 			console.log(globalInstructionData);
 			console.log('---- flattened globals -----');
-			console.log(flattenedGlobals);
+			console.log(allImportedGlobals);
 
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, symbols);
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
 			} else {
@@ -75,18 +78,28 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
-	private async processImportedGlobals(importedGlobals1: ImportedGlobals[], level1Hrefs: string[]): Promise<GlobalsSummary> {
+	private async processImportedGlobals(importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {
 		let level2Globals: Promise<ImportedGlobals[]>[] = [];
 		let level2Hrefs = this.accumulateImportHrefs(importedGlobals1, level1Hrefs);
+		let newGlobals: ImportedGlobals[] = [];
 
 		level2Hrefs.forEach((href) => {
 			level2Globals.push(this.fetchImportedGlobals([href]));
 		});
 		let importedGlobals2Array = await Promise.all(level2Globals);
 		importedGlobals2Array.forEach((importedGlobals2) => {
-			importedGlobals1 = importedGlobals1.concat(importedGlobals2);
+			if (topLevel) {
+				newGlobals = newGlobals.concat(importedGlobals2);
+			} else {
+				importedGlobals1 = importedGlobals1.concat(importedGlobals2);
+			}
 		});
-		return {globals: importedGlobals1, hrefs: level2Hrefs};
+
+		if (topLevel) {
+			return {globals: newGlobals, hrefs: level2Hrefs};
+		} else {
+			return {globals: importedGlobals1, hrefs: level2Hrefs};
+		}
 	}
 
 	private accumulateImportHrefs(importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {

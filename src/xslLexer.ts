@@ -115,7 +115,8 @@ export interface GlobalInstructionData {
     name: string,
     type: GlobalInstructionType,
     token: BaseToken,
-    idNumber: number
+    idNumber: number,
+    href?: string
 }
 
 export class XslLexer {

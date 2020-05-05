@@ -127,7 +127,7 @@ export class XsltTokenDiagnostics {
 	}
 
 
-	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 
 		let inScopeVariablesList: VariableData[] = [];
@@ -157,6 +157,8 @@ export class XsltTokenDiagnostics {
 		let globalVariableData: VariableData[] = [];
 		let checkedGlobalVarNames: string[] = [];
 		let checkedGlobalFnNames: string[] = [];
+		let importedGlobalVarNames: string[] = [];
+		let importedGlobalFnNames: string[] = [];
 
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
@@ -178,6 +180,21 @@ export class XsltTokenDiagnostics {
 					instruction.token.value = functionNameWithArity;
 					problemTokens.push(instruction.token);
 				}				
+			}
+		});
+
+		importedInstructionData.forEach((instruction) => {
+			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
+				if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
+					checkedGlobalVarNames.push(instruction.name);
+					importedGlobalVarNames.push(instruction.name);
+				}
+			} else if (instruction.type === GlobalInstructionType.Function) {
+				let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
+				if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
+					checkedGlobalFnNames.push(functionNameWithArity);
+					importedGlobalFnNames.push(functionNameWithArity);
+				}			
 			}
 		});
 		let nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
@@ -461,7 +478,7 @@ export class XsltTokenDiagnostics {
 								xsltVariableDeclarations.push(token);
 							} else if (xpathVariableCurrentlyBeingDefined) {
 								// e.g.  with 'let $b := $a' the 'let $b' part has already occurred, the $a part needs to be resolved -  preXPathVariable is true also
-								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
 									xpathStack, inScopeVariablesList, elementStack);
 								if (unResolvedToken !== null) {
 									unresolvedXsltVariableReferences.push(unResolvedToken);
@@ -469,7 +486,7 @@ export class XsltTokenDiagnostics {
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
-							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
 								xpathStack, inScopeVariablesList, elementStack);
 							if (unResolvedToken !== null) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
@@ -635,7 +652,7 @@ export class XsltTokenDiagnostics {
 		return valueText;
 	}
 
-	static resolveXPathVariableReference(document: vscode.TextDocument, token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], 
+	static resolveXPathVariableReference(document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], 
 		                                 xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken|null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.substr(1);
@@ -651,6 +668,9 @@ export class XsltTokenDiagnostics {
 		}
 		if (!resolved) {
 			resolved = this.resolveStackVariableName(elementStack, varName);		
+		}
+		if (!resolved) {
+			resolved = importedVariables.indexOf(varName) > -1;
 		}
 		if (!resolved) {
 			result = token;
