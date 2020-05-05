@@ -36,21 +36,24 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// TODO: import recursively if imports include imports etc.
 		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName};
 		let importedGlobals1 = [importedG];
-		let accumulatedHrefs: string[] = [];
+		let accumulatedHrefs: string[] = [importedG.href];
 
 
-		let globalsSummary0 = {globals: importedGlobals1, hrefs: []}
+		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs}
 
-		let globalsSummary1 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs);
+		let processNestedGlobals = async () => {
+			let level = 0;
+			while (globalsSummary0.hrefs.length > 0 && level < 20) {
+				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs);
+				level++;
+			}
+		}
 
-		let globalsSummary2 = await this.processImportedGlobals(globalsSummary1.globals, accumulatedHrefs);
-
-		let globalsSummary3 = await this.processImportedGlobals(globalsSummary2.globals, accumulatedHrefs);
-
+		await processNestedGlobals();
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
-			console.log(globalsSummary3.globals);
+			console.log(globalsSummary0.globals);
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, symbols);
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
