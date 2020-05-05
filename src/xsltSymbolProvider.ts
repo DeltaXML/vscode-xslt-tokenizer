@@ -47,13 +47,23 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs);
 				level++;
 			}
-		}
+		};
 
 		await processNestedGlobals();
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
-			console.log(globalsSummary0.globals);
+			let flattenedGlobals: GlobalInstructionData[] = [];
+			globalsSummary0.globals.forEach((globals) => {
+				globals.data.forEach((global) => {
+					flattenedGlobals.push(global);
+				});
+			});
+			console.log('---- top-level globals-----');
+			console.log(globalInstructionData);
+			console.log('---- flattened globals -----');
+			console.log(flattenedGlobals);
+
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, symbols);
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
