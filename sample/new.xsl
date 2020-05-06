@@ -13,7 +13,7 @@
     <xsl:variable name="v5" as="xs:integer" select="$inc5p1"/>
     <xsl:variable name="v6" as="xs:integer" select="$inc6p1"/>
     
-    <xsl:sequence select="$va, fn:name($v1), $v2, $v4, $v5, $v6"/>
+    <xsl:sequence select="$va, fn:name($v1), fn:inc1name($v2), $v4, $v5, $v6"/>
     
 
     <xsl:function name="fn:name" as="xs:string">

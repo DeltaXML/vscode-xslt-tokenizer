@@ -608,6 +608,19 @@ export class XsltTokenDiagnostics {
 									xpathVariableCurrentlyBeingDefined = false;
 								}
 								break;
+							case CharLevelState.dSep:
+								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
+									let qFunctionName = prevToken.value + '#0';
+									if (qFunctionName.includes(':')) {
+										if (checkedGlobalFnNames.indexOf(qFunctionName) < 0) {
+											prevToken['error'] = ErrorType.XPathFunction;
+											prevToken['value'] = qFunctionName;
+											problemTokens.push(prevToken);
+										}
+									}
+
+								}
+								break;
 						}
 						break;
 					case TokenLevelState.attributeNameTest:
