@@ -48,6 +48,8 @@ interface XPathData {
 	variables: VariableData[];
 	preXPathVariable: boolean;
 	xpathVariableCurrentlyBeingDefined: boolean;
+	function?: BaseToken;
+	functionArity?: number;
 }
 
 interface VariableData {
@@ -525,6 +527,7 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.operator:
+						let functionToken: BaseToken|null = null;
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
 								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
@@ -544,9 +547,17 @@ export class XsltTokenDiagnostics {
 								if (!anonymousFunctionParams && prevToken?.tokenType !== TokenLevelState.nodeType) {
 									anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
 								}
+								if (prevToken?.tokenType === TokenLevelState.function) {
+									functionToken = prevToken;
+								}
 								// intentionally no-break;	
 							case CharLevelState.lPr:
-								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+								let xpathItem: XPathData = {token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined};
+								if (functionToken) {
+									xpathItem.function = functionToken;
+									xpathItem.functionArity = 0;
+								}
+								xpathStack.push(xpathItem);
 								preXPathVariable = false;	
 								inScopeXPathVariablesList = [];
 								xpathVariableCurrentlyBeingDefined = false;
@@ -560,6 +571,21 @@ export class XsltTokenDiagnostics {
 										inScopeXPathVariablesList = poppedData.variables
 										preXPathVariable = poppedData.preXPathVariable
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
+										if (poppedData.function) {
+											if (prevToken?.charType !== CharLevelState.lB) {
+												if (poppedData.functionArity !== undefined) {
+													poppedData.functionArity++;
+												}
+											}
+											let qFunctionName = poppedData.function.value + '#' + poppedData.functionArity;
+											if (qFunctionName.includes(':')) {
+												if (checkedGlobalFnNames.indexOf(qFunctionName) < 0) {
+													poppedData.function['error'] = ErrorType.XPathFunction;
+													poppedData.function['value'] = qFunctionName;
+													problemTokens.push(poppedData.function);
+												}
+											}
+										}
 									} else {
 										inScopeXPathVariablesList =  [];
 										preXPathVariable = false;
@@ -573,6 +599,12 @@ export class XsltTokenDiagnostics {
 								break;
 							case CharLevelState.sep:
 								if (token.value === ',') {
+									if (xpathStack.length > 0) {
+										let xp = xpathStack[xpathStack.length - 1];
+										if (xp.functionArity !== undefined) {
+											xp.functionArity++;
+										}
+									}
 									xpathVariableCurrentlyBeingDefined = false;
 								}
 								break;
@@ -861,6 +893,10 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathName:
 					msg = `XPath: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathFunction:
+					let parts = tokenValue.split('#');
+					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
 					break;
 				case ErrorType.XPathPrefix:
 					msg = `XPath: Undeclared prefix in name: '${tokenValue}'`;
