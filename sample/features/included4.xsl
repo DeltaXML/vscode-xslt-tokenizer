@@ -1,4 +1,6 @@
 <xsl:template xmlns:xsl="abc" xmlns:fn="def">
+
+    <xsl:import href="../included6.xsl"/>
     
     <xsl:param name="inc4p1" as="xs:integer" select="1"/>
     <xsl:variable name="inc4v1" as="xs:integer" select="2"/>
