@@ -6,7 +6,8 @@ import * as path from 'path';
 
 interface ImportedGlobals {
 	href: string,
-	data: GlobalInstructionData[]
+	data: GlobalInstructionData[],
+	error: boolean
 }
 
 interface GlobalsSummary {
@@ -31,10 +32,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 
-		// TODO: import recursively if imports include imports etc.
-		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName};
+		// Import/include XSLT - ensuring no duplicates
+		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
 		let importedGlobals1 = [importedG];
 		let accumulatedHrefs: string[] = [importedG.href];
+		let topLevelHrefs = this.accumulateImportHrefs(importedGlobals1, []);
 
 
 		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs};
@@ -53,20 +55,40 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
 			let allImportedGlobals: GlobalInstructionData[] = [];
+			let importErrors: GlobalInstructionData[] = [];
+
 			globalsSummary0.globals.forEach((globals) => {
-				globals.data.forEach((global) => {
-					global['href'] = globals.href;
-					allImportedGlobals.push(global);
-				});
+				if (globals.error) {
+					if (topLevelHrefs.indexOf(globals.href) > -1) {
+						let errorData = globalInstructionData.find((dataObject) => {
+							let result = false;
+							if (dataObject.type === GlobalInstructionType.Import || dataObject.type === GlobalInstructionType.Include) {
+								let resolvedName = this.resolvePath(dataObject.name, document.fileName);
+								result = resolvedName === globals.href;
+							}
+							return result;
+						});
+						if (errorData) {
+							importErrors.push(errorData);
+						}
+					}
+				} else {
+					globals.data.forEach((global) => {
+						global['href'] = globals.href;
+						allImportedGlobals.push(global);
+					});
+				}		
 			});
-			console.log('---- top-level globals-----');
-			console.log(globalInstructionData);
-			console.log('---- flattened globals -----');
-			console.log(allImportedGlobals);
+
+			let importDiagnostics: vscode.Diagnostic[] = [];
+			importErrors.forEach((importError) => {
+				importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
+			});
 
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(document, allTokens, globalInstructionData, allImportedGlobals, symbols);
-			if (diagnostics.length > 0) {
-				this.collection.set(document.uri, diagnostics);
+			let allDiagnostics = importDiagnostics.concat(diagnostics);
+			if (allDiagnostics.length > 0) {
+				this.collection.set(document.uri, allDiagnostics);
 			} else {
 				this.collection.clear();
 			};
@@ -136,7 +158,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return new Promise((resolve, reject) => {
 				inputHrefs.forEach((href, index) => {
 					this.gp.provideGlobals(href).then((globals) => {
-						result.push({href: href, data: globals});
+						result.push({href: href, data: globals.data, error: globals.error});
 						if (index === lastIndex) {
 							resolve(result);
 						}

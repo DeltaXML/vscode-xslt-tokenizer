@@ -1,7 +1,8 @@
 <xsl:template xmlns:xsl="abc" xmlns:fn="def">
     <xsl:include href="included1.xsl"/>
     <xsl:import href="features/included2.xsl"/>
-    
+    <xsl:import href="features/included2x.xsl"/>
+   
     <xsl:param name="p1" as="xs:integer" select="1"/>
 
     <xsl:variable name="va" as="xs:integer" select="2"/>
