@@ -3,8 +3,6 @@ import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructio
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
-import { promises } from 'dns';
-
 
 interface ImportedGlobals {
 	href: string,
