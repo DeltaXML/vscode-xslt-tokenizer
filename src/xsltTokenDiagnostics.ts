@@ -700,7 +700,7 @@ export class XsltTokenDiagnostics {
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
 		if (fNameParts.length === 1) {
-			if (token.value === 'concat') {
+			if (token.value === 'concat' || token.value === 'permute') {
 				// arity is any number
 				isValid = arity > 0;
 			} else {
