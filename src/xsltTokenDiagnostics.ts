@@ -700,14 +700,12 @@ export class XsltTokenDiagnostics {
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
 		if (fNameParts.length === 1) {
-			if (token.value === 'concat' || token.value === 'permute') {
-				// arity is any number
+			if (token.value === 'concat') {
 				isValid = arity > 0;
 			} else {
 				isValid = FunctionData.xpath.indexOf(fNameParts[0]) > -1;
 			}
-		}
-		else {
+		} else {
 			switch (fNameParts[0]) {
 				case 'array':
 					isValid = FunctionData.array.indexOf(fNameParts[1]) > -1;
