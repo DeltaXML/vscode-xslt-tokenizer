@@ -233,6 +233,7 @@ export class FunctionData {
 "available-system-properties#0",
 "copy-of#0",
 "copy-of#1",
+"current#1",
 "current-group#0",
 "current-grouping-key#0",
 "current-merge-group#0",
@@ -314,13 +315,14 @@ export class FunctionData {
 	]
 
 	public static readonly schema = [
-"string#1",
 "boolean#1",
+"double#1",
 "decimal#1",
 "float#1",
-"double#1",
+"string#1",
 "duration#1",
 "dateTime#1",
+"integer#1",
 "time#1",
 "date#1",
 	"gYearMonth#1",
@@ -333,5 +335,6 @@ export class FunctionData {
 	"anyURI#1",
 	"QName#1",
 	"NOTATION#1",
+	"untypedAtomic#1"
 	]
 }
