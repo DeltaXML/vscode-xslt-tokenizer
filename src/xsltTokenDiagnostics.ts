@@ -505,6 +505,12 @@ export class XsltTokenDiagnostics {
 							case 'for':
 							case 'let':
 							case 'some':
+								if (preXPathVariable) {
+									// TODO - we're about to nest variable declarations so we need to use a stack for
+									// preXPathVariable setting and xpathVariableCurrentlyBeingDefined setting
+									// temporaritly we can do this:
+									xpathVariableCurrentlyBeingDefined = false;
+								}
 								preXPathVariable = true;
 								break;
 							case 'then':
