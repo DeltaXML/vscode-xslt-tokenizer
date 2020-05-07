@@ -322,8 +322,8 @@ export class FunctionData {
 "string#1",
 "duration#1",
 "dateTime#1",
-"xs:dayTimeDuration#1",
-"xs:yearMonthDuration#1",
+"dayTimeDuration#1",
+"yearMonthDuration#1",
 "integer#1",
 "time#1",
 "date#1",
@@ -337,10 +337,10 @@ export class FunctionData {
 	"anyURI#1",
 	"QName#1",
 	"NOTATION#1",
-	"xs:anyAtomicType#1",
-	 "xs:untyped#1",
+	"anyAtomicType#1",
+	 "untyped#1",
 	"untypedAtomic#1",
-	"xs:anyType#1",
-	"xs:anySimpleType#1"
+	"anyType#1",
+	"anySimpleType#1"
 	]
 }
