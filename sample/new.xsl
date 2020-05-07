@@ -18,7 +18,7 @@
     <xsl:sequence select="map:keys(2)"/>
     <xsl:sequence select="math:pow(2,3)"/>
     <xsl:sequence select="saxon:any(2,3)"/>
-    <xsl:sequence select="concat(abc, j:escape(.), abc)"/>
+    <xsl:sequence select="['a', 'b', 'c'] => array:get(2)"/>
     
     
     

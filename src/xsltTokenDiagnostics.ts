@@ -162,6 +162,7 @@ export class XsltTokenDiagnostics {
 		let checkedGlobalFnNames: string[] = [];
 		let importedGlobalVarNames: string[] = [];
 		let importedGlobalFnNames: string[] = [];
+		let incrementFunctionArity = false;
 
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
@@ -556,7 +557,12 @@ export class XsltTokenDiagnostics {
 								let xpathItem: XPathData = {token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined};
 								if (functionToken) {
 									xpathItem.function = functionToken;
-									xpathItem.functionArity = 0;
+									if (incrementFunctionArity) {
+										xpathItem.functionArity = 1;
+										incrementFunctionArity = false;
+									} else {
+										xpathItem.functionArity = 0;
+									}
 								}
 								xpathStack.push(xpathItem);
 								preXPathVariable = false;	
@@ -609,12 +615,16 @@ export class XsltTokenDiagnostics {
 								break;
 							case CharLevelState.dSep:
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
-									let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(prevToken, checkedGlobalFnNames, 0);
+									const fnArity = incrementFunctionArity? 1: 0;
+									incrementFunctionArity = false;
+									let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(prevToken, checkedGlobalFnNames, fnArity);
 									if (!isValid) {
 										prevToken['error'] = ErrorType.XPathFunction;
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
 									}
+								} else if (token.value === '=>') {
+									incrementFunctionArity = true;
 								}
 								break;
 						}
