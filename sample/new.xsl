@@ -14,6 +14,13 @@
     <xsl:variable name="v6" as="xs:integer" select="$inc6p1"/>
     
     <xsl:sequence select="$va, fn:name($v1), fn:inc1name($v2), $v4, $v5, $v6"/>
+    <xsl:sequence select="array:head(2)"/>
+    <xsl:sequence select="map:keys(2)"/>
+    <xsl:sequence select="math:pow(2,3)"/>
+    <xsl:sequence select="saxon:any(2,3)"/>
+    <xsl:sequence select="concat(abc, j:escape(.), abc)"/>
+    
+    
     
 
     <xsl:function name="fn:name" as="xs:string">

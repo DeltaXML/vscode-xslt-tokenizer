@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType } from './xpLexer';
+import { FunctionData } from './functionData';
 
 enum HasCharacteristic {
 	unknown,
@@ -571,19 +572,17 @@ export class XsltTokenDiagnostics {
 										inScopeXPathVariablesList = poppedData.variables
 										preXPathVariable = poppedData.preXPathVariable
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
-										if (poppedData.function) {
+										if (poppedData.function && poppedData.functionArity !== undefined) {
 											if (prevToken?.charType !== CharLevelState.lB) {
 												if (poppedData.functionArity !== undefined) {
 													poppedData.functionArity++;
 												}
 											}
-											let qFunctionName = poppedData.function.value + '#' + poppedData.functionArity;
-											if (qFunctionName.includes(':')) {
-												if (checkedGlobalFnNames.indexOf(qFunctionName) < 0) {
-													poppedData.function['error'] = ErrorType.XPathFunction;
-													poppedData.function['value'] = qFunctionName;
-													problemTokens.push(poppedData.function);
-												}
+											let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
+											if (!isValid) {
+												poppedData.function['error'] = ErrorType.XPathFunction;
+												poppedData.function['value'] = qFunctionName;
+												problemTokens.push(poppedData.function);
 											}
 										}
 									} else {
@@ -610,15 +609,12 @@ export class XsltTokenDiagnostics {
 								break;
 							case CharLevelState.dSep:
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
-									let qFunctionName = prevToken.value + '#0';
-									if (qFunctionName.includes(':')) {
-										if (checkedGlobalFnNames.indexOf(qFunctionName) < 0) {
-											prevToken['error'] = ErrorType.XPathFunction;
-											prevToken['value'] = qFunctionName;
-											problemTokens.push(prevToken);
-										}
+									let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(prevToken, checkedGlobalFnNames, 0);
+									if (!isValid) {
+										prevToken['error'] = ErrorType.XPathFunction;
+										prevToken['value'] = qFunctionName;
+										problemTokens.push(prevToken);
 									}
-
 								}
 								break;
 						}
@@ -687,6 +683,47 @@ export class XsltTokenDiagnostics {
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
+	}
+
+	private static isValidFunctionName(token: BaseToken, checkedGlobalFnNames: string[], arity: number) {
+		let qFunctionName = token.value + '#' + arity;
+		let fNameParts = qFunctionName.split(':');
+		let isValid = false;
+		if (fNameParts.length === 1) {
+			if (token.value === 'concat') {
+				// arity is any number
+				isValid = arity > 0;
+			} else {
+				isValid = FunctionData.xpath.indexOf(fNameParts[0]) > -1;
+			}
+		}
+		else {
+			switch (fNameParts[0]) {
+				case 'array':
+					isValid = FunctionData.array.indexOf(fNameParts[1]) > -1;
+					break;
+				case 'map':
+					isValid = FunctionData.map.indexOf(fNameParts[1]) > -1;
+					break;
+				case 'math':
+					isValid = FunctionData.math.indexOf(fNameParts[1]) > -1;
+					break;
+					case 'xs':
+					isValid = FunctionData.schema.indexOf(fNameParts[1]) > -1;
+					break;
+				case 'saxon':
+				case 'expath-archive':
+				case 'expath-binary':
+				case 'expath-file':
+				case 'sql':
+					isValid = true;
+					break;
+				default:
+					isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
+					break;
+			}
+		}
+		return { isValid, qFunctionName };
 	}
 
 	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {

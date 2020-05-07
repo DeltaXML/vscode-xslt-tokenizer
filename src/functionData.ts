@@ -1,4 +1,4 @@
-export class functionData {
+export class FunctionData {
 	public static readonly xpath = [
 "count#1",
 "QName#2",
@@ -228,43 +228,80 @@ export class functionData {
 "random-number-generator#1",
 "zero-or-one#1"
 	]
-	public static readonly arrayFn = [
-"array:append#2",
-"array:filter#2",
-"array:flatten#1",
-"array:fold-left#3",
-"array:fold-right#3",
-"array:for-each#2",
-"array:for-each-pair#3",
-"array:get#2",
-"array:head#1",
-"array:insert-before#3",
-"array:join#1",
-"array:put#3",
-"array:remove#2",
-"array:reverse#1",
-"array:size#1",
-"array:sort#1",
-"array:sort#2",
-"array:sort#3",
-"array:subarray#2",
-"array:subarray#3",
-"array:tail#1"
+	public static readonly array = [
+"append#2",
+"filter#2",
+"flatten#1",
+"fold-left#3",
+"fold-right#3",
+"for-each#2",
+"for-each-pair#3",
+"get#2",
+"head#1",
+"insert-before#3",
+"join#1",
+"put#3",
+"remove#2",
+"reverse#1",
+"size#1",
+"sort#1",
+"sort#2",
+"sort#3",
+"subarray#2",
+"subarray#3",
+"tail#1"
 	]
 
-	public static readonly mspFn = [
-"map:contains#2",
-"map:entry#2",
-"map:find#2",
-"map:for-each#2",
-"map:get#2",
-"map:keys#1",
-"map:merge#1",
-"map:merge#2",
-"map:put#3",
-"map:remove#2",
-"map:size#1"
+	public static readonly map = [
+"contains#2",
+"entry#2",
+"find#2",
+"for-each#2",
+"get#2",
+"keys#1",
+"merge#1",
+"merge#2",
+"put#3",
+"remove#2",
+"size#1"
 	]
 
+	public static readonly math = [
+		"acos#1",
+ "asin#1",
+ "atan#1",
+ "atan2#2",
+ "cos#1",
+ "exp#1",
+ "exp10#1",
+ "log#1",
+ "log10#1",
+ "pi#0",
+ "pow#2",
+ "sin#1",
+ "sqrt#1",
+ "tan#1"
+	]
 
+	public static readonly schema = [
+"string#1",
+"boolean#1",
+"decimal#1",
+"float#1",
+"double#1",
+"duration#1",
+"dateTime#1",
+"time#1",
+"date#1",
+	"gYearMonth#1",
+	"gYear#1",
+	"gMonthDay#1",
+	"gDay#1",
+	"gMonth#1",
+	"hexBinary#1",
+	"base64Binary#1",
+	"anyURI#1",
+	"QName#1",
+	"NOTATION#1",
+	]
 }
