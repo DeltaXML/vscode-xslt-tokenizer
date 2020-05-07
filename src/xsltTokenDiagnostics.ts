@@ -88,7 +88,7 @@ export class XsltTokenDiagnostics {
 			return NameValidationError.NameError;
 		}
 		if (type === ValidationType.XMLAttribute) {
-			if (name === 'xml:space' || name === 'xml:lang') {
+			if (name === 'xml:space' || name === 'xml:lang' || name === 'xml:base' || name === 'xml:id') {
 				return NameValidationError.None;
 			}
 		}
