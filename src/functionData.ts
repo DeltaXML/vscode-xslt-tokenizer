@@ -233,7 +233,7 @@ export class FunctionData {
 "available-system-properties#0",
 "copy-of#0",
 "copy-of#1",
-"current#1",
+"current#0",
 "current-group#0",
 "current-grouping-key#0",
 "current-merge-group#0",
@@ -322,6 +322,8 @@ export class FunctionData {
 "string#1",
 "duration#1",
 "dateTime#1",
+"xs:dayTimeDuration#1",
+"xs:yearMonthDuration#1",
 "integer#1",
 "time#1",
 "date#1",
@@ -335,6 +337,10 @@ export class FunctionData {
 	"anyURI#1",
 	"QName#1",
 	"NOTATION#1",
-	"untypedAtomic#1"
+	"xs:anyAtomicType#1",
+	 "xs:untyped#1",
+	"untypedAtomic#1",
+	"xs:anyType#1",
+	"xs:anySimpleType#1"
 	]
 }
