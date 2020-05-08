@@ -498,31 +498,33 @@ export class XsltTokenDiagnostics {
 							case 'for':
 							case 'let':
 							case 'some':
-								if (preXPathVariable) {
-									// TODO - we're about to nest variable declarations so we need to use a stack for
-									// preXPathVariable setting and xpathVariableCurrentlyBeingDefined setting
-									// temporaritly we can do this:
-									xpathVariableCurrentlyBeingDefined = false;
-								}
 								preXPathVariable = true;
-								break;
+								xpathVariableCurrentlyBeingDefined = false;
+								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+							break;
 							case 'then':
 								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
 							case 'satisfies':
-								xpathVariableCurrentlyBeingDefined = false;
-								preXPathVariable = false;
-								break;
 							case 'else':
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
-									inScopeXPathVariablesList = (poppedData)? poppedData.variables: [];
-									preXPathVariable = false;
-								} else {
-									inScopeXPathVariablesList = [];
-									preXPathVariable = false;
+									if (poppedData) {
+										inScopeXPathVariablesList = poppedData.variables;
+										if (valueText === 'else') {
+											preXPathVariable = poppedData.preXPathVariable;
+										} else {
+											// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c
+											preXPathVariable = false;
+										}
+										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
+									} else {
+										inScopeXPathVariablesList =  [];
+										preXPathVariable = false;
+										xpathVariableCurrentlyBeingDefined = false;
+									}
 								}
 								break;
 						}
@@ -574,8 +576,8 @@ export class XsltTokenDiagnostics {
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
 									if (poppedData) {
-										inScopeXPathVariablesList = poppedData.variables
-										preXPathVariable = poppedData.preXPathVariable
+										inScopeXPathVariablesList = poppedData.variables;
+										preXPathVariable = poppedData.preXPathVariable;
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
 										if (poppedData.function && poppedData.functionArity !== undefined) {
 											if (prevToken?.charType !== CharLevelState.lB) {
@@ -608,6 +610,7 @@ export class XsltTokenDiagnostics {
 										if (xp.functionArity !== undefined) {
 											xp.functionArity++;
 										}
+										preXPathVariable = xp.preXPathVariable;
 									}
 									xpathVariableCurrentlyBeingDefined = false;
 								}

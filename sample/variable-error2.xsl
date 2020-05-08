@@ -14,13 +14,14 @@
         <xsl:copy>
             <xsl:apply-templates select="." mode="#current"/>
             <xsl:sequence select="
-                let $tuples := $a,
+                let $tuples := $a,                     (: stack push 1 :)
                     $c := 
-                    for $tuple in $tuples 
-                    return 
+                    for 
+                        $tuple in $tuples              (: stack push 2 :)
+                    return                             (: stack pop 2 :) 
                         if($b) then $tuple else '',
-                            $pos := $c
-                return 
+                            $pos := $c                 (: preVariable 1 still true:)
+                return  (: stack pop 1:)
                     $pos"/>
         </xsl:copy>
     </xsl:template>
