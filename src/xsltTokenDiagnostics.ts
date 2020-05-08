@@ -471,23 +471,16 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.variable:
-						if (preXPathVariable || anonymousFunctionParams) {
+						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							let currentVariable = {token: token, name: fullVariableName.substring(1)};
 						    if (anonymousFunctionParams) {
 								anonymousFunctionParamList.push(currentVariable);
 								xsltVariableDeclarations.push(token);
-							} else if (preXPathVariable && !xpathVariableCurrentlyBeingDefined) {
+							} else  {
 								inScopeXPathVariablesList.push(currentVariable);
 								xpathVariableCurrentlyBeingDefined = true;
 								xsltVariableDeclarations.push(token);
-							} else if (xpathVariableCurrentlyBeingDefined) {
-								// e.g.  with 'let $b := $a' the 'let $b' part has already occurred, the $a part needs to be resolved -  preXPathVariable is true also
-								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
-									xpathStack, inScopeVariablesList, elementStack);
-								if (unResolvedToken !== null) {
-									unresolvedXsltVariableReferences.push(unResolvedToken);
-								}
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
