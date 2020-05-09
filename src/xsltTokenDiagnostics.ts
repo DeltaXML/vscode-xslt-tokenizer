@@ -613,7 +613,7 @@ export class XsltTokenDiagnostics {
 													poppedData.functionArity++;
 												}
 											}
-											let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
+											let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
 											if (!isValid) {
 												poppedData.function['error'] = ErrorType.XPathFunction;
 												poppedData.function['value'] = qFunctionName;
@@ -647,7 +647,7 @@ export class XsltTokenDiagnostics {
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity? 1: 0;
 									incrementFunctionArity = false;
-									let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(prevToken, checkedGlobalFnNames, fnArity);
+									let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
 									if (!isValid) {
 										prevToken['error'] = ErrorType.XPathFunction;
 										prevToken['value'] = qFunctionName;
@@ -725,7 +725,7 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	}
 
-	private static isValidFunctionName(token: BaseToken, checkedGlobalFnNames: string[], arity: number) {
+	private static isValidFunctionName(xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity: number) {
 		let qFunctionName = token.value + '#' + arity;
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
@@ -736,29 +736,30 @@ export class XsltTokenDiagnostics {
 				isValid = FunctionData.xpath.indexOf(fNameParts[0]) > -1;
 			}
 		} else {
-			switch (fNameParts[0]) {
-				case 'array':
-					isValid = FunctionData.array.indexOf(fNameParts[1]) > -1;
-					break;
-				case 'map':
-					isValid = FunctionData.map.indexOf(fNameParts[1]) > -1;
-					break;
-				case 'math':
-					isValid = FunctionData.math.indexOf(fNameParts[1]) > -1;
-					break;
-					case 'xs':
-					isValid = FunctionData.schema.indexOf(fNameParts[1]) > -1;
-					break;
-				case 'saxon':
-				case 'expath-archive':
-				case 'expath-binary':
-				case 'expath-file':
-				case 'sql':
-					isValid = true;
-					break;
-				default:
-					isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
-					break;
+			let xsltType = xmlnsData.get(fNameParts[0]);
+			if (xsltType === XSLTnamespaces.NotDefined || xsltType === undefined) {
+				isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
+			} else {
+				switch (xsltType) {
+					case XSLTnamespaces.Array:
+						isValid = FunctionData.array.indexOf(fNameParts[1]) > -1;
+						break;
+					case XSLTnamespaces.Map:
+						isValid = FunctionData.map.indexOf(fNameParts[1]) > -1;
+						break;
+					case XSLTnamespaces.Math:
+						isValid = FunctionData.math.indexOf(fNameParts[1]) > -1;
+						break;
+					case XSLTnamespaces.XMLSchema:
+						isValid = FunctionData.schema.indexOf(fNameParts[1]) > -1;
+						break;
+					case XSLTnamespaces.Saxon:
+					case XSLTnamespaces.ExpathArchive:
+					case XSLTnamespaces.ExpathBinary:
+					case XSLTnamespaces.ExpathFile:
+						isValid = true;
+						break;
+				}				
 			}
 		}
 		return { isValid, qFunctionName };
