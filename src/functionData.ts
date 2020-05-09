@@ -343,6 +343,7 @@ export class FunctionData {
 "dateTime#1",
 "dayTimeDuration#1",
 "yearMonthDuration#1",
+"int#1",
 "integer#1",
 "time#1",
 "date#1",
