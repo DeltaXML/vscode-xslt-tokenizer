@@ -23,6 +23,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 	private onTypeLineEmpty = false;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	private isCloseTag = false;
+	private closeTagLine: vscode.TextLine|null = null;
+	private closeTagPos: vscode.Position|null = null;
 
 	constructor(xsltConfiguration: LanguageConfiguration) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
@@ -30,15 +33,20 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	}
 
 	public provideOnTypeFormattingEdits = (document: vscode.TextDocument, pos: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
-		if (ch.indexOf('\n') > -1) {
-			if (pos.line > 0){
-				//const prevLine = document.lineAt(pos.line - 1);
-				const newLine = document.lineAt(pos.line);
-				this.onTypeLineEmpty = newLine.text.trim().length === 0;
-				const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
-				return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
-			}
-			return [];			
+		this.isCloseTag = ch.indexOf('/') > -1;
+		if (this.isCloseTag && pos.character > 1) {
+			let tLine = document.lineAt(pos.line);
+			this.closeTagLine = tLine;
+			this.closeTagPos = pos;
+			let chBefore = tLine.text.charAt(pos.character - 2);
+			this.isCloseTag = chBefore === '<';
+		}
+		if (ch.indexOf('\n') > -1 || this.isCloseTag) {
+			//const prevLine = document.lineAt(pos.line - 1);
+			const newLine = document.lineAt(pos.line);
+			this.onTypeLineEmpty = newLine.text.trim().length === 0;
+			const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
+			return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);			
 		} else {
 			return [];
 		}
@@ -89,6 +97,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let multiLineState = MultiLineState.None;
 
 		let xmlSpacePreserveStack: boolean[] = [];
+		let xmlelementStack: string[] = [];
 		let xmlSpaceAttributeValue: boolean | null = null;
 		let awaitingXmlSpaceAttributeValue = false;
 		let attributeNameOffset = 0;
@@ -104,6 +113,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let awaitingSecondTag: HasCharacteristic = HasCharacteristic.unknown;
 		let firstStartTagLineNumber = -1;
 		let prevToken: BaseToken|null = null;
+		let elementName = '';
+		let closeTagWithinText = false;
+		let closeTagName: string|null = null;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -124,12 +136,13 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					case XSLTokenLevelState.xslElementName:
 						complexStateStack = [[0, []]];
 						isXSLTStartTag = true;
-						let elementName = this.getTextForToken(lineNumber, token, document);
+						elementName = this.getTextForToken(lineNumber, token, document);
 						isPreserveSpaceElement = elementName === 'xsl:text';
 						break;
 					case XSLTokenLevelState.elementName:
 						complexStateStack = [[0, []]];
 						isXSLTStartTag = false;
+						elementName = this.getTextForToken(lineNumber, token, document);
 						break;
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
@@ -150,6 +163,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case XMLCharState.rStNoAtt:
 								let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 								xmlSpacePreserveStack.push(preserveSpace);
+								if (this.isCloseTag) {
+									xmlelementStack.push(elementName);
+								}
 								break;
 							case XMLCharState.rSt:
 								attributeNameOffset = 0;
@@ -161,12 +177,23 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 									xmlSpacePreserveStack.push(xmlSpaceAttributeValue);
 									xmlSpaceAttributeValue = null;
 								}
+								if (this.isCloseTag) {
+									xmlelementStack.push(elementName);
+								}
 								break;
 							case XMLCharState.lCt:
 								// outdent:
 								indent = -1;
 								newNestingLevel--;
 								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken);
+								if (this.isCloseTag) {
+									closeTagWithinText = this.closeTagPos?.line === token.line && 
+									this.closeTagPos.character >= token.startCharacter && 
+									this.closeTagPos.character <= token.startCharacter + token.length;
+									if (closeTagWithinText && xmlelementStack.length > 0) {
+										closeTagName = xmlelementStack[xmlelementStack.length - 1];
+									}
+								}
 								break;
 							case XMLCharState.rSelfCtNoAtt:
 							case XMLCharState.rSelfCt:
@@ -181,6 +208,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								isPreserveSpaceElement = false;
 								if (stackLength > 0) {
 									xmlSpacePreserveStack.pop();
+								}
+								if (this.isCloseTag && xmlelementStack.length > 0) {
+									xmlelementStack.pop();
 								}
 								break;
 							case XMLCharState.lPi:
@@ -330,11 +360,29 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 				}
 			}
 
-			if (addNewLine && lineNumberDiff == 0) {
+			if (addNewLine && lineNumberDiff === 0) {
 				lineNumberDiff = 1;
 			}
+			if (this.isCloseTag) {
+				if (nestingLevel > 0 && closeTagName !== null && this.closeTagPos !== null) {
+					let nonWsStart = this.closeTagLine? this.closeTagLine.firstNonWhitespaceCharacterIndex: 0;
+					let replacementString = '';
+					let edit: vscode.TextEdit;
+					if ((nonWsStart + 2) === this.closeTagPos.character) {
+						let requiredIndentLength = ((nestingLevel - 1) * indentCharLength);
+						replacementString = indentString.repeat(requiredIndentLength);
+						replacementString += '</' + closeTagName + '>';
+						let startPos = new vscode.Position(this.closeTagPos.line, 0);
+						let endPos = new vscode.Position(this.closeTagPos.line, token.startCharacter + 2);
+						edit = vscode.TextEdit.replace(new vscode.Range(startPos, endPos), replacementString);
+					} else {
+						edit = vscode.TextEdit.insert(this.closeTagPos, closeTagName + '>');
+					}
+					closeTagName = null;
+					result.push(edit);
 
-			if (lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
+				}
+			} else if (lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
 				for (let i = lineNumberDiff - 1; i > -1; i--) {
 					let loopLineNumber = lineNumber - i;
@@ -394,6 +442,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			multiLineState = newMultiLineState;
 			prevToken = token;
 		});
+		this.isCloseTag = false;
 		return result;
 	}
 

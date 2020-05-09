@@ -64,14 +64,14 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xslt', 
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt', 
-		xsltFormatter, '\n'));
+		xsltFormatter, '\n', '/'));
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xml', 
 		xmlFormatter));
 	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xml', 
 		xmlFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xml', 
-		xmlFormatter, '\n'));
+		xmlFormatter, '\n', '/'));
 
 	let workspaceRoot = vscode.workspace.rootPath;
 	if (!workspaceRoot) {
