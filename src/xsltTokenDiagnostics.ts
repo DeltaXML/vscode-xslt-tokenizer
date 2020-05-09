@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType } from './xpLexer';
-import { FunctionData } from './functionData';
+import { FunctionData, XSLTnamespaces } from './functionData';
 
 enum HasCharacteristic {
 	unknown,
@@ -156,6 +156,7 @@ export class XsltTokenDiagnostics {
 		let lastTokenIndex = allTokens.length - 1;
 		let tagAttributeNames: string[] = [];
 		let tagXmlnsNames: string[] = [];
+		let rootXmlnsBindings: [string, string][] = [];
 		let inheritedPrefixes: string[] = [];
 		let globalVariableData: VariableData[] = [];
 		let checkedGlobalVarNames: string[] = [];
@@ -163,6 +164,8 @@ export class XsltTokenDiagnostics {
 		let importedGlobalVarNames: string[] = [];
 		let importedGlobalFnNames: string[] = [];
 		let incrementFunctionArity = false;
+		let onRootStartTag = true;
+		let rootXmlnsName: string|null = null;
 
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
@@ -258,6 +261,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
+								onRootStartTag = false;
 								let orginalPrefixes = inheritedPrefixes.slice();
 								tagXmlnsNames.forEach((attName) => {
 									// only need 'xmlns:pfx' - not default xmlns
@@ -386,6 +390,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.attributeName:
 					case XSLTokenLevelState.xmlnsName:
+						rootXmlnsName = null;
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let problemReported = false;
 						if (prevToken) {
@@ -410,6 +415,9 @@ export class XsltTokenDiagnostics {
 							} else {
 								if (xmlTokenType === XSLTokenLevelState.xmlnsName) {
 									tagXmlnsNames.push(attNameText);
+									if (onRootStartTag) {
+										rootXmlnsName = attNameText;
+									}
 								} else {
 									tagAttributeNames.push(attNameText);
 								}
@@ -430,7 +438,10 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.attributeValue:
 						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
-
+						if (rootXmlnsName !== null) {
+							let prefix = rootXmlnsName.length === 5? '': rootXmlnsName.substr(6);
+							rootXmlnsBindings.push([prefix, variableName]);
+						}
 						if (attType === AttributeType.Variable) {
 							tagIdentifierName = variableName;
 							variableData = {token: token, name: variableName};

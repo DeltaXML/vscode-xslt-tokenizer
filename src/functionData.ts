@@ -1,3 +1,22 @@
+export enum XSLTnamespaces {
+	NotDefined,
+	Array,
+	ExpathArchive,
+	ExpathBinary,
+	ExpathFile,
+	Map,
+	Math,
+	Saxon,
+	SQL,
+	XMLSchema,
+	XPath,
+	XSLT
+}
+
+interface NamespaceData {
+	
+}
+
 export class FunctionData {
 	public static readonly xpath = [
 "count#1",
@@ -343,4 +362,32 @@ export class FunctionData {
 "anyType#1",
 "anySimpleType#1"
 	]
+
+	public static readonly test = {
+"http://www.w3.org/2005/xpath-functions/array": XSLTnamespaces.Array,
+"http://expath.org/ns/archive": XSLTnamespaces.ExpathArchive,
+"http://expath.org/ns/binary": XSLTnamespaces.ExpathBinary,
+"http://expath.org/ns/file": XSLTnamespaces.ExpathFile,
+"http://www.w3.org/2005/xpath-functions/map": XSLTnamespaces.Map,
+"http://www.w3.org/2005/xpath-functions/math": XSLTnamespaces.Math,
+"http://saxon.sf.net/": XSLTnamespaces.Saxon,
+"http://saxon.sf.net/sql": XSLTnamespaces.SQL,
+"http://www.w3.org/2001/XMLSchema": XSLTnamespaces.XMLSchema,
+"http://www.w3.org/2005/xpath-functions": XSLTnamespaces.XPath,
+"http://www.w3.org/1999/XSL/Transform": XSLTnamespaces.XSLT
+	}
+
+	public static readonly namespaces = new Map([
+["http://www.w3.org/2005/xpath-functions/array", XSLTnamespaces.Array],
+["http://expath.org/ns/archive", XSLTnamespaces.ExpathArchive],
+["http://expath.org/ns/binary", XSLTnamespaces.ExpathBinary],
+["http://expath.org/ns/file", XSLTnamespaces.ExpathFile],
+["http://www.w3.org/2005/xpath-functions/map", XSLTnamespaces.Map],
+["http://www.w3.org/2005/xpath-functions/math", XSLTnamespaces.Math],
+["http://saxon.sf.net/", XSLTnamespaces.Saxon],
+["http://saxon.sf.net/sql", XSLTnamespaces.SQL],
+["http://www.w3.org/2001/XMLSchema", XSLTnamespaces.XMLSchema],
+["http://www.w3.org/2005/xpath-functions", XSLTnamespaces.XPath],
+["http://www.w3.org/1999/XSL/Transform", XSLTnamespaces.XSLT]
+	  ]);
 }
