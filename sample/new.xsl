@@ -1,4 +1,7 @@
-<xsl:template xmlns:xsl="abc" xmlns:fn="def">
+<xsl:template  
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:fn="def">
+    
     <xsl:include href="included1.xsl"/>
     <xsl:import href="features/included2.xsl"/>
     <xsl:import href="features/included2x.xsl"/>

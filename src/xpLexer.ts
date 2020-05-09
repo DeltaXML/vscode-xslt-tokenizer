@@ -1012,6 +1012,7 @@ export enum ErrorType {
     XPathKeyword,
     XMLXMLNS,
     XMLAttributeName,
+    XSLTNamesapce,
     XMLAttributeXMLNS,
     XMLAttNameSyntax,
     XMLAttEqualExpected,

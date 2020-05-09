@@ -130,7 +130,7 @@ export class XsltTokenDiagnostics {
 	}
 
 
-	public static calculateDiagnostics = (document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 
 		let inScopeVariablesList: VariableData[] = [];
@@ -166,6 +166,7 @@ export class XsltTokenDiagnostics {
 		let incrementFunctionArity = false;
 		let onRootStartTag = true;
 		let rootXmlnsName: string|null = null;
+		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
@@ -261,6 +262,22 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
+								if (isXSLT && onRootStartTag) {
+									rootXmlnsBindings.forEach((prefixNsPair) => {
+										let pfx = prefixNsPair[0];
+										let namespaceURI = prefixNsPair[1];
+										let xsltType = FunctionData.namespaces.get(namespaceURI);
+										if (xsltType !== undefined) {
+											xsltPrefixesToURIs.set(pfx, xsltType);
+										}
+									});
+									if (xsltPrefixesToURIs.get('xsl') !== XSLTnamespaces.XSLT) {
+										if (startTagToken !== null) {
+											startTagToken['error'] = ErrorType.XSLTNamesapce;
+											problemTokens.push(startTagToken);
+										}
+									}
+								}
 								onRootStartTag = false;
 								let orginalPrefixes = inheritedPrefixes.slice();
 								tagXmlnsNames.forEach((attName) => {
@@ -958,6 +975,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XSLTName:
 					msg = `XSLT: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.XSLTNamesapce:
+					msg = `Expected on the root element: xmlns:xsl='http://www.w3.org/1999/XSL/Transform' prefix/namespace-uri binding`
 					break;
 				case ErrorType.XSLTPrefix:
 					msg = `XSLT: Undeclared prefix in name: '${tokenValue}'`;
