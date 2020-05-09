@@ -937,7 +937,7 @@ export class XsltTokenDiagnostics {
 					diagnosticMetadata = [vscode.DiagnosticTag.Unnecessary];
 					break;
 				case ErrorType.ElementNesting:
-					msg = `XML: Start tag '${tokenValue} has no matching close tag`;
+					msg = `XML: Start tag '${tokenValue}' has no matching close tag`;
 					break;
 				case ErrorType.XPathKeyword:
 					msg = `XPath: Found: '${tokenValue}' expected keyword or operator`;
