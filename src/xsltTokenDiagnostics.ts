@@ -741,7 +741,9 @@ export class XsltTokenDiagnostics {
 				isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
 			} else {
 				switch (xsltType) {
-					case XSLTnamespaces.Array:
+					case XSLTnamespaces.XPath:
+						isValid = FunctionData.xpath.indexOf(fNameParts[1]) > -1;
+						case XSLTnamespaces.Array:
 						isValid = FunctionData.array.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.Map:

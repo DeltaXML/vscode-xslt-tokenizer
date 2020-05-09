@@ -1,15 +1,15 @@
-<xsl:template  
+<xsl:stylesheet  
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:array="http://www.w3.org/2005/xpath-functions/array"
     xmlns:map="http://www.w3.org/2005/xpath-functions/map"
     xmlns:math="http://www.w3.org/2005/xpath-functions/math"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:saxon="http://saxon.sf.net/"
-    xmlns:fn="def">
+    xmlns:fn="def"
+    version="3.0">
     
     <xsl:include href="included1.xsl"/>
     <xsl:import href="features/included2.xsl"/>
-    <xsl:import href="features/included2x.xsl"/>
    
     <xsl:param name="p1" as="xs:integer" select="1"/>
 
@@ -21,24 +21,22 @@
     <xsl:variable name="v5" as="xs:integer" select="$inc5p1"/>
     <xsl:variable name="v6" as="xs:integer" select="$inc6p1"/>
     
-    <xsl:sequence select="$va, fn:name($v1), fn:inc1name($v2), $v4, $v5, $v6"/>
-    <xsl:sequence select="array:head(2)"/>
-    <xsl:sequence select="map:keys(2)"/>
-    <xsl:sequence select="math:pow(2,3)"/>
-    <xsl:sequence select="saxon:any(2,3)"/>
-    <xsl:sequence select="['a', 'b', 'c'] => array:get(2)"/>
-    <xsl:sequence select="xs:integer('a')"/>
-    
-    
-    
-    
+    <xsl:template match="/" mode="#all">
+        <xsl:copy>
+            <xsl:sequence select="$va, fn:name($v1), fn:inc1name($v2), $v4, $v5, $v6"/>
+            <xsl:sequence select="array:head(2,2)"/>
+            <xsl:sequence select="map:keys(2)"/>
+            <xsl:sequence select="math:pow(2,3)"/>
+            <xsl:sequence select="saxon:any(2,3)"/>
+            <xsl:sequence select="['a', 'b', 'c'] => array:get(2)"/>
+            <xsl:sequence select="xs:integer('a')"/>   
+        </xsl:copy>
+        
+    </xsl:template>
 
     <xsl:function name="fn:name" as="xs:string">
-        <xsl:param name="fp1" as="node()"/>      
-    </xsl:function>
-    <xsl:sequence select="$inc1v1"/>
-    
-
-    
+        <xsl:param name="fp1" as="node()"/>
+        <xsl:sequence select="'test'"/>
+    </xsl:function>       
                 
-</xsl:template>
+</xsl:stylesheet>
