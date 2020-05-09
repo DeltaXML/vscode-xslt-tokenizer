@@ -30,6 +30,12 @@ enum AttributeType {
 	InstructionMode
 }
 
+enum FunctionError {
+	None,
+	NotFound,
+	PrefixNotDeclared
+}
+
 interface XSLTToken extends BaseToken {
 	tagType?: TagType
 }
@@ -729,6 +735,7 @@ export class XsltTokenDiagnostics {
 		let qFunctionName = token.value + '#' + arity;
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
+		let fErrorType = FunctionError.NotFound;
 		if (fNameParts.length === 1) {
 			if (token.value === 'concat') {
 				isValid = arity > 0;
@@ -737,7 +744,10 @@ export class XsltTokenDiagnostics {
 			}
 		} else {
 			let xsltType = xmlnsData.get(fNameParts[0]);
-			if (xsltType === XSLTnamespaces.NotDefined || xsltType === undefined) {
+			if (xsltType === undefined) {
+				// prefix is not bound to namespace-uri in root element
+				isValid = false;
+			} else if (xsltType === XSLTnamespaces.NotDefined || xsltType === undefined) {
 				isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
 			} else {
 				switch (xsltType) {
