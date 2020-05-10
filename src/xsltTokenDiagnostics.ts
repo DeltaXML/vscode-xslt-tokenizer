@@ -685,6 +685,14 @@ export class XsltTokenDiagnostics {
 							}
 						}
 						break;
+					case TokenLevelState.functionNameTest:
+						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token, checkedGlobalFnNames);
+						if (!isValid) {
+							token['error'] = fErrorType;
+							token['value'] = qFunctionName;
+							problemTokens.push(token);
+						}
+						break;
 				}
 			}
 			prevToken = token;
@@ -725,13 +733,21 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	}
 
-	private static isValidFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity: number) {
-		let qFunctionName = token.value + '#' + arity;
+	private static isValidFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number) {
+		let tokenValue;
+		if (arity === undefined) {
+			let parts = token.value.split('#');
+			arity = Number.parseInt(parts[1]);
+			tokenValue = parts[0];
+		} else {
+			tokenValue = token.value;
+		}
+		let qFunctionName = tokenValue + '#' + arity;
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
 		if (fNameParts.length === 1) {
-			if (token.value === 'concat') {
+			if (tokenValue === 'concat') {
 				isValid = arity > 0;
 			} else {
 				isValid = FunctionData.xpath.indexOf(fNameParts[0]) > -1;
@@ -748,7 +764,8 @@ export class XsltTokenDiagnostics {
 				switch (xsltType) {
 					case XSLTnamespaces.XPath:
 						isValid = FunctionData.xpath.indexOf(fNameParts[1]) > -1;
-						case XSLTnamespaces.Array:
+						break;
+					case XSLTnamespaces.Array:
 						isValid = FunctionData.array.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.Map:
