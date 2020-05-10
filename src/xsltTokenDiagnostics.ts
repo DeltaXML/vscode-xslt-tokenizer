@@ -375,6 +375,11 @@ export class XsltTokenDiagnostics {
 											errorToken['error'] = ErrorType.ElementNesting;
 											errorToken['value'] = poppedData.symbolName;
 											problemTokens.push(errorToken);
+											if (prevToken) {
+												prevToken['error'] = ErrorType.ElementNestingX;
+												prevToken['value'] = tagElementName;
+												problemTokens.push(prevToken);
+											}
 											// not well-nested
 											if (elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === tagElementName) {
 												// recover for benefit of outline view
@@ -400,7 +405,10 @@ export class XsltTokenDiagnostics {
 										}
 									}
 								} else {
-
+									let errToken = (prevToken)? prevToken: token;
+									errToken['error'] = ErrorType.ElementNestingX;
+									errToken['value'] = tagElementName;
+									problemTokens.push(errToken);
 								}
 								break;
 						}
@@ -992,6 +1000,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ElementNesting:
 					msg = `XML: Start tag '${tokenValue}' has no matching close tag`;
+					break;
+				case ErrorType.ElementNestingX:
+					msg = `XML: Unexpected close tag '${tokenValue}'`;
 					break;
 				case ErrorType.XPathKeyword:
 					msg = `XPath: Found: '${tokenValue}' expected keyword or operator`;

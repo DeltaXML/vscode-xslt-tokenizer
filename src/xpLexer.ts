@@ -999,6 +999,7 @@ export enum ErrorType {
     DuplicateVarName,
     DuplicateFnName,
     ElementNesting,
+    ElementNestingX,
     XMLName,
     XSLTName,
     XSLTPrefix,
