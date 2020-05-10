@@ -227,6 +227,12 @@ export class XsltTokenDiagnostics {
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
 				switch (xmlTokenType) {
+					case XSLTokenLevelState.xmlText:
+						if (elementStack.length === 0) {
+							token['error'] = ErrorType.ParentLessText;
+							token['value'] = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							problemTokens.push(token);
+						}
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
@@ -1021,10 +1027,13 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: Found: '${tokenValue}' expected keyword or operator`;
 					break;
 				case ErrorType.XMLName:
-					msg = `XML: Invalid name: '${tokenValue}'`;
+					msg = `XML: Invalid XML name: '${tokenValue}'`;
 					break;
 				case ErrorType.XSLTName:
-					msg = `XSLT: Invalid name: '${tokenValue}'`;
+					msg = `XSLT: Invalid XSLT name: '${tokenValue}'`;
+					break;
+				case ErrorType.ParentLessText:
+					msg = `XML: Text found outside root element: '${tokenValue}`
 					break;
 				case ErrorType.XSLTNamesapce:
 					msg = `Expected on the root element: xmlns:xsl='http://www.w3.org/1999/XSL/Transform' prefix/namespace-uri binding`

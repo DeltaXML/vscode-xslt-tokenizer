@@ -1000,6 +1000,7 @@ export enum ErrorType {
     DuplicateFnName,
     ElementNesting,
     ElementNestingX,
+    ParentLessText,
     MultiRoot,
     XMLName,
     XSLTName,
