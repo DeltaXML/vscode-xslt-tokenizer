@@ -30,12 +30,6 @@ enum AttributeType {
 	InstructionMode
 }
 
-enum FunctionError {
-	None,
-	NotFound,
-	PrefixNotDeclared
-}
-
 interface XSLTToken extends BaseToken {
 	tagType?: TagType
 }
@@ -619,9 +613,9 @@ export class XsltTokenDiagnostics {
 													poppedData.functionArity++;
 												}
 											}
-											let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
+											let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
 											if (!isValid) {
-												poppedData.function['error'] = ErrorType.XPathFunction;
+												poppedData.function['error'] = fErrorType;
 												poppedData.function['value'] = qFunctionName;
 												problemTokens.push(poppedData.function);
 											}
@@ -653,9 +647,9 @@ export class XsltTokenDiagnostics {
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity? 1: 0;
 									incrementFunctionArity = false;
-									let { isValid, qFunctionName } = XsltTokenDiagnostics.isValidFunctionName(xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
+									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
 									if (!isValid) {
-										prevToken['error'] = ErrorType.XPathFunction;
+										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
 									}
@@ -731,11 +725,11 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	}
 
-	private static isValidFunctionName(xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity: number) {
+	private static isValidFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity: number) {
 		let qFunctionName = token.value + '#' + arity;
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
-		let fErrorType = FunctionError.NotFound;
+		let fErrorType = ErrorType.XPathFunction;
 		if (fNameParts.length === 1) {
 			if (token.value === 'concat') {
 				isValid = arity > 0;
@@ -744,8 +738,9 @@ export class XsltTokenDiagnostics {
 			}
 		} else {
 			let xsltType = xmlnsData.get(fNameParts[0]);
-			if (xsltType === undefined) {
-				// prefix is not bound to namespace-uri in root element
+			if (xmlnsPrefixes.indexOf(fNameParts[0]) < 0) {
+				// prefix is not declared
+				fErrorType = ErrorType.XPathFunctionNamespace;
 				isValid = false;
 			} else if (xsltType === XSLTnamespaces.NotDefined || xsltType === undefined) {
 				isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
@@ -774,7 +769,8 @@ export class XsltTokenDiagnostics {
 				}				
 			}
 		}
-		return { isValid, qFunctionName };
+		fErrorType = isValid? ErrorType.None: fErrorType;
+		return { isValid, qFunctionName, fErrorType };
 	}
 
 	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
@@ -1001,6 +997,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunction:
 					let parts = tokenValue.split('#');
 					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
+					break;
+				case ErrorType.XPathFunctionNamespace:
+					let partsNs = tokenValue.split('#');
+					msg = `XPath: Undeclared prefix in function: '${partsNs[0]}'`;
 					break;
 				case ErrorType.XPathPrefix:
 					msg = `XPath: Undeclared prefix in name: '${tokenValue}'`;
