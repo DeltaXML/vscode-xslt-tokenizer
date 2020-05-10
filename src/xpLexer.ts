@@ -67,6 +67,7 @@ export enum TokenLevelState {
     simpleType, // parameterType
     axisName,       // label
     nodeNameTest,        // (xsl) class
+    functionNameTest,
     complexExpression, // (xsl) keyword
     function,
     anonymousFunction
@@ -635,6 +636,11 @@ export class XPathLexer {
             newToken.length = newTokenValue.length;
             newToken.line = this.lineNumber;
             newToken.startCharacter = this.tokenCharNumber;
+            if (newToken.tokenType === TokenLevelState.nodeNameTest) {
+                if (newTokenValue.includes('#')) {
+                    newToken.tokenType = TokenLevelState.functionNameTest;
+                }
+            }
 
             let isWhitespace = newToken.charType === CharLevelState.lWs;
 
@@ -671,16 +677,6 @@ export class XPathLexer {
             let prevToken = this.latestRealToken;
             this.setLabelForLastTokenOnly(prevToken, newToken);
             this.setLabelsUsingCurrentToken(prevToken, newToken);
-            // if (XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.operator) || XPathLexer.isTokenTypeEqual(newToken, TokenLevelState.complexExpression)) {
-            //     if (newTokenValue === 'then' || newTokenValue === 'in' || newTokenValue === ':=') {
-            //         if (!this.flatten) {
-            //             newToken.children = [];
-            //         }
-            //         stack.push(newToken);
-            //     } else {
-            //         this.conditionallyPopStack(stack, newToken);
-            //     }
-            // }
 
             if (!(state === CharLevelState.lC || state === CharLevelState.lWs)) {
                 this.latestRealToken = newToken;
@@ -806,7 +802,7 @@ export class XPathLexer {
                                 // TODO: check if value equals xs:integer or element?
                                 currentToken.tokenType = TokenLevelState.simpleType;
                             }
-                        } else if (XPathLexer.isTokenTypeEqual(prevToken, TokenLevelState.nodeNameTest) || XPathLexer.isTokenTypeAType(prevToken)) {
+                        } else if (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.functionNameTest || XPathLexer.isTokenTypeAType(prevToken)) {
                             Data.setAsOperatorIfKeyword(currentToken);
                         } 
                         break;

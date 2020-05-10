@@ -342,6 +342,11 @@
 				"description": "Declaration of anonymous XPath Function"
 			},
 			{
+				"id": "functionNameTest",
+				"superType": "struct",
+				"description": "Reference to an XPath Function - e.g. my:test#1"
+			},
+			{
 				"id": "xmlComment",
 				"superType": "comment",
 				"description": "XML Comment"
