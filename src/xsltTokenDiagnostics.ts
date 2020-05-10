@@ -238,6 +238,11 @@ export class XsltTokenDiagnostics {
 							if (!includeOrImport && tagType !== TagType.XSLTvar && elementStack.length === 1) {
 								includeOrImport = tagElementName === XsltTokenDiagnostics.xslImport || tagElementName === XsltTokenDiagnostics.xslInclude;
 							}
+							if (!onRootStartTag && elementStack.length === 0) {
+								token['error'] = ErrorType.MultiRoot;
+								token['value'] = tagElementName;
+								problemTokens.push(token);
+							}
 						}
 						break;
 					case XSLTokenLevelState.elementName:
@@ -245,6 +250,11 @@ export class XsltTokenDiagnostics {
 						if (tagType === TagType.Start) {
 							tagType = TagType.XMLstart;
 							startTagToken = token;
+							if (!onRootStartTag && elementStack.length === 0) {
+								token['error'] = ErrorType.MultiRoot;
+								token['value'] = tagElementName;
+								problemTokens.push(token);
+							}
 						}
 						break;
 					case XSLTokenLevelState.xmlPunctuation:
@@ -1000,6 +1010,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ElementNesting:
 					msg = `XML: Start tag '${tokenValue}' has no matching close tag`;
+					break;
+				case ErrorType.MultiRoot:
+					msg = 'XML: More than one root element';
 					break;
 				case ErrorType.ElementNestingX:
 					msg = `XML: Unexpected close tag '${tokenValue}'`;
