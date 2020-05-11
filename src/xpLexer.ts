@@ -1008,6 +1008,7 @@ export enum ErrorType {
     XSLTPrefix,
     XMLDeclaration,
     XPathName,
+    EntityName,
     XPathFunction,
     XPathFunctionNamespace,
     XPathPrefix,

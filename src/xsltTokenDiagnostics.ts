@@ -533,6 +533,21 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 						}
 						break;
+					case XSLTokenLevelState.entityRef:
+						let entityName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						let validationResult = NameValidationError.None;
+						if (entityName.length > 2) {
+							entityName = entityName.substring(1, entityName.length - 1);
+							validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+						} else {
+							validationResult = NameValidationError.NameError;
+							entityName = '';
+						}
+						if (validationResult !== NameValidationError.None){
+							token['error'] = ErrorType.EntityName;
+							token['value'] = entityName;
+							problemTokens.push(token);
+						}
 					case XSLTokenLevelState.processingInstrValue:
 						if (isXMLDeclaration) {
 							XsltTokenDiagnostics.validateXMLDeclaration(lineNumber, token, document, problemTokens);
@@ -1138,6 +1153,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ElementNesting:
 					msg = `XML: Start tag '${tokenValue}' has no matching close tag`;
+					break;
+				case ErrorType.EntityName:
+					msg = `XML: Invalid entity name '${tokenValue}'`;
 					break;
 				case ErrorType.MultiRoot:
 					msg = 'XML: More than one root element';
