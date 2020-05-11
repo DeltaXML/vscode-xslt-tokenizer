@@ -534,87 +534,8 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.processingInstrValue:
-						let piValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						let xmlPIrgx = /(=|'|"|\d+\.\d+|[\w|-]+|\s+)/;
-						let encodingRgx = /[A-Za-z]([A-Za-z0-9._-])*/
-						let spaceRegx = /\s+/
-						let pState: XMLPIState = XMLPIState.none;
-						let pName = XMLPIName.none;
-						let names: XMLPIName[] = [];
-						let namesWithValues: XMLPIName[] = [];
-						let isValid = true;
-						
 						if (isXMLDeclaration) {
-							let allParts = piValue.split(xmlPIrgx);
-							let lastPartIndex = allParts.length - 1;
-							allParts.forEach(function(part, index) {
-								if (pState !== XMLPIState.invalid && part.length > 0) {
-									switch (pState) {
-										case XMLPIState.none:
-											if (!spaceRegx.test(part)) {
-												if (part === 'version' && names.indexOf(XMLPIName.version) < 0) {
-													pState = XMLPIState.Name;
-													pName = XMLPIName.version;
-													names.push(pName);
-												} else if (part === 'encoding' && names.indexOf(XMLPIName.encoding) < 0) {
-													pState = XMLPIState.Name;
-													pName = XMLPIName.encoding;
-													names.push(pName);
-												} else if (part === 'standalone' && names.indexOf(XMLPIName.standalone) < 0) {
-													pState = XMLPIState.Name;
-													pName = XMLPIName.standalone;
-													names.push(pName);
-												} else {
-													pState = XMLPIState.invalid;
-												}
-											}
-											break;
-										case XMLPIState.Name:
-											if (!spaceRegx.test(part)) {
-												pState = part === '='? XMLPIState.Eq: XMLPIState.invalid;
-											}
-											break;
-										case XMLPIState.Eq:
-											if (!spaceRegx.test(part)) {
-												pState = part === '"' || part === '\''? XMLPIState.Start: XMLPIState.invalid;
-											}
-											break;
-										case XMLPIState.Start:
-											switch (pName) {
-												case XMLPIName.version:
-													pState = part === '1.0' || part === '1.1'? XMLPIState.End: XMLPIState.invalid;
-													break;
-												case XMLPIName.encoding:
-													pState = encodingRgx.test(part)? XMLPIState.End: XMLPIState.invalid;
-													break;
-												case XMLPIName.standalone:
-													pState = part === 'yes' || part === 'no'? XMLPIState.End: XMLPIState.invalid;
-													break;
-											}
-											break;
-										case XMLPIState.End:
-											pState = part === '"' || part === '\''? XMLPIState.none: XMLPIState.invalid;
-											namesWithValues.push(pName);
-											break;
-									}
-
-								}
-								if (index === lastPartIndex) {
-									if (pState === XMLPIState.invalid) {
-										isValid = false;
-									} else if (isValid) {
-										isValid = names.indexOf(XMLPIName.version) > -1 &&
-										namesWithValues.indexOf(XMLPIName.version) > -1 &&
-										names.indexOf(XMLPIName.encoding) > -1 === namesWithValues.indexOf(XMLPIName.encoding) > -1 &&
-										names.indexOf(XMLPIName.standalone) > -1 === namesWithValues.indexOf(XMLPIName.standalone) > -1;
-									}
-								}
-							});
-						}
-						if (!isValid) {
-							token['error'] = ErrorType.XMLDeclaration;
-							token['value'] = piValue;
-							problemTokens.push(token);
+							XsltTokenDiagnostics.validateXMLDeclaration(lineNumber, token, document, problemTokens);
 						}
 						break;
 				}
@@ -862,6 +783,92 @@ export class XsltTokenDiagnostics {
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
+	}
+
+	private static validateXMLDeclaration(lineNumber: number, token: BaseToken, document: vscode.TextDocument,problemTokens: BaseToken[]) {
+		let piValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+		let xmlPIrgx = /(=|'|"|\d+\.\d+|[\w|-]+|\s+)/;
+		let encodingRgx = /[A-Za-z]([A-Za-z0-9._-])*/;
+		let spaceRegx = /\s+/;
+		let pState: XMLPIState = XMLPIState.none;
+		let pName = XMLPIName.none;
+		let names: XMLPIName[] = [];
+		let namesWithValues: XMLPIName[] = [];
+		let isValid = true;
+		let allParts = piValue.split(xmlPIrgx);
+		let lastPartIndex = allParts.length - 1;
+		allParts.forEach(function (part, index) {
+			if (pState !== XMLPIState.invalid && part.length > 0) {
+				switch (pState) {
+					case XMLPIState.none:
+						if (!spaceRegx.test(part)) {
+							if (part === 'version' && names.indexOf(XMLPIName.version) < 0) {
+								pState = XMLPIState.Name;
+								pName = XMLPIName.version;
+								names.push(pName);
+							}
+							else if (part === 'encoding' && names.indexOf(XMLPIName.encoding) < 0) {
+								pState = XMLPIState.Name;
+								pName = XMLPIName.encoding;
+								names.push(pName);
+							}
+							else if (part === 'standalone' && names.indexOf(XMLPIName.standalone) < 0) {
+								pState = XMLPIState.Name;
+								pName = XMLPIName.standalone;
+								names.push(pName);
+							}
+							else {
+								pState = XMLPIState.invalid;
+							}
+						}
+						break;
+					case XMLPIState.Name:
+						if (!spaceRegx.test(part)) {
+							pState = part === '=' ? XMLPIState.Eq : XMLPIState.invalid;
+						}
+						break;
+					case XMLPIState.Eq:
+						if (!spaceRegx.test(part)) {
+							pState = part === '"' || part === '\'' ? XMLPIState.Start : XMLPIState.invalid;
+						}
+						break;
+					case XMLPIState.Start:
+						switch (pName) {
+							case XMLPIName.version:
+								pState = part === '1.0' || part === '1.1' ? XMLPIState.End : XMLPIState.invalid;
+								break;
+							case XMLPIName.encoding:
+								pState = encodingRgx.test(part) ? XMLPIState.End : XMLPIState.invalid;
+								break;
+							case XMLPIName.standalone:
+								pState = part === 'yes' || part === 'no' ? XMLPIState.End : XMLPIState.invalid;
+								break;
+						}
+						break;
+					case XMLPIState.End:
+						pState = part === '"' || part === '\'' ? XMLPIState.none : XMLPIState.invalid;
+						namesWithValues.push(pName);
+						break;
+				}
+			}
+			if (index === lastPartIndex) {
+				if (pState === XMLPIState.invalid) {
+					isValid = false;
+				}
+				else if (isValid) {
+					isValid = names.indexOf(XMLPIName.version) > -1 &&
+						namesWithValues.indexOf(XMLPIName.version) > -1 &&
+						names.indexOf(XMLPIName.encoding) > -1 === namesWithValues.indexOf(XMLPIName.encoding) > -1 &&
+						names.indexOf(XMLPIName.standalone) > -1 === namesWithValues.indexOf(XMLPIName.standalone) > -1;
+				}
+			}
+		});
+
+		if (!isValid) {
+			token['error'] = ErrorType.XMLDeclaration;
+			token['value'] = piValue;
+			problemTokens.push(token);
+		}
 	}
 
 	private static xorInputs(input1: boolean, input2: boolean) {
