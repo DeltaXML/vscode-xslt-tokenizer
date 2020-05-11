@@ -594,6 +594,9 @@ export class XslLexer {
                     } else if (currentState === XMLCharState.escTvt) {
                         this.addCharTokenToResult(tokenStartChar, 2, XSLTokenLevelState.xmlText, result, currentState);
                     }
+                    if (currentState === XMLCharState.lEntity && nextState !== XMLCharState.rEntity) {
+                        this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.entityRef, result, nextState);
+                    }
                     switch (nextState) {
                         case XMLCharState.lSt:
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);

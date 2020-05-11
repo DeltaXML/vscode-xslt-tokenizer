@@ -536,12 +536,11 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.entityRef:
 						let entityName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let validationResult = NameValidationError.None;
-						if (entityName.length > 2) {
+						if (entityName.length > 2 && entityName.endsWith(';')) {
 							entityName = entityName.substring(1, entityName.length - 1);
 							validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
 						} else {
 							validationResult = NameValidationError.NameError;
-							entityName = '';
 						}
 						if (validationResult !== NameValidationError.None){
 							token['error'] = ErrorType.EntityName;
