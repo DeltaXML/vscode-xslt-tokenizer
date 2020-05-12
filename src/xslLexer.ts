@@ -595,7 +595,19 @@ export class XslLexer {
                         this.addCharTokenToResult(tokenStartChar, 2, XSLTokenLevelState.xmlText, result, currentState);
                     }
                     if (currentState === XMLCharState.lEntity && nextState !== XMLCharState.rEntity) {
+                        // recover from syntax error:
                         this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.entityRef, result, nextState);
+                        switch (this.entityContext) {
+                            case EntityPosition.text:
+                                nextState = XMLCharState.init;
+                                break;
+                            case EntityPosition.attrSq:
+                                nextState = XMLCharState.lSq;
+                                break;
+                            case EntityPosition.attrDq:
+                                nextState = XMLCharState.lDq;
+                                break;
+                        }
                     }
                     switch (nextState) {
                         case XMLCharState.lSt:
