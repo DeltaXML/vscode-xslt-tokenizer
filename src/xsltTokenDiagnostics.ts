@@ -75,6 +75,7 @@ export class XsltTokenDiagnostics {
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
 	private static readonly xslInclude = 'xsl:include';
 	private static readonly xslImport = 'xsl:import';
+	private static readonly xmlChars = ['lt','gt','quot','apos','amp'];
 
 
 	private static readonly xslFunction = 'xsl:function';
@@ -168,6 +169,8 @@ export class XsltTokenDiagnostics {
 		let rootXmlnsName: string|null = null;
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 		let isXMLDeclaration = false;
+		let dtdStarted = false;
+		let dtdEnded = false;
 
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
@@ -546,6 +549,9 @@ export class XsltTokenDiagnostics {
 									validNumber = /^#[0-9]+$/.test(entityName);
 								}
 								validationResult = validNumber? NameValidationError.None: NameValidationError.NameError;
+							} else if (!dtdEnded) {
+								let isXmlChar = XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1;
+								validationResult = isXmlChar? NameValidationError.None: NameValidationError.NameError;
 							} else {
 								validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
 							}
@@ -560,6 +566,25 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.processingInstrValue:
 						if (isXMLDeclaration) {
 							XsltTokenDiagnostics.validateXMLDeclaration(lineNumber, token, document, problemTokens);
+						}
+						break;
+					case XSLTokenLevelState.dtdEnd:
+						if (dtdEnded) {
+							let endDtd = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							token['error'] = ErrorType.DTD;
+							token['value'] = endDtd;
+							problemTokens.push(token);	
+						}
+						dtdEnded = true;
+						break;
+					case XSLTokenLevelState.dtd:						
+						if (onRootStartTag && !dtdEnded) {
+							dtdStarted = true;
+						} else {
+							let dtdValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							token['error'] = ErrorType.DTD;
+							token['value'] = dtdValue;
+							problemTokens.push(token);							
 						}
 						break;
 				}
@@ -1198,6 +1223,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathName:
 					msg = `XPath: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.DTD:
+					msg = `XML: DTD position error: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathFunction:
 					let parts = tokenValue.split('#');

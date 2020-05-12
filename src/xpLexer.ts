@@ -1021,7 +1021,8 @@ export enum ErrorType {
     XMLAttEqualExpected,
     XMLDupllicateAtt,
     XPathUnexpected,
-    BracketNesting
+    BracketNesting,
+    DTD,
 }
 
 export interface BaseToken {

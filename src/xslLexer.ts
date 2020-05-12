@@ -79,6 +79,7 @@ export enum XSLTokenLevelState {
     attributeValue,
     xmlnsName,
     dtd,
+    dtdEnd,
     elementName,
     elementValue,
     processingInstrName,
@@ -674,7 +675,7 @@ export class XslLexer {
                             }
                             break;
                         case XMLCharState.rDtd:
-                            this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar, XSLTokenLevelState.dtd, result, currentState);
+                            this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar, XSLTokenLevelState.dtdEnd, result, currentState);
                             break;
                         case XMLCharState.rPiName:
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrName, result, nextState);

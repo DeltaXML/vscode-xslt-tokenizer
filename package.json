@@ -372,6 +372,11 @@
 				"description": "XML DTD Declaration"
 			},
 			{
+				"id": "dtdEnd",
+				"superType": "class",
+				"description": "End of XML DTD Declaration"
+			},
+			{
 				"id": "attributeEquals",
 				"superType": "macro",
 				"description": "XML attribute value assignment"
