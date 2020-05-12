@@ -78,6 +78,7 @@ export enum XSLTokenLevelState {
     attributeEquals,
     attributeValue,
     xmlnsName,
+    dtd,
     elementName,
     elementValue,
     processingInstrName,
@@ -138,6 +139,8 @@ export class XslLexer {
     private nativeTvtAttributes: string[] = [];
     private genericTvtAttributes: string[] = [];
     private nativePrefixLength = 0;
+    private dtdNesting = 0;
+
 
     constructor(languageConfiguration: LanguageConfiguration) {
         this.nativePrefixLength = languageConfiguration.nativePrefix.length + 1;
@@ -265,7 +268,13 @@ export class XslLexer {
                     rc = XMLCharState.lComment;
                     this.commentCharCount = 0;
                 } else if (char === '>') {
-                    rc = XMLCharState.rDtd;
+                    this.dtdNesting--;
+                    if (this.dtdNesting < 0) {
+                        this.dtdNesting = 0;
+                        rc = XMLCharState.rDtd;
+                    }
+                } else if (char === '<') {
+                    this.dtdNesting++;
                 }
                 // TODO: Handle internal DTD subset
                 break;
@@ -575,6 +584,9 @@ export class XslLexer {
                             case XMLCharState.lSq:
                                 addToken = XSLTokenLevelState.attributeValue;
                                 break;
+                            case XMLCharState.lExclam:
+                                addToken = XSLTokenLevelState.dtd;
+                                break;
                         }
                         if (addToken !== null) {
                             this.addNewTokenToResult(tokenStartChar, addToken, result, nextState);
@@ -660,6 +672,9 @@ export class XslLexer {
                                 let punctuationLength = nextState === XMLCharState.rCt || nextState === XMLCharState.rStNoAtt? 1: 2;
                                 this.addCharTokenToResult(this.lineCharCount - 1, punctuationLength, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             }
+                            break;
+                        case XMLCharState.rDtd:
+                            this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar, XSLTokenLevelState.dtd, result, currentState);
                             break;
                         case XMLCharState.rPiName:
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrName, result, nextState);

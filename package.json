@@ -367,6 +367,11 @@
 				"description": "XML Text Node"
 			},
 			{
+				"id": "dtd",
+				"superType": "number",
+				"description": "XML DTD Declaration"
+			},
+			{
 				"id": "attributeEquals",
 				"superType": "macro",
 				"description": "XML attribute value assignment"
