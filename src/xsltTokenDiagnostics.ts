@@ -538,7 +538,17 @@ export class XsltTokenDiagnostics {
 						let validationResult = NameValidationError.None;
 						if (entityName.length > 2 && entityName.endsWith(';')) {
 							entityName = entityName.substring(1, entityName.length - 1);
-							validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+							if (entityName.length > 2 && entityName.charAt(0) === '#') {
+								let validNumber;
+								if (entityName.charAt(1).toLocaleLowerCase() === 'x') {
+									validNumber = /^#[Xx][0-9a-fA-F]+$/.test(entityName);
+								} else {
+									validNumber = /^#[0-9]+$/.test(entityName);
+								}
+								validationResult = validNumber? NameValidationError.None: NameValidationError.NameError;
+							} else {
+								validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+							}
 						} else {
 							validationResult = NameValidationError.NameError;
 						}
