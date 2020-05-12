@@ -1,3 +1,11 @@
+<!-- abc -->
+<!DOCTYPE xsl:stylesheet [
+<!ENTITY doe-lt "&#xE801;">
+<!ENTITY doe-amp "&#xE802;">
+<!ENTITY doe-gt "&#xE803;">
+<!ENTITY doe-apos "&#xE804;">
+<!ENTITY doe-quot "&#xE805;">
+]>
 <xsl:stylesheet  
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:array="http://www.w3.org/2005/xpath-functions/array"

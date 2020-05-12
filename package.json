@@ -368,7 +368,7 @@
 			},
 			{
 				"id": "dtd",
-				"superType": "number",
+				"superType": "class",
 				"description": "XML DTD Declaration"
 			},
 			{
