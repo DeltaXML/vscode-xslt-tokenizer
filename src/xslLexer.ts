@@ -542,6 +542,7 @@ export class XslLexer {
         let isXPathAttribute = false;
         let isExpandTextAttribute = false;
         let isGlobalInstructionName = false;
+        let isGlobalInstructionMode = false;
         let expandTextValue: boolean|null = false;
         let xmlElementStack: XmlElement[] = [];
         let tokenStartChar = -1;
@@ -702,6 +703,7 @@ export class XslLexer {
                         case XMLCharState.lStEq:
                             let isXMLNSattribute = false;
                             isGlobalInstructionName = false;
+                            isGlobalInstructionMode = false;
                             attName = tokenChars.join('');
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
@@ -721,6 +723,9 @@ export class XslLexer {
                                 } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionName = true;
+                                } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'mode') {
+                                    isExpandTextAttribute = false;
+                                    isGlobalInstructionMode = true;
                                 } else {
                                     isExpandTextAttribute = false;
                                     isXPathAttribute = this.isExpressionAtt(attName);
@@ -769,10 +774,11 @@ export class XslLexer {
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
                             }
                             let newToken = this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
-                            if (isGlobalInstructionName) {
+                            if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');
                                 let newTokenCopy = Object.assign({}, newToken);
-                                this.globalInstructionData.push({type: tagGlobalInstructionType, name: attValue, token: newTokenCopy, idNumber: 0});
+                                let globalType = isGlobalInstructionMode? GlobalInstructionType.Mode: tagGlobalInstructionType;
+                                this.globalInstructionData.push({type: globalType, name: attValue, token: newTokenCopy, idNumber: 0});
                             }
                             tokenChars = [];
                             storeToken = false;
@@ -984,6 +990,15 @@ export class XslLexer {
                     case ('include'):
                         instructionType = GlobalInstructionType.Include;
                         break;
+                    case ('accumulator'):
+                        instructionType = GlobalInstructionType.Accumulator;
+                        break;
+                    case ('mode'):
+                        instructionType = GlobalInstructionType.Mode;
+                        break;
+                    case ('attribute-set'):
+                        instructionType = GlobalInstructionType.AttributeSet;
+                        break;
                 }
             }
         }
@@ -1003,6 +1018,9 @@ export enum GlobalInstructionType {
     Variable,
     Parameter,
     Function,
+    Mode,
+    Accumulator,
+    AttributeSet,
     Template,
     Include,
     Import,

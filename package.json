@@ -32,6 +32,19 @@
 	"license": "MIT",
 	"main": "./out/extension.js",
 	"contributes": {
+		"semanticTokenScopes": [
+			{
+				"scopes": {
+					"xmlPunctuation": ["punctuation.definition.tag"],
+					"processingInstrName": ["storage.type"],
+					"attributeNameTest": ["storage.type"],
+					"xslElementName": ["storage.type"],
+					"uriLiteral": ["storage.type"],
+					"functionNameTest": ["variable.other.constant"],
+					"anonymousFunction": ["variable.other.constant"]
+				}
+			}
+		],
 		"configuration": {
 			"title": "XPath Embedded",
 			"properties": {
@@ -476,18 +489,6 @@
 			}
 		]
 	},
-	"semanticTokenScopes": [
-		{
-			"language": "xslt",
-			"scopes": {
-				"xmlPunctuation": [
-					"punctuation.definition.tag",
-					"meta.tag.xml",
-					"text.xml"
-				]
-			}
-		}
-	],
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",

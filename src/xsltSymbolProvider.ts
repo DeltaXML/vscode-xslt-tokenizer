@@ -33,7 +33,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// console.log('provideDocumentSymbols: ' + document.uri);
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
-
+		console.log(globalInstructionData);
 		// Import/include XSLT - ensuring no duplicates
 		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
 		let importedGlobals1 = [importedG];

@@ -8,14 +8,11 @@
                     
             version="3.0">
     
-    <xsl:function name="fnc:test">
-        <xsl:sequence select="1"/>
-    </xsl:function>
+    <xsl:accumulator name="myaccum"/>
+    <xsl:attribute-set name="myset"/>
+
     
-    <xsl:variable name="test" select="
-        let $a := fnc:test#0 return 1, $a"/>
-    
-    <xsl:template match="/">
+    <xsl:template match="/" mode="trial">
         <xsl:sequence select="'abc', fnc:test(), fn:count('a'), $test"/>
     </xsl:template>
     
