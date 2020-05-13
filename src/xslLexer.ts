@@ -785,7 +785,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (isExpandTextAttribute || isGlobalInstructionName) {
+                            if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
                                 this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeValue, result, nextState);
