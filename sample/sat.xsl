@@ -8,12 +8,6 @@
                     
             version="3.0">
     
-    <xsl:accumulator name="myaccum"/>
-    <xsl:attribute-set name="myset"/>
-
-    
-    <xsl:template match="/" mode="trial">
-        <xsl:sequence select="'abc', fnc:test(), fn:count('a'), $test"/>
-    </xsl:template>
+    <xsl:variable name="abc" select="/ instance of element(abc) or / instance of xs:integer"/>
     
 </xsl:stylesheet>

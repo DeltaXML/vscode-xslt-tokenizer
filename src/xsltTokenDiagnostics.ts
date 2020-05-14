@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 
 enum HasCharacteristic {
@@ -794,6 +794,32 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 						}
 						break;
+					case TokenLevelState.simpleType:
+						let tValue = token.value;
+						let tParts = tValue.split(':');
+						let isValidType = false;
+						if (tParts.length === 1) {
+							let nextToken = allTokens.length > index + 1? allTokens[index + 1]: null;
+
+							if (nextToken && (nextToken.charType === CharLevelState.lB || (nextToken.charType === CharLevelState.dSep && nextToken.value === '()'))) {
+								isValidType = Data.nodeTypes.indexOf(tParts[0]) > -1;
+								if (!isValidType) {
+									isValidType = Data.nonFunctionTypes.indexOf(tParts[0]) > -1;
+								}
+							}
+						} else if (tParts.length === 2) {
+							let nsType = xsltPrefixesToURIs.get(tParts[0]);
+							if (nsType !== undefined) {
+								if (nsType === XSLTnamespaces.XMLSchema) {
+									isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
+								}
+							}
+						}
+						if (!isValidType) {
+							token['error'] = ErrorType.XPathTypeName;
+							problemTokens.push(token);
+						}
+						break;
 				}
 			}
 			prevToken = token;
@@ -1230,6 +1256,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunction:
 					let parts = tokenValue.split('#');
 					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
+					break;
+				case ErrorType.XPathTypeName:
+					msg = `XPath: Invalid type: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathFunctionNamespace:
 					let partsNs = tokenValue.split('#');

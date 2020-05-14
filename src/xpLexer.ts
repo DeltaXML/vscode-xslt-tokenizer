@@ -93,7 +93,7 @@ export enum ModifierState {
     UnresolvedRef = 1, // documentation
 }
 
-class Data {
+export class Data {
     public static separators = ['!','*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?','|'];
 
     public static doubleSeps = ['!=', '*:', '..', '//', ':*', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
@@ -1005,6 +1005,7 @@ export enum ErrorType {
     MultiRoot,
     XMLName,
     XSLTName,
+    XPathTypeName,
     XSLTPrefix,
     XMLDeclaration,
     XPathName,
