@@ -1334,6 +1334,13 @@ export class XsltTokenDiagnostics {
 			case 'then':
 				r = 'else';
 				break;
+			case 'let':
+				r = 'return'
+				break;
+			case 'every':
+			case 'some':
+				r = 'satisfies';
+				break;
 			case 'else':
 				r = 'then';
 				break;
