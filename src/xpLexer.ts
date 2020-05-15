@@ -998,6 +998,7 @@ export enum ErrorType {
     UnresolvedVarReference,
     DuplicateVarName,
     DuplicateFnName,
+    DuplicateParameterName,
     ElementNesting,
     ElementNestingX,
     ParentLessText,

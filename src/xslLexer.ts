@@ -8,7 +8,7 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 
-import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition} from "./xpLexer";
+import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType} from "./xpLexer";
 
 export enum XMLCharState {
     init,// 0 initial state
@@ -788,6 +788,10 @@ export class XslLexer {
                                 if (this.globalInstructionData.length > 0) {
                                     let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
                                     if (gd.memberNames) {
+                                        if (gd.memberNames.indexOf(attValue) > -1) {
+                                            newToken['error'] = ErrorType.DuplicateParameterName;
+                                            newToken.value = attValue;
+                                        }
                                         gd.memberNames.push(attValue);
                                     } else {
                                         gd['memberNames'] = [attValue];

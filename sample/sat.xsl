@@ -13,6 +13,8 @@
     
     <xsl:function name="fn:name" as="xs:string">
         <xsl:param name="fp1" as="node()"/>
+        <xsl:param name="fp2" as="node()"/>
+        
         <xsl:sequence select="'test'"/>
     </xsl:function>       
     

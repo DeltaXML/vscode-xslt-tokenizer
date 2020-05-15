@@ -504,7 +504,9 @@ export class XsltTokenDiagnostics {
 							tagIdentifierName = variableName;
 						}
 
-						if (attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
+						if (token.error) {
+							problemTokens.push(token);
+						} else if (attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute')? ValidationType.XMLAttribute: ValidationType.PrefixedName;
 								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
@@ -1234,6 +1236,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XSLTName:
 					msg = `XSLT: Invalid XSLT name: '${tokenValue}'`;
+					break;
+				case ErrorType.DuplicateParameterName:
+					msg = `XSLT: Duplicate parameter name: '${tokenValue}'`;
 					break;
 				case ErrorType.ParentLessText:
 					msg = `XML: Text found outside root element: '${tokenValue}`
