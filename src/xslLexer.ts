@@ -118,6 +118,7 @@ export interface GlobalInstructionData {
     type: GlobalInstructionType,
     token: BaseToken,
     idNumber: number,
+    memberNames?: string[],
     href?: string
 }
 
@@ -543,11 +544,13 @@ export class XslLexer {
         let isExpandTextAttribute = false;
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
+        let isGlobalParameterName = false;
         let expandTextValue: boolean|null = false;
         let xmlElementStack: XmlElement[] = [];
         let tokenStartChar = -1;
         let tokenStartLine = -1;
         let attributeNameTokenAdded = false;
+        let collectParamName = false;
         
         if (this.debug) {
             console.log("xsl:\n" + xsl);
@@ -648,15 +651,13 @@ export class XslLexer {
                             let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;
+                            collectParamName = false;
                             if (xmlElementStack.length === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
                             } else if (xmlElementStack.length === 2 
-                                && contextGlobalInstructionType === GlobalInstructionType.Function
+                                && (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template)
                                 && isNativeElement && elementProperties.nativeName === 'param') {
-                                if (this.globalInstructionData.length > 0) {
-                                    let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
-                                    gd.idNumber++;
-                                }
+                                    collectParamName = true;
                             }
 
                             if (isCloseTag) {
@@ -704,6 +705,7 @@ export class XslLexer {
                             let isXMLNSattribute = false;
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
+                            isGlobalParameterName = false;
                             attName = tokenChars.join('');
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
@@ -726,6 +728,8 @@ export class XslLexer {
                                 } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'mode') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionMode = true;
+                                } else if (collectParamName && attName === 'name') {
+                                    isGlobalParameterName = true;
                                 } else {
                                     isExpandTextAttribute = false;
                                     isXPathAttribute = this.isExpressionAtt(attName);
@@ -779,12 +783,26 @@ export class XslLexer {
                                 let newTokenCopy = Object.assign({}, newToken);
                                 let globalType = isGlobalInstructionMode? GlobalInstructionType.Mode: tagGlobalInstructionType;
                                 this.globalInstructionData.push({type: globalType, name: attValue, token: newTokenCopy, idNumber: 0});
+                            } else if (isGlobalParameterName) {
+                                let attValue = tokenChars.join('');
+                                if (this.globalInstructionData.length > 0) {
+                                    let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                    if (gd.memberNames) {
+                                        gd.memberNames.push(attValue);
+                                    } else {
+                                        gd['memberNames'] = [attValue];
+                                    }
+                                    gd.idNumber++;
+                                }
                             }
                             tokenChars = [];
                             storeToken = false;
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
+                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template) {
+                                storeToken = true;
+                            }
                             if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
