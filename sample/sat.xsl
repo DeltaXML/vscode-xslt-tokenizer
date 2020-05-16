@@ -10,6 +10,11 @@
         <xsl:param name="p1" as="element()" select="a"/>
         <xsl:param name="p2" as="element()" select="b"/>          
     </xsl:template>
+
+    <xsl:template match="/">
+        <xsl:param name="mp1" as="element()" select="a"/>
+        <xsl:param name="mp2" as="element()" select="b"/>          
+    </xsl:template>
     
     <xsl:function name="fn:name" as="xs:string">
         <xsl:param name="fp1" as="node()"/>

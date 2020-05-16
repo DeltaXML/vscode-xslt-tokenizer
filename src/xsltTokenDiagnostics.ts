@@ -171,27 +171,35 @@ export class XsltTokenDiagnostics {
 		let isXMLDeclaration = false;
 		let dtdStarted = false;
 		let dtdEnded = false;
+		let namedTemplates: Map<string, string[]> = new Map();
 
 		globalInstructionData.forEach((instruction) => {
-			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
-				if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
-					checkedGlobalVarNames.push(instruction.name);
-				} else {
-					instruction.token['error'] = ErrorType.DuplicateVarName;
-					instruction.token.value = instruction.name;
-					problemTokens.push(instruction.token);
-				}
-				globalVariableData.push({token: instruction.token, name: instruction.name })
-				xsltVariableDeclarations.push(instruction.token);
-			} else if (instruction.type === GlobalInstructionType.Function) {
-				let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
-				if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
-					checkedGlobalFnNames.push(functionNameWithArity);
-				} else {
-					instruction.token['error'] = ErrorType.DuplicateFnName;
-					instruction.token.value = functionNameWithArity;
-					problemTokens.push(instruction.token);
-				}				
+			switch (instruction.type) {
+				case GlobalInstructionType.Variable:
+				case GlobalInstructionType.Parameter:
+					if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
+						checkedGlobalVarNames.push(instruction.name);
+					} else {
+						instruction.token['error'] = ErrorType.DuplicateVarName;
+						instruction.token.value = instruction.name;
+						problemTokens.push(instruction.token);
+					}
+					globalVariableData.push({token: instruction.token, name: instruction.name })
+					xsltVariableDeclarations.push(instruction.token);
+					break;
+				case GlobalInstructionType.Function:
+					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
+					if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
+						checkedGlobalFnNames.push(functionNameWithArity);
+					} else {
+						instruction.token['error'] = ErrorType.DuplicateFnName;
+						instruction.token.value = functionNameWithArity;
+						problemTokens.push(instruction.token);
+					}	
+					break;
+				case GlobalInstructionType.Template:
+
+					break;
 			}
 		});
 
@@ -503,10 +511,18 @@ export class XsltTokenDiagnostics {
 						} else if (attType === AttributeType.InstructionMode && tagIdentifierName === '') {
 							tagIdentifierName = variableName;
 						}
-
+						let hasProblem = false;
 						if (token.error) {
 							problemTokens.push(token);
-						} else if (attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
+							hasProblem = true;
+						} 
+						
+						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length === 2 && tagElementName === 'xsl:with-param') {
+							let callTemplateName = elementStack[elementStack.length - 1].symbolID;
+							
+						}
+						
+						if (!hasProblem && attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute')? ValidationType.XMLAttribute: ValidationType.PrefixedName;
 								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
