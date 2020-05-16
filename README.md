@@ -7,11 +7,12 @@ A VSCode extension for XPath 3.1, XSLT 3.0 and more.
 - XSLT 3.0 and XPath 3.1 Formatting
 - XSLT Outline View
 - XSLT/XPath Symbol-lookup
-- XML Well-Formedness Checking (wip)
+- XML Well-Formedness Checking
 - XSLT Static Code Checking (wip)
 - XPath Static Code Checking (wip)
 - Mark unused variables
-- Show invalid variable references as errors
+- Close-tag auto-completion with tag-name
+- Show invalid variable/param references as errors
 - *Saxon XSLT* Transform Task Provider (requires Java)
 
 ## Sample Screenshots
