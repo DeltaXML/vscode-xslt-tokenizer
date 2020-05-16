@@ -204,24 +204,32 @@ export class XsltTokenDiagnostics {
 						problemTokens.push(instruction.token);
 					} else {
 						let members = instruction.memberNames? instruction.memberNames: [];
-						namedTemplates.set(instruction.name, members)
+						namedTemplates.set(instruction.name, members);
 					}
 					break;
 			}
 		});
 
 		importedInstructionData.forEach((instruction) => {
-			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
-				if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
-					checkedGlobalVarNames.push(instruction.name);
-					importedGlobalVarNames.push(instruction.name);
-				}
-			} else if (instruction.type === GlobalInstructionType.Function) {
-				let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
-				if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
-					checkedGlobalFnNames.push(functionNameWithArity);
-					importedGlobalFnNames.push(functionNameWithArity);
-				}			
+			switch (instruction.type) {
+				case GlobalInstructionType.Variable:
+				case GlobalInstructionType.Parameter:
+					if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
+						checkedGlobalVarNames.push(instruction.name);
+						importedGlobalVarNames.push(instruction.name);
+					}
+					break;
+				case GlobalInstructionType.Function:
+					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
+					if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
+						checkedGlobalFnNames.push(functionNameWithArity);
+						importedGlobalFnNames.push(functionNameWithArity);
+					}	
+					break;
+				case GlobalInstructionType.Template:
+					let members = instruction.memberNames? instruction.memberNames: [];
+					namedTemplates.set(instruction.name, members);
+					break;
 			}
 		});
 		let nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
@@ -526,7 +534,14 @@ export class XsltTokenDiagnostics {
 						
 						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length === 2 && tagElementName === 'xsl:with-param') {
 							let callTemplateName = elementStack[elementStack.length - 1].symbolID;
-							
+							let templateParams = namedTemplates.get(callTemplateName);
+							if (templateParams) {
+								if (templateParams?.indexOf(variableName) < 0) {
+									token['error'] = ErrorType.MissingTemplateParam;
+									token.value = `${callTemplateName}#${variableName}`;
+									problemTokens.push(token);
+								}
+							}
 						}
 						
 						if (!hasProblem && attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
@@ -1262,6 +1277,10 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.DuplicateParameterName:
 					msg = `XSLT: Duplicate parameter name: '${tokenValue}'`;
+					break;
+				case ErrorType.MissingTemplateParam:
+					let pParts = tokenValue.split('#');
+					msg = `XSLT: Parameter '${pParts[0]}' is not declared for template '${pParts[1]}'`;
 					break;
 				case ErrorType.ParentLessText:
 					msg = `XML: Text found outside root element: '${tokenValue}`
