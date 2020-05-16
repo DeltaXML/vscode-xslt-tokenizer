@@ -198,7 +198,14 @@ export class XsltTokenDiagnostics {
 					}	
 					break;
 				case GlobalInstructionType.Template:
-
+					if (namedTemplates.get(instruction.name)) {
+						instruction.token['error'] = ErrorType.DuplicateTemplateName;
+						instruction.token.value = instruction.name;
+						problemTokens.push(instruction.token);
+					} else {
+						let members = instruction.memberNames? instruction.memberNames: [];
+						namedTemplates.set(instruction.name, members)
+					}
 					break;
 			}
 		});
@@ -1311,6 +1318,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.DuplicateFnName:
 					msg = `XSLT: Duplicate function name and arity: '${tokenValue}'`;
+					break;
+				case ErrorType.DuplicateTemplateName:
+					msg = `XSLT: Duplicate template name '${tokenValue}'`;
 					break;
 				default:
 					msg = 'Unexepected Error';
