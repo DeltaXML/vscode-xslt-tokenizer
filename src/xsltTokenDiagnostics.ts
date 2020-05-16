@@ -531,8 +531,15 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 							hasProblem = true;
 						} 
-						
-						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length === 2 && tagElementName === 'xsl:with-param') {
+						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length > 0 && tagElementName === 'xsl:call-template') {
+							if (!namedTemplates.get(variableName)) {
+								token['error'] = ErrorType.TemplateNameUnresolved;
+								token.value = variableName;
+								problemTokens.push(token);
+								hasProblem = true;
+							}
+						}
+						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length > 0 && tagElementName === 'xsl:with-param') {
 							let callTemplateName = elementStack[elementStack.length - 1].symbolID;
 							let templateParams = namedTemplates.get(callTemplateName);
 							if (templateParams) {
@@ -540,6 +547,7 @@ export class XsltTokenDiagnostics {
 									token['error'] = ErrorType.MissingTemplateParam;
 									token.value = `${callTemplateName}#${variableName}`;
 									problemTokens.push(token);
+									hasProblem = true;
 								}
 							}
 						}
@@ -1281,6 +1289,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingTemplateParam:
 					let pParts = tokenValue.split('#');
 					msg = `XSLT: Parameter '${pParts[0]}' is not declared for template '${pParts[1]}'`;
+					break;
+				case ErrorType.TemplateNameUnresolved:
+					msg = `XSLT: Named template '${tokenValue}' not found`;
 					break;
 				case ErrorType.ParentLessText:
 					msg = `XML: Text found outside root element: '${tokenValue}`
