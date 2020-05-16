@@ -149,7 +149,7 @@ export class XslLexerLight extends XslLexer {
                             break;
                         case XMLCharState.rSt:
                             if (tagGlobalInstructionType === GlobalInstructionType.Template && !tagInstructionNameAdded && tagMatchToken) {
-                                this.globalInstructionData.push({type: tagGlobalInstructionType, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
+                                this.globalInstructionData.push({type: GlobalInstructionType.TemplateMatch, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
                             }
                             xmlElementStack++;
                             storeToken = false;

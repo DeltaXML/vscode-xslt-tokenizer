@@ -767,7 +767,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.rSt:
                             if (tagGlobalInstructionType === GlobalInstructionType.Template && !tagInstructionNameAdded && tagMatchToken) {
-                                this.globalInstructionData.push({type: tagGlobalInstructionType, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
+                                this.globalInstructionData.push({type: GlobalInstructionType.TemplateMatch, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
                             }
                             expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
@@ -1069,6 +1069,7 @@ export enum GlobalInstructionType {
     Accumulator,
     AttributeSet,
     Template,
+    TemplateMatch,
     Include,
     Import,
     Unknown
