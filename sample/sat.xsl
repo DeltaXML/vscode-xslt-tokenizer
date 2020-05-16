@@ -3,10 +3,10 @@
     xmlns:fn="abc"
     version="3.0">
     
-    <xsl:include href="included1.xsl"/>
-    <xsl:import href="features/included2.xsl"/>
+<!--     <xsl:include href="included1.xsl"/>
+    <xsl:import href="features/included2.xsl"/> -->
     
-    <xsl:template match="/" mode="#all">
+    <xsl:template name="tp1">
         <xsl:param name="p1" as="element()" select="a"/>
         <xsl:param name="p2" as="element()" select="b"/>          
     </xsl:template>
