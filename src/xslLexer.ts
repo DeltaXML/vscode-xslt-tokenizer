@@ -796,7 +796,7 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 let newTokenCopy = Object.assign({}, newToken);
                                 let globalType = isGlobalInstructionMode? GlobalInstructionType.Mode: tagGlobalInstructionType;
-                                let targetGlobal = isGlobalInstructionMode? this.globalModeData: this.globalInstructionData;
+                                let targetGlobal;
                                 if (isGlobalInstructionMode) {
                                     targetGlobal = this.globalModeData;
                                 } else {

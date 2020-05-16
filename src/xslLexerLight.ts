@@ -18,7 +18,7 @@ export class XslLexerLight extends XslLexer {
     public analyseLight(xsl: string): GlobalInstructionData[] {
 
         this.globalInstructionData = [];
-
+        this.globalModeData = [];
 
         let currentState: XMLCharState = XMLCharState.init;
         let currentChar: string = '';
@@ -31,10 +31,14 @@ export class XslLexerLight extends XslLexer {
         let storeToken = false;
         let isNativeElement = false;
         let tagGlobalInstructionType = GlobalInstructionType.Unknown;
+        let tagInstructionNameAdded = false;
+        let tagMatchToken: BaseToken|null = null;
         let contextGlobalInstructionType = GlobalInstructionType.Unknown;
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
         let isGlobalParameterName = false;
+        let isGlobalInstructionMatch = false;
+
         let xmlElementStack: number = 0;
         let lCharCount = -1;
         let lineNumber = 0;
@@ -91,6 +95,8 @@ export class XslLexerLight extends XslLexer {
                             let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;
+                            tagInstructionNameAdded = false;
+                            tagMatchToken = null;
                             collectParamName = false;
                             if (xmlElementStack === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
@@ -125,6 +131,7 @@ export class XslLexerLight extends XslLexer {
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
+                            isGlobalInstructionMatch = false;
                             if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
                              && attName === 'href') {
                                 isGlobalInstructionName = true;
@@ -132,6 +139,8 @@ export class XslLexerLight extends XslLexer {
                                 isGlobalInstructionName = true;
                             } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'mode') {
                                 isGlobalInstructionMode = true; 
+                            } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'match') {
+                                isGlobalInstructionMatch = true;
                             } else if (collectParamName && attName === 'name') {
                                 isGlobalParameterName = true;
                             }
@@ -139,6 +148,9 @@ export class XslLexerLight extends XslLexer {
                             storeToken = false;
                             break;
                         case XMLCharState.rSt:
+                            if (tagGlobalInstructionType === GlobalInstructionType.Template && !tagInstructionNameAdded && tagMatchToken) {
+                                this.globalInstructionData.push({type: tagGlobalInstructionType, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
+                            }
                             xmlElementStack++;
                             storeToken = false;
                             tokenChars = [];
@@ -158,8 +170,14 @@ export class XslLexerLight extends XslLexer {
                                     tokenType: XSLTokenLevelState.attributeValue
                                 };
                                 let globalType = isGlobalInstructionMode? GlobalInstructionType.Mode: tagGlobalInstructionType;
-
-                                this.globalInstructionData.push({type: globalType, name: attValue, token: tkn, idNumber: 0});
+                                let targetGlobal = isGlobalInstructionMode? this.globalModeData: this.globalInstructionData;
+                                if (isGlobalInstructionMode) {
+                                    targetGlobal = this.globalModeData;
+                                } else {
+                                    targetGlobal = this.globalInstructionData;
+                                    tagInstructionNameAdded = true;
+                                }
+                                targetGlobal.push({type: globalType, name: attValue, token: tkn, idNumber: 0});
                                 isGlobalInstructionName = false;
                                 tagGlobalInstructionType = GlobalInstructionType.Unknown;
                             } else if (isGlobalParameterName) {
@@ -173,6 +191,17 @@ export class XslLexerLight extends XslLexer {
                                     }
                                     gd.idNumber++;
                                 }
+                            } else if (isGlobalInstructionMatch) {
+                                let attValue = tokenChars.join('');
+                                let tkn: BaseToken = {
+                                    line: lineNumber,
+                                    length: attValue.length,
+                                    startCharacter: lineNumberChar - attValue.length,
+                                    value: attValue,
+                                    tokenType: XSLTokenLevelState.attributeValue
+                                };
+                                tagMatchToken = tkn;
+                                tagMatchToken.value = attValue;
                             }
                             tokenChars = [];
                             storeToken = false;
