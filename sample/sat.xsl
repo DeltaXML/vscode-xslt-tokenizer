@@ -3,14 +3,16 @@
     xmlns:fn="abc"
     version="3.0">
     
-<!--     <xsl:include href="included1.xsl"/>
-    <xsl:import href="features/included2.xsl"/> -->
+    <xsl:include href="included1.xsl"/>
+    <xsl:import href="features/included2.xsl"/> 
     
     <xsl:template name="tp1">
         <xsl:param name="p1" as="element()" select="a"/>
-        <xsl:param name="p2" as="element()" select="b"/>          
+        <xsl:param name="p2" as="element()" select="b"/> 
+        <xsl:sequence select="fn:name(1,2)"/>
+        
     </xsl:template>
-
+    
     <xsl:template match="/">
         <xsl:param name="mp1" as="element()" select="a"/>
         <xsl:param name="mp2" as="element()" select="b"/>          

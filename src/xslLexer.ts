@@ -739,6 +739,7 @@ export class XslLexer {
                                 } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'match') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionMatch = true;
+                                    isXPathAttribute = true;
                                 } else if (collectParamName && attName === 'name') {
                                     isGlobalParameterName = true;
                                 } else {
