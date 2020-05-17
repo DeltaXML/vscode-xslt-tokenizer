@@ -698,10 +698,12 @@ export class XsltTokenDiagnostics {
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
-							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
-								xpathStack, inScopeVariablesList, elementStack);
-							if (unResolvedToken !== null) {
-								unresolvedXsltVariableReferences.push(unResolvedToken);
+							if (!(token.value === '$value' && tagElementName === 'xsl:accumulator-rule' )) {
+								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+									xpathStack, inScopeVariablesList, elementStack);
+								if (unResolvedToken !== null) {
+									unresolvedXsltVariableReferences.push(unResolvedToken);
+								}
 							}
 						}
 						break;
