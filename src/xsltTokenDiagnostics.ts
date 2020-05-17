@@ -173,6 +173,7 @@ export class XsltTokenDiagnostics {
 		let dtdEnded = false;
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default'];
+		let globalKeys: string[] = [];
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -212,6 +213,9 @@ export class XsltTokenDiagnostics {
 					let modes = instruction.name.split(/\s+/);
 					globalModes = globalModes.concat(modes);
 					break;
+				case GlobalInstructionType.Key:
+					globalKeys.push(instruction.name);
+					break;
 			}
 		});
 
@@ -238,6 +242,9 @@ export class XsltTokenDiagnostics {
 				case GlobalInstructionType.Mode:
 					let modes = instruction.name.split(/\s+/);
 					globalModes = globalModes.concat(modes);
+					break;
+				case GlobalInstructionType.Key:
+					globalKeys.push(instruction.name);
 					break;
 			}
 		});
