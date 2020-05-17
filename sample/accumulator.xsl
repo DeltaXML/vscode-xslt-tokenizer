@@ -4,9 +4,6 @@
     
     <xsl:import href="key.xsl"/>
 
-	 <xsl:accumulator name="a" initial-value="0">
-   <xsl:accumulator-rule match="section" select="$value + 1"/>
-</xsl:accumulator>
 
 <xsl:template match="section">
    <xsl:value-of select="accumulator-before('a')"/>
@@ -14,5 +11,10 @@
 
    <xsl:apply-templates/>
 </xsl:template>
+   
+   <xsl:template match="bibref">
+      <xsl:variable name="name" select="."/>
+      <xsl:apply-templates select="document('bib.xml')/key('idkey',$name)"/>
+   </xsl:template>
     
 </xsl:stylesheet>

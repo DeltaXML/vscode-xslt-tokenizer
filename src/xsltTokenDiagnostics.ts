@@ -174,6 +174,7 @@ export class XsltTokenDiagnostics {
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default'];
 		let globalKeys: string[] = [];
+		let globalAccumulatorNames: string[] = [];
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -216,6 +217,15 @@ export class XsltTokenDiagnostics {
 				case GlobalInstructionType.Key:
 					globalKeys.push(instruction.name);
 					break;
+				case GlobalInstructionType.Accumulator:
+					if (globalAccumulatorNames.indexOf(instruction.name) < 0) {
+						globalAccumulatorNames.push(instruction.name);
+					} else {
+						instruction.token['error'] = ErrorType.DuplicateAccumulatorName;
+						instruction.token.value = instruction.name;
+						problemTokens.push(instruction.token);
+					}
+				
 			}
 		});
 
@@ -245,6 +255,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case GlobalInstructionType.Key:
 					globalKeys.push(instruction.name);
+					break;
+				case GlobalInstructionType.Accumulator:
+					globalAccumulatorNames.push(instruction.name);
 					break;
 			}
 		});
@@ -669,10 +682,15 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.string:
 						if (xpathStack.length > 0) {
 							let xp = xpathStack[xpathStack.length - 1];
-							if (xp.functionArity === 0 && xp.function?.value === 'key') {
+							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
 								let keyVal = token.value.substring(1, token.value.length - 1);
-								if (globalKeys.indexOf(keyVal) < 0) {
-									token['error'] = ErrorType.XSLTKeyUnresolved;
+								if (xp.function.value === 'key') {
+									if (globalKeys.indexOf(keyVal) < 0) {
+											token['error'] = ErrorType.XSLTKeyUnresolved;
+											problemTokens.push(token);
+									}
+								} else if (globalAccumulatorNames.indexOf(keyVal) < 0) {
+									token['error'] = ErrorType.AccumulatorNameUnresolved;
 									problemTokens.push(token);
 								}
 							}
@@ -1336,6 +1354,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XSLTKeyUnresolved:
 					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;
 					break;
+				case ErrorType.AccumulatorNameUnresolved:
+					msg = `XSLT: xsl:accumulator with name '${tokenValue}' not found`;
+					break;					
 				case ErrorType.TemplateModeUnresolved:
 					msg = `XSLT: Template mode '${tokenValue}' not used`;
 					severity = vscode.DiagnosticSeverity.Warning;
@@ -1397,8 +1418,11 @@ export class XsltTokenDiagnostics {
 					msg = `XSLT: Duplicate function name and arity: '${tokenValue}'`;
 					break;
 				case ErrorType.DuplicateTemplateName:
-					msg = `XSLT: Duplicate template name '${tokenValue}'`;
+					msg = `XSLT: Duplicate xsl:template name '${tokenValue}'`;
 					break;
+				case ErrorType.DuplicateAccumulatorName:
+					msg = `XSLT: Duplicate xsl:accumulator name '${tokenValue}'`;
+					break;					
 				default:
 					msg = 'Unexepected Error';
 					break;
