@@ -137,7 +137,7 @@ export class XslLexerLight extends XslLexer {
                                 isGlobalInstructionName = true;
                             } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                 isGlobalInstructionName = true;
-                            } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'mode') {
+                            } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'mode'|| tagGlobalInstructionType === GlobalInstructionType.Mode && attName === 'name') {
                                 isGlobalInstructionMode = true; 
                             } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'match') {
                                 isGlobalInstructionMatch = true;
