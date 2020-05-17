@@ -1,6 +1,6 @@
 <!--
-  abc
-  $def
+     abc
+     $def
 -->
 
 <xsl:variable name="var1" select="
@@ -97,11 +97,11 @@
         $table + $row + $cell
     ),
     for $a in 1 to 20
-      return
+    return
       this/is/cool
-
-
-  "/>
+    
+    
+"/>
 
 <xsl:variable name="var1"
   select="

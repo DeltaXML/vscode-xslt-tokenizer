@@ -528,7 +528,6 @@ export class XslLexer {
         let currentChar: string = '';
         let tokenChars: string[] = [];
         let result: BaseToken[] = [];
-        let nestedTokenStack: XslToken[] = [];
         let attName: string = '';
 
         let xpLexer: XPathLexer = new XPathLexer();
