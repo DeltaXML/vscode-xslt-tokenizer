@@ -244,7 +244,7 @@ export class XslLexerLight extends XslLexer {
             } 
             currentChar = nextChar;
         } 
-        return this.globalInstructionData;
+        return this.globalInstructionData.concat(this.globalModeData);
     }
 
 }

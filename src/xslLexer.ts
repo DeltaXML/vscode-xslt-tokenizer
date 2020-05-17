@@ -128,7 +128,7 @@ export class XslLexer {
     public timerOn: boolean = false;
     public provideCharLevelState = false;
     public globalInstructionData: GlobalInstructionData[] = [];
-    public globalModeData: GlobalInstructionData[] = [];
+    protected globalModeData: GlobalInstructionData[] = [];
     private lineNumber: number = 0;
     private charCount = 0;
     private lineCharCount = 0;
@@ -732,10 +732,10 @@ export class XslLexer {
                                 } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionName = true;
-                                } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'mode') {
+                                } else if (tagGlobalInstructionType === GlobalInstructionType.Template && attName === 'mode' || tagGlobalInstructionType === GlobalInstructionType.Mode && attName === 'name') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionMode = true;
-                                } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'match') {
+                                } else if (tagGlobalInstructionType === GlobalInstructionType.Template && attName === 'match') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionMatch = true;
                                     isXPathAttribute = true;
@@ -959,6 +959,7 @@ export class XslLexer {
         if (this.timerOn) {
             console.timeEnd('xslLexer.analyse');
         }
+        this.globalInstructionData = this.globalInstructionData.concat(this.globalModeData);
         return result;
     }
 
