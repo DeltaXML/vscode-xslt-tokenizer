@@ -1267,6 +1267,7 @@ export class XsltTokenDiagnostics {
 			let tokenValue = token.value;
 			let msg: string;
 			let diagnosticMetadata: vscode.DiagnosticTag[] = [];
+			let severity = vscode.DiagnosticSeverity.Error;
 			switch (token.error) {
 				case ErrorType.AxisName:
 					msg = `XPath: Invalid axis name: '${tokenValue}`;
@@ -1312,6 +1313,7 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.TemplateModeUnresolved:
 					msg = `XSLT: Template mode '${tokenValue}' not found`;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.ParentLessText:
 					msg = `XML: Text found outside root element: '${tokenValue}`
@@ -1381,7 +1383,7 @@ export class XsltTokenDiagnostics {
 				code: '',
 				message: msg,
 				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
-				severity: vscode.DiagnosticSeverity.Error,
+				severity: severity,
 				tags: diagnosticMetadata,
 				source: ''
 			});
