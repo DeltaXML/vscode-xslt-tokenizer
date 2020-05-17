@@ -1032,6 +1032,9 @@ export class XslLexer {
                     case ('template'):
                         instructionType = GlobalInstructionType.Template;
                         break;
+                    case ('key'):
+                        instructionType = GlobalInstructionType.Key;
+                        break;
                     case ('import'):
                         instructionType = GlobalInstructionType.Import;
                         break;
@@ -1069,6 +1072,7 @@ export enum GlobalInstructionType {
     Mode,
     Accumulator,
     AttributeSet,
+    Key,
     Template,
     TemplateMatch,
     Include,
