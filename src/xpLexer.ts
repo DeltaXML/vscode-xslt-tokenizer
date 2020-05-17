@@ -1028,6 +1028,7 @@ export enum ErrorType {
     XMLDupllicateAtt,
     XPathUnexpected,
     BracketNesting,
+    XSLTKeyUnresolved,
     DTD,
 }
 

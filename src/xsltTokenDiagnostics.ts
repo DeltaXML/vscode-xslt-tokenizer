@@ -666,6 +666,19 @@ export class XsltTokenDiagnostics {
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 
 				switch (xpathTokenType) {
+					case TokenLevelState.string:
+						if (xpathStack.length > 0) {
+							let xp = xpathStack[xpathStack.length - 1];
+							if (xp.functionArity === 0 && xp.function?.value === 'key') {
+								let keyVal = token.value.substring(1, token.value.length - 1);
+								if (globalKeys.indexOf(keyVal) < 0) {
+									token['error'] = ErrorType.XSLTKeyUnresolved;
+									problemTokens.push(token);
+								}
+							}
+							preXPathVariable = xp.preXPathVariable;
+						}
+						break;
 					case TokenLevelState.axisName:
 						if (token.error) {
 							problemTokens.push(token);
@@ -1313,13 +1326,16 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.MissingTemplateParam:
 					let pParts = tokenValue.split('#');
-					msg = `XSLT: Parameter '${pParts[0]}' is not declared for template '${pParts[1]}'`;
+					msg = `XSLT: xsl:param '${pParts[0]}' is not declared for template '${pParts[1]}'`;
 					break;
 				case ErrorType.TemplateNameUnresolved:
-					msg = `XSLT: Named template '${tokenValue}' not found`;
+					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.XSLTKeyUnresolved:
+					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;
 					break;
 				case ErrorType.TemplateModeUnresolved:
-					msg = `XSLT: Template mode '${tokenValue}' not found`;
+					msg = `XSLT: Template mode '${tokenValue}' not used`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.ParentLessText:

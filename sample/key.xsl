@@ -5,4 +5,9 @@
   
   <xsl:key name="idkey" match="div" use="@id"/>
   
+  <xsl:template match="bibref">
+    <xsl:variable name="name" select="."/>
+    <xsl:apply-templates select="document('bib.xml')/key('idkey',$name)"/>
+  </xsl:template>
+  
 </xsl:stylesheet>
