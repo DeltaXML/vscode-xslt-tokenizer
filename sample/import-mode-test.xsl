@@ -6,7 +6,7 @@
     <xsl:import href="mode-test.xsl"/>
     
     <xsl:template match="pattern" mode="#default"> 
-        
+        <xsl:apply-templates select="abc" mode="def"/>
     </xsl:template>
     
     

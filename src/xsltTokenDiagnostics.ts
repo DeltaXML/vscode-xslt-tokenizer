@@ -172,6 +172,7 @@ export class XsltTokenDiagnostics {
 		let dtdStarted = false;
 		let dtdEnded = false;
 		let namedTemplates: Map<string, string[]> = new Map();
+		let globalModes: string[] = ['#current', '#default'];
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -207,6 +208,10 @@ export class XsltTokenDiagnostics {
 						namedTemplates.set(instruction.name, members);
 					}
 					break;
+				case GlobalInstructionType.Mode:
+					let modes = instruction.name.split(/\s+/);
+					globalModes = globalModes.concat(modes);
+					break;
 			}
 		});
 
@@ -229,6 +234,10 @@ export class XsltTokenDiagnostics {
 				case GlobalInstructionType.Template:
 					let members = instruction.memberNames? instruction.memberNames: [];
 					namedTemplates.set(instruction.name, members);
+					break;
+				case GlobalInstructionType.Mode:
+					let modes = instruction.name.split(/\s+/);
+					globalModes = globalModes.concat(modes);
 					break;
 			}
 		});
@@ -531,9 +540,17 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 							hasProblem = true;
 						} 
-						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length > 0 && tagElementName === 'xsl:call-template') {
+						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
 							if (!namedTemplates.get(variableName)) {
 								token['error'] = ErrorType.TemplateNameUnresolved;
+								token.value = variableName;
+								problemTokens.push(token);
+								hasProblem = true;
+							}
+						}
+						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
+							if (globalModes.indexOf(variableName) < 0) {
+								token['error'] = ErrorType.TemplateModeUnresolved;
 								token.value = variableName;
 								problemTokens.push(token);
 								hasProblem = true;
@@ -1292,6 +1309,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.TemplateNameUnresolved:
 					msg = `XSLT: Named template '${tokenValue}' not found`;
+					break;
+				case ErrorType.TemplateModeUnresolved:
+					msg = `XSLT: Template mode '${tokenValue}' not found`;
 					break;
 				case ErrorType.ParentLessText:
 					msg = `XML: Text found outside root element: '${tokenValue}`
