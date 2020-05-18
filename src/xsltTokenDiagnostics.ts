@@ -182,7 +182,7 @@ export class XsltTokenDiagnostics {
 		let globalKeys: string[] = [];
 		let globalAccumulatorNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
-		let tagExcludeResultPrefixes: BaseToken|null = null;
+		let tagExcludeResultPrefixes: {token: BaseToken, prefixes: string[]}|null = null;
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -376,6 +376,19 @@ export class XsltTokenDiagnostics {
 										}
 									}
 								});
+								let problem = false;
+								if (tagExcludeResultPrefixes) {
+									let missingPrefix = tagExcludeResultPrefixes.prefixes.find((pfx) => {
+										if (inheritedPrefixes.indexOf(pfx) < 0) return pfx;
+									});
+									if (missingPrefix) {
+										let xToken = tagExcludeResultPrefixes.token;
+										xToken['error'] = ErrorType.MissingPrefixInList;
+										xToken.value = missingPrefix;
+										problemTokens.push(tagExcludeResultPrefixes.token);
+										problem = true;
+									}
+								}
 								let attsWithXmlnsErrors: string[] = [];
 								let attsWithNameErrors: string[] = [];
 								tagAttributeNames.forEach((attName) => {
@@ -387,7 +400,7 @@ export class XsltTokenDiagnostics {
 									}
 								});
 
-								if (startTagToken) {
+								if (startTagToken && !problem) {
 									if (attsWithNameErrors.length > 0) {
 										startTagToken['error'] = ErrorType.XMLAttributeName;
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithNameErrors.join('\', ');
@@ -548,6 +561,8 @@ export class XsltTokenDiagnostics {
 								attType = AttributeType.InstructionMode;
 							} else if (attNameText === XsltTokenDiagnostics.useAttSet) {
 								attType = AttributeType.UseAttributeSets;
+							} else if (attNameText === XsltTokenDiagnostics.excludePrefixes || attNameText === XsltTokenDiagnostics.xslExcludePrefixes) {
+								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
 								attType = AttributeType.None;
 							}
@@ -579,6 +594,10 @@ export class XsltTokenDiagnostics {
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
 								}
+								break;
+							case AttributeType.ExcludeResultPrefixes:
+									let excludePrefixes = variableName.split(/\s+/);
+									tagExcludeResultPrefixes = {token: token, prefixes: excludePrefixes};
 								break;
 						}
 
@@ -1388,6 +1407,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.AttributeSetUnresolved:
 					msg = `XSLT: xsl:attribute-set with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.MissingPrefixInList:
+					msg = `XSLT: Namespace prefix '${tokenValue}' is not declared`;
 					break;
 				case ErrorType.XSLTKeyUnresolved:
 					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;

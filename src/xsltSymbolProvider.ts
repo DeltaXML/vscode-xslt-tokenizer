@@ -84,10 +84,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			importErrors.forEach((importError) => {
 				importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
 			});
-			console.log('globals');
-			console.log(globalInstructionData);
-			console.log('imports');
-			console.log(allImportedGlobals);
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			let allDiagnostics = importDiagnostics.concat(diagnostics);
 			if (allDiagnostics.length > 0) {
