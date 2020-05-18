@@ -28,7 +28,8 @@ enum AttributeType {
 	Variable,
 	InstructionName,
 	InstructionMode,
-	UseAttributeSets
+	UseAttributeSets,
+	ExcludeResultPrefixes
 }
 
 interface XSLTToken extends BaseToken {
@@ -85,6 +86,8 @@ export class XsltTokenDiagnostics {
 	private static readonly xslModeAtt = 'mode';
 	private static readonly useAttSet = 'use-attribute-sets';
 	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
+	private static readonly excludePrefixes = 'exclude-result-prefixes';
+	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 
 	private static validateName(name: string, type: ValidationType, startCharRgx: RegExp, charRgx: RegExp, xmlnsPrefixes: string[]): NameValidationError {
 		let valid = NameValidationError.None
@@ -179,6 +182,7 @@ export class XsltTokenDiagnostics {
 		let globalKeys: string[] = [];
 		let globalAccumulatorNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
+		let tagExcludeResultPrefixes: BaseToken|null = null;
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -337,6 +341,7 @@ export class XsltTokenDiagnostics {
 								tagIdentifierName = '';
 								variableData = null;
 								tagElementName = '';
+								tagExcludeResultPrefixes = null;
 								tagType = TagType.Start;
 								break;
 							case XMLCharState.rStNoAtt:
@@ -572,11 +577,6 @@ export class XsltTokenDiagnostics {
 								break;
 							case AttributeType.InstructionMode:
 								if (tagIdentifierName === '') {
-									tagIdentifierName = variableName;
-								}
-								break;
-							default:
-								if (attType !== AttributeType.None) {
 									tagIdentifierName = variableName;
 								}
 								break;
