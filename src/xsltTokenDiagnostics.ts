@@ -27,7 +27,8 @@ enum AttributeType {
 	None,
 	Variable,
 	InstructionName,
-	InstructionMode
+	InstructionMode,
+	UseAttributeSets
 }
 
 interface XSLTToken extends BaseToken {
@@ -82,6 +83,8 @@ export class XsltTokenDiagnostics {
 
 	private static readonly xslNameAtt = 'name';
 	private static readonly xslModeAtt = 'mode';
+	private static readonly useAttSet = 'use-attribute-sets';
+	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
 
 	private static validateName(name: string, type: ValidationType, startCharRgx: RegExp, charRgx: RegExp, xmlnsPrefixes: string[]): NameValidationError {
 		let valid = NameValidationError.None
@@ -175,6 +178,7 @@ export class XsltTokenDiagnostics {
 		let globalModes: string[] = ['#current', '#default'];
 		let globalKeys: string[] = [];
 		let globalAccumulatorNames: string[] = [];
+		let globalAttributeSetNames: string[] = [];
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -225,6 +229,10 @@ export class XsltTokenDiagnostics {
 						instruction.token.value = instruction.name;
 						problemTokens.push(instruction.token);
 					}
+					break;
+				case GlobalInstructionType.AttributeSet:
+					globalAttributeSetNames.push(instruction.name);
+					break;
 				
 			}
 		});
@@ -258,6 +266,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case GlobalInstructionType.Accumulator:
 					globalAccumulatorNames.push(instruction.name);
+					break;
+				case GlobalInstructionType.AttributeSet:
+					globalAttributeSetNames.push(instruction.name);
 					break;
 			}
 		});
@@ -530,9 +541,13 @@ export class XsltTokenDiagnostics {
 								attType = AttributeType.InstructionName;
 							} else if (attNameText === XsltTokenDiagnostics.xslModeAtt) {
 								attType = AttributeType.InstructionMode;
+							} else if (attNameText === XsltTokenDiagnostics.useAttSet) {
+								attType = AttributeType.UseAttributeSets;
 							} else {
 								attType = AttributeType.None;
 							}
+						} else if (attNameText === XsltTokenDiagnostics.xslUseAttSet) {
+								attType = AttributeType.UseAttributeSets;
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
@@ -542,24 +557,44 @@ export class XsltTokenDiagnostics {
 							let prefix = rootXmlnsName.length === 5? '': rootXmlnsName.substr(6);
 							rootXmlnsBindings.push([prefix, variableName]);
 						}
-						if (attType === AttributeType.Variable) {
-							tagIdentifierName = variableName;
-							variableData = {token: token, name: variableName};
-						} else if (attType === AttributeType.InstructionName) {
-							let slashPos = variableName.lastIndexOf('/');
-							if (slashPos > 0) {
-								// package name may be URI
-								variableName = variableName.substring(slashPos + 1);
-							}
-							tagIdentifierName = variableName;
-						} else if (attType === AttributeType.InstructionMode && tagIdentifierName === '') {
-							tagIdentifierName = variableName;
+						switch (attType) {
+							case AttributeType.Variable:
+								tagIdentifierName = variableName;
+								variableData = {token: token, name: variableName};
+								break;
+							case AttributeType.InstructionName:
+								let slashPos = variableName.lastIndexOf('/');
+								if (slashPos > 0) {
+									// package name may be URI
+									variableName = variableName.substring(slashPos + 1);
+								}
+								tagIdentifierName = variableName;
+								break;
+							case AttributeType.InstructionMode:
+								if (tagIdentifierName === '') {
+									tagIdentifierName = variableName;
+								}
+								break;
+							default:
+								if (attType !== AttributeType.None) {
+									tagIdentifierName = variableName;
+								}
+								break;
 						}
+
 						let hasProblem = false;
 						if (token.error) {
 							problemTokens.push(token);
 							hasProblem = true;
-						} 
+						}
+						if (!hasProblem && attType === AttributeType.UseAttributeSets) {
+							if (globalAttributeSetNames.indexOf(variableName) < 0 && variableName !== 'xsl:original') {
+								token['error'] = ErrorType.AttributeSetUnresolved;
+								token.value = variableName;
+								problemTokens.push(token);
+								hasProblem = true;
+							}
+						}						
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
 							if (!namedTemplates.get(variableName)) {
 								token['error'] = ErrorType.TemplateNameUnresolved;
@@ -1350,6 +1385,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.TemplateNameUnresolved:
 					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.AttributeSetUnresolved:
+					msg = `XSLT: xsl:attribute-set with name '${tokenValue}' not found`;
 					break;
 				case ErrorType.XSLTKeyUnresolved:
 					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;

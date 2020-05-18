@@ -1013,6 +1013,7 @@ export enum ErrorType {
     MissingTemplateParam,
     TemplateNameUnresolved,
     TemplateModeUnresolved,
+    AttributeSetUnresolved,
     AccumulatorNameUnresolved,
     XMLDeclaration,
     XPathName,
