@@ -381,7 +381,7 @@ export class XsltTokenDiagnostics {
 									let missingPrefix;
 									if (!(tagExcludeResultPrefixes.prefixes.length === 1 && tagExcludeResultPrefixes.prefixes[0] === '#all')) {
 										missingPrefix = tagExcludeResultPrefixes.prefixes.find((pfx) => {
-											if (inheritedPrefixes.indexOf(pfx) < 0) return pfx;
+											if (pfx !== '#default' && inheritedPrefixes.indexOf(pfx) < 0) return pfx;
 										});
 									}
 									if (missingPrefix) {
