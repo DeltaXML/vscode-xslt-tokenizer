@@ -59,7 +59,7 @@ interface GenericTask {
 }
 
 export class SaxonTaskProvider implements vscode.TaskProvider {
-	static SaxonBuildScriptType: string = 'custombuildscript';
+	static SaxonBuildScriptType: string = 'xslt';
 	private tasks: vscode.Task[] = [];
 
 	constructor(private workspaceRoot: string) { }
