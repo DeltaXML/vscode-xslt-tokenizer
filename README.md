@@ -39,6 +39,16 @@ To enable syntax highighting for a custom theme you need to change User Settings
 }
   ```
 
+Or, to enable syntax highlighting for all themes:
+
+```json
+{
+    "editor.semanticTokenColorCustomizations":{
+      "enabled": true
+    },
+}
+  ```
+
 ### Editor Settings For Formatting
 ```json
 {
