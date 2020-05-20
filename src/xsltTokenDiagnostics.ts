@@ -960,7 +960,10 @@ export class XsltTokenDiagnostics {
 						let tValue = token.value;
 						let tParts = tValue.split(':');
 						let isValidType = false;
-						if (tParts.length === 1) {
+						if (tValue === '*' || tValue === '?' || tValue === '+') {
+							// e.g. xs:integer* don't check name
+							isValidType = true;
+						} else if (tParts.length === 1) {
 							let nextToken = allTokens.length > index + 1? allTokens[index + 1]: null;
 
 							if (nextToken && (nextToken.charType === CharLevelState.lB || (nextToken.charType === CharLevelState.dSep && nextToken.value === '()'))) {

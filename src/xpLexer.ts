@@ -846,15 +846,22 @@ export class XPathLexer {
                 break;
             case CharLevelState.sep:
                 let prevTokenT = prevToken.tokenType;
-                if (currentToken.value === '*' && 
-                (
-                    prevTokenT === TokenLevelState.operator || 
-                    prevTokenT === TokenLevelState.complexExpression || 
-                    prevTokenT === TokenLevelState.uriLiteral ||
-                    prevTokenT === TokenLevelState.attributeNameTest
-                )) {
+                if (currentToken.value === '*') {
+                    if (
+                        prevTokenT === TokenLevelState.operator || 
+                        prevTokenT === TokenLevelState.complexExpression || 
+                        prevTokenT === TokenLevelState.uriLiteral ||
+                        prevTokenT === TokenLevelState.attributeNameTest
+                    ) {
+                        currentToken.charType = CharLevelState.lName;
+                        currentToken.tokenType = TokenLevelState.nodeType;
+                    } else if (prevTokenT === TokenLevelState.simpleType) {
+                        currentToken.charType = CharLevelState.lName;
+                        currentToken.tokenType = TokenLevelState.simpleType;
+                    }
+                } else if ((currentToken.value === '?' || currentToken.value === '+') && prevTokenT === TokenLevelState.simpleType) {
                     currentToken.charType = CharLevelState.lName;
-                    currentToken.tokenType = TokenLevelState.nodeType;
+                    currentToken.tokenType = TokenLevelState.simpleType;                    
                 }
                 break;
             case CharLevelState.dSep:
