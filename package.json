@@ -35,7 +35,7 @@
 		"semanticTokenScopes": [
 			{
 				"scopes": {
-					"xmlPunctuation": ["punctuation.definition.tag"],
+					"xmlPunctuation": ["punctuation.definition.tag.xml"],
 					"processingInstrName": ["storage.type"],
 					"attributeNameTest": ["storage.type"],
 					"xslElementName": ["storage.type"],
