@@ -96,7 +96,7 @@ export enum ModifierState {
 export class Data {
     public static separators = ['!','*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?','|'];
 
-    public static doubleSeps = ['!=', '*:', '..', '//', ':*', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
+    public static doubleSeps = ['!=', '*:', '?*', '..', '//', ':*', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
 
     public static axes = [ "ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self", 
                             "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"];
@@ -387,6 +387,7 @@ export class XPathLexer {
         let tokenChars: string[] = [];
         let result = this.documentTokens;
         let nestedTokenStack: Token[] = [];
+        let poppedContext: Token|undefined|null = null;
 
         if (this.debug) {
             console.log("xpath:\n" + xpath);
@@ -431,7 +432,7 @@ export class XPathLexer {
                         break;   
                 }
                 if (exitAnalysis) {
-                    this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                    this.update(poppedContext, result, tokenChars, currentLabelState);
                     position.line = this.lineNumber;
                     position.startCharacter = this.tokenCharNumber;
                     position.documentOffset = i;
@@ -456,7 +457,7 @@ export class XPathLexer {
                     if (currentChar == '\n' && (currentLabelState === CharLevelState.lSq || currentLabelState === CharLevelState.lDq || 
                         currentLabelState === CharLevelState.lC || currentLabelState === CharLevelState.lSqEnt || currentLabelState === CharLevelState.lDqEnt)) {
                         // split multi-line strings or comments - don't include newline char
-                        this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                        this.update(poppedContext, result, tokenChars, currentLabelState);
                         this.lineNumber++;
                         this.tokenCharNumber = 0;
                     } else {
@@ -469,7 +470,7 @@ export class XPathLexer {
                         case CharLevelState.lVar:
                         case CharLevelState.lName:
                         case CharLevelState.lEnt:
-                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                            this.update(poppedContext, result, tokenChars, currentLabelState);
                             tokenChars = [];
                             tokenChars.push(currentChar);
                             break;
@@ -479,15 +480,15 @@ export class XPathLexer {
                             tokenChars.push(currentChar);
                             break;
                         case CharLevelState.dSep:
-                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                            this.update(poppedContext, result, tokenChars, currentLabelState);
                             let bothChars = currentChar + nextChar;
-                            this.updateResult(nestedTokenStack, result, new BasicToken(bothChars, nextLabelState));
+                            this.updateResult(poppedContext, result, new BasicToken(bothChars, nextLabelState));
                             break;
                         case CharLevelState.dSep2:
                             break;
                         case CharLevelState.sep:
-                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
-                            this.updateResult(nestedTokenStack, result, new BasicToken(currentChar, nextLabelState));
+                            this.update(poppedContext, result, tokenChars, currentLabelState);
+                            this.updateResult(poppedContext, result, new BasicToken(currentChar, nextLabelState));
                             break;
                         case CharLevelState.escSq:
                         case CharLevelState.escDq:
@@ -495,16 +496,16 @@ export class XPathLexer {
                             break;
                         case CharLevelState.rC:
                             tokenChars.push(':)');
-                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                            this.update(poppedContext, result, tokenChars, currentLabelState);
                             break;
                         case CharLevelState.lB:
                         case CharLevelState.lBr:
                         case CharLevelState.lPr:
-                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                            this.update(poppedContext, result, tokenChars, currentLabelState);
                             let currentToken: Token;
                             currentToken = new FlattenedToken(currentChar, nextLabelState, this.latestRealToken);
 
-                            this.updateResult(nestedTokenStack, result, currentToken);
+                            this.updateResult(poppedContext, result, currentToken);
                             // add to nesting level
                             nestedTokenStack.push(currentToken);
                             this.latestRealToken = null;                   
@@ -514,19 +515,19 @@ export class XPathLexer {
                         case CharLevelState.rPr:
                             if (currentLabelState !== CharLevelState.rC) {
                                 let prevToken: Token = new BasicToken(tokenChars.join(''), currentLabelState);
-                                this.updateResult(nestedTokenStack, result, prevToken);
+                                this.updateResult(poppedContext, result, prevToken);
                                 let newToken: Token = new BasicToken(currentChar, nextLabelState);
+                                this.updateResult(poppedContext, result, newToken);
                                 if (nestedTokenStack.length > 0) {
                                     // remove from nesting level
                                     if (XPathLexer.closeMatchesOpen(nextLabelState, nestedTokenStack)) {
-                                        nestedTokenStack.pop();
+                                        poppedContext = nestedTokenStack.pop()?.context;
                                     } else {
                                         newToken['error'] = ErrorType.BracketNesting;
                                     }
                                 } else {
                                     newToken['error'] = ErrorType.BracketNesting;
                                 }
-                                this.updateResult(nestedTokenStack, result, newToken);
                                 tokenChars = [];
                             }
                             break;
@@ -539,7 +540,7 @@ export class XPathLexer {
                                 nextState = [CharLevelState.lSqEnt, 0];
                             } else {
                                 let entToken: Token = new BasicToken(ent, CharLevelState.lName);
-                                this.updateResult(nestedTokenStack, result, entToken);
+                                this.updateResult(poppedContext, result, entToken);
                                 tokenChars.length = 0;
                             } 
                             break;   
@@ -547,7 +548,7 @@ export class XPathLexer {
                         case CharLevelState.rDq:
                         case CharLevelState.rUri:
                             tokenChars.push(currentChar);
-                            this.update(nestedTokenStack, result, tokenChars, currentLabelState);                      
+                            this.update(poppedContext, result, tokenChars, currentLabelState);                      
                             break;
                         case CharLevelState.lSq:
                         case CharLevelState.lDq:
@@ -555,7 +556,7 @@ export class XPathLexer {
                         case CharLevelState.lWs:
                         case CharLevelState.lUri:
                             if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq) {
-                                this.update(nestedTokenStack, result, tokenChars, currentLabelState);
+                                this.update(poppedContext, result, tokenChars, currentLabelState);
                             }
                             tokenChars.push(currentChar);
                             break;              
@@ -565,7 +566,7 @@ export class XPathLexer {
                                 tokenChars = [];
                             } else if (currentLabelState === CharLevelState.lWs) {
                                 // set whitespace token and then initial with currentChar
-                                this.update(nestedTokenStack, result, tokenChars, currentLabelState); 
+                                this.update(poppedContext, result, tokenChars, currentLabelState); 
                                 tokenChars.push(currentChar);
                             }
                             else {
@@ -575,7 +576,7 @@ export class XPathLexer {
                     }
                 }
                 if (!nextChar && tokenChars.length > 0) {
-                    this.update(nestedTokenStack, result, tokenChars, nextLabelState);
+                    this.update(poppedContext, result, tokenChars, nextLabelState);
                 }
                 currentState = nextState;
             } // end if(currentChar)
@@ -603,9 +604,9 @@ export class XPathLexer {
         return result;
     }
 
-    private update(stack: Token[], result: Token[], tokenChars: string[], charState: CharLevelState) {
+    private update(poppedContext: Token|null|undefined, result: Token[], tokenChars: string[], charState: CharLevelState) {
         if (tokenChars.length > 0) {
-            this.updateResult(stack, result, new BasicToken(tokenChars.join(''), charState ));
+            this.updateResult(poppedContext, result, new BasicToken(tokenChars.join(''), charState ));
         }
         tokenChars.length = 0;
     }
@@ -626,7 +627,7 @@ export class XPathLexer {
         return result;
     }
 
-    private updateResult(stack: Token[], result: Token[], newToken: Token) {
+    private updateResult(poppedContext: Token|null|undefined, result: Token[], newToken: Token) {
         let cachedRealToken = this.latestRealToken;
         let state = newToken.charType;
         let newTokenValue = newToken.value;
@@ -676,7 +677,7 @@ export class XPathLexer {
 
             let prevToken = this.latestRealToken;
             this.setLabelForLastTokenOnly(prevToken, newToken);
-            this.setLabelsUsingCurrentToken(prevToken, newToken);
+            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken);
 
             if (!(state === CharLevelState.lC || state === CharLevelState.lWs)) {
                 this.latestRealToken = newToken;
@@ -776,7 +777,7 @@ export class XPathLexer {
         }
     }
 
-    private setLabelsUsingCurrentToken(prevToken: Token|null, currentToken: Token) {
+    private setLabelsUsingCurrentToken(poppedContext: Token|null|undefined, prevToken: Token|null, currentToken: Token) {
         if (!(prevToken)) {
             prevToken = new BasicToken(',', CharLevelState.sep);
             prevToken.tokenType = TokenLevelState.operator;
@@ -846,28 +847,39 @@ export class XPathLexer {
                 break;
             case CharLevelState.sep:
                 let prevTokenT = prevToken.tokenType;
-                if (currentToken.value === '*') {
-                    if (
-                        prevTokenT === TokenLevelState.operator || 
-                        prevTokenT === TokenLevelState.complexExpression || 
-                        prevTokenT === TokenLevelState.uriLiteral ||
-                        prevTokenT === TokenLevelState.attributeNameTest
-                    ) {
-                        currentToken.charType = CharLevelState.lName;
-                        currentToken.tokenType = TokenLevelState.nodeType;
-                    } else if (prevTokenT === TokenLevelState.simpleType) {
-                        currentToken.charType = CharLevelState.lName;
-                        currentToken.tokenType = TokenLevelState.simpleType;
-                    }
-                } else if ((currentToken.value === '?' || currentToken.value === '+') && prevTokenT === TokenLevelState.simpleType) {
+                let isStar = currentToken.value === '*';
+                if (isStar && (prevTokenT === TokenLevelState.attributeNameTest || prevTokenT === TokenLevelState.uriLiteral)) {
+                    // @* or {example.com}*
                     currentToken.charType = CharLevelState.lName;
-                    currentToken.tokenType = TokenLevelState.simpleType;                    
+                    currentToken.tokenType = TokenLevelState.nodeType; 
+                } else {
+                    let possOccurrentIndicator = currentToken.value === '?' || currentToken.value === '+' || isStar;
+                    if (possOccurrentIndicator) {
+                        if (prevTokenT === TokenLevelState.simpleType) {
+                            // xs:integer? etc
+                            currentToken.charType = CharLevelState.lName;
+                            currentToken.tokenType = TokenLevelState.simpleType;                    
+                        } else if (prevTokenT === TokenLevelState.operator && prevToken.value === ')') {
+                            // ($a) * 9 or count($a) * 8 or abc as map(*)* or $item as node()+
+                            if (poppedContext && poppedContext.tokenType === TokenLevelState.simpleType) {
+                                currentToken.charType = CharLevelState.lName;
+                                currentToken.tokenType = TokenLevelState.nodeType;
+                            }
+                        } else if (isStar && (prevTokenT === TokenLevelState.operator || prevTokenT === TokenLevelState.complexExpression)) {
+                            // ?* is a dSep so no test for this needed here
+                            // $a and * or if ($a) then * else book
+                            currentToken.charType = CharLevelState.lName;
+                            currentToken.tokenType = TokenLevelState.nodeType;
+                        }
+                    }
                 }
                 break;
             case CharLevelState.dSep:
                 if (currentToken.value === ':*') {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
+                } else if (currentToken.value === '?*') {
+
                 }
                 break;
         }
