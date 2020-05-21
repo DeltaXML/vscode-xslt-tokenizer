@@ -2,7 +2,7 @@
 	"name": "xpath-embedded",
 	"displayName": "XPath Embedded",
 	"description": "Syntax Highlighter and tools for XSLT and other XPath-based languages",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"publisher": "deltaxml",
 	"icon": "xpath-embedded.png",
 	"repository": {
