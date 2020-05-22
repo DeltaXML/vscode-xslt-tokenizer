@@ -17,16 +17,29 @@ export class XSLTConfiguration {
 		expressionAtts: XSLTConfiguration.expressionAtts,
 		avtAtts: XSLTConfiguration.avtAtts,
 		nativePrefix: XSLTConfiguration.xsltPrefix,
-		tvtAttributes: ['expand-text']
+		tvtAttributes: ['expand-text'],
+		nonNativeAvts: true
+	} 
+}
+
+export class XProcConfiguration {
+	// initial configuration is for basic XProc support only
+	public static configuration: LanguageConfiguration = {
+		expressionAtts: ['select', 'test'],
+		nativePrefix: 'p',
+		tvtAttributes: ['expand-text', 'inline-expand-text'],
+		nonNativeAvts: true
+
 	} 
 }
 
 export class XMLConfiguration {
 	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {
-		expressionAtts: ['select', 'test'],
-		nativePrefix: 'p',
-		tvtAttributes: ['expand-text', 'inline-expand-text']
+		expressionAtts: [],
+		nativePrefix: 'qz',
+		tvtAttributes: [],
+		nonNativeAvts: false
 	} 
 }
 
@@ -35,6 +48,7 @@ export class XSLTLightConfiguration {
 	public static configuration: LanguageConfiguration = {
 		expressionAtts: [],
 		nativePrefix: 'xsl',
-		tvtAttributes: []
+		tvtAttributes: [],
+		nonNativeAvts: false
 	} 
 }

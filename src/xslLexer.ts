@@ -110,7 +110,8 @@ export interface LanguageConfiguration {
     expressionAtts?: string[],
     avtAtts?: string[],
     nativePrefix: string,
-    tvtAttributes: string[]
+    tvtAttributes: string[],
+    nonNativeAvts: boolean;
 }
 
 export interface GlobalInstructionData {
@@ -143,9 +144,11 @@ export class XslLexer {
     private genericTvtAttributes: string[] = [];
     private nativePrefixLength = 0;
     private dtdNesting = 0;
+    private nonNativeAvts = false;
 
 
     constructor(languageConfiguration: LanguageConfiguration) {
+        this.nonNativeAvts = languageConfiguration.nonNativeAvts;
         this.nativePrefixLength = languageConfiguration.nativePrefix.length + 1;
         this.languageConfiguration = languageConfiguration;
         this.languageConfiguration.tvtAttributes.forEach(tvtAttribute => {
@@ -866,8 +869,10 @@ export class XslLexer {
                                 } else {
                                     exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
                                 }
-                            } else {
+                            } else if (this.nonNativeAvts) {
                                 exit = ExitCondition.CurlyBrace;
+                            } else {
+                                exit =ExitCondition.None;
                             }
 
                             if (exit !== ExitCondition.None) {
