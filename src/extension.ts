@@ -48,7 +48,6 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
-		console.log('onDidChangeActiveTextEditor');
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
