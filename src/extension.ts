@@ -14,6 +14,8 @@ import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer } from './xslLexer';
+import {DocumentChangeHandler} from './documentChangeHandler'
+import { on } from 'process';
 
 
 const tokenModifiers = new Map<string, number>();
@@ -39,12 +41,16 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const xmlDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xml');
 	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection);
+	const docChangeHandler = new DocumentChangeHandler();
+	let activeEditor = vscode.window.activeTextEditor;
+	if (activeEditor) {
+		docChangeHandler.registerXMLEditor(activeEditor);
+	}
 
-	// context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
-	// 	if (editor) {
-
-	// 	}
-	// }));
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
+		console.log('onDidChangeActiveTextEditor');
+		docChangeHandler.registerXMLEditor(editor);
+	}));
 
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt'}, xsltSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml'}, xmlSymbolProvider));
@@ -79,11 +85,8 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 	customTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
 
-	// context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(e => {
-	// 	console.log('onDidOpenTextDocument: ' + e.fileName);
-
-	// }));
 }
+
 
 class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 	private xpLexer = new XPathLexer();
