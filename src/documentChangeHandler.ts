@@ -2,29 +2,32 @@ import * as vscode from 'vscode';
 import { XslLexerLight } from './xslLexerLight';
 import { XSLTLightConfiguration, XMLConfiguration } from './languageConfigurations';
 import { XslLexerRenameTag } from './xslLexerRenameTag';
-
-export interface TagRenameEdit {
-	range: vscode.Range,
-	text: string
-}
+import {TagRenameEdit} from './xslLexerRenameTag';
 
 export class DocumentChangeHandler {
 	private onDidChangeRegistration: vscode.Disposable|null = null;
 	private xmlDocumentRegistered = false;
 	private lastChangePerformed: TagRenameEdit|null = null;
+	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
+
 
 	public onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
 		if (!isXML) {
 			return;
 		}
-		let lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, e.contentChanges[0])) {
-			this.lastChangePerformed = {range: e.contentChanges[0].range, text: 'test'};
-			this.performRename(e.document, this.lastChangePerformed);
+			let findEndTag = this.lexer.isStartTagChange(e.document, e.contentChanges[0]);
+			console.log(findEndTag);
+			if (false) {
+				this.lastChangePerformed = {range: e.contentChanges[0].range, text: 'test'};
+				this.lexer.renameTag(e.document, e.contentChanges[0]);
+				//this.performRename(e.document, this.lastChangePerformed);
+			} else {
+				this.lastChangePerformed = null;
+			}
 		} else {
 			this.lastChangePerformed = null;
 		}
-		//lexer.renameTag(e.document, e.contentChanges[0]);
 	}
 
 	public registerXMLEditor = (editor: vscode.TextEditor|undefined) => {
@@ -32,12 +35,6 @@ export class DocumentChangeHandler {
 			this.registerXMLDocument(editor.document);
 		}
 	}
-
-	public performRename(document: vscode.TextDocument, edit: TagRenameEdit) {
-        let wse = new vscode.WorkspaceEdit();
-        wse.replace(document.uri, edit.range, edit.text);
-        vscode.workspace.applyEdit(wse);
-    }
 
 	private registerXMLDocument = (document: vscode.TextDocument) => {
 		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt';
@@ -50,6 +47,12 @@ export class DocumentChangeHandler {
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.onDocumentChange(e, isXMLDocument));
 		}
 	}
+
+	public performRename(document: vscode.TextDocument, edit: TagRenameEdit) {
+        let wse = new vscode.WorkspaceEdit();
+        wse.replace(document.uri, edit.range, edit.text);
+        vscode.workspace.applyEdit(wse);
+    }
 
 	private changesAreEqual(tagRenameEdit: TagRenameEdit, change2: vscode.TextDocumentContentChangeEvent) {
 		let result = (

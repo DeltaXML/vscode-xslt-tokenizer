@@ -9,25 +9,55 @@
  */
 
 import { XslLexer, XMLCharState, GlobalInstructionType, XSLTokenLevelState, EntityPosition, GlobalInstructionData} from "./xslLexer";
-import { BaseToken} from "./xpLexer";
 import * as vscode from 'vscode';
 
 
+export interface TagRenameEdit {
+	range: vscode.Range,
+	text: string
+}
 
 export class XslLexerRenameTag extends XslLexer {
 
-    private analyseChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent) {
+    private nonNameRgx = new RegExp(/[\s<>\/]/);
+    private hasWsOrCloseRgx = new RegExp(/[\s\/]/);
+
+
+    public isStartTagChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent) {
         let renameRange = change.range;
-        let renameChar = renameRange.start.character;       
-        if (renameRange.end.line !== renameRange.start.line) {
-            return;
+        let renameChar = renameRange.start.character;
+        let text = change.text; 
+        let isValid = renameRange.end.line === renameRange.start.line && !this.nonNameRgx.test(change.text);     
+        if (!isValid) {
+            return false;
         }
 
         let renameLine = document.lineAt(renameRange.start.line);
         let firstNonWsChar = renameLine.firstNonWhitespaceCharacterIndex;
         if (renameChar <= firstNonWsChar) {
-            return;
+            return false;
         }
+        let beforeChange = this.scanBefore(renameLine.text, change);
+        return beforeChange;
+    }
+
+    private scanBefore(text: string, change: vscode.TextDocumentContentChangeEvent) {
+        let startTagPos = text.lastIndexOf('<', change.range.start.character);
+        if (startTagPos < 0) {
+            return false;
+        }
+        let prevEndTagPos = text.lastIndexOf('>', change.range.start.character - 1);
+        if (prevEndTagPos > startTagPos) {
+            return false;
+        }
+
+        let textBefore = text.substring(startTagPos + 1, change.range.start.character);
+        let hasWsOrClose = this.hasWsOrCloseRgx.test(textBefore);
+        if (hasWsOrClose) {
+            return false;
+        }
+        
+        return true;
     }
 
     public renameTag(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): vscode.TextEdit|null {
