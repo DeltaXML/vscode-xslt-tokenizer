@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import { XslLexerLight } from './xslLexerLight';
-import { XSLTLightConfiguration, XMLConfiguration } from './languageConfigurations';
+import { XMLConfiguration } from './languageConfigurations';
 import { XslLexerRenameTag } from './xslLexerRenameTag';
 import {TagRenameEdit} from './xslLexerRenameTag';
 
@@ -17,8 +16,7 @@ export class DocumentChangeHandler {
 		}
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, e.contentChanges[0])) {
 			let findEndTag = this.lexer.isStartTagChange(e.document, e.contentChanges[0]);
-			console.log(findEndTag);
-			if (false) {
+			if (findEndTag) {
 				this.lastChangePerformed = {range: e.contentChanges[0].range, text: 'test'};
 				this.lexer.renameTag(e.document, e.contentChanges[0]);
 				//this.performRename(e.document, this.lastChangePerformed);

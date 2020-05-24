@@ -60,7 +60,7 @@ export class XslLexerRenameTag extends XslLexer {
         return true;
     }
 
-    public renameTag(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): vscode.TextEdit|null {
+    public renameTag(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): TagRenameEdit|null {
         
         this.globalInstructionData = [];
         this.globalModeData = [];
