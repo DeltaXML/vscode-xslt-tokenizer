@@ -17,6 +17,11 @@ export interface TagRenameEdit {
 	text: string
 }
 
+export interface TagRenamePosition {
+	position: vscode.Position,
+	text: string
+}
+
 export class XslLexerRenameTag extends XslLexer {
 
     private nonNameRgx = new RegExp(/[\s<>\/]/);
@@ -62,7 +67,7 @@ export class XslLexerRenameTag extends XslLexer {
         return textBefore.length;
     }
 
-    public getEndTagForStartTagChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): vscode.Position|null {
+    public getEndTagForStartTagChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): TagRenamePosition|null {
         
         this.globalInstructionData = [];
         this.globalModeData = [];
@@ -90,7 +95,7 @@ export class XslLexerRenameTag extends XslLexer {
         let renameStackLength = -1;
         let breakLoop = false;
         let foundStartTag = false;
-        let endTagStartPos: vscode.Position|null = null;
+        let endTagStartPos: TagRenamePosition|null = null;
 
 
         while (lCharCount < xslLength + 1) {
@@ -183,7 +188,7 @@ export class XslLexerRenameTag extends XslLexer {
                             if (xmlElementStack === renameStackLength) {
                                 let closeTag = tokenChars.join('');
                                 if (true) { //(renameName === closeTag) {
-                                    endTagStartPos = new vscode.Position(lineNumber, lineNumberChar - tokenChars.length);
+                                    endTagStartPos = {text: closeTag, position: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
                                     breakLoop = true;
                                 }
                             }

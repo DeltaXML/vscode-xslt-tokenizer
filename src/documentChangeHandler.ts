@@ -20,8 +20,9 @@ export class DocumentChangeHandler {
 			}
 			let startTagPos = this.lexer.isStartTagChange(e.document, e.contentChanges[0]);
 			if (startTagPos > -1) {
-				let endTagPos = this.lexer.getEndTagForStartTagChange(e.document, e.contentChanges[0]);
-				if (endTagPos) {
+				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, e.contentChanges[0]);
+				if (endTagPosData) {
+					let endTagPos = endTagPosData.position;
 					let adjustedStartTagPos = endTagPos.character + (startTagPos - 1);
 					let updateStartPos = new vscode.Position(endTagPos.line, adjustedStartTagPos);
 					let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + e.contentChanges[0].rangeLength);
