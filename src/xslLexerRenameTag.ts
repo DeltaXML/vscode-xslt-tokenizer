@@ -30,6 +30,9 @@ export class XslLexerRenameTag extends XslLexer {
 
 
     public isStartTagChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent) {
+        if (!change) {
+            return -1;
+        }
         let renameRange = change.range;
         let renameChar = renameRange.start.character;
         let text = change.text; 

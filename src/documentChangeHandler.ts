@@ -35,7 +35,7 @@ export class DocumentChangeHandler {
 						let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + activeChange.rangeLength);
 						let updateRange = new vscode.Range(updateStartPos, updateEndPos);
 						this.lastChangePerformed = {range: updateRange, text: activeChange.text};
-						await this.performRename(e.document, this.lastChangePerformed);
+						await this.performRename(e.document, Object.assign(this.lastChangePerformed));
 					} else {
 						this.lastChangePerformed = null;
 					}
