@@ -15,11 +15,17 @@ export class DocumentChangeHandler {
 			return;
 		}
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, e.contentChanges[0])) {
-			let findEndTag = this.lexer.isStartTagChange(e.document, e.contentChanges[0]);
-			if (findEndTag) {
-				this.lastChangePerformed = {range: e.contentChanges[0].range, text: 'test'};
-				this.lexer.renameTag(e.document, e.contentChanges[0]);
-				//this.performRename(e.document, this.lastChangePerformed);
+			let startTagPos = this.lexer.isStartTagChange(e.document, e.contentChanges[0]);
+			if (startTagPos > -1) {
+				let endTagPos = this.lexer.getEndTagForStartTagChange(e.document, e.contentChanges[0]);
+				if (endTagPos) {
+					let adjustedStartTagPos = endTagPos.character + (startTagPos - 1);
+					let updateStartPos = new vscode.Position(endTagPos.line, adjustedStartTagPos);
+					let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + e.contentChanges[0].rangeLength);
+					let updateRange = new vscode.Range(updateStartPos, updateEndPos);
+					this.lastChangePerformed = {range: updateRange, text: e.contentChanges[0].text};
+					this.performRename(e.document, this.lastChangePerformed);
+				}
 			} else {
 				this.lastChangePerformed = null;
 			}

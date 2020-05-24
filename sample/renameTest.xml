@@ -1,1 +1,5 @@
-<ro><d><p id="2">test</p></d></ro>
+<root>
+    <doorsame it="abc" name="abc">
+        <poorly id="2">test</poorly>
+    </doorsame>
+</root>

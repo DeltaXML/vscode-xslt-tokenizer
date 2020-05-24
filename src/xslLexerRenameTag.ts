@@ -27,40 +27,42 @@ export class XslLexerRenameTag extends XslLexer {
         let renameRange = change.range;
         let renameChar = renameRange.start.character;
         let text = change.text; 
-        let isValid = renameRange.end.line === renameRange.start.line && !this.nonNameRgx.test(change.text);     
+        let isValid = renameRange.end.line === renameRange.start.line && !this.nonNameRgx.test(change.text);
         if (!isValid) {
-            return false;
+            return -1;
         }
 
         let renameLine = document.lineAt(renameRange.start.line);
         let firstNonWsChar = renameLine.firstNonWhitespaceCharacterIndex;
         if (renameChar <= firstNonWsChar) {
-            return false;
+            return -1;
         }
-        let beforeChange = this.scanBefore(renameLine.text, change);
-        return beforeChange;
+        let posInStartTag = this.scanBefore(renameLine.text, change);
+        return posInStartTag;
     }
 
     private scanBefore(text: string, change: vscode.TextDocumentContentChangeEvent) {
+        let posInStartTag = -1;    
+
         let startTagPos = text.lastIndexOf('<', change.range.start.character);
         if (startTagPos < 0) {
-            return false;
+            return -1;
         }
         let prevEndTagPos = text.lastIndexOf('>', change.range.start.character - 1);
         if (prevEndTagPos > startTagPos) {
-            return false;
+            return -1;
         }
 
         let textBefore = text.substring(startTagPos + 1, change.range.start.character);
         let hasWsOrClose = this.hasWsOrCloseRgx.test(textBefore);
         if (hasWsOrClose) {
-            return false;
+            return -1;
         }
         
-        return true;
+        return textBefore.length;
     }
 
-    public renameTag(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): TagRenameEdit|null {
+    public getEndTagForStartTagChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): vscode.Position|null {
         
         this.globalInstructionData = [];
         this.globalModeData = [];
@@ -88,12 +90,13 @@ export class XslLexerRenameTag extends XslLexer {
         let renameStackLength = -1;
         let breakLoop = false;
         let foundStartTag = false;
+        let endTagStartPos: vscode.Position|null = null;
 
 
         while (lCharCount < xslLength + 1) {
-            if (breakLoop) {
-                console.log('breaking loop');
-            }
+            // if (breakLoop) {
+            //     console.log('breaking loop');
+            // }
             lCharCount++;
             lineNumberChar++;
             let nextState: XMLCharState = XMLCharState.init;
@@ -149,7 +152,7 @@ export class XslLexerRenameTag extends XslLexer {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             }
-                            console.log('start of the close tag name')
+                            // console.log('start of the close tag name')
                             break;
                         case XMLCharState.lEn:
                             if (storeToken) {
@@ -179,8 +182,9 @@ export class XslLexerRenameTag extends XslLexer {
                         case XMLCharState.rCt:
                             if (xmlElementStack === renameStackLength) {
                                 let closeTag = tokenChars.join('');
-                                if (renameName === closeTag) {
-                                    console.log('found');
+                                if (true) { //(renameName === closeTag) {
+                                    endTagStartPos = new vscode.Position(lineNumber, lineNumberChar - tokenChars.length);
+                                    breakLoop = true;
                                 }
                             }
 
@@ -195,7 +199,7 @@ export class XslLexerRenameTag extends XslLexer {
             } 
             currentChar = nextChar;
         } 
-        return null;
+        return endTagStartPos;
     }
 
 }
