@@ -16,11 +16,31 @@ import * as vscode from 'vscode';
 
 export class XslLexerRenameTag extends XslLexer {
 
-    public renameTag(xsl: string, renamePos: vscode.Position): vscode.TextEdit|null {
+    private analyseChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent) {
+        let renameRange = change.range;
+        let renameChar = renameRange.start.character;       
+        if (renameRange.end.line !== renameRange.start.line) {
+            return;
+        }
+
+        let renameLine = document.lineAt(renameRange.start.line);
+        let firstNonWsChar = renameLine.firstNonWhitespaceCharacterIndex;
+        if (renameChar <= firstNonWsChar) {
+            return;
+        }
+    }
+
+    public renameTag(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): vscode.TextEdit|null {
         
         this.globalInstructionData = [];
         this.globalModeData = [];
+        let xsl = document.getText();
+        let renameRange = change.range;
+        let renamePos = renameRange.start;
+        
         let renameStartChar = renamePos.character;
+        let renameEndChar = renameRange.end.character;
+
         let renameLine = renamePos.line;
         let currentState: XMLCharState = XMLCharState.init;
         let currentChar: string = '';
