@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { XMLConfiguration } from './languageConfigurations';
-import { XslLexerRenameTag } from './xslLexerRenameTag';
+import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
 import {TagRenameEdit} from './xslLexerRenameTag';
 
 export class DocumentChangeHandler {
@@ -14,21 +14,25 @@ export class DocumentChangeHandler {
 		if (!isXML) {
 			return;
 		}
-		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, e.contentChanges[0])) {
+		let activeChange = e.contentChanges[0];
+		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, activeChange)) {
 			if (e.contentChanges.length > 1) {
 				console.log('multi-change');
 			}
-			let startTagPos = this.lexer.isStartTagChange(e.document, e.contentChanges[0]);
+			let startTagPos = this.lexer.isStartTagChange(e.document, activeChange);
 			if (startTagPos > -1) {
-				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, e.contentChanges[0]);
+				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, activeChange);
 				if (endTagPosData) {
-					let endTagPos = endTagPosData.position;
-					let adjustedStartTagPos = endTagPos.character + (startTagPos - 1);
-					let updateStartPos = new vscode.Position(endTagPos.line, adjustedStartTagPos);
-					let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + e.contentChanges[0].rangeLength);
-					let updateRange = new vscode.Range(updateStartPos, updateEndPos);
-					this.lastChangePerformed = {range: updateRange, text: e.contentChanges[0].text};
-					await this.performRename(e.document, this.lastChangePerformed);
+					let endTagNameOk = this.checkEndTag(endTagPosData, startTagPos, activeChange);
+					if (endTagNameOk) {
+						let endTagPos = endTagPosData.startPosition;
+						let adjustedStartTagPos = endTagPos.character + (startTagPos - 1);
+						let updateStartPos = new vscode.Position(endTagPos.line, adjustedStartTagPos);
+						let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + activeChange.rangeLength);
+						let updateRange = new vscode.Range(updateStartPos, updateEndPos);
+						this.lastChangePerformed = {range: updateRange, text: activeChange.text};
+						await this.performRename(e.document, this.lastChangePerformed);
+					}
 				}
 			} else {
 				this.lastChangePerformed = null;
@@ -36,6 +40,19 @@ export class DocumentChangeHandler {
 		} else {
 			this.lastChangePerformed = null;
 		}
+	}
+
+	private checkEndTag(endTagData: TagRenamePosition, startTagPos: number, startTagChange: vscode.TextDocumentContentChangeEvent): boolean {
+		let result = false;
+		let endTagName = endTagData.endTag;
+		if (startTagPos > endTagName.length) {
+			return false;
+		}
+		let beforeEndTag = endTagName.substring(0, startTagPos);
+		let afterEndTag = endTagName.substring(startTagPos + startTagChange.rangeLength);
+		let updatedEndName = beforeEndTag + startTagChange.text + afterEndTag;
+		result = updatedEndName === endTagData.startTag;
+		return result;
 	}
 
 	public registerXMLEditor = (editor: vscode.TextEditor|undefined) => {
