@@ -37,6 +37,8 @@ export class DocumentChangeHandler {
 	public registerXMLEditor = (editor: vscode.TextEditor|undefined) => {
 		if (editor) {
 			this.registerXMLDocument(editor.document);
+		} else {
+			
 		}
 	}
 

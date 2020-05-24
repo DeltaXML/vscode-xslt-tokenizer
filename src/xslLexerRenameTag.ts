@@ -94,9 +94,9 @@ export class XslLexerRenameTag extends XslLexer {
 
 
         while (lCharCount < xslLength + 1) {
-            // if (breakLoop) {
-            //     console.log('breaking loop');
-            // }
+            if (breakLoop) {
+                break;
+            }
             lCharCount++;
             lineNumberChar++;
             let nextState: XMLCharState = XMLCharState.init;
@@ -107,7 +107,7 @@ export class XslLexerRenameTag extends XslLexer {
                 if (isCurrentCharNewLIne) {
                     lineNumberChar = 0;
                     lineNumber++;
-                    if (lineNumber > renameLine && renameName !== '') {
+                    if (lineNumber > renameLine && (renameName === '')) {
                         breakLoop = true;
                     }
                 }

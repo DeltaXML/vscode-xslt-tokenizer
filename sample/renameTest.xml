@@ -1,5 +1,6 @@
 <root>
-    <doorsame it="abc" name="abc">
-        <poorly id="2">test</poorly>
-    </doorsame>
+    <door it="abc" name="abc">
+        <abc name="test"/>
+        <poorly id="2">test <b>this</b></poorly>
+    </door>
 </root>
