@@ -149,13 +149,27 @@ export class XslLexerRenameTag extends XslLexer {
                             //     console.log('start-tag on line: ' + lineNumber + ' breakloop: ' + breakLoop);
                             // }
                             break;
-                        // start of the close tag name
-                        case XMLCharState.lCtName:
+                        // the '<' of the '</' close tag:
+                        case XMLCharState.lCt:
+                            console.log('closetag linenumber: ' + lineNumber);
                             if (xmlElementStack > 0) {
                                 xmlElementStack--;
                             }
+                            break;
+                        // start of the close tag name
+                        case XMLCharState.lCtName:
                             if (gotRenameName && xmlElementStack === renameStackLength) {
-                                tokenChars.push(currentChar);
+                                // handle empty close tag name
+                                if (currentChar !== '>') {
+                                    tokenChars.push(currentChar);
+                                } else {
+                                    if (gotRenameName && xmlElementStack === renameStackLength) {
+                                        let closeTag = '';
+                                        endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
+                                        console.log('empty endTag found!!!!');
+                                        breakLoop = true;
+                                    }
+                                }
                                 storeToken = true;
                             }
                             break;
