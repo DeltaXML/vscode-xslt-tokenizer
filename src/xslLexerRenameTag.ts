@@ -151,7 +151,6 @@ export class XslLexerRenameTag extends XslLexer {
                             break;
                         // the '<' of the '</' close tag:
                         case XMLCharState.lCt:
-                            console.log('closetag linenumber: ' + lineNumber);
                             if (xmlElementStack > 0) {
                                 xmlElementStack--;
                             }
@@ -166,7 +165,6 @@ export class XslLexerRenameTag extends XslLexer {
                                     if (gotRenameName && xmlElementStack === renameStackLength) {
                                         let closeTag = '';
                                         endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
-                                        console.log('empty endTag found!!!!');
                                         breakLoop = true;
                                     }
                                 }
@@ -232,7 +230,6 @@ export class XslLexerRenameTag extends XslLexer {
                             if (xmlElementStack === renameStackLength) {
                                 let closeTag = tokenChars.join('');
                                 endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
-                                console.log('endTag found!!!!');
                                 breakLoop = true;
                             }
 

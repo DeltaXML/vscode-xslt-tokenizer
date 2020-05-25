@@ -18,10 +18,10 @@ export class DocumentChangeHandler {
 		if (activeChange === null) {
 			return;
 		}
-		console.log('didChange');
+		//console.log('didChange');
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, activeChange)) {
 			if (e.contentChanges.length > 1) {
-				console.log('multi-change');
+				//console.log('multi-change');
 			}
 			let startTagPos = this.lexer.isStartTagChange(e.document, activeChange);
 			if (startTagPos > -1) {
