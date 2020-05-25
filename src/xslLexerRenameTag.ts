@@ -115,6 +115,7 @@ export class XslLexerRenameTag extends XslLexer {
                     lineNumberChar = 0;
                     lineNumber++;
                     if (lineNumber > renameLine && (renameName === '')) {
+                        console.log('break');
                         breakLoop = true;
                     }
                 }
@@ -135,22 +136,14 @@ export class XslLexerRenameTag extends XslLexer {
                 } else {
 
                     switch (nextState) {
+                        // the '<' of the start tag
                         case XMLCharState.lSt:
+                            // need to start storing token if line number is the same
+                            // it may not be the right token though:
                             storeToken = renameLine === lineNumber && renameName === '';
                             breakLoop = (renameName === '' && lineNumberChar >= renameStartChar);
                             break;
-                        case XMLCharState.rSt:
-                            if (storeToken) {
-                                if (lineNumberChar < renameStartChar) {
-                                    renameName = tokenChars.join('');
-                                }
-                            }
-                            xmlElementStack++;
-                            storeToken = false;
-                            tokenChars = [];
-                            break;
-                        case XMLCharState.rSelfCt:
-                            break;
+                        // start of the close tag name
                         case XMLCharState.lCtName:
                             if (xmlElementStack > 0) {
                                 xmlElementStack--;
@@ -159,46 +152,62 @@ export class XslLexerRenameTag extends XslLexer {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             }
-                            // console.log('start of the close tag name')
                             break;
+                        // start tag element name
                         case XMLCharState.lEn:
                             if (storeToken) {
                                 tokenChars.push(currentChar);
                             }
                             break;
+                        // whitespace after start tag name
                         case XMLCharState.lsElementNameWs:
+                        // the '>' char after start tag name
+                        case XMLCharState.rSt:
+                        // the '>' char at the end of start tag *with* atts
                         case XMLCharState.rStNoAtt:
-                            if (lineNumberChar >= renameStartChar) {
-                                if (storeToken) {
+                            // we can get the start tag name now
+                            if (storeToken) {
+                                if (lineNumberChar >= renameStartChar) {
                                     renameName = tokenChars.join('');
                                     renameStackLength = xmlElementStack;
                                 }                               
-                            } else if (renameName === '') {
-                                breakLoop = true;
                             }
                             storeToken = false;
                             tokenChars = [];
-                            if (nextState === XMLCharState.rStNoAtt) {
+                            if (nextState !== XMLCharState.lsElementNameWs) {
                                 xmlElementStack++;
                             }
                             break;
+                        // the '>' char at the end of start tag *with* atts
+                        // we already have the start tag name:
+                        case XMLCharState.rSt:
+                            if (storeToken) {
+                                if (lineNumberChar >= renameStartChar) {
+                                    renameName = tokenChars.join('');
+                                }
+                            }
+                            xmlElementStack++;
+                            storeToken = false;
+                            tokenChars = [];
+                            break;
+                        // end of self-closing tag with attributes:
+                        case XMLCharState.rSelfCt:
+                        // end of self-closing tag with no attributes:
                         case XMLCharState.rSelfCtNoAtt:
                             storeToken = false;
                             tokenChars = [];
                             break;
+                        // end of close-tag
                         case XMLCharState.rCt:
                             if (xmlElementStack === renameStackLength) {
                                 let closeTag = tokenChars.join('');
-                                if (true) { //(renameName === closeTag) {
-                                    endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
-                                    breakLoop = true;
-                                }
+                                endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
+                                breakLoop = true;
                             }
 
                             storeToken = false;
                             tokenChars = [];
                             break;
-
                     }
 
                 } // else ends
