@@ -143,7 +143,7 @@ export class XslLexerRenameTag extends XslLexer {
                             // if (storeToken){
                             //     console.log('storetoken');
                             // }
-                            breakLoop = ((storeToken && (lineNumberChar >= renameStartChar)) || (renameName === '' && (lineNumber > renameLine)) );
+                            breakLoop = ((storeToken && (lineNumberChar > renameStartChar)) || (renameName === '' && (lineNumber > renameLine)) );
                             // if (breakLoop) {
                             //     console.log('start-tag on line: ' + lineNumber + ' breakloop: ' + breakLoop);
                             // }
