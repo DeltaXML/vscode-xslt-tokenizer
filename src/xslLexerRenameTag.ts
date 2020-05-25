@@ -115,7 +115,6 @@ export class XslLexerRenameTag extends XslLexer {
                     lineNumberChar = 0;
                     lineNumber++;
                     if (lineNumber > renameLine && (renameName === '')) {
-                        console.log('break');
                         breakLoop = true;
                     }
                 }

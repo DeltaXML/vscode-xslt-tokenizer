@@ -14,21 +14,18 @@ export class DocumentChangeHandler {
 		if (!isXML) {
 			return;
 		}
-		console.log('didChange');
 		let activeChange = e.contentChanges[0];
 		if (activeChange === null) {
 			return;
 		}
+		console.log('didChange');
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, activeChange)) {
 			if (e.contentChanges.length > 1) {
 				console.log('multi-change');
 			}
 			let startTagPos = this.lexer.isStartTagChange(e.document, activeChange);
-			console.log('isStartTag ' + startTagPos);
 			if (startTagPos > -1) {
 				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, activeChange);
-				console.log('endTagPosData:');
-				console.log(endTagPosData);
 				if (endTagPosData) {
 					let endTagNameOk = this.checkEndTag(endTagPosData, startTagPos, activeChange);
 					if (endTagNameOk) {
@@ -61,7 +58,6 @@ export class DocumentChangeHandler {
 		let afterEndTag = endTagName.substring(startTagPos + startTagChange.rangeLength);
 		let updatedEndName = beforeEndTag + startTagChange.text + afterEndTag;
 		result = updatedEndName === endTagData.startTag;
-		console.log('checkEndTag ', result)
 		return result;
 	}
 
