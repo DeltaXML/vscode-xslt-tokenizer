@@ -162,7 +162,15 @@ export class XslLexerRenameTag extends XslLexer {
                         // start tag element name
                         case XMLCharState.lEn:
                             if (storeToken) {
-                                tokenChars.push(currentChar);
+                                if (currentChar === ' ' || currentChar === '/n' || currentChar === '/t' || currentChar === '/r') {
+                                    // where start tag name is empty string
+                                    gotRenameName = true;
+                                    renameName = '';
+                                    renameStackLength = xmlElementStack;
+                                    storeToken = false;
+                                } else {
+                                    tokenChars.push(currentChar);
+                                }
                             }
                             break;
                         // whitespace after start tag name
