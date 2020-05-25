@@ -54,6 +54,10 @@ export class DocumentChangeHandler {
 		if (startTagPos > endTagName.length) {
 			return false;
 		}
+		let originalStartTagLength = endTagData.startTag.length - (startTagChange.text.length - startTagChange.rangeLength);
+		if (originalStartTagLength !== endTagData.endTag.length) {
+			return false;
+		}
 		let beforeEndTag = endTagName.substring(0, startTagPos);
 		let afterEndTag = endTagName.substring(startTagPos + startTagChange.rangeLength);
 		let updatedEndName = beforeEndTag + startTagChange.text + afterEndTag;

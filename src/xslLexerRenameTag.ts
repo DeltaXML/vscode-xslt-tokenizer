@@ -114,6 +114,7 @@ export class XslLexerRenameTag extends XslLexer {
                     lineNumberChar = 0;
                     lineNumber++;
                     if (lineNumber > renameLine && (renameName === '')) {
+                        console.log('breakloop #1 ');
                         breakLoop = true;
                     }
                 }
@@ -139,7 +140,11 @@ export class XslLexerRenameTag extends XslLexer {
                             // need to start storing token if line number is the same
                             // it may not be the right token though:
                             storeToken = renameLine === lineNumber && renameName === '';
-                            breakLoop = (renameName === '' && lineNumberChar >= renameStartChar);
+                            if (storeToken){
+                                console.log('storetoken');
+                            }
+                            breakLoop = ((storeToken && (lineNumberChar >= renameStartChar)) || (renameName === '' && (lineNumber > renameLine)) );
+                            console.log('start-tag on line: ' + lineNumber + ' breakloop: ' + breakLoop);
                             break;
                         // start of the close tag name
                         case XMLCharState.lCtName:
@@ -200,6 +205,7 @@ export class XslLexerRenameTag extends XslLexer {
                             if (xmlElementStack === renameStackLength) {
                                 let closeTag = tokenChars.join('');
                                 endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
+                                console.log('endTag found!!!!');
                                 breakLoop = true;
                             }
 

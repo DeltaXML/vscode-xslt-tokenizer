@@ -1,4 +1,19 @@
-<root>
-    <one>test</one>       
-    <two></two>   
-</root>
+<xsl:package
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:map="http://www.w3.org/2005/xpath-functions/map"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:fn="http://www.w3.org/2005/xpath-functions"
+    xmlns:j="http://www.w3.org/2013/XSLT/xml-to-json"
+    exclude-result-prefixes="xs fn j" default-mode="j:xml-to-json" version="3.0">
+    
+    <pqr>     
+        <def>
+            <abc/>
+        </def>       
+    </pqr>
+        
+    <xsl:template match="/" mode="indent no-indent">
+        <xsl:apply-templates mode="#current"/>
+    </xsl:template>
+    
+</xsl:package>
