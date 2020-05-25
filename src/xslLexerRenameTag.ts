@@ -220,19 +220,19 @@ export class XslLexerRenameTag extends XslLexer {
                         case XMLCharState.tvtCdata:
                             nextState = XMLCharState.awaitingRcdata;
                             break;
-                            case XMLCharState.rEntity:
-                                switch (this.entityContext) {
-                                    case EntityPosition.text:
-                                        nextState = XMLCharState.init;
-                                        break;
-                                    case EntityPosition.attrSq:
-                                        nextState = XMLCharState.lSq;
-                                        break;
-                                    case EntityPosition.attrDq:
-                                        nextState = XMLCharState.lDq;
-                                        break;
-                                }
-                                break;
+                        case XMLCharState.rEntity:
+                            switch (this.entityContext) {
+                                case EntityPosition.text:
+                                    nextState = XMLCharState.init;
+                                    break;
+                                case EntityPosition.attrSq:
+                                    nextState = XMLCharState.lSq;
+                                    break;
+                                case EntityPosition.attrDq:
+                                    nextState = XMLCharState.lDq;
+                                    break;
+                            }
+                            break;
                     }
 
                 } // else ends
