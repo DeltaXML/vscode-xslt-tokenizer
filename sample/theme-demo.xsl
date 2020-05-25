@@ -4,10 +4,10 @@
   <!-- xml comment -->
   <?pi height < 4: width > 28 ?>
   
-  <avt-sample name="section-{$qrt} block-{$wnt}">
+  <nonavt name="section-{$qrt} block-{$wnt}">
     text nodes <![CDATA[have <b>cdata</b> tags]]>
     entity references &lt;need&gt; special care
-  </avt-sample>
+  </nonavt>
   
   <non-avt name="simple attributes"/>
   
