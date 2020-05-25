@@ -208,6 +208,12 @@ export class XslLexerRenameTag extends XslLexer {
                             storeToken = false;
                             tokenChars = [];
                             break;
+                        case XMLCharState.sqAvt:
+                            nextState = XMLCharState.lSq;
+                            break;
+                        case XMLCharState.dqAvt:
+                            nextState = XMLCharState.lDq;
+                            break;
                     }
 
                 } // else ends
