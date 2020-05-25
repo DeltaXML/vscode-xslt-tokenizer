@@ -93,6 +93,7 @@ export class XslLexerRenameTag extends XslLexer {
         let lineNumber = 0;
         let lineNumberChar = -1;
         let renameName = '';
+        let gotRenameName = false;
         let renameStackLength = -1;
         let breakLoop = false;
         let foundStartTag = false;
@@ -113,7 +114,7 @@ export class XslLexerRenameTag extends XslLexer {
                 if (isCurrentCharNewLIne) {
                     lineNumberChar = 0;
                     lineNumber++;
-                    if (lineNumber > renameLine && (renameName === '')) {
+                    if (lineNumber > renameLine && (!gotRenameName)) {
                         console.log('breakloop #1 ');
                         breakLoop = true;
                     }
@@ -139,11 +140,11 @@ export class XslLexerRenameTag extends XslLexer {
                         case XMLCharState.lSt:
                             // need to start storing token if line number is the same
                             // it may not be the right token though:
-                            storeToken = renameLine === lineNumber && renameName === '';
+                            storeToken = renameLine === lineNumber && !gotRenameName;
                             // if (storeToken){
                             //     console.log('storetoken');
                             // }
-                            breakLoop = ((storeToken && (lineNumberChar > renameStartChar)) || (renameName === '' && (lineNumber > renameLine)) );
+                            breakLoop = ((storeToken && (lineNumberChar > renameStartChar)) || (!gotRenameName && (lineNumber > renameLine)) );
                             // if (breakLoop) {
                             //     console.log('start-tag on line: ' + lineNumber + ' breakloop: ' + breakLoop);
                             // }
@@ -153,7 +154,7 @@ export class XslLexerRenameTag extends XslLexer {
                             if (xmlElementStack > 0) {
                                 xmlElementStack--;
                             }
-                            if (renameName !== '' && xmlElementStack === renameStackLength) {
+                            if (gotRenameName && xmlElementStack === renameStackLength) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             }
@@ -174,6 +175,7 @@ export class XslLexerRenameTag extends XslLexer {
                             if (storeToken) {
                                 if (lineNumberChar >= renameStartChar) {
                                     renameName = tokenChars.join('');
+                                    gotRenameName = true;
                                     renameStackLength = xmlElementStack;
                                 }                               
                             }
@@ -189,6 +191,7 @@ export class XslLexerRenameTag extends XslLexer {
                             if (storeToken) {
                                 if (lineNumberChar >= renameStartChar) {
                                     renameName = tokenChars.join('');
+                                    gotRenameName = true;
                                 }
                             }
                             xmlElementStack++;
