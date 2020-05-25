@@ -16,6 +16,9 @@ export class DocumentChangeHandler {
 		}
 		console.log('didChange');
 		let activeChange = e.contentChanges[0];
+		if (activeChange === null) {
+			return;
+		}
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, activeChange)) {
 			if (e.contentChanges.length > 1) {
 				console.log('multi-change');
@@ -89,12 +92,16 @@ export class DocumentChangeHandler {
     }
 
 	private changesAreEqual(tagRenameEdit: TagRenameEdit, change2: vscode.TextDocumentContentChangeEvent) {
-		let result = (
-		tagRenameEdit.range.start.line === change2.range.start.line &&
-		tagRenameEdit.range.start.character === change2.range.start.character &&
-		tagRenameEdit.range.end.character === change2.range.end.character &&
-		tagRenameEdit.range.end.line === change2.range.end.line &&
-		tagRenameEdit.text === change2.text);
-		return result;
+		if (tagRenameEdit && change2) {
+			let result = (
+			tagRenameEdit.range.start.line === change2.range.start.line &&
+			tagRenameEdit.range.start.character === change2.range.start.character &&
+			tagRenameEdit.range.end.character === change2.range.end.character &&
+			tagRenameEdit.range.end.line === change2.range.end.line &&
+			tagRenameEdit.text === change2.text);
+			return result;
+		} else {
+			return false;
+		}
 	}
 }
