@@ -26,7 +26,7 @@ export interface TagRenamePosition {
 export class XslLexerRenameTag extends XslLexer {
 
     private nonNameRgx = new RegExp(/[\s<>\/]/);
-    private hasWsOrCloseRgx = new RegExp(/[\s\/]/);
+    private hasWsOrCloseRgx = new RegExp(/[\s\/?!]/);
 
 
     public isStartTagChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent) {
@@ -35,7 +35,6 @@ export class XslLexerRenameTag extends XslLexer {
         }
         let renameRange = change.range;
         let renameChar = renameRange.start.character;
-        let text = change.text; 
         let isValid = renameRange.end.line === renameRange.start.line && !this.nonNameRgx.test(change.text);
         if (!isValid) {
             return -1;
