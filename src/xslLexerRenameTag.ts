@@ -11,12 +11,6 @@
 import { XslLexer, XMLCharState, GlobalInstructionType, XSLTokenLevelState, EntityPosition, GlobalInstructionData} from "./xslLexer";
 import * as vscode from 'vscode';
 
-
-export interface TagRenameEdit {
-	range: vscode.Range,
-	text: string
-}
-
 export interface TagRenamePosition {
 	startPosition: vscode.Position,
     endTag: string

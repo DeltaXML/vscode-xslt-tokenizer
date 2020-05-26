@@ -1,14 +1,18 @@
 import * as vscode from 'vscode';
 import { XMLConfiguration } from './languageConfigurations';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
-import {TagRenameEdit} from './xslLexerRenameTag';
 
+export interface TagRenameEdit {
+	range: vscode.Range,
+	text: string
+	fullTagName: string
+}
 export class DocumentChangeHandler {
 	private onDidChangeRegistration: vscode.Disposable|null = null;
 	private xmlDocumentRegistered = false;
 	private lastChangePerformed: TagRenameEdit|null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
-	private failedEdits: TagRenameEdit[] = [];
+	private cachedFailedEdit: TagRenameEdit|null = null;
 
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
@@ -33,6 +37,12 @@ export class DocumentChangeHandler {
 				let character = startBracketPos;
 				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, offset, line, character,activeChange);
 				if (endTagPosData) {
+					if (this.cachedFailedEdit) {
+						// TODO: check this change is contiguous
+						let contiguous = true;
+						// TODO: use fullTagName with checkEndTag
+						let prevFullTagName = this.cachedFailedEdit.fullTagName;
+					}
 					let endTagNameOk = this.checkEndTag(endTagPosData, tagNameLengthBeforeEdit, activeChange);
 					if (endTagNameOk) {
 						let endTagPos = endTagPosData.startPosition;
@@ -40,7 +50,7 @@ export class DocumentChangeHandler {
 						let updateStartPos = new vscode.Position(endTagPos.line, adjustedStartTagPos);
 						let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + activeChange.rangeLength);
 						let updateRange = new vscode.Range(updateStartPos, updateEndPos);
-						this.lastChangePerformed = {range: updateRange, text: activeChange.text};
+						this.lastChangePerformed = {range: updateRange, text: activeChange.text, fullTagName: endTagPosData.startTag};
 						await this.performRename(e.document, Object.assign(this.lastChangePerformed));
 					} else {
 						this.lastChangePerformed = null;
@@ -102,9 +112,9 @@ export class DocumentChangeHandler {
 			console.log('edit failed for: ' + edit.text);
 		}
 		if (success) {
-			this.failedEdits = [];
+			this.cachedFailedEdit = null;
 		} else {
-			this.failedEdits.push(edit);
+			this.cachedFailedEdit = edit;
 		}
 		return success;
     }
