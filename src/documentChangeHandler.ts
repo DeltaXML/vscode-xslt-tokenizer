@@ -8,6 +8,7 @@ export class DocumentChangeHandler {
 	private xmlDocumentRegistered = false;
 	private lastChangePerformed: TagRenameEdit|null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
+	private failedEdits: TagRenameEdit[] = [];
 
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
@@ -92,8 +93,20 @@ export class DocumentChangeHandler {
 
 	public async performRename(document: vscode.TextDocument, edit: TagRenameEdit) {
         let wse = new vscode.WorkspaceEdit();
-        wse.replace(document.uri, edit.range, edit.text);
-        await vscode.workspace.applyEdit(wse);
+		wse.replace(document.uri, edit.range, edit.text);
+		let success = false;
+        await vscode.workspace.applyEdit(wse).then((result) => {
+			success = result;
+		});
+		if (!success) {
+			console.log('edit failed for: ' + edit.text);
+		}
+		if (success) {
+			this.failedEdits = [];
+		} else {
+			this.failedEdits.push(edit);
+		}
+		return success;
     }
 
 	private changesAreEqual(tagRenameEdit: TagRenameEdit, change2: vscode.TextDocumentContentChangeEvent) {
