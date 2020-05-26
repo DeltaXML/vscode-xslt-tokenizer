@@ -68,7 +68,7 @@ export class XslLexerRenameTag extends XslLexer {
         return textBefore.length;
     }
 
-    public getEndTagForStartTagChange(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent): TagRenamePosition|null {
+    public getEndTagForStartTagChange(document: vscode.TextDocument, offset: number, line: number, character: number, change: vscode.TextDocumentContentChangeEvent): TagRenamePosition|null {
         
         this.globalInstructionData = [];
         this.globalModeData = [];
@@ -89,9 +89,9 @@ export class XslLexerRenameTag extends XslLexer {
 
 
         let xmlElementStack: number = 0;
-        let lCharCount = -1;
-        let lineNumber = 0;
-        let lineNumberChar = -1;
+        let lCharCount = offset -1;
+        let lineNumber = line;
+        let lineNumberChar = character -1;
         let renameName = '';
         let gotRenameName = false;
         let renameStackLength = -1;

@@ -23,14 +23,19 @@ export class DocumentChangeHandler {
 			if (e.contentChanges.length > 1) {
 				//console.log('multi-change');
 			}
-			let startTagPos = this.lexer.isStartTagChange(e.document, activeChange);
-			if (startTagPos > -1) {
-				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, activeChange);
+			let tagNameLengthBeforeEdit = this.lexer.isStartTagChange(e.document, activeChange);
+			if (tagNameLengthBeforeEdit > -1) {
+				let startBracketPos = activeChange.range.start.character - (tagNameLengthBeforeEdit + 1);
+				let startTagOffset = activeChange.range.start.character - startBracketPos; // positive number
+				let offset = activeChange.rangeOffset - startTagOffset;
+				let line = activeChange.range.start.line;
+				let character = startBracketPos;
+				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, offset, line, character,activeChange);
 				if (endTagPosData) {
-					let endTagNameOk = this.checkEndTag(endTagPosData, startTagPos, activeChange);
+					let endTagNameOk = this.checkEndTag(endTagPosData, tagNameLengthBeforeEdit, activeChange);
 					if (endTagNameOk) {
 						let endTagPos = endTagPosData.startPosition;
-						let adjustedStartTagPos = endTagPos.character + (startTagPos - 1);
+						let adjustedStartTagPos = endTagPos.character + (tagNameLengthBeforeEdit - 1);
 						let updateStartPos = new vscode.Position(endTagPos.line, adjustedStartTagPos);
 						let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + activeChange.rangeLength);
 						let updateRange = new vscode.Range(updateStartPos, updateEndPos);
