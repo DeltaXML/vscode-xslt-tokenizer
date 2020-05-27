@@ -223,7 +223,7 @@ export class XslLexerRenameTag extends XslLexer {
                         case XMLCharState.rCt:
                             if (xmlElementStack === renameStackLength) {
                                 let closeTag = tokenChars.join('');
-                                endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
+                                endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - (tokenChars.length + 1))};
                                 breakLoop = true;
                             }
 

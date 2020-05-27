@@ -23,6 +23,9 @@ export class DocumentChangeHandler {
 		if (activeChange === null) {
 			return;
 		}
+		if (this.cachedFailedEdit) {
+			console.log('fail entry');
+		}
 		//console.log('didChange');
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, activeChange)) {
 			if (e.contentChanges.length > 1) {
@@ -35,18 +38,24 @@ export class DocumentChangeHandler {
 				let offset = activeChange.rangeOffset - startTagOffset;
 				let line = activeChange.range.start.line;
 				let character = startBracketPos;
+
 				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, offset, line, character,activeChange);
 				if (endTagPosData) {
 					if (this.cachedFailedEdit) {
-						// TODO: check this change is contiguous
-						let contiguous = true;
-						// TODO: use fullTagName with checkEndTag
-						let prevFullTagName = this.cachedFailedEdit.fullTagName;
+						this.cachedFailedEdit = null;
+						let startChar = endTagPosData.startPosition.character;
+						let startLline = endTagPosData.startPosition.line;
+						let updateStartPos = new vscode.Position(startLline, startChar);
+						let updateEndPos = new vscode.Position(startLline, startChar + endTagPosData.endTag.length);
+						let updateRange = new vscode.Range(updateStartPos, updateEndPos);
+						// replace the whole endtag to be safe:
+						this.lastChangePerformed = {range: updateRange, text: endTagPosData.startTag, fullTagName: endTagPosData.startTag};
+						await this.performRename(e.document, Object.assign(this.lastChangePerformed));
 					}
 					let endTagNameOk = this.checkEndTag(endTagPosData, tagNameLengthBeforeEdit, activeChange);
 					if (endTagNameOk) {
 						let endTagPos = endTagPosData.startPosition;
-						let adjustedStartTagPos = endTagPos.character + (tagNameLengthBeforeEdit - 1);
+						let adjustedStartTagPos = endTagPos.character + (tagNameLengthBeforeEdit);
 						let updateStartPos = new vscode.Position(endTagPos.line, adjustedStartTagPos);
 						let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + activeChange.rangeLength);
 						let updateRange = new vscode.Range(updateStartPos, updateEndPos);
@@ -108,13 +117,11 @@ export class DocumentChangeHandler {
         await vscode.workspace.applyEdit(wse).then((result) => {
 			success = result;
 		});
-		if (!success) {
-			console.log('edit failed for: ' + edit.text);
-		}
 		if (success) {
 			this.cachedFailedEdit = null;
 		} else {
 			this.cachedFailedEdit = edit;
+			this.lastChangePerformed = null;
 		}
 		return success;
     }
