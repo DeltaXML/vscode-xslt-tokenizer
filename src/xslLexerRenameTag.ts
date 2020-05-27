@@ -158,7 +158,7 @@ export class XslLexerRenameTag extends XslLexer {
                                 } else {
                                     if (gotRenameName && xmlElementStack === renameStackLength) {
                                         let closeTag = '';
-                                        endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - tokenChars.length)};
+                                        endTagStartPos = {startTag: renameName, endTag: closeTag, startPosition: new vscode.Position(lineNumber, lineNumberChar - (tokenChars.length + 1))};
                                         breakLoop = true;
                                     }
                                 }
