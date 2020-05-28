@@ -4,7 +4,13 @@ A VSCode language extension for XPath 3.1, XSLT 3.0 and more.
 
 ### Main Features
 - XSLT 3.0 and XPath 3.1 Syntax highlighting
+  - Using character by character lexer - no regular expressions
+- code analysis with transient structures instead of cpu-intensive abstract syntax tree
 - XSLT 3.0 and XPath 3.1 Formatting
+  - Format document
+  - Format selection
+  - Format on paste
+  - Format on type
 - Suppports Saxon and EXPath extension namespaces
 - Supports proposed XSLT 4.0 language extensions
 - XSLT Outline View
