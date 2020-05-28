@@ -53,6 +53,7 @@ interface XPathData {
 	xpathVariableCurrentlyBeingDefined: boolean;
 	function?: BaseToken;
 	functionArity?: number;
+	isRangeVar?: boolean;
 }
 
 interface VariableData {
@@ -791,7 +792,7 @@ export class XsltTokenDiagnostics {
 							case 'some':
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
-								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true});
 							break;
 							case 'then':
 								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
@@ -901,7 +902,9 @@ export class XsltTokenDiagnostics {
 										if (xp.functionArity !== undefined) {
 											xp.functionArity++;
 										}
-										preXPathVariable = xp.preXPathVariable;
+										if (xp.isRangeVar) {
+											preXPathVariable = xp.preXPathVariable;
+										}
 									}
 									xpathVariableCurrentlyBeingDefined = false;
 								}

@@ -30,10 +30,10 @@
     <xsl:variable name="v6" as="xs:integer" select="$inc6p1"/>
     
     <xsl:template match="/" mode="#all">
-        <xsl:sequence select="$va"/>
+        <xsl:sequence select="let $a := ($v1, $va) return $a"/>
         
         <xsl:copy>
-            <xsl:sequence select="$va, fn:name($v1), fn:inc1name($v2), $v4, $v5, $v6"/>
+            <xsl:sequence select="$v3, fn:name($v1), fn:inc1name($v2), $v4, $v5, $v6"/>
             <xsl:sequence select="array:head(2,2)"/>
             <xsl:sequence select="map:keys(2)"/>
             <xsl:sequence select="math:pow(2,3)"/>
