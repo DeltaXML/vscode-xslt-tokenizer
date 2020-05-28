@@ -1,19 +1,34 @@
 # XPath-Embedded
 
-A VSCode extension for XPath 3.1, XSLT 3.0 and more.
+A VSCode language extension for XPath 3.1, XSLT 3.0 and more.
 
-### Main Editor Features
+### Main Features
 - XSLT 3.0 and XPath 3.1 Syntax highlighting
 - XSLT 3.0 and XPath 3.1 Formatting
+- Suppports Saxon and EXPath extension namespaces
+- Supports proposed XSLT 4.0 language extensions
 - XSLT Outline View
 - XSLT/XPath Symbol-lookup
 - XML Well-Formedness Checking
 - XSLT Static Code Checking (wip)
-- XPath Static Code Checking (wip)
+- XPath Static Code Checking
 - Mark unused variables
 - Close-tag auto-completion with tag-name
-- Show invalid variable/param references as errors
+- Tag renaming - start tag synchronised with close tag
 - *Saxon XSLT* Transform Task Provider (requires Java)
+- Numerous pre-compile checks for improved diagnostics
+- Checks XML well-formedness (excludes internal DTD subset)
+- Checks variable/param references
+- Checks higher-order function references
+- Checks XPath keywords
+- Checks internal/user-defined function names and arity
+- Checks XSLT imports/includes asynchronously
+- Checks accumulator and attribute-set names
+- Checks mode names used in apply-templates instruction
+- Checks template names and param names in call-templates instruction
+- Checks for duplicate global symbol names
+- Checks prefixes for node-name tests
+- Checks atomic type names
 
 ## Sample Screenshots
 
