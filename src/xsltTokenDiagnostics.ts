@@ -304,6 +304,7 @@ export class XsltTokenDiagnostics {
 							token['value'] = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							problemTokens.push(token);
 						}
+						break;
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
