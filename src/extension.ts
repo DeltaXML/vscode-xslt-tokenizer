@@ -16,6 +16,7 @@ import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer } from './xslLexer';
 import {DocumentChangeHandler} from './documentChangeHandler'
 import { on } from 'process';
+import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 
 
 const tokenModifiers = new Map<string, number>();
@@ -38,6 +39,7 @@ let customTaskProvider: vscode.Disposable | undefined;
 export function activate(context: vscode.ExtensionContext) {
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
+	const xsltDefintiionProvider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
 
 	const xmlDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xml');
 	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection);
@@ -53,8 +55,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt'}, xsltSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml'}, xmlSymbolProvider));
-
-
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt'}, xsltDefintiionProvider));
 
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));

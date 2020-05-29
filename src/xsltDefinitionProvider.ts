@@ -18,15 +18,13 @@ interface GlobalsSummary {
 export class XsltDefinitionProvider implements vscode.DefinitionProvider {
 
 	private readonly xslLexer: XslLexer;
-	private readonly collection: vscode.DiagnosticCollection;
 	private gp = new GlobalsProvider();
 	private readonly isXSLT: boolean;
 
-	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
+	public constructor(xsltConfiguration: LanguageConfiguration) {
 		this.isXSLT = xsltConfiguration.nativePrefix === 'xsl';
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
-		this.collection = collection;
 	}
 
 	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Location | undefined> {
