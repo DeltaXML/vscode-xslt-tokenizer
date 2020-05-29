@@ -8,12 +8,7 @@ import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
-
-enum HasCharacteristic {
-	unknown,
-	yes,
-	no
-}
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 enum TagType {
 	XSLTstart,
@@ -59,18 +54,6 @@ interface XPathData {
 interface VariableData {
 	token: BaseToken,
 	name: string;
-}
-
-enum NameValidationError {
-	None,
-	NamespaceError,
-	NameError
-}
-
-enum ValidationType {
-	XMLAttribute,
-	PrefixedName,
-	Name
 }
 
 export class XsltTokenDefinitions {
@@ -228,7 +211,7 @@ export class XsltTokenDefinitions {
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDefinitions.xsltStartTokenNumber);
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
-						tagElementName = XsltTokenDefinitions.getTextForToken(lineNumber, token, document);
+						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
 							tagType = (XsltTokenDefinitions.xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
@@ -241,7 +224,7 @@ export class XsltTokenDefinitions {
 						}
 						break;
 					case XSLTokenLevelState.elementName:
-						tagElementName = XsltTokenDefinitions.getTextForToken(lineNumber, token, document);
+						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
 							tagType = TagType.XMLstart;
 							startTagToken = token;
@@ -363,7 +346,7 @@ export class XsltTokenDefinitions {
 					case XSLTokenLevelState.attributeName:
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
-						let attNameText = XsltTokenDefinitions.getTextForToken(lineNumber, token, document);
+						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let problemReported = false;
 
 						if (!problemReported) {
@@ -399,7 +382,7 @@ export class XsltTokenDefinitions {
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
-						let fullVariableName = XsltTokenDefinitions.getTextForToken(lineNumber, token, document);
+						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
 						if (rootXmlnsName !== null) {
 							let prefix = rootXmlnsName.length === 5? '': rootXmlnsName.substr(6);
@@ -479,7 +462,7 @@ export class XsltTokenDefinitions {
 						break;
 					case TokenLevelState.variable:
 						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
-							let fullVariableName = XsltTokenDefinitions.getTextForToken(lineNumber, token, document);
+							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							let currentVariable = {token: token, name: fullVariableName.substring(1)};
 						    if (anonymousFunctionParams) {
 								anonymousFunctionParamList.push(currentVariable);
@@ -492,7 +475,7 @@ export class XsltTokenDefinitions {
 						} else {
 							// don't include any current pending variable declarations when resolving
 							if (!(token.value === '$value' && tagElementName === 'xsl:accumulator-rule' )) {
-								let unResolvedToken = XsltTokenDefinitions.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
 									xpathStack, inScopeVariablesList, elementStack);
 								if (unResolvedToken !== null) {
 									unresolvedXsltVariableReferences.push(unResolvedToken);
@@ -501,7 +484,7 @@ export class XsltTokenDefinitions {
 						}
 						break;
 					case TokenLevelState.complexExpression:
-						let valueText = XsltTokenDefinitions.getTextForToken(lineNumber, token, document);
+						let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						switch (valueText) {
 							case 'every':
 							case 'for':
@@ -594,7 +577,7 @@ export class XsltTokenDefinitions {
 													poppedData.functionArity++;
 												}
 											}
-											let { isValid, qFunctionName, fErrorType } = XsltTokenDefinitions.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
+											let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
 											if (isValid) {
 
 											}
@@ -624,7 +607,7 @@ export class XsltTokenDefinitions {
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity? 1: 0;
 									incrementFunctionArity = false;
-									let { isValid, qFunctionName, fErrorType } = XsltTokenDefinitions.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
+									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
 									if (isValid) {
 
 									}
@@ -636,7 +619,7 @@ export class XsltTokenDefinitions {
 						break;
 
 					case TokenLevelState.functionNameTest:
-						let { isValid, qFunctionName, fErrorType } = XsltTokenDefinitions.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token, checkedGlobalFnNames);
+						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token, checkedGlobalFnNames);
 						if (isValid) {
 
 						}
@@ -647,141 +630,6 @@ export class XsltTokenDefinitions {
 		});
 
 		return resultLocation;
-	}
-
-	private static isValidFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number) {
-		let tokenValue;
-		if (arity === undefined) {
-			let parts = token.value.split('#');
-			arity = Number.parseInt(parts[1]);
-			tokenValue = parts[0];
-		} else {
-			tokenValue = token.value;
-		}
-		let qFunctionName = tokenValue + '#' + arity;
-		let fNameParts = qFunctionName.split(':');
-		let isValid = false;
-		let fErrorType = ErrorType.XPathFunction;
-		if (fNameParts.length === 1) {
-			if (tokenValue === 'concat') {
-				isValid = arity > 0;
-			} else {
-				isValid = FunctionData.xpath.indexOf(fNameParts[0]) > -1;
-			}
-		} else {
-			let xsltType = xmlnsData.get(fNameParts[0]);
-			if (xmlnsPrefixes.indexOf(fNameParts[0]) < 0) {
-				// prefix is not declared
-				fErrorType = ErrorType.XPathFunctionNamespace;
-				isValid = false;
-			} else if (xsltType === XSLTnamespaces.NotDefined || xsltType === undefined) {
-				isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
-			} else {
-				switch (xsltType) {
-					case XSLTnamespaces.XPath:
-						isValid = FunctionData.xpath.indexOf(fNameParts[1]) > -1;
-						break;
-					case XSLTnamespaces.Array:
-						isValid = FunctionData.array.indexOf(fNameParts[1]) > -1;
-						break;
-					case XSLTnamespaces.Map:
-						isValid = FunctionData.map.indexOf(fNameParts[1]) > -1;
-						break;
-					case XSLTnamespaces.Math:
-						isValid = FunctionData.math.indexOf(fNameParts[1]) > -1;
-						break;
-					case XSLTnamespaces.XMLSchema:
-						isValid = FunctionData.schema.indexOf(fNameParts[1]) > -1;
-						break;
-					case XSLTnamespaces.Saxon:
-					case XSLTnamespaces.ExpathArchive:
-					case XSLTnamespaces.ExpathBinary:
-					case XSLTnamespaces.ExpathFile:
-						isValid = true;
-						break;
-				}				
-			}
-		}
-		fErrorType = isValid? ErrorType.None: fErrorType;
-		return { isValid, qFunctionName, fErrorType };
-	}
-
-	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
-		let startPos = new vscode.Position(lineNumber, token.startCharacter);
-		let endPos = new vscode.Position(lineNumber, token.startCharacter + token.length);
-		const currentLine = document.lineAt(lineNumber);
-		let valueRange = currentLine.range.with(startPos, endPos);
-		let valueText = document.getText(valueRange);
-		return valueText;
-	}
-
-	static resolveXPathVariableReference(document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], 
-		                                 xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken|null {
-		let fullVarName = XsltTokenDefinitions.getTextForToken(token.line, token, document);
-		let varName = fullVarName.substr(1);
-		let result: BaseToken|null = null;
-		let globalVariable = null;
-
-		let resolved = this.resolveVariableName(inScopeXPathVariablesList, varName, xpathVariableCurrentlyBeingDefined, globalVariable);
-		if (!resolved) {
-			resolved = this.resolveStackVariableName(xpathStack, varName);			
-		}
-		if (!resolved) {
-			resolved = this.resolveVariableName(inScopeVariablesList, varName, false, globalVariable);			
-		}
-		if (!resolved) {
-			resolved = this.resolveStackVariableName(elementStack, varName);		
-		}
-		if (!resolved) {
-			resolved = importedVariables.indexOf(varName) > -1;
-		}
-		if (!resolved) {
-			result = token;
-		}
-		return result;
-	}
-
-	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData|null): boolean {
-		let resolved = false;
-		let decrementedLength = variableList.length - 1;
-		let globalVariableName = globalXsltVariable?.name;
-		// last items in list of declared parameters must be resolved first:
-		for (let i = decrementedLength; i > -1; i--) {
-			let data = variableList[i];
-			if (xpathVariableCurrentlyBeingDefined && i === decrementedLength) {
-				// do nothing: we skip last item in list as it's currently being defined
-			} else if (data.name === varName && globalVariableName !== data.name) {
-				resolved = true;
-				data.token['referenced'] = true;
-				break;
-			}
-		}
-		return resolved;
-	}
-
-	private static resolveStackVariableName(elementStack: ElementData[]|XPathData[], varName: string): boolean {
-		let resolved = false;
-		let globalXsltVariable: VariableData|null = null;
-
-		for (let i = elementStack.length - 1; i > -1; i--) {
-			let inheritedVariables = elementStack[i].variables;
-			let xpathBeingDefinedInit = elementStack[i].xpathVariableCurrentlyBeingDefined;
-			let xpathBeingDefined = !(xpathBeingDefinedInit === undefined || xpathBeingDefinedInit === false);
-			if (i === 1) {
-				// at the level of a global variable declaration
-				let elementData: ElementData = <ElementData>elementStack[i];
-				let currentVar = elementData.currentVariable;
-				if (currentVar) {
-					// must be inside a global variable declaration - keep this:
-					globalXsltVariable = currentVar;
-				}
-			}
-			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable)
-			if (resolved) {
-				break;
-			}
-		}
-		return resolved;
 	}
 
 }

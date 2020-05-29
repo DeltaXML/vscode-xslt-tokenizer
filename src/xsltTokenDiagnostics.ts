@@ -1123,7 +1123,7 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static isValidFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number) {
+	public static isValidFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number) {
 		let tokenValue;
 		if (arity === undefined) {
 			let parts = token.value.split('#');
@@ -1180,7 +1180,7 @@ export class XsltTokenDiagnostics {
 		return { isValid, qFunctionName, fErrorType };
 	}
 
-	private static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
+	public static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
 		let startPos = new vscode.Position(lineNumber, token.startCharacter);
 		let endPos = new vscode.Position(lineNumber, token.startCharacter + token.length);
 		const currentLine = document.lineAt(lineNumber);
@@ -1189,7 +1189,7 @@ export class XsltTokenDiagnostics {
 		return valueText;
 	}
 
-	static resolveXPathVariableReference(document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], 
+	public static resolveXPathVariableReference(document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], 
 		                                 xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken|null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.substr(1);
@@ -1308,7 +1308,7 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData|null): boolean {
+	public static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData|null): boolean {
 		let resolved = false;
 		let decrementedLength = variableList.length - 1;
 		let globalVariableName = globalXsltVariable?.name;
@@ -1326,7 +1326,7 @@ export class XsltTokenDiagnostics {
 		return resolved;
 	}
 
-	private static resolveStackVariableName(elementStack: ElementData[]|XPathData[], varName: string): boolean {
+	public static resolveStackVariableName(elementStack: ElementData[]|XPathData[], varName: string): boolean {
 		let resolved = false;
 		let globalXsltVariable: VariableData|null = null;
 
