@@ -15,7 +15,7 @@ interface GlobalsSummary {
 	hrefs: string[]
 }
 
-export class XsltDefinitionProvider implements vscode.DefinitionProvider {
+export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode.CompletionItemProvider {
 
 	private readonly xslLexer: XslLexer;
 	private gp = new GlobalsProvider();
@@ -68,6 +68,51 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider {
 			location= XsltTokenDefinitions.findDefinition(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
 
 			resolve(location);
+		});
+
+	}
+
+	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.CompletionItem[] | undefined> {
+		const allTokens = this.xslLexer.analyse(document.getText());
+		const globalInstructionData = this.xslLexer.globalInstructionData;
+		// Import/include XSLT - ensuring no duplicates
+		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
+		let importedGlobals1 = [importedG];
+		let accumulatedHrefs: string[] = [importedG.href];
+
+
+		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs};
+		const maxImportLevel = 20;
+
+		let processNestedGlobals = async () => {
+			let level = 0;
+			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel) {
+				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs, level === 0);
+				level++;
+			}
+		};
+
+		await processNestedGlobals();
+
+		return new Promise((resolve, reject) => {
+			let result: vscode.CompletionItem[]|undefined = undefined;
+			let allImportedGlobals: GlobalInstructionData[] = [];
+
+			globalsSummary0.globals.forEach((globals) => {
+				if (globals.error) {
+					// ignore 
+				} else {
+					globals.data.forEach((global) => {
+						global['href'] = globals.href;
+						allImportedGlobals.push(global);
+					});
+				}		
+			});
+
+
+			//location= XsltTokenDefinitions.findDefinition(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+
+			resolve(result);
 		});
 
 	}
