@@ -1,40 +1,10 @@
 # XPath-Embedded
 
-A VSCode language extension for XPath 3.1, XSLT 3.0 and more.
+XPath Embedded provides comprehensive language support XSLT 3.0 and XPath 3.0 in VSCode.
 
-### Main Features
-- XSLT 3.0 and XPath 3.1 Syntax highlighting
-  - Using character by character lexer - no regular expressions
-- code analysis with transient structures instead of cpu-intensive abstract syntax tree
-- XSLT 3.0 and XPath 3.1 Formatting
-  - Format document
-  - Format selection
-  - Format on paste
-  - Format on type
-- Suppports Saxon and EXPath extension namespaces
-- Supports proposed XSLT 4.0 language extensions
-- XSLT Outline View
-- XSLT/XPath Symbol-lookup
-- XML Well-Formedness Checking
-- XSLT Static Code Checking (wip)
-- XPath Static Code Checking
-- Mark unused variables
-- Close-tag auto-completion with tag-name
-- Tag renaming - start tag synchronised with close tag
-- *Saxon XSLT* Transform Task Provider (requires Java)
-- Numerous pre-compile checks for improved diagnostics
-- Checks XML well-formedness (excludes internal DTD subset)
-- Checks variable/param references
-- Checks higher-order function references
-- Checks XPath keywords
-- Checks internal/user-defined function names and arity
-- Checks XSLT imports/includes asynchronously
-- Checks accumulator and attribute-set names
-- Checks mode names used in apply-templates instruction
-- Checks template names and param names in call-templates instruction
-- Checks for duplicate global symbol names
-- Checks prefixes for node-name tests
-- Checks atomic type names
+For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. The avoidance of the much more common use of regular expressions on a line-by-line basis has provided many benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and full integrity for syntax highlighting.
+
+This extension performs a comprehensive set of checks on the code, before any XSLT compilation. This ensures that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows references to symbol definitions can be checked regarless of the location of the defintition.
 
 ## Sample Screenshots
 
