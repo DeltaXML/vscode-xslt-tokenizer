@@ -5,7 +5,7 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
@@ -54,6 +54,7 @@ interface XPathData {
 interface VariableData {
 	token: BaseToken,
 	name: string;
+	uri?: string
 }
 
 export class XsltTokenDefinitions {
@@ -61,7 +62,7 @@ export class XsltTokenDefinitions {
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
 	private static readonly xslInclude = 'xsl:include';
 	private static readonly xslImport = 'xsl:import';
-	private static readonly xmlChars = ['lt','gt','quot','apos','amp'];
+	private static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
 
 
 	private static readonly xslFunction = 'xsl:function';
@@ -74,12 +75,12 @@ export class XsltTokenDefinitions {
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 
 
-	public static findDefinition = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.Location|undefined => {
+	public static findDefinition = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.Location | undefined => {
 		let lineNumber = -1;
-		let resultLocation: vscode.Location|undefined;
+		let resultLocation: vscode.Location | undefined;
 
 		let inScopeVariablesList: VariableData[] = [];
-		let xpathVariableCurrentlyBeingDefined: boolean;
+		let xpathVariableCurrentlyBeingDefined = false;
 		let elementStack: ElementData[] = [];
 		let inScopeXPathVariablesList: VariableData[] = [];
 		let anonymousFunctionParamList: VariableData[] = [];
@@ -87,13 +88,12 @@ export class XsltTokenDefinitions {
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
-		let startTagToken: XSLTToken|null = null;
+		let startTagToken: XSLTToken | null = null;
 		let preXPathVariable = false;
 		let anonymousFunctionParams = false;
-		let variableData: VariableData|null = null;
+		let variableData: VariableData | null = null;
 		let xsltVariableDeclarations: BaseToken[] = [];
-		let unresolvedXsltVariableReferences: BaseToken[] = [];
-		let prevToken: BaseToken|null = null;
+		let prevToken: BaseToken | null = null;
 		let includeOrImport = false;
 		let tagIdentifierName: string = '';
 		let tagAttributeNames: string[] = [];
@@ -101,105 +101,51 @@ export class XsltTokenDefinitions {
 		let rootXmlnsBindings: [string, string][] = [];
 		let inheritedPrefixes: string[] = [];
 		let globalVariableData: VariableData[] = [];
-		let checkedGlobalVarNames: string[] = [];
 		let checkedGlobalFnNames: string[] = [];
-		let importedGlobalVarNames: string[] = [];
-		let importedGlobalFnNames: string[] = [];
+		let importedGlobalVarNames: Map<string, GlobalInstructionData> = new Map();
 		let incrementFunctionArity = false;
 		let onRootStartTag = true;
-		let rootXmlnsName: string|null = null;
+		let rootXmlnsName: string | null = null;
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default'];
-		let globalKeys: string[] = [];
-		let globalAccumulatorNames: string[] = [];
-		let globalAttributeSetNames: string[] = [];
-		let tagExcludeResultPrefixes: {token: BaseToken, prefixes: string[]}|null = null;
+
+		let tagExcludeResultPrefixes: { token: BaseToken, prefixes: string[] } | null = null;
+		let requiredLine = position.line;
+		let requiredChar = position.character;
+		let isOnRequiredToken = false;
 
 		globalInstructionData.forEach((instruction) => {
-			switch (instruction.type) {
-				case GlobalInstructionType.Variable:
-				case GlobalInstructionType.Parameter:
-					if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
-						checkedGlobalVarNames.push(instruction.name);
-					}
-					globalVariableData.push({token: instruction.token, name: instruction.name })
-					xsltVariableDeclarations.push(instruction.token);
-					break;
-				case GlobalInstructionType.Function:
-					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
-					if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
-						checkedGlobalFnNames.push(functionNameWithArity);
-					}
-					break;
-				case GlobalInstructionType.Template:
-					if (namedTemplates.get(instruction.name)) {
-
-					} else {
-						let members = instruction.memberNames? instruction.memberNames: [];
-						namedTemplates.set(instruction.name, members);
-					}
-					break;
-				case GlobalInstructionType.Mode:
-					let modes = instruction.name.split(/\s+/);
-					globalModes = globalModes.concat(modes);
-					break;
-				case GlobalInstructionType.Key:
-					globalKeys.push(instruction.name);
-					break;
-				case GlobalInstructionType.Accumulator:
-					if (globalAccumulatorNames.indexOf(instruction.name) < 0) {
-						globalAccumulatorNames.push(instruction.name);
-					}
-					break;
-				case GlobalInstructionType.AttributeSet:
-					globalAttributeSetNames.push(instruction.name);
-					break;
-				
+			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
+				if (!importedGlobalVarNames.get(instruction.name)) {
+					importedGlobalVarNames.set(instruction.name, instruction);
+				}
 			}
+
 		});
 
 		importedInstructionData.forEach((instruction) => {
-			switch (instruction.type) {
-				case GlobalInstructionType.Variable:
-				case GlobalInstructionType.Parameter:
-					if (checkedGlobalVarNames.indexOf(instruction.name) < 0) {
-						checkedGlobalVarNames.push(instruction.name);
-						importedGlobalVarNames.push(instruction.name);
-					}
-					break;
-				case GlobalInstructionType.Function:
-					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
-					if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
-						checkedGlobalFnNames.push(functionNameWithArity);
-						importedGlobalFnNames.push(functionNameWithArity);
-					}	
-					break;
-				case GlobalInstructionType.Template:
-					let members = instruction.memberNames? instruction.memberNames: [];
-					namedTemplates.set(instruction.name, members);
-					break;
-				case GlobalInstructionType.Mode:
-					let modes = instruction.name.split(/\s+/);
-					globalModes = globalModes.concat(modes);
-					break;
-				case GlobalInstructionType.Key:
-					globalKeys.push(instruction.name);
-					break;
-				case GlobalInstructionType.Accumulator:
-					globalAccumulatorNames.push(instruction.name);
-					break;
-				case GlobalInstructionType.AttributeSet:
-					globalAttributeSetNames.push(instruction.name);
-					break;
+			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
+				if (!importedGlobalVarNames.get(instruction.name)) {
+					importedGlobalVarNames.set(instruction.name, instruction);
+				}
 			}
+
 		});
-		let nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
-		let nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
-		allTokens.forEach((token, index) => {
+		let index = -1;
+		for (let token of allTokens) {
+			index++;
 			lineNumber = token.line;
+			let isOnRequiredLine = lineNumber === requiredLine;
+			if (isOnRequiredToken || resultLocation || lineNumber > requiredLine) {
+				break;
+			}
 
+			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
+			if (isOnRequiredToken) {
+				console.log(token);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenDefinitions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -213,7 +159,7 @@ export class XsltTokenDefinitions {
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
-							tagType = (XsltTokenDefinitions.xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
+							tagType = (XsltTokenDefinitions.xslVariable.indexOf(tagElementName) > -1) ? TagType.XSLTvar : TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
 							startTagToken = token;
@@ -282,19 +228,21 @@ export class XsltTokenDefinitions {
 									// on a start tag
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
-									let newVariablesList = elementStack.length === 0? globalVariableData: inScopeVariablesList;
+									let newVariablesList = elementStack.length === 0 ? globalVariableData : inScopeVariablesList;
 									//let newVariablesList = inScopeVariablesList;
 									if (variableData !== null) {
 										if (elementStack.length > 1) {
 											xsltVariableDeclarations.push(variableData.token);
 										}
-										if (startTagToken){
+										if (startTagToken) {
 											// if a top-level element, use global variables instad of inScopeVariablesList;
-											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList, 
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
+											elementStack.push({
+												namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList,
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []
+											});
 										}
 									} else if (startTagToken) {
-										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
+										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [] });
 									}
 									inScopeVariablesList = [];
 									newVariablesList = [];
@@ -322,18 +270,18 @@ export class XsltTokenDefinitions {
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
 									if (poppedData) {
-										if (poppedData.symbolName !== tagElementName) {											
+										if (poppedData.symbolName !== tagElementName) {
 											// not well-nested
 											if (elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === tagElementName) {
 												// recover for benefit of outline view
 												poppedData = elementStack.pop();
 											}
 										}
-								    }
+									}
 									if (poppedData) {
 										inheritedPrefixes = poppedData.namespacePrefixes.slice();
 
-										inScopeVariablesList = (poppedData)? poppedData.variables: [];
+										inScopeVariablesList = (poppedData) ? poppedData.variables : [];
 										if (poppedData.currentVariable) {
 											inScopeVariablesList.push(poppedData.currentVariable);
 										}
@@ -364,7 +312,7 @@ export class XsltTokenDefinitions {
 							}
 						}
 						if (tagType === TagType.XSLTvar) {
-							attType = attNameText === XsltTokenDefinitions.xslNameAtt? AttributeType.Variable: AttributeType.None;
+							attType = attNameText === XsltTokenDefinitions.xslNameAtt ? AttributeType.Variable : AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
 							if (attNameText === XsltTokenDefinitions.xslNameAtt) {
 								attType = AttributeType.InstructionName;
@@ -378,20 +326,20 @@ export class XsltTokenDefinitions {
 								attType = AttributeType.None;
 							}
 						} else if (attNameText === XsltTokenDefinitions.xslUseAttSet) {
-								attType = AttributeType.UseAttributeSets;
+							attType = AttributeType.UseAttributeSets;
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
 						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
 						if (rootXmlnsName !== null) {
-							let prefix = rootXmlnsName.length === 5? '': rootXmlnsName.substr(6);
+							let prefix = rootXmlnsName.length === 5 ? '' : rootXmlnsName.substr(6);
 							rootXmlnsBindings.push([prefix, variableName]);
 						}
 						switch (attType) {
 							case AttributeType.Variable:
 								tagIdentifierName = variableName;
-								variableData = {token: token, name: variableName};
+								variableData = { token: token, name: variableName };
 								break;
 							case AttributeType.InstructionName:
 								let slashPos = variableName.lastIndexOf('/');
@@ -407,13 +355,13 @@ export class XsltTokenDefinitions {
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
-									let excludePrefixes = variableName.split(/\s+/);
-									tagExcludeResultPrefixes = {token: token, prefixes: excludePrefixes};
+								let excludePrefixes = variableName.split(/\s+/);
+								tagExcludeResultPrefixes = { token: token, prefixes: excludePrefixes };
 								break;
 						}
 
 						let hasProblem = false;
-					
+
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
 							if (!namedTemplates.get(variableName)) {
 
@@ -431,7 +379,7 @@ export class XsltTokenDefinitions {
 
 							}
 						}
-						
+
 						if (!hasProblem && attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
 
 						}
@@ -450,11 +398,9 @@ export class XsltTokenDefinitions {
 							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
 								let keyVal = token.value.substring(1, token.value.length - 1);
 								if (xp.function.value === 'key') {
-									if (globalKeys.indexOf(keyVal) > -1) {
-
-									}
-								} else if (globalAccumulatorNames.indexOf(keyVal) > -1) {
-
+									// get key def
+								} else {
+									// get accumulator def
 								}
 							}
 							preXPathVariable = xp.preXPathVariable;
@@ -463,22 +409,25 @@ export class XsltTokenDefinitions {
 					case TokenLevelState.variable:
 						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							let currentVariable = {token: token, name: fullVariableName.substring(1)};
-						    if (anonymousFunctionParams) {
+							let currentVariable = { token: token, name: fullVariableName.substring(1) };
+							if (anonymousFunctionParams) {
 								anonymousFunctionParamList.push(currentVariable);
 								xsltVariableDeclarations.push(token);
-							} else  {
+							} else {
 								inScopeXPathVariablesList.push(currentVariable);
 								xpathVariableCurrentlyBeingDefined = true;
 								xsltVariableDeclarations.push(token);
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
-							if (!(token.value === '$value' && tagElementName === 'xsl:accumulator-rule' )) {
-								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+							if (!(token.value === '$value' && tagElementName === 'xsl:accumulator-rule')) {
+								let resolvedVariable = XsltTokenDefinitions.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
-								if (unResolvedToken !== null) {
-									unresolvedXsltVariableReferences.push(unResolvedToken);
+								if (resolvedVariable) {
+									let uri = resolvedVariable.uri? vscode.Uri.parse(resolvedVariable.uri): document.uri;
+									let startPos = new vscode.Position(resolvedVariable.token.line, resolvedVariable.token.startCharacter);
+									let endPos = new vscode.Position(resolvedVariable.token.line, resolvedVariable.token.startCharacter + resolvedVariable.token.length);
+									resultLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
 								}
 							}
 						}
@@ -492,10 +441,10 @@ export class XsltTokenDefinitions {
 							case 'some':
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
-								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true});
-							break;
+								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
+								break;
 							case 'then':
-								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
 								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
@@ -513,7 +462,7 @@ export class XsltTokenDefinitions {
 										}
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
 									} else {
-										inScopeXPathVariablesList =  [];
+										inScopeXPathVariablesList = [];
 										preXPathVariable = false;
 										xpathVariableCurrentlyBeingDefined = false;
 									}
@@ -522,18 +471,18 @@ export class XsltTokenDefinitions {
 						}
 						break;
 					case TokenLevelState.operator:
-						let functionToken: BaseToken|null = null;
+						let functionToken: BaseToken | null = null;
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
-								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
-								if (anonymousFunctionParams) {	
+								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
+								if (anonymousFunctionParams) {
 									// handle case: function($a) {$a + 8} pass params to inside '{...}'				
 									inScopeXPathVariablesList = anonymousFunctionParamList;
 									anonymousFunctionParamList = [];
 									anonymousFunctionParams = false;
 								} else {
 									inScopeXPathVariablesList = [];
-								}	
+								}
 								preXPathVariable = false;
 								xpathVariableCurrentlyBeingDefined = false;
 								break;
@@ -545,9 +494,9 @@ export class XsltTokenDefinitions {
 								if (prevToken?.tokenType === TokenLevelState.function) {
 									functionToken = prevToken;
 								}
-								// intentionally no-break;	
+							// intentionally no-break;	
 							case CharLevelState.lPr:
-								let xpathItem: XPathData = {token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined};
+								let xpathItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined };
 								if (functionToken) {
 									xpathItem.function = functionToken;
 									if (incrementFunctionArity) {
@@ -558,7 +507,7 @@ export class XsltTokenDefinitions {
 									}
 								}
 								xpathStack.push(xpathItem);
-								preXPathVariable = false;	
+								preXPathVariable = false;
 								inScopeXPathVariablesList = [];
 								xpathVariableCurrentlyBeingDefined = false;
 								break;
@@ -583,7 +532,7 @@ export class XsltTokenDefinitions {
 											}
 										}
 									} else {
-										inScopeXPathVariablesList =  [];
+										inScopeXPathVariablesList = [];
 										preXPathVariable = false;
 										xpathVariableCurrentlyBeingDefined = false;
 									}
@@ -605,7 +554,7 @@ export class XsltTokenDefinitions {
 								break;
 							case CharLevelState.dSep:
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
-									const fnArity = incrementFunctionArity? 1: 0;
+									const fnArity = incrementFunctionArity ? 1 : 0;
 									incrementFunctionArity = false;
 									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
 									if (isValid) {
@@ -627,9 +576,90 @@ export class XsltTokenDefinitions {
 				}
 			}
 			prevToken = token;
-		});
+		}
 
 		return resultLocation;
+	}
+
+	private static resolveXPathVariableReference(document: vscode.TextDocument, importedVariables: Map<string, GlobalInstructionData>, token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[],
+		xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): VariableData | null {
+		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
+		let varName = fullVarName.substr(1);
+		let resolved: VariableData | null = null;
+		let globalVariable = null;
+
+		resolved = this.resolveVariableName(inScopeXPathVariablesList, varName, xpathVariableCurrentlyBeingDefined, globalVariable);
+		if (!resolved) {
+			resolved = this.resolveStackVariableName(xpathStack, varName);
+		}
+		if (!resolved) {
+			resolved = this.resolveVariableName(inScopeVariablesList, varName, false, globalVariable);
+		}
+		if (!resolved) {
+			resolved = this.resolveStackVariableName(elementStack, varName);
+		}
+		if (!resolved) {
+			let instruction = importedVariables.get(varName);
+			if (instruction) {
+				resolved = {name: instruction.name, token: instruction.token, uri: instruction.href }
+			}
+		}
+
+		return resolved;
+	}
+
+	public static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData|null): VariableData|null {
+		let resolved = null;
+		let decrementedLength = variableList.length - 1;
+		let globalVariableName = globalXsltVariable?.name;
+		// last items in list of declared parameters must be resolved first:
+		for (let i = decrementedLength; i > -1; i--) {
+			let data = variableList[i];
+			if (xpathVariableCurrentlyBeingDefined && i === decrementedLength) {
+				// do nothing: we skip last item in list as it's currently being defined
+			} else if (data.name === varName && globalVariableName !== data.name) {
+				resolved = data;
+				break;
+			}
+		}
+		return resolved;
+	}
+
+	public static resolveStackVariableName(elementStack: ElementData[]|XPathData[], varName: string): VariableData|null  {
+		let resolved = null;
+		let globalXsltVariable: VariableData|null = null;
+
+		for (let i = elementStack.length - 1; i > -1; i--) {
+			let inheritedVariables = elementStack[i].variables;
+			let xpathBeingDefinedInit = elementStack[i].xpathVariableCurrentlyBeingDefined;
+			let xpathBeingDefined = !(xpathBeingDefinedInit === undefined || xpathBeingDefinedInit === false);
+			if (i === 1) {
+				// at the level of a global variable declaration
+				let elementData: ElementData = <ElementData>elementStack[i];
+				let currentVar = elementData.currentVariable;
+				if (currentVar) {
+					// must be inside a global variable declaration - keep this:
+					globalXsltVariable = currentVar;
+				}
+			}
+			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable)
+			if (resolved) {
+				break;
+			}
+		}
+		return resolved;
+	}
+
+	findMatchingDefintion(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], name: string, type: GlobalInstructionType, arity?: number) {
+		let foundInstruction: GlobalInstructionData | undefined;
+		let findFunction = type === GlobalInstructionType.Function;
+		globalInstructionData.find((instruction) => {
+			if (findFunction) {
+				return
+			} else {
+				return instruction.name === name;
+			}
+		});
 	}
 
 }
