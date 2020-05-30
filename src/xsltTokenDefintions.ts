@@ -420,7 +420,7 @@ export class XsltTokenDefinitions {
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
-							if (!(token.value === '$value' && tagElementName === 'xsl:accumulator-rule')) {
+							if (isOnRequiredToken && !(token.value === '$value' && tagElementName === 'xsl:accumulator-rule')) {
 								let resolvedVariable = XsltTokenDefinitions.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
 								if (resolvedVariable) {

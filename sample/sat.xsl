@@ -4,7 +4,10 @@
     version="3.0">
     
     <xsl:include href="included1.xsl"/>
-    <xsl:import href="features/included2.xsl"/> 
+    <xsl:import href="features/included2.xsl"/>
+    
+    <xsl:variable name="sat1" as="xs:integer" select="2"/>
+    
     
     <xsl:template name="tp1">
         <xsl:param name="p1" as="element()" select="a"/>
