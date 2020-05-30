@@ -10,6 +10,8 @@
 
     <xsl:output method="xml" indent="yes"/>  
     <xsl:mode on-no-match="shallow-copy"/>
+    <xsl:import href="import-globalDefintion2.xsl"/>
+    
     
     <xsl:variable name="import1" as="xs:integer" select="2"/>
     

@@ -11,30 +11,13 @@
     <xsl:output method="xml" indent="yes"/>  
     <xsl:mode on-no-match="shallow-copy"/>
     
-    <xsl:import href="import-gotoDefitinition.xsl"/>
-    
-    
-    <xsl:variable name="variable1" as="xs:integer" select="2"/>
+    <xsl:variable name="import2" as="xs:integer" select="2"/>
     
     
     <xsl:template match="/" mode="#all">
         <xsl:copy>
             <xsl:apply-templates select="" mode="#current"/>
-        </xsl:copy>
-        <xsl:sequence select="$variable1"/>
-        <xsl:sequence select="$import1"/>
-        <xsl:sequence select="$import2"/>
-        
-        <xsl:sequence select="for $range in 1 to 255
-            return 
-                288 +
-                288 +
-                290 +
-                $range"/>
-        
-        
-        
-        
+        </xsl:copy>        
     </xsl:template>
     
     
