@@ -4,6 +4,7 @@
                 xmlns:array="http://www.w3.org/2005/xpath-functions/array"
                 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
                 xmlns:math="http://www.w3.org/2005/xpath-functions/array/math"
+                xmlns:fx="example.com"
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="3.0">
@@ -12,6 +13,12 @@
     <xsl:mode on-no-match="shallow-copy"/>
     
     <xsl:import href="import-gotoDefitinition.xsl"/>
+    
+    <xsl:function name="fx:function1" as="xs:string">
+        <xsl:param name="p1" as="node()"/>
+        
+    </xsl:function>
+    
     
     
     <xsl:variable name="variable1" as="xs:integer" select="2"/>
@@ -24,6 +31,8 @@
         <xsl:sequence select="$variable1"/>
         <xsl:sequence select="$import1"/>
         <xsl:sequence select="$import2"/>
+        <xsl:sequence select="fx:function1(a)"/>
+        
         
         <xsl:sequence select="for $range in 1 to 255
             return 

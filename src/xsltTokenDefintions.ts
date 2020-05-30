@@ -101,7 +101,6 @@ export class XsltTokenDefinitions {
 		let rootXmlnsBindings: [string, string][] = [];
 		let inheritedPrefixes: string[] = [];
 		let globalVariableData: VariableData[] = [];
-		let checkedGlobalFnNames: string[] = [];
 		let importedGlobalVarNames: Map<string, GlobalInstructionData> = new Map();
 		let incrementFunctionArity = false;
 		let onRootStartTag = true;
@@ -114,6 +113,7 @@ export class XsltTokenDefinitions {
 		let requiredLine = position.line;
 		let requiredChar = position.character;
 		let isOnRequiredToken = false;
+		let awaitingRequiredArity = false;
 
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
@@ -138,7 +138,7 @@ export class XsltTokenDefinitions {
 			index++;
 			lineNumber = token.line;
 			let isOnRequiredLine = lineNumber === requiredLine;
-			if (isOnRequiredToken || resultLocation || lineNumber > requiredLine) {
+			if ((isOnRequiredToken && !awaitingRequiredArity) || resultLocation || lineNumber > requiredLine) {
 				break;
 			}
 
@@ -406,6 +406,11 @@ export class XsltTokenDefinitions {
 							preXPathVariable = xp.preXPathVariable;
 						}
 						break;
+					case TokenLevelState.function:
+						if (isOnRequiredToken) {
+							awaitingRequiredArity = true;
+						}
+						break;
 					case TokenLevelState.variable:
 						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
@@ -526,10 +531,13 @@ export class XsltTokenDefinitions {
 													poppedData.functionArity++;
 												}
 											}
-											let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
-											if (isValid) {
-
+											if (awaitingRequiredArity && prevToken) {
+												const fnArity = poppedData.functionArity;
+												const fnName = poppedData.function.value;
+												let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
+												resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 											}
+											awaitingRequiredArity = false;
 										}
 									} else {
 										inScopeXPathVariablesList = [];
@@ -554,12 +562,14 @@ export class XsltTokenDefinitions {
 								break;
 							case CharLevelState.dSep:
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
-									const fnArity = incrementFunctionArity ? 1 : 0;
-									incrementFunctionArity = false;
-									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
-									if (isValid) {
-
+									if (awaitingRequiredArity) {
+										const fnArity = incrementFunctionArity ? 1 : 0;
+										const fnName = prevToken.value;
+										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 									}
+									awaitingRequiredArity = false;
+									incrementFunctionArity = false;
 								} else if (token.value === '=>') {
 									incrementFunctionArity = true;
 								}
@@ -568,9 +578,10 @@ export class XsltTokenDefinitions {
 						break;
 
 					case TokenLevelState.functionNameTest:
-						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token, checkedGlobalFnNames);
-						if (isValid) {
-
+						if (isOnRequiredToken) {
+							let {name, arity} = XsltTokenDefinitions.resolveFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token);
+							let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, name, GlobalInstructionType.Function, arity);
+							resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 						}
 						break;
 				}
@@ -579,6 +590,24 @@ export class XsltTokenDefinitions {
 		}
 
 		return resultLocation;
+	}
+
+	public static createLocationFromInstrcution(instruction: GlobalInstructionData|undefined, document: vscode.TextDocument) {
+		if (instruction) {
+			let uri = instruction?.href? vscode.Uri.parse(instruction.href): document.uri;
+			let startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
+			let endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
+			return new vscode.Location(uri, new vscode.Range(startPos, endPos));
+		}
+	}
+
+	public static resolveFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken) {
+
+		let parts = token.value.split('#');
+		let arity = Number.parseInt(parts[1]);
+		let name = parts[0];
+		
+		return {name, arity};
 	}
 
 	private static resolveXPathVariableReference(document: vscode.TextDocument, importedVariables: Map<string, GlobalInstructionData>, token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[],
@@ -650,16 +679,26 @@ export class XsltTokenDefinitions {
 		return resolved;
 	}
 
-	findMatchingDefintion(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], name: string, type: GlobalInstructionType, arity?: number) {
-		let foundInstruction: GlobalInstructionData | undefined;
+	public static findMatchingDefintion(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], name: string, type: GlobalInstructionType, arity?: number) {
 		let findFunction = type === GlobalInstructionType.Function;
-		globalInstructionData.find((instruction) => {
+
+		let found = globalInstructionData.find((instruction) => {
 			if (findFunction) {
-				return
+				return;
 			} else {
 				return instruction.name === name;
 			}
 		});
+		if (!found) {
+			found = importedInstructionData.find((instruction) => {
+				if (findFunction) {
+					return;
+				} else {
+					return instruction.name === name;
+				}
+			});			
+		}
+		return found;
 	}
 
 }
