@@ -94,7 +94,7 @@
 	"xsl:element": {
 		"prefix": "xsl-element",
 		"body": [
-			"<xsl:element name=\"$1\" name=\"{$2}\" namespace=\"{$3}\"/>",
+			"<xsl:element name=\"{$1}\" namespace=\"{$2}\"/>",
 			"$0"
 		],
 		"description": "xsl:element"
@@ -168,6 +168,16 @@
 			"</xsl:call-template>"
 		],
 		"description": "xsl:call-template"
+	},
+	"xsl:apply-templates": {
+		"prefix": "xsl-apply-templates",
+		"body": [
+			"<xsl:apply-templates mode=\"${1:#current}\">",
+			"\t<xsl:with-param name=\"$2\" as=\"$3\"/>",
+			"\t$0",
+			"</xsl:apply-templates>"
+		],
+		"description": "xsl:apply-templates"
 	},
 	"xsl:choose": {
 		"prefix": "xsl-choose",
