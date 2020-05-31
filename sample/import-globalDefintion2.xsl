@@ -12,6 +12,15 @@
     <xsl:output method="xml" indent="yes"/>  
     <xsl:mode on-no-match="shallow-copy"/>
     
+    <xsl:key name="book-id2" match="book" use="@id"/>
+    
+    <xsl:accumulator name="acc2" initial-value="2">
+        <xsl:accumulator-rule match="test">
+            <xsl:sequence select="$value + 1"/>
+        </xsl:accumulator-rule>
+        <xsl:accumulator-rule match="test2" select="count($value)"/>
+    </xsl:accumulator>
+    
     <xsl:variable name="import2" as="xs:integer" select="2"/>
     
     <xsl:template name="template2">

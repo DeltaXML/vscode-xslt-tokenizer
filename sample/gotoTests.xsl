@@ -4,17 +4,32 @@
   exclude-result-prefixes="xs"
   version="3.0">
   
+  <xsl:import href="import-globalDefintion2.xsl"/>
+  
+  
   <xsl:key name="book-id" match="book" use="@id"/>
   
   <xsl:accumulator name="acc" initial-value="2">
     <xsl:accumulator-rule match="test">
       <xsl:sequence select="$value + 1"/>
     </xsl:accumulator-rule>
+    <xsl:accumulator-rule match="test2" select="count($value)"/>
   </xsl:accumulator>
+  
+  
+  
+  
+  
+  
+  
+  
+
   
   <xsl:template match="/">
     <xsl:sequence select="key('book-id', 'test')"/>
     <xsl:sequence select="accumulator-before('acc')"/>
+    <xsl:sequence select="key('book-id2', 'test')"/>
+    <xsl:sequence select="accumulator-before('acc2')"/>
   </xsl:template>
   
 </xsl:stylesheet>

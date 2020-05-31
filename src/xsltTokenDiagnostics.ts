@@ -426,6 +426,9 @@ export class XsltTokenDiagnostics {
 
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
 									// on a start tag
+									if (tagElementName === 'xsl:accumulator') {
+										inScopeVariablesList.push({token: token, name: 'value'});
+									}
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
 									let newVariablesList = elementStack.length === 0? globalVariableData: inScopeVariablesList;
@@ -775,12 +778,10 @@ export class XsltTokenDiagnostics {
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
-							if (!(token.value === '$value' && tagElementName === 'xsl:accumulator-rule' )) {
-								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
-									xpathStack, inScopeVariablesList, elementStack);
-								if (unResolvedToken !== null) {
-									unresolvedXsltVariableReferences.push(unResolvedToken);
-								}
+							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+								xpathStack, inScopeVariablesList, elementStack);
+							if (unResolvedToken !== null) {
+								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
 						}
 						break;
