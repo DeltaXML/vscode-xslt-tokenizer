@@ -9,7 +9,8 @@
   <xsl:attribute-set name="field-attributes" 
                      visibility="public">
     <xsl:attribute name="quoted" 
-      select="if (starts-with(., '')) 
+      select="
+        if (starts-with(., '')) 
           then 'yes' 
         else 'no'"/>
   </xsl:attribute-set>
