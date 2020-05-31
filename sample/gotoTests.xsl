@@ -5,6 +5,8 @@
   version="3.0">
   
   <xsl:import href="import-globalDefintion2.xsl"/>
+  <xsl:import href="key.xsl"/>
+  
   
   
   <xsl:key name="book-id" match="book" use="@id"/>
@@ -30,6 +32,9 @@
     <xsl:sequence select="accumulator-before('acc')"/>
     <xsl:sequence select="key('book-id2', 'test')"/>
     <xsl:sequence select="accumulator-before('acc2')"/>
+    <field xsl:use-attribute-sets="field-attributes">test</field>
+    <xsl:element name="book" use-attribute-sets="field-attributes"/>
+        
   </xsl:template>
   
 </xsl:stylesheet>

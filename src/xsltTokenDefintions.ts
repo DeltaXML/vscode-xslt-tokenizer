@@ -349,7 +349,7 @@ export class XsltTokenDefinitions {
 								}
 								tagIdentifierName = variableName;
 
-								if (isOnRequiredToken && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
+								if (isOnRequiredToken && tagElementName === 'xsl:call-template') {
 									let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
 									resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 								}
@@ -357,6 +357,12 @@ export class XsltTokenDefinitions {
 							case AttributeType.InstructionMode:
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
+								}
+								break;
+							case AttributeType.UseAttributeSets:
+								if (isOnRequiredToken) {
+									let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.AttributeSet);
+									resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
