@@ -19,8 +19,14 @@
         
     </xsl:function>
     
-    
-    
+   <xsl:template name="template1">
+       <xsl:param name="p1" as="node()"/>
+       <xsl:copy>
+           <xsl:apply-templates select="@*, node()" mode="#current"/>
+       </xsl:copy>
+       
+   </xsl:template>
+        
     <xsl:variable name="variable1" as="xs:integer" select="2"/>
     
     
@@ -40,7 +46,13 @@
         <xsl:sequence select="tokenize('abc','') => fx:function1()"/>
         <xsl:sequence select="tokenize('abc','') => fx:function2(a)"/>
         
-               
+        <xsl:call-template name="template1">
+            <xsl:with-param name="p1" as="xs:string"/>           
+        </xsl:call-template> 
+        
+        <xsl:call-template name="template2">
+            <xsl:with-param name="p1" as="xs:string"/>           
+        </xsl:call-template> 
         
         <xsl:sequence select="for $range in 1 to 255
             return 

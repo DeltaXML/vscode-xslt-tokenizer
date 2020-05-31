@@ -14,6 +14,14 @@
     
     <xsl:variable name="import2" as="xs:integer" select="2"/>
     
+    <xsl:template name="template2">
+        <xsl:param name="p1" as="node()"/>
+        <xsl:copy>
+            <xsl:apply-templates select="@*, node()" mode="#current"/>
+        </xsl:copy>
+        
+    </xsl:template>
+    
     <xsl:function name="fx:function2" as="xs:string">
         <xsl:param name="p1" as="node()"/>
         <xsl:param name="p2" as="node()"/>

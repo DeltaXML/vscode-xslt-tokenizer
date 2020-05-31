@@ -348,6 +348,11 @@ export class XsltTokenDefinitions {
 									variableName = variableName.substring(slashPos + 1);
 								}
 								tagIdentifierName = variableName;
+
+								if (isOnRequiredToken && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
+									let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
+									resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+								}
 								break;
 							case AttributeType.InstructionMode:
 								if (tagIdentifierName === '') {
@@ -683,7 +688,9 @@ export class XsltTokenDefinitions {
 		let findFunction = type === GlobalInstructionType.Function;
 
 		let found = globalInstructionData.find((instruction) => {
-			if (findFunction && arity) {
+			if (type !== instruction.type) {
+				return;
+			} else if (findFunction && arity) {
 				return instruction.name === name && instruction.idNumber === arity;
 			} else {
 				return instruction.name === name;
@@ -691,7 +698,9 @@ export class XsltTokenDefinitions {
 		});
 		if (!found) {
 			found = importedInstructionData.find((instruction) => {
-				if (findFunction) {
+				if (type !== instruction.type) {
+					return;
+				} else if (findFunction && arity) {
 					return instruction.name === name && instruction.idNumber === arity;
 				} else {
 					return instruction.name === name;
