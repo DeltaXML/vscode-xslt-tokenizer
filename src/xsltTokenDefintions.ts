@@ -365,29 +365,6 @@ export class XsltTokenDefinitions {
 								break;
 						}
 
-						let hasProblem = false;
-
-						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
-							if (!namedTemplates.get(variableName)) {
-
-							}
-						}
-						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
-							if (globalModes.indexOf(variableName) < 0) {
-
-							}
-						}
-						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length > 0 && tagElementName === 'xsl:with-param') {
-							let callTemplateName = elementStack[elementStack.length - 1].symbolID;
-							let templateParams = namedTemplates.get(callTemplateName);
-							if (templateParams) {
-
-							}
-						}
-
-						if (!hasProblem && attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
-
-						}
 						attType = AttributeType.None;
 						break;
 				}
@@ -400,13 +377,15 @@ export class XsltTokenDefinitions {
 					case TokenLevelState.string:
 						if (xpathStack.length > 0) {
 							let xp = xpathStack[xpathStack.length - 1];
-							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
+							if (isOnRequiredToken && (
+								xp.functionArity === 0 && (
+									xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-')
+								)
+							)) {
 								let keyVal = token.value.substring(1, token.value.length - 1);
-								if (xp.function.value === 'key') {
-									// get key def
-								} else {
-									// get accumulator def
-								}
+								let instrType = xp.function.value === 'key'? GlobalInstructionType.Key: GlobalInstructionType.Accumulator;
+								let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, keyVal, instrType);
+								resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 							}
 							preXPathVariable = xp.preXPathVariable;
 						}
@@ -434,7 +413,7 @@ export class XsltTokenDefinitions {
 								let resolvedVariable = XsltTokenDefinitions.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
 								if (resolvedVariable) {
-									let uri = resolvedVariable.uri? vscode.Uri.parse(resolvedVariable.uri): document.uri;
+									let uri = resolvedVariable.uri ? vscode.Uri.parse(resolvedVariable.uri) : document.uri;
 									let startPos = new vscode.Position(resolvedVariable.token.line, resolvedVariable.token.startCharacter);
 									let endPos = new vscode.Position(resolvedVariable.token.line, resolvedVariable.token.startCharacter + resolvedVariable.token.length);
 									resultLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
@@ -584,7 +563,7 @@ export class XsltTokenDefinitions {
 
 					case TokenLevelState.functionNameTest:
 						if (isOnRequiredToken) {
-							let {name, arity} = XsltTokenDefinitions.resolveFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token);
+							let { name, arity } = XsltTokenDefinitions.resolveFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token);
 							let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, name, GlobalInstructionType.Function, arity);
 							resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 						}
@@ -597,9 +576,9 @@ export class XsltTokenDefinitions {
 		return resultLocation;
 	}
 
-	public static createLocationFromInstrcution(instruction: GlobalInstructionData|undefined, document: vscode.TextDocument) {
+	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
 		if (instruction) {
-			let uri = instruction?.href? vscode.Uri.parse(instruction.href): document.uri;
+			let uri = instruction?.href ? vscode.Uri.parse(instruction.href) : document.uri;
 			let startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
 			let endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
 			return new vscode.Location(uri, new vscode.Range(startPos, endPos));
@@ -611,8 +590,8 @@ export class XsltTokenDefinitions {
 		let parts = token.value.split('#');
 		let arity = Number.parseInt(parts[1]);
 		let name = parts[0];
-		
-		return {name, arity};
+
+		return { name, arity };
 	}
 
 	private static resolveXPathVariableReference(document: vscode.TextDocument, importedVariables: Map<string, GlobalInstructionData>, token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[],
@@ -635,14 +614,14 @@ export class XsltTokenDefinitions {
 		if (!resolved) {
 			let instruction = importedVariables.get(varName);
 			if (instruction) {
-				resolved = {name: instruction.name, token: instruction.token, uri: instruction.href }
+				resolved = { name: instruction.name, token: instruction.token, uri: instruction.href }
 			}
 		}
 
 		return resolved;
 	}
 
-	public static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData|null): VariableData|null {
+	public static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData | null): VariableData | null {
 		let resolved = null;
 		let decrementedLength = variableList.length - 1;
 		let globalVariableName = globalXsltVariable?.name;
@@ -659,9 +638,9 @@ export class XsltTokenDefinitions {
 		return resolved;
 	}
 
-	public static resolveStackVariableName(elementStack: ElementData[]|XPathData[], varName: string): VariableData|null  {
+	public static resolveStackVariableName(elementStack: ElementData[] | XPathData[], varName: string): VariableData | null {
 		let resolved = null;
-		let globalXsltVariable: VariableData|null = null;
+		let globalXsltVariable: VariableData | null = null;
 
 		for (let i = elementStack.length - 1; i > -1; i--) {
 			let inheritedVariables = elementStack[i].variables;
@@ -705,7 +684,7 @@ export class XsltTokenDefinitions {
 				} else {
 					return instruction.name === name;
 				}
-			});			
+			});
 		}
 		return found;
 	}
