@@ -2,7 +2,6 @@
 import { XslLexerLight } from "./xslLexerLight";
 import { GlobalInstructionData, GlobalInstructionType } from "./xslLexer";
 import * as vscode from "vscode";
-import { XSLTLightConfiguration,  } from "./languageConfigurations";
 import { LanguageConfiguration} from "./xslLexer"
 import * as path from 'path';
 
