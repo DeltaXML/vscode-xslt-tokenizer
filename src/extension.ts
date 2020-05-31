@@ -11,12 +11,13 @@ import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
-import {XSLTConfiguration, XMLConfiguration} from './languageConfigurations';
+import {XSLTConfiguration, XMLConfiguration, XSLTLightConfiguration} from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer } from './xslLexer';
 import {DocumentChangeHandler} from './documentChangeHandler'
 import { on } from 'process';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
+import { DocumentLinkProvider } from './documentLinkProvider';
 
 
 const tokenModifiers = new Map<string, number>();
@@ -40,6 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
 	const xsltDefintiionProvider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
+	const xsltLinkProvider = new DocumentLinkProvider(XSLTLightConfiguration.configuration);
 
 	const xmlDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xml');
 	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection);
@@ -57,7 +59,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml'}, xmlSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt'}, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt'}, xsltDefintiionProvider));
-
+	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt'}, xsltLinkProvider));
 
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
