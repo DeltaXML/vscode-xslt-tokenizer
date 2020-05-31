@@ -683,8 +683,8 @@ export class XsltTokenDefinitions {
 		let findFunction = type === GlobalInstructionType.Function;
 
 		let found = globalInstructionData.find((instruction) => {
-			if (findFunction) {
-				return;
+			if (findFunction && arity) {
+				return instruction.name === name && instruction.idNumber === arity;
 			} else {
 				return instruction.name === name;
 			}
@@ -692,7 +692,7 @@ export class XsltTokenDefinitions {
 		if (!found) {
 			found = importedInstructionData.find((instruction) => {
 				if (findFunction) {
-					return;
+					return instruction.name === name && instruction.idNumber === arity;
 				} else {
 					return instruction.name === name;
 				}

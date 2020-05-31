@@ -32,7 +32,15 @@
         <xsl:sequence select="$import1"/>
         <xsl:sequence select="$import2"/>
         <xsl:sequence select="fx:function1(a)"/>
+        <xsl:sequence select="fx:function2(a,b)"/>
+        <xsl:sequence select="fx:function3()"/>
+        <xsl:sequence select="fx:function1#1"/>
+        <xsl:sequence select="fx:function2#2"/>
+        <xsl:sequence select="fx:function3#0"/>
+        <xsl:sequence select="tokenize('abc','') => fx:function1()"/>
+        <xsl:sequence select="tokenize('abc','') => fx:function2(a)"/>
         
+               
         
         <xsl:sequence select="for $range in 1 to 255
             return 

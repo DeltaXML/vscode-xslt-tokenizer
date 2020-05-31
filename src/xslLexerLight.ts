@@ -164,8 +164,8 @@ export class XslLexerLight extends XslLexer {
                                 let attValue = tokenChars.join('');
                                 let tkn: BaseToken = {
                                     line: lineNumber,
-                                    length: attValue.length,
-                                    startCharacter: lineNumberChar - attValue.length,
+                                    length: attValue.length - 2,
+                                    startCharacter: lineNumberChar - (attValue.length + 1),
                                     value: attValue,
                                     tokenType: XSLTokenLevelState.attributeValue
                                 };
