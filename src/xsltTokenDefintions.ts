@@ -49,6 +49,7 @@ interface XPathData {
 	function?: BaseToken;
 	functionArity?: number;
 	isRangeVar?: boolean;
+	awaitingArity: boolean;
 }
 
 interface VariableData {
@@ -114,6 +115,7 @@ export class XsltTokenDefinitions {
 		let requiredChar = position.character;
 		let isOnRequiredToken = false;
 		let awaitingRequiredArity = false;
+		let keepProcessing = false;
 
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
@@ -138,7 +140,7 @@ export class XsltTokenDefinitions {
 			index++;
 			lineNumber = token.line;
 			let isOnRequiredLine = lineNumber === requiredLine;
-			if ((isOnRequiredToken && !awaitingRequiredArity) || resultLocation || lineNumber > requiredLine) {
+			if ((isOnRequiredToken && !keepProcessing) || resultLocation || lineNumber > requiredLine) {
 				break;
 			}
 
@@ -399,6 +401,7 @@ export class XsltTokenDefinitions {
 					case TokenLevelState.function:
 						if (isOnRequiredToken) {
 							awaitingRequiredArity = true;
+							keepProcessing = true;
 						}
 						break;
 					case TokenLevelState.variable:
@@ -436,10 +439,10 @@ export class XsltTokenDefinitions {
 							case 'some':
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
-								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
+								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
 								break;
 							case 'then':
-								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
+								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
 								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
@@ -469,7 +472,7 @@ export class XsltTokenDefinitions {
 						let functionToken: BaseToken | null = null;
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
-								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
+								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
 								if (anonymousFunctionParams) {
 									// handle case: function($a) {$a + 8} pass params to inside '{...}'				
 									inScopeXPathVariablesList = anonymousFunctionParamList;
@@ -491,7 +494,8 @@ export class XsltTokenDefinitions {
 								}
 							// intentionally no-break;	
 							case CharLevelState.lPr:
-								let xpathItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined };
+								let xpathItem: XPathData = { awaitingArity: awaitingRequiredArity, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined };
+								awaitingRequiredArity = false;
 								if (functionToken) {
 									xpathItem.function = functionToken;
 									if (incrementFunctionArity) {
@@ -521,13 +525,13 @@ export class XsltTokenDefinitions {
 													poppedData.functionArity++;
 												}
 											}
-											if (awaitingRequiredArity && prevToken) {
+											if (poppedData.awaitingArity && prevToken) {
+												keepProcessing = false;
 												const fnArity = poppedData.functionArity;
 												const fnName = poppedData.function.value;
 												let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 												resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 											}
-											awaitingRequiredArity = false;
 										}
 									} else {
 										inScopeXPathVariablesList = [];
