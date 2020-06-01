@@ -414,7 +414,9 @@ export class XslLexer {
                     rc = XMLCharState.lDq;
                 } else if (char === '\'') {
                     rc = XMLCharState.lSq;
-                } 
+                } else {
+                    rc = XMLCharState.syntaxError;
+                }
                 break;
             case XMLCharState.lDq:
                 if (char === '"') {
@@ -428,6 +430,11 @@ export class XslLexer {
                 } else if (char === '&') {
                     rc = XMLCharState.lEntity;
                     this.entityContext = EntityPosition.attrDq;
+                } else {
+                    const charState = this.testAttValueChar(char, nextChar);
+                    if (charState !== XMLCharState.lText) {
+                        rc = charState;
+                    }
                 }
                 break; 
             case XMLCharState.lSq:
@@ -442,6 +449,11 @@ export class XslLexer {
                 } else if (char === '&') {
                     rc = XMLCharState.lEntity;
                     this.entityContext = EntityPosition.attrSq;
+                } else {
+                    const charState = this.testAttValueChar(char, nextChar);
+                    if (charState !== XMLCharState.lText) {
+                        rc = charState;
+                    }
                 }
                 break; 
             case XMLCharState.escDqAvt:
@@ -506,6 +518,35 @@ export class XslLexer {
                 break;
             case '/':
                 rc = XMLCharState.syntaxError;
+                break;
+            default:
+                rc = XMLCharState.lText;
+                break;
+        }
+        return rc;
+    }
+
+    private testAttValueChar (char: string, nextChar: string): XMLCharState {
+        let rc: XMLCharState;
+
+        switch (char) {
+            case '<':
+                switch (nextChar) {
+                    case '?':
+                        rc = XMLCharState.lPi;
+                        break;
+                    case '!':
+                        rc = XMLCharState.lExclam;
+                        break;
+                    case '/':
+                        rc = XMLCharState.lCt;
+                        break;
+                    default:
+                        rc = XMLCharState.lSt;                 
+                }
+                break;
+            case '/':                
+                rc = nextChar === '>'? XMLCharState.syntaxError: XMLCharState.lText;
                 break;
             default:
                 rc = XMLCharState.lText;
