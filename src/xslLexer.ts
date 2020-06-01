@@ -388,6 +388,11 @@ export class XslLexer {
                     rc = XMLCharState.wsAfterAttName;
                 } else if (char === '=') {
                     rc = XMLCharState.lStEq;
+                } else {
+                    const charState = this.testNameChar(char, nextChar);
+                    if (charState !== XMLCharState.lText) {
+                        rc = charState;
+                    }
                 }
                 break;
             // whitespace after attribute name
@@ -464,6 +469,47 @@ export class XslLexer {
             default:
                 // awaiting a new node
                 rc = this.testChar(char, nextChar, false);
+        }
+        return rc;
+    }
+
+    private testNameChar (char: string, nextChar: string): XMLCharState {
+        let rc: XMLCharState;
+
+        switch (char) {
+            case '<':
+                switch (nextChar) {
+                    case '?':
+                        rc = XMLCharState.lPi;
+                        break;
+                    case '!':
+                        rc = XMLCharState.lExclam;
+                        break;
+                    case '/':
+                        rc = XMLCharState.lCt;
+                        break;
+                    default:
+                        rc = XMLCharState.lSt;                 
+                }
+                break;
+            case '{':
+                if (nextChar === '{') {
+                    rc = XMLCharState.escTvt;
+                } else {
+                    rc = XMLCharState.tvt;
+                }
+                break;
+            case '&':
+                // TODO: check next char is not ';'
+                rc = XMLCharState.lEntity;
+                this.entityContext = EntityPosition.text;
+                break;
+            case '/':
+                rc = XMLCharState.syntaxError;
+                break;
+            default:
+                rc = XMLCharState.lText;
+                break;
         }
         return rc;
     }

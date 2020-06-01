@@ -1026,6 +1026,7 @@ export enum ErrorType {
     ProcessingInstructionName,
     MultiRoot,
     XMLName,
+    XMLSyntax,
     XSLTName,
     XPathTypeName,
     XSLTPrefix,

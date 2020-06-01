@@ -297,6 +297,7 @@ export class XsltTokenDiagnostics {
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
+
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xmlText:
 						if (elementStack.length === 0) {
