@@ -7,7 +7,8 @@ XPath Embedded provides comprehensive language support XSLT 3.0 and XPath 3.0 in
  - XSLT 3.0 / XPATH 3.1
  - Syntax Highlighting
  - Formatting - on-type/on-paste/document/selection
- - Code diagnostics
+ - Code Diagnostics
+ - XML Well-Formedness Checking
  - Code symbol outline
  - Code symbol lookup
  - xsl:include/xsl:import links
