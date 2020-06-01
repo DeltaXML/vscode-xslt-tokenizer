@@ -17,7 +17,7 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 		let data: GlobalInstructionData[] = this.lexer.analyseLight(document.getText());
 		let result: vscode.DocumentLink[] = [];
 		data.forEach((instruction) => {
-			if (instruction.type === GlobalInstructionType.Import) {
+			if (instruction.type === GlobalInstructionType.Import || instruction.type === GlobalInstructionType.Include) {
 				const basePath = path.dirname(document.fileName);
 				const resolvedPath = path.resolve(basePath, instruction.name);
 				const uri = vscode.Uri.parse(resolvedPath);
