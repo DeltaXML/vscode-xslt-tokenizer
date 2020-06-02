@@ -16,8 +16,8 @@
     </xsl:function> 
     
     <xsl:template match="/" mode="#all">
-        <xsl:variabl select="fn:foo(test)"/>
+        <xsl:variable select="fn:foo(test)"/>
         
-    </xsl:variab>
+    </xsl:variable>
                 
 </xsl:stylesheet>

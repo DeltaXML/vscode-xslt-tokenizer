@@ -216,6 +216,7 @@ export class XslLexerRenameTag extends XslLexer {
                         case XMLCharState.rSelfCt:
                         // end of self-closing tag with no attributes:
                         case XMLCharState.rSelfCtNoAtt:
+                            breakLoop = gotRenameName && xmlElementStack === renameStackLength;
                             storeToken = false;
                             tokenChars = [];
                             break;
