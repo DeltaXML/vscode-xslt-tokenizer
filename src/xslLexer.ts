@@ -1052,9 +1052,6 @@ export class XslLexer {
                 currentState = nextState;
             } 
             currentChar = nextChar;
-            if (isLastChar) {
-                console.log('last char');
-            }
 
             if (isLastChar && resultLengthAtLastChar === result.length && !(nextState === XMLCharState.lWs || nextState === XMLCharState.lsEqWs)) {
                 // if last char we must create a token
