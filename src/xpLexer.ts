@@ -757,11 +757,6 @@ export class XPathLexer {
                         prevToken.tokenType = TokenLevelState.operator;
                     }
                         break;
-                    case CharLevelState.lPr:
-                        if (prevToken.value ===  'array') {
-                            prevToken.tokenType = TokenLevelState.operator;
-                        }
-                        break;
                     case CharLevelState.lBr:
                         if (prevToken.value === 'map' || prevToken.value === 'array') {
                             prevToken.tokenType = TokenLevelState.operator;
