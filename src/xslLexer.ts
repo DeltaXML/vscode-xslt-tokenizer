@@ -656,6 +656,8 @@ export class XslLexer {
             this.lineCharCount++;
             let nextState: XMLCharState = XMLCharState.init;
             let nextChar: string = xsl.charAt(this.charCount);
+            const isLastChar: boolean = this.charCount === xslLength;
+            const resultLengthAtLastChar = isLastChar? result.length: -1;
 
             if (currentChar) {
                 let isCurrentCharNewLIne = currentChar === '\n';
@@ -668,7 +670,7 @@ export class XslLexer {
                 );
 
                 if (nextState === currentState) {
-                    if (isCurrentCharNewLIne) {
+                    if (isCurrentCharNewLIne || isLastChar) {
                         // we must split multi-line tokens:
                         let addToken: XSLTokenLevelState|null = null;
                         switch (nextState) {
@@ -691,7 +693,9 @@ export class XslLexer {
                         if (addToken !== null) {
                             this.addNewTokenToResult(tokenStartChar, addToken, result, nextState);
                             tokenStartChar = 0;
-
+                        } else if (isLastChar) {
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.xmlText, result, nextState);
+                            tokenStartChar = 0;
                         }
                     } else if (storeToken) {
                         tokenChars.push(currentChar);
@@ -1048,6 +1052,14 @@ export class XslLexer {
                 currentState = nextState;
             } 
             currentChar = nextChar;
+            if (isLastChar) {
+                console.log('last char');
+            }
+
+            if (isLastChar && resultLengthAtLastChar === result.length && !(nextState === XMLCharState.lWs || nextState === XMLCharState.lsEqWs)) {
+                // if last char we must create a token
+                this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar, XSLTokenLevelState.xmlText, result, currentState);                        
+            }
         } 
         if (this.timerOn) {
             console.timeEnd('xslLexer.analyse');
