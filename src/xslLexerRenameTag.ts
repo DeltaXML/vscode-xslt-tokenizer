@@ -109,7 +109,6 @@ export class XslLexerRenameTag extends XslLexer {
                     lineNumberChar = 0;
                     lineNumber++;
                     if (lineNumber > renameLine && (!gotRenameName)) {
-                        console.log('breakloop #1 ');
                         breakLoop = true;
                     }
                 }
@@ -132,16 +131,8 @@ export class XslLexerRenameTag extends XslLexer {
                     switch (nextState) {
                         // the '<' of the start tag
                         case XMLCharState.lSt:
-                            // need to start storing token if line number is the same
-                            // it may not be the right token though:
                             storeToken = renameLine === lineNumber && !gotRenameName;
-                            // if (storeToken){
-                            //     console.log('storetoken');
-                            // }
                             breakLoop = ((storeToken && (lineNumberChar > renameStartChar)) || (!gotRenameName && (lineNumber > renameLine)) );
-                            // if (breakLoop) {
-                            //     console.log('start-tag on line: ' + lineNumber + ' breakloop: ' + breakLoop);
-                            // }
                             break;
                         // the '<' of the '</' close tag:
                         case XMLCharState.lCt:
