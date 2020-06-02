@@ -59,10 +59,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	}
 
 	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
-		return this.provideAllFormattingEdits(document, range, options, token);
-	}
-
-	public provideAllFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		let result: vscode.TextEdit[] = [];
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
