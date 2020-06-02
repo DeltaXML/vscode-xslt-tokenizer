@@ -626,7 +626,7 @@ export class XslLexer {
         xpLexer.documentTokens = result;
         xpLexer.debug = this.debug;
         xpLexer.timerOn = this.timerOn;
-        let xslLength = xsl.length - 1;
+        let xslLength = xsl.length;
         let storeToken = false;
         let isNativeElement = false;
         let tagGlobalInstructionType = GlobalInstructionType.Unknown;
@@ -651,7 +651,7 @@ export class XslLexer {
             console.log("xsl:\n" + xsl);
         }
 
-        while (this.charCount < xslLength + 1) {
+        while (this.charCount < xslLength) {
             this.charCount++;
             this.lineCharCount++;
             let nextState: XMLCharState = XMLCharState.init;
