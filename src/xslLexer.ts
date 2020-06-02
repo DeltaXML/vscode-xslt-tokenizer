@@ -389,7 +389,7 @@ export class XslLexer {
                 } else if (char === '=') {
                     rc = XMLCharState.lStEq;
                 } else {
-                    const charState = this.testNameChar(char, nextChar);
+                    const charState = this.testAttNameChar(char, nextChar);
                     if (charState !== XMLCharState.lText) {
                         rc = charState;
                     }
@@ -485,7 +485,7 @@ export class XslLexer {
         return rc;
     }
 
-    private testNameChar (char: string, nextChar: string): XMLCharState {
+    private testAttNameChar (char: string, nextChar: string): XMLCharState {
         let rc: XMLCharState;
 
         switch (char) {
@@ -517,6 +517,7 @@ export class XslLexer {
                 this.entityContext = EntityPosition.text;
                 break;
             case '/':
+            case '>':
                 rc = XMLCharState.syntaxError;
                 break;
             default:
