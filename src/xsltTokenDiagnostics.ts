@@ -736,6 +736,13 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 				}
+				if (index === lastTokenIndex) {
+					if (onRootStartTag) {
+						let errorToken = Object.assign({}, token);
+						errorToken['error'] = ErrorType.XMLRootMissing;
+						problemTokens.push(errorToken);
+					}
+				}
 
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
@@ -992,6 +999,9 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 				}
+				if (index === lastTokenIndex) {
+					// TODO: show error if xpath token is last
+				}
 			}
 			prevToken = token;
 			if (index === lastTokenIndex && elementStack.length > 0) {
@@ -1011,8 +1021,9 @@ export class XsltTokenDiagnostics {
 							endToken = token;
 							usedtoken = true;
 						}
-						poppedData.identifierToken['error'] = ErrorType.ElementNesting;
-						problemTokens.push(poppedData.identifierToken);
+						let errorToken = Object.assign({}, poppedData.identifierToken);
+						errorToken['error'] = ErrorType.ElementNesting;
+						problemTokens.push(errorToken);
 						let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
 						if (symbol !== null) {
 							if (elementStack.length > 0) {
@@ -1403,6 +1414,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLName:
 					msg = `XML: Invalid XML name: '${tokenValue}'`;
+					break;
+				case ErrorType.XMLRootMissing:
+					msg = `XML: Root element is missing`;
 					break;
 				case ErrorType.XSLTName:
 					msg = `XSLT: Invalid XSLT name: '${tokenValue}'`;
