@@ -694,8 +694,10 @@ export class XslLexer {
                             this.addNewTokenToResult(tokenStartChar, addToken, result, nextState);
                             tokenStartChar = 0;
                         } else if (isLastChar) {
-                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.xmlText, result, nextState);
-                            tokenStartChar = 0;
+                            let alreadyDone = result.length > 0 && result[result.length - 1].startCharacter === tokenStartChar;
+                            if (!alreadyDone) {
+                                this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.xmlText, result, nextState);
+                            }
                         }
                     } else if (storeToken) {
                         tokenChars.push(currentChar);
@@ -1054,8 +1056,10 @@ export class XslLexer {
             currentChar = nextChar;
 
             if (isLastChar && resultLengthAtLastChar === result.length && !(nextState === XMLCharState.lWs || nextState === XMLCharState.lsEqWs)) {
-                // if last char we must create a token
-                this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar, XSLTokenLevelState.xmlText, result, currentState);                        
+                let alreadyDone = result.length > 0 && result[result.length - 1].startCharacter === tokenStartChar;
+                if (!alreadyDone) {
+                    this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar, XSLTokenLevelState.xmlText, result, currentState);                        
+                }
             }
         } 
         if (this.timerOn) {
