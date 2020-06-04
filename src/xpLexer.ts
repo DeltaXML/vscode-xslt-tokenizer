@@ -850,7 +850,7 @@ export class XPathLexer {
                 } else {
                     let possOccurrentIndicator = currentToken.value === '?' || currentToken.value === '+' || isStar;
                     if (possOccurrentIndicator) {
-                        if (prevTokenT === TokenLevelState.simpleType) {
+                        if (prevTokenT === TokenLevelState.simpleType && prevToken.length > 1) {
                             // xs:integer? etc
                             currentToken.charType = CharLevelState.lName;
                             currentToken.tokenType = TokenLevelState.simpleType;                    
@@ -1036,6 +1036,7 @@ export enum ErrorType {
     EntityName,
     XPathFunction,
     XPathFunctionNamespace,
+    XPathOperatorUnexpected,
     XPathPrefix,
     XPathKeyword,
     XMLXMLNS,

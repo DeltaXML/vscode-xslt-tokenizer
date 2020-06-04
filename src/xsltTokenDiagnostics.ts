@@ -285,6 +285,31 @@ export class XsltTokenDiagnostics {
 
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			if (isXMLToken) {
+				if (prevToken && prevToken.tokenType && prevToken.tokenType === TokenLevelState.operator && !prevToken.error) {
+					let isValid = false;
+					switch(prevToken.charType) {
+						case CharLevelState.rB:
+						case CharLevelState.rBr:
+						case CharLevelState.rPr:
+							isValid = true;
+							break;
+						case CharLevelState.dSep:
+							isValid = prevToken.value === '()';
+							break;
+						default:
+							if (prevToken.value === '/' || prevToken.value === '*' || prevToken.value === '.') {
+								// these are ok provided that the previous token was XSLT;
+								let prevToken2 = allTokens[index - 2];
+								let tokenBeforePrevWasXSLT = prevToken2.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+								isValid = tokenBeforePrevWasXSLT;
+							}
+							break;
+					}
+					if (!isValid) {
+						prevToken['error'] = ErrorType.XPathOperatorUnexpected;
+						problemTokens.push(prevToken);
+					}
+				}
 				inScopeXPathVariablesList = [];
 				xpathVariableCurrentlyBeingDefined = false;
 				if(xpathStack.length > 0) {
@@ -1461,6 +1486,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathName:
 					msg = `XPath: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathOperatorUnexpected:
+					msg = `XPath: Operator unexpected at this position: '${tokenValue}'`;
 					break;
 				case ErrorType.DTD:
 					msg = `XML: DTD position error: '${tokenValue}'`;
