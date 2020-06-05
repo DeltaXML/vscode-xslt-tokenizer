@@ -34,7 +34,7 @@ See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wik
 
 ### Editor Settings for Highlighting in Color Theme Extensions
 
-Syntax highlighting is currently only enabled in built-in themes. This is because the 'Semantic Highlighting' used by XPath Embedded may not work well with some languages and some themes.
+Syntax highlighting is currently only enabled in built-in themes. This is because the 'Semantic Highlighting' used by XPath Embedded may not work well with some languages (other than XSLT) and some themes.
 
 To enable syntax highighting for a custom theme you need to change User Settings. For example, to enable syntax highlighting for XSLT in the *City Lights* theme use:
 ```json
