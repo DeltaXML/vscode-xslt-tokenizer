@@ -19,7 +19,7 @@ XPath Embedded provides comprehensive language support XSLT 3.0 and XPath 3.0 in
  
 For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. The avoidance of the much more common use of regular expressions on a line-by-line basis has provided many benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and full integrity for syntax highlighting.
 
-This extension performs a comprehensive set of checks on the code, before any XSLT compilation. This ensures that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows references to symbol definitions can be checked regarless of the location of the defintition.
+This extension performs a comprehensive set of checks on the code, before any XSLT compilation. This ensures that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows checking of references to symbol definitions regardless of the location of the definition.
 
 ## Sample Screenshots
 
