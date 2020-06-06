@@ -692,7 +692,6 @@ export class XPathLexer {
                         this.attributeNameTests.push(prevToken.value);
                     }
                 }
-                console.log(this.elementNameTests);
             }
 
             if (!(state === CharLevelState.lC || state === CharLevelState.lWs)) {
