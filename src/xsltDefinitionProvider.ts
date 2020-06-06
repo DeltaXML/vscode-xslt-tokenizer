@@ -3,6 +3,7 @@ import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructio
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
+import { XsltTokenCompletions } from './xsltTokenCompletions';
 
 interface ImportedGlobals {
 	href: string,
@@ -75,6 +76,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.CompletionItem[] | undefined> {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
+
 		// Import/include XSLT - ensuring no duplicates
 		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
 		let importedGlobals1 = [importedG];
@@ -108,11 +110,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
+			let completions: vscode.CompletionItem[]|undefined;
 
 
-			//location= XsltTokenDefinitions.findDefinition(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			completions= XsltTokenCompletions.getCompletions(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
 
-			resolve(result);
+			resolve(completions);
 		});
 
 	}
