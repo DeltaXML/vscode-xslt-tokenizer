@@ -76,7 +76,7 @@ export class XsltTokenCompletions {
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 
 
-	public static getCompletions = (attNameTests: string[], elementNameTest: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
+	public static getCompletions = (attNameTests: string[], elementNameTests: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let lineNumber = -1;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 
@@ -128,7 +128,7 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			if (isOnRequiredToken) {
-				//console.log('on completion token:');
+				console.log('on completion token:');
 				//console.log(token);
 			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
@@ -536,6 +536,11 @@ export class XsltTokenCompletions {
 									}
 									xpathVariableCurrentlyBeingDefined = false;
 								}
+								if (isOnRequiredToken) {
+									if (token.value === '/') {
+										resultCompletions = XsltTokenCompletions.getSimpleCompletions('$', elementNameTests, token, vscode.CompletionItemKind.Snippet);
+									}
+								}
 								break;
 							case CharLevelState.dSep:
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
@@ -590,55 +595,58 @@ export class XsltTokenCompletions {
 	private static getVariableCompletions(globalVarName: string|null, elementStack: ElementData[], token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
 		xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], inScopeVariablesList: VariableData[]): vscode.CompletionItem[] {
 
-			let completionStrings: string[] = [];
+		let completionStrings: string[] = [];
 
-			globalInstructionData.forEach((instruction) => {
-				if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
-					if (completionStrings.indexOf(instruction.name) < 0 && globalVarName !== instruction.name) {
-						completionStrings.push(instruction.name);
-					}
-				}
-	
-			});
-	
-			importedInstructionData.forEach((instruction) => {
-				if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
-					if (completionStrings.indexOf(instruction.name) < 0) {
-						completionStrings.push(instruction.name);
-					}
-				}
-	
-			});
-			let lastIndex = inScopeXPathVariablesList.length - 1;
-			inScopeXPathVariablesList.forEach((instruction, index) => {
-				if (lastIndex === index && xpathVariableCurrentlyBeingDefined) {
-					// do not add
-				} else if (completionStrings.indexOf(instruction.name) < 0) {
+		globalInstructionData.forEach((instruction) => {
+			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
+				if (completionStrings.indexOf(instruction.name) < 0 && globalVarName !== instruction.name) {
 					completionStrings.push(instruction.name);
-				}	
-			});
+				}
+			}
 
-			inScopeVariablesList.forEach((instruction, index) => {
+		});
+
+		importedInstructionData.forEach((instruction) => {
+			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
 				if (completionStrings.indexOf(instruction.name) < 0) {
 					completionStrings.push(instruction.name);
-				}	
-			});
+				}
+			}
 
-			XsltTokenCompletions.pushStackVariableNames(elementStack, completionStrings);
+		});
+		let lastIndex = inScopeXPathVariablesList.length - 1;
+		inScopeXPathVariablesList.forEach((instruction, index) => {
+			if (lastIndex === index && xpathVariableCurrentlyBeingDefined) {
+				// do not add
+			} else if (completionStrings.indexOf(instruction.name) < 0) {
+				completionStrings.push(instruction.name);
+			}	
+		});
 
-			let completionItems: vscode.CompletionItem[] = [];
-			const startPos = new vscode.Position(token.line, token.startCharacter);
-			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
-			const tokenRange = new vscode.Range(startPos, endPos);
+		inScopeVariablesList.forEach((instruction, index) => {
+			if (completionStrings.indexOf(instruction.name) < 0) {
+				completionStrings.push(instruction.name);
+			}	
+		});
 
-			completionStrings.forEach((name) => {
-				const varName = '$' + name;
-				const newItem = new vscode.CompletionItem(varName, vscode.CompletionItemKind.Variable);
+		XsltTokenCompletions.pushStackVariableNames(elementStack, completionStrings);
 
-				newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
-				completionItems.push(newItem);
-			});
+		return XsltTokenCompletions.getSimpleCompletions('$', completionStrings, token, vscode.CompletionItemKind.Variable);
+	}
 
+	private static getSimpleCompletions(char: string, completionStrings: string[], token: BaseToken, kind: vscode.CompletionItemKind) {
+		let completionItems: vscode.CompletionItem[] = [];
+		const startPos = new vscode.Position(token.line, token.startCharacter);
+		const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+		const tokenRange = new vscode.Range(startPos, endPos);
+
+		completionStrings.forEach((name) => {
+			const varName = char + name;
+			const newItem = new vscode.CompletionItem(varName, kind);
+
+			newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
+			completionItems.push(newItem);
+		});
 		return completionItems;
 	}
 

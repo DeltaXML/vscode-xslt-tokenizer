@@ -12,7 +12,7 @@
     
     
     <xsl:variable name="var1" as="xs:integer" select="25 + 8"/>   
-    <xsl:variable name="var2" as="xs:integer" select="$var1 + 9"/>
+    <xsl:variable name="var2" as="xs:integer" select="$var1 + 9 + $varP"/>
 
     <xsl:template match="book" mode="#all">
         <xsl:variable name="var2" as="xs:integer"
@@ -28,7 +28,7 @@
             </nest>
         </nest>
         <xsl:copy>
-            <xsl:apply-templates select="$var2" mode="#current"/>
+            <xsl:apply-templates select="$var2, $var2" mode="#current"/>
             <xsl:sequence select="/alpha/bravo[@delta]/charlie[@echo]/final"/>
             
         </xsl:copy>
