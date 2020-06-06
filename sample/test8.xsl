@@ -6,10 +6,12 @@
                 version="3.0">
 
     <xsl:variable name="myVar" as="xs:string" select="'test'"/>
+    <xsl:variable name="myVar2" as="xs:string" select="'test'"/>
+    
     
 
     <xsl:template match="@*" mode="#all">
-        <xsl:sequence select="2 + "/>
+        <xsl:sequence select="2 + $a"/>
         
     </xsl:template>
 

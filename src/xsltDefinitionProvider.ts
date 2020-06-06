@@ -73,7 +73,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 	}
 
-	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.CompletionItem[] | undefined> {
+	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 
@@ -97,7 +97,6 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		await processNestedGlobals();
 
 		return new Promise((resolve, reject) => {
-			let result: vscode.CompletionItem[]|undefined = undefined;
 			let allImportedGlobals: GlobalInstructionData[] = [];
 
 			globalsSummary0.globals.forEach((globals) => {
@@ -110,10 +109,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
-			let completions: vscode.CompletionItem[]|undefined;
 
-
-			completions= XsltTokenCompletions.getCompletions(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			let completions= XsltTokenCompletions.getCompletions(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
 
 			resolve(completions);
 		});

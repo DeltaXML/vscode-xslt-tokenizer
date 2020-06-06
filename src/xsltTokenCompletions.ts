@@ -128,8 +128,8 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			if (isOnRequiredToken) {
-				console.log('on completion token:');
-				console.log(token);
+				//console.log('on completion token:');
+				//console.log(token);
 			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
@@ -403,7 +403,7 @@ export class XsltTokenCompletions {
 							if (isOnRequiredToken) {
 								resultCompletions = XsltTokenCompletions.getVariableCompletions(globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 								if (tagElementName === 'xsl:accumulator-rule') {
-									resultCompletions.push(new vscode.CompletionItem('value'));
+									resultCompletions.push(new vscode.CompletionItem('value', vscode.CompletionItemKind.Variable));
 								}
 							}
 						}
@@ -621,7 +621,7 @@ export class XsltTokenCompletions {
 
 			let completionItems: vscode.CompletionItem[] = [];
 			completionStrings.forEach((name) => {
-				completionItems.push(new vscode.CompletionItem(name));
+				completionItems.push(new vscode.CompletionItem('$' + name, vscode.CompletionItemKind.Variable));
 			});
 
 		return completionItems;
