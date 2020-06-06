@@ -67,6 +67,10 @@ Or, to enable syntax highlighting for all themes:
   }
 }
 ```
+### Editor Settings For Word Selection/Navigation
+
+`editor.wordSeparators`
+
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
 
