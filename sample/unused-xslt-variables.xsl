@@ -29,6 +29,8 @@
         </nest>
         <xsl:copy>
             <xsl:apply-templates select="$var2" mode="#current"/>
+            <xsl:sequence select="/alpha/bravo[@delta]/charlie[@echo]/final"/>
+            
         </xsl:copy>
     </xsl:template>
 

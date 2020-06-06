@@ -129,6 +129,8 @@ export class XslLexer {
     public timerOn: boolean = false;
     public provideCharLevelState = false;
     public globalInstructionData: GlobalInstructionData[] = [];
+    public attributeNameTests: string[]|undefined;
+    public elementNameTests: string[]|undefined;
     protected globalModeData: GlobalInstructionData[] = [];
     private lineNumber: number = 0;
     private charCount = 0;
@@ -606,7 +608,7 @@ export class XslLexer {
         return rc;
     }
 
-    public analyse(xsl: string): BaseToken[] {
+    public analyse(xsl: string, keepNameTests?: boolean): BaseToken[] {
         if (this.timerOn) {
             console.time('xslLexer.analyse');
         }
@@ -614,6 +616,14 @@ export class XslLexer {
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.charCount = -1;
+        if (keepNameTests) {
+            this.attributeNameTests = [];
+            this.elementNameTests = [];
+        } else {
+            this.attributeNameTests = undefined;
+            this.elementNameTests = undefined;
+        }
+        
 
         let currentState: XMLCharState = XMLCharState.init;
         let currentChar: string = '';
@@ -622,6 +632,9 @@ export class XslLexer {
         let attName: string = '';
 
         let xpLexer: XPathLexer = new XPathLexer();
+        xpLexer.elementNameTests = this.elementNameTests;
+        xpLexer.attributeNameTests = this.attributeNameTests;
+
         xpLexer.documentText = xsl;
         xpLexer.documentTokens = result;
         xpLexer.debug = this.debug;
@@ -943,6 +956,7 @@ export class XslLexer {
                                 }
 
                                 xpLexer.analyse('', exit, p);
+                                this.updateNames(result);
                                 // need to process right double-quote/single-quote
                                 this.lineNumber = p.line;
                                 let newCharCount = p.documentOffset - 1;
@@ -975,6 +989,8 @@ export class XslLexer {
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
                                 xpLexer.analyse('', exit, p);
+                                this.updateNames(result);
+
                                 // need to process right double-quote
                                 this.lineNumber = p.line;
                                 let newCharCount = p.documentOffset - 1;
@@ -996,6 +1012,7 @@ export class XslLexer {
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
                                 xpLexer.analyse('', ExitCondition.CurlyBrace, p);
+                                this.updateNames(result);
                                 // need to process right double-quote
                                 this.lineNumber = p.line;
                                 let newCharCount = p.documentOffset - 1;
@@ -1067,6 +1084,21 @@ export class XslLexer {
         }
         this.globalInstructionData = this.globalInstructionData.concat(this.globalModeData);
         return result;
+    }
+
+    private updateNames(result: BaseToken[]) {
+        if (this.elementNameTests && this.attributeNameTests && result.length > 0) {
+            let prevToken = result[result.length - 1];
+            if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
+                if (this.elementNameTests.indexOf(prevToken.value) < 0) {
+                    this.elementNameTests.push(prevToken.value);
+                }
+            } else if (prevToken.tokenType === TokenLevelState.attributeNameTest) {
+                if (this.attributeNameTests.indexOf(prevToken.value) < 0) {
+                    this.attributeNameTests.push(prevToken.value);
+                }
+            }
+        }
     }
 
     private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState): BaseToken {

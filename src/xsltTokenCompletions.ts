@@ -76,7 +76,7 @@ export class XsltTokenCompletions {
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 
 
-	public static getCompletions = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
+	public static getCompletions = (attNameTests: string[], elementNameTest: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let lineNumber = -1;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 

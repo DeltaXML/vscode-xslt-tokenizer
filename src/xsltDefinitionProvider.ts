@@ -74,7 +74,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
-		const allTokens = this.xslLexer.analyse(document.getText());
+		const keepNameTests = true;
+		const allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 
 		// Import/include XSLT - ensuring no duplicates
@@ -109,8 +110,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
-
-			let completions= XsltTokenCompletions.getCompletions(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			let attNames = this.xslLexer.attributeNameTests? this.xslLexer.attributeNameTests: [];
+			let nodeNames = this.xslLexer.elementNameTests? this.xslLexer.elementNameTests: [];
+			let completions= XsltTokenCompletions.getCompletions(attNames, nodeNames, this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
 
 			resolve(completions);
 		});
