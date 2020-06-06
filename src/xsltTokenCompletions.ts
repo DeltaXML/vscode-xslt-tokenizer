@@ -401,7 +401,7 @@ export class XsltTokenCompletions {
 						} else {
 							// don't include any current pending variable declarations when resolving
 							if (isOnRequiredToken) {
-								resultCompletions = XsltTokenCompletions.getVariableCompletions(token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
+								resultCompletions = XsltTokenCompletions.getVariableCompletions(elementStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 								if (tagElementName === 'xsl:accumulator-rule') {
 									resultCompletions.push(new vscode.CompletionItem('value', vscode.CompletionItemKind.Variable));
 								}
@@ -582,7 +582,7 @@ export class XsltTokenCompletions {
 		return { name, arity };
 	}
 
-	private static getVariableCompletions(token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
+	private static getVariableCompletions(elementStack: ElementData[], token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
 		xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], inScopeVariablesList: VariableData[]): vscode.CompletionItem[] {
 
 			let completionStrings: string[] = [];
@@ -619,11 +619,13 @@ export class XsltTokenCompletions {
 				}	
 			});
 
+			XsltTokenCompletions.pushStackVariableNames(elementStack, completionStrings);
+
 			let completionItems: vscode.CompletionItem[] = [];
 			const startPos = new vscode.Position(token.line, token.startCharacter);
 			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
 			const tokenRange = new vscode.Range(startPos, endPos);
-			
+
 			completionStrings.forEach((name) => {
 				const varName = '$' + name;
 				const newItem = new vscode.CompletionItem(varName, vscode.CompletionItemKind.Variable);
@@ -635,46 +637,19 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	public static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData | null): VariableData | null {
-		let resolved = null;
-		let decrementedLength = variableList.length - 1;
-		let globalVariableName = globalXsltVariable?.name;
-		// last items in list of declared parameters must be resolved first:
-		for (let i = decrementedLength; i > -1; i--) {
-			let data = variableList[i];
-			if (xpathVariableCurrentlyBeingDefined && i === decrementedLength) {
-				// do nothing: we skip last item in list as it's currently being defined
-			} else if (data.name === varName && globalVariableName !== data.name) {
-				resolved = data;
-				break;
+	private static pushStackVariableNames(elementStack: ElementData[] | XPathData[], varNames: string[]): void {
+		elementStack.forEach((element: ElementData | XPathData, index: number) => {
+			if (index > 1) {
+				// we have global variables already
+				let inheritedVariables = element.variables;
+				inheritedVariables.forEach((varData: VariableData) => {
+					const varName = varData.name;
+					if (varNames.indexOf(varName) < 0) {
+						varNames.push(varName)
+					}
+				});
 			}
-		}
-		return resolved;
-	}
-
-	public static resolveStackVariableName(elementStack: ElementData[] | XPathData[], varName: string): VariableData | null {
-		let resolved = null;
-		let globalXsltVariable: VariableData | null = null;
-
-		for (let i = elementStack.length - 1; i > -1; i--) {
-			let inheritedVariables = elementStack[i].variables;
-			let xpathBeingDefinedInit = elementStack[i].xpathVariableCurrentlyBeingDefined;
-			let xpathBeingDefined = !(xpathBeingDefinedInit === undefined || xpathBeingDefinedInit === false);
-			if (i === 1) {
-				// at the level of a global variable declaration
-				let elementData: ElementData = <ElementData>elementStack[i];
-				let currentVar = elementData.currentVariable;
-				if (currentVar) {
-					// must be inside a global variable declaration - keep this:
-					globalXsltVariable = currentVar;
-				}
-			}
-			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable)
-			if (resolved) {
-				break;
-			}
-		}
-		return resolved;
+		});
 	}
 
 	public static findMatchingDefintion(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], name: string, type: GlobalInstructionType, arity?: number) {

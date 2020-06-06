@@ -2,19 +2,25 @@
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 exclude-result-prefixes="#all"
-                expand-text="yes"
+                expand-text="no"
                 version="3.0">
-
+    
     <xsl:variable name="myVar" as="xs:string" select="'test'"/>
-    <xsl:variable name="myVar2" as="xs:string" select="'test'"/>
+    <xsl:variable name="myVar2" as="xs:string" select="'test' || $myVar2"/>
     
     
-
+    
     <xsl:template match="@*" mode="#all">
-        <xsl:sequence select="2 + $a"/>
+        <xsl:variable name="depth" select="count(ancestor::*) + 1"/>
+        <xsl:value-of select="count($depth)"/>
+        <xsl:for-each select="*">
+            <xsl:value-of select="count($depth)"/>
+            <xsl:sequence select="for $new in 1 to 20 return $new, $new"/>
+            
+        </xsl:for-each>
         
     </xsl:template>
-
     
-
+    
+    
 </xsl:stylesheet>
