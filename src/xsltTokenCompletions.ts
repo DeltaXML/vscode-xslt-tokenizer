@@ -401,7 +401,7 @@ export class XsltTokenCompletions {
 						} else {
 							// don't include any current pending variable declarations when resolving
 							if (isOnRequiredToken) {
-								resultCompletions = XsltTokenCompletions.getVariableCompletions(globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
+								resultCompletions = XsltTokenCompletions.getVariableCompletions(token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 								if (tagElementName === 'xsl:accumulator-rule') {
 									resultCompletions.push(new vscode.CompletionItem('value', vscode.CompletionItemKind.Variable));
 								}
@@ -582,7 +582,7 @@ export class XsltTokenCompletions {
 		return { name, arity };
 	}
 
-	private static getVariableCompletions(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
+	private static getVariableCompletions(token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
 		xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], inScopeVariablesList: VariableData[]): vscode.CompletionItem[] {
 
 			let completionStrings: string[] = [];
@@ -620,8 +620,16 @@ export class XsltTokenCompletions {
 			});
 
 			let completionItems: vscode.CompletionItem[] = [];
+			const startPos = new vscode.Position(token.line, token.startCharacter);
+			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+			const tokenRange = new vscode.Range(startPos, endPos);
+			
 			completionStrings.forEach((name) => {
-				completionItems.push(new vscode.CompletionItem('$' + name, vscode.CompletionItemKind.Variable));
+				const varName = '$' + name;
+				const newItem = new vscode.CompletionItem(varName, vscode.CompletionItemKind.Variable);
+
+				newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
+				completionItems.push(newItem);
 			});
 
 		return completionItems;
