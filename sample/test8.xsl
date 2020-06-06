@@ -5,13 +5,13 @@
                 expand-text="no"
                 version="3.0">
     
-    <xsl:param name="param1" as="" select="$param1"/>
+    <xsl:param name="param1" as="" select="22"/>
     <xsl:variable name="myVar" as="xs:string" select="'test'"/>
-    <xsl:variable name="myVar2" as="xs:string" select="'test' || $myVar"/>
+    <xsl:variable name="myVar2" as="xs:string" select="'test' || $param1 || $myVar"/>
     
     
     <xsl:template match="@*" mode="#all">
-        <xsl:variable name="depth" select="count(ancestor::*) + 1"/>
+        <xsl:variable name="depth" select="count(ancestor::*) + 1 + $myVar2"/>
         <xsl:value-of select="count($depth)"/>
         <xsl:for-each select="*">
             <xsl:value-of select="count($depth)"/>

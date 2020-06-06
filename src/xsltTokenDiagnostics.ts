@@ -483,7 +483,7 @@ export class XsltTokenDiagnostics {
 											inScopeVariablesList.push(variableData);
 											xsltVariableDeclarations.push(variableData.token);
 										} else {
-											inScopeVariablesList = globalVariableData;
+											inScopeVariablesList = [];
 										}
 									}
 									if (startTagToken) {
@@ -811,7 +811,11 @@ export class XsltTokenDiagnostics {
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
-							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+							let globalVarName: string|null = null;
+							if (tagType === TagType.XSLTvar && elementStack.length === 1) {
+								globalVarName = tagIdentifierName;
+							}
+							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(globalVarName, document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
 								xpathStack, inScopeVariablesList, elementStack);
 							if (unResolvedToken !== null) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
@@ -1227,7 +1231,7 @@ export class XsltTokenDiagnostics {
 		return valueText;
 	}
 
-	private static resolveXPathVariableReference(document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], 
+	private static resolveXPathVariableReference(globalVarName: string|null, document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], 
 		                                 xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken|null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.substr(1);
@@ -1242,10 +1246,14 @@ export class XsltTokenDiagnostics {
 			resolved = this.resolveVariableName(inScopeVariablesList, varName, false, globalVariable);			
 		}
 		if (!resolved) {
-			resolved = this.resolveStackVariableName(elementStack, varName);		
+			if (elementStack.length === 1 && globalVarName === varName) {
+				resolved = false;
+			} else {
+				resolved = this.resolveStackVariableName(elementStack, varName);		
+			}
 		}
 		if (!resolved) {
-			resolved = importedVariables.indexOf(varName) > -1;
+			resolved = globalVarName !== varName && importedVariables.indexOf(varName) > -1;
 		}
 		if (!resolved) {
 			result = token;
