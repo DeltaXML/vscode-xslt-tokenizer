@@ -144,6 +144,7 @@ export class XsltTokenCompletions {
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
+							const isVar = 
 							tagType = (XsltTokenCompletions.xslVariable.indexOf(tagElementName) > -1) ? TagType.XSLTvar : TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
@@ -401,7 +402,11 @@ export class XsltTokenCompletions {
 						} else {
 							// don't include any current pending variable declarations when resolving
 							if (isOnRequiredToken) {
-								resultCompletions = XsltTokenCompletions.getVariableCompletions(elementStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
+								let globalVarName: string|null = null;
+								if (tagType === TagType.XSLTvar && elementStack.length === 1) {
+									globalVarName = tagIdentifierName;
+								}
+								resultCompletions = XsltTokenCompletions.getVariableCompletions(globalVarName, elementStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 								if (tagElementName === 'xsl:accumulator-rule') {
 									resultCompletions.push(new vscode.CompletionItem('value', vscode.CompletionItemKind.Variable));
 								}
@@ -582,14 +587,14 @@ export class XsltTokenCompletions {
 		return { name, arity };
 	}
 
-	private static getVariableCompletions(elementStack: ElementData[], token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
+	private static getVariableCompletions(globalVarName: string|null, elementStack: ElementData[], token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
 		xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], inScopeVariablesList: VariableData[]): vscode.CompletionItem[] {
 
 			let completionStrings: string[] = [];
 
 			globalInstructionData.forEach((instruction) => {
 				if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
-					if (completionStrings.indexOf(instruction.name) < 0) {
+					if (completionStrings.indexOf(instruction.name) < 0 && globalVarName !== instruction.name) {
 						completionStrings.push(instruction.name);
 					}
 				}

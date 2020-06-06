@@ -5,9 +5,9 @@
                 expand-text="no"
                 version="3.0">
     
+    <xsl:param name="param1" as="" select="$param1"/>
     <xsl:variable name="myVar" as="xs:string" select="'test'"/>
-    <xsl:variable name="myVar2" as="xs:string" select="'test' || $myVar2"/>
-    
+    <xsl:variable name="myVar2" as="xs:string" select="'test' || $myVar"/>
     
     
     <xsl:template match="@*" mode="#all">
