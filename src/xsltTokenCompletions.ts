@@ -9,7 +9,6 @@ import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, Glob
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
-import { ExecSyncOptionsWithBufferEncoding } from 'child_process';
 
 enum TagType {
 	XSLTstart,
@@ -75,6 +74,8 @@ export class XsltTokenCompletions {
 	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
 	private static readonly excludePrefixes = 'exclude-result-prefixes';
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
+	private static jsonObject: FunctionCompletionData[] = require('./data/xpathFunctions.json');
+
 
 
 	public static getCompletions = (attNameTests: string[], elementNameTests: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
@@ -553,8 +554,7 @@ export class XsltTokenCompletions {
 											{name: 'funct1', markDownDescription: 'funct1(*$args* as item()\\*) as item()\\*\n\nDescription goes here'},
 											{name: 'funct2', markDownDescription: 'funct2(*$args* as item()\\*) as item()\\*'}
 										]
-										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, functions);
-
+										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.jsonObject);
 										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions);
 									}
 								}

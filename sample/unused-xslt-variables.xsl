@@ -12,7 +12,7 @@
     
     
     <xsl:variable name="var1" as="xs:integer" select="$varP/descendant::book"/>   
-    <xsl:variable name="var2" as="xs:integer" select="$var1"/>
+    <xsl:variable name="var2" as="xs:integer" select="$var1/funct1"/>
 
     <xsl:template match="book" mode="#all">
         <xsl:variable name="var2" as="xs:integer"
