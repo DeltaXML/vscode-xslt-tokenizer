@@ -549,8 +549,11 @@ export class XsltTokenCompletions {
 										let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Operator);
 										let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
 										let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
+										let f1: FunctionCompletionData = {name: 'funct1', markDownDescription: 'funct1($args as item()\\*) as item()\\*\n\nDescription goes here'};
+										let f2: FunctionCompletionData = {name: 'funct2', markDownDescription: 'funct2($args as item()\\*) as item()\\*'};
+										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, [f1, f2]);
 
-										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions);
+										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions);
 									}
 								}
 								break;
@@ -697,15 +700,14 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getFunctionCompletions(dataItems: FunctionCompletionData[], token: BaseToken) {
+	private static getFnCompletions(pos: vscode.Position, dataItems: FunctionCompletionData[]) {
 		let completionItems: vscode.CompletionItem[] = [];
-		const startPos = new vscode.Position(token.line, token.startCharacter);
-		const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
-		const tokenRange = new vscode.Range(startPos, endPos);
-		
+		const newPos = new vscode.Position(pos.line, pos.character + 1);
+
 		dataItems.forEach((item) => {
 			const newItem = new vscode.CompletionItem(item.name, vscode.CompletionItemKind.Function);
 			newItem.documentation = new vscode.MarkdownString(item.markDownDescription);
+			newItem.textEdit = vscode.TextEdit.insert(pos, item.name);
 			//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 			completionItems.push(newItem);
 		});
