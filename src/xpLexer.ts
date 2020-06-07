@@ -102,10 +102,16 @@ export class Data {
     public static axes = [ "ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self", 
                             "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"];
 
+    public static cAxes = [ "ancestor", "ancestor-or-self", "attribute", "descendant", "descendant-or-self", 
+                            "following", "following-sibling", "parent", "preceding", "preceding-sibling", "self"];
+
     public static nodeTypes = [ "attribute", 
                                 "comment", "document-node", "element", "empty-sequence", "item", "namespace-node", "node", 
                                 "processing-instruction", 
-                                "schema-attribute", "schema-element", "text"]; 
+                                "schema-attribute", "schema-element", "text"];
+
+    public static cNodeTypes = [ "attribute", "comment", "element", "item", "namespace-node", "node", 
+                                "processing-instruction", "text"]; 
 
     // note: 'otherwise' is a Saxon extension operator:
     public static keywords = [ "and", "array", "as", "div", 

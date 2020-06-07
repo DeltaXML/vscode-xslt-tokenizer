@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
@@ -542,8 +542,16 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (token.value === '/') {
 										resultCompletions = XsltTokenCompletions.getSimpleCompletions('/', elementNameTests, token, vscode.CompletionItemKind.Unit);
+
 										let attnamecompletions = XsltTokenCompletions.getSimpleCompletions('/', attNameTests, token, vscode.CompletionItemKind.Unit);
-										resultCompletions = resultCompletions.concat(attnamecompletions);
+
+										let axes = Data.cAxes.map(axis => axis + '::');
+										let axisCompletions = XsltTokenCompletions.getSimpleCompletions('/', axes, token, vscode.CompletionItemKind.Property);
+
+										let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
+										let nodeCompletions = XsltTokenCompletions.getSimpleCompletions('/', nodeTypes, token, vscode.CompletionItemKind.Property);
+
+										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions);
 									}
 								}
 								break;
