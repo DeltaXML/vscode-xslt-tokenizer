@@ -102,7 +102,7 @@ export class Data {
     public static axes = [ "ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self", 
                             "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"];
 
-    public static cAxes = [ "ancestor", "ancestor-or-self", "attribute", "descendant", "descendant-or-self", 
+    public static cAxes = [ "ancestor", "ancestor-or-self", "descendant", "descendant-or-self", 
                             "following", "following-sibling", "parent", "preceding", "preceding-sibling", "self"];
 
     public static nodeTypes = [ "attribute", 

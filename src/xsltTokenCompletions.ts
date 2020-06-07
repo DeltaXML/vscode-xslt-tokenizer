@@ -128,7 +128,7 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			if (isOnRequiredToken) {
-				console.log('on completion token:');
+				console.log('on completion token: column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
 				//console.log(token);
 			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
@@ -567,6 +567,28 @@ export class XsltTokenCompletions {
 									incrementFunctionArity = false;
 								} else if (token.value === '=>') {
 									incrementFunctionArity = true;
+								} else if (token.value === '::') {
+									if (isOnRequiredToken && prevToken) {
+										switch (prevToken.value) {
+											case 'attribute':
+												let attNames = attNameTests.map((name) => name.substring(0, name.length - 1));
+												resultCompletions = XsltTokenCompletions.getSimpleCompletions(':', attNames, token, vscode.CompletionItemKind.Unit);
+												break;
+											case 'child':
+											case 'self':
+												resultCompletions = XsltTokenCompletions.getAxisCompletions('', elementNameTests, token, vscode.CompletionItemKind.Unit);
+												break;
+											default:
+												resultCompletions = XsltTokenCompletions.getSimpleCompletions(':', elementNameTests, token, vscode.CompletionItemKind.Unit);
+					
+												let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
+												let nodeCompletions = XsltTokenCompletions.getSimpleCompletions(':', nodeTypes, token, vscode.CompletionItemKind.Property);
+					
+												resultCompletions = resultCompletions.concat(nodeCompletions);
+												break;
+										}
+										console.log(resultCompletions);
+									}
 								}
 								break;
 						}
@@ -659,6 +681,23 @@ export class XsltTokenCompletions {
 				const newItem = new vscode.CompletionItem(varName, kind);
 	
 				newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
+				completionItems.push(newItem);
+			}
+		});
+		return completionItems;
+	}
+
+	private static getAxisCompletions(char: string, completionStrings: string[], token: BaseToken, kind: vscode.CompletionItemKind, excludeChar?: string) {
+		let completionItems: vscode.CompletionItem[] = [];
+		const startPos = new vscode.Position(token.line, token.startCharacter + 2);
+		const endPos = new vscode.Position(token.line, token.startCharacter + 2);
+		const tokenRange = new vscode.Range(startPos, endPos);
+
+		completionStrings.forEach((name) => {
+			if (!excludeChar || name !== excludeChar) {
+				const varName = char + name;
+				const newItem = new vscode.CompletionItem(varName, kind);
+				newItem.range = tokenRange;
 				completionItems.push(newItem);
 			}
 		});
