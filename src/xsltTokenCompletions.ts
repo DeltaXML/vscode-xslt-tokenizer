@@ -549,9 +549,11 @@ export class XsltTokenCompletions {
 										let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Operator);
 										let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
 										let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
-										let f1: FunctionCompletionData = {name: 'funct1', markDownDescription: 'funct1(*$args* as item()\\*) as item()\\*\n\nDescription goes here'};
-										let f2: FunctionCompletionData = {name: 'funct2', markDownDescription: 'funct2(*$args* as item()\\*) as item()\\*'};
-										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, [f1, f2]);
+										let functions = [
+											{name: 'funct1', markDownDescription: 'funct1(*$args* as item()\\*) as item()\\*\n\nDescription goes here'},
+											{name: 'funct2', markDownDescription: 'funct2(*$args* as item()\\*) as item()\\*'}
+										]
+										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, functions);
 
 										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions);
 									}
