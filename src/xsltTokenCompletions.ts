@@ -571,23 +571,18 @@ export class XsltTokenCompletions {
 									if (isOnRequiredToken && prevToken) {
 										switch (prevToken.value) {
 											case 'attribute':
-												let attNames = attNameTests.map((name) => name.substring(0, name.length - 1));
-												resultCompletions = XsltTokenCompletions.getSimpleCompletions(':', attNames, token, vscode.CompletionItemKind.Unit);
-												break;
-											case 'child':
-											case 'self':
-												resultCompletions = XsltTokenCompletions.getAxisCompletions('', elementNameTests, token, vscode.CompletionItemKind.Unit);
+												let attNames = attNameTests.map((name) => name.substring(1));
+												resultCompletions = XsltTokenCompletions.getAxisCompletions('', attNames, token, vscode.CompletionItemKind.Unit);
 												break;
 											default:
-												resultCompletions = XsltTokenCompletions.getSimpleCompletions(':', elementNameTests, token, vscode.CompletionItemKind.Unit);
+												resultCompletions = XsltTokenCompletions.getAxisCompletions('', elementNameTests, token, vscode.CompletionItemKind.Unit);
 					
-												let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
-												let nodeCompletions = XsltTokenCompletions.getSimpleCompletions(':', nodeTypes, token, vscode.CompletionItemKind.Property);
+												let nodeTypes = Data.cNodeTypes.map(axis => axis + '()');
+												let nodeCompletions = XsltTokenCompletions.getAxisCompletions('', nodeTypes, token, vscode.CompletionItemKind.Property);
 					
 												resultCompletions = resultCompletions.concat(nodeCompletions);
 												break;
 										}
-										console.log(resultCompletions);
 									}
 								}
 								break;
