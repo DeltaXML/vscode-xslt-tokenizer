@@ -546,7 +546,7 @@ export class XsltTokenCompletions {
 										let attnamecompletions = XsltTokenCompletions.getSimpleCompletions('/', attNameTests, token, vscode.CompletionItemKind.Unit);
 
 										let axes = Data.cAxes.map(axis => axis + '::');
-										let axisCompletions = XsltTokenCompletions.getSimpleCompletions('/', axes, token, vscode.CompletionItemKind.Property);
+										let axisCompletions = XsltTokenCompletions.getCommandCompletions('/', axes, token, vscode.CompletionItemKind.Property);
 
 										let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
 										let nodeCompletions = XsltTokenCompletions.getSimpleCompletions('/', nodeTypes, token, vscode.CompletionItemKind.Property);
@@ -675,6 +675,24 @@ export class XsltTokenCompletions {
 				const varName = char + name;
 				const newItem = new vscode.CompletionItem(varName, kind);
 	
+				newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
+				completionItems.push(newItem);
+			}
+		});
+		return completionItems;
+	}
+
+	private static getCommandCompletions(char: string, completionStrings: string[], token: BaseToken, kind: vscode.CompletionItemKind, excludeChar?: string) {
+		let completionItems: vscode.CompletionItem[] = [];
+		const startPos = new vscode.Position(token.line, token.startCharacter);
+		const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+		const tokenRange = new vscode.Range(startPos, endPos);
+
+		completionStrings.forEach((name) => {
+			if (!excludeChar || name !== excludeChar) {
+				const varName = char + name;
+				const newItem = new vscode.CompletionItem(varName, kind);
+				newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 				newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
 				completionItems.push(newItem);
 			}
