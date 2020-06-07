@@ -387,6 +387,9 @@ export class XsltTokenCompletions {
 							keepProcessing = true;
 						}
 						break;
+					case TokenLevelState.attributeNameTest:
+						resultCompletions = XsltTokenCompletions.getSimpleCompletions('', attNameTests, token, vscode.CompletionItemKind.Unit, '@');
+						break;
 					case TokenLevelState.variable:
 						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
 							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
@@ -538,7 +541,9 @@ export class XsltTokenCompletions {
 								}
 								if (isOnRequiredToken) {
 									if (token.value === '/') {
-										resultCompletions = XsltTokenCompletions.getSimpleCompletions('$', elementNameTests, token, vscode.CompletionItemKind.Snippet);
+										resultCompletions = XsltTokenCompletions.getSimpleCompletions('/', elementNameTests, token, vscode.CompletionItemKind.Unit);
+										let attnamecompletions = XsltTokenCompletions.getSimpleCompletions('/', attNameTests, token, vscode.CompletionItemKind.Unit);
+										resultCompletions = resultCompletions.concat(attnamecompletions);
 									}
 								}
 								break;
@@ -634,18 +639,20 @@ export class XsltTokenCompletions {
 		return XsltTokenCompletions.getSimpleCompletions('$', completionStrings, token, vscode.CompletionItemKind.Variable);
 	}
 
-	private static getSimpleCompletions(char: string, completionStrings: string[], token: BaseToken, kind: vscode.CompletionItemKind) {
+	private static getSimpleCompletions(char: string, completionStrings: string[], token: BaseToken, kind: vscode.CompletionItemKind, excludeChar?: string) {
 		let completionItems: vscode.CompletionItem[] = [];
 		const startPos = new vscode.Position(token.line, token.startCharacter);
 		const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
 		const tokenRange = new vscode.Range(startPos, endPos);
 
 		completionStrings.forEach((name) => {
-			const varName = char + name;
-			const newItem = new vscode.CompletionItem(varName, kind);
-
-			newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
-			completionItems.push(newItem);
+			if (!excludeChar || name !== excludeChar) {
+				const varName = char + name;
+				const newItem = new vscode.CompletionItem(varName, kind);
+	
+				newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
+				completionItems.push(newItem);
+			}
 		});
 		return completionItems;
 	}
