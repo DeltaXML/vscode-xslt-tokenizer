@@ -549,6 +549,7 @@ export class XsltTokenCompletions {
 										let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
 										let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
 										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
+										//let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
 										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions);
 									}
 								}
@@ -712,6 +713,48 @@ export class XsltTokenCompletions {
 			completionItems.push(newItem);
 		});
 		return completionItems;
+	}
+
+	private static getUserFnCompletions(pos: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+		let completionItems: vscode.CompletionItem[] = [];
+		const startPos = new vscode.Position(pos.line, pos.character);
+
+
+		let filteredFunctions: GlobalInstructionData[] = [];
+		this.pushFunctionsOnMaxArity(filteredFunctions, globalInstructionData);
+		this.pushFunctionsOnMaxArity(filteredFunctions, importedInstructionData);
+
+		filteredFunctions.forEach((item) => {
+			if (item.type === GlobalInstructionType.Function) {
+				const noArgs = !item.idNumber || item.idNumber === 0;
+				const suffixBrackets = noArgs? '()${0}': '(${0})';
+				const newItem = new vscode.CompletionItem(item.name, vscode.CompletionItemKind.Function);
+				//newItem.documentation = new vscode.MarkdownString(item.description);
+				newItem.detail = item.idNumber === 0? item.name + '()' : item.name + '(' + item.memberNames?.join(', ') + ' )';
+				newItem.insertText = new vscode.SnippetString(item.name + suffixBrackets);
+				newItem.range = new vscode.Range(startPos, startPos);
+				//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
+				completionItems.push(newItem);
+			}
+		});
+		return completionItems;
+	}
+
+	private static pushFunctionsOnMaxArity(filteredFunctionData: GlobalInstructionData[], instructionData: GlobalInstructionData[]) {
+		instructionData.forEach((item) => {
+			if (item.type === GlobalInstructionType.Function) {
+				let existing = filteredFunctionData.find(pre => pre.name === item.name);
+				if (existing && existing.idNumber > item.idNumber) {
+					// keep existing data
+				} else if (existing) {
+					existing.idNumber = item.idNumber;
+					existing.memberNames = item.memberNames;
+				} else {
+					filteredFunctionData.push(item);
+				}
+			}
+		});
+		return filteredFunctionData;
 	}
 
 	private static getNormalCompletions(pos: vscode.Position, completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
