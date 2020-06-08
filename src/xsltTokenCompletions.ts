@@ -701,10 +701,12 @@ export class XsltTokenCompletions {
 		const startPos = new vscode.Position(pos.line, pos.character);
 
 		dataItems.forEach((item) => {
+			const noArgs = item.signature.startsWith(item.name + '()');
+			const suffixBrackets = noArgs? '()${0}': '(${0})';
 			const newItem = new vscode.CompletionItem(item.name, vscode.CompletionItemKind.Function);
 			newItem.documentation = new vscode.MarkdownString(item.description);
 			newItem.detail = item.signature;
-			newItem.insertText = new vscode.SnippetString(item.name + '(${0})');
+			newItem.insertText = new vscode.SnippetString(item.name + suffixBrackets);
 			newItem.range = new vscode.Range(startPos, startPos);
 			//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 			completionItems.push(newItem);
