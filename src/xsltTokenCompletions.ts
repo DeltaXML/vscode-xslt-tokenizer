@@ -9,6 +9,7 @@ import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, Glob
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { XPathFunctionDetails } from './xpathFunctionDetails';
 
 enum TagType {
 	XSLTstart,
@@ -74,9 +75,6 @@ export class XsltTokenCompletions {
 	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
 	private static readonly excludePrefixes = 'exclude-result-prefixes';
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
-	private static jsonObject: FunctionCompletionData[] = require('./data/xpathFunctions.json');
-
-
 
 	public static getCompletions = (attNameTests: string[], elementNameTests: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let lineNumber = -1;
@@ -550,7 +548,7 @@ export class XsltTokenCompletions {
 										let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Operator);
 										let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
 										let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
-										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.jsonObject);
+										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
 										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions);
 									}
 								}
@@ -704,7 +702,8 @@ export class XsltTokenCompletions {
 
 		dataItems.forEach((item) => {
 			const newItem = new vscode.CompletionItem(item.name, vscode.CompletionItemKind.Function);
-			newItem.documentation = new vscode.MarkdownString(item.markDownDescription);
+			newItem.documentation = new vscode.MarkdownString(item.description);
+			newItem.detail = item.signature;
 			newItem.insertText = new vscode.SnippetString(item.name + '(${0})');
 			newItem.range = new vscode.Range(startPos, startPos);
 			//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
@@ -772,24 +771,9 @@ export class XsltTokenCompletions {
 
 }
 
-interface FunctionCompletionData {
+export interface FunctionCompletionData {
 	name: string;
-	markDownDescription: string;
+	signature: string;
+	description: string;
 }
 
-
-enum XMLPIState {
-	none,
-	invalid,
-	Name,
-	Eq,
-	Start,
-	End,
-}
-
-enum XMLPIName {
-	none,
-	version,
-	encoding,
-	standalone
-}
