@@ -388,7 +388,9 @@ export class XsltTokenCompletions {
 						}
 						break;
 					case TokenLevelState.attributeNameTest:
-						resultCompletions = XsltTokenCompletions.createVariableCompletions('', attNameTests, token, vscode.CompletionItemKind.Unit, '@');
+						if (isOnRequiredToken) {
+							resultCompletions = XsltTokenCompletions.createVariableCompletions('', attNameTests, token, vscode.CompletionItemKind.Unit, '@');
+						}
 						break;
 					case TokenLevelState.variable:
 						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
@@ -549,8 +551,8 @@ export class XsltTokenCompletions {
 										let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
 										let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
 										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
-										//let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
-										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions);
+										let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
+										resultCompletions = resultCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions, userFnCompletions);
 									}
 								}
 								break;
@@ -730,7 +732,7 @@ export class XsltTokenCompletions {
 				const suffixBrackets = noArgs? '()${0}': '(${0})';
 				const newItem = new vscode.CompletionItem(item.name, vscode.CompletionItemKind.Function);
 				//newItem.documentation = new vscode.MarkdownString(item.description);
-				newItem.detail = item.idNumber === 0? item.name + '()' : item.name + '(' + item.memberNames?.join(', ') + ' )';
+				newItem.detail = item.idNumber === 0? item.name + '()' : item.name + '( ' + item.memberNames?.join(', ') + ' )';
 				newItem.insertText = new vscode.SnippetString(item.name + suffixBrackets);
 				newItem.range = new vscode.Range(startPos, startPos);
 				//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
