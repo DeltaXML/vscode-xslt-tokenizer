@@ -480,6 +480,9 @@ export class XsltTokenCompletions {
 								if (prevToken?.tokenType === TokenLevelState.function) {
 									functionToken = prevToken;
 								}
+								if (isOnRequiredToken) {
+									resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData, resultCompletions);
+								}
 							// intentionally no-break;	
 							case CharLevelState.lPr:
 								let xpathItem: XPathData = { awaitingArity: awaitingRequiredArity, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined };
@@ -497,6 +500,9 @@ export class XsltTokenCompletions {
 								preXPathVariable = false;
 								inScopeXPathVariablesList = [];
 								xpathVariableCurrentlyBeingDefined = false;
+								if (isOnRequiredToken) {
+									resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData, resultCompletions);
+								}
 								break;
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
@@ -542,7 +548,7 @@ export class XsltTokenCompletions {
 									xpathVariableCurrentlyBeingDefined = false;
 								}
 								if (isOnRequiredToken) {
-									if (token.value === '/' || token.value === '[' || token.value === '(') {
+									if (token.value === '/') {
 										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData, resultCompletions);
 									} else if (token.value === '!') {
 										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
