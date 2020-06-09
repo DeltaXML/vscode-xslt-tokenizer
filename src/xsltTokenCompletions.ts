@@ -645,9 +645,9 @@ export class XsltTokenCompletions {
 		return resultCompletions;
 	}
 
-	private static getXPathCompletions(prev2Token: BaseToken, position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
-		let xpath2TokenType = <TokenLevelState>prev2Token.tokenType;
-		let xpath2CharType = <CharLevelState>prev2Token.charType;
+	private static getXPathCompletions(previousToken: BaseToken, position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+		let xpath2TokenType = <TokenLevelState>previousToken.tokenType;
+		let xpath2CharType = <CharLevelState>previousToken.charType;
 		let xpathCompletions: vscode.CompletionItem[]|undefined;
 		switch (xpath2TokenType) {
 			case TokenLevelState.operator:
