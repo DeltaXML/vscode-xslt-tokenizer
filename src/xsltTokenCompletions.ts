@@ -411,7 +411,7 @@ export class XsltTokenCompletions {
 								if (tagType === TagType.XSLTvar && elementStack.length === 1) {
 									globalVarName = tagIdentifierName;
 								}
-								resultCompletions = XsltTokenCompletions.getVariableCompletions(globalVarName, elementStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
+								resultCompletions = XsltTokenCompletions.getVariableCompletions(globalVarName, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 								if (tagElementName === 'xsl:accumulator-rule') {
 									resultCompletions.push(new vscode.CompletionItem('value', vscode.CompletionItemKind.Variable));
 								}
@@ -628,7 +628,7 @@ export class XsltTokenCompletions {
 		return { name, arity };
 	}
 
-	private static getVariableCompletions(globalVarName: string|null, elementStack: ElementData[], token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
+	private static getVariableCompletions(globalVarName: string|null, elementStack: ElementData[], xpathStack: XPathData[], token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], 
 		xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], inScopeVariablesList: VariableData[]): vscode.CompletionItem[] {
 
 		let completionStrings: string[] = [];
@@ -665,8 +665,10 @@ export class XsltTokenCompletions {
 			}	
 		});
 
-		XsltTokenCompletions.pushStackVariableNames(elementStack, completionStrings);
-
+		XsltTokenCompletions.pushStackVariableNames(0, xpathStack, completionStrings);
+		// startIndex = 2 - so we miss out globals
+		XsltTokenCompletions.pushStackVariableNames(2, elementStack, completionStrings);
+		console.log('var completions: ' + completionStrings.length);
 		return XsltTokenCompletions.createVariableCompletions('$', completionStrings, token, vscode.CompletionItemKind.Variable);
 	}
 
@@ -836,9 +838,9 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static pushStackVariableNames(elementStack: ElementData[] | XPathData[], varNames: string[]): void {
+	private static pushStackVariableNames(startIndex: number, elementStack: ElementData[] | XPathData[], varNames: string[]): void {
 		elementStack.forEach((element: ElementData | XPathData, index: number) => {
-			if (index > 1) {
+			if (index >= startIndex) {
 				// we have global variables already
 				let inheritedVariables = element.variables;
 				inheritedVariables.forEach((varData: VariableData) => {

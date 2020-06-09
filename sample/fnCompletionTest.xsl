@@ -5,7 +5,7 @@
 
     
     <xsl:template match="/">
-        <xsl:param name="mp1" as="element()" select="@yankee[count(25)]  "/>
+        <xsl:param name="mp1" as="element()" select="let $abcd := 25 return "/>
         <xsl:param name="mp2" as="element()" select=""/>          
     </xsl:template>
     
