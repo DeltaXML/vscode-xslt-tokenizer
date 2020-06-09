@@ -122,8 +122,49 @@ export class XsltTokenCompletions {
 			index++;
 			lineNumber = token.line;
 			let isOnRequiredLine = lineNumber === requiredLine;
-			if ((isOnRequiredToken && !keepProcessing) || resultCompletions || lineNumber > requiredLine) {
-				break;
+			if (resultCompletions) {
+				return resultCompletions;
+			}
+			let overranPos = !keepProcessing && (lineNumber > requiredLine || (lineNumber === requiredLine && token.startCharacter > requiredChar));
+			if (prevToken) {
+				if (overranPos) {
+					let prevIsXML = prevToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
+					if (prevIsXML) {
+						let xmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
+						let xmlCharType = <XMLCharState>prevToken.charType;
+						switch (xmlTokenType) {
+							case XSLTokenLevelState.attributeValue:
+								let prev2Token = allTokens[index - 2];
+								let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
+								if (!prev2IsXML) {
+									let xpath2TokenType = <TokenLevelState>prev2Token.tokenType;
+									switch (xpath2TokenType) {
+										case TokenLevelState.operator:
+											resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData, resultCompletions);
+											break;
+									}
+								}
+								break;
+							case XSLTokenLevelState.xmlPunctuation:
+								switch (xmlCharType) {
+									case XMLCharState.rSq:
+									case XMLCharState.rDq:
+										// TODO:
+										break;
+								}
+								break;
+						}
+					} else {
+						switch (prevToken.tokenType) {
+							case TokenLevelState.operator:
+								resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData, resultCompletions);
+								break;
+						}
+					}
+				}
+			}
+			if (overranPos) {
+				return resultCompletions;
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
