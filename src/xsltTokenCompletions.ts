@@ -458,7 +458,7 @@ export class XsltTokenCompletions {
 						break;
 					case TokenLevelState.nodeNameTest:
 						if (isOnRequiredToken) {
-							resultCompletions = XsltTokenCompletions.getTokenCompletions(position, token, elementNameTests, vscode.CompletionItemKind.Unit);
+							resultCompletions = XsltTokenCompletions.getAllTokenCompletions(position, token, elementNameTests, attNameTests, globalInstructionData, importedInstructionData, resultCompletions);
 						}
 						break;
 					case TokenLevelState.operator:
@@ -610,19 +610,6 @@ export class XsltTokenCompletions {
 		return resultCompletions;
 	}
 
-	private static getAllCompletions(position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], resultCompletions: vscode.CompletionItem[] | undefined) {
-		let elementCompletions = XsltTokenCompletions.getNormalCompletions(position, elementNameTests, vscode.CompletionItemKind.Unit);
-		let attnamecompletions = XsltTokenCompletions.getNormalCompletions(position, attNameTests, vscode.CompletionItemKind.Unit);
-		let axes = Data.cAxes.map(axis => axis + '::');
-		let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Operator);
-		let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
-		let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
-		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
-		let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
-		resultCompletions = elementCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions, userFnCompletions);
-		return resultCompletions;
-	}
-
 	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
 		if (instruction) {
 			let uri = instruction?.href ? vscode.Uri.parse(instruction.href) : document.uri;
@@ -683,6 +670,32 @@ export class XsltTokenCompletions {
 		return XsltTokenCompletions.createVariableCompletions('$', completionStrings, token, vscode.CompletionItemKind.Variable);
 	}
 
+	private static getAllCompletions(position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], resultCompletions: vscode.CompletionItem[] | undefined) {
+		let elementCompletions = XsltTokenCompletions.getNormalCompletions(position, elementNameTests, vscode.CompletionItemKind.Unit);
+		let attnamecompletions = XsltTokenCompletions.getNormalCompletions(position, attNameTests, vscode.CompletionItemKind.Unit);
+		let axes = Data.cAxes.map(axis => axis + '::');
+		let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Operator);
+		let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
+		let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
+		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
+		let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
+		resultCompletions = elementCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions, userFnCompletions);
+		return resultCompletions;
+	}
+
+	private static getAllTokenCompletions(position: vscode.Position, token: BaseToken, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], resultCompletions: vscode.CompletionItem[] | undefined) {
+		let elementCompletions = XsltTokenCompletions.getTokenCompletions(position, token, elementNameTests, vscode.CompletionItemKind.Unit);
+		let attnamecompletions = XsltTokenCompletions.getTokenCompletions(position, token, attNameTests, vscode.CompletionItemKind.Unit);
+		let axes = Data.cAxes.map(axis => axis + '::');
+		let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Operator);
+		let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
+		let nodeCompletions = XsltTokenCompletions.getTokenCompletions(position, token, nodeTypes, vscode.CompletionItemKind.Property);
+		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data, token);
+		let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData, token);
+		resultCompletions = elementCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions, userFnCompletions);
+		return resultCompletions;
+	}
+
 	private static createVariableCompletions(char: string, completionStrings: string[], token: BaseToken, kind: vscode.CompletionItemKind, excludeChar?: string) {
 		let completionItems: vscode.CompletionItem[] = [];
 		const startPos = new vscode.Position(token.line, token.startCharacter);
@@ -716,9 +729,17 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getFnCompletions(pos: vscode.Position, dataItems: FunctionCompletionData[]) {
+	private static getFnCompletions(pos: vscode.Position, dataItems: FunctionCompletionData[], token?: BaseToken) {
 		let completionItems: vscode.CompletionItem[] = [];
-		const startPos = new vscode.Position(pos.line, pos.character);
+		let range: vscode.Range;
+		if (token) {
+			const startPos = new vscode.Position(token.line, token.startCharacter);
+			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+			range = new vscode.Range(startPos, endPos);
+		} else {
+			const startPos = new vscode.Position(pos.line, pos.character);
+			range = new vscode.Range(startPos, startPos);
+		}
 
 		dataItems.forEach((item) => {
 			const noArgs = item.signature.startsWith(item.name + '()');
@@ -727,16 +748,24 @@ export class XsltTokenCompletions {
 			newItem.documentation = new vscode.MarkdownString(item.description);
 			newItem.detail = item.signature;
 			newItem.insertText = new vscode.SnippetString(item.name + suffixBrackets);
-			newItem.range = new vscode.Range(startPos, startPos);
+			newItem.range = range;
 			//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 			completionItems.push(newItem);
 		});
 		return completionItems;
 	}
 
-	private static getUserFnCompletions(pos: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+	private static getUserFnCompletions(pos: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], token?: BaseToken) {
 		let completionItems: vscode.CompletionItem[] = [];
-		const startPos = new vscode.Position(pos.line, pos.character);
+		let range: vscode.Range;
+		if (token) {
+			const startPos = new vscode.Position(token.line, token.startCharacter);
+			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+			range = new vscode.Range(startPos, endPos);
+		} else {
+			const startPos = new vscode.Position(pos.line, pos.character);
+			range = new vscode.Range(startPos, startPos);
+		}
 
 
 		let filteredFunctions: GlobalInstructionData[] = [];
@@ -751,7 +780,7 @@ export class XsltTokenCompletions {
 				//newItem.documentation = new vscode.MarkdownString(item.description);
 				newItem.detail = item.idNumber === 0? item.name + '()' : item.name + '( ' + item.memberNames?.join(', ') + ' )';
 				newItem.insertText = new vscode.SnippetString(item.name + suffixBrackets);
-				newItem.range = new vscode.Range(startPos, startPos);
+				newItem.range = range;
 				//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 				completionItems.push(newItem);
 			}
