@@ -138,9 +138,19 @@ export class XsltTokenCompletions {
 								let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 								if (!prev2IsXML) {
 									let xpath2TokenType = <TokenLevelState>prev2Token.tokenType;
+									let xpath2CharType = <CharLevelState>prev2Token.charType;
 									switch (xpath2TokenType) {
 										case TokenLevelState.operator:
-											resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData, resultCompletions);
+											switch (xpath2CharType) {
+												case CharLevelState.rB:
+												case CharLevelState.rBr:
+												case CharLevelState.rPr:
+												case CharLevelState.lBr:
+													break;
+												default:
+													resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData, resultCompletions);
+													break;
+											}
 											break;
 									}
 								}
@@ -169,8 +179,7 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			if (isOnRequiredToken) {
-				console.log('on completion token: column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-				//console.log(token);
+				//console.log('on completion token: column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
 			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
