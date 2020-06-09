@@ -20,7 +20,13 @@ export class DocumentChangeHandler {
 			return;
 		}
 		let activeChange = e.contentChanges[0];
-		if (activeChange === null) {
+		if (!activeChange) {
+			return;
+		}
+		if (activeChange.text === ' ') {
+			setTimeout(() => {
+				vscode.commands.executeCommand('editor.action.triggerSuggest');
+			}, 10);
 			return;
 		}
 		if (this.cachedFailedEdit) {
