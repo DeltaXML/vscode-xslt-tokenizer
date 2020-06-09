@@ -7,7 +7,7 @@
     
     <xsl:param name="param1" as="" select="22"/>
     <xsl:variable name="myVar" as="xs:string" select="'test'"/>
-    <xsl:variable name="myVar2" as="xs:string" select="'test' || $param1 || $myVar"/>
+    <xsl:variable name="myVar2" as="xs:string" select="'test' || $param1 || $myVar/"/>
     
     
     <xsl:template match="@*" mode="#all">
@@ -16,6 +16,8 @@
         <xsl:for-each select="*">
             <xsl:value-of select="count($depth)"/>
             <xsl:sequence select="for $new in 1 to 20 return $new, $new"/>
+            <xsl:sequence select="alpha/bravo/charlie"/>
+            
             
         </xsl:for-each>
         

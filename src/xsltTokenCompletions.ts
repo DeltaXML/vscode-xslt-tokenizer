@@ -456,6 +456,11 @@ export class XsltTokenCompletions {
 								break;
 						}
 						break;
+					case TokenLevelState.nodeNameTest:
+						if (isOnRequiredToken) {
+							resultCompletions = XsltTokenCompletions.getTokenCompletions(position, token, elementNameTests, vscode.CompletionItemKind.Unit);
+						}
+						break;
 					case TokenLevelState.operator:
 						let functionToken: BaseToken | null = null;
 						switch (xpathCharType) {
@@ -698,8 +703,6 @@ export class XsltTokenCompletions {
 
 	private static getCommandCompletions(pos: vscode.Position, completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
 		let completionItems: vscode.CompletionItem[] = [];
-		const newPos = new vscode.Position(pos.line, pos.character + 1);
-		const tokenRange = new vscode.Range(newPos, newPos);
 
 		completionStrings.forEach((name) => {
 			if (!excludeChar || name !== excludeChar) {
@@ -775,14 +778,29 @@ export class XsltTokenCompletions {
 
 	private static getNormalCompletions(pos: vscode.Position, completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
 		let completionItems: vscode.CompletionItem[] = [];
-		const newPos = new vscode.Position(pos.line, pos.character + 1);
-		const tokenRange = new vscode.Range(newPos, newPos);
-
 		completionStrings.forEach((name) => {
 			if (!excludeChar || name !== excludeChar) {
 				const varName = name;
 				const newItem = new vscode.CompletionItem(varName, kind);
 				newItem.textEdit = vscode.TextEdit.insert(pos, varName);
+				completionItems.push(newItem);
+			}
+		});
+		return completionItems;
+	}
+
+	private static getTokenCompletions(pos: vscode.Position, token: BaseToken, completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
+		let completionItems: vscode.CompletionItem[] = [];
+		const startPos = new vscode.Position(token.line, token.startCharacter);
+		const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+		const tokenRange = new vscode.Range(startPos, endPos);
+
+
+		completionStrings.forEach((name) => {
+			if (!excludeChar || name !== excludeChar) {
+				const varName = name;
+				const newItem = new vscode.CompletionItem(varName, kind);
+				newItem.textEdit = vscode.TextEdit.replace(tokenRange, varName);
 				completionItems.push(newItem);
 			}
 		});
