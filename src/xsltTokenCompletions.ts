@@ -398,6 +398,7 @@ export class XsltTokenCompletions {
 							)) {
 								let keyVal = token.value.substring(1, token.value.length - 1);
 								let instrType = xp.function.value === 'key'? GlobalInstructionType.Key: GlobalInstructionType.Accumulator;
+								resultCompletions = XsltTokenCompletions.getSpecialCompletions(token, instrType, globalInstructionData, importedInstructionData);
 								//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, keyVal, instrType);
 								//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 							}
@@ -715,6 +716,29 @@ export class XsltTokenCompletions {
 		return XsltTokenCompletions.createVariableCompletions('$', completionStrings, token, vscode.CompletionItemKind.Variable);
 	}
 
+	private static getSpecialCompletions(token: BaseToken, type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
+		let completionStrings: string[] = [];
+
+		globalInstructionData.forEach((instruction) => {
+			if (instruction.type === type) {
+				if (completionStrings.indexOf(instruction.name)) {
+					completionStrings.push(instruction.name);
+				}
+			}
+		});
+
+		importedInstructionData.forEach((instruction) => {
+			if (instruction.type === type) {
+				if (completionStrings.indexOf(instruction.name)) {
+					completionStrings.push(instruction.name);
+				}
+			}
+		});
+
+		let allCompletions = XsltTokenCompletions.getTokenCompletions(token, completionStrings, vscode.CompletionItemKind.Property);
+		return allCompletions;
+	}
+
 	private static getAllCompletions(position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let elementCompletions = XsltTokenCompletions.getNormalCompletions(position, elementNameTests, vscode.CompletionItemKind.Unit);
@@ -731,12 +755,12 @@ export class XsltTokenCompletions {
 
 	private static getAllTokenCompletions(position: vscode.Position, token: BaseToken, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
 		let resultCompletions: vscode.CompletionItem[] | undefined;
-		let elementCompletions = XsltTokenCompletions.getTokenCompletions(position, token, elementNameTests, vscode.CompletionItemKind.Unit);
-		let attnamecompletions = XsltTokenCompletions.getTokenCompletions(position, token, attNameTests, vscode.CompletionItemKind.Unit);
+		let elementCompletions = XsltTokenCompletions.getTokenCompletions(token, elementNameTests, vscode.CompletionItemKind.Unit);
+		let attnamecompletions = XsltTokenCompletions.getTokenCompletions(token, attNameTests, vscode.CompletionItemKind.Unit);
 		let axes = Data.cAxes.map(axis => axis + '::');
 		let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Operator);
 		let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
-		let nodeCompletions = XsltTokenCompletions.getTokenCompletions(position, token, nodeTypes, vscode.CompletionItemKind.Property);
+		let nodeCompletions = XsltTokenCompletions.getTokenCompletions(token, nodeTypes, vscode.CompletionItemKind.Property);
 		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data, token);
 		let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData, token);
 		resultCompletions = elementCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions, userFnCompletions);
@@ -865,7 +889,7 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getTokenCompletions(pos: vscode.Position, token: BaseToken, completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
+	private static getTokenCompletions(token: BaseToken, completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
 		let completionItems: vscode.CompletionItem[] = [];
 		const startPos = new vscode.Position(token.line, token.startCharacter);
 		const endPos = new vscode.Position(token.line, token.startCharacter + token.length);

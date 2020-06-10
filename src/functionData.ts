@@ -267,6 +267,7 @@ export class FunctionData {
 "key#2",
 "key#3",
 "permute#1",
+"next#0",
 "regex-group#1",
 "snapshot#0",
 "snapshot#1",

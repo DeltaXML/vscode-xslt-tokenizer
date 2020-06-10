@@ -28,6 +28,8 @@
 
   
   <xsl:template match="/">
+    <xsl:sequence select="key("/>
+    
     <xsl:sequence select="key('book-id', 'test')"/>
     <xsl:sequence select="accumulator-before('acc')"/>
     <xsl:sequence select="key('book-id2', 'test')"/>
