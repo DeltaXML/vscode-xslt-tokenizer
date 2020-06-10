@@ -142,11 +142,7 @@ export class XsltTokenCompletions {
 								break;
 						}
 					} else {
-						switch (prevToken.tokenType) {
-							case TokenLevelState.operator:
-								resultCompletions = XsltTokenCompletions.getXPathCompletions(prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
-								break;
-						}
+						resultCompletions = XsltTokenCompletions.getXPathCompletions(prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 					}
 				}
 			}
