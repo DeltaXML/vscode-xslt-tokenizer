@@ -131,21 +131,13 @@ export class XsltTokenCompletions {
 					let prevIsXML = prevToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 					if (prevIsXML) {
 						let xmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
-						let xmlCharType = <XMLCharState>prevToken.charType;
 						switch (xmlTokenType) {
 							case XSLTokenLevelState.attributeValue:
+							case XSLTokenLevelState.xmlText:
 								let prev2Token = allTokens[index - 2];
 								let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 								if (!prev2IsXML) {
 									resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
-								}
-								break;
-							case XSLTokenLevelState.xmlPunctuation:
-								switch (xmlCharType) {
-									case XMLCharState.rSq:
-									case XMLCharState.rDq:
-										// TODO:
-										break;
 								}
 								break;
 						}

@@ -1,12 +1,16 @@
 <xsl:stylesheet  
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:fn="abc"
+    expand-text="yes"
     version="3.0">
 
     
     <xsl:template match="/">
         <xsl:param name="mp1" as="element()" select="let $abcd := 25 return 2 + $abcd"/>
-        <xsl:param name="mp2" as="element()" select=""/>          
+        <xsl:param name="mp2" as="element()" select=""/> 
+        <xsl:text>
+            the {$mp1}
+        </xsl:text>
     </xsl:template>
     
     
