@@ -358,7 +358,7 @@ export class XsltTokenCompletions {
 								tagIdentifierName = variableName;
 
 								if (isOnRequiredToken && tagElementName === 'xsl:call-template') {
-									let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
+									//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
 									//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 								}
 								break;
@@ -369,7 +369,7 @@ export class XsltTokenCompletions {
 								break;
 							case AttributeType.UseAttributeSets:
 								if (isOnRequiredToken) {
-									let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.AttributeSet);
+									//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.AttributeSet);
 									//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 								}
 								break;
@@ -398,7 +398,7 @@ export class XsltTokenCompletions {
 							)) {
 								let keyVal = token.value.substring(1, token.value.length - 1);
 								let instrType = xp.function.value === 'key'? GlobalInstructionType.Key: GlobalInstructionType.Accumulator;
-								let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, keyVal, instrType);
+								//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, keyVal, instrType);
 								//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 							}
 							preXPathVariable = xp.preXPathVariable;
@@ -712,7 +712,6 @@ export class XsltTokenCompletions {
 		XsltTokenCompletions.pushStackVariableNames(0, xpathStack, completionStrings);
 		// startIndex = 2 - so we miss out globals
 		XsltTokenCompletions.pushStackVariableNames(2, elementStack, completionStrings);
-		console.log('var completions: ' + completionStrings.length);
 		return XsltTokenCompletions.createVariableCompletions('$', completionStrings, token, vscode.CompletionItemKind.Variable);
 	}
 
