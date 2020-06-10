@@ -369,8 +369,7 @@ export class XsltTokenCompletions {
 								break;
 							case AttributeType.UseAttributeSets:
 								if (isOnRequiredToken) {
-									//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.AttributeSet);
-									//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
+									resultCompletions = XsltTokenCompletions.getSpecialCompletions(token, GlobalInstructionType.AttributeSet, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
@@ -389,6 +388,7 @@ export class XsltTokenCompletions {
 
 				switch (xpathTokenType) {
 					case TokenLevelState.string:
+
 						if (xpathStack.length > 0) {
 							let xp = xpathStack[xpathStack.length - 1];
 							if (isOnRequiredToken && (
@@ -396,11 +396,8 @@ export class XsltTokenCompletions {
 									xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-')
 								)
 							)) {
-								let keyVal = token.value.substring(1, token.value.length - 1);
 								let instrType = xp.function.value === 'key'? GlobalInstructionType.Key: GlobalInstructionType.Accumulator;
 								resultCompletions = XsltTokenCompletions.getSpecialCompletions(token, instrType, globalInstructionData, importedInstructionData);
-								//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, keyVal, instrType);
-								//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 							}
 							preXPathVariable = xp.preXPathVariable;
 						}
@@ -552,7 +549,7 @@ export class XsltTokenCompletions {
 												keepProcessing = false;
 												const fnArity = poppedData.functionArity;
 												const fnName = poppedData.function.value;
-												let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
+												//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 												//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 											}
 										}
@@ -591,7 +588,7 @@ export class XsltTokenCompletions {
 									if (awaitingRequiredArity) {
 										const fnArity = incrementFunctionArity ? 1 : 0;
 										const fnName = prevToken.value;
-										let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
+										//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 										//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 									}
 									awaitingRequiredArity = false;
@@ -622,7 +619,7 @@ export class XsltTokenCompletions {
 					case TokenLevelState.functionNameTest:
 						if (isOnRequiredToken) {
 							let { name, arity } = XsltTokenCompletions.resolveFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token);
-							let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, name, GlobalInstructionType.Function, arity);
+							//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, name, GlobalInstructionType.Function, arity);
 							//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 						}
 						break;
@@ -718,19 +715,21 @@ export class XsltTokenCompletions {
 
 	private static getSpecialCompletions(token: BaseToken, type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
 		let completionStrings: string[] = [];
-
+		const quote = type === GlobalInstructionType.AttributeSet? '"': '\'';
 		globalInstructionData.forEach((instruction) => {
+			const name = quote + instruction.name + quote;
 			if (instruction.type === type) {
-				if (completionStrings.indexOf(instruction.name)) {
-					completionStrings.push(instruction.name);
+				if (completionStrings.indexOf(name)) {
+					completionStrings.push(name);
 				}
 			}
 		});
 
 		importedInstructionData.forEach((instruction) => {
+			const name = quote + instruction.name + quote;
 			if (instruction.type === type) {
-				if (completionStrings.indexOf(instruction.name)) {
-					completionStrings.push(instruction.name);
+				if (completionStrings.indexOf(name)) {
+					completionStrings.push(name);
 				}
 			}
 		});
@@ -920,32 +919,6 @@ export class XsltTokenCompletions {
 				});
 			}
 		});
-	}
-
-	public static findMatchingDefintion(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], name: string, type: GlobalInstructionType, arity?: number) {
-		let findFunction = type === GlobalInstructionType.Function;
-
-		let found = globalInstructionData.find((instruction) => {
-			if (type !== instruction.type) {
-				return;
-			} else if (findFunction && arity) {
-				return instruction.name === name && instruction.idNumber === arity;
-			} else {
-				return instruction.name === name;
-			}
-		});
-		if (!found) {
-			found = importedInstructionData.find((instruction) => {
-				if (type !== instruction.type) {
-					return;
-				} else if (findFunction && arity) {
-					return instruction.name === name && instruction.idNumber === arity;
-				} else {
-					return instruction.name === name;
-				}
-			});
-		}
-		return found;
 	}
 
 }
