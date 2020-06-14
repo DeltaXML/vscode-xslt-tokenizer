@@ -1,16 +1,16 @@
 import { XSLTSchema, SimpleType, ComplexType, AttributeItem} from './xsltschema';
 
-class Expected {
+export class Expected {
     elements: string[] = [];
     attrs: string[] = [];
     attributeValues = [];
 }
 
-class SchemaQuery {
+export class SchemaQuery {
 
-    schema = new XSLTSchema();
+    private schema = new XSLTSchema();
 
-    getExpected(name: string, attributeName?: string) {
+    public getExpected(name: string, attributeName?: string) {
         let result: Expected = new Expected();
         if (!name.startsWith('xsl:')) {
             let attGroup = this.schema.attributeGroups['xsl:literal-result-element-attributes'];
@@ -161,7 +161,7 @@ class SchemaQuery {
         return target;
     }
 
-    performSubstitutions(elements: string[]) {
+    private performSubstitutions(elements: string[]) {
         let newElements: string[] = [];
         elements.forEach((item) => {
             if (item === 'instruction') {
@@ -178,7 +178,7 @@ class SchemaQuery {
     }
 }
 
-let s1 = new SchemaQuery();
+//let s1 = new SchemaQuery();
 // an element in the instruction substitutionGroup:
 //let result = s1.getExpected('xsl:analyze-string');
 // an element declared on its own:
@@ -189,20 +189,6 @@ let s1 = new SchemaQuery();
 //let result = s1.getExpected('xsl:global-context-item');
 //let result = s1.getExpected('xsl:expose', 'visibility');
 // let result = s1.getExpected('xsl:attribute', 'validation');
-let result = s1.getExpected('anyelement', 'xsl:expand-text');
+//let result = s1.getExpected('anyelement', 'xsl:expand-text');
+//console.log(result);
 
-
-
-
-console.log(result);
-
-
-
-// console.log(s1.simpleTypes);
-// console.log('---------------');
-// console.log(s1.complexTypes);
-// console.log('---------------');
-// console.log(s1.elements);
-// console.log('---------------');
-// console.log(s1.substitutionGroups);
-// console.log('---------------');
