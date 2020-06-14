@@ -12,6 +12,12 @@ export interface ComplexType {
     type?: string,
     elementNames?: string[],
     attributeList?: AttributeItem[];
+    primitive?: string
+}
+
+export interface SubstitutionGroupType {
+    type: string,
+    elements: { [name: string]: ComplexType}
 }
 
 export interface AttributeItem {
@@ -76,7 +82,7 @@ export class XSLTSchema {
         "xsl:yes-or-no-or-omit": { base: ['xs:token'], enum: ['yes', 'no', 'true', 'false', '1', '0', 'omit'] },
         "xsl:zero-digit": { base: ['xsl:char'] },
     };
-    complexTypes: { [name: string]: any } = {
+    complexTypes: { [name: string]: ComplexType } = {
         "xsl:generic-element-type": {
             attrs: {
                 'default-collation': 'xsl:uri-list',
@@ -140,7 +146,7 @@ export class XSLTSchema {
             }
         },
     }
-    substitutionGroups: { [name: string]: any } = {
+    substitutionGroups: { [name: string]: SubstitutionGroupType } = {
         instruction: {
             type: 'generic-element-type',
             elements: {
@@ -631,7 +637,7 @@ export class XSLTSchema {
                         '_as': 'xs:string',
                         '_use': 'xs:string'
                     },
-                    attributeList: [{ name: 'use', emum: ['required', 'optional', 'absent'] },
+                    attributeList: [{ name: 'use', enum: ['required', 'optional', 'absent'] },
                     ]
                 },
                 "xsl:import": {
@@ -693,7 +699,7 @@ export class XSLTSchema {
                         '_typed': 'xs:string',
                         '_visibility': 'xs:string'
                     },
-                    attributeList: [{ name: 'visibility', emum: ['public', 'private', 'final'] },
+                    attributeList: [{ name: 'visibility', enum: ['public', 'private', 'final'] },
                     ]
                 },
                 "xsl:namespace-alias": {
