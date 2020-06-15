@@ -659,6 +659,7 @@ export class XslLexer {
         let tokenStartLine = -1;
         let attributeNameTokenAdded = false;
         let collectParamName = false;
+        let xpathEnded = false;
         
         if (this.debug) {
             console.log("xsl:\n" + xsl);
@@ -901,6 +902,10 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
                             }
+                            if (xpathEnded) {
+                                tokenStartChar++;
+                                xpathEnded = false;
+                            }
                             let newToken = this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');
@@ -963,6 +968,7 @@ export class XslLexer {
                                 if (newCharCount > this.charCount) {
                                     this.charCount = newCharCount;
                                 }
+                                xpathEnded = true;
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
                                 isXPathAttribute = false;

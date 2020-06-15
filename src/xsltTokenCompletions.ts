@@ -151,9 +151,9 @@ export class XsltTokenCompletions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
-			if (isOnRequiredToken) {
-				//console.log('on completion token: column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			}
+			// if (isOnRequiredToken) {
+			// 	console.log('on completion token: column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -558,6 +558,9 @@ export class XsltTokenCompletions {
 										preXPathVariable = false;
 										xpathVariableCurrentlyBeingDefined = false;
 									}
+								}
+								if (isOnRequiredToken) {
+									resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case CharLevelState.sep:
