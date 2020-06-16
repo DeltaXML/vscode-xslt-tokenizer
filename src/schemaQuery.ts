@@ -32,6 +32,7 @@ export class SchemaQuery {
             }
             return result;
         }
+        name = name === 'xsl:stylesheet'? 'xsl:transform': name;
         let ct = <ComplexType>this.schema.elements[name];
         if (ct) {
             if (ct.elementNames) {
