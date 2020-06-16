@@ -924,10 +924,30 @@ export class XsltTokenCompletions {
 		expectedTags = xsltParent? XsltTokenCompletions.schemaQuery.getExpected(xsltParent).elements: [];
 
 		let completionItems: vscode.CompletionItem[] = [];
-		expectedTags.forEach((name) => {
-			const varName = name;
-			const newItem = new vscode.CompletionItem(varName, vscode.CompletionItemKind.Struct);
-			newItem.textEdit = vscode.TextEdit.insert(pos, varName);
+		expectedTags.forEach((tagName) => {
+			let snippetAttrs =  XsltTokenCompletions.schemaQuery.getExpected(tagName).foundAttributes;
+			let attrText = '';
+			switch (snippetAttrs.length) {
+				case 0:
+					break;
+				case 1:
+					attrText = ` ${snippetAttrs[0]}="$0"`
+					break;
+				default:
+					this.schemaQuery.soughtAttributes.forEach((attr, index) => {
+						if (snippetAttrs.indexOf(attr) > -1) {
+							let snippetNum = index + 1 === snippetAttrs.length? 0: index + 1;
+							attrText += ` ${attr}="$${snippetNum}"`
+						}
+					});
+					break;
+			}
+			let textNode = snippetAttrs.length === 0? '$0': '';
+			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>${textNode}</${tagName}>`: '/>';
+			const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+			newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
+
+			//newItem.textEdit = vscode.TextEdit.insert(pos, varName);
 			completionItems.push(newItem);
 		});
 		return completionItems;

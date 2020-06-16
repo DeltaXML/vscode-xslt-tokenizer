@@ -4,18 +4,22 @@ export class Expected {
     elements: string[] = [];
     attrs: string[] = [];
     attributeValues = [];
+    foundAttributes: string[] = [];
 }
 
 export class SchemaQuery {
 
     private schema = new XSLTSchema();
+    public soughtAttributes: string[] = ['name', 'as', 'select', 'test'];
+    public emptyElements: string[] = ['xsl:variable','xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates'];
+
 
     public getExpected(name: string, attributeName?: string) {
         let result: Expected = new Expected();
         if (!name.startsWith('xsl:')) {
             let attGroup = this.schema.attributeGroups['xsl:literal-result-element-attributes'];
             if (attGroup.attrs) {
-                result.attrs = Object.keys(attGroup.attrs);
+                this.mergeAttrArrays(result, Object.keys(attGroup.attrs));
                 if (attributeName) {
                     let simpleTypeName = attGroup.attrs[attributeName];
                     if (simpleTypeName) {
@@ -44,7 +48,7 @@ export class SchemaQuery {
                         this.lookupBaseType(type, result, attributeName);
                     }
                     if (type.attrs) {
-                        this.mergeArrays(result.attrs, Object.keys(type.attrs));
+                        this.mergeAttrArrays(result, Object.keys(type.attrs));
                     }
             }
         }
@@ -69,7 +73,7 @@ export class SchemaQuery {
                     this.lookupBaseType(sgType, result);
                 }
                 if (sgType.attrs) {
-                    this.mergeArrays(result.attrs, Object.keys(sgType.attrs));
+                    this.mergeAttrArrays(result, Object.keys(sgType.attrs));
                 }
                 if (sgElement.elementNames) {
                     this.mergeArrays(result.elements, sgElement.elementNames);
@@ -84,7 +88,7 @@ export class SchemaQuery {
 
     private collectAttributeDetails(ct: ComplexType, result: Expected, attributeName: string|undefined) {
         if (ct.attrs) {
-            result.attrs = Object.keys(ct.attrs);
+            this.mergeAttrArrays(result, Object.keys(ct.attrs));
             if (attributeName) {
                 let simpleTypeName = ct.attrs[attributeName];
                 if (simpleTypeName) {
@@ -108,7 +112,7 @@ export class SchemaQuery {
                     }
                 }
             });
-            this.mergeArrays(result.attrs, attNames);
+            this.mergeAttrArrays(result, attNames);
         }
     }
 
@@ -116,7 +120,7 @@ export class SchemaQuery {
         if (sgType.base) {
             let baseType = <ComplexType>this.schema.complexTypes[sgType.base];
             if (baseType && baseType.attrs) {
-                this.mergeArrays(result.attrs, Object.keys(baseType.attrs));
+                this.mergeAttrArrays(result, Object.keys(baseType.attrs));
                 if (attributeName) {
                     let attrType = baseType.attrs[attributeName];
                     if (attrType) {
@@ -155,6 +159,19 @@ export class SchemaQuery {
     private mergeArrays(target: string[], source: string[]) {
         source.forEach((item) => {
             if (target.indexOf(item) === -1) {
+                target.push(item);
+            }
+        });
+        return target;
+    }
+
+    private mergeAttrArrays(expected: Expected, source: string[]) {
+        let target = expected.attrs;
+        source.forEach((item) => {
+            if (target.indexOf(item) === -1) {
+                if (this.soughtAttributes.indexOf(item) > -1) {
+                    expected.foundAttributes.push(item)
+                }
                 target.push(item);
             }
         });
