@@ -191,7 +191,7 @@ export class XsltTokenCompletions {
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
 								if (isOnRequiredToken) {
-								
+									resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(position, elementStack)
 								}
 								tagAttributeNames = [];
 								tagXmlnsNames = [];
@@ -908,16 +908,27 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getXSLTTagCompletions(pos: vscode.Position, xsltParent: string, kind: vscode.CompletionItemKind, excludeChar?: string) {
-		let completionStrings: string[] = [];
-		let completionItems: vscode.CompletionItem[] = [];
-		completionStrings.forEach((name) => {
-			if (!excludeChar || name !== excludeChar) {
-				const varName = name;
-				const newItem = new vscode.CompletionItem(varName, kind);
-				newItem.textEdit = vscode.TextEdit.insert(pos, varName);
-				completionItems.push(newItem);
+	private static getXSLTTagCompletions(pos: vscode.Position, elementStack: ElementData[]) {
+		let expectedTags: string[] = [];
+		let xsltParent: string|null = null;
+		let stackPos = elementStack.length - 1;
+		while (stackPos > -1) {
+			let elementName = elementStack[stackPos].symbolName;
+			if (elementName.startsWith('xsl:')) {
+				xsltParent = elementName;
+				break;
 			}
+			stackPos--;
+		}
+		console.log('xsltParent: ' + xsltParent);
+		expectedTags = xsltParent? XsltTokenCompletions.schemaQuery.getExpected(xsltParent).elements: [];
+
+		let completionItems: vscode.CompletionItem[] = [];
+		expectedTags.forEach((name) => {
+			const varName = name;
+			const newItem = new vscode.CompletionItem(varName, vscode.CompletionItemKind.Struct);
+			newItem.textEdit = vscode.TextEdit.insert(pos, varName);
+			completionItems.push(newItem);
 		});
 		return completionItems;
 	}

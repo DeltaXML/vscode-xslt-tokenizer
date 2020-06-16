@@ -115,7 +115,7 @@ export class XSLTSchema {
         },
         "xsl:sequence-constructor": {
             base: 'xsl:versioned-element-type',
-            elementNames: ['instruction']
+            elementNames: ['xsl:instruction']
         },
         "xsl:sequence-constructor-and-select": {
             base: 'xsl:sequence-constructor',
@@ -125,7 +125,8 @@ export class XSLTSchema {
             }
         },
         "xsl:sequence-constructor-or-select": {
-            base: 'xsl:sequence-constructor-and-select'
+            base: 'xsl:sequence-constructor-and-select',
+            elementNames: ['xsl:instruction']
         },
         "xsl:text-element-base-type": {
             primitive: 'xs:string',
@@ -294,14 +295,14 @@ export class XSLTSchema {
                     },
                     elementNames: ['xsl:with-param', 'xsl:fallback']
                 },
-                "xsl:fallback": { type: 'xsl:sequence-constructor' },
+                "xsl:fallback": { type: 'xsl:sequence-constructor'},
                 "xsl:for-each": {
                     base: 'xsl:versioned-element-type',
                     attrs: {
                         'select': 'xsl:expression',
                         '_select': 'xs:string'
                     },
-                    elementNames: ['xsl:sort']
+                    elementNames: ['xsl:sort', 'xsl:instruction']
                 },
                 "xsl:for-each-group": {
                     base: 'xsl:versioned-element-type',
@@ -321,7 +322,7 @@ export class XSLTSchema {
                         '_composite': 'xs:string',
                         '_collation': 'xs:string'
                     },
-                    elementNames: ['xsl:sort']
+                    elementNames: ['xsl:sort', 'xsl:instruction']
                 },
                 "xsl:fork": {
                     base: 'xsl:versioned-element-type',
@@ -340,7 +341,7 @@ export class XSLTSchema {
                         'select': 'xsl:expression',
                         '_select': 'xs:string'
                     },
-                    elementNames: ['xsl:param', 'xsl:on-completion']
+                    elementNames: ['xsl:param', 'xsl:on-completion', 'xsl:instruction']
                 },
                 "xsl:map": { type: 'xsl:sequence-constructor' },
                 "xsl:map-entry": {
@@ -369,7 +370,8 @@ export class XSLTSchema {
                         '_collation': 'xs:string',
                         '_case-order': 'xs:string',
                         '_data-type': 'xs:string'
-                    }
+                    },
+                    elementNames: ['xsl:instruction']
                 },
                 "xsl:message": {
                     base: 'xsl:sequence-constructor',
@@ -433,7 +435,7 @@ export class XSLTSchema {
                     attrs: {
                         'select': 'xsl:expression'
                     },
-                    elementNames: ['xsl:sort']
+                    elementNames: ['xsl:sort', 'xsl:instruction']
                 },
                 "xsl:processing-instruction": {
                     base: 'xsl:sequence-constructor-or-select',
@@ -523,7 +525,7 @@ export class XSLTSchema {
                         '_rollback-output': 'xs:string',
                         '_select': 'xs:string'
                     },
-                    elementNames: ['xsl:catch', 'xsl:catch', 'xsl:fallback']
+                    elementNames: ['xsl:catch', 'xsl:catch', 'xsl:fallback', 'xsl:instruction']
                 },
                 "xsl:value-of": {
                     base: 'xsl:sequence-constructor-or-select',
@@ -641,7 +643,7 @@ export class XSLTSchema {
                         '_identity-sensitive': 'xs:string',
                         '_cache': 'xs:string'
                     },
-                    elementNames: ['xsl:param']
+                    elementNames: ['xsl:param', 'xsl:instruction']
                 },
                 "xsl:global-context-item": {
                     base: 'xsl:element-only-versioned-element-type',
@@ -819,7 +821,7 @@ export class XSLTSchema {
                         '_as': 'xs:string',
                         '_visibility': 'xs:string'
                     },
-                    elementNames: ['xsl:context-item', 'xsl:param']
+                    elementNames: ['xsl:context-item', 'xsl:param', 'xsl:instruction']
                 },
                 "xsl:use-package": {
                     base: 'xsl:element-only-versioned-element-type',

@@ -164,10 +164,10 @@ export class SchemaQuery {
     private performSubstitutions(elements: string[]) {
         let newElements: string[] = [];
         elements.forEach((item) => {
-            if (item === 'instruction') {
+            if (item === 'xsl:instruction') {
                 let subElements = Object.keys(this.schema.substitutionGroups.instruction.elements);
                 newElements = newElements.concat(subElements);
-            } else if (item === 'declaration') {
+            } else if (item === 'xsl:declaration') {
                 let subElements = Object.keys(this.schema.substitutionGroups.declaration.elements);
                 newElements = newElements.concat(subElements);
             } else {
