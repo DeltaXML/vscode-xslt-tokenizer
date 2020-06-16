@@ -651,6 +651,18 @@ export class XsltTokenCompletions {
 						break;
 				}
 				break;
+			case TokenLevelState.complexExpression:
+				switch (previousToken.value) {
+					case ':=':
+					case 'return':
+					case 'satisfies':
+					case 'else':
+					case 'then':
+					case 'in':
+						xpathCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+						break;
+				}
+				break;
 		}
 		return xpathCompletions;
 	}
