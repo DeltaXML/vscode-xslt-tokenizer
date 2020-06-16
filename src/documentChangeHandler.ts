@@ -23,7 +23,7 @@ export class DocumentChangeHandler {
 		if (!activeChange) {
 			return;
 		}
-		if (activeChange.text === ' ' || activeChange.text === '(' || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '/' || activeChange.text === '$') {
+		if (activeChange.text === ' ' || activeChange.text === '(' || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '/' || activeChange.text === '$' || activeChange.text === '<') {
 			setTimeout(() => {
 				vscode.commands.executeCommand('editor.action.triggerSuggest');
 			}, 10);

@@ -534,6 +534,19 @@ export class XSLTSchema {
                         '_disable-output-escaping': 'xs:string'
                     }
                 },
+                "xsl:variable": {
+                    base: "xsl:sequence-constructor-or-select",
+                    attrs: {
+                        'name': 'xsl:EQName',
+                        'as': 'xsl:sequence-type',
+                        'visibility': 'xsl:visibility-type',
+                        'static': 'xsl:yes-or-no',
+                        '_name': 'xs:string',
+                        '_as': 'xs:string',
+                        '_visibility': 'xs:string',
+                        '_static': 'xs:string',
+                    }
+                },
                 "xsl:where-populated": { type: 'xsl:sequence-constructor' },
             }
 
@@ -817,6 +830,19 @@ export class XSLTSchema {
                         '_package-version': 'xs:string'
                     },
                     elementNames: ['xsl:accept', 'xsl:override']
+                },
+                "xsl:variable": {
+                    base: "xsl:sequence-constructor-or-select",
+                    attrs: {
+                        'name': 'xsl:EQName',
+                        'as': 'xsl:sequence-type',
+                        'visibility': 'xsl:visibility-type',
+                        'static': 'xsl:yes-or-no',
+                        '_name': 'xs:string',
+                        '_as': 'xs:string',
+                        '_visibility': 'xs:string',
+                        '_static': 'xs:string',
+                    }
                 },
             }
 

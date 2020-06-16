@@ -10,6 +10,7 @@ import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
+import { SchemaQuery, Expected } from './schemaQuery';
 
 enum TagType {
 	XSLTstart,
@@ -75,6 +76,7 @@ export class XsltTokenCompletions {
 	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
 	private static readonly excludePrefixes = 'exclude-result-prefixes';
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
+	private static readonly schemaQuery = new SchemaQuery();
 
 	public static getCompletions = (attNameTests: string[], elementNameTests: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let lineNumber = -1;
@@ -151,9 +153,9 @@ export class XsltTokenCompletions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
-			// if (isOnRequiredToken) {
-			// 	console.log('on completion token: column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// }
+			if (isOnRequiredToken) {
+				console.log('on completion token: column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -188,6 +190,9 @@ export class XsltTokenCompletions {
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
+								if (isOnRequiredToken) {
+								
+								}
 								tagAttributeNames = [];
 								tagXmlnsNames = [];
 								tagIdentifierName = '';
@@ -891,6 +896,20 @@ export class XsltTokenCompletions {
 	}
 
 	private static getNormalCompletions(pos: vscode.Position, completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
+		let completionItems: vscode.CompletionItem[] = [];
+		completionStrings.forEach((name) => {
+			if (!excludeChar || name !== excludeChar) {
+				const varName = name;
+				const newItem = new vscode.CompletionItem(varName, kind);
+				newItem.textEdit = vscode.TextEdit.insert(pos, varName);
+				completionItems.push(newItem);
+			}
+		});
+		return completionItems;
+	}
+
+	private static getXSLTTagCompletions(pos: vscode.Position, xsltParent: string, kind: vscode.CompletionItemKind, excludeChar?: string) {
+		let completionStrings: string[] = [];
 		let completionItems: vscode.CompletionItem[] = [];
 		completionStrings.forEach((name) => {
 			if (!excludeChar || name !== excludeChar) {
