@@ -54,16 +54,6 @@
 				}
 			}
 		},
-		"snippets": [
-			{
-				"language": "xslt",
-				"path": "./xsltSnippets.json"
-			},
-			{
-				"language": "xslt",
-				"path": "./xpathSnippets.json"
-			}
-		],
 		"taskDefinitions": [
 			{
 				"type": "xslt",

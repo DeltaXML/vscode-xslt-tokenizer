@@ -132,8 +132,8 @@ export class XsltTokenCompletions {
 				if (overranPos) {
 					let prevIsXML = prevToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 					if (prevIsXML) {
-						let xmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
-						switch (xmlTokenType) {
+						let prevXmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
+						switch (prevXmlTokenType) {
 							case XSLTokenLevelState.attributeValue:
 							case XSLTokenLevelState.xmlText:
 								let prev2Token = allTokens[index - 2];
@@ -207,6 +207,9 @@ export class XsltTokenCompletions {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
+								if (isOnRequiredToken) {
+									resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName)
+								}
 								if (isXSLT && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
 										let pfx = prefixNsPair[0];
@@ -965,6 +968,24 @@ export class XsltTokenCompletions {
 
 			//newItem.textEdit = vscode.TextEdit.insert(pos, varName);
 			completionItems.push(newItem);
+		});
+		return completionItems;
+	}
+
+
+	private static getXSLTAttributeCompletions(pos: vscode.Position, xsltParent: string) {
+		let expectedAttributes: string[] = [];
+
+		expectedAttributes = xsltParent? XsltTokenCompletions.schemaQuery.getExpected(xsltParent).attrs: [];
+
+		let completionItems: vscode.CompletionItem[] = [];
+		expectedAttributes.forEach((attrName) => {
+			if (attrName.charAt(0) !== '_'){
+				let attributeDec = `${attrName}="$1"$0`;
+				const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Struct);
+				newItem.insertText = new vscode.SnippetString(attributeDec);
+				completionItems.push(newItem);
+			}
 		});
 		return completionItems;
 	}
