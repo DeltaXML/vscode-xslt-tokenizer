@@ -557,7 +557,7 @@ export class XsltTokenDiagnostics {
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let problemReported = false;
 						if (prevToken) {
-							if (token.startCharacter - (prevToken.startCharacter + prevToken.length) === 0) {
+							if (token.line === prevToken.line && token.startCharacter - (prevToken.startCharacter + prevToken.length) === 0) {
 								problemReported = true;
 								token['error'] = ErrorType.XMLAttNameSyntax;
 								token['value'] = attNameText;

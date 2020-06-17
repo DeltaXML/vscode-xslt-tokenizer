@@ -17,6 +17,10 @@
     
     <xsl:variable name="myvar" as="xs:string" select="an"/>
     
+    <xsl:variable name="default-features" select="
+test" 
+     as="element()*"/>
+    
     
     
     <xsl:function name="fn:name0" as="xs:string">        

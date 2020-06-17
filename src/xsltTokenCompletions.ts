@@ -138,7 +138,9 @@ export class XsltTokenCompletions {
 							case XSLTokenLevelState.xmlText:
 								let prev2Token = allTokens[index - 2];
 								let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
-								if (!prev2IsXML) {
+								if (prev2IsXML) {
+									// handle xml attribute/tag completion after other attribute or after text nodes
+								} else {
 									resultCompletions = XsltTokenCompletions.getXPathCompletions(token, prev2Token, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 								}
 								break;
