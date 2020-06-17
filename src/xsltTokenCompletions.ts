@@ -208,7 +208,7 @@ export class XsltTokenCompletions {
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
 								if (isOnRequiredToken) {
-									resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName)
+									resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName, tagAttributeNames)
 								}
 								if (isXSLT && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
@@ -973,16 +973,16 @@ export class XsltTokenCompletions {
 	}
 
 
-	private static getXSLTAttributeCompletions(pos: vscode.Position, xsltParent: string) {
+	private static getXSLTAttributeCompletions(pos: vscode.Position, xsltParent: string, existingAttrs: string[]) {
 		let expectedAttributes: string[] = [];
 
 		expectedAttributes = xsltParent? XsltTokenCompletions.schemaQuery.getExpected(xsltParent).attrs: [];
 
 		let completionItems: vscode.CompletionItem[] = [];
 		expectedAttributes.forEach((attrName) => {
-			if (attrName.charAt(0) !== '_'){
+			if (attrName.charAt(0) !== '_' && existingAttrs.indexOf(attrName) === -1){
 				let attributeDec = `${attrName}="$1"$0`;
-				const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Struct);
+				const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Reference);
 				newItem.insertText = new vscode.SnippetString(attributeDec);
 				completionItems.push(newItem);
 			}
