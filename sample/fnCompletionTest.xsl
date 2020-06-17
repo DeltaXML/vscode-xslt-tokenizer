@@ -9,13 +9,13 @@
         <xsl:param name="mp2" as="element()" select="(2, $myvar, $myvar) + $"/> 
         <xsl:param name="mp1" as="element()" select="let $abcd := 25 return 2 + $abcd"/>
         <xsl:text></xsl:text>
-        <xsl:variable name="test" as="xs:string" select=""/>
+        <xsl:variable name="test" as="xs:string" select="a"/>
         <xsl:text>
             the {$mp1}
         </xsl:text>
     </xsl:template>
     
-    <xsl:variable name="myvar" as="xs:string" select="dev"/>
+    <xsl:variable name="myvar" as="xs:string" select="an"/>
     
     
     
