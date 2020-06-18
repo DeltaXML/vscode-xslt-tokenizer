@@ -948,11 +948,12 @@ export class XsltTokenCompletions {
 		expectedTags.forEach((tagName) => {
 			let snippetAttrs =  XsltTokenCompletions.schemaQuery.getExpected(tagName).foundAttributes;
 			let attrText = '';
+
 			switch (snippetAttrs.length) {
 				case 0:
 					break;
 				case 1:
-					attrText = ` ${snippetAttrs[0]}="$0"`
+					attrText = ' ' + snippetAttrs[0] + '="$1"';
 					break;
 				default:
 					this.schemaQuery.soughtAttributes.forEach((attr, index) => {
@@ -962,6 +963,7 @@ export class XsltTokenCompletions {
 					});
 					break;
 			}
+			
 			let textNode = snippetAttrs.length === 0? '$0': '';
 			let selfCloseTag = snippetAttrs.length === 0? '/>': '/>$0';
 			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>${textNode}</${tagName}>`: selfCloseTag;
