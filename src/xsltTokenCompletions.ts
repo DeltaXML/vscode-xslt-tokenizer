@@ -245,6 +245,9 @@ export class XsltTokenCompletions {
 
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
 									// on a start tag
+									if (tagElementName === 'xsl:accumulator') {
+										inScopeVariablesList.push({token: token, name: 'value'});
+									}
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
 									let newVariablesList = elementStack.length === 0 ? globalVariableData : inScopeVariablesList;
@@ -444,12 +447,9 @@ export class XsltTokenCompletions {
 									globalVarName = tagIdentifierName;
 								}
 								resultCompletions = XsltTokenCompletions.getVariableCompletions(globalVarName, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
-								if (tagElementName === 'xsl:accumulator-rule') {
-									resultCompletions.push(new vscode.CompletionItem('value', vscode.CompletionItemKind.Variable));
-								}
 							}
 						}
-						break;
+					break;
 					case TokenLevelState.complexExpression:
 						let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						switch (valueText) {
@@ -1014,10 +1014,10 @@ export class XsltTokenCompletions {
 
 	private static pushStackVariableNames(startIndex: number, elementStack: ElementData[] | XPathData[], varNames: string[]): void {
 		elementStack.forEach((element: ElementData | XPathData, index: number) => {
-			if (index >= startIndex) {
+			if (index >= startIndex || (index === 1 && (element as ElementData).symbolName === 'xsl:accumulator')) {
 				// we have global variables already
 				let inheritedVariables = element.variables;
-				inheritedVariables.forEach((varData: VariableData) => {
+				inheritedVariables.forEach((varData: VariableData) =>{
 					const varName = varData.name;
 					if (varNames.indexOf(varName) < 0) {
 						varNames.push(varName)

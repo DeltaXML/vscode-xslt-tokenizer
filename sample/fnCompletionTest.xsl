@@ -16,6 +16,9 @@
     </xsl:template>
     
     <xsl:variable name="myvar" as="xs:string" select="an"/>
+    <xsl:accumulator name="test" as="xs:string">
+        <xsl:accumulator-rule select="v"></xsl:accumulator-rule>    
+    </xsl:accumulator>
     
     <xsl:variable name="default-features" select="
 test" 
