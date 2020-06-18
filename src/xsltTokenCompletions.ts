@@ -140,9 +140,21 @@ export class XsltTokenCompletions {
 								let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 								if (prev2IsXML) {
 									// handle xml attribute/tag completion after other attribute or after text nodes
+
+									let prev2XmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
+									switch (prev2XmlTokenType) {
+										case XSLTokenLevelState.attributeValue:
+											resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName, tagAttributeNames);
+											break;
+									}
+									console.log('test');
 								} else {
 									resultCompletions = XsltTokenCompletions.getXPathCompletions(token, prev2Token, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 								}
+								break;
+							case XSLTokenLevelState.elementName:
+							case XSLTokenLevelState.xslElementName:
+								resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName, tagAttributeNames);
 								break;
 						}
 					} else {
@@ -210,7 +222,7 @@ export class XsltTokenCompletions {
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
 								if (isOnRequiredToken) {
-									resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName, tagAttributeNames)
+									resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName, tagAttributeNames);
 								}
 								if (isXSLT && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
@@ -988,7 +1000,7 @@ export class XsltTokenCompletions {
 
 		let completionItems: vscode.CompletionItem[] = [];
 		expectedAttributes.forEach((attrName) => {
-			if (attrName.charAt(0) !== '_' && existingAttrs.indexOf(attrName) === -1){
+			if (existingAttrs.indexOf(attrName) === -1){
 				let attributeDec = `${attrName}="$1"$0`;
 				const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Reference);
 				newItem.insertText = new vscode.SnippetString(attributeDec);
