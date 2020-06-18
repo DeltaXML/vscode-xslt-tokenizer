@@ -957,14 +957,14 @@ export class XsltTokenCompletions {
 				default:
 					this.schemaQuery.soughtAttributes.forEach((attr, index) => {
 						if (snippetAttrs.indexOf(attr) > -1) {
-							let snippetNum = index + 1 === snippetAttrs.length? 0: index + 1;
-							attrText += ` ${attr}="$${snippetNum}"`
+							attrText += ` ${attr}="$${index + 1}"`
 						}
 					});
 					break;
 			}
 			let textNode = snippetAttrs.length === 0? '$0': '';
-			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>${textNode}</${tagName}>`: '/>';
+			let selfCloseTag = snippetAttrs.length === 0? '/>': '/>$0';
+			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>${textNode}</${tagName}>`: selfCloseTag;
 			const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 			newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
 

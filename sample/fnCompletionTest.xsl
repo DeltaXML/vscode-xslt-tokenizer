@@ -9,7 +9,7 @@
         <xsl:param name="mp2" as="element()" select="(2, $myvar, $myvar) + $"/> 
         <xsl:param name="mp1" as="element()" select="let $abcd := 25 return 2 + $abcd"/>
         <xsl:text></xsl:text>
-        <xsl:variable name="test" as="xs:string" select="a"/>
+        <xsl:variable name="test" as="xs:string" select="$mp2 + $default-features"/>
         <xsl:text>
             the {$mp1}
         </xsl:text>
