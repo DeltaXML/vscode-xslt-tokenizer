@@ -75,6 +75,7 @@ enum ValidationType {
 
 export class XsltTokenDiagnostics {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	public static readonly xsltCatchVariables = ['err:code','err:description', 'err:value', 'err:module', 'err:linenumber', 'err:column-number'];
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
 	private static readonly xslInclude = 'xsl:include';
 	private static readonly xslImport = 'xsl:import';
@@ -454,6 +455,10 @@ export class XsltTokenDiagnostics {
 									// on a start tag
 									if (tagElementName === 'xsl:accumulator') {
 										inScopeVariablesList.push({token: token, name: 'value'});
+									} else if (tagElementName === 'xsl:catch') {
+										XsltTokenDiagnostics.xsltCatchVariables.forEach((catchVar) => {
+											inScopeVariablesList.push({token: token, name: catchVar});
+										});
 									}
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:

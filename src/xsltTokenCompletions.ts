@@ -247,6 +247,10 @@ export class XsltTokenCompletions {
 									// on a start tag
 									if (tagElementName === 'xsl:accumulator') {
 										inScopeVariablesList.push({token: token, name: 'value'});
+									} else if (tagElementName === 'xsl:catch') {
+										XsltTokenDiagnostics.xsltCatchVariables.forEach((catchVar) => {
+											inScopeVariablesList.push({token: token, name: catchVar});
+										});
 									}
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
