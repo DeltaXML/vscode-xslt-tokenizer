@@ -26,7 +26,8 @@ enum AttributeType {
 	InstructionName,
 	InstructionMode,
 	UseAttributeSets,
-	ExcludeResultPrefixes
+	ExcludeResultPrefixes,
+	Xmlns
 }
 
 interface XSLTToken extends BaseToken {
@@ -349,22 +350,26 @@ export class XsltTokenCompletions {
 								}
 							}
 						}
-						if (tagType === TagType.XSLTvar) {
-							attType = attNameText === XsltTokenCompletions.xslNameAtt ? AttributeType.Variable : AttributeType.None;
-						} else if (tagType === TagType.XSLTstart) {
-							if (attNameText === XsltTokenCompletions.xslNameAtt) {
-								attType = AttributeType.InstructionName;
-							} else if (attNameText === XsltTokenCompletions.xslModeAtt) {
-								attType = AttributeType.InstructionMode;
-							} else if (attNameText === XsltTokenCompletions.useAttSet) {
+						if (xmlTokenType === XSLTokenLevelState.attributeName) {
+							if (tagType === TagType.XSLTvar) {
+								attType = attNameText === XsltTokenCompletions.xslNameAtt ? AttributeType.Variable : AttributeType.None;
+							} else if (tagType === TagType.XSLTstart) {
+								if (attNameText === XsltTokenCompletions.xslNameAtt) {
+									attType = AttributeType.InstructionName;
+								} else if (attNameText === XsltTokenCompletions.xslModeAtt) {
+									attType = AttributeType.InstructionMode;
+								} else if (attNameText === XsltTokenCompletions.useAttSet) {
+									attType = AttributeType.UseAttributeSets;
+								} else if (attNameText === XsltTokenCompletions.excludePrefixes || attNameText === XsltTokenCompletions.xslExcludePrefixes) {
+									attType = AttributeType.ExcludeResultPrefixes;
+								} else {
+									attType = AttributeType.None;
+								}
+							} else if (attNameText === XsltTokenCompletions.xslUseAttSet) {
 								attType = AttributeType.UseAttributeSets;
-							} else if (attNameText === XsltTokenCompletions.excludePrefixes || attNameText === XsltTokenCompletions.xslExcludePrefixes) {
-								attType = AttributeType.ExcludeResultPrefixes;
-							} else {
-								attType = AttributeType.None;
 							}
-						} else if (attNameText === XsltTokenCompletions.xslUseAttSet) {
-							attType = AttributeType.UseAttributeSets;
+						} else {
+							attType = AttributeType.Xmlns;
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
@@ -405,6 +410,16 @@ export class XsltTokenCompletions {
 							case AttributeType.ExcludeResultPrefixes:
 								let excludePrefixes = variableName.split(/\s+/);
 								tagExcludeResultPrefixes = { token: token, prefixes: excludePrefixes };
+								break;
+							case AttributeType.Xmlns:
+								break;
+							default:
+								if (isOnRequiredToken) {
+									if (tagAttributeNames.length > 0) {
+										let attName = tagAttributeNames[tagAttributeNames.length - 1];
+										resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(position, tagElementName, attName);
+									}
+								}
 								break;
 						}
 
@@ -1006,6 +1021,20 @@ export class XsltTokenCompletions {
 				newItem.insertText = new vscode.SnippetString(attributeDec);
 				completionItems.push(newItem);
 			}
+		});
+		return completionItems;
+	}
+
+	private static getXSLTAttributeValueCompletions(pos: vscode.Position, xsltParent: string, currentAttribute: string) {
+		let expectedAttrValues: string[] = [];
+
+		expectedAttrValues = XsltTokenCompletions.schemaQuery.getExpected(xsltParent, currentAttribute).attributeValues;
+
+		let completionItems: vscode.CompletionItem[] = [];
+		expectedAttrValues.forEach((attrName) => {
+			const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Reference);
+			newItem.insertText = new vscode.SnippetString(attrName);
+			completionItems.push(newItem);
 		});
 		return completionItems;
 	}

@@ -3,7 +3,7 @@ import { XSLTSchema, SimpleType, ComplexType, AttributeItem} from './xsltschema'
 export class Expected {
     elements: string[] = [];
     attrs: string[] = [];
-    attributeValues = [];
+    attributeValues: string[] = [];
     foundAttributes: string[] = [];
 }
 
@@ -63,7 +63,7 @@ export class SchemaQuery {
             }
             if (sgElement) {
                 this.collectAttributeDetails(sgElement, result, attributeName);
-                this.lookupBaseType(sgElement, result);
+                this.lookupBaseType(sgElement, result, attributeName);
                 let sgType: ComplexType;
                 if (isInstructionSg) {
                     sgType = this.schema.complexTypes['xsl:versioned-element-type'];
@@ -71,7 +71,7 @@ export class SchemaQuery {
                     sgType = this.schema.complexTypes['xsl:generic-element-type'];
                 }
                 if (sgType && sgType.base) {
-                    this.lookupBaseType(sgType, result);
+                    this.lookupBaseType(sgType, result, attributeName);
                 }
                 if (sgType.attrs) {
                     this.mergeAttrArrays(result, Object.keys(sgType.attrs));
@@ -125,7 +125,7 @@ export class SchemaQuery {
                 if (attributeName) {
                     let attrType = baseType.attrs[attributeName];
                     if (attrType) {
-                        let simpleType = <SimpleType>this.schema.simpleTypes[attributeName];
+                        let simpleType = <SimpleType>this.schema.simpleTypes[attrType];
                         if (simpleType.enum) {
                             this.mergeArrays(result.attributeValues, simpleType.enum);
                         }
@@ -137,7 +137,7 @@ export class SchemaQuery {
             }
             // recursive call;
             if (baseType.base) {
-                this.lookupBaseType(baseType, result);
+                this.lookupBaseType(baseType, result, attributeName);
             }
         }
     }
