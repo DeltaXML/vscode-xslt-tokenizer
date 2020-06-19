@@ -169,10 +169,10 @@ export class XsltTokenCompletions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
-			if (isOnRequiredToken) {
-				console.log('--------- on required token ---------');
-				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			}
+			// if (isOnRequiredToken) {
+			// 	console.log('--------- on required token ---------');
+			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -394,7 +394,7 @@ export class XsltTokenCompletions {
 								tagIdentifierName = variableName;
 
 								if (isOnRequiredToken && tagElementName === 'xsl:call-template') {
-									resultCompletions = XsltTokenCompletions.getSpecialCompletions(token, GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
+									resultCompletions = XsltTokenCompletions.getSpecialCompletions(position, GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case AttributeType.InstructionMode:
@@ -404,7 +404,7 @@ export class XsltTokenCompletions {
 								break;
 							case AttributeType.UseAttributeSets:
 								if (isOnRequiredToken) {
-									resultCompletions = XsltTokenCompletions.getSpecialCompletions(token, GlobalInstructionType.AttributeSet, globalInstructionData, importedInstructionData);
+									resultCompletions = XsltTokenCompletions.getSpecialCompletions(position, GlobalInstructionType.AttributeSet, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
@@ -446,7 +446,7 @@ export class XsltTokenCompletions {
 								)
 							)) {
 								let instrType = xp.function.value === 'key'? GlobalInstructionType.Key: GlobalInstructionType.Accumulator;
-								resultCompletions = XsltTokenCompletions.getSpecialCompletions(token, instrType, globalInstructionData, importedInstructionData);
+								resultCompletions = XsltTokenCompletions.getTokenSpecialCompletions(token, instrType, globalInstructionData, importedInstructionData);
 							}
 							preXPathVariable = xp.preXPathVariable;
 						}
@@ -774,7 +774,7 @@ export class XsltTokenCompletions {
 		return XsltTokenCompletions.createVariableCompletions('$', completionStrings, token, vscode.CompletionItemKind.Variable);
 	}
 
-	private static getSpecialCompletions(token: BaseToken, type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
+	private static getTokenSpecialCompletions(token: BaseToken, type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
 		let completionStrings: string[] = [];
 		const quote = type === GlobalInstructionType.AttributeSet? '"': '\'';
 		globalInstructionData.forEach((instruction) => {
@@ -797,6 +797,30 @@ export class XsltTokenCompletions {
 
 		let allCompletions = XsltTokenCompletions.getTokenCompletions(token, completionStrings, vscode.CompletionItemKind.Property);
 		return allCompletions;
+	}
+
+	private static getSpecialCompletions(position: vscode.Position, type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
+		let completionStrings: string[] = [];
+		globalInstructionData.forEach((instruction) => {
+			const name = instruction.name;
+			if (instruction.type === type) {
+				if (completionStrings.indexOf(name)) {
+					completionStrings.push(name);
+				}
+			}
+		});
+
+		importedInstructionData.forEach((instruction) => {
+			const name = instruction.name;
+			if (instruction.type === type) {
+				if (completionStrings.indexOf(name)) {
+					completionStrings.push(name);
+				}
+			}
+		});
+
+		let elementCompletions = XsltTokenCompletions.getNormalCompletions(position, completionStrings, vscode.CompletionItemKind.Unit);
+		return elementCompletions;
 	}
 
 	private static getAllCompletions(position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
@@ -999,9 +1023,8 @@ export class XsltTokenCompletions {
 					break;
 			}
 			
-			let textNode = snippetAttrs.length === 0? '$0': '';
 			let selfCloseTag = snippetAttrs.length === 0? '/>': '/>$0';
-			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>${textNode}</${tagName}>`: selfCloseTag;
+			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>$0</${tagName}>`: selfCloseTag;
 			const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 			newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
 

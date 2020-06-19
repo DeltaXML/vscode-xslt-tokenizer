@@ -17,12 +17,21 @@
     
     <xsl:variable name="myvar" as="xs:string" select="an"/>
     <xsl:accumulator name="test" as="xs:string">
-        <xsl:accumulator-rule select="v"></xsl:accumulator-rule>    
+        <xsl:accumulator-rule select="accumulator-before('test')"></xsl:accumulator-rule>    
     </xsl:accumulator>
     
     <xsl:variable name="default-features" select="
 test" 
      as="element()*"/>
+    
+    <xsl:template name="tmp1" as="item()*">
+        <xsl:choose></xsl:choose>  
+        <xsl:variable name="text" as="xs:string" select="22"/>
+        <xsl:call-template name=""/>
+        <test xsl:use-attribute-sets=""/>
+    </xsl:template>
+    
+    <xsl:attribute-set name="myattset"></xsl:attribute-set>
     
     
     
