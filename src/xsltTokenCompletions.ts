@@ -11,6 +11,7 @@ import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { SchemaQuery, Expected } from './schemaQuery';
+import { XSLTConfiguration } from './languageConfigurations';
 
 enum TagType {
 	XSLTstart,
@@ -416,7 +417,11 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (tagAttributeNames.length > 0) {
 										let attName = tagAttributeNames[tagAttributeNames.length - 1];
-										resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(position, tagElementName, attName);
+										if (XSLTConfiguration.expressionAtts.indexOf(attName) === -1) {
+											resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(position, tagElementName, attName);
+										} else {
+											resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										}
 									}
 								}
 								break;
