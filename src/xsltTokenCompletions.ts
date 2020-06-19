@@ -1039,8 +1039,6 @@ export class XsltTokenCompletions {
 			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>$0</${tagName}>`: selfCloseTag;
 			const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 			newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
-
-			//newItem.textEdit = vscode.TextEdit.insert(pos, varName);
 			completionItems.push(newItem);
 		});
 		return completionItems;
