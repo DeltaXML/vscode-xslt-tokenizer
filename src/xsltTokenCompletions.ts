@@ -393,8 +393,7 @@ export class XsltTokenCompletions {
 								tagIdentifierName = variableName;
 
 								if (isOnRequiredToken && tagElementName === 'xsl:call-template') {
-									//let instruction = XsltTokenCompletions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
-									//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
+									resultCompletions = XsltTokenCompletions.getSpecialCompletions(token, GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case AttributeType.InstructionMode:

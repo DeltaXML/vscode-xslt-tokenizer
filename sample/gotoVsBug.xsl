@@ -20,7 +20,12 @@
     </xsl:function> 
     
     <xsl:template match="/" mode="#all">
-        <xsl:variable name="bad" select="fn:bar(fn:foo(.))"/>        
+        <xsl:variable name="bad" select="fn:bar(fn:foo(.))"/>
+        <xsl:call-template name=""></xsl:call-template>
+    </xsl:template>
+    
+    <xsl:template name="mytemp1" as="xs:string">
+        <xsl:param name="abc" as="xs:string" select="22"/>    
     </xsl:template>
                 
 </xsl:stylesheet>
