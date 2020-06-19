@@ -118,8 +118,9 @@ export class SchemaQuery {
     }
 
     private lookupBaseType(sgType: ComplexType, result: Expected, attributeName?: string) {
-        if (sgType.base) {
-            let baseType = <ComplexType>this.schema.complexTypes[sgType.base];
+        let sgTypeBase = sgType.base? sgType.base: sgType.type;
+        if (sgTypeBase) {
+            let baseType = <ComplexType>this.schema.complexTypes[sgTypeBase];
             if (baseType && baseType.attrs) {
                 this.mergeAttrArrays(result, Object.keys(baseType.attrs));
                 if (attributeName) {
