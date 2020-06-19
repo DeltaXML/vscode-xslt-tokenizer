@@ -394,7 +394,7 @@ export class XsltTokenCompletions {
 								tagIdentifierName = variableName;
 
 								if (isOnRequiredToken && tagElementName === 'xsl:call-template') {
-									resultCompletions = XsltTokenCompletions.getSpecialCompletions(position, GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
+									resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case AttributeType.InstructionMode:
@@ -404,7 +404,7 @@ export class XsltTokenCompletions {
 								break;
 							case AttributeType.UseAttributeSets:
 								if (isOnRequiredToken) {
-									resultCompletions = XsltTokenCompletions.getSpecialCompletions(position, GlobalInstructionType.AttributeSet, globalInstructionData, importedInstructionData);
+									resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.AttributeSet, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
@@ -799,7 +799,7 @@ export class XsltTokenCompletions {
 		return allCompletions;
 	}
 
-	private static getSpecialCompletions(position: vscode.Position, type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
+	private static getSpecialCompletions(type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
 		let completionStrings: string[] = [];
 		globalInstructionData.forEach((instruction) => {
 			const name = instruction.name;
@@ -819,7 +819,7 @@ export class XsltTokenCompletions {
 			}
 		});
 
-		let elementCompletions = XsltTokenCompletions.getNormalCompletions(position, completionStrings, vscode.CompletionItemKind.Unit);
+		let elementCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.Unit);
 		return elementCompletions;
 	}
 
@@ -983,6 +983,18 @@ export class XsltTokenCompletions {
 				const varName = name;
 				const newItem = new vscode.CompletionItem(varName, kind);
 				newItem.textEdit = vscode.TextEdit.insert(pos, varName);
+				completionItems.push(newItem);
+			}
+		});
+		return completionItems;
+	}
+
+	private static getSimpleInsertCompletions(completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
+		let completionItems: vscode.CompletionItem[] = [];
+		completionStrings.forEach((name) => {
+			if (!excludeChar || name !== excludeChar) {
+				const varName = name;
+				const newItem = new vscode.CompletionItem(varName, kind);
 				completionItems.push(newItem);
 			}
 		});

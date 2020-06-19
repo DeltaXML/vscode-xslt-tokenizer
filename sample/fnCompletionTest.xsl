@@ -15,7 +15,7 @@
         </xsl:text>
     </xsl:template>
     
-    <xsl:variable name="myvar" as="xs:string" select="an"/>
+    <xsl:variable name="myvar" as="xs:string" select="unparsed-entity-uri('abc')"/>
     <xsl:accumulator name="test" as="xs:string">
         <xsl:accumulator-rule select="accumulator-before('test')"></xsl:accumulator-rule>    
     </xsl:accumulator>
@@ -26,9 +26,9 @@ test"
     
     <xsl:template name="tmp1" as="item()*">
         <xsl:choose></xsl:choose>  
-        <xsl:variable name="text" as="xs:string" select="22"/>
-        <xsl:call-template name=""/>
-        <test xsl:use-attribute-sets=""/>
+        <xsl:variable name="text" as="xs:string" select=""/>
+        <xsl:call-template name="tmp1"/>
+        <test xsl:use-attribute-sets="myattset"/>
     </xsl:template>
     
     <xsl:attribute-set name="myattset"></xsl:attribute-set>
