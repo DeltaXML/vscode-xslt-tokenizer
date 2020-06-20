@@ -1,6 +1,6 @@
 # XPath-Embedded
 
-XPath Embedded provides comprehensive language support XSLT 3.0 and XPath 3.0 in VSCode.
+XPath Embedded provides comprehensive language support for XSLT 3.0 and XPath 3.0 in VSCode.
 
 ## Features
 
