@@ -10,7 +10,7 @@ export class Expected {
 export class SchemaQuery {
 
     private schema = new XSLTSchema();
-    public soughtAttributes: string[] = ['name', 'as', 'select', 'test'];
+    public soughtAttributes: string[] = ['name', 'as', 'select', 'test', 'href'];
     public emptyElements: string[] = ['xsl:variable','xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param'];
 
 
