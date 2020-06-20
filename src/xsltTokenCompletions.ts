@@ -398,8 +398,14 @@ export class XsltTokenCompletions {
 								}
 								tagIdentifierName = variableName;
 
-								if (isOnRequiredToken && tagElementName === 'xsl:call-template') {
-									resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
+								if (isOnRequiredToken) {
+									if (tagElementName === 'xsl:call-template') {
+										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
+									} else if (tagElementName === 'xsl:with-param' && elementStack.length > 0) {
+										// get name attribute of parent
+										let templateName = elementStack[elementStack.length - 1].symbolID;
+										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData, templateName);
+									}
 								}
 								break;
 							case AttributeType.InstructionMode:
@@ -804,25 +810,36 @@ export class XsltTokenCompletions {
 		return allCompletions;
 	}
 
-	private static getSpecialCompletions(type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] {
+	private static getSpecialCompletions(type: GlobalInstructionType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], instrName?: string): vscode.CompletionItem[] {
 		let completionStrings: string[] = [];
-		globalInstructionData.forEach((instruction) => {
-			const name = instruction.name;
-			if (instruction.type === type) {
-				if (completionStrings.indexOf(name)) {
-					completionStrings.push(name);
-				}
-			}
-		});
 
-		importedInstructionData.forEach((instruction) => {
-			const name = instruction.name;
-			if (instruction.type === type) {
-				if (completionStrings.indexOf(name)) {
-					completionStrings.push(name);
-				}
+		if (instrName) {
+			let gd = globalInstructionData.find(data => data.type === type && data.name === instrName);
+			if (!gd) {
+				gd = importedInstructionData.find(data => data.type === type && data.name === instrName);
 			}
-		});
+			if (gd && gd.memberNames) {
+				completionStrings = gd.memberNames;
+			}
+		} else {
+			globalInstructionData.forEach((instruction) => {
+				const name = instruction.name;
+				if (instruction.type === type) {
+					if (completionStrings.indexOf(name)) {
+						completionStrings.push(name);
+					}
+				}
+			});
+	
+			importedInstructionData.forEach((instruction) => {
+				const name = instruction.name;
+				if (instruction.type === type) {
+					if (completionStrings.indexOf(name)) {
+						completionStrings.push(name);
+					}
+				}
+			});
+		}
 
 		let elementCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.Unit);
 		return elementCompletions;

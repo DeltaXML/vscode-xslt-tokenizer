@@ -13,6 +13,9 @@
         <xsl:text>
             the {$mp1}
         </xsl:text>
+        <xsl:call-template name="tmp1">
+            <xsl:with-param name="" as="" select=""/>    
+        </xsl:call-template>
     </xsl:template>
     
     <xsl:variable name="myvar" as="xs:string" select="unparsed-entity-uri('abc')"/>
@@ -25,6 +28,9 @@ test"
      as="element()*"/>
     
     <xsl:template name="tmp1" as="item()*">
+        <xsl:param name="p1" as="" select=""/>
+        <xsl:param name="p2" as="" select=""/>
+        <xsl:param name="p3" as="" select=""/>
         <xsl:choose></xsl:choose>  
         <xsl:variable name="text" as="xs:string" select=""/>
         <xsl:call-template name="tmp1"/>
