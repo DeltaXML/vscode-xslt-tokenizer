@@ -107,7 +107,32 @@ export class XSLTSnippets {
 			name: 'xmlns:ignore',
 			description: 'DeltaXML ignore-for-alignment namespace',
 			body: `xmlns:ignore="http://www.deltaxml.com/ns/ignoreForAlignment"$0`
-		}
+		},
+		{
+			name: 'xmlns:pi',
+			description: 'DeltaXML processing-instruction namespace',
+			body: `xmlns:pi="http://www.deltaxml.com/ns/processing-instructions"$0`
+		},
+		{
+			name: 'xmlns:er',
+			description: 'DeltaXML entity-references namespace',
+			body: `xmlns:er="http://www.deltaxml.com/ns/entity-references"$0`
+		},
+		{
+			name: 'xmlns:docbook',
+			description: 'Oasis DocBook namespace',
+			body: `xmlns:docbook="http://docbook.org/ns/docbook"$0`
+		},
+		{
+			name: 'xmlns:xlink',
+			description: 'W3C XLink namespace',
+			body: `xmlns:xlink="http://www.w3.org/1999/xlink"$0`
+		},
+		{
+			name: 'xmlns:svg',
+			description: 'W3C SVG namespace',
+			body: `xmlns:svg="http://www.w3.org/2000/svg"$0`
+		},
 	]
 
 }
