@@ -36,29 +36,78 @@ export class XSLTSnippets {
 		{
 			name: 'xmlns:xsl',
 			description: 'W3C XSLT Namespace',
-			body: `xmlns:xsl="http://www.w3.org/1999/XSL/Transform`,
+			body: `xmlns:xsl="http://www.w3.org/1999/XSL/Transform"$0`,
 		},
 		{
 			name: 'xmlns:xs',
 			description: 'W3C XMLSchema Namespace',
-			body: `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+			body: `xmlns:xs="http://www.w3.org/2001/XMLSchema"$0`
 		},
 		{
 			name: 'xmlns:array',
 			description: 'W3C XPath Array Namespace',
-			body: `xmlns:array="http://www.w3.org/2005/xpath-functions/array"`
+			body: `xmlns:array="http://www.w3.org/2005/xpath-functions/array"$0`
 		},
 		{
 			name: 'xmlns:map',
 			description: 'W3C XPath Map Namespace',
-			body: `xmlns:array="http://www.w3.org/2005/xpath-functions/map"`
+			body: `xmlns:array="http://www.w3.org/2005/xpath-functions/map"$0`
 		},
 		{
 			name: 'xmlns:math',
 			description: 'W3C XPath Math Namespace',
-			body: `xmlns:array="http://www.w3.org/2005/xpath-functions/math"`
+			body: `xmlns:array="http://www.w3.org/2005/xpath-functions/math"$0`
 		},
-
+		{
+			name: 'xmlns:any',
+			description: 'Generic namespace snippet',
+			body: `xmlns:\${1:prefix}="\${2:namespace-uri}"$0`
+		},
+		{
+			name: 'xmlns:saxon',
+			description: 'Saxonica Saxon XSLT Namespace',
+			body: `xmlns:saxon="http://saxon.sf.net/"$0`
+		},
+		{
+			name: 'xmlns:sql',
+			description: 'Saxonica Saxon SQL Namespace',
+			body: `xmlns:sql="http://saxon.sf.net/sql"$0`
+		},
+		{
+			name: 'xmlns:ixsl',
+			description: 'Saxonica Saxon-JS Interactive XSLT Namespace',
+			body: `xmlns:ixsl="http://saxonica.com/ns/interactiveXSLT"$0`
+		},
+		{
+			name: 'xmlns:xhtml',
+			description: 'W3C XHTML Namespace',
+			body: `xmlns:xhtml="http://www.w3.org/1999/xhtml"$0`
+		},
+		{
+			name: 'xmlns:deltaxml',
+			description: 'DeltaXML namespace',
+			body: `xmlns:deltaxml="http://www.deltaxml.com/ns/well-formed-delta-v1"$0`
+		},
+		{
+			name: 'xmlns:dxa',
+			description: 'DeltaXML non-namespaced attribute',
+			body: `xmlns:dxa="http://www.deltaxml.com/ns/non-namespaced-attribute"$0`
+		},
+		{
+			name: 'xmlns:dxx',
+			description: 'DeltaXML xml-namespaced attribute',
+			body: `xmlns:dxx="http://www.deltaxml.com/ns/xml-namespaced-attribute"$0`
+		},
+		{
+			name: 'xmlns:preserve',
+			description: 'DeltaXML preservation-item namespace',
+			body: `xmlns:preserve="http://www.deltaxml.com/ns/preserve"$0`
+		},
+		{
+			name: 'xmlns:ignore',
+			description: 'DeltaXML ignore-for-alignment namespace',
+			body: `xmlns:ignore="http://www.deltaxml.com/ns/ignoreForAlignment"$0`
+		}
 	]
 
 }

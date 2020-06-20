@@ -1076,7 +1076,9 @@ export class XsltTokenCompletions {
 				completionItems.push(newItem);
 			}
 		});
-		return completionItems;
+		let xmlnsCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltXMLNS);
+
+		return completionItems.concat(xmlnsCompletions);
 	}
 
 	private static getXSLTAttributeValueCompletions(pos: vscode.Position, xsltParent: string, currentAttribute: string) {
