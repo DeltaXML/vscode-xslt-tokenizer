@@ -1025,6 +1025,16 @@ export class XsltTokenCompletions {
 			let snippetAttrs =  XsltTokenCompletions.schemaQuery.getExpected(tagName).foundAttributes;
 			let attrText = '';
 
+			let competionName = tagName;
+			let description: string|undefined;
+			if (tagName === 'xsl:template') {
+				const newItem = new vscode.CompletionItem(tagName + ' match', vscode.CompletionItemKind.Struct);
+				newItem.documentation = "xsl:template with 'match' attribute";
+				newItem.insertText = new vscode.SnippetString('xsl:template match="$1" mode="$2">$0</xsl:template>');
+				completionItems.push(newItem);
+				competionName = tagName + ' name';
+				description = "xsl:template with 'name' attribute";
+			}
 			switch (snippetAttrs.length) {
 				case 0:
 					break;
@@ -1042,8 +1052,11 @@ export class XsltTokenCompletions {
 			
 			let selfCloseTag = snippetAttrs.length === 0? '/>': '/>$0';
 			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>$0</${tagName}>`: selfCloseTag;
-			const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+			const newItem = new vscode.CompletionItem(competionName, vscode.CompletionItemKind.Struct);
 			newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
+			if (description) {
+				newItem.documentation = description;
+			}
 			completionItems.push(newItem);
 		});
 		return completionItems;
