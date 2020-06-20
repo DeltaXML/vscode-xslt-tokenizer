@@ -12,6 +12,7 @@ import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { SchemaQuery, Expected } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
+import { XSLTSnippets, Snippet } from './xsltSnippets';
 
 enum TagType {
 	XSLTstart,
@@ -208,7 +209,11 @@ export class XsltTokenCompletions {
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
 								if (isOnRequiredToken) {
-									resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(position, elementStack)
+									if (elementStack.length === 0) {
+										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltRootTags);
+									} else {										
+										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(position, elementStack)
+									}
 								}
 								tagAttributeNames = [];
 								tagXmlnsNames = [];
@@ -1039,6 +1044,18 @@ export class XsltTokenCompletions {
 			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>$0</${tagName}>`: selfCloseTag;
 			const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 			newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
+			completionItems.push(newItem);
+		});
+		return completionItems;
+	}
+
+	private static getXSLTSnippetCompletions(snippets: Snippet[]) {
+
+		let completionItems: vscode.CompletionItem[] = [];
+		snippets.forEach((snippet) => {
+			const newItem = new vscode.CompletionItem(snippet.name, vscode.CompletionItemKind.Struct);
+			newItem.insertText = new vscode.SnippetString(snippet.body);
+			newItem.documentation = new vscode.MarkdownString(snippet.description);
 			completionItems.push(newItem);
 		});
 		return completionItems;

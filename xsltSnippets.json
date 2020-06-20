@@ -7,7 +7,7 @@
 			"                xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"",
 			"                xmlns:array=\"http://www.w3.org/2005/xpath-functions/array\"",
 			"                xmlns:map=\"http://www.w3.org/2005/xpath-functions/map\"",
-			"                xmlns:math=\"http://www.w3.org/2005/xpath-functions/array/math\"",
+			"                xmlns:math=\"http://www.w3.org/2005/xpath-functions/math\"",
 			"                exclude-result-prefixes=\"#all\"",
 			"                expand-text=\"yes\"",
 			"                version=\"3.0\">",
