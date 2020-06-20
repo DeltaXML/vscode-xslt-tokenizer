@@ -13,7 +13,7 @@ XPath Embedded provides comprehensive language support for XSLT 3.0 and XPath 3.
  - Code symbol outline
  - Code symbol lookup
  - xsl:include/xsl:import links
- - Goto Definition
+ - Goto/Peek Definition
  - Tag Rename
  - Auto tag-close
  - Language Snippets
