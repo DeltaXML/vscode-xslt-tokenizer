@@ -110,6 +110,8 @@ export class Data {
                                 "processing-instruction", 
                                 "schema-attribute", "schema-element", "text"];
 
+    public static nodeTypesBrackets = Data.nodeTypes.map(t => t + '()');
+
     public static cNodeTypes = [ "attribute", "comment", "element", "item", "namespace-node", "node", 
                                 "processing-instruction", "text"]; 
 
@@ -127,6 +129,7 @@ export class Data {
 
     public static nonFunctionConditional = ["if", "then", "else"];
     public static nonFunctionTypes = ["map", "array", "function"];
+    public static nonFunctionTypesBrackets = Data.nonFunctionTypes.map(t => t + '(*)');
 
     public static setAsOperatorIfKeyword(token: Token) {
         if (token.value === 'return' || token.value === 'satisfies' || token.value === 'in' || 

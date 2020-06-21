@@ -381,6 +381,8 @@ export class FunctionData {
 		"dateTimeStamp#1"
 	]
 
+	public static readonly simpleTypes = FunctionData.schema.map(t => 'xs:' + t.substring(0, t.length - 2));
+
 	public static readonly namespaces = new Map([
 ["http://www.w3.org/2005/xpath-functions/array", XSLTnamespaces.Array],
 ["http://expath.org/ns/archive", XSLTnamespaces.ExpathArchive],
