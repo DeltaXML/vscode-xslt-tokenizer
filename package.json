@@ -1,13 +1,13 @@
 {
-	"name": "xpath-embedded",
-	"displayName": "XPath Embedded",
-	"description": "Syntax Highlighter and tools for XSLT and other XPath-based languages",
-	"version": "0.0.5",
+	"name": "xslt-xpath",
+	"displayName": "XSLT/XPath for Visual Studio Code",
+	"description": "Comprehensive language support for XSLT 3.0 / XPath 3.1",
+	"version": "0.1.0",
 	"publisher": "deltaxml",
 	"icon": "xpath-embedded.png",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/DeltaXML/xpath-embedded"
+		"url": "https://github.com/DeltaXML/vscode-xslt-tokenizer"
 	},
 	"keywords": [
 		"xml",
@@ -46,7 +46,7 @@
 			}
 		],
 		"configuration": {
-			"title": "XPath Embedded",
+			"title": "XSLT/XPath",
 			"properties": {
 				"XSLT.tasks.saxonJar": {
 					"type": "string",

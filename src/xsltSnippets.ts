@@ -17,7 +17,7 @@ export class XSLTSnippets {
                 xmlns:math="http://www.w3.org/2005/xpath-functions/math"
                 exclude-result-prefixes="#all"
                 expand-text="yes"
-                version="3.0">"
+                version="3.0">
 
 \t<xsl:output method="xml" indent="yes"/>
 \t<xsl:mode on-no-match="shallow-copy"/>
