@@ -22,9 +22,9 @@ export class XSLTSnippets {
 \t<xsl:output method="xml" indent="yes"/>
 \t<xsl:mode on-no-match="shallow-copy"/>
 
-\t<xsl:template match="$1" mode="#all">
+\t<xsl:template match="\${1:/*}" mode="#all">
 \t\t<xsl:copy>
-\t\t\t<xsl:apply-templates select="$2" mode="#current"/>
+\t\t\t<xsl:apply-templates select="\${2:@*, node()}" mode="#current"/>
 \t\t</xsl:copy>
 \t</xsl:template>
 
