@@ -29,6 +29,16 @@ This extension performs a comprehensive set of checks on the code, before any XS
 
 See: [XSLT/XPath Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
 
+## Settings Options
+
+See: [VSCode Settings](https://code.visualstudio.com/docs/getstarted/settings)
+
+To use the task-provider for the Saxon XSLT Processor, the following setting is required:
+
+```
+  "XSLT.tasks.saxonJar": "/usr/local/opt/SaxonHE10-0J/saxon-he-10.0.jar"
+```
+
 ## Formatting
 
 ### VSCode Formatting Command Keyboard Shortcuts
