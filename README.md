@@ -1,6 +1,6 @@
-# XPath-Embedded
+# XSLT/XPath for Visual Studio Code
 
-XPath Embedded provides comprehensive language support for XSLT 3.0 and XPath 3.0 in VSCode.
+The XSLT/XPath VSCode extension provides comprehensive language support for XSLT 3.0 and XPath 3.0.
 
 ## Features
 
@@ -27,7 +27,7 @@ This extension performs a comprehensive set of checks on the code, before any XS
 
 ## Sample Screenshots
 
-See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
+See: [XSLT/XPath Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
 
 ## Formatting
 
@@ -38,7 +38,7 @@ See: [XPath Embedded Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wik
 
 ### Editor Settings for Highlighting in Color Theme Extensions
 
-Syntax highlighting is currently only enabled in built-in themes. This is because the 'Semantic Highlighting' used by XPath Embedded may not work well with some languages (other than XSLT) and some themes.
+Syntax highlighting is currently only enabled by default in VSCode's built-in themes. This is because some extension themes may not yet have specific language support for VSCode's 'Semantic Highlighting' as used by this extension.
 
 To enable syntax highighting for a custom theme you need to change User Settings. For example, to enable syntax highlighting for XSLT in the *City Lights* theme use:
 ```json
@@ -63,7 +63,7 @@ Or, to enable syntax highlighting for all themes:
 ```json
 {
   "[xslt]": {
-    "editor.defaultFormatter": "deltaxml.xpath-embedded",
+    "editor.defaultFormatter": "deltaxml.xslt-xpath",
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
     "editor.formatOnType": true
