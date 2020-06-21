@@ -6,8 +6,8 @@
                 version="3.0">"
 
     
-    <xsl:variable name="test" as="" select="/abc/def/ghi/jkl[@name]"/>
-    <xsl:variable name="test2" as="" select="abc/jkl/def/ghi/jkl"/>
+    <xsl:variable name="test" as="" select="22 treat as attribute()"/>
+    <xsl:variable name="test2" as="" select="abc/jkl/def/ghi/jkl[@name and @id and @myatt]"/>
 
     <xsl:template match="" mode="#all">
         <xsl:copy>

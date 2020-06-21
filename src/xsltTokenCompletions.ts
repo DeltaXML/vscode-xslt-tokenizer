@@ -662,6 +662,20 @@ export class XsltTokenCompletions {
 								}
 								break;
 							case CharLevelState.dSep:
+								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.simpleType) {
+									let completionStrings: string[] = [];
+									if (isOnRequiredToken && requiredChar === token.startCharacter + 1) {
+										if (Data.nonFunctionTypes.indexOf(prevToken.value) !== -1) {
+											completionStrings = XsltTokenCompletions.sequenceTypes;
+										} else if (prevToken.value === 'element') {
+											completionStrings = elementNameTests;
+										} else if (prevToken.value === 'attribute') {
+											completionStrings = attNameTests.map(t => t.substring(1));
+										}
+										resultCompletions = XsltTokenCompletions.getNormalCompletions(position, completionStrings, vscode.CompletionItemKind.TypeParameter);
+
+									}
+								}
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
 									if (isOnRequiredToken && requiredChar === token.startCharacter + 1) {
 										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
