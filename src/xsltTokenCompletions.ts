@@ -663,6 +663,9 @@ export class XsltTokenCompletions {
 								break;
 							case CharLevelState.dSep:
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
+									if (isOnRequiredToken && requiredChar === token.startCharacter + 1) {
+										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									}
 									if (awaitingRequiredArity) {
 										const fnArity = incrementFunctionArity ? 1 : 0;
 										const fnName = prevToken.value;
