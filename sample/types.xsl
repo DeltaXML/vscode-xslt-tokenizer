@@ -6,7 +6,7 @@
                 version="3.0">"
 
     
-    <xsl:variable name="test" as="" select="22 treat as attribute()"/>
+    <xsl:variable name="test" as="" select="count(22)"/>
     <xsl:variable name="test2" as="" select="abc/jkl/def/ghi/jkl[@name and @id and @myatt]"/>
 
     <xsl:template match="" mode="#all">
