@@ -80,7 +80,8 @@ export class XsltTokenCompletions {
 	private static readonly excludePrefixes = 'exclude-result-prefixes';
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 	private static readonly schemaQuery = new SchemaQuery();
-	private static readonly sequenceTypes = FunctionData.simpleTypes.concat(Data.nodeTypesBrackets, Data.nonFunctionTypesBrackets)
+	private static readonly sequenceTypes = FunctionData.simpleTypes.concat(Data.nodeTypesBrackets, Data.nonFunctionTypesBrackets);
+	private static readonly doubleParts = ['castable as', 'cast as', 'instance of', 'treat as'];
 
 	public static getCompletions = (attNameTests: string[], elementNameTests: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let lineNumber = -1;
@@ -121,6 +122,7 @@ export class XsltTokenCompletions {
 		let isOnRequiredToken = false;
 		let awaitingRequiredArity = false;
 		let keepProcessing = false;
+		let isOnStartOfRequiredToken = false;
 
 		let index = -1;
 		for (let token of allTokens) {
@@ -170,6 +172,7 @@ export class XsltTokenCompletions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
+			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
 			if (isOnRequiredToken) {
 				console.log('--------- on required token ---------');
 				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
@@ -565,7 +568,12 @@ export class XsltTokenCompletions {
 									functionToken = prevToken;
 								}
 								if (isOnRequiredToken) {
-									resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									if (isOnStartOfRequiredToken && prevToken) {
+										let prev2Token = prevToken.tokenType ===  TokenLevelState.operator? allTokens[index - 2]: null;
+										resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									} else {
+										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									}
 								}
 							// intentionally no-break;	
 							case CharLevelState.lPr:
@@ -585,7 +593,12 @@ export class XsltTokenCompletions {
 								inScopeXPathVariablesList = [];
 								xpathVariableCurrentlyBeingDefined = false;
 								if (isOnRequiredToken) {
-									resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									if (isOnStartOfRequiredToken && prevToken) {
+										let prev2Token = prevToken.tokenType ===  TokenLevelState.operator? allTokens[index - 2]: null;
+										resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									} else {
+										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									}
 								}
 								break;
 							case CharLevelState.rB:
@@ -617,8 +630,9 @@ export class XsltTokenCompletions {
 										xpathVariableCurrentlyBeingDefined = false;
 									}
 								}
-								if (isOnRequiredToken) {
-									resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+								if (isOnStartOfRequiredToken && prevToken) {
+									let prev2Token = prevToken.tokenType ===  TokenLevelState.operator? allTokens[index - 2]: null;
+									resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case CharLevelState.sep:
@@ -635,7 +649,10 @@ export class XsltTokenCompletions {
 									xpathVariableCurrentlyBeingDefined = false;
 								}
 								if (isOnRequiredToken) {
-									if (token.value === '/') {
+									if (isOnStartOfRequiredToken && prevToken) {
+										let prev2Token = prevToken.tokenType ===  TokenLevelState.operator? allTokens[index - 2]: null;
+										resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									} else if (token.value === '/') {
 										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									} else if (token.value === '!') {
 										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
@@ -736,6 +753,9 @@ export class XsltTokenCompletions {
 						break;
 				}
 				break;
+		}
+		if (!xpathCompletions) {
+			xpathCompletions = XsltTokenCompletions.getNormalCompletions(position, XsltTokenCompletions.doubleParts, vscode.CompletionItemKind.TypeParameter);
 		}
 		return xpathCompletions;
 	}

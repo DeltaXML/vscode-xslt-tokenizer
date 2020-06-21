@@ -124,7 +124,7 @@ export class Data {
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
     public static rangeVars = ["every", "for", "let", "member", "some", "return"];
-    public static firstParts = [ "cast", "castable", "instance"];
+    public static firstParts = [ "cast", "castable", "instance", "treat"];
     public static secondParts = ["as", "of"];
 
     public static nonFunctionConditional = ["if", "then", "else"];
@@ -197,6 +197,7 @@ export class XPathLexer {
         switch (firstPart) {
             case "cast":
             case "castable":
+            case "treat":
                 result = secondPart === "as";
                 break;
             case "instance":
