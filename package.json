@@ -4,7 +4,7 @@
 	"description": "Comprehensive language support for XSLT 3.0 / XPath 3.1",
 	"version": "0.1.0",
 	"publisher": "deltaxml",
-	"icon": "xpath-embedded.png",
+	"icon": "xslt-xpath.png",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/DeltaXML/vscode-xslt-tokenizer"
@@ -35,13 +35,27 @@
 		"semanticTokenScopes": [
 			{
 				"scopes": {
-					"xmlPunctuation": ["punctuation.definition.tag.xml"],
-					"processingInstrName": ["storage.type"],
-					"attributeNameTest": ["storage.type"],
-					"xslElementName": ["storage.type"],
-					"uriLiteral": ["storage.type"],
-					"functionNameTest": ["variable.other.constant"],
-					"anonymousFunction": ["variable.other.constant"]
+					"xmlPunctuation": [
+						"punctuation.definition.tag.xml"
+					],
+					"processingInstrName": [
+						"storage.type"
+					],
+					"attributeNameTest": [
+						"storage.type"
+					],
+					"xslElementName": [
+						"storage.type"
+					],
+					"uriLiteral": [
+						"storage.type"
+					],
+					"functionNameTest": [
+						"variable.other.constant"
+					],
+					"anonymousFunction": [
+						"variable.other.constant"
+					]
 				}
 			}
 		],
@@ -488,11 +502,12 @@
 	},
 	"devDependencies": {
 		"@types/jest": "^24.9.1",
-		"@types/vscode": "^1.44.0",
 		"@types/node": "^10.17.17",
+		"@types/vscode": "^1.44.0",
 		"jest": "^25.2.3",
 		"ts-jest": "^24.3.0",
 		"tslint": "^5.20.1",
-		"typescript": "^3.8.3"
+		"typescript": "^3.8.3",
+		"xslt3": "^2.0.2"
 	}
 }
