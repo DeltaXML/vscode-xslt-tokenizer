@@ -1,6 +1,6 @@
 # XSLT/XPath for Visual Studio Code
 
-The XSLT/XPath VSCode extension provides comprehensive language support for XSLT 3.0 and XPath 3.0.
+The XSLT/XPath VSCode extension provides comprehensive language support for XSLT 3.0 and XPath 3.1.
 
 ## Features
 
