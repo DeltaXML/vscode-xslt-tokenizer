@@ -62,12 +62,11 @@ export class XslLexerRenameTag extends XslLexer {
         return textBefore.length;
     }
 
-    public getEndTagForStartTagChange(document: vscode.TextDocument, offset: number, line: number, character: number, change: vscode.TextDocumentContentChangeEvent): TagRenamePosition|null {
+    public getEndTagForStartTagChange(document: vscode.TextDocument, offset: number, line: number, character: number, renameRange: vscode.Range): TagRenamePosition|null {
         
         this.globalInstructionData = [];
         this.globalModeData = [];
         let xsl = document.getText();
-        let renameRange = change.range;
         let renamePos = renameRange.start;
         
         let renameStartChar = renamePos.character;

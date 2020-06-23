@@ -23,7 +23,16 @@ export class DocumentChangeHandler {
 		if (!activeChange) {
 			return;
 		}
-		if (activeChange.text === ' ' || activeChange.text === '(' || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '/' || activeChange.text === '$' || activeChange.text === '<') {
+		let triggerSuggest = false;
+		if (activeChange.text === '/') {
+			let nextChar = e.document.getText().charAt(activeChange.rangeOffset + 1);
+			if (nextChar === '>') {
+
+			} else {
+				triggerSuggest = true;
+			}
+		}
+		if (triggerSuggest || activeChange.text === ' ' || activeChange.text === '(' || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
 			setTimeout(() => {
 				vscode.commands.executeCommand('editor.action.triggerSuggest');
 			}, 10);
@@ -45,7 +54,7 @@ export class DocumentChangeHandler {
 				let line = activeChange.range.start.line;
 				let character = startBracketPos;
 
-				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, offset, line, character,activeChange);
+				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, offset, line, character, activeChange.range);
 				if (endTagPosData) {
 					if (this.cachedFailedEdit) {
 						this.cachedFailedEdit = null;
