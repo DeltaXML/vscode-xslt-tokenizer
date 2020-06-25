@@ -24,10 +24,32 @@ export class DocumentChangeHandler {
 			return;
 		}
 		let triggerSuggest = false;
-		if (activeChange.text === '/') {
+		if (activeChange.text === '/' && activeChange.rangeLength === 0) {
 			let nextChar = e.document.getText().charAt(activeChange.rangeOffset + 1);
 			if (nextChar === '>') {
-
+				let textBeforeCloseEnd = this.lexer.getTextBeforeCloseEnd(e.document, activeChange);
+				if (textBeforeCloseEnd) {
+					let newStartChar = (activeChange.range.start.character - textBeforeCloseEnd.length); // positive number
+					let activeStartPos = activeChange.range.start;
+					let newStartPos = new vscode.Position(activeStartPos.line, newStartChar + 1);
+					let newRange = new vscode.Range(newStartPos, newStartPos);
+					let newOffset = activeChange.rangeOffset - (textBeforeCloseEnd.length + 1);
+					let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, newOffset, activeChange.range.start.line, newStartChar, newRange, true);
+					if (endTagPosData && endTagPosData.startTag === endTagPosData.endTag) {
+						let endLine = e.document.lineAt(endTagPosData.startPosition.line).text;
+						let followingStartCloseTag = endLine.substring(endTagPosData.startPosition.character);
+						let closeTagCharPos = followingStartCloseTag.indexOf('>');
+						if (closeTagCharPos > -1) {
+							let startPos = new vscode.Position(activeChange.range.start.line, activeChange.range.start.character + 1);
+							let endCharPos = endTagPosData.startPosition.character + closeTagCharPos;
+							let endPos = new vscode.Position(endTagPosData.startPosition.line, endCharPos);
+							let deletionRange = new vscode.Range(startPos, endPos);
+							let wse = new vscode.WorkspaceEdit();
+							wse.delete(e.document.uri, deletionRange);
+							vscode.workspace.applyEdit(wse);
+						}
+					}
+				}
 			} else {
 				triggerSuggest = true;
 			}
@@ -37,9 +59,6 @@ export class DocumentChangeHandler {
 				vscode.commands.executeCommand('editor.action.triggerSuggest');
 			}, 10);
 			return;
-		}
-		if (this.cachedFailedEdit) {
-			console.log('fail entry');
 		}
 		//console.log('didChange');
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, activeChange)) {
@@ -54,7 +73,7 @@ export class DocumentChangeHandler {
 				let line = activeChange.range.start.line;
 				let character = startBracketPos;
 
-				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, offset, line, character, activeChange.range);
+				let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, offset, line, character, activeChange.range, false);
 				if (endTagPosData) {
 					if (this.cachedFailedEdit) {
 						this.cachedFailedEdit = null;

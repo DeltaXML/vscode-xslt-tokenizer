@@ -43,6 +43,22 @@ export class XslLexerRenameTag extends XslLexer {
         return posInStartTag;
     }
 
+    public getTextBeforeCloseEnd(document: vscode.TextDocument, change: vscode.TextDocumentContentChangeEvent) {
+        if (!change) {
+            return null;
+        }
+        let renameRange = change.range;
+        let renameChar = renameRange.start.character;
+
+        let renameLine = document.lineAt(renameRange.start.line);
+        let firstNonWsChar = renameLine.firstNonWhitespaceCharacterIndex;
+        if (renameChar <= firstNonWsChar) {
+            return null;
+        }
+        let textBeforeCloseEnd = this.tagBeforeClose(renameLine.text, change);
+        return textBeforeCloseEnd;
+    }
+
     private scanBefore(text: string, change: vscode.TextDocumentContentChangeEvent) {
         let startTagPos = text.lastIndexOf('<', change.range.start.character);
         if (startTagPos < 0) {
@@ -62,7 +78,21 @@ export class XslLexerRenameTag extends XslLexer {
         return textBefore.length;
     }
 
-    public getEndTagForStartTagChange(document: vscode.TextDocument, offset: number, line: number, character: number, renameRange: vscode.Range): TagRenamePosition|null {
+    private tagBeforeClose(text: string, change: vscode.TextDocumentContentChangeEvent) {
+        let startTagPos = text.lastIndexOf('<', change.range.start.character);
+        if (startTagPos < 0) {
+            return null;
+        }
+        let prevEndTagPos = text.lastIndexOf('>', change.range.start.character - 1);
+        if (prevEndTagPos > startTagPos) {
+            return null;
+        }
+
+        let textBefore = text.substring(startTagPos + 1, change.range.start.character);        
+        return textBefore;
+    }
+
+    public getEndTagForStartTagChange(document: vscode.TextDocument, offset: number, line: number, character: number, renameRange: vscode.Range, ignoreFirstSelfCloseTag: boolean): TagRenamePosition|null {
         
         this.globalInstructionData = [];
         this.globalModeData = [];
@@ -91,6 +121,7 @@ export class XslLexerRenameTag extends XslLexer {
         let breakLoop = false;
         let foundStartTag = false;
         let endTagStartPos: TagRenamePosition|null = null;
+        let ignoreSelfCloseTag = ignoreFirstSelfCloseTag;
 
 
         while (lCharCount < xslLength + 1) {
@@ -118,6 +149,11 @@ export class XslLexerRenameTag extends XslLexer {
                     nextChar,
                     currentState,
                 );
+
+                if (ignoreSelfCloseTag && nextState === XMLCharState.rSelfCt) {
+                    ignoreSelfCloseTag = false;
+                    nextState = currentState;
+                }
 
                 if (nextState === currentState) {
                     if (isCurrentCharNewLIne) {
@@ -206,6 +242,7 @@ export class XslLexerRenameTag extends XslLexer {
                         case XMLCharState.rSelfCt:
                         // end of self-closing tag with no attributes:
                         case XMLCharState.rSelfCtNoAtt:
+                            // for deleting endAfterSelfClose, we need to ignore this the first time!
                             breakLoop = gotRenameName && xmlElementStack === renameStackLength;
                             storeToken = false;
                             tokenChars = [];
