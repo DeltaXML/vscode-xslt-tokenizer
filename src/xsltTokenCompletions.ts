@@ -772,7 +772,7 @@ export class XsltTokenCompletions {
 				break;
 		}
 		if (!xpathCompletions) {
-			xpathCompletions = XsltTokenCompletions.getNormalCompletions(position, XsltTokenCompletions.doubleParts, vscode.CompletionItemKind.TypeParameter);
+			xpathCompletions = [];
 		}
 		return xpathCompletions;
 	}
