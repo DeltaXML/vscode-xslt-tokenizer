@@ -14,7 +14,7 @@ import {SaxonTaskProvider} from './saxonTaskProvider';
 import {XSLTConfiguration, XMLConfiguration, XSLTLightConfiguration} from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer } from './xslLexer';
-import {DocumentChangeHandler} from './documentChangeHandler'
+import {DocumentChangeHandler} from './documentChangeHandler';
 import { on } from 'process';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { DocumentLinkProvider } from './documentLinkProvider';
