@@ -20,7 +20,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	public minimiseXPathIndents = true;
 	public indentMixedContent = false;
 	private xslLexer: XslLexer;
-
+	private onType = false;
 	private onTypeLineEmpty = false;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private isCloseTag = false;
@@ -46,7 +46,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			const newLine = document.lineAt(pos.line);
 			this.onTypeLineEmpty = newLine.text.trim().length === 0;
 			const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
-			return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);			
+			this.onType = true;
+			let formatEdit =  this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+			this.onType = false;
+			return formatEdit;			
 		} else {
 			return [];
 		}
@@ -124,7 +127,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 			let isXMLToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
-			if (isXMLToken) {
+
+			if (this.onType && result.length > 0) {
+				// do nothing
+			} else if (isXMLToken) {
 				xpathNestingLevel = 0;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
@@ -359,7 +365,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			if (addNewLine && lineNumberDiff === 0) {
 				lineNumberDiff = 1;
 			}
-			if (this.isCloseTag) {
+			if (this.onType && result.length > 0) {
+			} else if (this.isCloseTag) {
 				if (nestingLevel > 0 && closeTagName !== null && this.closeTagPos !== null) {
 					let nonWsStart = this.closeTagLine? this.closeTagLine.firstNonWhitespaceCharacterIndex: 0;
 					let replacementString = '';
