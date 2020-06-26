@@ -35,6 +35,9 @@ export class DocumentChangeHandler {
 					let newRange = new vscode.Range(newStartPos, newStartPos);
 					let newOffset = activeChange.rangeOffset - (textBeforeCloseEnd.length + 1);
 					let endTagPosData = this.lexer.getEndTagForStartTagChange(e.document, newOffset, activeChange.range.start.line, newStartChar, newRange, true);
+					if (endTagPosData && endTagPosData?.startTag.endsWith('/')) {
+						endTagPosData.startTag = endTagPosData.startTag.substring(0, endTagPosData.startTag.length - 1);
+					}
 					if (endTagPosData && endTagPosData.startTag === endTagPosData.endTag) {
 						let endLine = e.document.lineAt(endTagPosData.startPosition.line).text;
 						let followingStartCloseTag = endLine.substring(endTagPosData.startPosition.character);

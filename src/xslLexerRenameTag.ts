@@ -150,7 +150,7 @@ export class XslLexerRenameTag extends XslLexer {
                     currentState,
                 );
 
-                if (ignoreSelfCloseTag && nextState === XMLCharState.rSelfCt) {
+                if (ignoreSelfCloseTag && (nextState === XMLCharState.rSelfCtNoAtt || nextState === XMLCharState.rSelfCt)) {
                     ignoreSelfCloseTag = false;
                     nextState = currentState;
                 }
