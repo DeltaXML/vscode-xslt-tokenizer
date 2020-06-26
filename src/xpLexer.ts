@@ -909,7 +909,7 @@ export class XPathLexer {
         let rv: CharLevelState;
         switch (char) {
             case 'Q':
-                rv = (nextChar === '{')? CharLevelState.lUri : CharLevelState.lName;
+                rv = (nextChar === '{')? CharLevelState.lUri : existingState;
                 break;
             case '(':
                 if (nextChar === ':') {
