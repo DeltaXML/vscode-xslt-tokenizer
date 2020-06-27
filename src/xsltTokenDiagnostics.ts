@@ -969,6 +969,15 @@ export class XsltTokenDiagnostics {
 								break;
 						}
 						break;
+					case TokenLevelState.nodeType:
+						if (token.value === ':*' && prevToken && !prevToken.error) {
+							let pfx = prevToken.tokenType === TokenLevelState.attributeNameTest? prevToken.value.substring(1): prevToken.value;
+							if (inheritedPrefixes.indexOf(pfx) === -1) {
+								prevToken['error'] = ErrorType.XPathPrefix;
+								problemTokens.push(prevToken);
+							}
+						}
+						break;
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
 						if (token.error) {
