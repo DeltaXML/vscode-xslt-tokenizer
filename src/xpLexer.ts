@@ -97,7 +97,7 @@ export enum ModifierState {
 export class Data {
     public static separators = ['!','*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?','|'];
 
-    public static doubleSeps = ['!=', '*:', '?*', '..', '//', ':*', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
+    public static doubleSeps = ['!=', '*:', '..', '//', ':*', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
 
     public static axes = [ "ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self", 
                             "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"];
@@ -868,7 +868,7 @@ export class XPathLexer {
             case CharLevelState.sep:
                 let prevTokenT = prevToken.tokenType;
                 let isStar = currentToken.value === '*';
-                if (isStar && (prevTokenT === TokenLevelState.attributeNameTest || prevTokenT === TokenLevelState.uriLiteral)) {
+                if (isStar && (prevTokenT === TokenLevelState.attributeNameTest || prevTokenT === TokenLevelState.uriLiteral || (prevTokenT === TokenLevelState.operator && prevToken.value === '?'))) {
                     // @* or {example.com}*
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType; 
@@ -886,7 +886,6 @@ export class XPathLexer {
                                 currentToken.tokenType = TokenLevelState.nodeType;
                             }
                         } else if (isStar && (prevTokenT === TokenLevelState.operator || prevTokenT === TokenLevelState.complexExpression)) {
-                            // ?* is a dSep so no test for this needed here
                             // $a and * or if ($a) then * else book
                             currentToken.charType = CharLevelState.lName;
                             currentToken.tokenType = TokenLevelState.nodeType;
@@ -898,8 +897,6 @@ export class XPathLexer {
                 if (currentToken.value === ':*') {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
-                } else if (currentToken.value === '?*') {
-
                 }
                 break;
         }

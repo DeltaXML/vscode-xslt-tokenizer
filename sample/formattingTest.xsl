@@ -20,6 +20,7 @@
     </book>
     
     <xsl:function name="wfn:createAttrNameMap" as="map(xs:string, attribute()?)">
+        <xsl:variable name="test" as="xs:string" select="?*"/>
         <xsl:param name="element" as="element()"/>
         <xsl:variable name="wbw-attrs" as="attribute()*" select="$element/@word-by-word:*"/>
         <xsl:variable name="instructionAttrs" as="attribute()*" select="$wbw-attrs[substring-before(local-name(.), '_') = $splitterNames]"/>
