@@ -74,6 +74,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		}
 		let indentCharLength = useTabs ? 1 : options.tabSize;
 
+		let currentLine = document.lineAt(range.start.line);
+		if (range.start.character > currentLine.firstNonWhitespaceCharacterIndex) {
+			// don't format pastes / range selections if they don't include the start non-ws char of the line
+			return [];
+		}
+
 		let startFormattingLineNumber = range.start.line;
 		const firstLine = document.lineAt(0);
         const adjustedStartRange = new vscode.Range(firstLine.range.start, range.end);
