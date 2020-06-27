@@ -51,7 +51,7 @@ export class XSLTSnippets {
 		{
 			name: 'xmlns:map',
 			description: 'W3C XPath Map Namespace',
-			body: `xmlns:array="http://www.w3.org/2005/xpath-functions/map"$0`
+			body: `xmlns:map="http://www.w3.org/2005/xpath-functions/map"$0`
 		},
 		{
 			name: 'xmlns:math',
