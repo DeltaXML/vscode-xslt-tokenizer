@@ -1,23 +1,37 @@
 # XSLT/XPath for Visual Studio Code
 
-The XSLT/XPath VSCode extension provides comprehensive language support for XSLT 3.0 and XPath 3.1.
+The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1.
 
+
+![vscode-xslt](vscode-xslt.png)
+
+*Screen shot showing XSLT symbol-outline, problem-reporting and syntax-highlighting:*
 ## Features
 
  - XSLT 3.0 / XPATH 3.1
- - Syntax Highlighting
- - XML/Code formatting
- - Auto-Completion
- - Code Diagnostics
- - XML Well-Formedness Checking
- - Code symbol outline
- - Code symbol lookup
- - xsl:include/xsl:import links
- - Goto/Peek Definition
- - Tag Rename
- - Auto tag-close
- - Language Snippets
- - Built-in task config for Saxon XSLT processor
+ - Syntax Highlighter uses [Semantic Highlgihting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively (avoiding TextMate grammar issues)
+ - Built-in Code Diagnostics
+ - XSLT Language support for VSCode features:
+   - [Auto Completion/Intellisense](https://code.visualstudio.com/docs/editor/intellisense)
+   - [Syntax Highlighting Themes](https://code.visualstudio.com/docs/getstarted/themes)
+   - [Code Formatting](https://code.visualstudio.com/docs/editor/codebasics#_formatting)
+   - [Code Folding](https://code.visualstudio.com/docs/editor/codebasics#_folding)
+   - [Snippets](https://code.visualstudio.com/docs/editor/userdefinedsnippets) for XSLT/XPath context
+   - [Code symbol outline](https://code.visualstudio.com/docs/getstarted/userinterface#_outline-view)
+   - [Goto Symbol](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
+   - [Symbol Breadcrumbs](https://code.visualstudio.com/docs/getstarted/userinterface#_breadcrumbs)
+   - [Goto Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_go-to-definition)
+   - [Peek Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
+   - [VScode Tasks](https://code.visualstudio.com/Docs/editor/tasks) include custom [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
+   - [Bracket Matching](https://code.visualstudio.com/Docs/editor/editingevolved#_bracket-matching)
+   - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax
+ -  Follow `xsl:include`/`xsl:import` links
+ - Custom XML Editing Featues:
+   - XML Well-Formedness Checking
+   - Tag Rename
+   - Auto tag-close
+   - Auto clean of end tag orpahned by `/` added to self-close start tag
+
  
  ## Introduction
  
@@ -26,6 +40,14 @@ For lexical analysis, this extension processes code character-by-character. This
 Auto-completion is available for XSLT and XPath, including contex-aware completion items for all code symbol names. XSLT and XPATH function signatures and descriptions are shown alongside fuction completion items.
 
 This extension performs a comprehensive set of checks on the code, before any XSLT compilation. Thsese checks ensure that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows checking of references to symbol definitions regardless of the location of the definition.
+
+## Running XSLT
+
+![xslt-tasks](xslt-tasks.png)
+
+*XSLT transforms are configured and run as special VSCode Tasks*
+
+For more detail, see [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
 
 ## Release Notes
 
