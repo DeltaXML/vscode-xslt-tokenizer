@@ -226,8 +226,8 @@
 		],
 		"problemMatchers": [
 			{
-				"name": "saxon-xslt-js",
-				"owner": "xslt-js",
+				"name": "saxon-xslt",
+				"owner": "xslt",
 				"fileLocation": [
 					"relative",
 					"${file}/.."
@@ -248,24 +248,26 @@
 				]
 			},
 			{
-				"name": "saxon-xslt",
-				"owner": "xslt",
+				"name": "saxon-xslt-js",
+				"owner": "xslt-js",
 				"fileLocation": [
 					"relative",
 					"${file}/.."
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
-						"severity": 1,
-						"file": 5
+						"regexp": "^s*"
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
-						"code": 1,
-						"message": 2
+						"regexp": "^.*(Error|Warning|Info)\\s+([^\\s]+)\\s+at\\s+([^#]+)#(\\d+)",
+						"line": 4,
+						"severity": 1,
+						"code": 2,
+						"file": 3
+					},
+					{
+						"regexp": "^(.*)",
+						"message": 1
 					}
 				]
 			},
