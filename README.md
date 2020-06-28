@@ -30,7 +30,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
    - XML Well-Formedness Checking
    - Tag Rename
    - Auto tag-close
-   - Auto clean of end tag orpahned by `/` added to self-close start tag
+   - Auto clean orphaned end tag after `/` added to make start tag self-close
 
  
  ## Introduction
