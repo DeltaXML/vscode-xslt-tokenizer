@@ -147,9 +147,106 @@
 						}
 					}
 				}
+			},
+			{
+				"type": "xslt-js",
+				"required": [
+					"label",
+					"xsltFile",
+					"xmlSource",
+					"resultPath",
+					"nodeModulesFolder"
+				],
+				"properties": {
+					"label": {
+						"type": "string",
+						"description": "The user interface label. Change this to uniquely identify the task"
+					},
+					"nodeModulesFolder": {
+						"type": "string",
+						"description": "The path of the node_modules folder"
+					},
+					"xsltFile": {
+						"type": "string",
+						"description": "The path to the XSLT stylesheet"
+					},
+					"xmlSource": {
+						"type": "string",
+						"description": "The path to the XML source file"
+					},
+					"initialTemplate": {
+						"type": "string",
+						"description": "The named template to be executed. Namespaced templates can be written as {uri}localname. Default is xsl:initial-template"
+					},
+					"initialMode": {
+						"type": "string",
+						"description": "The initial mode for the transformation. Namespaced modes can be written as {uri}localname"
+					},
+					"export": {
+						"type": "string",
+						"description": "Export filename: If set, exports the compiled stylesheet, in a form suitable for subsequent execution"
+					},
+					"resultPath": {
+						"type": "string",
+						"description": "The destination path for the XSLT result"
+					},
+					"parameters": {
+						"description": "The xsl:param values for the XSLT",
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "The xsl:param name. Namespaced params can be written as {uri}localname"
+								},
+								"value": {
+									"type": "string",
+									"description": "The xsl:param value. Special leading characters are: '?' (XPath), '!' (xsl:output), '+' (filename): See: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+								}
+							},
+							"required": [
+								"name",
+								"value"
+							]
+						},
+						"minItems": 1
+					},
+					"group": {
+						"type": "object",
+						"properties": {
+							"kind": {
+								"type": "string",
+								"description": "The kind of task. E.g. 'build'"
+							}
+						}
+					}
+				}
 			}
 		],
 		"problemMatchers": [
+			{
+				"name": "saxon-xslt-js",
+				"owner": "xslt-js",
+				"fileLocation": [
+					"relative",
+					"${file}/.."
+				],
+				"pattern": [
+					{
+						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
+						"line": 3,
+						"column": 4,
+						"severity": 1,
+						"file": 5
+					},
+					{
+						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"code": 1,
+						"message": 2
+					}
+				]
+			},
 			{
 				"name": "saxon-xslt",
 				"owner": "xslt",

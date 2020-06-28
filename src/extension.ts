@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
+import {SaxonJsTaskProvider} from './saxonJsTaskProvider';
 import {XSLTConfiguration, XMLConfiguration, XSLTLightConfiguration} from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer } from './xslLexer';
@@ -33,9 +34,6 @@ const legend = (function () {
 
 	return new vscode.SemanticTokensLegend(tokenTypesLegend, tokenModifiersLegend);
 })();
-
-let customTaskProvider: vscode.Disposable | undefined;
-
 
 export function activate(context: vscode.ExtensionContext) {
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
@@ -87,7 +85,10 @@ export function activate(context: vscode.ExtensionContext) {
 	if (!workspaceRoot) {
 		return;
 	}
-	customTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
+	let xsltTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
+	let xsltjsTaskProvider = vscode.tasks.registerTaskProvider(SaxonJsTaskProvider.SaxonBuildScriptType, new SaxonJsTaskProvider());
+	context.subscriptions.push(xsltTaskProvider);
+	context.subscriptions.push(xsltjsTaskProvider);
 
 }
 
