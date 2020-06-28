@@ -121,7 +121,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             }
             if (genericTask.type === 'xslt-js') {
                 let xsltTask: XSLTJSTask = <XSLTJSTask> genericTask;
-                if (xsltTask.label === 'xslt: ' + newTaskLabel || xsltTask.label === newTaskLabel) {
+                if (xsltTask.label === 'xslt-js: ' + newTaskLabel || xsltTask.label === newTaskLabel) {
                     // do not add a new task if there's already a task with the 'new' task label
                     addNewTask = false;
                 }
