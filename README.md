@@ -19,11 +19,17 @@ The XSLT/XPath VSCode extension provides comprehensive language support for XSLT
  - Language Snippets
  - Built-in task config for Saxon XSLT processor
  
+ ## Introduction
+ 
 For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. The avoidance of the much more common use of regular expressions on a line-by-line basis brimgs many benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and full integrity for syntax highlighting.
 
 Auto-completion is available for XSLT and XPath, including contex-aware completion items for all code symbol names. XSLT and XPATH function signatures and descriptions are shown alongside fuction completion items.
 
 This extension performs a comprehensive set of checks on the code, before any XSLT compilation. Thsese checks ensure that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows checking of references to symbol definitions regardless of the location of the definition.
+
+## Release Notes
+
+See: [Release Notes](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/Release-Notes) on the project wiki
 
 ## Sample Screenshots
 
@@ -81,6 +87,8 @@ Or, to enable syntax highlighting for all themes:
 }
 ```
 ### Editor Settings For Word Selection/Navigation
+
+For word selection/navigation, by default, names like $two-parts as two words and $ is also excluded from the name. This behaviour can be altered using the VSCode setting: 
 
 `editor.wordSeparators`
 
