@@ -9,7 +9,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 ## Features
 
  - XSLT 3.0 / XPATH 3.1
- - Syntax Highlighter uses [Semantic Highlgihting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively (avoiding TextMate grammar issues)
+ - Syntax Highlighter uses [Semantic Highlgihting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
  - Built-in Code Diagnostics
  - Integration with Saxon/Saxon-JS XSLT Processors
  - XSLT Language support for VSCode features:
