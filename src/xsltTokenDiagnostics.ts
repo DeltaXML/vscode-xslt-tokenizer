@@ -299,10 +299,10 @@ export class XsltTokenDiagnostics {
 							break;
 						default:
 							if (prevToken.value === '/' || prevToken.value === '*' || prevToken.value === '.') {
-								// these are ok provided that the previous token was XSLT;
+								// these are ok provided that the previous token was XSLT or previous token was ,;
 								let prevToken2 = allTokens[index - 2];
 								let tokenBeforePrevWasXSLT = prevToken2.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
-								isValid = tokenBeforePrevWasXSLT;
+								isValid = tokenBeforePrevWasXSLT || prevToken2.value === ',';
 							}
 							break;
 					}
