@@ -111,7 +111,7 @@ Or, to enable syntax highlighting for all themes:
 ```
 ### Editor Settings For Word Selection/Navigation
 
-For word selection/navigation, by default, names like $two-parts as two words and $ is also excluded from the name. This behaviour can be altered using the VSCode setting: 
+For word selection/navigation, by default, names like $two-parts are treated as two words for selection purposes and $ is also excluded from the name. This behaviour can be altered using the VSCode setting: 
 
 `editor.wordSeparators`
 
