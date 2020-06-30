@@ -794,7 +794,6 @@ export class XsltTokenDiagnostics {
 									problemTokens.push(token);
 								}
 							}
-							preXPathVariable = xp.preXPathVariable;
 						}
 						break;
 					case TokenLevelState.axisName:
