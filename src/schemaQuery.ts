@@ -198,17 +198,3 @@ export class SchemaQuery {
     }
 }
 
-//let s1 = new SchemaQuery();
-// an element in the instruction substitutionGroup:
-//let result = s1.getExpected('xsl:analyze-string');
-// an element declared on its own:
-//let result = s1.getExpected('xsl:matching-substring');
-//an element requiring recursive looku:
-//let result = s1.getExpected('xsl:accumulator-rule');
-// an element with attributeList:
-//let result = s1.getExpected('xsl:global-context-item');
-//let result = s1.getExpected('xsl:expose', 'visibility');
-// let result = s1.getExpected('xsl:attribute', 'validation');
-//let result = s1.getExpected('anyelement', 'xsl:expand-text');
-//console.log(result);
-
