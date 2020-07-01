@@ -22,6 +22,16 @@ export class XSLTConfiguration {
 	} 
 }
 
+export class DCPConfiguration {
+	// initial configuration is for basic XProc support only
+	public static configuration: LanguageConfiguration = {
+		expressionAtts: ['xpath'],
+		nativePrefix: '',
+		tvtAttributes: [],
+		nonNativeAvts: false
+	} 
+}
+
 export class XProcConfiguration {
 	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {

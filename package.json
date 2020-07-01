@@ -26,6 +26,7 @@
 	"activationEvents": [
 		"onLanguage:xpath",
 		"onLanguage:xslt",
+		"onLanguage:dcp",
 		"onLanguage:xml",
 		"onCommand:workbench.action.tasks.runTask"
 	],
@@ -521,6 +522,17 @@
 					".xslt"
 				],
 				"configuration": "./xsl-language-configuration.json"
+			},
+			{
+				"id": "dcp",
+				"aliases": [
+					"DCP",
+					"dcp"
+				],
+				"extensions": [
+					".dcp"
+				],
+				"configuration": "./language-configuration.json"
 			},
 			{
 				"id": "xml",

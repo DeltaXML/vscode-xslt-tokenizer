@@ -151,7 +151,7 @@ export class XslLexer {
 
     constructor(languageConfiguration: LanguageConfiguration) {
         this.nonNativeAvts = languageConfiguration.nonNativeAvts;
-        this.nativePrefixLength = languageConfiguration.nativePrefix.length + 1;
+        this.nativePrefixLength = languageConfiguration.nativePrefix.length === 0? 0: languageConfiguration.nativePrefix.length + 1;
         this.languageConfiguration = languageConfiguration;
         this.languageConfiguration.tvtAttributes.forEach(tvtAttribute => {
             this.nativeTvtAttributes.push(this.languageConfiguration.nativePrefix + ':' + tvtAttribute);
@@ -1157,7 +1157,7 @@ export class XslLexer {
 
     protected getElementProperties(tokenChars: string[], isRootChild: boolean): ElementProperties {
         let elementName= tokenChars.join('');
-        let isNative = tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.languageConfiguration.nativePrefix + ':');
+        let isNative = (this.nativePrefixLength === 0 && elementName.indexOf(':') === -1) || (tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.languageConfiguration.nativePrefix + ':'));
         let instructionType = GlobalInstructionType.Unknown;
         let nativeName = '';
         if (isNative) {

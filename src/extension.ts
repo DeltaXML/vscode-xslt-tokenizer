@@ -12,9 +12,9 @@ import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {SaxonJsTaskProvider} from './saxonJsTaskProvider';
-import {XSLTConfiguration, XMLConfiguration, XSLTLightConfiguration} from './languageConfigurations';
+import {XSLTConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration} from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
-import { XslLexer } from './xslLexer';
+import { XslLexer, LanguageConfiguration } from './xslLexer';
 import {DocumentChangeHandler} from './documentChangeHandler';
 import { on } from 'process';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
@@ -60,7 +60,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt'}, xsltLinkProvider));
 
 	// syntax highlighters
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp'}, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
@@ -112,8 +113,8 @@ export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokens
 
 	private xslLexer: XslLexer;
 
-	public constructor() {
-		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
+	public constructor(languageConfig: LanguageConfiguration) {
+		this.xslLexer = new XslLexer(languageConfig);
 		this.xslLexer.provideCharLevelState = true;
 	}
 
