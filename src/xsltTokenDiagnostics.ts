@@ -76,7 +76,6 @@ enum ValidationType {
 export class XsltTokenDiagnostics {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	public static readonly xsltCatchVariables = ['err:code','err:description', 'err:value', 'err:module', 'err:linenumber', 'err:column-number'];
-	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
 	private static readonly xslInclude = 'xsl:include';
 	private static readonly xslImport = 'xsl:import';
 	private static readonly xmlChars = ['lt','gt','quot','apos','amp'];
@@ -139,7 +138,7 @@ export class XsltTokenDiagnostics {
 	}
 
 
-	public static calculateDiagnostics = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (xslVariable: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 
 		let inScopeVariablesList: VariableData[] = [];
@@ -335,7 +334,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
-							tagType = (XsltTokenDiagnostics.xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
+							tagType = (xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
 							startTagToken = token;

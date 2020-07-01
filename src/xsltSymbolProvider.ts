@@ -21,6 +21,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private readonly collection: vscode.DiagnosticCollection;
 	private gp = new GlobalsProvider();
 	private readonly isXSLT: boolean;
+	private xslVarNames = ['xsl:variable', 'xsl:param'];
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
 		this.isXSLT = xsltConfiguration.nativePrefix === 'xsl';
@@ -84,7 +85,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			importErrors.forEach((importError) => {
 				importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
 			});
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
+
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.xslVarNames, this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			let allDiagnostics = importDiagnostics.concat(diagnostics);
 			if (allDiagnostics.length > 0) {
 				this.collection.set(document.uri, allDiagnostics);

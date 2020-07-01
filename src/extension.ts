@@ -19,6 +19,7 @@ import {DocumentChangeHandler} from './documentChangeHandler';
 import { on } from 'process';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { DocumentLinkProvider } from './documentLinkProvider';
+import { DCPSymbolProvider } from './dcpSymbolProvider';
 
 
 const tokenModifiers = new Map<string, number>();
@@ -38,6 +39,9 @@ const legend = (function () {
 export function activate(context: vscode.ExtensionContext) {
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
+	const dcpDiagnosticsCollection = vscode.languages.createDiagnosticCollection('dcp');
+	const dcpSymbolProvider = new DCPSymbolProvider(DCPConfiguration.configuration, dcpDiagnosticsCollection);
+
 	const xsltDefintiionProvider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
 	const xsltLinkProvider = new DocumentLinkProvider(XSLTLightConfiguration.configuration);
 
@@ -54,6 +58,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt'}, xsltSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp'}, dcpSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml'}, xmlSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt'}, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt'}, xsltDefintiionProvider));
