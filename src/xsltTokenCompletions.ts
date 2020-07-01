@@ -1097,6 +1097,7 @@ export class XsltTokenCompletions {
 
 			let competionName = tagName;
 			let description: string|undefined;
+			let useCurrent = true;
 			if (tagName === 'xsl:template') {
 				const newItem = new vscode.CompletionItem(tagName + ' match', vscode.CompletionItemKind.Struct);
 				newItem.documentation = "xsl:template with 'match' attribute";
@@ -1104,30 +1105,48 @@ export class XsltTokenCompletions {
 				completionItems.push(newItem);
 				competionName = tagName + ' name';
 				description = "xsl:template with 'name' attribute";
+			} else if (tagName === 'xsl:literal-result-element') {
+				useCurrent = false;
+				const newItem = new vscode.CompletionItem('literal-self-closing-element', vscode.CompletionItemKind.Struct);
+				newItem.documentation = "self-closing tag for literal result element";
+				newItem.insertText = new vscode.SnippetString('${1:div} ${2:class}="$3"/>$0');
+				completionItems.push(newItem);
+				const newItem2 = new vscode.CompletionItem('literal-start-element', vscode.CompletionItemKind.Struct);
+				newItem2.documentation = "start tag for literal result element";
+				newItem2.insertText = new vscode.SnippetString('${1:div}>$0');
+				completionItems.push(newItem2);
+				const newItem3 = new vscode.CompletionItem('literal-element', vscode.CompletionItemKind.Struct);
+				newItem3.documentation = "start and close tag for literal result element";
+				newItem3.insertText = new vscode.SnippetString('${1:div}>$0</${1:div}>');
+				completionItems.push(newItem3);
 			}
-			switch (snippetAttrs.length) {
-				case 0:
-					break;
-				case 1:
-					attrText = ' ' + snippetAttrs[0] + '="$1"';
-					break;
-				default:
-					this.schemaQuery.soughtAttributes.forEach((attr, index) => {
-						if (snippetAttrs.indexOf(attr) > -1) {
-							attrText += ` ${attr}="$${index + 1}"`
-						}
-					});
-					break;
+			if (useCurrent) {
+				switch (snippetAttrs.length) {
+					case 0:
+						break;
+					case 1:
+						attrText = ' ' + snippetAttrs[0] + '="$1"';
+						break;
+					default:
+						this.schemaQuery.soughtAttributes.forEach((attr, index) => {
+							if (snippetAttrs.indexOf(attr) > -1) {
+								attrText += ` ${attr}="$${index + 1}"`
+							}
+						});
+						break;
+				}
+				
+				let selfCloseTag = snippetAttrs.length === 0? '/>': '/>$0';
+				let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>$0</${tagName}>`: selfCloseTag;
+				const newItem = new vscode.CompletionItem(competionName, vscode.CompletionItemKind.Struct);
+				newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
+				if (description) {
+					newItem.documentation = description;
+				}
+				completionItems.push(newItem);
+			} else {
+				useCurrent = true;
 			}
-			
-			let selfCloseTag = snippetAttrs.length === 0? '/>': '/>$0';
-			let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>$0</${tagName}>`: selfCloseTag;
-			const newItem = new vscode.CompletionItem(competionName, vscode.CompletionItemKind.Struct);
-			newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
-			if (description) {
-				newItem.documentation = description;
-			}
-			completionItems.push(newItem);
 		});
 		return completionItems;
 	}

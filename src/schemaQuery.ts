@@ -185,6 +185,7 @@ export class SchemaQuery {
         elements.forEach((item) => {
             if (item === 'xsl:instruction') {
                 let subElements = Object.keys(this.schema.substitutionGroups.instruction.elements);
+                newElements.push('xsl:literal-result-element');
                 newElements = newElements.concat(subElements);
             } else if (item === 'xsl:declaration') {
                 let subElements = Object.keys(this.schema.substitutionGroups.declaration.elements);
