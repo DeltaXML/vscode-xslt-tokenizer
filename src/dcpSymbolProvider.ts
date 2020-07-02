@@ -1,31 +1,22 @@
 import * as vscode from 'vscode';
-import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
-import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
-import {GlobalsProvider} from './globalsProvider';
-import * as path from 'path';
+import { XslLexer, LanguageConfiguration, DocumentTypes } from './xslLexer';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
-interface ImportedGlobals {
-	href: string,
-	data: GlobalInstructionData[],
-	error: boolean
-}
 
-interface GlobalsSummary {
-	globals: ImportedGlobals[],
-	hrefs: string[]
-}
 
 export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection;
-	private readonly isXSLT: boolean;
+	private static varNames = ['stringParameter', 'booleanParameter'];
+	private docType: DocumentTypes
+
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
-		this.isXSLT = xsltConfiguration.nativePrefix === 'xsl';
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
+		this.docType = xsltConfiguration.docType;
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
@@ -36,8 +27,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 			let symbols: vscode.DocumentSymbol[] = [];
 
 			let importDiagnostics: vscode.Diagnostic[] = [];
-			let varNames = ['stringParameter', 'booleanParameter'];
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(varNames, this.isXSLT, document, allTokens, [], [], symbols);
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(DCPSymbolProvider.varNames, this.docType, document, allTokens, [], [], symbols);
 			let allDiagnostics = importDiagnostics.concat(diagnostics);
 			if (allDiagnostics.length > 0) {
 				this.collection.set(document.uri, allDiagnostics);

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
+import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
@@ -20,14 +20,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection;
 	private gp = new GlobalsProvider();
-	private readonly isXSLT: boolean;
 	private xslVarNames = ['xsl:variable', 'xsl:param'];
+	private docType: DocumentTypes;
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
-		this.isXSLT = xsltConfiguration.nativePrefix === 'xsl';
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
+		this.docType = xsltConfiguration.docType;
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
@@ -86,7 +86,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
 			});
 
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.xslVarNames, this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.xslVarNames, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			let allDiagnostics = importDiagnostics.concat(diagnostics);
 			if (allDiagnostics.length > 0) {
 				this.collection.set(document.uri, allDiagnostics);

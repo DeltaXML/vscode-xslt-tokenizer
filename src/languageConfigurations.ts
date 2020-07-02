@@ -1,5 +1,4 @@
-import {LanguageConfiguration} from './xslLexer';
-
+import {LanguageConfiguration, DocumentTypes} from './xslLexer';
 
 export class XSLTConfiguration {
 	// Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
@@ -18,7 +17,8 @@ export class XSLTConfiguration {
 		avtAtts: XSLTConfiguration.avtAtts,
 		nativePrefix: XSLTConfiguration.xsltPrefix,
 		tvtAttributes: ['expand-text'],
-		nonNativeAvts: true
+		nonNativeAvts: true,
+		docType: DocumentTypes.XSLT
 	} 
 }
 
@@ -28,7 +28,8 @@ export class DCPConfiguration {
 		expressionAtts: ['xpath'],
 		nativePrefix: '',
 		tvtAttributes: [],
-		nonNativeAvts: false
+		nonNativeAvts: false,
+		docType: DocumentTypes.DCP
 	} 
 }
 
@@ -38,8 +39,8 @@ export class XProcConfiguration {
 		expressionAtts: ['select', 'test'],
 		nativePrefix: 'p',
 		tvtAttributes: ['expand-text', 'inline-expand-text'],
-		nonNativeAvts: true
-
+		nonNativeAvts: true,
+		docType: DocumentTypes.Other
 	} 
 }
 
@@ -49,7 +50,8 @@ export class XMLConfiguration {
 		expressionAtts: [],
 		nativePrefix: 'qz',
 		tvtAttributes: [],
-		nonNativeAvts: false
+		nonNativeAvts: false,
+		docType: DocumentTypes.Other
 	} 
 }
 
@@ -59,6 +61,7 @@ export class XSLTLightConfiguration {
 		expressionAtts: [],
 		nativePrefix: 'xsl',
 		tvtAttributes: [],
-		nonNativeAvts: false
+		nonNativeAvts: false,
+		docType: DocumentTypes.XSLT
 	} 
 }

@@ -10,6 +10,12 @@
 
 import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType} from "./xpLexer";
 
+export enum DocumentTypes {
+	XSLT,
+	DCP,
+	Other
+}
+
 export enum XMLCharState {
     init,// 0 initial state
     lSt,  // 1 left start tag
@@ -112,6 +118,7 @@ export interface LanguageConfiguration {
     nativePrefix: string,
     tvtAttributes: string[],
     nonNativeAvts: boolean;
+    docType: DocumentTypes
 }
 
 export interface GlobalInstructionData {

@@ -5,7 +5,7 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 
@@ -138,7 +138,7 @@ export class XsltTokenDiagnostics {
 	}
 
 
-	public static calculateDiagnostics = (xslVariable: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (xslVariable: string[], docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 
 		let inScopeVariablesList: VariableData[] = [];
@@ -377,7 +377,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
-								if (isXSLT && onRootStartTag) {
+								if (docType === DocumentTypes.XSLT && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
 										let pfx = prefixNsPair[0];
 										let namespaceURI = prefixNsPair[1];
@@ -484,7 +484,11 @@ export class XsltTokenDiagnostics {
 									inheritedPrefixes = orginalPrefixes;
 									if (variableData !== null) {
 										if (elementStack.length > 1) {
-											inScopeVariablesList.push(variableData);
+											if (docType === DocumentTypes.DCP) {
+												globalVariableData.push(variableData);
+											} else {
+												inScopeVariablesList.push(variableData);
+											}
 											xsltVariableDeclarations.push(variableData.token);
 										} else {
 											inScopeVariablesList = [];
@@ -539,7 +543,11 @@ export class XsltTokenDiagnostics {
 										}
 										inScopeVariablesList = (poppedData)? poppedData.variables: [];
 										if (poppedData.currentVariable) {
-											inScopeVariablesList.push(poppedData.currentVariable);
+											if (docType === DocumentTypes.DCP) {
+												globalVariableData.push(poppedData.currentVariable);
+											} else {
+												inScopeVariablesList.push(poppedData.currentVariable);
+											}
 										}
 									}
 								} else {
