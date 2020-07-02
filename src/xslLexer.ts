@@ -154,6 +154,7 @@ export class XslLexer {
     private nativePrefixLength = 0;
     private dtdNesting = 0;
     private nonNativeAvts = false;
+    private docType: DocumentTypes;
 
 
     constructor(languageConfiguration: LanguageConfiguration) {
@@ -164,6 +165,7 @@ export class XslLexer {
             this.nativeTvtAttributes.push(this.languageConfiguration.nativePrefix + ':' + tvtAttribute);
         });
         this.genericTvtAttributes = this.languageConfiguration.tvtAttributes;
+        this.docType = languageConfiguration.docType;
     }
 
     public static getTextmateTypeLegend(): string[] {
@@ -985,7 +987,9 @@ export class XslLexer {
                         case XMLCharState.dqAvt:
                             let exit;
                             if (isNativeElement) {
-                                if (exit = attName.startsWith('_')) {
+                                if (this.docType === DocumentTypes.DCP) {
+                                    exit = ExitCondition.CurlyBrace;
+                                } else if (exit = attName.startsWith('_')) {
                                     exit = ExitCondition.CurlyBrace;
                                 } else {
                                     exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
