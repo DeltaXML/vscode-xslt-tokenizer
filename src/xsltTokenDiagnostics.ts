@@ -26,6 +26,7 @@ enum TagType {
 enum AttributeType {
 	None,
 	Variable,
+	VariableRef,
 	InstructionName,
 	InstructionMode,
 	UseAttributeSets,
@@ -485,6 +486,7 @@ export class XsltTokenDiagnostics {
 									if (variableData !== null) {
 										if (elementStack.length > 1) {
 											if (docType === DocumentTypes.DCP) {
+												importedGlobalVarNames.push(variableData.name);
 												globalVariableData.push(variableData);
 											} else {
 												inScopeVariablesList.push(variableData);
@@ -544,6 +546,7 @@ export class XsltTokenDiagnostics {
 										inScopeVariablesList = (poppedData)? poppedData.variables: [];
 										if (poppedData.currentVariable) {
 											if (docType === DocumentTypes.DCP) {
+												importedGlobalVarNames.push(poppedData.currentVariable.name);
 												globalVariableData.push(poppedData.currentVariable);
 											} else {
 												inScopeVariablesList.push(poppedData.currentVariable);
@@ -601,7 +604,9 @@ export class XsltTokenDiagnostics {
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt? AttributeType.Variable: AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
-							if (attNameText === XsltTokenDiagnostics.xslNameAtt) {
+							if (docType === DocumentTypes.DCP && attNameText === 'parameterRef') {
+								attType = AttributeType.VariableRef;
+							} else if (attNameText === XsltTokenDiagnostics.xslNameAtt) {
 								attType = AttributeType.InstructionName;
 							} else if (attNameText === XsltTokenDiagnostics.xslModeAtt) {
 								attType = AttributeType.InstructionMode;
@@ -627,6 +632,13 @@ export class XsltTokenDiagnostics {
 							case AttributeType.Variable:
 								tagIdentifierName = variableName;
 								variableData = {token: token, name: variableName};
+								break;
+							case AttributeType.VariableRef:
+								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference('', document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, 
+									xpathStack, inScopeVariablesList, elementStack);
+								if (unResolvedToken !== null) {
+									unresolvedXsltVariableReferences.push(unResolvedToken);
+								}
 								break;
 							case AttributeType.InstructionName:
 								let slashPos = variableName.lastIndexOf('/');
@@ -1254,7 +1266,7 @@ export class XsltTokenDiagnostics {
 	private static resolveXPathVariableReference(globalVarName: string|null, document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[], 
 		                                 xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken|null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
-		let varName = fullVarName.substr(1);
+		let varName = fullVarName.startsWith('$')? fullVarName.substring(1): fullVarName.substring(1, fullVarName.length - 1);
 		let result: BaseToken|null = null;
 		let globalVariable = null;
 
