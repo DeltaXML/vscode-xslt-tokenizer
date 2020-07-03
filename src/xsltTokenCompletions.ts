@@ -5,7 +5,7 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
@@ -65,7 +65,6 @@ interface VariableData {
 
 export class XsltTokenCompletions {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
-	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
 	private static readonly xslInclude = 'xsl:include';
 	private static readonly xslImport = 'xsl:import';
 	private static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
@@ -83,7 +82,7 @@ export class XsltTokenCompletions {
 	private static readonly sequenceTypes = FunctionData.simpleTypes.concat(Data.nodeTypesBrackets, Data.nonFunctionTypesBrackets);
 	private static readonly doubleParts = ['castable as', 'cast as', 'instance of', 'treat as'];
 
-	public static getCompletions = (attNameTests: string[], elementNameTests: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
+	public static getCompletions = (xslVariable: string[], docType: DocumentTypes, attNameTests: string[], elementNameTests: string[], isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let lineNumber = -1;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 
@@ -191,7 +190,7 @@ export class XsltTokenCompletions {
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
 							const isVar = 
-							tagType = (XsltTokenCompletions.xslVariable.indexOf(tagElementName) > -1) ? TagType.XSLTvar : TagType.XSLTstart;
+							tagType = (xslVariable.indexOf(tagElementName) > -1) ? TagType.XSLTvar : TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
 							startTagToken = token;

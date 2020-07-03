@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType} from './xslLexer';
+import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
@@ -20,12 +20,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 	private readonly xslLexer: XslLexer;
 	private gp = new GlobalsProvider();
-	private readonly isXSLT: boolean;
+	private docType: DocumentTypes;
 
 	public constructor(xsltConfiguration: LanguageConfiguration) {
-		this.isXSLT = xsltConfiguration.nativePrefix === 'xsl';
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
+		this.docType = xsltConfiguration.docType;
 	}
 
 	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Location | undefined> {
@@ -65,8 +65,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				}		
 			});
 
-
-			location= XsltTokenDefinitions.findDefinition(this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			let isXSLT = this.docType === DocumentTypes.XSLT;
+			location= XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
 
 			resolve(location);
 		});
@@ -112,7 +112,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			});
 			let attNames = this.xslLexer.attributeNameTests? this.xslLexer.attributeNameTests: [];
 			let nodeNames = this.xslLexer.elementNameTests? this.xslLexer.elementNameTests: [];
-			let completions= XsltTokenCompletions.getCompletions(attNames, nodeNames, this.isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			let xslVariable = ['xsl:variable', 'xsl:param'];
+			let isXSLT = this.docType === DocumentTypes.XSLT;
+			let completions= XsltTokenCompletions.getCompletions(xslVariable, this.docType, attNames, nodeNames, isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
 
 			resolve(completions);
 		});
