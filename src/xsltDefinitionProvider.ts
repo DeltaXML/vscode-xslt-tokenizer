@@ -114,7 +114,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let nodeNames = this.xslLexer.elementNameTests? this.xslLexer.elementNameTests: [];
 			let xslVariable = ['xsl:variable', 'xsl:param'];
 			let isXSLT = this.docType === DocumentTypes.XSLT;
-			let completions= XsltTokenCompletions.getCompletions(xslVariable, this.docType, attNames, nodeNames, isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			let completions= XsltTokenCompletions.getCompletions(xslVariable, this.docType, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 
 			resolve(completions);
 		});
