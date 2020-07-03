@@ -78,11 +78,10 @@ export class XsltTokenCompletions {
 	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
 	private static readonly excludePrefixes = 'exclude-result-prefixes';
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
-	private static readonly schemaQuery = new SchemaQuery();
 	private static readonly sequenceTypes = FunctionData.simpleTypes.concat(Data.nodeTypesBrackets, Data.nonFunctionTypesBrackets);
 	private static readonly doubleParts = ['castable as', 'cast as', 'instance of', 'treat as'];
 
-	public static getCompletions = (xslVariable: string[], docType: DocumentTypes, attNameTests: string[], elementNameTests: string[], document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
+	public static getCompletions = (schemaQuery: SchemaQuery, xslVariable: string[], docType: DocumentTypes, attNameTests: string[], elementNameTests: string[], document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let lineNumber = -1;
 		let isXSLT = docType === DocumentTypes.XSLT;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
@@ -149,7 +148,7 @@ export class XsltTokenCompletions {
 									let prev2XmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
 									switch (prev2XmlTokenType) {
 										case XSLTokenLevelState.attributeValue:
-											resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName, tagAttributeNames);
+											resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 											break;
 									}
 								} else {
@@ -158,7 +157,7 @@ export class XsltTokenCompletions {
 								break;
 							case XSLTokenLevelState.elementName:
 							case XSLTokenLevelState.xslElementName:
-								resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName, tagAttributeNames);
+								resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 								break;
 						}
 					} else {
@@ -215,7 +214,7 @@ export class XsltTokenCompletions {
 									if (elementStack.length === 0) {
 										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltRootTags);
 									} else {										
-										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(position, elementStack)
+										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(schemaQuery, position, elementStack)
 									}
 								}
 								tagAttributeNames = [];
@@ -232,7 +231,7 @@ export class XsltTokenCompletions {
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
 								if (isOnRequiredToken) {
-									resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(position, tagElementName, tagAttributeNames);
+									resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 								}
 								if (isXSLT && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
@@ -432,7 +431,7 @@ export class XsltTokenCompletions {
 									if (tagAttributeNames.length > 0) {
 										let attName = tagAttributeNames[tagAttributeNames.length - 1];
 										if (XSLTConfiguration.expressionAtts.indexOf(attName) === -1) {
-											resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(position, tagElementName, attName);
+											resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(schemaQuery, position, tagElementName, attName);
 										} else {
 											let prev2Token = allTokens[index - 2];
 											resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
@@ -1076,7 +1075,7 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getXSLTTagCompletions(pos: vscode.Position, elementStack: ElementData[]) {
+	private static getXSLTTagCompletions(schemaQuery: SchemaQuery, pos: vscode.Position, elementStack: ElementData[]) {
 		let expectedTags: string[] = [];
 		let xsltParent: string|null = null;
 		let stackPos = elementStack.length - 1;
@@ -1088,11 +1087,11 @@ export class XsltTokenCompletions {
 			}
 			stackPos--;
 		}
-		expectedTags = xsltParent? XsltTokenCompletions.schemaQuery.getExpected(xsltParent).elements: [];
+		expectedTags = xsltParent? schemaQuery.getExpected(xsltParent).elements: [];
 
 		let completionItems: vscode.CompletionItem[] = [];
 		expectedTags.forEach((tagName) => {
-			let snippetAttrs =  XsltTokenCompletions.schemaQuery.getExpected(tagName).foundAttributes;
+			let snippetAttrs =  schemaQuery.getExpected(tagName).foundAttributes;
 			let attrText = '';
 
 			let competionName = tagName;
@@ -1128,7 +1127,7 @@ export class XsltTokenCompletions {
 						attrText = ' ' + snippetAttrs[0] + '="$1"';
 						break;
 					default:
-						this.schemaQuery.soughtAttributes.forEach((attr, index) => {
+						schemaQuery.soughtAttributes.forEach((attr, index) => {
 							if (snippetAttrs.indexOf(attr) > -1) {
 								attrText += ` ${attr}="$${index + 1}"`
 							}
@@ -1137,7 +1136,7 @@ export class XsltTokenCompletions {
 				}
 				
 				let selfCloseTag = snippetAttrs.length === 0? '/>': '/>$0';
-				let tagClose = this.schemaQuery.emptyElements.indexOf(tagName) === -1? `>$0</${tagName}>`: selfCloseTag;
+				let tagClose = schemaQuery.emptyElements.indexOf(tagName) === -1? `>$0</${tagName}>`: selfCloseTag;
 				const newItem = new vscode.CompletionItem(competionName, vscode.CompletionItemKind.Struct);
 				newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
 				if (description) {
@@ -1164,10 +1163,10 @@ export class XsltTokenCompletions {
 	}
 
 
-	private static getXSLTAttributeCompletions(pos: vscode.Position, xsltParent: string, existingAttrs: string[]) {
+	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery, pos: vscode.Position, xsltParent: string, existingAttrs: string[]) {
 		let expectedAttributes: string[] = [];
 
-		expectedAttributes = xsltParent? XsltTokenCompletions.schemaQuery.getExpected(xsltParent).attrs: [];
+		expectedAttributes = xsltParent? schemaQuery.getExpected(xsltParent).attrs: [];
 
 		let completionItems: vscode.CompletionItem[] = [];
 		expectedAttributes.forEach((attrName) => {
@@ -1183,10 +1182,10 @@ export class XsltTokenCompletions {
 		return completionItems.concat(xmlnsCompletions);
 	}
 
-	private static getXSLTAttributeValueCompletions(pos: vscode.Position, xsltParent: string, currentAttribute: string) {
+	private static getXSLTAttributeValueCompletions(schemaQuery: SchemaQuery, pos: vscode.Position, xsltParent: string, currentAttribute: string) {
 		let expectedAttrValues: string[] = [];
 
-		expectedAttrValues = XsltTokenCompletions.schemaQuery.getExpected(xsltParent, currentAttribute).attributeValues;
+		expectedAttrValues = schemaQuery.getExpected(xsltParent, currentAttribute).attributeValues;
 
 		let completionItems: vscode.CompletionItem[] = [];
 		expectedAttrValues.forEach((attrName) => {

@@ -4,6 +4,8 @@ import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
+import { XSLTSchema } from './xsltSchema';
+import { SchemaQuery } from './schemaQuery';
 
 interface ImportedGlobals {
 	href: string,
@@ -113,8 +115,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let attNames = this.xslLexer.attributeNameTests? this.xslLexer.attributeNameTests: [];
 			let nodeNames = this.xslLexer.elementNameTests? this.xslLexer.elementNameTests: [];
 			let xslVariable = ['xsl:variable', 'xsl:param'];
-			let isXSLT = this.docType === DocumentTypes.XSLT;
-			let completions= XsltTokenCompletions.getCompletions(xslVariable, this.docType, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			let schemaQuery = new SchemaQuery(new XSLTSchema());
+
+			let completions= XsltTokenCompletions.getCompletions(schemaQuery, xslVariable, this.docType, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 
 			resolve(completions);
 		});

@@ -14,6 +14,8 @@
   to transform core-dcp-v1_0.xsd - included in XML Compare
  */
 
+import { SchemaData } from './xsltSchema'
+
 export interface SimpleType {
   base?: string[],
   enum?: string[],
@@ -38,7 +40,7 @@ export interface AttributeItem {
   name: string,
   enum?: string[];
 }
-export class DCPSchema {
+export class DCPSchema implements SchemaData {
   simpleTypes: { [name: string]: SimpleType } = {
     "Percentage": { base: ['xs:integer'] },
     "advancedEntityReferenceUsageType": {

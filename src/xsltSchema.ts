@@ -25,7 +25,15 @@ export interface AttributeItem {
     enum?: string[];
 }
 
-export class XSLTSchema {
+export interface SchemaData {
+    attributeGroups: { [name: string]: any },
+    simpleTypes: { [name: string]: SimpleType },
+    complexTypes: { [name: string]: ComplexType },
+    substitutionGroups?: { [name: string]: SubstitutionGroupType },
+    elements: {[name: string]: ComplexType}
+}
+
+export class XSLTSchema implements SchemaData {
     attributeGroups: { [name: string]: any } = {
         "xsl:literal-result-element-attributes": {
             attrs: {

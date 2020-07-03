@@ -12,7 +12,7 @@
   
   <xsl:template match="/*" mode="#all">
     <xsl:call-template name="typeScriptHeader"/>
-    <xsl:text>export class DCPSchema {{
+    <xsl:text>export class DCPSchema implements SchemaData {{
   </xsl:text>
     <xsl:call-template name="addSimpleType"/>
     <xsl:call-template name="addComplexType"/>
@@ -132,6 +132,8 @@
   
   <xsl:template name="typeScriptHeader" as="xs:string">
     <xsl:text expand-text="no">
+import { SchemaData } from './xsltSchema'
+
 export interface SimpleType {
     base?: string[],
     enum?: string[],

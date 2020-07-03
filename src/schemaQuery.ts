@@ -1,4 +1,4 @@
-import { XSLTSchema, SimpleType, ComplexType, AttributeItem} from './xsltschema';
+import { XSLTSchema, SimpleType, ComplexType, AttributeItem, SchemaData} from './xsltschema';
 
 export class Expected {
     elements: string[] = [];
@@ -9,9 +9,13 @@ export class Expected {
 
 export class SchemaQuery {
 
-    private schema = new XSLTSchema();
+    private schema: SchemaData;
     public soughtAttributes: string[] = ['name', 'as', 'select', 'test', 'href'];
     public emptyElements: string[] = ['xsl:variable','xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param'];
+
+    constructor (schemaData: SchemaData) {
+        this.schema = schemaData;
+    }
 
 
     public getExpected(name: string, attributeName?: string) {
@@ -54,7 +58,7 @@ export class SchemaQuery {
             }
         }
 
-        if (!ct) {
+        if (!ct && this.schema.substitutionGroups) {
             let isInstructionSg = true;
             let sgElement = <ComplexType>this.schema.substitutionGroups.instruction.elements[name];
             if (!sgElement) {
@@ -182,18 +186,20 @@ export class SchemaQuery {
 
     private performSubstitutions(elements: string[]) {
         let newElements: string[] = [];
+
         elements.forEach((item) => {
-            if (item === 'xsl:instruction') {
+            if (item === 'xsl:instruction' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.instruction.elements);
                 newElements.push('xsl:literal-result-element');
                 newElements = newElements.concat(subElements);
-            } else if (item === 'xsl:declaration') {
+            } else if (item === 'xsl:declaration' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.declaration.elements);
                 newElements = newElements.concat(subElements);
             } else {
                 newElements.push(item);
             }
         });
+    
         return newElements;
     }
 }
