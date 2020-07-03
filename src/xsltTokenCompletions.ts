@@ -214,7 +214,7 @@ export class XsltTokenCompletions {
 									if (elementStack.length === 0) {
 										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltRootTags);
 									} else {										
-										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(schemaQuery, position, elementStack)
+										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(docType, schemaQuery, position, elementStack)
 									}
 								}
 								tagAttributeNames = [];
@@ -1075,13 +1075,17 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getXSLTTagCompletions(schemaQuery: SchemaQuery, pos: vscode.Position, elementStack: ElementData[]) {
+	private static getXSLTTagCompletions(docType: DocumentTypes, schemaQuery: SchemaQuery, pos: vscode.Position, elementStack: ElementData[]) {
 		let expectedTags: string[] = [];
 		let xsltParent: string|null = null;
 		let stackPos = elementStack.length - 1;
+		let isXSLT = docType === DocumentTypes.XSLT;
 		while (stackPos > -1) {
 			let elementName = elementStack[stackPos].symbolName;
-			if (elementName.startsWith('xsl:')) {
+			if (isXSLT && elementName.startsWith('xsl:')) {
+				xsltParent = elementName;
+				break;
+			} else if (!isXSLT) {
 				xsltParent = elementName;
 				break;
 			}

@@ -1,4 +1,5 @@
 import {} from './schemaQuery';
+import { DocumentTypes } from './xslLexer';
 
 export interface SimpleType {
     base?: string[],
@@ -30,10 +31,12 @@ export interface SchemaData {
     simpleTypes: { [name: string]: SimpleType },
     complexTypes: { [name: string]: ComplexType },
     substitutionGroups?: { [name: string]: SubstitutionGroupType },
-    elements: {[name: string]: ComplexType}
+    elements: {[name: string]: ComplexType},
+    docType: DocumentTypes
 }
 
 export class XSLTSchema implements SchemaData {
+    docType = DocumentTypes.XSLT;
     attributeGroups: { [name: string]: any } = {
         "xsl:literal-result-element-attributes": {
             attrs: {

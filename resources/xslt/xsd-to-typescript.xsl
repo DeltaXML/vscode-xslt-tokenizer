@@ -13,6 +13,7 @@
   <xsl:template match="/*" mode="#all">
     <xsl:call-template name="typeScriptHeader"/>
     <xsl:text>export class DCPSchema implements SchemaData {{
+  docType = DocumentTypes.DCP;
   </xsl:text>
     <xsl:call-template name="addSimpleType"/>
     <xsl:call-template name="addComplexType"/>
@@ -40,7 +41,7 @@
   
   <xsl:template name="addElement">
     <xsl:text>elements: {{ [name: string]: ComplexType }} = {{</xsl:text>
-    <xsl:apply-templates select="xs:element"/>
+    <xsl:apply-templates select=".//xs:element[@name]"/>
     <xsl:text>}}
 </xsl:text>
   </xsl:template>
@@ -132,7 +133,23 @@
   
   <xsl:template name="typeScriptHeader" as="xs:string">
     <xsl:text expand-text="no">
+/**
+ *  Copyright (c) 2020 DeltaXML Ltd. and others.
+ *  All rights reserved. This program and the accompanying materials
+ *  are made available under the terms of the MIT license
+ *  which accompanies this distribution.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd.
+ */
+
+ /*
+  NOTE: this code was auto-generated using .resources/xsd-to-typescript
+  to transform core-dcp-v1_0.xsd - included in XML Compare
+ */
+ 
 import { SchemaData } from './xsltSchema'
+import { DocumentTypes } from './xslLexer';
 
 export interface SimpleType {
     base?: string[],

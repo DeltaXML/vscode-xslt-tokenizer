@@ -1,0 +1,1 @@
+java -jar /usr/local/java/SaxonPE9-8-0-12J/saxon9pe.jar -xsl:resources/xslt/xsd-to-typescript.xsl -s:resources/xsd/core-dcp-v1_0.xsd -o:src/dcpSchema.ts

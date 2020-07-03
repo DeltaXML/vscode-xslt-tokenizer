@@ -41,6 +41,8 @@ export function activate(context: vscode.ExtensionContext) {
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
 	const dcpDiagnosticsCollection = vscode.languages.createDiagnosticCollection('dcp');
 	const dcpSymbolProvider = new DCPSymbolProvider(DCPConfiguration.configuration, dcpDiagnosticsCollection);
+	const dcpDefintiionProvider = new XsltDefinitionProvider(DCPConfiguration.configuration);
+
 
 	const xsltDefintiionProvider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
 	const xsltLinkProvider = new DocumentLinkProvider(XSLTLightConfiguration.configuration);
@@ -62,6 +64,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml'}, xmlSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt'}, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt'}, xsltDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp'}, dcpDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt'}, xsltLinkProvider));
 
 	// syntax highlighters

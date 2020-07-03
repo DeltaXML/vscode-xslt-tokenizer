@@ -136,7 +136,7 @@ export class DocumentChangeHandler {
 	}
 
 	private registerXMLDocument = (document: vscode.TextDocument) => {
-		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt';
+		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp';
 
 		if (this.xmlDocumentRegistered && !isXMLDocument && this.onDidChangeRegistration) {
 			this.onDidChangeRegistration.dispose();

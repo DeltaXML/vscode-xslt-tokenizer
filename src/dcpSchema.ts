@@ -15,6 +15,7 @@
  */
 
 import { SchemaData } from './xsltSchema'
+import { DocumentTypes } from './xslLexer';
 
 export interface SimpleType {
   base?: string[],
@@ -41,6 +42,7 @@ export interface AttributeItem {
   enum?: string[];
 }
 export class DCPSchema implements SchemaData {
+  docType = DocumentTypes.DCP;
   simpleTypes: { [name: string]: SimpleType } = {
     "Percentage": { base: ['xs:integer'] },
     "advancedEntityReferenceUsageType": {
@@ -199,6 +201,8 @@ export class DCPSchema implements SchemaData {
     },
     "fullDescription": { type: 'anyMixedContent' },
     "pipelineParameters": { elementNames: ['booleanParameter', 'stringParameter'] },
+    "booleanParameter": { type: 'booleanParameterType' },
+    "stringParameter": { type: 'stringParameterType' },
     "description": { type: 'xs:string' },
     "extensionPoints": { elementNames: ['inputPreFlatteningPoint', 'inputExtensionPoints', 'inputAExtensionPoints', 'inputBExtensionPoints', 'outputExtensionPoints'] },
     "inputPreFlatteningPoint": { type: 'filterChainType' },
@@ -400,6 +404,8 @@ export class DCPSchema implements SchemaData {
     "parameter": { type: 'simpleStringParameterType' },
     "stringProperty": { type: 'simpleStringParameterType' },
     "booleanProperty": { type: 'simpleBooleanParameterType' },
+    "preAttributePoint": { type: 'filterChainType' },
+    "finalPoint": { type: 'filterChainType' },
     "preTablePoint": { type: 'filterChainType' },
     "postTablePoint": { type: 'filterChainType' },
   }

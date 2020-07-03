@@ -1,4 +1,5 @@
 import { XSLTSchema, SimpleType, ComplexType, AttributeItem, SchemaData} from './xsltschema';
+import { DocumentTypes } from './xslLexer';
 
 export class Expected {
     elements: string[] = [];
@@ -20,7 +21,7 @@ export class SchemaQuery {
 
     public getExpected(name: string, attributeName?: string) {
         let result: Expected = new Expected();
-        if (!name.startsWith('xsl:')) {
+        if (this.schema.docType === DocumentTypes.XSLT && !name.startsWith('xsl:')) {
             let attGroup = this.schema.attributeGroups['xsl:literal-result-element-attributes'];
             if (attGroup.attrs) {
                 this.mergeAttrArrays(result, Object.keys(attGroup.attrs));
