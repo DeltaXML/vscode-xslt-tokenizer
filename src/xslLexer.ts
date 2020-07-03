@@ -9,6 +9,7 @@
  */
 
 import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType} from "./xpLexer";
+import { SchemaData } from "./xsltSchema";
 
 export enum DocumentTypes {
 	XSLT,
@@ -117,7 +118,8 @@ export interface LanguageConfiguration {
     avtAtts?: string[],
     nativePrefix: string,
     tvtAttributes: string[],
-    nonNativeAvts: boolean;
+    nonNativeAvts: boolean,
+    schemaData?: SchemaData,
     docType: DocumentTypes
 }
 

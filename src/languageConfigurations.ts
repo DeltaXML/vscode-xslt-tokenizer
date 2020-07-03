@@ -1,4 +1,7 @@
 import {LanguageConfiguration, DocumentTypes} from './xslLexer';
+import { DCPSymbolProvider } from './dcpSymbolProvider';
+import { DCPSchema } from './dcpSchema';
+import { XSLTSchema } from './xsltSchema';
 
 export class XSLTConfiguration {
 	// Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
@@ -18,6 +21,7 @@ export class XSLTConfiguration {
 		nativePrefix: XSLTConfiguration.xsltPrefix,
 		tvtAttributes: ['expand-text'],
 		nonNativeAvts: true,
+		schemaData: new XSLTSchema(),
 		docType: DocumentTypes.XSLT
 	} 
 }
@@ -29,6 +33,7 @@ export class DCPConfiguration {
 		nativePrefix: '',
 		tvtAttributes: [],
 		nonNativeAvts: false,
+		schemaData: new DCPSchema(),
 		docType: DocumentTypes.DCP
 	} 
 }

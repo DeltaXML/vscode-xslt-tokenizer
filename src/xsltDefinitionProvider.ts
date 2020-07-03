@@ -4,7 +4,7 @@ import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
-import { XSLTSchema } from './xsltSchema';
+import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
 
 interface ImportedGlobals {
@@ -23,11 +23,13 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	private readonly xslLexer: XslLexer;
 	private gp = new GlobalsProvider();
 	private docType: DocumentTypes;
+	private schemaData: SchemaData|undefined;
 
 	public constructor(xsltConfiguration: LanguageConfiguration) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.docType = xsltConfiguration.docType;
+		this.schemaData = xsltConfiguration.schemaData;
 	}
 
 	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Location | undefined> {
@@ -115,10 +117,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let attNames = this.xslLexer.attributeNameTests? this.xslLexer.attributeNameTests: [];
 			let nodeNames = this.xslLexer.elementNameTests? this.xslLexer.elementNameTests: [];
 			let xslVariable = ['xsl:variable', 'xsl:param'];
-			let schemaQuery = new SchemaQuery(new XSLTSchema());
-
-			let completions= XsltTokenCompletions.getCompletions(schemaQuery, xslVariable, this.docType, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
-
+			
+			let completions: vscode.CompletionItem[]|undefined;
+			if (this.schemaData) {
+				let schemaQuery = new SchemaQuery(this.schemaData);
+				completions= XsltTokenCompletions.getCompletions(schemaQuery, xslVariable, this.docType, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			}
 			resolve(completions);
 		});
 
