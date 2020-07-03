@@ -1178,6 +1178,13 @@ export class XsltTokenCompletions {
 				completionItems.push(newItem);
 			}
 		});
+		let isXSLT = xsltParent.startsWith('xsl:');
+		if (!isXSLT) {
+			let attributeDec = '${1:name}="$2"$0';
+			const newItem = new vscode.CompletionItem('literal-attribute', vscode.CompletionItemKind.Reference);
+			newItem.insertText = new vscode.SnippetString(attributeDec);
+			completionItems.push(newItem);
+		}
 		let xmlnsCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltXMLNS);
 
 		return completionItems.concat(xmlnsCompletions);
