@@ -7,7 +7,7 @@ export interface Snippet {
 export class XSLTSnippets {
 	static xsltRootTags: Snippet[] = [{
 		name: 'xsl:stylesheet',
-		description: '`xsl:stylesheet` snippet for identity transform ',
+		description: 'xsl:stylesheet` snippet for identity transform ',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -31,7 +31,7 @@ export class XSLTSnippets {
 \t$0
 
 </xsl:stylesheet>`
-	}]
+	}];
 	static xsltXMLNS: Snippet[] = [
 		{
 			name: 'xmlns:xsl',

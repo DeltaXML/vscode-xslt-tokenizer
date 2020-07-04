@@ -11,11 +11,25 @@ export class Expected {
 export class SchemaQuery {
 
     private schema: SchemaData;
-    public soughtAttributes: string[] = ['name', 'as', 'select', 'test', 'href'];
-    public emptyElements: string[] = ['xsl:variable','xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param'];
+    public soughtAttributes: string[] = [];
+    public emptyElements: string[] = [];
+    public docType: DocumentTypes;
 
     constructor (schemaData: SchemaData) {
         this.schema = schemaData;
+        this.docType = schemaData.docType;
+        switch (schemaData.docType) {
+            case DocumentTypes.XSLT:
+                this.soughtAttributes =  ['name', 'as', 'select', 'test', 'href'];
+                this.emptyElements = ['xsl:variable','xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param']
+                break;
+            case DocumentTypes.DCP:
+                this.soughtAttributes =  ['name', 'defaultValue', 'literalValue','version','id','description'];
+                this.emptyElements = ['property','feature','resource','parameter', 'booleanParameter', 'stringParameter']
+                break;
+            default:
+                break;
+        }
     }
 
 

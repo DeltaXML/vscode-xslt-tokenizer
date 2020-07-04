@@ -13,6 +13,7 @@ import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { SchemaQuery, Expected } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { XSLTSnippets, Snippet } from './xsltSnippets';
+import { DCPSnippets } from './dcpSnippets';
 
 enum TagType {
 	XSLTstart,
@@ -212,7 +213,11 @@ export class XsltTokenCompletions {
 							case XMLCharState.lSt:
 								if (isOnRequiredToken) {
 									if (elementStack.length === 0) {
-										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltRootTags);
+										if (isXSLT) {
+											resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltRootTags);
+										} else if (docType === DocumentTypes.DCP) {
+											resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(DCPSnippets.xsltRootTags);
+										}
 									} else {										
 										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(docType, schemaQuery, position, elementStack)
 									}
@@ -1181,7 +1186,10 @@ export class XsltTokenCompletions {
 				completionItems.push(newItem);
 			}
 		});
-		let xmlnsCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltXMLNS);
+		let xmlnsCompletions: vscode.CompletionItem[] = [];
+		if (schemaQuery.docType === DocumentTypes.XSLT && (xsltParent === 'xsl:stylesheet' || xsltParent === 'xsl:transforrm' || xsltParent === 'xsl:package')) {
+			xmlnsCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltXMLNS);
+		}
 
 		return completionItems.concat(xmlnsCompletions);
 	}
