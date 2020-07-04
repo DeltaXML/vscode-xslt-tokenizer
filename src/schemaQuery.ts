@@ -102,7 +102,15 @@ export class SchemaQuery {
                 // literal result element - provide 'xsl:literal-result-element-attributes' attributeGoup?
             }
         }
-        result.elements = this.performSubstitutions(result.elements);
+        if (this.docType === DocumentTypes.XSLT) {
+            result.elements = this.performSubstitutions(result.elements);
+        } else if (this.docType === DocumentTypes.DCP) {
+            // parameterRefGroup applies to all elements permitting literalValue attr
+            if (result.attrs.indexOf('literalValue') !== -1) {
+                result.attrs.push('xpath');
+                result.attrs.push('parameterRef');
+            }
+        }
         return result;
     }
 
