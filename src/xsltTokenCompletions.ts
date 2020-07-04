@@ -5,7 +5,7 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
@@ -82,8 +82,10 @@ export class XsltTokenCompletions {
 	private static readonly sequenceTypes = FunctionData.simpleTypes.concat(Data.nodeTypesBrackets, Data.nonFunctionTypesBrackets);
 	private static readonly doubleParts = ['castable as', 'cast as', 'instance of', 'treat as'];
 
-	public static getCompletions = (schemaQuery: SchemaQuery, xslVariable: string[], docType: DocumentTypes, attNameTests: string[], elementNameTests: string[], document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
+	public static getCompletions = (languageConfig: LanguageConfiguration, xslVariable: string[], attNameTests: string[], elementNameTests: string[], document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
+		let schemaQuery = languageConfig.schemaData? new SchemaQuery(languageConfig.schemaData): undefined;
 		let lineNumber = -1;
+		let docType = languageConfig.docType;
 		let isXSLT = docType === DocumentTypes.XSLT;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 
@@ -173,10 +175,10 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -435,11 +437,11 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (tagAttributeNames.length > 0) {
 										let attName = tagAttributeNames[tagAttributeNames.length - 1];
-										if (XSLTConfiguration.expressionAtts.indexOf(attName) === -1) {
-											resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(schemaQuery, position, tagElementName, attName);
-										} else {
+										if (languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1) {
 											let prev2Token = allTokens[index - 2];
 											resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										} else {
+											resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(schemaQuery, position, tagElementName, attName);
 										}
 									}
 								}
@@ -1080,7 +1082,10 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getXSLTTagCompletions(docType: DocumentTypes, schemaQuery: SchemaQuery, pos: vscode.Position, elementStack: ElementData[]) {
+	private static getXSLTTagCompletions(docType: DocumentTypes, schemaQuery: SchemaQuery|undefined, pos: vscode.Position, elementStack: ElementData[]) {
+		if (!schemaQuery) {
+			return [];
+		}
 		let expectedTags: string[] = [];
 		let xsltParent: string|null = null;
 		let stackPos = elementStack.length - 1;
@@ -1172,7 +1177,10 @@ export class XsltTokenCompletions {
 	}
 
 
-	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery, pos: vscode.Position, xsltParent: string, existingAttrs: string[]) {
+	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery|undefined, pos: vscode.Position, xsltParent: string, existingAttrs: string[]) {
+		if (!schemaQuery) {
+			return [];
+		}
 		let expectedAttributes: string[] = [];
 
 		expectedAttributes = xsltParent? schemaQuery.getExpected(xsltParent).attrs: [];
@@ -1194,7 +1202,10 @@ export class XsltTokenCompletions {
 		return completionItems.concat(xmlnsCompletions);
 	}
 
-	private static getXSLTAttributeValueCompletions(schemaQuery: SchemaQuery, pos: vscode.Position, xsltParent: string, currentAttribute: string) {
+	private static getXSLTAttributeValueCompletions(schemaQuery: SchemaQuery|undefined, pos: vscode.Position, xsltParent: string, currentAttribute: string) {
+		if (!schemaQuery) {
+			return [];
+		}
 		let expectedAttrValues: string[] = [];
 
 		expectedAttrValues = schemaQuery.getExpected(xsltParent, currentAttribute).attributeValues;

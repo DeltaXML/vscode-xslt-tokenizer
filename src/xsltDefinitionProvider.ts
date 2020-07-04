@@ -24,8 +24,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	private gp = new GlobalsProvider();
 	private docType: DocumentTypes;
 	private schemaData: SchemaData|undefined;
+	private languageConfig: LanguageConfiguration;
 
 	public constructor(xsltConfiguration: LanguageConfiguration) {
+		this.languageConfig = xsltConfiguration;
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.docType = xsltConfiguration.docType;
@@ -120,8 +122,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			
 			let completions: vscode.CompletionItem[]|undefined;
 			if (this.schemaData) {
-				let schemaQuery = new SchemaQuery(this.schemaData);
-				completions= XsltTokenCompletions.getCompletions(schemaQuery, xslVariable, this.docType, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
+				completions= XsltTokenCompletions.getCompletions(this.languageConfig, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 			}
 			resolve(completions);
 		});

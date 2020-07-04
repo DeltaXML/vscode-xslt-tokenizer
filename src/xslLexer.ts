@@ -115,6 +115,7 @@ interface XmlElement {
 
 export interface LanguageConfiguration {
     expressionAtts?: string[],
+    variableElementNames?: string[],
     avtAtts?: string[],
     nativePrefix: string,
     tvtAttributes: string[],
@@ -1173,7 +1174,12 @@ export class XslLexer {
         let isNative = (this.nativePrefixLength === 0 && elementName.indexOf(':') === -1) || (tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.languageConfiguration.nativePrefix + ':'));
         let instructionType = GlobalInstructionType.Unknown;
         let nativeName = '';
-        if (isNative) {
+
+        if (this.languageConfiguration.docType === DocumentTypes.DCP) {
+            if (this.languageConfiguration.variableElementNames && this.languageConfiguration.variableElementNames.indexOf(elementName) !== -1) {
+                instructionType = GlobalInstructionType.Variable;
+            }
+        } else if (isNative) {
             nativeName = elementName.substring(this.nativePrefixLength);
             if (isRootChild) {
                 switch (nativeName) {
