@@ -72,9 +72,13 @@ export class SchemaQuery {
                         if (attributeName) {
                             let attrTypeName = type.attrs[attributeName];
                             if (attrTypeName) {
-                                let attrType = this.schema.simpleTypes[attrTypeName];
-                                if (attrType) {
-                                    this.lookupSimpleType(attrType, result);
+                                if (attrTypeName === 'xs:boolean') {
+                                    this.mergeArrays(result.attributeValues, ['true', 'false']);
+                                } else {
+                                    let attrType = this.schema.simpleTypes[attrTypeName];
+                                    if (attrType) {
+                                        this.lookupSimpleType(attrType, result);
+                                    }
                                 }
                             }
                         }
@@ -129,9 +133,13 @@ export class SchemaQuery {
             if (attributeName) {
                 let simpleTypeName = ct.attrs[attributeName];
                 if (simpleTypeName) {
-                    let sType = this.schema.simpleTypes[simpleTypeName];
-                    if (sType) {
-                        this.lookupSimpleType(sType, result);
+                    if (simpleTypeName === 'xs:boolean') {
+                        this.mergeArrays(result.attributeValues, ['true', 'false']);
+                    } else {
+                        let sType = this.schema.simpleTypes[simpleTypeName];
+                        if (sType) {
+                            this.lookupSimpleType(sType, result);
+                        }
                     }
                 }
             }
