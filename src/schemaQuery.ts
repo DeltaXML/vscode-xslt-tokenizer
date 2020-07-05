@@ -25,7 +25,7 @@ export class SchemaQuery {
                 break;
             case DocumentTypes.DCP:
                 this.soughtAttributes =  ['name', 'defaultValue', 'literalValue','version','id','description'];
-                this.emptyElements = ['property','feature','resource','parameter', 'booleanParameter', 'stringParameter']
+                this.emptyElements = ['property','feature','resource','parameter', 'booleanParameter', 'stringParameter', 'retain', 'processingMode', 'outputType', ]
                 break;
             default:
                 break;
@@ -69,6 +69,15 @@ export class SchemaQuery {
                     }
                     if (type.attrs) {
                         this.mergeAttrArrays(result, Object.keys(type.attrs));
+                        if (attributeName) {
+                            let attrTypeName = type.attrs[attributeName];
+                            if (attrTypeName) {
+                                let attrType = this.schema.simpleTypes[attrTypeName];
+                                if (attrType) {
+                                    this.lookupSimpleType(attrType, result);
+                                }
+                            }
+                        }
                     }
             }
         }
