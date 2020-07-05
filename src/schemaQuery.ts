@@ -24,8 +24,7 @@ export class SchemaQuery {
                 this.emptyElements = ['xsl:variable','xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param']
                 break;
             case DocumentTypes.DCP:
-                this.soughtAttributes =  ['name', 'defaultValue', 'literalValue','version','id','description'];
-                this.emptyElements = ['property','feature','resource','parameter', 'booleanParameter', 'stringParameter', 'retain', 'processingMode', 'outputType', ]
+                this.soughtAttributes =  ['name', 'defaultValue', 'literalValue','version','id','description', 'path'];
                 break;
             default:
                 break;

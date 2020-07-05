@@ -2,8 +2,8 @@ import { Snippet} from './xsltSnippets';
 
 export class DCPSnippets {
 	static xsltRootTags: Snippet[] = [{
-		name: 'documentComparator',
-		description: 'root element template for DCP',
+		name: 'Side-by-side diff report',
+		description: 'DCP to generate a side-by-side diffreport',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <documentComparator version="1.0"
@@ -70,5 +70,39 @@ export class DCPSnippets {
 \t\t</outputExtensionPoints>
 \t</extensionPoints>
 </documentComparator>`
-	}];
+	},
+	{
+		name: 'Standard Configuration DCP',
+		description: 'DCP structure with basic configuration',
+		body:
+			`?xml version="1.0" encoding="UTF-8"?>
+<documentComparator version="1.0"
+	                id="\${1:pipeline-id}" 
+	                description="\${2:short description}" >
+			 
+\t<standardConfig>
+
+\t\t<lexicalPreservation>
+\t\t\t<defaults>
+\t\t\t\t<retain literalValue="true"/>
+\t\t\t</defaults>
+\t\t\t<overrides>
+\t\t\t\t<preserveItems>
+\t\t\t\t\t<ignorableWhitespace>
+\t\t\t\t\t\t<retain literalValue="false"/>
+\t\t\t\t\t</ignorableWhitespace>
+\t\t\t\t</preserveItems>
+\t\t\t</overrides>
+\t\t</lexicalPreservation>
+
+\t\t<resultReadabilityOptions>
+\t\t\t<modifiedWhitespaceBehaviour literalValue="normalize"/>
+\t\t\t<mixedContentDetectionScope literalValue="local"/>
+\t\t</resultReadabilityOptions>
+
+\t</standardConfig>
+			 
+</documentComparator>`
+	}
+];
 }
