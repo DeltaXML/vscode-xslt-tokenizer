@@ -437,7 +437,17 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (tagAttributeNames.length > 0) {
 										let attName = tagAttributeNames[tagAttributeNames.length - 1];
-										if (languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1) {
+										if (languageConfig.docType === DocumentTypes.DCP && attName === 'parameterRef') {
+											let varCompletionStrings: string[] = [];
+											globalInstructionData.forEach((instruction) => {
+												if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
+													if (varCompletionStrings.indexOf(instruction.name) < 0) {
+														varCompletionStrings.push(instruction.name);
+													}
+												}									
+											});
+											resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
+										} else if (languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1) {
 											let prev2Token = allTokens[index - 2];
 											resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 										} else {
