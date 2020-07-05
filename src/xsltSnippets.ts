@@ -56,7 +56,7 @@ export class XSLTSnippets {
 		{
 			name: 'xmlns:math',
 			description: 'W3C XPath Math Namespace',
-			body: `xmlns:array="http://www.w3.org/2005/xpath-functions/math"$0`
+			body: `xmlns:math="http://www.w3.org/2005/xpath-functions/math"$0`
 		},
 		{
 			name: 'xmlns:any',

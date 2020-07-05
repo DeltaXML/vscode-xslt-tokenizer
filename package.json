@@ -32,6 +32,14 @@
 	],
 	"license": "MIT",
 	"main": "./out/extension.js",
+	"configurationDefaults": {
+		"[xslt]": {
+			"editor.semanticHighlighting.enabled": true
+		},
+		"[xsl]": {
+			"editor.semanticHighlighting.enabled": true
+		}
+	},
 	"contributes": {
 		"semanticTokenScopes": [
 			{
