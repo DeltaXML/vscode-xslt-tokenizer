@@ -36,7 +36,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
  
  ## Introduction
  
-For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. The avoidance of the much more common use of regular expressions on a line-by-line basis brimgs many benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and full integrity for syntax highlighting.
+For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. Avoiding the much more common use of regular expressions on a line-by-line basis brings significant benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and full integrity for syntax highlighting.
 
 Auto-completion is available for XSLT and XPath, including contex-aware completion items for all code symbol names. XSLT and XPATH function signatures and descriptions are shown alongside fuction completion items.
 
