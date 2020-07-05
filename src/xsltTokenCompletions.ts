@@ -155,7 +155,7 @@ export class XsltTokenCompletions {
 											break;
 									}
 								} else {
-									resultCompletions = XsltTokenCompletions.getXPathCompletions(null, prev2Token, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, null, prev2Token, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case XSLTokenLevelState.elementName:
@@ -165,7 +165,7 @@ export class XsltTokenCompletions {
 						}
 					} else {
 						let prev2Token = prevToken.tokenType === TokenLevelState.operator? allTokens[index - 2]: null;
-						resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+						resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 					}
 				}
 			}
@@ -449,7 +449,7 @@ export class XsltTokenCompletions {
 											resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
 										} else if (languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1) {
 											let prev2Token = allTokens[index - 2];
-											resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+											resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 										} else {
 											resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(schemaQuery, position, tagElementName, attName);
 										}
@@ -556,7 +556,7 @@ export class XsltTokenCompletions {
 						break;
 					case TokenLevelState.nodeNameTest:
 						if (isOnRequiredToken) {
-							resultCompletions = XsltTokenCompletions.getAllTokenCompletions(position, token, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+							resultCompletions = XsltTokenCompletions.getAllTokenCompletions(docType, position, token, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 						}
 						break;
 					case TokenLevelState.operator:
@@ -586,9 +586,9 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (isOnStartOfRequiredToken && prevToken) {
 										let prev2Token = prevToken.tokenType ===  TokenLevelState.operator? allTokens[index - 2]: null;
-										resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									} else {
-										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									}
 								}
 							// intentionally no-break;	
@@ -611,9 +611,9 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (isOnStartOfRequiredToken && prevToken) {
 										let prev2Token = prevToken.tokenType ===  TokenLevelState.operator? allTokens[index - 2]: null;
-										resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									} else {
-										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									}
 								}
 								break;
@@ -648,7 +648,7 @@ export class XsltTokenCompletions {
 								}
 								if (isOnStartOfRequiredToken && prevToken) {
 									let prev2Token = prevToken.tokenType ===  TokenLevelState.operator? allTokens[index - 2]: null;
-									resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case CharLevelState.sep:
@@ -667,11 +667,11 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (isOnStartOfRequiredToken && prevToken) {
 										let prev2Token = prevToken.tokenType ===  TokenLevelState.operator? allTokens[index - 2]: null;
-										resultCompletions = XsltTokenCompletions.getXPathCompletions(prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									} else if (token.value === '/') {
-										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									} else if (token.value === '!') {
-										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
+										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType));
 										let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
 										resultCompletions = fnCompletions.concat(userFnCompletions);
 									}
@@ -694,7 +694,7 @@ export class XsltTokenCompletions {
 								}
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
 									if (isOnRequiredToken && requiredChar === token.startCharacter + 1) {
-										resultCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									}
 									if (awaitingRequiredArity) {
 										const fnArity = incrementFunctionArity ? 1 : 0;
@@ -742,9 +742,17 @@ export class XsltTokenCompletions {
 		return resultCompletions;
 	}
 
-	private static getXPathCompletions(previous2Token: BaseToken|null, previousToken: BaseToken|null, position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+	private static internalFunctionCompletions(docType: DocumentTypes) {
+		if (docType === DocumentTypes.XSLT) {
+			return XPathFunctionDetails.data;
+		} else {
+			return XPathFunctionDetails.xpathData;
+		}
+	}
+
+	private static getXPathCompletions(docType: DocumentTypes, previous2Token: BaseToken|null, previousToken: BaseToken|null, position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
 		if (!previousToken || previousToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber) {
-			return XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+			return XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 		}
 		let xpath2TokenType = <TokenLevelState>previousToken.tokenType;
 		let xpath2CharType = <CharLevelState>previousToken.charType;
@@ -765,7 +773,7 @@ export class XsltTokenCompletions {
 						} else if (pValue === 'as') {
 							isSimpleType = previous2Token?.value === 'cast' || previous2Token?.value === 'castable';
 						} else {
-							xpathCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+							xpathCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 						}
 						if (!xpathCompletions) {
 							let completionStrings = isSimpleType? FunctionData.simpleTypes: XsltTokenCompletions.sequenceTypes;
@@ -782,7 +790,7 @@ export class XsltTokenCompletions {
 					case 'else':
 					case 'then':
 					case 'in':
-						xpathCompletions = XsltTokenCompletions.getAllCompletions(position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+						xpathCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 						break;
 				}
 				break;
@@ -914,7 +922,7 @@ export class XsltTokenCompletions {
 		return elementCompletions;
 	}
 
-	private static getAllCompletions(position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+	private static getAllCompletions(docType: DocumentTypes, position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let elementCompletions = XsltTokenCompletions.getNormalCompletions(position, elementNameTests, vscode.CompletionItemKind.Unit);
 		let attnamecompletions = XsltTokenCompletions.getNormalCompletions(position, attNameTests, vscode.CompletionItemKind.Unit);
@@ -922,13 +930,13 @@ export class XsltTokenCompletions {
 		let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Function);
 		let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
 		let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
-		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data);
+		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType));
 		let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
 		resultCompletions = elementCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions, userFnCompletions);
 		return resultCompletions;
 	}
 
-	private static getAllTokenCompletions(position: vscode.Position, token: BaseToken, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+	private static getAllTokenCompletions(docType: DocumentTypes, position: vscode.Position, token: BaseToken, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let elementCompletions = XsltTokenCompletions.getTokenCompletions(token, elementNameTests, vscode.CompletionItemKind.Unit);
 		let attnamecompletions = XsltTokenCompletions.getTokenCompletions(token, attNameTests, vscode.CompletionItemKind.Unit);
@@ -936,7 +944,7 @@ export class XsltTokenCompletions {
 		let axisCompletions = XsltTokenCompletions.getTokenCommandCompletions(token, position, axes, vscode.CompletionItemKind.Function);
 		let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
 		let nodeCompletions = XsltTokenCompletions.getTokenCompletions(token, nodeTypes, vscode.CompletionItemKind.Property);
-		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XPathFunctionDetails.data, token);
+		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType), token);
 		let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData, token);
 		resultCompletions = elementCompletions.concat(attnamecompletions, axisCompletions, nodeCompletions, fnCompletions, userFnCompletions);
 		return resultCompletions;
