@@ -1121,27 +1121,42 @@ export class XsltTokenCompletions {
 			let competionName = tagName;
 			let description: string|undefined;
 			let useCurrent = true;
-			if (tagName === 'xsl:template') {
-				const newItem = new vscode.CompletionItem(tagName + ' match', vscode.CompletionItemKind.Struct);
-				newItem.documentation = "xsl:template with 'match' attribute";
-				newItem.insertText = new vscode.SnippetString('xsl:template match="$1" mode="$2">$0</xsl:template>');
-				completionItems.push(newItem);
-				competionName = tagName + ' name';
-				description = "xsl:template with 'name' attribute";
-			} else if (tagName === 'xsl:literal-result-element') {
-				useCurrent = false;
-				const newItem = new vscode.CompletionItem('literal-self-closing-element', vscode.CompletionItemKind.Struct);
-				newItem.documentation = "self-closing tag for literal result element";
-				newItem.insertText = new vscode.SnippetString('${1:div} ${2:class}="$3"/>$0');
-				completionItems.push(newItem);
-				const newItem2 = new vscode.CompletionItem('literal-start-element', vscode.CompletionItemKind.Struct);
-				newItem2.documentation = "start tag for literal result element";
-				newItem2.insertText = new vscode.SnippetString('${1:div}>$0');
-				completionItems.push(newItem2);
-				const newItem3 = new vscode.CompletionItem('literal-element', vscode.CompletionItemKind.Struct);
-				newItem3.documentation = "start and close tag for literal result element";
-				newItem3.insertText = new vscode.SnippetString('${1:div}>$0</${1:div}>');
-				completionItems.push(newItem3);
+			if (docType === DocumentTypes.XSLT) {
+				if (tagName === 'xsl:template') {
+					const newItem = new vscode.CompletionItem(tagName + ' match', vscode.CompletionItemKind.Struct);
+					newItem.documentation = "xsl:template with 'match' attribute";
+					newItem.insertText = new vscode.SnippetString('xsl:template match="$1" mode="$2">$0</xsl:template>');
+					completionItems.push(newItem);
+					competionName = tagName + ' name';
+					description = "xsl:template with 'name' attribute";
+				} else if (tagName === 'xsl:literal-result-element') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem('literal-self-closing-element', vscode.CompletionItemKind.Struct);
+					newItem.documentation = "self-closing tag for literal result element";
+					newItem.insertText = new vscode.SnippetString('${1:div} ${2:class}="$3"/>$0');
+					completionItems.push(newItem);
+					const newItem2 = new vscode.CompletionItem('literal-start-element', vscode.CompletionItemKind.Struct);
+					newItem2.documentation = "start tag for literal result element";
+					newItem2.insertText = new vscode.SnippetString('${1:div}>$0');
+					completionItems.push(newItem2);
+					const newItem3 = new vscode.CompletionItem('literal-element', vscode.CompletionItemKind.Struct);
+					newItem3.documentation = "start and close tag for literal result element";
+					newItem3.insertText = new vscode.SnippetString('${1:div}>$0</${1:div}>');
+					
+					completionItems.push(newItem3);
+				}
+			} else if (docType === DocumentTypes.DCP) {
+				if (snippetAttrs.indexOf('literalValue') !== -1) {
+					useCurrent = false;
+					let attrNames = ['literalValue', 'parameterRef', 'xpath'];
+					attrNames.forEach((attName) => {
+						const newItem = new vscode.CompletionItem(tagName + '-' + attName.charAt(0), vscode.CompletionItemKind.Struct);
+						newItem.documentation = ` with ${attName} attribute`;
+						newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
+						newItem.insertText = new vscode.SnippetString(tagName + ` ${attName}="\$1"/>$0`);
+						completionItems.push(newItem);
+					});
+				}
 			}
 			if (useCurrent) {
 				switch (snippetAttrs.length) {
