@@ -26,7 +26,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	private isCloseTag = false;
 	private closeTagLine: vscode.TextLine|null = null;
 	private closeTagPos: vscode.Position|null = null;
-	private isSqueezedBetweetStartEndTag = false;
 
 	constructor(xsltConfiguration: LanguageConfiguration) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
@@ -34,11 +33,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	}
 
 	public provideOnTypeFormattingEdits = (document: vscode.TextDocument, pos: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
-		this.onTypeLineEmpty = false;
-		this.isSqueezedBetweetStartEndTag = false;
 		this.isCloseTag = ch.indexOf('/') > -1;
-		const isNewLine = ch.indexOf('\n') > -1;
-
 		if (this.isCloseTag && pos.character > 1) {
 			let tLine = document.lineAt(pos.line);
 			this.closeTagLine = tLine;
@@ -46,16 +41,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			let chBefore = tLine.text.charAt(pos.character - 2);
 			this.isCloseTag = chBefore === '<';
 		}
-		if (isNewLine || this.isCloseTag) {
+		if (ch.indexOf('\n') > -1 || this.isCloseTag) {
+			//const prevLine = document.lineAt(pos.line - 1);
 			const newLine = document.lineAt(pos.line);
-			const newLineText = newLine.text;
-			if (isNewLine) {
-				const prevLineText = document.lineAt(pos.line - 1).text;
-				if (prevLineText.charAt(prevLineText.length - 1) === '>') {
-					this.isSqueezedBetweetStartEndTag = true;
-				}
-			}
-			this.onTypeLineEmpty = newLineText.trim().length === 0;
+			this.onTypeLineEmpty = newLine.text.trim().length === 0;
 			const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
 			this.onType = true;
 			let formatEdit =  this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
@@ -438,15 +427,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								let editPos = new vscode.Position(loopLineNumber, token.startCharacter);
 								let replacementString = newLineString + indentString.repeat(requiredIndentLength);
 								result.push(vscode.TextEdit.insert(editPos, replacementString));
-							} else if (this.isSqueezedBetweetStartEndTag) {
-								let replacementString = indentString.repeat(requiredIndentLength);
-								result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
-								const prevLine = document.lineAt(loopLineNumber - 1);
-								let prevLineReplacementString = indentString.repeat(requiredIndentLength + indentCharLength);
-								let prevLineEnding = newLineString + prevLineReplacementString;
-								let prevLineInsert = vscode.TextEdit.insert(prevLine.range.end, prevLineEnding);
-								result.push(prevLineInsert);
-
 							} else {
 								let replacementString = indentString.repeat(requiredIndentLength);
 								result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
