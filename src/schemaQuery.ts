@@ -60,7 +60,8 @@ export class SchemaQuery {
             this.collectAttributeDetails(ct, result, attributeName);
             let typeName: string|undefined = ct.type? ct.type: ct.base;
             if (typeName) {
-                    let type = <ComplexType>this.schema.complexTypes[typeName];
+                let type = <ComplexType>this.schema.complexTypes[typeName];
+                if (type) {
                     if (type.elementNames) {
                         this.mergeArrays(result.elements, type.elementNames);
                     }
@@ -83,6 +84,7 @@ export class SchemaQuery {
                             }
                         }
                     }
+                }
             }
         }
 
@@ -105,7 +107,7 @@ export class SchemaQuery {
                 if (sgType && sgType.base) {
                     this.lookupBaseType(sgType, result, attributeName);
                 }
-                if (sgType.attrs) {
+                if (sgType && sgType.attrs) {
                     this.mergeAttrArrays(result, Object.keys(sgType.attrs));
                 }
                 if (sgElement.elementNames) {
