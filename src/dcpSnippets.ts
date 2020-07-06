@@ -101,6 +101,8 @@ export class DCPSnippets {
 \t\t</resultReadabilityOptions>
 
 \t</standardConfig>
+
+$0
 			 
 </documentComparator>`
 	}

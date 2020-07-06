@@ -1133,7 +1133,7 @@ export class XsltTokenCompletions {
 				if (tagName === 'xsl:template') {
 					const newItem = new vscode.CompletionItem(tagName + ' match', vscode.CompletionItemKind.Struct);
 					newItem.documentation = "xsl:template with 'match' attribute";
-					newItem.insertText = new vscode.SnippetString('xsl:template match="$1" mode="$2">$0</xsl:template>');
+					newItem.insertText = new vscode.SnippetString('xsl:template match="$1" mode="${2:#default}">\n\t$0\n</xsl:template>');
 					completionItems.push(newItem);
 					competionName = tagName + ' name';
 					description = "xsl:template with 'name' attribute";
@@ -1149,7 +1149,7 @@ export class XsltTokenCompletions {
 					completionItems.push(newItem2);
 					const newItem3 = new vscode.CompletionItem('literal-element', vscode.CompletionItemKind.Struct);
 					newItem3.documentation = "start and close tag for literal result element";
-					newItem3.insertText = new vscode.SnippetString('${1:div}>$0</${1:div}>');
+					newItem3.insertText = new vscode.SnippetString('${1:div}>\n\t$0\n</${1:div}>');
 					
 					completionItems.push(newItem3);
 				}
@@ -1189,7 +1189,7 @@ export class XsltTokenCompletions {
 				} else if (docType === DocumentTypes.XSLT) {
 					makeEmpty = schemaQuery.emptyElements.indexOf(tagName) !== -1;
 				}
-				let tagClose = makeEmpty? selfCloseTag: `>$0</${tagName}>`;
+				let tagClose = makeEmpty? selfCloseTag: ">\n\t$0\n</" + tagName + ">";
 				const newItem = new vscode.CompletionItem(competionName, vscode.CompletionItemKind.Struct);
 				newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
 				if (description) {
