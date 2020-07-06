@@ -80,7 +80,10 @@
         if ((.//xs:restriction| .//xs:extension)/@base) then
           '&#xa;base: [' ||  string-join(for $a in (.//xs:restriction|.//xs:extension)/@base => distinct-values() return concat('''', $a, ''''), ',') || ']'
         else ()"/>
-    <xsl:variable name="elementType" as="xs:string?" select="if (exists(@type)) then 'type: ''' || @type || '''' else ()"/>
+    <xsl:variable name="detail" as="xs:string?" select="if (self::xs:element) then fxs:getAnyDetail(.) else ()"/>
+    <xsl:variable name="detailProperty" as="xs:string?" select="if (exists($detail)) then '&#xa;detail: `' || $detail || '`' else ()"/>
+    
+    <xsl:variable name="elementType" as="xs:string?" select="if (exists(@type)) then '&#xa;type: ''' || @type || '''' else ()"/>
 
     <xsl:variable name="attrValue" as="xs:string?" select="fxs:createAttrProperties(.)"/>
     <xsl:variable name="elementArray" as="xs:string?">
@@ -89,11 +92,11 @@
       <xsl:variable name="elementNames" as="xs:string*" select=".//xs:element/(@name|@ref), $processContentsLax"/>     
       <xsl:if test="count($elementNames) gt 0">
         <xsl:variable name="elementNameString" select="string-join((for $a in $elementNames return '''' || $a || ''''), ',')"/>
-        <xsl:sequence select="'elementNames: [' || $elementNameString || ']'"/>
+        <xsl:sequence select="'&#xa;elementNames: [' || $elementNameString || ']'"/>
       </xsl:if>
     </xsl:variable>
       
-    <xsl:variable name="joined" as="xs:string" select="string-join(($elementType, $base, $attrValue, $elementArray), ', ')"/>
+    <xsl:variable name="joined" as="xs:string" select="string-join(($elementType, $base, $attrValue, $elementArray, $detailProperty), ', ')"/>
     
     <xsl:text>"{@name}": {{{$joined}}},
 </xsl:text>   
@@ -155,6 +158,7 @@ export interface SimpleType {
     base?: string[],
     enum?: string[],
     list?: string,
+    detail?: string
 }
 
 export interface ComplexType {
@@ -163,7 +167,8 @@ export interface ComplexType {
     type?: string,
     elementNames?: string[],
     attributeList?: AttributeItem[];
-    primitive?: string
+    primitive?: string,
+    detail?: string
 }
 
 export interface SubstitutionGroupType {
@@ -177,6 +182,21 @@ export interface AttributeItem {
 }
     </xsl:text>  
   </xsl:template>
+  
+  <xsl:function name="fxs:getAnyDetail" as="xs:string?">
+    <xsl:param name="element" as="element()"/>
+    <xsl:variable name="ESCLF" as="xs:string" select="'XLFX'"/>
+    <xsl:variable name="docElement" as="element()" select="$element/xs:annotation/xs:documentation"/>
+    <xsl:choose>
+      <xsl:when test="empty($docElement)"/>
+      <xsl:otherwise>
+        <xsl:variable name="escaped" select="replace($docElement, '\$', '\\\$')"/>
+        <xsl:variable name="reservedLF" as="xs:string" select="replace($escaped,'\r?\n', $ESCLF)"/>
+        <xsl:variable name="normalised" as="xs:string" select="normalize-space($reservedLF)"/>
+        <xsl:sequence select="replace($normalised, $ESCLF, '&#xa;') "/>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:function>
   
   
 </xsl:stylesheet>
