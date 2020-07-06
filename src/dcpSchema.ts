@@ -9,10 +9,10 @@
  *  DeltaXML Ltd.
  */
 
- /*
-  NOTE: this code was auto-generated using .resources/xsd-to-typescript
-  to transform core-dcp-v1_0.xsd - included in XML Compare
- */
+/*
+ NOTE: this code was auto-generated using .resources/xsd-to-typescript
+ to transform core-dcp-v1_0.xsd - included in XML Compare
+*/
 
 import { SchemaData } from './xsltSchema'
 import { DocumentTypes } from './xslLexer';
