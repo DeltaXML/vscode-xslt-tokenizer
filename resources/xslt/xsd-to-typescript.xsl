@@ -152,25 +152,8 @@
   to transform core-dcp-v1_0.xsd - included in XML Compare
  */
  
-import { SchemaData } from './xsltSchema'
+import { SchemaData, ComplexType, SimpleType } from './xsltSchema'
 import { DocumentTypes } from './xslLexer';
-
-export interface SimpleType {
-    base?: string[],
-    enum?: string[],
-    list?: string,
-    detail?: { [name: string]: string}
-}
-
-export interface ComplexType {
-    attrs?: any,
-    base?: string,
-    type?: string,
-    elementNames?: string[],
-    attributeList?: AttributeItem[];
-    primitive?: string,
-    detail?: string
-}
 
 export interface SubstitutionGroupType {
     type: string,

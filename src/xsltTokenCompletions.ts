@@ -1104,7 +1104,7 @@ export class XsltTokenCompletions {
 		if (!schemaQuery) {
 			return [];
 		}
-		let expectedTags: string[] = [];
+		let expectedTags: [string, string][] = [];
 		let xsltParent: string|null = null;
 		let stackPos = elementStack.length - 1;
 		let isXSLT = docType === DocumentTypes.XSLT;
@@ -1122,7 +1122,9 @@ export class XsltTokenCompletions {
 		expectedTags = xsltParent? schemaQuery.getExpected(xsltParent).elements: [];
 
 		let completionItems: vscode.CompletionItem[] = [];
-		expectedTags.forEach((tagName) => {
+		expectedTags.forEach((tagData) => {
+			let tagName = tagData[0];
+			let tagDetail = tagData[1];
 			let snippetAttrs =  schemaQuery.getExpected(tagName).foundAttributes;
 			let attrText = '';
 
@@ -1159,7 +1161,7 @@ export class XsltTokenCompletions {
 					let attrNames = ['literalValue', 'parameterRef', 'xpath'];
 					attrNames.forEach((attName) => {
 						const newItem = new vscode.CompletionItem(tagName + '-' + attName.charAt(0), vscode.CompletionItemKind.Struct);
-						newItem.documentation = ` with ${attName} attribute`;
+						newItem.documentation = '(With ' + attName + ' attribute)\n\n' + tagDetail;
 						newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 						newItem.insertText = new vscode.SnippetString(tagName + ` ${attName}="\$1"/>$0`);
 						completionItems.push(newItem);
@@ -1191,6 +1193,9 @@ export class XsltTokenCompletions {
 				}
 				let tagClose = makeEmpty? selfCloseTag: ">\n\t$0\n</" + tagName + ">";
 				const newItem = new vscode.CompletionItem(competionName, vscode.CompletionItemKind.Struct);
+				if (tagDetail.length > 0) {
+					newItem.documentation = tagDetail; 
+				}
 				newItem.insertText = new vscode.SnippetString(tagName + attrText + tagClose);
 				if (description) {
 					newItem.documentation = description;

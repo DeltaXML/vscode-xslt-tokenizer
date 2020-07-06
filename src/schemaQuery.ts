@@ -2,7 +2,7 @@ import { XSLTSchema, SimpleType, ComplexType, AttributeItem, SchemaData} from '.
 import { DocumentTypes } from './xslLexer';
 
 export class Expected {
-    elements: string[] = [];
+    elements: [string, string][] = [];
     attrs: string[] = [];
     attributeValues: string[] = [];
     foundAttributes: string[] = [];
@@ -53,17 +53,13 @@ export class SchemaQuery {
         name = name === 'xsl:stylesheet'? 'xsl:transform': name;
         let ct = <ComplexType>this.schema.elements[name];
         if (ct) {
-            if (ct.elementNames) {
-                result.elements = ct.elementNames;
-            }
+            this.addElementDetails(ct, result);
             this.collectAttributeDetails(ct, result, attributeName);
             let typeName: string|undefined = ct.type? ct.type: ct.base;
             if (typeName) {
                 let type = <ComplexType>this.schema.complexTypes[typeName];
                 if (type) {
-                    if (type.elementNames) {
-                        this.mergeArrays(result.elements, type.elementNames);
-                    }
+                    this.addElementDetails(type, result);
                     if (type.base) {
                         this.lookupBaseType(type, result, attributeName);
                     }
@@ -109,9 +105,7 @@ export class SchemaQuery {
                 if (sgType && sgType.attrs) {
                     this.mergeAttrArrays(result, Object.keys(sgType.attrs));
                 }
-                if (sgElement.elementNames) {
-                    this.mergeArrays(result.elements, sgElement.elementNames);
-                }
+                this.addElementDetails(sgElement, result);
             } else {
                 // literal result element - provide 'xsl:literal-result-element-attributes' attributeGoup?
             }
@@ -126,6 +120,21 @@ export class SchemaQuery {
             }
         }
         return result;
+    }
+
+    private addElementDetails(ct: ComplexType, result: Expected) {
+        if (ct.elementNames) {
+            ct.elementNames.forEach((name) => {
+                let elementDefinition = this.schema.elements[name];
+                let detail: string | undefined;;
+                if (elementDefinition && elementDefinition.detail) {
+                    detail = elementDefinition.detail;
+                }
+                let detailValue = detail ? detail : '';
+
+                result.elements.push([name, detailValue]);
+            });
+        }
     }
 
     private collectAttributeDetails(ct: ComplexType, result: Expected, attributeName: string|undefined) {
@@ -178,8 +187,8 @@ export class SchemaQuery {
                     }
                 }
             }
-            if (baseType && baseType.elementNames) {
-                this.mergeArrays(result.elements, baseType.elementNames);
+            if (baseType) {
+                this.addElementDetails(baseType, result);
             }
             // recursive call;
             if (baseType.base) {
@@ -225,23 +234,25 @@ export class SchemaQuery {
         return target;
     }
 
-    private performSubstitutions(elements: string[]) {
+    private performSubstitutions(elements: [string, string][]) {
         let newElements: string[] = [];
 
         elements.forEach((item) => {
-            if (item === 'xsl:instruction' && this.schema.substitutionGroups) {
+            if (item[0] === 'xsl:instruction' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.instruction.elements);
                 newElements.push('xsl:literal-result-element');
                 newElements = newElements.concat(subElements);
-            } else if (item === 'xsl:declaration' && this.schema.substitutionGroups) {
+            } else if (item[0] === 'xsl:declaration' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.declaration.elements);
                 newElements = newElements.concat(subElements);
-            } else {
-                newElements.push(item);
             }
         });
+
+        newElements.forEach((item) => {
+            elements.push([item, '']);
+        });
     
-        return newElements;
+        return elements;
     }
 }
 

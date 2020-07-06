@@ -5,6 +5,7 @@ export interface SimpleType {
     base?: string[],
     enum?: string[],
     list?: string,
+    detail?: {[name: string]: string}
 }
 
 export interface ComplexType {
@@ -13,7 +14,8 @@ export interface ComplexType {
     type?: string,
     elementNames?: string[],
     attributeList?: AttributeItem[];
-    primitive?: string
+    primitive?: string,
+    detail?: string
 }
 
 export interface SubstitutionGroupType {
