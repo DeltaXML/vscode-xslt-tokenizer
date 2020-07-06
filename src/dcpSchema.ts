@@ -21,7 +21,7 @@ export interface SimpleType {
     base?: string[],
     enum?: string[],
     list?: string,
-    detail?: string
+    detail?: { [name: string]: string}
 }
 
 export interface ComplexType {
@@ -47,38 +47,135 @@ export interface AttributeItem {
   docType = DocumentTypes.DCP;
   simpleTypes: { [name: string]: SimpleType } = {"Percentage": {base: ['xs:integer']},
 "advancedEntityReferenceUsageType": {base: ['xs:string'],
-enum: ['useDefault','change','replace','split']},
+enum: ['useDefault','change','replace','split'],
+detail: {
+'useDefault': `Choose one of the other three behaviours in a context dependent manner.`,
+'change': `Keep the encoded form of the entity reference, with its change markup.`,
+'replace': `Extract the replacement text from the encoded entity reference.`,
+'split': `The encoded entity references have their replacement text removed and are split into 'new' and 'old' versions on detection of change.`
+}},
 "processingModeEnumType": {base: ['xs:string'],
-enum: ['useDefault','A','AB','AdB','B','BA','BdA','change']},
+enum: ['useDefault','A','AB','AdB','B','BA','BdA','change'],
+detail: {
+'useDefault': `Use the default ProcessingMode`,
+'A': `Keep the A version`,
+'AB': `Keep the A version if it exists, otherwise keep the B version`,
+'AdB': `Same as A, except when handling internal subset declarations which are treated as AB`,
+'B': `Keep the B version`,
+'BA': `Keep the B version if it exists, otherwise keep the A version`,
+'BdA': `Same as B, except when handling internal subset declarations which are treated as BA`,
+'change': `Keep change information as-is`
+}},
 "outputTypeEnumType": {base: ['xs:string'],
-enum: ['useDefault','encoded','normal']},
+enum: ['useDefault','encoded','normal'],
+detail: {
+'useDefault': `Specifies that the default encoding style should be used.`,
+'encoded': `The encoded preservation element should appear encoded in the output.`,
+'normal': `The encoded preservation element should be decoded by the final output transformation (which is typically part of serialisation process).`
+}},
 "xpathExpressionType": {base: ['xs:string']},
 "mathMlGranularityType": {base: ['xs:string'],
-enum: ['adjacent','detailed-adjacent','inline']},
+enum: ['adjacent','detailed-adjacent','inline'],
+detail: {
+'adjacent': `Reports the differences by repeating A and B MathML adjacent to each other.`,
+'detailed-adjacent': `Reports the differences by repeating the A and B MathML adjacent to each other. Content within the adjacent A and B views is highlighted at the specific parts where it is different.`,
+'inline': `Reports the differences inline within the MathML without duplicating A and B. If the differences are too complex to easily render inline, the 'detailed-adjacent' view is used.`
+}},
 "invalidBehaviourType": {base: ['xs:string'],
-enum: ['compareAsXml','fail','propagateUp']},
+enum: ['compareAsXml','fail','propagateUp'],
+detail: {
+'compareAsXml': `Compare tables as 'plain' XML.`,
+'fail': `Throw an Exception when invalid tables are encountered.`,
+'propagateUp': `Propagate the changes to the <tgroup> level of the table.`
+}},
 "relBaseType": {base: ['xs:string'],
-enum: ['current','home','dxp']},
+enum: ['current','home','dxp'],
+detail: {
+'current': `Resolve using the current working directory, obtained from the Java user.dir system property.`,
+'home': `Resolve using the user's home directory.`,
+'dxp': `Resolve using the directory containing the DXP file, when it is loaded from a file.`
+}},
 "modifiedAttributeModeType": {base: ['xs:string'],
-enum: ['useDefault','change','A','AB','B','BA','encode-as-attributes']},
+enum: ['useDefault','change','A','AB','B','BA','encode-as-attributes'],
+detail: {
+'useDefault': `The behaviour will depend on other parameter settings, primarily the output-format.`,
+'change': `The associated modified attribute filter will be skipped, thus leaving the delta attribute change markup alone.`,
+'A': `Output the 'A' version of modified attributes and any deleted ('A') attributes.`,
+'AB': `Output the 'A' version of modified attributes.`,
+'B': `Output the 'B' version of modified attributes and any added ('B') attributes.`,
+'BA': `Output the 'B' version of modified attributes.`,
+'encode-as-attributes': `Output the 'B' version of modified attributes and any added ('B') attributes but additionally show the changes encoded as attributes in the attribute-change ('ac') namespace.`
+}},
 "modifiedWhitespaceType": {base: ['xs:string'],
-enum: ['useDefault','ignore','keepA','normalize','show']},
+enum: ['useDefault','ignore','keepA','normalize','show'],
+detail: {
+'useDefault': `The context dependent automatic whitespace setting.`,
+'ignore': `Ignore differences in whitespace that is not explicitly preserved.`,
+'keepA': `Similar to 'ignore' except that 'A' document's whitespace is kept (instead of the 'B' document's whitespace).`,
+'normalize': `Normalize whitespace in inputs before comparison.`,
+'show': `Display the differences in whitespace where possible`
+}},
 "MixedContentDetectionScopeType": {base: ['xs:string'],
-enum: ['document','local']},
+enum: ['document','local'],
+detail: {
+'document': `Determine if an element is mixed-content using information from elements of the same name in the document. Using this scope significantly slows processing for large files.`,
+'local': `Determine mixed content information for each element in turn, based on the contents of that element alone.`
+}},
 "resultFormatType": {base: ['xs:string'],
-enum: ['arbortext-tc','delta','oxygen-tc','xmetal-tc','framemaker-tc']},
+enum: ['arbortext-tc','delta','oxygen-tc','xmetal-tc','framemaker-tc'],
+detail: {
+'arbortext-tc': `Reports changes using the Arbortext editor track changes format.`,
+'delta': `Reports changes using the DeltaXML delta file result.`,
+'oxygen-tc': `Reports changes using oXygen Author track changes processing instructions.`,
+'xmetal-tc': `Reports changes using XMetaL track changes processing instructions.`,
+'framemaker-tc': `Reports changes using FrameMaker track changes processing instructions.`
+}},
 "modifiedFormatOutputType": {base: ['xs:string'],
-enum: ['useDefault','A','B','AB','BA','change','content-group']},
+enum: ['useDefault','A','B','AB','BA','change','content-group'],
+detail: {
+'useDefault': `Choose the most relevant behaviour based on other configuration settings.`,
+'A': `Output the formatting elements from the A input.`,
+'B': `Output the formatting elements from the B input.`,
+'AB': `Output the A and B formatting elements. Where A and B formatting elements overlap or are nested, use formatting elements from the A input.`,
+'BA': `Output the A and B formatting elements. Where A and B formatting elements overlap or are nested, use formatting elements from the B input.`,
+'change': `Represent all formatting element changes using the deltaV2.1 format.`,
+'content-group': `Output each formatting element change using a content group.`
+}},
 "xmetalTableChangeModeType": {base: ['xs:string'],
-enum: ['down','ignore','up']},
+enum: ['down','ignore','up'],
+detail: {
+'down': `Changes in rows and cells are pushed down to the cell content level.`,
+'ignore': `All changes in a table are ignored.`,
+'up': `Changes in rows and cells are pushed up to the table level.`
+}},
 "frameMakerTableChangeModeType": {base: ['xs:string'],
-enum: ['down','ignore','up']},
+enum: ['down','ignore','up'],
+detail: {
+'down': `Changes in rows and cells are pushed down to the cell content level.`,
+'ignore': `All changes in a table are ignored.`,
+'up': `Changes in rows and cells are pushed up to the table level.`
+}},
 "orderlessPresentationModeType": {base: ['xs:string'],
-enum: ['a_adds','a_matches_deletes_adds','b_deletes','b_matches_adds_deletes']},
+enum: ['a_adds','a_matches_deletes_adds','b_deletes','b_matches_adds_deletes'],
+detail: {
+'a_adds': `Outputs elements from the A input, in order, followed by elements only in the B input, in order.`,
+'a_matches_deletes_adds': `Outputs elements from both inputs in their A order, followed by elements only in A and then elements only in B.`,
+'b_deletes': `Outputs elements from the B input, in order, followed by elements only in the A input, in order.`,
+'b_matches_adds_deletes': `Outputs elements from both inputs in their B order, followed by elements only in B and then elements only in A.`
+}},
 "validationLevelType": {base: ['xs:string'],
-enum: ['relaxed','strict']},
+enum: ['relaxed','strict'],
+detail: {
+'relaxed': `Performs relaxed validation.`,
+'strict': `Performs strict validation.`
+}},
 "warningReportModeType": {base: ['xs:string'],
-enum: ['comments','message','processingInstructions']},
+enum: ['comments','message','processingInstructions'],
+detail: {
+'comments': `Reports warnings using XML comments.`,
+'message': `Reports warnings using <xsl:message/>.`,
+'processingInstructions': `Reports warning using processing instructions with the format <?dxml_warn warning content ?>.`
+}},
 "anyNameType": {base: ['xs:string']},
 }
 complexTypes: { [name: string]: ComplexType } = {"processingModeType": {

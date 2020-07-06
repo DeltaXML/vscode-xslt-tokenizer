@@ -84,7 +84,7 @@
     <xsl:variable name="detailProperty" as="xs:string?" select="if (exists($detail)) then '&#xa;detail: `' || $detail || '`' else ()"/>
     
     <xsl:variable name="elementType" as="xs:string?" select="if (exists(@type)) then '&#xa;type: ''' || @type || '''' else ()"/>
-
+    
     <xsl:variable name="attrValue" as="xs:string?" select="fxs:createAttrProperties(.)"/>
     <xsl:variable name="elementArray" as="xs:string?">
       <xsl:variable name="processContentsLax" as="xs:string?" 
@@ -95,7 +95,7 @@
         <xsl:sequence select="'&#xa;elementNames: [' || $elementNameString || ']'"/>
       </xsl:if>
     </xsl:variable>
-      
+    
     <xsl:variable name="joined" as="xs:string" select="string-join(($elementType, $base, $attrValue, $elementArray, $detailProperty), ', ')"/>
     
     <xsl:text>"{@name}": {{{$joined}}},
@@ -116,10 +116,11 @@
         if (count($enumList) gt 0) then 
           'enum: [' || string-join($enumList, ', ') || ']'
         else ()"/>
+    <xsl:variable name="enumDetail" as="xs:string?" select="fxs:getEnumDocumentation(xs:restriction)"/>
     
     <xsl:variable name="list" as="xs:string*" select="if (.//xs:list/@itemType) then 'list: ''' || .//xs:list/@itemType || '''' else ()"/>
     
-    <xsl:variable name="joined" as="xs:string" select="string-join(($base, $list, $enumValue), ',&#xa;')"/>          
+    <xsl:variable name="joined" as="xs:string" select="string-join(($base, $list, $enumValue, $enumDetail), ',&#xa;')"/>          
     <xsl:text>"{@name}": {{{$joined}}},
 </xsl:text> 
   </xsl:template>
@@ -158,7 +159,7 @@ export interface SimpleType {
     base?: string[],
     enum?: string[],
     list?: string,
-    detail?: string
+    detail?: { [name: string]: string}
 }
 
 export interface ComplexType {
@@ -186,7 +187,7 @@ export interface AttributeItem {
   <xsl:function name="fxs:getAnyDetail" as="xs:string?">
     <xsl:param name="element" as="element()"/>
     <xsl:variable name="ESCLF" as="xs:string" select="'XLFX'"/>
-    <xsl:variable name="docElement" as="element()" select="$element/xs:annotation/xs:documentation"/>
+    <xsl:variable name="docElement" as="element()?" select="$element/xs:annotation/xs:documentation"/>
     <xsl:choose>
       <xsl:when test="empty($docElement)"/>
       <xsl:otherwise>
@@ -195,6 +196,23 @@ export interface AttributeItem {
         <xsl:variable name="normalised" as="xs:string" select="normalize-space($reservedLF)"/>
         <xsl:sequence select="replace($normalised, $ESCLF, '&#xa;') "/>
       </xsl:otherwise>
+    </xsl:choose>
+  </xsl:function>
+  
+  <xsl:function name="fxs:getEnumDocumentation" as="xs:string?">
+    <xsl:param name="restriction" as="element(xs:restriction)?"/>  
+    <xsl:choose>
+      <xsl:when test="empty($restriction/xs:enumeration)"/>
+      <xsl:otherwise>
+        <xsl:variable name="docItems" as="xs:string*">
+          <xsl:for-each select="$restriction/xs:enumeration[xs:annotation/xs:documentation]">
+            <xsl:sequence 
+              select="
+                '&#xa;''' || @value || ''': `' || fxs:getAnyDetail(current()) || '`'"/>
+          </xsl:for-each>
+        </xsl:variable>
+        <xsl:sequence select="'detail: {' || string-join($docItems, ',') || '&#xa;}'"/>
+      </xsl:otherwise>  
     </xsl:choose>
   </xsl:function>
   
