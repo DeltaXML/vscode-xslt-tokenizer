@@ -1158,14 +1158,11 @@ export class XsltTokenCompletions {
 			} else if (docType === DocumentTypes.DCP) {
 				if (snippetAttrs.indexOf('literalValue') !== -1) {
 					useCurrent = false;
-					let attrNames = ['literalValue', 'parameterRef', 'xpath'];
-					attrNames.forEach((attName) => {
-						const newItem = new vscode.CompletionItem(tagName + '-' + attName.charAt(0), vscode.CompletionItemKind.Struct);
-						newItem.documentation = '(With ' + attName + ' attribute)\n\n' + tagDetail;
-						newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
-						newItem.insertText = new vscode.SnippetString(tagName + ` ${attName}="\$1"/>$0`);
-						completionItems.push(newItem);
-					});
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.documentation = tagDetail;
+					newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
+					newItem.insertText = new vscode.SnippetString(tagName + ' ${1|literalValue,parameterRef,xpath|}="$2"/>$0');
+					completionItems.push(newItem);
 				}
 			}
 			if (useCurrent) {
@@ -1258,13 +1255,18 @@ export class XsltTokenCompletions {
 		if (!schemaQuery) {
 			return [];
 		}
-		let expectedAttrValues: string[] = [];
+		let expectedAttrValues: [string, string][] = [];
 
 		expectedAttrValues = schemaQuery.getExpected(xsltParent, currentAttribute).attributeValues;
 
 		let completionItems: vscode.CompletionItem[] = [];
-		expectedAttrValues.forEach((attrName) => {
+		expectedAttrValues.forEach((attrValueData) => {
+			let attrName = attrValueData[0];
+			let attrDocs = attrValueData[1];
 			const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Reference);
+			if (attrDocs.length > 0) {
+				newItem.documentation = attrDocs;
+			}
 			newItem.insertText = new vscode.SnippetString(attrName);
 			completionItems.push(newItem);
 		});

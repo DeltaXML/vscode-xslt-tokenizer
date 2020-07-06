@@ -102,7 +102,7 @@ export class DCPSnippets {
 
 \t</standardConfig>
 
-$0
+\t$0
 			 
 </documentComparator>`
 	}

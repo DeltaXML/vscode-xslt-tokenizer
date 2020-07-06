@@ -4,7 +4,7 @@ import { DocumentTypes } from './xslLexer';
 export class Expected {
     elements: [string, string][] = [];
     attrs: string[] = [];
-    attributeValues: string[] = [];
+    attributeValues: [string, string][] = [];
     foundAttributes: string[] = [];
 }
 
@@ -69,7 +69,8 @@ export class SchemaQuery {
                             let attrTypeName = type.attrs[attributeName];
                             if (attrTypeName) {
                                 if (attrTypeName === 'xs:boolean') {
-                                    this.mergeArrays(result.attributeValues, ['true', 'false']);
+                                    result.attributeValues.push(['true', '']);
+                                    result.attributeValues.push(['false', '']);
                                 } else {
                                     let attrType = this.schema.simpleTypes[attrTypeName];
                                     if (attrType) {
@@ -144,7 +145,8 @@ export class SchemaQuery {
                 let simpleTypeName = ct.attrs[attributeName];
                 if (simpleTypeName) {
                     if (simpleTypeName === 'xs:boolean') {
-                        this.mergeArrays(result.attributeValues, ['true', 'false']);
+                        result.attributeValues.push(['true', '']);
+                        result.attributeValues.push(['false', '']);
                     } else {
                         let sType = this.schema.simpleTypes[simpleTypeName];
                         if (sType) {
@@ -163,7 +165,9 @@ export class SchemaQuery {
                 if (findAtt && item.name === attributeName) {
                     findAtt = false;
                     if (item.enum) {
-                        this.mergeArrays(result.attributeValues, item.enum);
+                        item.enum.forEach((attrValue) => {
+                            result.attributeValues.push([attrValue, '']);
+                        });
                     }
                 }
             });
@@ -181,9 +185,7 @@ export class SchemaQuery {
                     let attrType = baseType.attrs[attributeName];
                     if (attrType) {
                         let simpleType = <SimpleType>this.schema.simpleTypes[attrType];
-                        if (simpleType.enum) {
-                            this.mergeArrays(result.attributeValues, simpleType.enum);
-                        }
+                        this.lookupSimpleType(simpleType, result);
                     }
                 }
             }
@@ -198,27 +200,17 @@ export class SchemaQuery {
     }
 
     private lookupSimpleType(sgType: SimpleType, result: Expected) {
-        if (sgType.enum) {
-            this.mergeArrays(result.attributeValues, sgType.enum);
+        if (sgType && sgType.enum) {
+            sgType.enum.forEach((attrValue) => {
+                let detail = ''
+                if (sgType.detail) {
+                    let lookup = sgType.detail[attrValue];
+                    detail = lookup? lookup: '';
+                }
+                result.attributeValues.push([attrValue, detail]);
+            });
         }
-        // all simpleTypes here are restrictions on a base we should NOT make this recursive call;
-        // if (sgType.base) {
-        //     sgType.base.forEach((item) => {
-        //         let baseType = <SimpleType>this.schema.simpleTypes[item];
-        //         if (baseType) {
-        //             this.lookupSimpleType(baseType, result);
-        //         }
-        //     });
-        // }
-    }
 
-    private mergeArrays(target: string[], source: string[]) {
-        source.forEach((item) => {
-            if (target.indexOf(item) === -1) {
-                target.push(item);
-            }
-        });
-        return target;
     }
 
     private mergeAttrArrays(expected: Expected, source: string[]) {
