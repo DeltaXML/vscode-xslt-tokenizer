@@ -437,7 +437,7 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (tagAttributeNames.length > 0) {
 										let attName = tagAttributeNames[tagAttributeNames.length - 1];
-										if (languageConfig.docType === DocumentTypes.DCP && attName === 'parameterRef') {
+										if (languageConfig.docType === DocumentTypes.DCP && (attName === 'parameterRef' || attName === 'if' || attName === 'unless')) {
 											let varCompletionStrings: string[] = [];
 											globalInstructionData.forEach((instruction) => {
 												if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
