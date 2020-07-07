@@ -176,10 +176,10 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -415,6 +415,8 @@ export class XsltTokenCompletions {
 										// get name attribute of parent
 										let templateName = elementStack[elementStack.length - 1].symbolID;
 										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData, templateName);
+									} else {
+										resultCompletions = [];
 									}
 								}
 								break;
@@ -1157,7 +1159,7 @@ export class XsltTokenCompletions {
 					completionItems.push(newItem3);
 				}
 			} else if (docType === DocumentTypes.DCP) {
-				if (snippetAttrs.indexOf('literalValue') !== -1) {
+				if (snippetAttrs.length === 1 && snippetAttrs.indexOf('literalValue') !== -1) {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.documentation = tagDetail;
@@ -1230,10 +1232,10 @@ export class XsltTokenCompletions {
 		let completionItems: vscode.CompletionItem[] = [];
 		expectedAttributes.forEach((attrName) => {
 			if (existingAttrs.indexOf(attrName) === -1){
-				let triggerCompletion = schemaQuery.docType === DocumentTypes.DCP;
-				let attributeDec = triggerCompletion? attrName + '="$0"': `${attrName}="$1"$0`;
+				let isDCP = schemaQuery.docType === DocumentTypes.DCP;
+				let attributeDec = isDCP? attrName + '="$0"': `${attrName}="$1"$0`;
 				const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Reference);
-				if (triggerCompletion) {
+				if (isDCP) {
 					newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 				}
 
