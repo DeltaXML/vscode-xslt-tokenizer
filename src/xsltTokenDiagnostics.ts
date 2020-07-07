@@ -604,7 +604,7 @@ export class XsltTokenDiagnostics {
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt? AttributeType.Variable: AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
-							if (docType === DocumentTypes.DCP && attNameText === 'parameterRef') {
+							if (docType === DocumentTypes.DCP && (attNameText === 'parameterRef' || attNameText === 'if' || attNameText === 'unless')) {
 								attType = AttributeType.VariableRef;
 							} else if (attNameText === XsltTokenDiagnostics.xslNameAtt) {
 								attType = AttributeType.InstructionName;
