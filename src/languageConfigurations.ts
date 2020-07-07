@@ -31,6 +31,7 @@ export class DCPConfiguration {
 	public static configuration: LanguageConfiguration = {
 		expressionAtts: ['xpath', 'when'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
+		linkElementAttrNames: ['file', 'path'],
 		nativePrefix: '',
 		tvtAttributes: [],
 		nonNativeAvts: false,

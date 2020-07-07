@@ -116,6 +116,7 @@ interface XmlElement {
 export interface LanguageConfiguration {
     expressionAtts?: string[],
     variableElementNames?: string[],
+    linkElementAttrNames?: [string, string];
     avtAtts?: string[],
     nativePrefix: string,
     tvtAttributes: string[],
@@ -849,7 +850,7 @@ export class XslLexer {
                                     isXMLNSattribute = true;
                                     attributeNameToken = XSLTokenLevelState.xmlnsName;
                                 } else if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
-                                     && attName === 'href') {
+                                     && (attName === 'href' || (this.languageConfiguration.docType === DocumentTypes.DCP && this.languageConfiguration.linkElementAttrNames && attName === this.languageConfiguration?.linkElementAttrNames[1]))) {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionName = true;
                                 } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
@@ -1178,6 +1179,9 @@ export class XslLexer {
         if (this.languageConfiguration.docType === DocumentTypes.DCP) {
             if (this.languageConfiguration.variableElementNames && this.languageConfiguration.variableElementNames.indexOf(elementName) !== -1) {
                 instructionType = GlobalInstructionType.Variable;
+            }
+            if (instructionType === GlobalInstructionType.Unknown && this.languageConfiguration.linkElementAttrNames && this.languageConfiguration.linkElementAttrNames[0] === elementName) {
+                instructionType = GlobalInstructionType.Import;
             }
         } else if (isNative) {
             nativeName = elementName.substring(this.nativePrefixLength);
