@@ -29,7 +29,7 @@ export class XSLTConfiguration {
 export class DCPConfiguration {
 	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {
-		expressionAtts: ['xpath'],
+		expressionAtts: ['xpath', 'when'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
 		nativePrefix: '',
 		tvtAttributes: [],
