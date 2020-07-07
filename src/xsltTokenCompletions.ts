@@ -14,6 +14,7 @@ import { SchemaQuery, Expected } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { XSLTSnippets, Snippet } from './xsltSnippets';
 import { DCPSnippets } from './dcpSnippets';
+import { DCPSchema } from './dcpSchema';
 
 enum TagType {
 	XSLTstart,
@@ -1161,7 +1162,7 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.documentation = tagDetail;
 					newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
-					newItem.insertText = new vscode.SnippetString(tagName + ' ${1|literalValue,parameterRef,xpath|}="$2"/>$0');
+					newItem.insertText = new vscode.SnippetString(tagName + ' $0/>');
 					completionItems.push(newItem);
 				}
 			}
@@ -1229,8 +1230,13 @@ export class XsltTokenCompletions {
 		let completionItems: vscode.CompletionItem[] = [];
 		expectedAttributes.forEach((attrName) => {
 			if (existingAttrs.indexOf(attrName) === -1){
-				let attributeDec = `${attrName}="$1"$0`;
+				let triggerCompletion = schemaQuery.docType === DocumentTypes.DCP;
+				let attributeDec = triggerCompletion? attrName + '="$0"': `${attrName}="$1"$0`;
 				const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Reference);
+				if (triggerCompletion) {
+					newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
+				}
+
 				newItem.insertText = new vscode.SnippetString(attributeDec);
 				completionItems.push(newItem);
 			}
