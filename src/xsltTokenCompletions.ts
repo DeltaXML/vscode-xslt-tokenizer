@@ -1241,7 +1241,7 @@ export class XsltTokenCompletions {
 		}
 
 		let isXSLT = xsltParent.startsWith('xsl:');
-		if (!isXSLT) {
+		if (schemaQuery.docType === DocumentTypes.XSLT && !isXSLT) {
 			let attributeDec = '${1:name}="$2"$0';
 			const newItem = new vscode.CompletionItem('literal-attribute', vscode.CompletionItemKind.Reference);
 			newItem.insertText = new vscode.SnippetString(attributeDec);
