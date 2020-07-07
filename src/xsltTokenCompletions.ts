@@ -1186,7 +1186,7 @@ export class XsltTokenCompletions {
 				if (docType === DocumentTypes.DCP) {
 					makeEmpty = (tagName !== 'description' && schemaQuery.getExpected(tagName).elements.length === 0) || schemaQuery.emptyElements.indexOf(tagName) !== -1;
 				} else if (docType === DocumentTypes.XSLT) {
-					makeEmpty = schemaQuery.emptyElements.indexOf(tagName) !== -1;
+					makeEmpty = schemaQuery.emptyElements.indexOf(tagName) !== -1 || schemaQuery.getExpected(tagName).elements.length === 0;
 				}
 				let tagClose = makeEmpty? selfCloseTag: ">\n\t$0\n</" + tagName + ">";
 				const newItem = new vscode.CompletionItem(competionName, vscode.CompletionItemKind.Struct);
