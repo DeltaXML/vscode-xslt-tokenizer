@@ -18,7 +18,7 @@ export class GlobalsProvider {
 		let data: GlobalInstructionData[] = [];
 		let error = true;
 
-		if (href.length !== 0 && await this.fileExists(href)) {
+		if (href.length !== 0 && await GlobalsProvider.fileExists(href)) {
 			xsltText= fs.readFileSync(href).toString('utf-8');
 			data = lexer.analyseLight(xsltText);
 			error = false;
@@ -27,7 +27,7 @@ export class GlobalsProvider {
 		return {data: data, error: error};
 	}
 
-	fileExists(file: string): Promise<boolean> {
+	public static fileExists(file: string): Promise<boolean> {
 		return new Promise<boolean>((resolve, _reject) => {
 			fs.exists(file, (exists) => {
 				if (exists) {
