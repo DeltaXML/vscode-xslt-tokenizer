@@ -25,6 +25,7 @@ export class SchemaQuery {
                 break;
             case DocumentTypes.DCP:
                 this.soughtAttributes =  ['name', 'defaultValue', 'literalValue','version','id','description', 'path'];
+                this.emptyElements = ['booleanParameter', 'stringParameter'];
                 break;
             default:
                 break;

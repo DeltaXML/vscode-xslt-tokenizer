@@ -1184,7 +1184,7 @@ export class XsltTokenCompletions {
 				let selfCloseTag = snippetAttrs.length === 0? '/>': '/>$0';
 				let makeEmpty = false;
 				if (docType === DocumentTypes.DCP) {
-					makeEmpty = schemaQuery.getExpected(tagName).elements.length === 0 && tagName !== 'description';
+					makeEmpty = (tagName !== 'description' && schemaQuery.getExpected(tagName).elements.length === 0) || schemaQuery.emptyElements.indexOf(tagName) !== -1;
 				} else if (docType === DocumentTypes.XSLT) {
 					makeEmpty = schemaQuery.emptyElements.indexOf(tagName) !== -1;
 				}
