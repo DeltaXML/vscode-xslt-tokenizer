@@ -46,6 +46,17 @@ export class DCPConfiguration {
 			'xsl/schema-input-filter.xsl',
 			'xsl/extract-format-version.xsl',
 			'xsl/split-adjacent-ignorable-whitespace.xsl'
+		],
+		featureNames: [
+			'http://apache.org/xml/features/validation/schema',
+			'http://apache.org/xml/features/nonvalidating/load-dtd-grammar',
+			'http://apache.org/xml/features/nonvalidating/load-external-dtd',
+			'http://apache.org/xml/features/validation/dynamic',
+			'http://apache.org/xml/features/validation/schema'
+		],
+		propertyNames: [
+			'http://apache.org/xml/properties/schema/external-schemaLocation',
+			'http://apache.org/xml/properties/schema/external-noNamespaceSchemaLocation',
 		]
 	} 
 }

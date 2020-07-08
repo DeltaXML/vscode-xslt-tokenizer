@@ -123,7 +123,9 @@ export interface LanguageConfiguration {
     nonNativeAvts: boolean,
     schemaData?: SchemaData,
     docType: DocumentTypes,
-    resourceNames?: string[]
+    resourceNames?: string[],
+    featureNames?: string[],
+    propertyNames?: string[]
 }
 
 export interface GlobalInstructionData {

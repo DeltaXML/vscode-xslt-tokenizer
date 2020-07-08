@@ -418,6 +418,12 @@ export class XsltTokenCompletions {
 									} else if (languageConfig.docType === DocumentTypes.DCP && languageConfig.resourceNames && tagElementName === 'resource') {
 										let varCompletionStrings = languageConfig.resourceNames;
 										resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
+									} else if (languageConfig.docType === DocumentTypes.DCP && languageConfig.featureNames && tagElementName === 'feature') {
+										let varCompletionStrings = languageConfig.featureNames;
+										resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
+									} else if (languageConfig.docType === DocumentTypes.DCP && languageConfig.propertyNames && tagElementName === 'property') {
+										let varCompletionStrings = languageConfig.propertyNames;
+										resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
 									} else {
 										resultCompletions = [];
 									}
