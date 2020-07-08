@@ -415,6 +415,9 @@ export class XsltTokenCompletions {
 										// get name attribute of parent
 										let templateName = elementStack[elementStack.length - 1].symbolID;
 										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData, templateName);
+									} else if (languageConfig.docType === DocumentTypes.DCP && languageConfig.resourceNames && tagElementName === 'resource') {
+										let varCompletionStrings = languageConfig.resourceNames;
+										resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
 									} else {
 										resultCompletions = [];
 									}

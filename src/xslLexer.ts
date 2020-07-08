@@ -122,7 +122,8 @@ export interface LanguageConfiguration {
     tvtAttributes: string[],
     nonNativeAvts: boolean,
     schemaData?: SchemaData,
-    docType: DocumentTypes
+    docType: DocumentTypes,
+    resourceNames?: string[]
 }
 
 export interface GlobalInstructionData {

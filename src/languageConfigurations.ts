@@ -36,7 +36,17 @@ export class DCPConfiguration {
 		tvtAttributes: [],
 		nonNativeAvts: false,
 		schemaData: new DCPSchema(),
-		docType: DocumentTypes.DCP
+		docType: DocumentTypes.DCP,
+		resourceNames: [
+			'xsl/apply-ignore-changes.xsl',
+			'xsl/attribute-ignore-changes-marker.xsl',
+			'xsl/clean-house.xsl',
+			'xsl/clean-non-delta-dxml-content.xsl',
+			'xsl.propagate-ignore-changes.xsl',
+			'xsl/schema-input-filter.xsl',
+			'xsl/extract-format-version.xsl',
+			'xsl/split-adjacent-ignorable-whitespace.xsl'
+		]
 	} 
 }
 
