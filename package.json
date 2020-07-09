@@ -116,6 +116,24 @@
 						"type": "string",
 						"description": "The destination path for the XSLT result"
 					},
+					"catalogFilenames": {
+						"type": "string",
+						"decription": "Either a file name or a list of file names separated by semicolons; the files are OASIS XML catalogs defining how public identifiers and system identifiers (URIs) are to be redirected"
+					},
+					"configFilename": {
+						"type": "string",
+						"decription": "If set, configuration properties (unless overridden by other properties here) are taken from the supplied configuration file."
+					},
+					"dtd": {
+						"type": "string",
+						"enum": ["on","off"],
+						"decription": "Requests DTD-based validation of the source file and of any files read using the document() function"
+					},
+					"ea": {
+						"type": ["string"],
+						"enum": ["on", "off", "recover"],
+						"decription": "Enables assertions both at compile time and at run time"
+					},
 					"parameters": {
 						"description": "The xsl:param values for the XSLT",
 						"type": "array",
