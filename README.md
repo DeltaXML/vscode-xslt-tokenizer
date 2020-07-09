@@ -2,6 +2,8 @@
 
 The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1.
 
+In addition to XSLT, other languages/vocabularies with embedded XPath will be supported in future in this extension. Currently, DeltaXML's [Document Comparison Pipeline (DCP)](https://docs.deltaxml.com/xml-compare/latest/dcp-user-guide-9340381.html) format is supported, acting as a 'pilot' for other languages.
+
 
 ![vscode-xslt](vscode-xslt.png)
 
