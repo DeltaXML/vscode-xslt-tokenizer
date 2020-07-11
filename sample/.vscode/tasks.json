@@ -40,6 +40,7 @@
 			"label": "Compile Active XSLT File",
 			"saxonJar": "${config:XSLT.tasks.saxonJar}",
 			"xsltFile": "${file}",
+			"catalogFilenames": "notExists.xml",
 			"xmlSource": "${file}",
 			"resultPath": "${workspaceFolder}/out/${fileBasenameNoExtension}.xml",
 			"group": {

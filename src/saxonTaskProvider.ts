@@ -10,16 +10,16 @@ import * as fs from 'fs';
 import * as  os from 'os';
 
 function exists(file: string): Promise<boolean> {
-	return new Promise<boolean>((resolve, _reject) => {
-		fs.exists(file, (value) => {
-			resolve(value);
-		});
-	});
+    return new Promise<boolean>((resolve, _reject) => {
+        fs.exists(file, (value) => {
+            resolve(value);
+        });
+    });
 }
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
-      return ';';
+        return ';';
     } else {
         return ':';
     }
@@ -59,13 +59,13 @@ interface GenericTask {
 }
 
 export class SaxonTaskProvider implements vscode.TaskProvider {
-	static SaxonBuildScriptType: string = 'xslt';
-	private tasks: vscode.Task[] = [];
+    static SaxonBuildScriptType: string = 'xslt';
+    private tasks: vscode.Task[] = [];
 
-	constructor(private workspaceRoot: string) { }
+    constructor(private workspaceRoot: string) { }
 
-	public async provideTasks(): Promise<vscode.Task[]> {
-        let rootPath = vscode.workspace.rootPath? vscode.workspace.rootPath: '/';
+    public async provideTasks(): Promise<vscode.Task[]> {
+        let rootPath = vscode.workspace.rootPath ? vscode.workspace.rootPath : '/';
         let tasksPath = path.join(rootPath, '.vscode', 'tasks.json');
         let tasksObject = undefined;
 
@@ -73,7 +73,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             const tasksText = fs.readFileSync(tasksPath).toString('utf-8');
             const taskLines = tasksText.split("\n");
             const jsonTaskLines: string[] = [];
-            taskLines.forEach((taskLine) =>  {
+            taskLines.forEach((taskLine) => {
                 if (taskLine.trimLeft().startsWith('//')) {
                     // don't add comment
                 } else {
@@ -84,33 +84,33 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             tasksObject = JSON.parse(jsonString);
 
         } else {
-            tasksObject = {tasks: []};
+            tasksObject = { tasks: [] };
         }
 
-		return this.getTasks(tasksObject);
-	}
-
-	public resolveTask(_task: vscode.Task): vscode.Task | undefined {	
-        return undefined;	
+        return this.getTasks(tasksObject);
     }
-    
+
+    public resolveTask(_task: vscode.Task): vscode.Task | undefined {
+        return undefined;
+    }
+
     private getProp(obj: any, prop: string): string {
         return obj[prop];
     }
 
-	private getTasks(tasksObject: TasksObject): vscode.Task[] {
+    private getTasks(tasksObject: TasksObject): vscode.Task[] {
         this.tasks = [];
 
-		let newTaskLabel = 'Saxon Transform (New)';
-		let saxonJarDefault = '${config:XSLT.tasks.saxonJar}'
-		let source = 'xslt';
-		let xmlSourceValue = '${file}';
-		let xsltFilePath = '${file}';
+        let newTaskLabel = 'Saxon Transform (New)';
+        let saxonJarDefault = '${config:XSLT.tasks.saxonJar}'
+        let source = 'xslt';
+        let xmlSourceValue = '${file}';
+        let xsltFilePath = '${file}';
         let resultPathValue = '${workspaceFolder}/xslt-out/result1.xml';
 
         let tasks: GenericTask[] = tasksObject.tasks;
         let addNewTask = true;
-        
+
         for (let i = 0; i < tasks.length + 1; i++) {
             let genericTask: GenericTask;
             if (i === tasks.length) {
@@ -125,13 +125,13 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                     };
                     genericTask = xsltTask;
                 } else {
-                    genericTask = {type: 'ignore'};
+                    genericTask = { type: 'ignore' };
                 }
             } else {
                 genericTask = tasks[i];
             }
             if (genericTask.type === 'xslt') {
-                let xsltTask: XSLTTask = <XSLTTask> genericTask;
+                let xsltTask: XSLTTask = <XSLTTask>genericTask;
                 if (xsltTask.label === 'xslt: ' + newTaskLabel || xsltTask.label === newTaskLabel) {
                     // do not add a new task if there's already a task with the 'new' task label
                     addNewTask = false;
@@ -142,7 +142,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 
                 let commandLineArgs: string[] = [];
 
-                let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
+                let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
                 let xsltParametersCommand: string[] = []
                 for (const param of xsltParameters) {
                     xsltParametersCommand.push('"' + param.name + '=' + param.value + '"');
@@ -151,24 +151,51 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 if (xsltTask.classPathEntries) {
                     classPaths = classPaths.concat(xsltTask.classPathEntries);
                 }
-                
+
                 for (const propName in xsltTask) {
                     let propValue = this.getProp(xsltTask, propName);
                     switch (propName) {
-                        case 'xsltFile': 
+                        case 'xsltFile':
                             commandLineArgs.push('-xsl:' + propValue);
                             break
                         case 'xmlSource':
                             commandLineArgs.push('-s:' + propValue);
                             break;
-                        case 'resultPath': 
+                        case 'resultPath':
                             commandLineArgs.push('-o:' + propValue);
                             break
                         case 'initialTemplate':
                             commandLineArgs.push('-it:' + propValue);
                             break;
-                        case 'initialMode': 
+                        case 'initialMode':
                             commandLineArgs.push('-im:' + propValue);
+                            break;
+                        case 'catalogFilenames':
+                            commandLineArgs.push('-catalog:' + propValue);
+                            break;
+                        case 'configFilename':
+                            commandLineArgs.push('-config:' + propValue);
+                            break;
+                        case 'dtd':
+                            commandLineArgs.push('-dtd:' + propValue);
+                            break;
+                        case 'enableAssertions':
+                            commandLineArgs.push('-ea' + propValue);
+                            break;
+                        case 'expandValues':
+                            commandLineArgs.push('-expand:' + propValue);
+                            break;
+                        case 'explainFilename':
+                            commandLineArgs.push('-explain:' + propValue);
+                            break;
+                        case 'exportFilename':
+                            commandLineArgs.push('-export:' + propValue);
+                            break;
+                        case 'traceOutFilename':
+                            commandLineArgs.push('-traceOut:' + propValue);
+                            break;
+                        case 'timing':
+                            commandLineArgs.push('-t');
                             break;
                     }
                 }
@@ -178,7 +205,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 }
 
                 let classPathString = classPaths.join(pathSeparator());
-                let resolvedCommandLine = commandLineArgs.join(' ');         
+                let resolvedCommandLine = commandLineArgs.join(' ');
                 // this is overriden if problemMatcher is set in the tasks.json file      
                 let problemMatcher = "$saxon-xslt";
                 let commandline = `java -cp ${classPathString} net.sf.saxon.Transform ${resolvedCommandLine}`;
@@ -187,7 +214,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             }
         }
 
-		return this.tasks;
+        return this.tasks;
 
-	}
+    }
 }
