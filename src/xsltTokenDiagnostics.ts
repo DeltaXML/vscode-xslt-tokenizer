@@ -548,7 +548,8 @@ export class XsltTokenDiagnostics {
 											if (docType === DocumentTypes.DCP) {
 												importedGlobalVarNames.push(poppedData.currentVariable.name);
 												globalVariableData.push(poppedData.currentVariable);
-											} else {
+											} else if (elementStack.length > 1) {
+												// reset inscope variables - unless at global-variable stack-level
 												inScopeVariablesList.push(poppedData.currentVariable);
 											}
 										}
