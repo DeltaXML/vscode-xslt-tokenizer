@@ -4,7 +4,7 @@
                 expand-text="yes"
                 version="3.0">  
     
-    <xsl:variable name="var1" select="'test'"></xsl:variable>
+    <xsl:variable name="var1" select="/*/@xml:*"></xsl:variable>
     
     <xsl:variable name="var2" select="$var1"/>
         

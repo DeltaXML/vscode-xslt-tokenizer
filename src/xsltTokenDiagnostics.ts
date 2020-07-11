@@ -991,7 +991,7 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.nodeType:
 						if (token.value === ':*' && prevToken && !prevToken.error) {
 							let pfx = prevToken.tokenType === TokenLevelState.attributeNameTest? prevToken.value.substring(1): prevToken.value;
-							if (inheritedPrefixes.indexOf(pfx) === -1) {
+							if (inheritedPrefixes.indexOf(pfx) === -1 && pfx !== 'xml') {
 								prevToken['error'] = ErrorType.XPathPrefix;
 								problemTokens.push(prevToken);
 							}
@@ -1011,7 +1011,7 @@ export class XsltTokenDiagnostics {
 							} else {
 								tokenValue = token.value.substr(1);
 								validationType= ValidationType.XMLAttribute;
-								skipValidation = token.value === '@';
+								skipValidation = token.value === '@' || token.value === '@xml';
 							}
 							if (!skipValidation) {
 								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
