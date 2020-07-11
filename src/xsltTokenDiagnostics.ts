@@ -33,6 +33,12 @@ enum AttributeType {
 	ExcludeResultPrefixes
 }
 
+enum CurlyBraceType {
+	None,
+	Map,
+	Array
+}
+
 interface XSLTToken extends BaseToken {
 	tagType?: TagType
 }
@@ -55,6 +61,7 @@ interface XPathData {
 	function?: BaseToken;
 	functionArity?: number;
 	isRangeVar?: boolean;
+	curlyBraceType?: CurlyBraceType;
 }
 
 interface VariableData {
@@ -800,6 +807,50 @@ export class XsltTokenDiagnostics {
 
 				switch (xpathTokenType) {
 					case TokenLevelState.string:
+						if (prevToken) {
+							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+							if (!isXMLToken) {
+								let isXPathError = true;
+								let prevType = <TokenLevelState>prevToken.tokenType;
+								let prevCharType = <CharLevelState>prevToken.charType;
+								let pv = prevToken.value;
+								switch (prevType) {
+									case TokenLevelState.operator:
+										switch (prevCharType) {
+											case CharLevelState.lB:
+											case CharLevelState.lBr:
+											case CharLevelState.lPr:
+												isXPathError = false;
+												break;
+											case CharLevelState.sep:
+												isXPathError = !(pv === '=' || pv === ',');
+												// TODO maps: map { 'a' : 'b'}
+												if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].curlyBraceType === CurlyBraceType.Map) {
+													isXPathError = !(pv === ':' || pv === '=' || pv === ',' || pv === '!');
+												} else {
+													isXPathError = !(pv === '=' || pv === ',' || pv === '!');
+												}
+												break;
+											case CharLevelState.dSep:
+												isXPathError = !(pv === '!=' || pv === '||')
+												break;
+											case CharLevelState.lName:
+												isXPathError = !(pv === '&lt;' || pv === '&gt;' || pv === 'eq' || pv === 'ne' || pv === 'gt' || pv === 'lt');
+												break;
+										}
+										break;
+									case TokenLevelState.complexExpression:
+										isXPathError = false;
+										break;
+								}
+								if (isXPathError) {
+									token['error'] = ErrorType.XPathUnexpected;
+									problemTokens.push(token);
+								}
+							}
+						}
+						
+
 						if (xpathStack.length > 0) {
 							let xp = xpathStack[xpathStack.length - 1];
 							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
@@ -888,7 +939,16 @@ export class XsltTokenDiagnostics {
 						let functionToken: BaseToken|null = null;
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
-								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
+								let curlyBraceType = CurlyBraceType.None;
+								if (prevToken && prevToken.tokenType === TokenLevelState.operator) {
+									if (prevToken.value === 'map') {
+										curlyBraceType = CurlyBraceType.Map;
+									} else if (prevToken.value === 'array') {
+										curlyBraceType = CurlyBraceType.Array;
+									}
+								}
+
+								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType});
 								if (anonymousFunctionParams) {	
 									// handle case: function($a) {$a + 8} pass params to inside '{...}'				
 									inScopeXPathVariablesList = anonymousFunctionParamList;
@@ -1524,6 +1584,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLDeclaration:
 					msg = `XML: Invalid content in XML declaration: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathUnexpected:
+					msg = `XPath: Expression context - unexpected token here: ${tokenValue} `;
 					break;
 				case ErrorType.XPathName:
 					msg = `XPath: Invalid name: '${tokenValue}'`;

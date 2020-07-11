@@ -4,13 +4,8 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:mode on-no-match="shallow-copy"/>
-    
-    <xsl:template match="test" mode="#default">
-        <xsl:copy>
-            <xsl:apply-templates select="@*, node()"/>
-        </xsl:copy>
-    </xsl:template>
+    <xsl:variable name="test" as="xs:string" select="if (0) then 'b' else 'c'"/>    
+
         
     
 
