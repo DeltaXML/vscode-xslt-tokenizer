@@ -84,6 +84,7 @@ export class XMLConfiguration {
 		tvtAttributes: [],
 		nonNativeAvts: false,
 		rootElementSnippets: XMLSnippets.xsltRootTags,
+		elementSnippets: XMLSnippets.generalTags,
 		docType: DocumentTypes.Other
 	} 
 }

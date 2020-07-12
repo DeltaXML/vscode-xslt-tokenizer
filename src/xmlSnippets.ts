@@ -16,4 +16,46 @@ export class XMLSnippets {
 </\${1:element}>`
 	}
 ];
+	static generalTags: Snippet[] = [
+		{
+			name: 'block-start-end-tag-with',
+			description: 'with attribute',
+			body:
+			`\${1:element} \${2:attribute}="\${3:value}">			 
+\t\$0						 
+</\${1:element}>`
+		},
+		{
+			name: 'inline-start-end-tag-with',
+			description: 'with attribute',
+			body:
+			`\${1:element} \${2:attribute}="\${3:value}">\${4:text}</\${1:element}>$0`
+		},
+		{
+			name: 'self-closed-tag-with',
+			description: 'with attribute',
+			body:
+			`\${1:element} \${2:attribute}="\${3:value}"\$0/>`
+		},
+		{
+			name: 'block-start-end-tag',
+			description: 'no attribute',
+			body:
+			`\${1:element}>			 
+\t\$0						 
+</\${1:element}>`
+		},
+		{
+			name: 'inline-start-end-tag',
+			description: 'no attribute',
+			body:
+			`\${1:element}>\${2:text}</\${1:element}>$0`
+		},
+		{
+			name: 'self-closed-tag',
+			description: 'no attribute',
+			body:
+			`\${1:element}$0/>`
+		}
+	]
 }

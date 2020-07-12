@@ -215,7 +215,7 @@ export class XsltTokenCompletions {
 									if (elementStack.length === 0) {
 										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
 									} else {										
-										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(docType, schemaQuery, position, elementStack)
+										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(docType, languageConfig, schemaQuery, position, elementStack)
 									}
 								}
 								tagAttributeNames = [];
@@ -1105,9 +1105,9 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getXSLTTagCompletions(docType: DocumentTypes, schemaQuery: SchemaQuery|undefined, pos: vscode.Position, elementStack: ElementData[]) {
+	private static getXSLTTagCompletions(docType: DocumentTypes, languageConfig: LanguageConfiguration, schemaQuery: SchemaQuery|undefined, pos: vscode.Position, elementStack: ElementData[]) {
 		if (!schemaQuery) {
-			return [];
+			return XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.elementSnippets);
 		}
 		let expectedTags: [string, string][] = [];
 		let xsltParent: string|null = null;

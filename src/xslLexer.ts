@@ -127,7 +127,8 @@ export interface LanguageConfiguration {
     resourceNames?: string[],
     featureNames?: string[],
     propertyNames?: string[],
-    rootElementSnippets?: Snippet[]
+    rootElementSnippets?: Snippet[],
+    elementSnippets?: Snippet[]
 }
 
 export interface GlobalInstructionData {
