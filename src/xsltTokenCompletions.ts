@@ -12,6 +12,7 @@ import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTSnippets, Snippet } from './xsltSnippets';
+import { XMLSnippets } from './xmlSnippets';
 
 enum TagType {
 	XSLTstart,
@@ -1227,7 +1228,7 @@ export class XsltTokenCompletions {
 
 	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery|undefined, pos: vscode.Position, xsltParent: string, existingAttrs: string[]) {
 		if (!schemaQuery) {
-			return [];
+			return this.getXSLTSnippetCompletions(XMLSnippets.generalAttributes);
 		}
 		let expectedAttributes: string[] = [];
 
