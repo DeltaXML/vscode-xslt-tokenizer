@@ -6,15 +6,12 @@
  */
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
-import { SchemaQuery, Expected } from './schemaQuery';
-import { XSLTConfiguration } from './languageConfigurations';
+import { SchemaQuery } from './schemaQuery';
 import { XSLTSnippets, Snippet } from './xsltSnippets';
-import { DCPSnippets } from './dcpSnippets';
-import { DCPSchema } from './dcpSchema';
 
 enum TagType {
 	XSLTstart,
