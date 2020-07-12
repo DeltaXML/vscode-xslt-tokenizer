@@ -30,6 +30,7 @@ In addition to XSLT, other languages/vocabularies with embedded XPath will be su
    - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax
  -  Follow `xsl:include`/`xsl:import` links
  - Custom XML Editing Featues:
+   - XML Context-Aware Snippets
    - XML Well-Formedness Checking
    - Tag Rename
    - Auto tag-close
