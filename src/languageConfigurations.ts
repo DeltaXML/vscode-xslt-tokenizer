@@ -4,6 +4,7 @@ import { DCPSchema } from './dcpSchema';
 import { XSLTSchema } from './xsltSchema';
 import { DCPSnippets } from './dcpSnippets';
 import { XSLTSnippets } from './xsltSnippets';
+import { XMLSnippets } from './xmlSnippets';
 
 export class XSLTConfiguration {
 	// Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
@@ -77,12 +78,12 @@ export class XProcConfiguration {
 }
 
 export class XMLConfiguration {
-	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {
 		expressionAtts: [],
 		nativePrefix: 'qz',
 		tvtAttributes: [],
 		nonNativeAvts: false,
+		rootElementSnippets: XMLSnippets.xsltRootTags,
 		docType: DocumentTypes.Other
 	} 
 }

@@ -44,6 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const dcpDiagnosticsCollection = vscode.languages.createDiagnosticCollection('dcp');
 	const dcpSymbolProvider = new DCPSymbolProvider(DCPConfiguration.configuration, dcpDiagnosticsCollection);
 	const dcpDefintiionProvider = new XsltDefinitionProvider(DCPConfiguration.configuration);
+	const xmlDefinitionProvider = new XsltDefinitionProvider(XMLConfiguration.configuration);
 
 
 	const xsltDefintiionProvider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
@@ -68,6 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt'}, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt'}, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp'}, dcpDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xml'}, xmlDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt'}, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp'}, dcpLinkProvider));
 

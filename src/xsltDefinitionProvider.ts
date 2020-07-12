@@ -121,9 +121,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let xslVariable = ['xsl:variable', 'xsl:param'];
 			
 			let completions: vscode.CompletionItem[]|undefined;
-			if (this.schemaData) {
-				completions= XsltTokenCompletions.getCompletions(this.languageConfig, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
-			}
+			completions= XsltTokenCompletions.getCompletions(this.languageConfig, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 			resolve(completions);
 		});
 
