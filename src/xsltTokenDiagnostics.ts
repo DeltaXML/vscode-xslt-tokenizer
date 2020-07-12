@@ -807,6 +807,9 @@ export class XsltTokenDiagnostics {
 
 				switch (xpathTokenType) {
 					case TokenLevelState.string:
+						if (token.error) {
+							problemTokens.push(token);
+						}
 						if (prevToken) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 							if (!isXMLToken) {
@@ -1596,6 +1599,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.DTD:
 					msg = `XML: DTD position error: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathStringLiteral:
+					msg = `String literal not terminated properly: ${tokenValue}`
 					break;
 				case ErrorType.XPathFunction:
 					let parts = tokenValue.split('#');

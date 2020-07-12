@@ -446,6 +446,15 @@ export class XPathLexer {
                 }
                 if (exitAnalysis) {
                     this.update(poppedContext, result, tokenChars, currentLabelState);
+                    if (result.length > 0) {
+                        let lastToken = result[result.length - 1];
+                        if (lastToken.tokenType === TokenLevelState.string) {
+                            let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
+                            if (!(lastChar === '"' || lastChar === '\'')) {
+                                lastToken['error'] = ErrorType.XPathStringLiteral;
+                            }
+                        }
+                    }
                     position.line = this.lineNumber;
                     position.startCharacter = this.tokenCharNumber;
                     position.documentOffset = i;
@@ -1069,6 +1078,7 @@ export enum ErrorType {
     XMLAttEqualExpected,
     XMLDupllicateAtt,
     XPathUnexpected,
+    XPathStringLiteral,
     BracketNesting,
     XSLTKeyUnresolved,
     XMLRootMissing,
