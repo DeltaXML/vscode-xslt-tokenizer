@@ -216,11 +216,7 @@ export class XsltTokenCompletions {
 							case XMLCharState.lSt:
 								if (isOnRequiredToken) {
 									if (elementStack.length === 0) {
-										if (isXSLT) {
-											resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltRootTags);
-										} else if (docType === DocumentTypes.DCP) {
-											resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(DCPSnippets.xsltRootTags);
-										}
+										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
 									} else {										
 										resultCompletions =  XsltTokenCompletions.getXSLTTagCompletions(docType, schemaQuery, position, elementStack)
 									}
@@ -1217,8 +1213,10 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getXSLTSnippetCompletions(snippets: Snippet[]) {
-
+	private static getXSLTSnippetCompletions(snippets: Snippet[]|undefined) {
+		if (!snippets) {
+			return [];
+		}
 		let completionItems: vscode.CompletionItem[] = [];
 		snippets.forEach((snippet) => {
 			const newItem = new vscode.CompletionItem(snippet.name, vscode.CompletionItemKind.Struct);

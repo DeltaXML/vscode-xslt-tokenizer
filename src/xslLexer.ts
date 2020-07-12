@@ -10,6 +10,7 @@
 
 import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType} from "./xpLexer";
 import { SchemaData } from "./xsltSchema";
+import { Snippet} from './xsltSnippets';
 
 export enum DocumentTypes {
 	XSLT,
@@ -125,7 +126,8 @@ export interface LanguageConfiguration {
     docType: DocumentTypes,
     resourceNames?: string[],
     featureNames?: string[],
-    propertyNames?: string[]
+    propertyNames?: string[],
+    rootElementSnippets?: Snippet[]
 }
 
 export interface GlobalInstructionData {

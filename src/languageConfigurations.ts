@@ -2,6 +2,8 @@ import {LanguageConfiguration, DocumentTypes} from './xslLexer';
 import { DCPSymbolProvider } from './dcpSymbolProvider';
 import { DCPSchema } from './dcpSchema';
 import { XSLTSchema } from './xsltSchema';
+import { DCPSnippets } from './dcpSnippets';
+import { XSLTSnippets } from './xsltSnippets';
 
 export class XSLTConfiguration {
 	// Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
@@ -21,6 +23,7 @@ export class XSLTConfiguration {
 		nativePrefix: XSLTConfiguration.xsltPrefix,
 		tvtAttributes: ['expand-text'],
 		nonNativeAvts: true,
+		rootElementSnippets: XSLTSnippets.xsltRootTags,
 		schemaData: new XSLTSchema(),
 		docType: DocumentTypes.XSLT
 	} 
@@ -37,6 +40,7 @@ export class DCPConfiguration {
 		nonNativeAvts: false,
 		schemaData: new DCPSchema(),
 		docType: DocumentTypes.DCP,
+		rootElementSnippets: DCPSnippets.xsltRootTags,
 		resourceNames: [
 			'xsl/apply-ignore-changes.xsl',
 			'xsl/attribute-ignore-changes-marker.xsl',
