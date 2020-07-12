@@ -118,6 +118,8 @@ For word selection/navigation, by default, names like $two-parts are treated as 
 
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
+___
+
 ## Support for other languages with embedded XPath
 
 In addition to XSLT, other XML-based languages/vocabularies with embedded XPath will be supported in future in this extension. Currently, DeltaXML's [Document Comparison Pipeline (DCP)](https://docs.deltaxml.com/xml-compare/latest/dcp-user-guide-9340381.html) format is supported, acting as a pilot for other languages.
