@@ -302,14 +302,19 @@ export class XsltTokenDiagnostics {
 							isValid = true;
 							break;
 						case CharLevelState.dSep:
-							isValid = prevToken.value === '()';
+							isValid = prevToken.value === '()' || prevToken.value === '[]';
 							break;
 						default:
-							if (prevToken.value === '/' || prevToken.value === '*' || prevToken.value === '.') {
+							if (prevToken.value === '/' || prevToken.value === '.') {
 								// these are ok provided that the previous token was XSLT or previous token was ,;
 								let prevToken2 = allTokens[index - 2];
 								let tokenBeforePrevWasXSLT = prevToken2.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
-								isValid = tokenBeforePrevWasXSLT || prevToken2.value === ',';
+								isValid = tokenBeforePrevWasXSLT || (
+									prevToken2.tokenType === TokenLevelState.operator && 
+									prevToken2.charType !== CharLevelState.rB && 
+									prevToken2.charType !== CharLevelState.rBr && 
+									prevToken2.charType !== CharLevelState.rPr
+									);
 							}
 							break;
 					}
