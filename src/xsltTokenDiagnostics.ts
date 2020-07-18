@@ -829,24 +829,25 @@ export class XsltTokenDiagnostics {
 								let pv = prevToken.value;
 								switch (prevType) {
 									case TokenLevelState.operator:
+										isXPathError = false;
 										switch (prevCharType) {
-											case CharLevelState.lB:
-											case CharLevelState.lBr:
-											case CharLevelState.lPr:
-												isXPathError = false;
+											case CharLevelState.rB:
+											case CharLevelState.rBr:
+											case CharLevelState.rPr:
+												isXPathError = true;
 												break;
 											case CharLevelState.sep:
 												if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].curlyBraceType === CurlyBraceType.Map) {
-													isXPathError = !(pv === ':' || pv === '=' || pv === ',' || pv === '!');
+													isXPathError = !(pv === ':' || pv === '=' || pv === ',' || pv === '!' || pv === '<' || pv === '>');
 												} else {
-													isXPathError = !(pv === '=' || pv === ',' || pv === '!');
+													isXPathError = !(pv === '=' || pv === ',' || pv === '!' || pv === '<' || pv === '>');
 												}
 												break;
 											case CharLevelState.dSep:
-												isXPathError = !(pv === '!=' || pv === '||')
+												isXPathError = !(pv === '!=' || pv === '||' || pv === '<=' || pv === '>=')
 												break;
 											case CharLevelState.lName:
-												isXPathError = !(pv === '&lt;' || pv === '&gt;' || pv === 'eq' || pv === 'ne' || pv === 'gt' || pv === 'lt');
+												isXPathError = !(pv === '&lt;' || pv === '&gt;' || pv === 'eq' || pv === 'ne' || pv === 'gt' || pv === 'lt' || pv === 'ge' || pv === 'le' || pv === 'and' || pv === 'or');
 												break;
 										}
 										break;
