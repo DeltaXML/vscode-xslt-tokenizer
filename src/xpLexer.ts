@@ -902,7 +902,7 @@ export class XPathLexer {
                 }
                 break;
             case CharLevelState.dSep:
-                if (currentToken.value === ':*') {
+                if (currentToken.value === ':*' || currentToken.value === '..') {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
                 }
