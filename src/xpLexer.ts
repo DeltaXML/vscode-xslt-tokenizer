@@ -45,6 +45,7 @@ export enum CharLevelState {
     rSqEnt,  // 31
     lDqEnt,  // 33
     rDqEnt,  // 34
+    dot
 }
 
 /*
@@ -509,6 +510,7 @@ export class XPathLexer {
                         case CharLevelState.dSep2:
                             break;
                         case CharLevelState.sep:
+                        case CharLevelState.dot:
                             this.update(poppedContext, result, tokenChars, currentLabelState);
                             this.updateResult(poppedContext, result, new BasicToken(currentChar, nextLabelState));
                             break;
@@ -644,6 +646,7 @@ export class XPathLexer {
             case CharLevelState.rBr:
             case CharLevelState.rPr:
             case CharLevelState.sep:
+            case CharLevelState.dot:
                 result = true;
         }
         return result;
@@ -846,12 +849,8 @@ export class XPathLexer {
                     case CharLevelState.lDq:
                     case CharLevelState.rDqEnt:
                     case CharLevelState.rSqEnt:
+                    case CharLevelState.dot:
                         Data.setAsOperatorIfKeyword(currentToken);
-                        break;
-                    case CharLevelState.sep:
-                        if (prevToken.value === '.') {
-                            Data.setAsOperatorIfKeyword(currentToken);
-                        }
                         break;
                     case CharLevelState.dSep:
                         if (prevToken.value === '()' || prevToken.value === '..') {
@@ -982,8 +981,11 @@ export class XPathLexer {
                     rv = CharLevelState.dSep;
                     break;
                 } else if (Data.separators.indexOf(char) > -1) {
-                    if (char === '.' && !!(nextChar) && XPathLexer.isDigit(nextChar.charCodeAt(0))) {
+                    let isDot = char === '.';
+                    if (isDot && !!(nextChar) && XPathLexer.isDigit(nextChar.charCodeAt(0))) {
                         rv = CharLevelState.lNl;
+                    } else if (isDot) {
+                        rv = CharLevelState.dot;
                     } else {
                         rv = CharLevelState.sep;
                     }
@@ -996,7 +998,7 @@ export class XPathLexer {
                             // '..' parent axis
                             rv = CharLevelState.dSep;
                         } else {
-                            rv = XPathLexer.isDigit(nextCharCode)? CharLevelState.lNl : CharLevelState.sep;
+                            rv = XPathLexer.isDigit(nextCharCode)? CharLevelState.lNl : CharLevelState.dot;
                         }
                     } else if (XPathLexer.isDigit(charCode)) {
                         rv = CharLevelState.lNl;
@@ -1162,6 +1164,9 @@ class BasicToken implements Token {
                 break;
             case CharLevelState.dSep:
                 this.tokenType = value === ':='? TokenLevelState.complexExpression: TokenLevelState.operator;
+                break;
+            case CharLevelState.dot:
+                this.tokenType = TokenLevelState.nodeType;
                 break;
             case CharLevelState.sep:
             case CharLevelState.lB:

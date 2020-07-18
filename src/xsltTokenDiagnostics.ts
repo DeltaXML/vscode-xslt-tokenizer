@@ -97,6 +97,11 @@ export class XsltTokenDiagnostics {
 	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
 	private static readonly excludePrefixes = 'exclude-result-prefixes';
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
+	private static readonly brackets = [CharLevelState.lB, CharLevelState.lBr, CharLevelState.lPr, CharLevelState.rB, CharLevelState.rBr, CharLevelState.rPr];
+
+	private static isBracket(charState: CharLevelState) {
+		return XsltTokenDiagnostics.brackets.indexOf(charState) !== -1;
+	}
 
 	private static validateName(name: string, type: ValidationType, startCharRgx: RegExp, charRgx: RegExp, xmlnsPrefixes: string[]): NameValidationError {
 		let valid = NameValidationError.None
@@ -302,7 +307,7 @@ export class XsltTokenDiagnostics {
 							isValid = true;
 							break;
 						case CharLevelState.dSep:
-							isValid = prevToken.value === '()' || prevToken.value === '[]';
+							isValid = prevToken.value === '()' || prevToken.value === '[]' || prevToken.value === '{}';
 							break;
 						default:
 							if (prevToken.value === '/' || prevToken.value === '.') {
@@ -831,8 +836,6 @@ export class XsltTokenDiagnostics {
 												isXPathError = false;
 												break;
 											case CharLevelState.sep:
-												isXPathError = !(pv === '=' || pv === ',');
-												// TODO maps: map { 'a' : 'b'}
 												if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].curlyBraceType === CurlyBraceType.Map) {
 													isXPathError = !(pv === ':' || pv === '=' || pv === ',' || pv === '!');
 												} else {
@@ -944,6 +947,75 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.operator:
+						let isXPathError = false;
+						let isNextDigit = index + 1 < allTokens.length? allTokens[index + 1].tokenType === TokenLevelState.number: false;
+						let tv = token.value;
+
+						// start checks
+						if (prevToken && !prevToken.error && !((tv === '+' || tv === '-') && isNextDigit) && !(tv === 'map' || tv === 'array')) {
+							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+							if (!isXMLToken && prevToken.tokenType === TokenLevelState.operator) {
+								// current type is operator and previous type is operator
+								let currCharType = <CharLevelState>token.charType;
+								let prevCharType = <CharLevelState>prevToken.charType;
+								let pv = prevToken.value;
+
+								switch (currCharType) {
+									case CharLevelState.rB:
+									case CharLevelState.rBr:
+									case CharLevelState.rPr:
+										if (!XsltTokenDiagnostics.isBracket(prevCharType)) {
+											// +) is not ok but )) or ( ) is ok
+											if (!(
+												(prevToken.charType === CharLevelState.sep && pv === '?' && tv === ')') 
+												|| (prevToken.charType === CharLevelState.dSep && (pv === '{}' || pv === '()' || pv === '[]')))
+												) {
+												isXPathError = true;
+											}
+										}
+										break;
+									case CharLevelState.dSep:
+										if (!((tv === '{}' && (pv === 'map' || pv === 'array')) || tv === '()' || tv === '[]')) {
+											isXPathError = true;
+										}
+										break;
+									case CharLevelState.lB:
+									case CharLevelState.lBr:
+									case CharLevelState.lPr:
+										// +( is ok
+										break;
+									default:
+										switch (prevCharType) {
+											case CharLevelState.rB:
+											case CharLevelState.rBr:
+											case CharLevelState.rPr:
+												// ), or )+ are ok
+												break;
+											case CharLevelState.dSep:
+												if (!(pv === '()' || pv === '{}' || pv === '[]')) {
+													isXPathError = true;
+												}
+												break;
+											default:
+												// (+ or ++ are not ok
+												if (!(
+													(pv === '?' && (tv === ',' || tv === ')')) || 
+													(tv === '?' && (pv === '(' || pv === ')' || pv === ',')))
+													) {
+													isXPathError = true;
+												}
+												break;
+										}
+								}
+
+								if (isXPathError) {
+									token['error'] = ErrorType.XPathUnexpected;
+									problemTokens.push(token);
+									// token is pushed onto problemTokens later
+								}
+							}
+						}
+						// end checks
 						let functionToken: BaseToken|null = null;
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
@@ -1021,7 +1093,7 @@ export class XsltTokenDiagnostics {
 										xpathVariableCurrentlyBeingDefined = false;
 									}
 								}
-								if (token.error) {
+								if (token.error && !isXPathError) {
 									// any error should already have been added by lexer:
 									problemTokens.push(token);
 								}
