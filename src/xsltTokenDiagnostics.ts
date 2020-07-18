@@ -950,9 +950,9 @@ export class XsltTokenDiagnostics {
 						let isXPathError = false;
 						let isNextDigit = index + 1 < allTokens.length? allTokens[index + 1].tokenType === TokenLevelState.number: false;
 						let tv = token.value;
-
+						
 						// start checks
-						if (prevToken && !prevToken.error && !((tv === '+' || tv === '-') && isNextDigit) && !(tv === 'map' || tv === 'array')) {
+						if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error && !((tv === '+' || tv === '-') && isNextDigit) && !(tv === 'map' || tv === 'array')) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 							if (!isXMLToken && prevToken.tokenType === TokenLevelState.operator) {
 								// current type is operator and previous type is operator
