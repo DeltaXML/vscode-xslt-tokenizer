@@ -912,10 +912,12 @@ export class XPathLexer {
 
     testChar(existingState: CharLevelState, isFirstChar: boolean, char: string, nextChar: string, nesting: number) {
         let rv: CharLevelState;
+
+        if (isFirstChar && char === 'Q' && nextChar === '{') {
+            rv = CharLevelState.lUri;
+            return {rv, nesting};
+        }
         switch (char) {
-            case 'Q':
-                rv = (nextChar === '{')? CharLevelState.lUri : existingState;
-                break;
             case '(':
                 if (nextChar === ':') {
                     rv = CharLevelState.lC;

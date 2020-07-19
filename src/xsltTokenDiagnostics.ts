@@ -976,7 +976,10 @@ export class XsltTokenDiagnostics {
 										}
 										break;
 									case CharLevelState.dSep:
-										if (!((tv === '{}' && (pv === 'map' || pv === 'array')) || tv === '()' || tv === '[]')) {
+										if (prevCharType === CharLevelState.rB || prevCharType === CharLevelState.rPr || prevCharType === CharLevelState.rBr) {
+											// allow: ) !=
+											isXPathError = false;
+										} else if (!((tv === '{}' && (pv === 'map' || pv === 'array')) || tv === '()' || tv === '[]')) {
 											isXPathError = true;
 										}
 										break;
