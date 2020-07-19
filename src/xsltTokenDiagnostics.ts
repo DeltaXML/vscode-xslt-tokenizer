@@ -978,8 +978,10 @@ export class XsltTokenDiagnostics {
 									case CharLevelState.dSep:
 										if (prevCharType === CharLevelState.rB || prevCharType === CharLevelState.rPr || prevCharType === CharLevelState.rBr) {
 											// allow: ) !=
+											isXPathError = tv === '*:';
+										} else if (tv === '*:') {
 											isXPathError = false;
-										} else if (!((tv === '{}' && (pv === 'map' || pv === 'array')) || tv === '()' || tv === '[]')) {
+ 										} else if (!((tv === '{}' && (pv === 'map' || pv === 'array')) || tv === '()' || tv === '[]')) {
 											isXPathError = true;
 										}
 										break;
@@ -1004,8 +1006,8 @@ export class XsltTokenDiagnostics {
 												// (+ or ++ are not ok
 												if (!(
 													(pv === '?' && (tv === ',' || tv === ')')) || 
-													(tv === '?' && (pv === '(' || pv === ')' || pv === ',')))
-													) {
+													(tv === '?' && (pv === '(' || pv === ')' || pv === ','))
+												)) {
 													isXPathError = true;
 												}
 												break;

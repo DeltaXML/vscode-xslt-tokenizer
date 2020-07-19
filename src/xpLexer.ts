@@ -98,7 +98,7 @@ export enum ModifierState {
 export class Data {
     public static separators = ['!','*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?','|'];
 
-    public static doubleSeps = ['!=', '*:', '..', '//', ':*', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
+    public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
 
     public static axes = [ "ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self", 
                             "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"];
