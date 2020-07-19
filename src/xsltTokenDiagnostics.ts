@@ -976,7 +976,9 @@ export class XsltTokenDiagnostics {
 										}
 										break;
 									case CharLevelState.dSep:
-										if (prevCharType === CharLevelState.rB || prevCharType === CharLevelState.rPr || prevCharType === CharLevelState.rBr) {
+										if (prevCharType === CharLevelState.rB || prevCharType === CharLevelState.rPr || prevCharType === CharLevelState.rBr ||
+											(prevCharType === CharLevelState.dSep && (pv === '()' || pv === '[]' || pv === '{}'))
+											) {
 											// allow: ) !=
 											isXPathError = tv === '*:';
 										} else if (tv === '*:') {
