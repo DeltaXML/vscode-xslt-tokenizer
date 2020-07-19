@@ -853,7 +853,7 @@ export class XPathLexer {
                         Data.setAsOperatorIfKeyword(currentToken);
                         break;
                     case CharLevelState.dSep:
-                        if (prevToken.value === '()' || prevToken.value === '..') {
+                        if (prevToken.value === '()' || prevToken.value === '..' || prevToken.value === '[]' || prevToken.value === '{}') {
                             Data.setAsOperatorIfKeyword(currentToken);
                         }
                         break;
