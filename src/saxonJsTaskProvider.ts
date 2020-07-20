@@ -60,7 +60,10 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 
         if (await exists(tasksPath)) {
             const tasksText = fs.readFileSync(tasksPath).toString('utf-8');
-            const taskLines = tasksText.split("\n");
+            const commaFixedTasksText1 = tasksText.replace(/,\s*}/, '}');
+            const commaFixedTasksText2 = commaFixedTasksText1.replace(/,\s*\]/, ']');
+
+            const taskLines = commaFixedTasksText2.split("\n");
             const jsonTaskLines: string[] = [];
             taskLines.forEach((taskLine) =>  {
                 if (taskLine.trimLeft().startsWith('//')) {
@@ -110,7 +113,10 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         label: newTaskLabel,
                         xsltFile: xsltFilePath,
                         xmlSource: xmlSourceValue,
-                        resultPath: resultPathValue
+                        resultPath: resultPathValue,
+                        group: {
+                            kind: "build"
+                        }
                     };
                     genericTask = xsltTask;
                 } else {
@@ -124,9 +130,6 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                 if (xsltTask.label === 'xslt-js: ' + newTaskLabel || xsltTask.label === newTaskLabel) {
                     // do not add a new task if there's already a task with the 'new' task label
                     addNewTask = false;
-                }
-                xsltTask.group = {
-                    kind: 'build'
                 }
 
                 let commandLineArgs: string[] = [];
