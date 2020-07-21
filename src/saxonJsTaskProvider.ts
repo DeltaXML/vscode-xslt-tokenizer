@@ -9,15 +9,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 function exists(file: string): Promise<boolean> {
-	return new Promise<boolean>((resolve, _reject) => {
-		fs.exists(file, (value) => {
-			resolve(value);
-		});
-	});
-}
-
-interface TasksObject {
-    tasks: GenericTask[]
+    return new Promise<boolean>((resolve, _reject) => {
+        fs.exists(file, (value) => {
+            resolve(value);
+        });
+    });
 }
 
 interface XSLTJSTask {
@@ -44,17 +40,16 @@ interface XSLTParameter {
     value: string
 }
 
-interface GenericTask {
-    type: string,
-    group?: object
-}
-
 export class SaxonJsTaskProvider implements vscode.TaskProvider {
-	static SaxonBuildScriptType: string = 'xslt-js';
-	private tasks: vscode.Task[] = [];
+    static SaxonBuildScriptType: string = 'xslt-js';
+    templateTaskLabel = 'Saxon-JS Transform (New)';
+    templateTaskFound = false;
 
-	public async provideTasks(): Promise<vscode.Task[]> {
-        let rootPath = vscode.workspace.rootPath? vscode.workspace.rootPath: '/';
+
+    constructor(private workspaceRoot: string) { }
+
+    public async provideTasks(): Promise<vscode.Task[]> {
+        let rootPath = vscode.workspace.rootPath ? vscode.workspace.rootPath : '/';
         let tasksPath = path.join(rootPath, '.vscode', 'tasks.json');
         let tasksObject = undefined;
 
@@ -65,7 +60,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 
             const taskLines = commaFixedTasksText2.split("\n");
             const jsonTaskLines: string[] = [];
-            taskLines.forEach((taskLine) =>  {
+            taskLines.forEach((taskLine) => {
                 if (taskLine.trimLeft().startsWith('//')) {
                     // don't add comment
                 } else {
@@ -73,113 +68,122 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                 }
             });
             const jsonString = jsonTaskLines.join('\n');
+            console.log(jsonString);
+
             tasksObject = JSON.parse(jsonString);
 
         } else {
-            tasksObject = {tasks: []};
+            tasksObject = { tasks: [] };
         }
 
-		return this.getTasks(tasksObject);
-	}
-
-	public resolveTask(_task: vscode.Task): vscode.Task | undefined {	
-        return undefined;	
+        return this.getTasks(tasksObject.tasks);
     }
-    
+
+    public resolveTask(_task: vscode.Task): vscode.Task | undefined {
+        return this.getTask(_task.definition);
+    }
+
     private getProp(obj: any, prop: string): string {
         return obj[prop];
     }
 
-	private getTasks(tasksObject: TasksObject): vscode.Task[] {
-        this.tasks = [];
+    private getTasks(tasks: XSLTJSTask[]) {
+        let result: vscode.Task[] = [];
+        this.templateTaskFound = false;
+        tasks.forEach((task) => {
+            let newTask = this.getTask(task);
+            if (newTask) {
+                result.push(newTask);
+            }
+        })
+        if (!this.templateTaskFound) {
+            let templateTask = this.addTemplateTask();
+            if (templateTask) {
+                result.push(templateTask);
+            }
+        }
 
-		let newTaskLabel = 'Saxon-JS Transform (New)';
+        return result;
+    }
+
+    private addTemplateTask() {
 		let nodeModulesDefault = '${workspaceFolder}/node_modules'
-		let source = 'xslt-js';
 		let xmlSourceValue = '${file}';
 		let xsltFilePath = '${file}';
         let resultPathValue = '${workspaceFolder}/xslt-out/result1.xml';
 
-        let tasks: GenericTask[] = tasksObject.tasks;
-        let addNewTask = true;
-        
-        for (let i = 0; i < tasks.length + 1; i++) {
-            let genericTask: GenericTask;
-            if (i === tasks.length) {
-                if (addNewTask) {
-                    let xsltTask: XSLTJSTask = {
-                        type: 'xslt-js',
-                        nodeModulesFolder: nodeModulesDefault,
-                        label: newTaskLabel,
-                        xsltFile: xsltFilePath,
-                        xmlSource: xmlSourceValue,
-                        resultPath: resultPathValue,
-                        group: {
-                            kind: "build"
-                        }
-                    };
-                    genericTask = xsltTask;
-                } else {
-                    genericTask = {type: 'ignore'};
-                }
-            } else {
-                genericTask = tasks[i];
+        let xsltTask: XSLTJSTask = {
+            type: 'xslt-js',
+            nodeModulesFolder: nodeModulesDefault,
+            label: this.templateTaskLabel,
+            xsltFile: xsltFilePath,
+            xmlSource: xmlSourceValue,
+            resultPath: resultPathValue,
+            group: {
+                kind: "build"
             }
-            if (genericTask.type === 'xslt-js') {
-                let xsltTask: XSLTJSTask = <XSLTJSTask> genericTask;
-                if (xsltTask.label === 'xslt-js: ' + newTaskLabel || xsltTask.label === newTaskLabel) {
-                    // do not add a new task if there's already a task with the 'new' task label
-                    addNewTask = false;
-                }
+        };
 
-                let commandLineArgs: string[] = [];
+        return this.getTask(xsltTask);
+    }
 
-                let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
-                let xsltParametersCommand: string[] = []
-                for (const param of xsltParameters) {
-                    xsltParametersCommand.push('"' + param.name + '=' + param.value + '"');
-                }
-                
-                for (const propName in xsltTask) {
-                    let propValue = this.getProp(xsltTask, propName);
-                    switch (propName) {
-                        case 'xsltFile': 
-                            commandLineArgs.push('-xsl:' + propValue);
-                            break
-                        case 'xmlSource':
-                            commandLineArgs.push('-s:' + propValue);
-                            break;
-                        case 'resultPath': 
-                            commandLineArgs.push('-o:' + propValue);
-                            break
-                        case 'initialTemplate':
-                            commandLineArgs.push('-it:' + propValue);
-                            break;
-                        case 'initialMode': 
-                            commandLineArgs.push('-im:' + propValue);
-                            break;
-                        case 'export':
-                            commandLineArgs.push('-export:' + propValue);
-                            break;
-                    }
-                }
+    private getTask(genericTask: vscode.TaskDefinition): vscode.Task|undefined {
 
-                let nodeModulesPath = xsltTask.nodeModulesFolder + path.sep + '.bin' + path.sep;
+        let source = 'xslt-js';
 
-                if (xsltParametersCommand.length > 0) {
-                    commandLineArgs.push(xsltParametersCommand.join(' '));
-                }
-
-                let resolvedCommandLine = commandLineArgs.join(' ');         
-                // this is overriden if problemMatcher is set in the tasks.json file      
-                let problemMatcher = "$saxon-xslt-js";
-                let commandline = `${nodeModulesPath}xslt3 ${resolvedCommandLine}`;
-                let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
-                this.tasks.push(newTask);
+        if (genericTask.type === 'xslt-js') {
+            let xsltTask: XSLTJSTask = <XSLTJSTask> genericTask;
+            if (xsltTask.label === 'xslt-js: ' + this.templateTaskLabel) {
+                this.templateTaskFound = true;
             }
+
+            let commandLineArgs: string[] = [];
+
+            let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
+            let xsltParametersCommand: string[] = []
+            for (const param of xsltParameters) {
+                xsltParametersCommand.push('"' + param.name + '=' + param.value + '"');
+            }
+            
+            for (const propName in xsltTask) {
+                let propValue = this.getProp(xsltTask, propName);
+                switch (propName) {
+                    case 'xsltFile': 
+                        commandLineArgs.push('-xsl:' + propValue);
+                        break
+                    case 'xmlSource':
+                        commandLineArgs.push('-s:' + propValue);
+                        break;
+                    case 'resultPath': 
+                        commandLineArgs.push('-o:' + propValue);
+                        break
+                    case 'initialTemplate':
+                        commandLineArgs.push('-it:' + propValue);
+                        break;
+                    case 'initialMode': 
+                        commandLineArgs.push('-im:' + propValue);
+                        break;
+                    case 'export':
+                        commandLineArgs.push('-export:' + propValue);
+                        break;
+                }
+            }
+
+            let nodeModulesPath = xsltTask.nodeModulesFolder + path.sep + '.bin' + path.sep;
+
+            if (xsltParametersCommand.length > 0) {
+                commandLineArgs.push(xsltParametersCommand.join(' '));
+            }
+
+            let resolvedCommandLine = commandLineArgs.join(' ');         
+            // this is overriden if problemMatcher is set in the tasks.json file      
+            let problemMatcher = "$saxon-xslt-js";
+            let commandline = `${nodeModulesPath}xslt3 ${resolvedCommandLine}`;
+            let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
+            return newTask;
+        } else {
+            return undefined;
         }
-
-		return this.tasks;
-
-	}
+        
+    }
 }
