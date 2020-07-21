@@ -74,6 +74,16 @@
 				"XSLT.tasks.saxonJar": {
 					"type": "string",
 					"description": "Path of the installed Saxon jar file"
+				},
+				"XSLT.tasks.java.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable Saxon Tasks"
+				},
+				"XSLT.tasks.js.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable Saxon-JS Tasks"
 				}
 			}
 		},

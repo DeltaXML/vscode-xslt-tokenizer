@@ -108,10 +108,18 @@ export function activate(context: vscode.ExtensionContext) {
 	if (!workspaceRoot) {
 		return;
 	}
-	let xsltTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
-	let xsltjsTaskProvider = vscode.tasks.registerTaskProvider(SaxonJsTaskProvider.SaxonBuildScriptType, new SaxonJsTaskProvider());
-	context.subscriptions.push(xsltTaskProvider);
-	context.subscriptions.push(xsltjsTaskProvider);
+
+	let xsltTaskEnabled = vscode.workspace.getConfiguration('XSLT.tasks.java').get('enabled');
+	if (xsltTaskEnabled) {
+		let xsltTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
+		context.subscriptions.push(xsltTaskProvider);
+	}
+	
+	let xsltJsTaskEnabled = vscode.workspace.getConfiguration('XSLT.tasks.js').get('enabled');
+	if (xsltJsTaskEnabled) {
+		let xsltjsTaskProvider = vscode.tasks.registerTaskProvider(SaxonJsTaskProvider.SaxonBuildScriptType, new SaxonJsTaskProvider(workspaceRoot));
+		context.subscriptions.push(xsltjsTaskProvider);
+	}
 
 }
 
