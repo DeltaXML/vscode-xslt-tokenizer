@@ -698,6 +698,14 @@ export class XsltTokenDiagnostics {
 								hasProblem = true;
 							}
 						}
+						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:function') {
+							if (!variableName.includes(':')) {
+								token['error'] = ErrorType.XSLTFunctionNamePrefix;
+								token.value = variableName;
+								problemTokens.push(token);
+								hasProblem = true;
+							}
+						}
 						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
 							if (globalModes.indexOf(variableName) < 0) {
 								token['error'] = ErrorType.TemplateModeUnresolved;
@@ -1644,6 +1652,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.TemplateNameUnresolved:
 					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.XSLTFunctionNamePrefix:
+					msg = `XSLT: missing namespace prefox in xsl:function name '${tokenValue}'`;
 					break;
 				case ErrorType.AttributeSetUnresolved:
 					msg = `XSLT: xsl:attribute-set with name '${tokenValue}' not found`;

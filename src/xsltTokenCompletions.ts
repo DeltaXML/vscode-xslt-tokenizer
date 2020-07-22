@@ -381,6 +381,9 @@ export class XsltTokenCompletions {
 						} else {
 							attType = AttributeType.Xmlns;
 						}
+						if (isOnRequiredToken) {
+							resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltXMLNS);
+						}
 						break;
 					case XSLTokenLevelState.attributeValue:
 						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);

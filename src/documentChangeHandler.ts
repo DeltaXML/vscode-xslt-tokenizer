@@ -57,6 +57,12 @@ export class DocumentChangeHandler {
 				triggerSuggest = true;
 			}
 		}
+		if (activeChange.rangeOffset > 10) {
+			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
+			if ((prevChar === '\n' || prevChar === ' ') && activeChange.text === 'x') {
+				triggerSuggest = true;
+			}
+		}
 		if (triggerSuggest || activeChange.text === ' ' || activeChange.text === '(' || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
 			setTimeout(() => {
 				vscode.commands.executeCommand('editor.action.triggerSuggest');
