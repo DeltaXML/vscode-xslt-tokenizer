@@ -74,7 +74,6 @@ The Saxon XSLT-Java and XSLT-JS TaskProviders are enabled by default. These can 
 ```
 "XSLT.tasks.java.enabled": true
 "XSLT.tasks.js.enabled": true
-
 ```
 
 ## Formatting
