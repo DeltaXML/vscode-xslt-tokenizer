@@ -1145,6 +1145,12 @@ export class XsltTokenCompletions {
 					completionItems.push(newItem);
 					competionName = tagName + ' name';
 					description = "xsl:template with 'name' attribute";
+				} else if (xsltParent === 'xsl:function' && tagName === 'xsl:param') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:param name="$1" as="$2"/>$0');
+					completionItems.push(newItem);
+					competionName = tagName + ' name';					
 				} else if (tagName === 'xsl:literal-result-element') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem('literal-self-closing-element', vscode.CompletionItemKind.Struct);
