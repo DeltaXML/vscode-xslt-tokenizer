@@ -69,6 +69,14 @@ To use the task-provider for the _Java_ Saxon XSLT Processor, the following sett
   "XSLT.tasks.saxonJar": "/path/to/folder/SaxonHE10-0J/saxon-he-10.0.jar"
 ```
 
+The Saxon XSLT-Java and XSLT-JS TaskProviders are enabled by default. These can be enabled/disable using the following settings properties:
+
+```
+"XSLT.tasks.java.enabled": true
+"XSLT.tasks.js.enabled": true
+
+```
+
 ## Formatting
 
 ### VSCode Formatting Command Keyboard Shortcuts
