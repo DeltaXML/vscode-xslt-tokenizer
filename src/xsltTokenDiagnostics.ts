@@ -1041,7 +1041,9 @@ export class XsltTokenDiagnostics {
 												break;
 											default:
 												// (+ or ++ are not ok
-												if (!(
+												if ((pv === '&gt;' && tv === '&gt;') || (pv === '&lt;' && (tv === '&lt;' || tv === '&gt;'))) {
+													// allow << <> or >>
+												} else if (!(
 													(pv === '?' && (tv === ',' || tv === ')')) || 
 													(tv === '?' && (pv === '(' || pv === ')' || pv === ','))
 												)) {
