@@ -30,7 +30,8 @@ export enum XMLCharState {
     lPiName,
     rPiName,
     lPiValue,
-	rPi, // 6 right processing instruction
+    rPi, // 6 right processing instruction
+    rPiNameOnly,
     lCd, // 7 left cdata
     lCdataEnd,
     rCd, // 8 right cdata
@@ -238,6 +239,9 @@ export class XslLexer {
             case XMLCharState.lPiName:
                 if (this.isWhitespace(isCurrentCharNewLine, char)) {
                     rc = XMLCharState.rPiName;
+                } else if (char === '?' && nextChar === '>') {
+                    rc = XMLCharState.rPiNameOnly;
+                    this.skipTokenChar = true;
                 }
                 break;
             case XMLCharState.rPiName:
@@ -257,6 +261,7 @@ export class XslLexer {
                 }
                 break;
             case XMLCharState.rPi:
+            case XMLCharState.rPiNameOnly:
             case XMLCharState.rSelfCt:
             case XMLCharState.rSelfCtNoAtt:
                 if (this.skipTokenChar) {
@@ -820,6 +825,10 @@ export class XslLexer {
                             break;
                         case XMLCharState.rPi:
                             this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrValue, result, currentState);
+                            this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result, nextState);
+                            break;
+                        case XMLCharState.rPiNameOnly:
+                            this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.processingInstrName, result, currentState);
                             this.addCharTokenToResult(this.lineCharCount - 1, 2, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             break;
                         case XMLCharState.rComment:
