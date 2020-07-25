@@ -3,12 +3,7 @@
 
     
     <xsl:template match="/*" mode="#default">
-        <xsl:variable name="t1" as="xs:string" select="22"/>
-        <xsl:sequence select="[] count(2)"/>
-        <xsl:sequence select="[] 22"/>
-        <xsl:sequence select="[] $t1"/>
-        <xsl:sequence select="[] elementName"/>
-        <xsl:sequence select="[] @attrName"/>
+        <xsl:variable name="t1" as="xs:string" select="a &gt;&gt; b"/>
     </xsl:template>
             
 </xsl:stylesheet>

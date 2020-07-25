@@ -834,6 +834,10 @@ export class XPathLexer {
                                 // e.g. castable as xs:integer
                                 // TODO: check if value equals xs:integer or element?
                                 currentToken.tokenType = TokenLevelState.simpleType;
+                            } else if (prevToken.value === '&gt;' && currentToken.value === '&gt;') {
+                                currentToken.tokenType = TokenLevelState.operator;
+                            } else if (prevToken.value === '&lt;' && (currentToken.value === '&lt;' || currentToken.value === '&gt;')) {
+                                currentToken.tokenType = TokenLevelState.operator;
                             }
                         } else if (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.functionNameTest || XPathLexer.isTokenTypeAType(prevToken)) {
                             Data.setAsOperatorIfKeyword(currentToken);
