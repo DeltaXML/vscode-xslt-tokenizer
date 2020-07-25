@@ -919,6 +919,7 @@ export class XsltTokenDiagnostics {
 							if (unResolvedToken !== null) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
+							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						}
 						break;
 					case TokenLevelState.complexExpression:
@@ -1208,6 +1209,7 @@ export class XsltTokenDiagnostics {
 								}
 							}
 						}
+						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						break;
 					case TokenLevelState.functionNameTest:
 						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token, checkedGlobalFnNames);
@@ -1218,31 +1220,8 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.function:
-						if (prevToken) {
-							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
-							if (!isXMLToken) {
-								let isXPathError = false;
-								if (prevToken.tokenType === TokenLevelState.complexExpression) {
-									// no error
-								} else if (prevToken.tokenType === TokenLevelState.operator) {
-									if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rPr) {
-										isXPathError = true;
-									} else if (prevToken.charType === CharLevelState.dSep) {
-										let pv = prevToken.value;
-										if (pv === '{}' || pv === '[]' || pv === '()' || pv === '*:' || pv === '::') {
-											isXPathError = true;
-										}
-
-									}
-								} else {
-									isXPathError = true;
-								}
-								if (isXPathError) {
-									token.error = ErrorType.XPathFunctionUnexpected;
-									problemTokens.push(token);								
-								}
-							}
-						}
+					case TokenLevelState.number:
+						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						break;
 					case TokenLevelState.simpleType:
 						let tValue = token.value;
@@ -1315,6 +1294,62 @@ export class XsltTokenDiagnostics {
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
+	}
+
+	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
+		if (token.error) {
+			return;
+		}
+		let errorSingleSeparators: string[];
+		if (token.tokenType === TokenLevelState.number) {
+			errorSingleSeparators = ['/', '|', '!'];
+		} else {
+			errorSingleSeparators = [];
+		}
+		let errDoubleSeparators;
+		if (token.tokenType === TokenLevelState.nodeNameTest) {
+			errDoubleSeparators = ['{}', '[]', '()'];
+		} else if (token.tokenType === TokenLevelState.number) {
+			errDoubleSeparators = ['{}', '[]', '()','*:', '::', '//'];
+		} else  {
+			errDoubleSeparators = ['{}', '[]', '()','*:', '::'];
+		}
+		if (prevToken) {
+			let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+			if (!isXMLToken) {
+				let isXPathError = false;
+				if (prevToken.tokenType === TokenLevelState.complexExpression) {
+					// no error
+				}
+				else if (prevToken.tokenType === TokenLevelState.operator) {
+					if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rPr) {
+						isXPathError = true;
+					}
+					else if (prevToken.charType === CharLevelState.dSep) {
+						if (errDoubleSeparators.indexOf(prevToken.value) !== -1) {
+							isXPathError = true;
+						}
+					} else if (prevToken.charType === CharLevelState.sep) {
+						if (errorSingleSeparators.indexOf(prevToken.value) !== -1) {
+							isXPathError = true;
+						}
+					}
+				}
+				else {
+					isXPathError = true;
+				}
+				if (isXPathError) {
+					let errType: ErrorType = ErrorType.XPathUnexpected;
+					switch(token.tokenType) {
+						case TokenLevelState.function:
+							errType = ErrorType.XPathFunctionUnexpected;
+							break;
+					}
+					token.error = errType;
+					problemTokens.push(token);
+				}
+			}
+		}
 	}
 
 	private static validateXMLDeclaration(lineNumber: number, token: BaseToken, document: vscode.TextDocument,problemTokens: BaseToken[]) {
