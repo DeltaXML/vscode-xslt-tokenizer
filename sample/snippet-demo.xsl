@@ -10,7 +10,7 @@
     <xsl:output method="xml" indent="yes"/>  
     <xsl:mode on-no-match="shallow-copy"/>
     
-    <xsl:param name="varP" as="xs:integer" select=" + 25 + 8"/>   
+    <xsl:param name="varP" as="xs:integer" select="@"/>   
     
     
     <xsl:variable name="var1" as="xs:integer" select="25 + 8"/>   

@@ -1185,7 +1185,11 @@ export class XsltTokenDiagnostics {
 							} else {
 								tokenValue = token.value.substr(1);
 								validationType= ValidationType.XMLAttribute;
-								skipValidation = token.value === '@' || token.value === '@xml';
+								skipValidation = token.value === '@xml';
+								if (!skipValidation && token.value === '@') {
+									let nextToken = allTokens.length > index + 1? allTokens[index + 1]: null;
+									skipValidation = nextToken? token.value === '@' && nextToken.value === '*': false;
+								}
 							}
 							if (!skipValidation) {
 								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
