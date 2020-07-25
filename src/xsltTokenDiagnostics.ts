@@ -963,9 +963,27 @@ export class XsltTokenDiagnostics {
 						// start checks
 						if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error && !((tv === '+' || tv === '-') && isNextDigit) && !(tv === 'map' || tv === 'array')) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
-							if (!isXMLToken && prevToken.tokenType === TokenLevelState.operator) {
+							let currCharType = <CharLevelState>token.charType;
+							if (isXMLToken) {
+								switch (currCharType) {
+									case CharLevelState.rB:
+									case CharLevelState.rBr:
+									case CharLevelState.rPr:
+										isXPathError = true;
+										break;
+									case CharLevelState.sep:
+										if (tv !== '?' && tv !== '/') {
+											isXPathError = true;
+										}
+										break;
+									case CharLevelState.dSep:
+										if (tv !== '()' && tv !== '[]' && tv !== '//' && tv !== '*:' && tv != '//') {
+											isXPathError = true;
+										}
+										break;
+								}
+							} else if (prevToken.tokenType === TokenLevelState.operator) {
 								// current type is operator and previous type is operator
-								let currCharType = <CharLevelState>token.charType;
 								let prevCharType = <CharLevelState>prevToken.charType;
 								let pv = prevToken.value;
 
@@ -1024,11 +1042,11 @@ export class XsltTokenDiagnostics {
 										}
 								}
 
-								if (isXPathError) {
-									token['error'] = ErrorType.XPathUnexpected;
-									problemTokens.push(token);
-									// token is pushed onto problemTokens later
-								}
+							}
+							if (isXPathError) {
+								token['error'] = ErrorType.XPathUnexpected;
+								problemTokens.push(token);
+								// token is pushed onto problemTokens later
 							}
 						}
 						// end checks
