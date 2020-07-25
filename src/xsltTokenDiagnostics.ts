@@ -965,10 +965,14 @@ export class XsltTokenDiagnostics {
 						let tv = token.value;
 						
 						// start checks
-						if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error && !((tv === '+' || tv === '-') && isNextDigit) && !(tv === 'map' || tv === 'array')) {
+						if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 							let currCharType = <CharLevelState>token.charType;
-							if (isXMLToken) {
+							if (tv === 'map' || tv === 'array') {
+								// todo: check as map/array
+							} else if ((tv === '+' || tv === '-') && isNextDigit)  {
+								// todo: check as number test
+							} else if (isXMLToken) {
 								switch (currCharType) {
 									case CharLevelState.rB:
 									case CharLevelState.rBr:
@@ -1216,9 +1220,27 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.function:
 						if (prevToken) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
-							if (!isXMLToken && prevToken.tokenType !== TokenLevelState.operator && prevToken.tokenType !== TokenLevelState.complexExpression) {
-								token.error = ErrorType.XPathFunctionUnexpected;
-								problemTokens.push(token);								
+							if (!isXMLToken) {
+								let isXPathError = false;
+								if (prevToken.tokenType === TokenLevelState.complexExpression) {
+									// no error
+								} else if (prevToken.tokenType === TokenLevelState.operator) {
+									if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rPr) {
+										isXPathError = true;
+									} else if (prevToken.charType === CharLevelState.dSep) {
+										let pv = prevToken.value;
+										if (pv === '{}' || pv === '[]' || pv === '()' || pv === '*:' || pv === '::') {
+											isXPathError = true;
+										}
+
+									}
+								} else {
+									isXPathError = true;
+								}
+								if (isXPathError) {
+									token.error = ErrorType.XPathFunctionUnexpected;
+									problemTokens.push(token);								
+								}
 							}
 						}
 						break;
