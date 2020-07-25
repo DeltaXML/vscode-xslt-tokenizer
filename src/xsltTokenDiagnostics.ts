@@ -830,6 +830,10 @@ export class XsltTokenDiagnostics {
 						}
 						if (prevToken) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+							if (isXMLToken && !token.error && token.length === 1) {
+								token.error = ErrorType.XPathStringLiteral;
+								problemTokens.push(token);
+							}
 							if (!isXMLToken) {
 								let isXPathError = true;
 								let prevType = <TokenLevelState>prevToken.tokenType;
