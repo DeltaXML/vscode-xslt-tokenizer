@@ -1213,6 +1213,15 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 						}
 						break;
+					case TokenLevelState.function:
+						if (prevToken) {
+							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+							if (!isXMLToken && prevToken.tokenType !== TokenLevelState.operator && prevToken.tokenType !== TokenLevelState.complexExpression) {
+								token.error = ErrorType.XPathFunctionUnexpected;
+								problemTokens.push(token);								
+							}
+						}
+						break;
 					case TokenLevelState.simpleType:
 						let tValue = token.value;
 						let tParts = tValue.split(':');
@@ -1712,6 +1721,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathUnexpected:
 					msg = `XPath: Expression context - unexpected token here: ${tokenValue} `;
+					break;
+				case ErrorType.XPathFunctionUnexpected:
+					msg = `XPath: Unexpected function after expression: '${tokenValue}()' `;
 					break;
 				case ErrorType.XPathName:
 					msg = `XPath: Invalid name: '${tokenValue}'`;

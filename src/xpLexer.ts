@@ -1072,6 +1072,7 @@ export enum ErrorType {
     XPathFunction,
     XSLTFunctionNamePrefix,
     XPathFunctionNamespace,
+    XPathFunctionUnexpected,
     XPathOperatorUnexpected,
     XPathPrefix,
     XPathKeyword,
