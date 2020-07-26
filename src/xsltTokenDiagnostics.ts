@@ -828,53 +828,7 @@ export class XsltTokenDiagnostics {
 						if (token.error) {
 							problemTokens.push(token);
 						}
-						if (prevToken) {
-							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
-							if (isXMLToken && !token.error && token.length === 1) {
-								token.error = ErrorType.XPathStringLiteral;
-								problemTokens.push(token);
-							}
-							if (!isXMLToken) {
-								let isXPathError = true;
-								let prevType = <TokenLevelState>prevToken.tokenType;
-								let prevCharType = <CharLevelState>prevToken.charType;
-								let pv = prevToken.value;
-								switch (prevType) {
-									case TokenLevelState.operator:
-										isXPathError = false;
-										switch (prevCharType) {
-											case CharLevelState.rB:
-											case CharLevelState.rBr:
-											case CharLevelState.rPr:
-												isXPathError = true;
-												break;
-											case CharLevelState.sep:
-												if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].curlyBraceType === CurlyBraceType.Map) {
-													isXPathError = !(pv === ':' || pv === '=' || pv === ',' || pv === '!' || pv === '<' || pv === '>');
-												} else {
-													isXPathError = !(pv === '=' || pv === ',' || pv === '!' || pv === '<' || pv === '>');
-												}
-												break;
-											case CharLevelState.dSep:
-												isXPathError = !(pv === '!=' || pv === '||' || pv === '<=' || pv === '>=')
-												break;
-											case CharLevelState.lName:
-												isXPathError = !(pv === '&lt;' || pv === '&gt;' || pv === 'eq' || pv === 'ne' || pv === 'gt' || pv === 'lt' || pv === 'ge' || pv === 'le' || pv === 'and' || pv === 'or');
-												break;
-										}
-										break;
-									case TokenLevelState.complexExpression:
-										isXPathError = false;
-										break;
-								}
-								if (isXPathError) {
-									token['error'] = ErrorType.XPathUnexpected;
-									problemTokens.push(token);
-								}
-							}
-						}
-						
-
+						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						if (xpathStack.length > 0) {
 							let xp = xpathStack[xpathStack.length - 1];
 							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
@@ -969,7 +923,13 @@ export class XsltTokenDiagnostics {
 						if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 							let currCharType = <CharLevelState>token.charType;
-							if (tv === 'map' || tv === 'array') {
+							if (tv === ':') {
+								if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].curlyBraceType === CurlyBraceType.Map) {
+									// todo:
+								}
+							} 
+
+                         	if (tv === 'map' || tv === 'array') {
 								// todo: check as map/array
 							} else if ((tv === '+' || tv === '-') && isNextDigit)  {
 								// todo: check as number test
@@ -1304,14 +1264,16 @@ export class XsltTokenDiagnostics {
 		}
 		let errorSingleSeparators: string[];
 		if (token.tokenType === TokenLevelState.number) {
-			errorSingleSeparators = ['/', '|', '!'];
+			errorSingleSeparators = ['|'];
+		} else if (token.tokenType === TokenLevelState.string) {
+			errorSingleSeparators = ['|', '+', '-', '*', '?'];
 		} else {
 			errorSingleSeparators = [];
 		}
 		let errDoubleSeparators;
 		if (token.tokenType === TokenLevelState.nodeNameTest) {
 			errDoubleSeparators = ['{}', '[]', '()'];
-		} else if (token.tokenType === TokenLevelState.number) {
+		} else if (token.tokenType === TokenLevelState.number || token.tokenType === TokenLevelState.string) {
 			errDoubleSeparators = ['{}', '[]', '()','*:', '::', '//'];
 		} else  {
 			errDoubleSeparators = ['{}', '[]', '()','*:', '::'];
