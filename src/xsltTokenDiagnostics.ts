@@ -916,23 +916,26 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.operator:
 						let isXPathError = false;
-						let isNextDigit = index + 1 < allTokens.length? allTokens[index + 1].tokenType === TokenLevelState.number: false;
 						let tv = token.value;
 						
 						// start checks
 						if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 							let currCharType = <CharLevelState>token.charType;
+							let nextToken = index + 1 < allTokens.length? allTokens[index + 1]: undefined;
 							if (tv === ':') {
 								if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].curlyBraceType === CurlyBraceType.Map) {
-									// todo:
+									// not an error in a map
+								} else if (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.attributeNameTest) {
+									isXPathError = !(prevToken.startCharacter + prevToken.length === token.startCharacter && nextToken?.value === '*');
+								} else {
+									isXPathError = true;
 								}
-							} 
-
+							}
                          	if (tv === 'map' || tv === 'array') {
 								// todo: check as map/array
-							} else if ((tv === '+' || tv === '-') && isNextDigit)  {
-								// todo: check as number test
+							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType === TokenLevelState.number)  {
+								// either a number of an operator so show no error
 							} else if (isXMLToken) {
 								switch (currCharType) {
 									case CharLevelState.rB:
@@ -977,7 +980,7 @@ export class XsltTokenDiagnostics {
 											// allow: ) !=
 											isXPathError = tv === '*:';
 										} else if (tv === '*:' || tv === '//') {
-											isXPathError = false;
+											// no error
  										} else if (!((tv === '{}' && (pv === 'map' || pv === 'array')) || tv === '()' || tv === '[]')) {
 											isXPathError = true;
 										}
@@ -1258,22 +1261,23 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	}
 
-	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
+	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], currentType?: TokenLevelState) {
 		if (token.error) {
 			return;
 		}
+		let tokenType = currentType? currentType: token.tokenType;
 		let errorSingleSeparators: string[];
-		if (token.tokenType === TokenLevelState.number) {
+		if (tokenType === TokenLevelState.number) {
 			errorSingleSeparators = ['|'];
-		} else if (token.tokenType === TokenLevelState.string) {
+		} else if (tokenType === TokenLevelState.string) {
 			errorSingleSeparators = ['|', '+', '-', '*', '?'];
 		} else {
 			errorSingleSeparators = [];
 		}
 		let errDoubleSeparators;
-		if (token.tokenType === TokenLevelState.nodeNameTest) {
+		if (tokenType === TokenLevelState.nodeNameTest) {
 			errDoubleSeparators = ['{}', '[]', '()'];
-		} else if (token.tokenType === TokenLevelState.number || token.tokenType === TokenLevelState.string) {
+		} else if (tokenType === TokenLevelState.number || tokenType === TokenLevelState.string) {
 			errDoubleSeparators = ['{}', '[]', '()','*:', '::', '//'];
 		} else  {
 			errDoubleSeparators = ['{}', '[]', '()','*:', '::'];
@@ -1303,12 +1307,7 @@ export class XsltTokenDiagnostics {
 					isXPathError = true;
 				}
 				if (isXPathError) {
-					let errType: ErrorType = ErrorType.XPathUnexpected;
-					switch(token.tokenType) {
-						case TokenLevelState.function:
-							errType = ErrorType.XPathFunctionUnexpected;
-							break;
-					}
+					let errType: ErrorType = tokenType === TokenLevelState.function? ErrorType.XPathFunctionUnexpected: ErrorType.XPathUnexpected;
 					token.error = errType;
 					problemTokens.push(token);
 				}
