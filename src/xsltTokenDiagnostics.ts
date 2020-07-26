@@ -934,7 +934,7 @@ export class XsltTokenDiagnostics {
 							}
                          	if (tv === 'map' || tv === 'array') {
 								// todo: check as map/array
-							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType === TokenLevelState.number)  {
+							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType !== TokenLevelState.string) {
 								// either a number of an operator so show no error
 							} else if (isXMLToken) {
 								switch (currCharType) {
@@ -1261,11 +1261,11 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	}
 
-	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], currentType?: TokenLevelState) {
+	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
 		if (token.error) {
 			return;
 		}
-		let tokenType = currentType? currentType: token.tokenType;
+		let tokenType = token.tokenType;
 		let errorSingleSeparators: string[];
 		if (tokenType === TokenLevelState.number) {
 			errorSingleSeparators = ['|'];

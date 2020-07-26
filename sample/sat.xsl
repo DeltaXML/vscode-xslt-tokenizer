@@ -3,8 +3,8 @@
                 version="3.0">
 
     
-    <xsl:template match="@test:*" mode="#default">
-        <xsl:variable name="t1" as="xs:string" select="2"/>
+    <xsl:template match="*" mode="#default">
+        <xsl:variable name="t1" as="xs:string" select="++2"/>
     </xsl:template>
             
 </xsl:stylesheet>
