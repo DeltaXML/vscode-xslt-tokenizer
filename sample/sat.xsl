@@ -4,7 +4,7 @@
 
     
     <xsl:template match="*" mode="#default">
-        <xsl:variable name="t1" as="xs:string" select="++2"/>
+        <xsl:variable name="t1" as="xs:string" select="let $a := map {a : 2} return $a"/>
     </xsl:template>
             
 </xsl:stylesheet>

@@ -933,7 +933,7 @@ export class XsltTokenDiagnostics {
 								}
 							}
                          	if (tv === 'map' || tv === 'array') {
-								// todo: check as map/array
+								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens, TokenLevelState.function);
 							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType !== TokenLevelState.string) {
 								// either a number of an operator so show no error
 							} else if (isXMLToken) {
@@ -1261,11 +1261,11 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	}
 
-	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
+	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], overridType?: TokenLevelState) {
 		if (token.error) {
 			return;
 		}
-		let tokenType = token.tokenType;
+		let tokenType = overridType? overridType: token.tokenType;
 		let errorSingleSeparators: string[];
 		if (tokenType === TokenLevelState.number) {
 			errorSingleSeparators = ['|'];
