@@ -1222,7 +1222,7 @@ export class XsltTokenDiagnostics {
 					// TODO: show error if xpath token is last
 				}
 			}
-			prevToken = token;
+			prevToken = token.tokenType === TokenLevelState.comment? prevToken: token;
 			if (index === lastTokenIndex && elementStack.length > 0) {
 				// xml is not well-nested if items still on the stack at the end
 				// but report errors and try to keep some part of the tree:
