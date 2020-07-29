@@ -906,6 +906,13 @@ export class XsltTokenDiagnostics {
 											preXPathVariable = false;
 										}
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
+										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(poppedData.token.value);
+										if (!token.error && matchingToken !== token.value) {
+											token['error'] = ErrorType.XPathUnexpected;
+											problemTokens.push(token);
+											poppedData.token['error'] = ErrorType.BracketNesting;
+											problemTokens.push(poppedData.token);
+										}
 									} else {
 										inScopeXPathVariablesList =  [];
 										preXPathVariable = false;
@@ -1846,6 +1853,7 @@ export class XsltTokenDiagnostics {
 				r = 'else';
 				break;
 			case 'let':
+			case 'for':
 				r = 'return'
 				break;
 			case 'every':
@@ -1858,6 +1866,23 @@ export class XsltTokenDiagnostics {
 			default:
 				r = '';
 				break;				
+		}
+		return r;	
+	}
+
+	private static getMatchingToken(text: string) {
+		let r = '';
+		switch(text) {
+			case 'let':
+			case 'for':
+				r = 'return'
+				break;
+			case 'every':
+			case 'some':
+				r = 'satisfies';
+				break;
+			case 'then':
+				r = 'else';			
 		}
 		return r;	
 	}

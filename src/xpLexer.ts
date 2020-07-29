@@ -1090,6 +1090,7 @@ export enum ErrorType {
     XPathUnexpected,
     XPathStringLiteral,
     BracketNesting,
+    PopNesting,
     XSLTKeyUnresolved,
     XMLRootMissing,
     DTD,
