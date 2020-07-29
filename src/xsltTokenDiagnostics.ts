@@ -849,6 +849,7 @@ export class XsltTokenDiagnostics {
 						if (token.error) {
 							problemTokens.push(token);
 						}
+						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						break;
 					case TokenLevelState.variable:
 						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
