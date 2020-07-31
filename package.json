@@ -84,6 +84,28 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Enable Saxon-JS Tasks"
+				},
+				"XSLT.Packages": {
+					"description": "Associate file paths with xsl:package names",
+					"type": "array",
+					"items": {
+						"type":"object",
+						"properties": {
+							"name": {
+								"type": "string",
+								"description": "XSLT Package Name"
+							},
+							"version": {
+								"type": "string",
+								"description": "XSLT Package Version"
+							},
+							"path": {
+								"type": "string",
+								"description": "Path to named XSLT Package"
+							}
+						}, 
+						"required": ["name", "path"]
+					}
 				}
 			}
 		},
