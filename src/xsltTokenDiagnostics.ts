@@ -197,6 +197,8 @@ export class XsltTokenDiagnostics {
 		let globalAccumulatorNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
 		let tagExcludeResultPrefixes: {token: BaseToken, prefixes: string[]}|null = null;
+		let ifThenStack: BaseToken[] = [];
+
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -295,10 +297,15 @@ export class XsltTokenDiagnostics {
 
 		allTokens.forEach((token, index) => {
 			lineNumber = token.line;
-
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			if (isXMLToken) {
-				if (prevToken && prevToken.tokenType && prevToken.tokenType === TokenLevelState.operator && !prevToken.error) {
+				if (ifThenStack.length > 0) {
+					let ifToken = ifThenStack[0];
+					ifToken['error'] = ErrorType.BracketNesting;
+					problemTokens.push(ifToken);
+					ifThenStack = [];
+				}
+				if (prevToken && prevToken.tokenType === TokenLevelState.operator && !prevToken.error) {
 					let isValid = false;
 					switch(prevToken.charType) {
 						case CharLevelState.rB:
@@ -327,6 +334,9 @@ export class XsltTokenDiagnostics {
 						prevToken['error'] = ErrorType.XPathOperatorUnexpected;
 						problemTokens.push(prevToken);
 					}
+				} else if (prevToken && prevToken.tokenType === TokenLevelState.complexExpression && !prevToken.error) {
+						prevToken['error'] = ErrorType.XPathAwaiting;
+						problemTokens.push(prevToken);
 				}
 				inScopeXPathVariablesList = [];
 				xpathVariableCurrentlyBeingDefined = false;
@@ -880,6 +890,9 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.complexExpression:
 						let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						switch (valueText) {
+							case 'if':
+								ifThenStack.push(token);
+								break;
 							case 'every':
 							case 'for':
 							case 'let':
@@ -889,6 +902,12 @@ export class XsltTokenDiagnostics {
 								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true});
 							break;
 							case 'then':
+								if (ifThenStack.length > 0) {
+									ifThenStack.pop();
+								} else {
+									token.error = ErrorType.XPathUnexpected;
+									problemTokens.push(token);
+								}
 								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined});
 								inScopeXPathVariablesList = [];
 								break;
@@ -1759,6 +1778,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathOperatorUnexpected:
 					msg = `XPath: Operator unexpected at this position: '${tokenValue}'`;
 					break;
+				case ErrorType.XPathAwaiting:
+					msg = `XPath: Expected expression following: '${tokenValue}'`;
+					break;
 				case ErrorType.DTD:
 					msg = `XML: DTD position error: '${tokenValue}'`;
 					break;
@@ -1848,6 +1870,9 @@ export class XsltTokenDiagnostics {
 				break;
 			case '}':
 				r = '{';
+				break;
+			case 'if':
+				r = 'then';
 				break;
 			case 'then':
 				r = 'else';

@@ -4,7 +4,7 @@
 
     
     <xsl:template match="*" mode="#default">
-        <xsl:variable name="t1" as="xs:string" select="let $a := map {a : 2} satisfies $a"/>
+        <xsl:variable name="t1" as="xs:string" select="if (1) then 2 else 3"/>
     </xsl:template>
             
 </xsl:stylesheet>
