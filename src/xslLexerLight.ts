@@ -37,6 +37,7 @@ export class XslLexerLight extends XslLexer {
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
         let isGlobalParameterName = false;
+        let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
 
         let xmlElementStack: number = 0;
@@ -121,7 +122,7 @@ export class XslLexerLight extends XslLexer {
                             break;      
                         case XMLCharState.lAn:
                             if ((xmlElementStack === 1 && tagGlobalInstructionType !== GlobalInstructionType.Unknown) ||
-                                xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template) {
+                                xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             }
@@ -131,6 +132,7 @@ export class XslLexerLight extends XslLexer {
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
+                            isGlobalUsePackageVersion = false;
                             isGlobalInstructionMatch = false;
                             if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
                              && attName === 'href') {
@@ -143,6 +145,8 @@ export class XslLexerLight extends XslLexer {
                                 isGlobalInstructionMatch = true;
                             } else if (collectParamName && attName === 'name') {
                                 isGlobalParameterName = true;
+                            } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
+                                isGlobalUsePackageVersion = true;
                             }
                             tokenChars = [];
                             storeToken = false;
@@ -180,16 +184,19 @@ export class XslLexerLight extends XslLexer {
                                 targetGlobal.push({type: globalType, name: attValue, token: tkn, idNumber: 0});
                                 isGlobalInstructionName = false;
                                 tagGlobalInstructionType = GlobalInstructionType.Unknown;
-                            } else if (isGlobalParameterName) {
+                            } else if (isGlobalParameterName || isGlobalUsePackageVersion) {
                                 let attValue = tokenChars.join('');
                                 if (this.globalInstructionData.length > 0) {
                                     let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
-                                    if (gd.memberNames) {
-                                        gd.memberNames.push(attValue);
+                                    if (isGlobalUsePackageVersion) {
+                                        gd['version'] = attValue;
                                     } else {
-                                        gd['memberNames'] = [attValue];
+                                        if (gd.memberNames) {
+                                            gd.memberNames.push(attValue);
+                                        } else {
+                                            gd['memberNames'] = [attValue];
+                                        }
                                     }
-                                    gd.idNumber++;
                                 }
                             } else if (isGlobalInstructionMatch) {
                                 let attValue = tokenChars.join('');
@@ -208,7 +215,7 @@ export class XslLexerLight extends XslLexer {
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template
+                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage
                                  || isGlobalInstructionName || isGlobalInstructionMode) {
                                 storeToken = true;
                             }

@@ -138,7 +138,8 @@ export interface GlobalInstructionData {
     token: BaseToken,
     idNumber: number,
     memberNames?: string[],
-    href?: string
+    href?: string,
+    version?: string
 }
 
 export class XslLexer {
@@ -1202,35 +1203,38 @@ export class XslLexer {
             nativeName = elementName.substring(this.nativePrefixLength);
             if (isRootChild) {
                 switch (nativeName) {
-                    case ('variable'):
+                    case 'variable':
                         instructionType = GlobalInstructionType.Variable;
                         break;
-                    case ('param'):
+                    case 'param':
                         instructionType = GlobalInstructionType.Parameter;
                         break;
-                    case ('function'):
+                    case 'function':
                         instructionType = GlobalInstructionType.Function;
                         break;
-                    case ('template'):
+                    case 'template':
                         instructionType = GlobalInstructionType.Template;
                         break;
-                    case ('key'):
+                    case 'key':
                         instructionType = GlobalInstructionType.Key;
                         break;
-                    case ('import'):
+                    case 'import':
                         instructionType = GlobalInstructionType.Import;
                         break;
-                    case ('include'):
+                    case 'include':
                         instructionType = GlobalInstructionType.Include;
                         break;
-                    case ('accumulator'):
+                    case 'accumulator':
                         instructionType = GlobalInstructionType.Accumulator;
                         break;
-                    case ('mode'):
+                    case 'mode':
                         instructionType = GlobalInstructionType.Mode;
                         break;
-                    case ('attribute-set'):
+                    case 'attribute-set':
                         instructionType = GlobalInstructionType.AttributeSet;
+                        break;
+                    case 'use-package':
+                        instructionType = GlobalInstructionType.UsePackage;
                         break;
                 }
             }
@@ -1259,6 +1263,7 @@ export enum GlobalInstructionType {
     TemplateMatch,
     Include,
     Import,
+    UsePackage,
     Unknown
 }
 
