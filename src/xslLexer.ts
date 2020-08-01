@@ -676,6 +676,7 @@ export class XslLexer {
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
         let isGlobalParameterName = false;
+        let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
 
         let expandTextValue: boolean|null = false;
@@ -881,6 +882,9 @@ export class XslLexer {
                                     isXPathAttribute = true;
                                 } else if (collectParamName && attName === 'name') {
                                     isGlobalParameterName = true;
+                                } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
+                                    isExpandTextAttribute = false;
+                                    isGlobalUsePackageVersion = true;
                                 } else {
                                     isExpandTextAttribute = false;
                                     isXPathAttribute = this.isExpressionAtt(attName);
@@ -963,6 +967,12 @@ export class XslLexer {
                                     }
                                     gd.idNumber++;
                                 }
+                            } else if (isGlobalUsePackageVersion) {
+                                let attValue = tokenChars.join('');
+                                if (this.globalInstructionData.length > 0) {
+                                    let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                    gd['version'] = attValue;
+                                }
                             } else if (isGlobalInstructionMatch) {
                                 let attValue = tokenChars.join('');
                                 tagMatchToken = newToken;
@@ -973,7 +983,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template) {
+                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage) {
                                 storeToken = true;
                             }
                             if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode) {
