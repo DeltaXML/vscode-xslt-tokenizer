@@ -2,8 +2,7 @@
                 xmlns:a="acb"
                 version="3.0">  
     
-    <xsl:use-package name="http://example.com/csv-parser" 
+    <xsl:use-package name="com.deltaxml.sbs.package"
                      package-version="*"/>
     
-            
 </xsl:stylesheet>

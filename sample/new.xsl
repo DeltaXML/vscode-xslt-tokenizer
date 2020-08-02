@@ -16,8 +16,12 @@
     xmlns:fn="def"
     version="3.0">
     
-    <xsl:include href="included1.xsl"/>
-    <xsl:import href="features/included2.xsl"/>
+<!--     <xsl:include href="included1.xsl"/>
+    <xsl:import href="features/included2.xsl"/> -->
+    
+    <xsl:use-package name="example.com.package1"/>
+    <xsl:use-package name="example.com.package2"/>
+    
    
     <xsl:param name="p1" as="xs:integer" select="1"/>
 
@@ -33,8 +37,6 @@
         <xsl:sequence select="let $a := ($v1, $va) return $a"/>
         
         <xsl:copy>
-            <xsl:sequence select="$v3, fn:name($v1), fn:inc1name($v2), $v4, $v5, $v6"/>
-            <xsl:sequence select="array:head(2,2)"/>
             <xsl:sequence select="map:keys(2)"/>
             <xsl:sequence select="math:pow(2,3)"/>
             <xsl:sequence select="saxon:any(2,3)"/>

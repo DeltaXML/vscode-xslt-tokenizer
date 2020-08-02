@@ -85,7 +85,7 @@
 					"default": true,
 					"description": "Enable Saxon-JS Tasks"
 				},
-				"XSLT.Packages": {
+				"XSLT.resources.xsltPackages": {
 					"description": "Associate file paths with xsl:package names",
 					"type": "array",
 					"items": {

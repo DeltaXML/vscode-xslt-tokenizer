@@ -15,6 +15,12 @@ interface GlobalsSummary {
 	hrefs: string[]
 }
 
+interface XsltPackage {
+	name: string,
+	path: string,
+	version?: string
+}
+
 export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
@@ -33,11 +39,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
+		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+
 		// Import/include XSLT - ensuring no duplicates
 		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
 		let importedGlobals1 = [importedG];
 		let accumulatedHrefs: string[] = [importedG.href];
-		let topLevelHrefs = this.accumulateImportHrefs(importedGlobals1, []);
+		let topLevelHrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
 
 
 		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs};
@@ -46,7 +54,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let processNestedGlobals = async () => {
 			let level = 0;
 			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel) {
-				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs, level === 0);
+				globalsSummary0 = await this.processImportedGlobals(xsltPackages, globalsSummary0.globals, accumulatedHrefs, level === 0);
 				level++;
 			}
 		};
@@ -98,9 +106,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
-	private async processImportedGlobals(importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {
+	private async processImportedGlobals(xsltPackages: XsltPackage[], importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {
 		let level2Globals: Promise<ImportedGlobals[]>[] = [];
-		let level2Hrefs = this.accumulateImportHrefs(importedGlobals1, level1Hrefs);
+		let level2Hrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, level1Hrefs);
 		let newGlobals: ImportedGlobals[] = [];
 
 		level2Hrefs.forEach((href) => {
@@ -122,8 +130,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	private accumulateImportHrefs(importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
+	private accumulateImportHrefs(xsltPackages: XsltPackage[],importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
 		let result: string[] = [];
+		const rootPath = vscode.workspace.rootPath;
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
@@ -131,6 +140,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					if (existingHrefs.indexOf(resolvedName) < 0) {
 						existingHrefs.push(resolvedName);
 						result.push(resolvedName);
+					}
+				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
+					let packageLookup = xsltPackages.find((pkg) => {
+						return pkg.name === data.name;
+					});
+					if (packageLookup) {
+						let resolvedName = this.resolvePathInSettings(packageLookup.path, rootPath);
+						if (existingHrefs.indexOf(resolvedName) < 0) {
+							existingHrefs.push(resolvedName);
+							result.push(resolvedName);
+						}
 					}
 				}
 			});
@@ -145,6 +165,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		} else {
 			let basePath = path.dirname(documentPath);
 			let joinedPath = path.join(basePath, href);
+			return path.normalize(joinedPath);
+		}
+	}
+
+	private resolvePathInSettings(href: string, workspace: string) {
+
+		if (path.isAbsolute(href)) {
+			return href;
+		} else {
+			let joinedPath = path.join(workspace, href);
 			return path.normalize(joinedPath);
 		}
 	}
