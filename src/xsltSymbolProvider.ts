@@ -15,7 +15,7 @@ interface GlobalsSummary {
 	hrefs: string[]
 }
 
-interface XsltPackage {
+export interface XsltPackage {
 	name: string,
 	path: string,
 	version?: string
@@ -146,7 +146,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						return pkg.name === data.name;
 					});
 					if (packageLookup) {
-						let resolvedName = this.resolvePathInSettings(packageLookup.path, rootPath);
+						let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
 						if (existingHrefs.indexOf(resolvedName) < 0) {
 							existingHrefs.push(resolvedName);
 							result.push(resolvedName);
@@ -169,7 +169,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	private resolvePathInSettings(href: string, workspace: string) {
+	public static resolvePathInSettings(href: string, workspace: string) {
 
 		if (path.isAbsolute(href)) {
 			return href;
