@@ -63,6 +63,8 @@ See: [XSLT/XPath Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
 
 See: [VSCode Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
+### XSLT Tasks
+
 To use the task-provider for the _Java_ Saxon XSLT Processor, the following setting is required (alter path to suit actual jar location):
 
 ```
