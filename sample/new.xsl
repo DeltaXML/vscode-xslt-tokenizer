@@ -21,7 +21,8 @@
     
     <xsl:use-package name="example.com.package1"/>
     <xsl:use-package name="example.com.package2"/>
-    
+    <xsl:use-package name="example.com.package4"/>
+   
    
     <xsl:param name="p1" as="xs:integer" select="1"/>
 

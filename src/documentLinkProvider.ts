@@ -31,7 +31,6 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 				const link = new vscode.DocumentLink(new vscode.Range(startPos, endPos), uri);
 				result.push(link);
 			} else if (instruction.type === GlobalInstructionType.UsePackage) {
-				const basePath = path.dirname(document.fileName);
 				let packageLookup = xsltPackages.find((pkg) => {
 					return pkg.name === instruction.name;
 				});

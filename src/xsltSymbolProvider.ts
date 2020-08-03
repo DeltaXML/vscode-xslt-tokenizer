@@ -65,6 +65,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			let symbols: vscode.DocumentSymbol[] = [];
 			let allImportedGlobals: GlobalInstructionData[] = [];
 			let importErrors: GlobalInstructionData[] = [];
+			const rootPath = vscode.workspace.rootPath;
 
 			globalsSummary0.globals.forEach((globals) => {
 				if (globals.error) {
@@ -74,6 +75,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							if (dataObject.type === GlobalInstructionType.Import || dataObject.type === GlobalInstructionType.Include) {
 								let resolvedName = this.resolvePath(dataObject.name, document.fileName);
 								result = resolvedName === globals.href;
+							} else if (dataObject.type === GlobalInstructionType.UsePackage) {
+								// TODO:
+								const basePath = path.dirname(document.fileName);
+								let packageLookup = xsltPackages.find((pkg) => {
+									return pkg.name === dataObject.name;
+								});
+								if (packageLookup && rootPath) {
+									let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
+									result = resolvedName === globals.href;
+								} else {
+									result = false;
+								}
+
 							}
 							return result;
 						});
