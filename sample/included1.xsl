@@ -12,7 +12,7 @@
     
     <xsl:variable name="inc1p1" as="xs:integer" select="2"/>
        
-    <xsl:template xmlns:xsl="abc" xmlns:fn="def">
+    <xsl:template name="included" xmlns:xsl="abc" xmlns:fn="def">
                 
         <xsl:param name="inc1p1" as="xs:integer" select="1"/>
         <xsl:variable name="inc1v1" as="xs:integer" select="2"/>

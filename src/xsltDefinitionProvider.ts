@@ -6,6 +6,7 @@ import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
+import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
 
 interface ImportedGlobals {
 	href: string,
@@ -37,6 +38,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Location | undefined> {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
+		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+
 		// Import/include XSLT - ensuring no duplicates
 		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
 		let importedGlobals1 = [importedG];
@@ -49,7 +52,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let processNestedGlobals = async () => {
 			let level = 0;
 			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel) {
-				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs, level === 0);
+				globalsSummary0 = await this.processImportedGlobals(xsltPackages, globalsSummary0.globals, accumulatedHrefs, level === 0);
 				level++;
 			}
 		};
@@ -83,6 +86,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		const keepNameTests = true;
 		const allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 		const globalInstructionData = this.xslLexer.globalInstructionData;
+		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
 		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
@@ -96,7 +100,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let processNestedGlobals = async () => {
 			let level = 0;
 			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel) {
-				globalsSummary0 = await this.processImportedGlobals(globalsSummary0.globals, accumulatedHrefs, level === 0);
+				globalsSummary0 = await this.processImportedGlobals(xsltPackages, globalsSummary0.globals, accumulatedHrefs, level === 0);
 				level++;
 			}
 		};
@@ -127,9 +131,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 	}
 
-	private async processImportedGlobals(importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {
+	private async processImportedGlobals(xsltPackages: XsltPackage[], importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {
 		let level2Globals: Promise<ImportedGlobals[]>[] = [];
-		let level2Hrefs = this.accumulateImportHrefs(importedGlobals1, level1Hrefs);
+		let level2Hrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, level1Hrefs);
 		let newGlobals: ImportedGlobals[] = [];
 
 		level2Hrefs.forEach((href) => {
@@ -151,8 +155,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		}
 	}
 
-	private accumulateImportHrefs(importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
+	private accumulateImportHrefs(xsltPackages: XsltPackage[],importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
 		let result: string[] = [];
+		const rootPath = vscode.workspace.rootPath;
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
@@ -160,6 +165,17 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					if (existingHrefs.indexOf(resolvedName) < 0) {
 						existingHrefs.push(resolvedName);
 						result.push(resolvedName);
+					}
+				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
+					let packageLookup = xsltPackages.find((pkg) => {
+						return pkg.name === data.name;
+					});
+					if (packageLookup) {
+						let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
+						if (existingHrefs.indexOf(resolvedName) < 0) {
+							existingHrefs.push(resolvedName);
+							result.push(resolvedName);
+						}
 					}
 				}
 			});
