@@ -854,6 +854,7 @@ export class XslLexer {
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
                             isGlobalInstructionMatch = false;
+                            isGlobalUsePackageVersion = false;
                             attName = tokenChars.join('');
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {

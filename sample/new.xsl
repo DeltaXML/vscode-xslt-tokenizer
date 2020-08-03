@@ -21,6 +21,7 @@
     
     <xsl:use-package name="example.com.package1"/>
     <xsl:use-package name="example.com.package2"/>
+    <xsl:use-package name="example.com.package3"/>
     <xsl:use-package name="example.com.package4"/>
    
    
