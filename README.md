@@ -26,7 +26,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
    - [VScode Tasks](https://code.visualstudio.com/Docs/editor/tasks) include custom [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
    - [Bracket Matching](https://code.visualstudio.com/Docs/editor/editingevolved#_bracket-matching)
    - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax
- -  Follow `xsl:include`/`xsl:import` links
+ -  Follow `xsl:include` / `xsl:import` / `xsl:use-package` links
  - Custom XML Editing Featues:
    - XML Context-Aware Snippets
    - XML Well-Formedness Checking
