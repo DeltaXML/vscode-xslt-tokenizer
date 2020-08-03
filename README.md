@@ -59,7 +59,7 @@ See: [Release Notes](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/Rele
 
 See: [XSLT/XPath Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
 
-## Settings Options
+## Extension Settings
 
 See: [VSCode Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
@@ -75,6 +75,12 @@ The Saxon XSLT-Java and XSLT-JS TaskProviders are enabled by default. These can 
 "XSLT.tasks.java.enabled": true
 "XSLT.tasks.js.enabled": true
 ```
+
+### XSLT Packages
+
+If your XSLT contains xsl:use-package instructions you can set the paths for named packages in the setting:
+
+`XSLT.resources.packages`
 
 ## Formatting
 
