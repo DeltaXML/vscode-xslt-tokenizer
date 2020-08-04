@@ -462,7 +462,12 @@ export class XsltTokenCompletions {
 											let prev2Token = allTokens[index - 2];
 											resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 										} else {
-											resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(schemaQuery, position, tagElementName, attName);
+											if (attName === 'as') {
+												let completionStrings = XsltTokenCompletions.sequenceTypes;
+												resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.TypeParameter);
+											} else {
+												resultCompletions =  XsltTokenCompletions.getXSLTAttributeValueCompletions(schemaQuery, position, tagElementName, attName);
+											}
 										}
 									}
 								}

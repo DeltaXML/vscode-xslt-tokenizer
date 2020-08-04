@@ -6,7 +6,7 @@
         
     </xsl:variable>
     
-    <xsl:variable name="test2" as="" select="" expand-text=""/>
+    <xsl:variable name="test2" as="xs:int" select="" expand-text="false"/>
     
     
 </xsl:stylesheet>

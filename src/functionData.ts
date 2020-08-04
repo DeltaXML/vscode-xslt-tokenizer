@@ -379,7 +379,7 @@ export class FunctionData {
 		"dayTimeDuration#1",
 		"untypedAtomic#1",
 		"dateTimeStamp#1"
-	]
+	];
 
 	public static readonly simpleTypes = FunctionData.schema.map(t => 'xs:' + t.substring(0, t.length - 2));
 
