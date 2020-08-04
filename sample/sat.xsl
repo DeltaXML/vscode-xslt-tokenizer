@@ -2,7 +2,8 @@
                 xmlns:a="acb"
                 version="3.0">  
     
-    <xsl:use-package name="com.deltaxml.sbs.package"
-                     package-version="*"/>
+    <xsl:variable name="test" as="node()">
+        
+    </xsl:variable>
     
 </xsl:stylesheet>

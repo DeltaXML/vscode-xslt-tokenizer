@@ -133,8 +133,10 @@ export class SchemaQuery {
                     detail = elementDefinition.detail;
                 }
                 let detailValue = detail ? detail : '';
-
-                result.elements.push([name, detailValue]);
+                let existing = result.elements.find(element => element[0] === name);
+                if (!existing) {
+                    result.elements.push([name, detailValue]);
+                }
             });
         }
     }
@@ -228,24 +230,22 @@ export class SchemaQuery {
     }
 
     private performSubstitutions(elements: [string, string][]) {
-        let newElements: string[] = [];
+        let newElements: [string, string][] = [];
 
         elements.forEach((item) => {
             if (item[0] === 'xsl:instruction' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.instruction.elements);
-                newElements.push('xsl:literal-result-element');
-                newElements = newElements.concat(subElements);
+                newElements.push(['xsl:literal-result-element', '']);
+                subElements.forEach((se) => {newElements.push([se, ''])});
             } else if (item[0] === 'xsl:declaration' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.declaration.elements);
-                newElements = newElements.concat(subElements);
+                subElements.forEach((se) => {newElements.push([se, ''])});
+            } else {
+                newElements.push(item);
             }
         });
-
-        newElements.forEach((item) => {
-            elements.push([item, '']);
-        });
     
-        return elements;
+        return newElements;
     }
 }
 
