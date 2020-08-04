@@ -116,6 +116,7 @@ export class XsltTokenCompletions {
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default'];
+		let attNameText: string = '';
 
 		let tagExcludeResultPrefixes: { token: BaseToken, prefixes: string[] } | null = null;
 		let requiredLine = position.line;
@@ -150,7 +151,8 @@ export class XsltTokenCompletions {
 									let prev2XmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
 									switch (prev2XmlTokenType) {
 										case XSLTokenLevelState.attributeValue:
-											resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
+											// let a = attNameText;
+											// resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 											break;
 									}
 								} else {
@@ -174,10 +176,10 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -343,7 +345,7 @@ export class XsltTokenCompletions {
 					case XSLTokenLevelState.attributeName:
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
-						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let problemReported = false;
 
 						if (!problemReported) {

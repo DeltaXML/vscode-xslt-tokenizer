@@ -61,6 +61,8 @@ export class DocumentChangeHandler {
 			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
 			if ((prevChar === '\n' || prevChar === ' ') && activeChange.text === 'x') {
 				triggerSuggest = true;
+			} else if (prevChar === '"' && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1 )  {
+				triggerSuggest = true;
 			}
 		}
 		if (triggerSuggest || activeChange.text === ' ' || activeChange.text === '(' || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
