@@ -26,7 +26,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
    - [VScode Tasks](https://code.visualstudio.com/Docs/editor/tasks) include custom [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
    - [Bracket Matching](https://code.visualstudio.com/Docs/editor/editingevolved#_bracket-matching)
    - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax
- -  Follow `xsl:include`/`xsl:import` links
+ -  Follow `xsl:include` / `xsl:import` / `xsl:use-package` links
  - Custom XML Editing Featues:
    - XML Context-Aware Snippets
    - XML Well-Formedness Checking
@@ -59,9 +59,11 @@ See: [Release Notes](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/Rele
 
 See: [XSLT/XPath Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
 
-## Settings Options
+## Extension Settings
 
 See: [VSCode Settings](https://code.visualstudio.com/docs/getstarted/settings)
+
+### XSLT Tasks
 
 To use the task-provider for the _Java_ Saxon XSLT Processor, the following setting is required (alter path to suit actual jar location):
 
@@ -75,6 +77,12 @@ The Saxon XSLT-Java and XSLT-JS TaskProviders are enabled by default. These can 
 "XSLT.tasks.java.enabled": true
 "XSLT.tasks.js.enabled": true
 ```
+
+### XSLT Packages
+
+If your XSLT contains xsl:use-package instructions you can set the paths for named packages in the setting:
+
+`XSLT.resources.packages`
 
 ## Formatting
 
