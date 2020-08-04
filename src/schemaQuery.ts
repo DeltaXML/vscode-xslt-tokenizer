@@ -210,7 +210,10 @@ export class SchemaQuery {
                     let lookup = sgType.detail[attrValue];
                     detail = lookup? lookup: '';
                 }
-                result.attributeValues.push([attrValue, detail]);
+                let existing = result.attributeValues.find(val => val[0] === attrValue);
+                if (!existing) {
+                    result.attributeValues.push([attrValue, detail]);
+                }
             });
         }
 
