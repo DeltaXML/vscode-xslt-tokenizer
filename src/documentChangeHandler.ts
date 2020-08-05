@@ -20,6 +20,7 @@ export class DocumentChangeHandler {
 			return;
 		}
 		let activeChange = e.contentChanges[0];
+		let skipTrigger = false;
 		if (!activeChange) {
 			return;
 		}
@@ -54,10 +55,15 @@ export class DocumentChangeHandler {
 					}
 				}
 			} else {
-				triggerSuggest = true;
+				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
+				if (prevChar === '"') {
+					skipTrigger = true;
+				} else {
+					triggerSuggest = true;
+				}
 			}
 		}
-		if (activeChange.rangeOffset > 10) {
+		if (!skipTrigger && activeChange.rangeOffset > 10) {
 			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
 			if ((prevChar === '\n' || prevChar === ' ') && activeChange.text === 'x') {
 				triggerSuggest = true;
