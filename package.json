@@ -2,7 +2,7 @@
 	"name": "xslt-xpath",
 	"displayName": "XSLT/XPath for Visual Studio Code",
 	"description": "Comprehensive language support for XSLT 3.0 / XPath 3.1",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"publisher": "deltaxml",
 	"icon": "xslt-xpath.png",
 	"repository": {
