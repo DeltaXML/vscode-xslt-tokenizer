@@ -142,21 +142,10 @@ export class XsltTokenCompletions {
 						let prevXmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
 						switch (prevXmlTokenType) {
 							case XSLTokenLevelState.attributeValue:
-							case XSLTokenLevelState.xmlText:
-								let prev2Token = allTokens[index - 2];
-								let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
-								if (prev2IsXML) {
-									// handle xml attribute/tag completion after other attribute or after text nodes
-
-									let prev2XmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
-									switch (prev2XmlTokenType) {
-										case XSLTokenLevelState.attributeValue:
-											// let a = attNameText;
-											// resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
-											break;
-									}
+								if (prevToken.startCharacter + prevToken.length > requiredChar) {
+									// we're within the attribute value
 								} else {
-									resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, null, prev2Token, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+									resultCompletions =  XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 								}
 								break;
 							case XSLTokenLevelState.elementName:
@@ -176,10 +165,10 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
