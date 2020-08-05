@@ -450,6 +450,13 @@ export class XsltTokenCompletions {
 										} else if (languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1) {
 											let prev2Token = allTokens[index - 2];
 											resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+										} else if (variableName === '}' && token.startCharacter + 1 === requiredChar) {
+											// for avt
+											let prev2Token = allTokens[index - 2];
+											let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
+											if (!prev2IsXML) {
+												resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+											}
 										} else {
 											if (attName === 'as') {
 												let completionStrings = XsltTokenCompletions.sequenceTypes;
