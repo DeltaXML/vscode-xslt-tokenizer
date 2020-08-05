@@ -8,5 +8,9 @@
     
     <xsl:variable name="test2" as="xs:int" select="" expand-text="false"/>
     
+    <xsl:template match="/" mode="#default">
+        <block name="abc{count(2)}"
+    </xsl:template>
+    
     
 </xsl:stylesheet>
