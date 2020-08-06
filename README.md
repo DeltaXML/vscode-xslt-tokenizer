@@ -90,6 +90,18 @@ If your XSLT contains xsl:use-package instructions, XSLT package names are resol
 
 `XSLT.resources.packages`
 
+An example of XSLT package name settings:
+
+```json
+"XSLT.resources.xsltPackages": [
+       { "name": "example.com.package1", "version": "2.0", "path": "included1.xsl"},
+       { "name": "example.com.package2", "version": "2.0", "path": "features/included2.xsl"},
+       { "name": "example.com.package3", "version": "2.0", "path": "features/not-exists.xsl"}
+]
+```
+
+If file paths are relative they are resolved from the first Visual Studio Code Workspace folder
+
 *Note: Currently, XSLT Package versions are not used in package-name lookup*
 
 ## Formatting
