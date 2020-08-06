@@ -88,7 +88,7 @@ If your XSLT contains xsl:use-package instructions, XSLT package names are resol
 
  To allow XSLT package names to be resolved to file paths, package details should be added to the setting:
 
-`XSLT.resources.packages`
+`XSLT.resources.xsltPackages`
 
 An example of XSLT package name settings:
 
