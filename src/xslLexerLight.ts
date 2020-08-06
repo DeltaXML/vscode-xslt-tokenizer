@@ -196,6 +196,7 @@ export class XslLexerLight extends XslLexer {
                                         } else {
                                             gd['memberNames'] = [attValue];
                                         }
+                                        gd.idNumber++;
                                     }
                                 }
                             } else if (isGlobalInstructionMatch) {

@@ -13,6 +13,7 @@
     xmlns:math="http://www.w3.org/2005/xpath-functions/math"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:saxon="http://saxon.sf.net/"
+    xmlns:abc="namespace-uri.com"
     xmlns:fn="def"
     version="3.0">
     
@@ -34,9 +35,14 @@
     <xsl:variable name="v4" as="xs:integer" select="$inc4p1"/>
     <xsl:variable name="v5" as="xs:integer" select="$inc5p1"/>
     <xsl:variable name="v6" as="xs:integer" select="$inc6p1"/>
+    <xsl:variable name="f1" as="xs:string" select="abc:test1('a')"/>
     
     <xsl:template match="/" mode="#all">
         <xsl:sequence select="let $a := ($v1, $va) return $a"/>
+        
+        <xsl:call-template name="included">
+            <xsl:with-param name="inc1p1" as="xs:int" select="$inc5v1"/>
+        </xsl:call-template>
         
         <xsl:copy>
             <xsl:sequence select="map:keys(2)"/>
