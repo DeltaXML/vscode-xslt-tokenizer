@@ -80,9 +80,17 @@ The Saxon XSLT-Java and XSLT-JS TaskProviders are enabled by default. These can 
 
 ### XSLT Packages
 
-If your XSLT contains xsl:use-package instructions you can set the paths for named packages in the setting:
+If your XSLT contains xsl:use-package instructions, XSLT package names are resolved to lookup symbols to support the following features:
+
+- Goto Definition
+- Symbol Diagnostics
+- Symbol Auto-Complection
+
+ To allow XSLT package names to be resolved to file paths, package details should be added to the setting:
 
 `XSLT.resources.packages`
+
+*Note: Currently, XSLT Package versions are not used in package-name lookup*
 
 ## Formatting
 
