@@ -139,7 +139,7 @@ export class Data {
         } else if (Data.keywords.indexOf(token.value) > -1) {
             token.tokenType = TokenLevelState.operator;
         } else {
-            token['error'] = ErrorType.XPathKeyword;
+            // token['error'] = ErrorType.XPathKeyword;
         }
     }
 
