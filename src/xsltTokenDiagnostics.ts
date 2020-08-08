@@ -5,7 +5,7 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 
@@ -30,7 +30,8 @@ enum AttributeType {
 	InstructionName,
 	InstructionMode,
 	UseAttributeSets,
-	ExcludeResultPrefixes
+	ExcludeResultPrefixes,
+	XPath
 }
 
 enum CurlyBraceType {
@@ -151,9 +152,9 @@ export class XsltTokenDiagnostics {
 	}
 
 
-	public static calculateDiagnostics = (xslVariable: string[], docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (languageConfig :LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
-
+        let xslVariable = languageConfig.variableElementNames;
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined: boolean;
 		let elementStack: ElementData[] = [];
@@ -652,6 +653,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.attributeValue:
 						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
+						let hasProblem = false;
 						if (rootXmlnsName !== null) {
 							let prefix = rootXmlnsName.length === 5? '': rootXmlnsName.substr(6);
 							rootXmlnsBindings.push([prefix, variableName]);
@@ -685,9 +687,13 @@ export class XsltTokenDiagnostics {
 									let excludePrefixes = variableName.split(/\s+/);
 									tagExcludeResultPrefixes = {token: token, prefixes: excludePrefixes};
 								break;
+							case AttributeType.None:
+								if (prevToken && prevToken.length === 1 && prevToken.tokenType === XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.attributeValue) {
+									token['error'] = ErrorType.XPathEmpty;
+								}
+								break;
 						}
 
-						let hasProblem = false;
 						if (token.error) {
 							problemTokens.push(token);
 							hasProblem = true;
@@ -1775,6 +1781,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathFunctionUnexpected:
 					msg = `XPath: Unexpected function after expression: '${tokenValue}()' `;
+					break;
+				case ErrorType.XPathEmpty:
+					msg = 'XSLT: Expected XPath expression';
 					break;
 				case ErrorType.XPathName:
 					msg = `XPath: Invalid name: '${tokenValue}'`;

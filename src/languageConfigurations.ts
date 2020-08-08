@@ -20,6 +20,7 @@ export class XSLTConfiguration {
 
 	static configuration: LanguageConfiguration = {
 		expressionAtts: XSLTConfiguration.expressionAtts,
+		variableElementNames: ['xsl:variable', 'xsl:param'],
 		avtAtts: XSLTConfiguration.avtAtts,
 		nativePrefix: XSLTConfiguration.xsltPrefix,
 		tvtAttributes: ['expand-text'],
@@ -70,6 +71,7 @@ export class XProcConfiguration {
 	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {
 		expressionAtts: ['select', 'test'],
+		variableElementNames: ['p:variable', 'p:param'],
 		nativePrefix: 'p',
 		tvtAttributes: ['expand-text', 'inline-expand-text'],
 		nonNativeAvts: true,
@@ -80,6 +82,7 @@ export class XProcConfiguration {
 export class XMLConfiguration {
 	public static configuration: LanguageConfiguration = {
 		expressionAtts: [],
+		variableElementNames: [],
 		nativePrefix: 'qz',
 		tvtAttributes: [],
 		nonNativeAvts: false,
@@ -93,6 +96,7 @@ export class XSLTLightConfiguration {
 	// used for global instruction processing only
 	public static configuration: LanguageConfiguration = {
 		expressionAtts: [],
+		variableElementNames: [],
 		nativePrefix: 'xsl',
 		tvtAttributes: [],
 		nonNativeAvts: false,

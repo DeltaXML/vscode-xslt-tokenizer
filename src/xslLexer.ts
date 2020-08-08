@@ -116,8 +116,8 @@ interface XmlElement {
 }
 
 export interface LanguageConfiguration {
-    expressionAtts?: string[],
-    variableElementNames?: string[],
+    expressionAtts: string[],
+    variableElementNames: string[],
     linkElementAttrNames?: [string, string];
     avtAtts?: string[],
     nativePrefix: string,

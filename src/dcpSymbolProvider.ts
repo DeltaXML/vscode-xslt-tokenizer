@@ -8,14 +8,15 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection;
-	private static varNames = ['stringParameter', 'booleanParameter'];
-	private docType: DocumentTypes
+	private docType: DocumentTypes;
+	private readonly languageConfig: LanguageConfiguration;
 
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
+		this.languageConfig = xsltConfiguration;
 		this.docType = xsltConfiguration.docType;
 	}
 
@@ -44,7 +45,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];			
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(DCPSymbolProvider.varNames, this.docType, document, allTokens, [], [], symbols);
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, [], [], symbols);
 			let importDiagnostics: vscode.Diagnostic[] = [];
 			errorFileRefs.forEach((fileRef) => {
 				if (fileRef) {
