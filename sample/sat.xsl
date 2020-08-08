@@ -3,7 +3,7 @@
     <xsl:variable name="test" as="xs:int" select=""/>
     
     <xsl:template match="/" mode="#default">
-        <new name=""/>
+        <new name="this {test}"/>
     </xsl:template>
     
 </xsl:stylesheet>
