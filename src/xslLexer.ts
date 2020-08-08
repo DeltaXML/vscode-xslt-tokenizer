@@ -198,15 +198,6 @@ export class XslLexer {
         return isCurrentCharNewLine || char === ' ' || char == '\t' || char === '\r';
     }
 
-    private isAvtAttribute(isNative: boolean) {
-        if (isNative) {
-
-        } else {
-
-        }
-    }
-
-    
     public isAvtAtt(name: string) {
         return this.languageConfiguration.avtAtts? this.languageConfiguration.avtAtts.indexOf(name) > -1: false;
     }
