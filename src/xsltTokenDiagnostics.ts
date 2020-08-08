@@ -1033,7 +1033,11 @@ export class XsltTokenDiagnostics {
 												// (+ or ++ are not ok
 												if ((pv === '&gt;' && tv === '&gt;') || (pv === '&lt;' && (tv === '&lt;' || tv === '&gt;'))) {
 													// allow << <> or >>
-												} else if (!(
+												} else if (tv === 'as') {
+													isXPathError = pv !== 'castable' && pv !== 'cast' && pv !== 'treat';
+												} else if (tv === 'of') {
+													isXPathError = pv !== 'instance';
+											    } else if (!(
 													(pv === '?' && (tv === ',' || tv === ')')) || 
 													(tv === '?' && (pv === '(' || pv === ')' || pv === ','))
 												)) {
