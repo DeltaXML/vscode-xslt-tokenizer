@@ -26,7 +26,7 @@
     <xsl:use-package name="example.com.package4"/>
    
    
-    <xsl:param name="p1" as="xs:integer" select="1"/>
+    <xsl:param name="p1" as="xs:integer" select="abc:test1(2)"/>
 
     <xsl:variable name="va" as="xs:integer" select="2"/>
     <xsl:variable name="v1" as="xs:integer" select="$inc1p1"/>
