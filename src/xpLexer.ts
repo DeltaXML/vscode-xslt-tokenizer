@@ -875,6 +875,8 @@ export class XPathLexer {
                     case CharLevelState.lVar:
                     case CharLevelState.lSq:
                     case CharLevelState.lDq:
+                    case CharLevelState.rLiteralSqEnt:
+                    case CharLevelState.rLiteralDqEnt:
                     case CharLevelState.rDqEnt:
                     case CharLevelState.rSqEnt:
                     case CharLevelState.dot:

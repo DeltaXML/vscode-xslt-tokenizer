@@ -1323,7 +1323,7 @@ export class XsltTokenDiagnostics {
 			let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			if (!isXMLToken) {
 				let isXPathError = false;
-				if (prevToken.tokenType === TokenLevelState.complexExpression) {
+				if (prevToken.tokenType === TokenLevelState.complexExpression || prevToken.tokenType === TokenLevelState.entityRef) {
 					// no error
 				}
 				else if (prevToken.tokenType === TokenLevelState.operator) {
