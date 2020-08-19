@@ -45,6 +45,10 @@ export enum CharLevelState {
     rSqEnt,  // 31
     lDqEnt,  // 33
     rDqEnt,  // 34
+    lLiteralSqEnt,
+    rLiteralSqEnt,
+    lLiteralDqEnt,
+    rLiteralDqEnt,
     dot
 }
 
@@ -72,6 +76,7 @@ export enum TokenLevelState {
     functionNameTest,
     complexExpression, // (xsl) keyword
     function,
+    entityRef, // same name as xslLexer entity reference
     anonymousFunction
 }
 
@@ -334,12 +339,28 @@ export class XPathLexer {
                 rv = (char === '&' && nextChar === 'q')? CharLevelState.rDqEnt: existing;               
                 break;
             case CharLevelState.lSq:
+            case CharLevelState.rLiteralSqEnt:
                 if (char === '\'' ) {
                     if (nextChar === '\'') {
                         rv = CharLevelState.escSq;
                     } else {
                         rv = CharLevelState.rSq;
                     }
+                } else if (char === '&') {
+                    rv = CharLevelState.lLiteralSqEnt;
+                } else {
+                    rv = CharLevelState.lSq;
+                }
+                break;
+            case CharLevelState.lLiteralSqEnt:
+                if (char === '\'' ) {
+                    if (nextChar === '\'') {
+                        rv = CharLevelState.escSq;
+                    } else {
+                        rv = CharLevelState.rSq;
+                    }
+                } else if (char === ';') {
+                    rv = CharLevelState.rLiteralSqEnt;
                 } else {
                     rv = existing;
                 }
@@ -493,6 +514,7 @@ export class XPathLexer {
                         case CharLevelState.lVar:
                         case CharLevelState.lName:
                         case CharLevelState.lEnt:
+                        case CharLevelState.lLiteralSqEnt:
                             this.update(poppedContext, result, tokenChars, currentLabelState);
                             tokenChars = [];
                             tokenChars.push(currentChar);
@@ -571,6 +593,8 @@ export class XPathLexer {
                         case CharLevelState.rSq:
                         case CharLevelState.rDq:
                         case CharLevelState.rUri:
+                        case CharLevelState.rLiteralSqEnt:
+                        case CharLevelState.rLiteralDqEnt:
                             tokenChars.push(currentChar);
                             this.update(poppedContext, result, tokenChars, currentLabelState);                      
                             break;
@@ -1203,6 +1227,8 @@ class BasicToken implements Token {
             case CharLevelState.lDqEnt:
             case CharLevelState.rDqEnt:
             case CharLevelState.rSqEnt:
+            case CharLevelState.rLiteralSqEnt:
+            case CharLevelState.rLiteralDqEnt:
                 this.tokenType = TokenLevelState.string;
                 break;
             case CharLevelState.lUri:
@@ -1210,6 +1236,10 @@ class BasicToken implements Token {
                 break;
             case CharLevelState.lC:
                 this.tokenType = TokenLevelState.comment;
+                break;
+            case CharLevelState.lLiteralSqEnt:
+            case CharLevelState.lLiteralDqEnt:
+                this.tokenType = TokenLevelState.entityRef;
                 break;
             default:
                 this.tokenType = TokenLevelState.Unset;
