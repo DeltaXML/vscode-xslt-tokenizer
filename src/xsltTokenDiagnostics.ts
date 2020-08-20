@@ -777,26 +777,8 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.entityRef:
 						let entityName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						let validationResult = NameValidationError.None;
-						if (entityName.length > 2 && entityName.endsWith(';')) {
-							entityName = entityName.substring(1, entityName.length - 1);
-							if (entityName.length > 2 && entityName.charAt(0) === '#') {
-								let validNumber;
-								if (entityName.charAt(1).toLocaleLowerCase() === 'x') {
-									validNumber = /^#[Xx][0-9a-fA-F]+$/.test(entityName);
-								} else {
-									validNumber = /^#[0-9]+$/.test(entityName);
-								}
-								validationResult = validNumber? NameValidationError.None: NameValidationError.NameError;
-							} else if (!dtdEnded) {
-								let isXmlChar = XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1;
-								validationResult = isXmlChar? NameValidationError.None: NameValidationError.NameError;
-							} else {
-								validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
-							}
-						} else {
-							validationResult = NameValidationError.NameError;
-						}
+						let validationResult;
+						({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(entityName, dtdEnded, nameStartCharRgx, nameCharRgx, inheritedPrefixes));
 						if (validationResult !== NameValidationError.None){
 							token['error'] = ErrorType.EntityName;
 							token['value'] = entityName;
@@ -1254,6 +1236,15 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 						}
 						break;
+					case TokenLevelState.entityRef:
+						let validationResult, entityName;
+						({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, nameStartCharRgx, nameCharRgx, inheritedPrefixes));
+						if (validationResult !== NameValidationError.None){
+							token['error'] = ErrorType.EntityName;
+							token['value'] = entityName;
+							problemTokens.push(token);
+						}
+						break;
 				}
 				if (index === lastTokenIndex) {
 					// TODO: show error if xpath token is last
@@ -1296,6 +1287,30 @@ export class XsltTokenDiagnostics {
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
+	}
+
+	private static validateEntityRef(entityName: string, dtdEnded: boolean, nameStartCharRgx: RegExp, nameCharRgx: RegExp, inheritedPrefixes: string[]) {
+		let validationResult = NameValidationError.None;
+		if (entityName.length > 2 && entityName.endsWith(';')) {
+			entityName = entityName.substring(1, entityName.length - 1);
+			if (entityName.length > 2 && entityName.charAt(0) === '#') {
+				let validNumber;
+				if (entityName.charAt(1).toLocaleLowerCase() === 'x') {
+					validNumber = /^#[Xx][0-9a-fA-F]+$/.test(entityName);
+				} else {
+					validNumber = /^#[0-9]+$/.test(entityName);
+				}
+				validationResult = validNumber ? NameValidationError.None : NameValidationError.NameError;
+			} else if (!dtdEnded) {
+				let isXmlChar = XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1;
+				validationResult = isXmlChar ? NameValidationError.None : NameValidationError.NameError;
+			} else {
+				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+			}
+		} else {
+			validationResult = NameValidationError.NameError;
+		}
+		return { validationResult, entityName };
 	}
 
 	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], overridType?: TokenLevelState) {
