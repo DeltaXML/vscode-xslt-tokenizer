@@ -372,16 +372,32 @@ export class XPathLexer {
                 rv = CharLevelState.lDq;
                 break;
             case CharLevelState.lDq:
+            case CharLevelState.rLiteralDqEnt:
                 if (char === '\"') {
                     if (nextChar === '\"') {
                         rv = CharLevelState.escDq;
                     } else {
                         rv = CharLevelState.rDq;
                     }
+                } else if (char === '&') {
+                    rv = CharLevelState.lLiteralDqEnt;
+                } else {
+                    rv = CharLevelState.lDq;
+                }
+                break; 
+            case CharLevelState.lLiteralDqEnt:
+                if (char === '"' ) {
+                    if (nextChar === '"') {
+                        rv = CharLevelState.escDq;
+                    } else {
+                        rv = CharLevelState.rDq;
+                    }
+                } else if (char === ';') {
+                    rv = CharLevelState.rLiteralDqEnt;
                 } else {
                     rv = existing;
                 }
-                break;  
+                break; 
             case CharLevelState.lC:
                 if (char === ':' && nextChar === ')') {
                     rv = (nesting === 1)? CharLevelState.rC : existing; 
@@ -515,6 +531,7 @@ export class XPathLexer {
                         case CharLevelState.lName:
                         case CharLevelState.lEnt:
                         case CharLevelState.lLiteralSqEnt:
+                        case CharLevelState.lLiteralDqEnt:
                             this.update(poppedContext, result, tokenChars, currentLabelState);
                             tokenChars = [];
                             tokenChars.push(currentChar);
@@ -1153,9 +1170,9 @@ export class Utilities {
             if (token.charType !== CharLevelState.lWs) {
                 delete token.charType;
                 delete token.context;
-                delete token.line;
-                delete token.length;
-                delete token.startCharacter;
+                // delete token.line;
+                // delete token.length;
+                // delete token.startCharacter;
                 r.push(token);
             }
             if (token.children) {
