@@ -84,6 +84,16 @@ export class XSLTSnippets {
 			body: `xmlns:xhtml="http://www.w3.org/1999/xhtml"$0`
 		},
 		{
+			name: 'xmlns:err',
+			description: 'W3C XSLT Standard Error Namespace',
+			body: `xmlns:err="http://www.w3.org/2005/xqt-errors"$0`
+		},
+		{
+			name: 'xmlns:xsi',
+			description: 'W3C XML Schema Instance Namespace',
+			body: `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"$0`
+		},
+		{
 			name: 'xmlns:deltaxml',
 			description: 'DeltaXML namespace',
 			body: `xmlns:deltaxml="http://www.deltaxml.com/ns/well-formed-delta-v1"$0`
