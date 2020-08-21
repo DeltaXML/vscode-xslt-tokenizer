@@ -851,7 +851,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.variable:
 						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
-							let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							let fullVariableName = token.value;
 							let currentVariable = {token: token, name: fullVariableName.substring(1)};
 						    if (anonymousFunctionParams) {
 								anonymousFunctionParamList.push(currentVariable);
@@ -862,6 +862,14 @@ export class XsltTokenDiagnostics {
 								xsltVariableDeclarations.push(token);
 							}
 						} else {
+							let prefixEnd = token.value.indexOf(':');
+							if (prefixEnd !== -1) {
+								let prefix = token.value.substring(1, prefixEnd);
+								if (inheritedPrefixes.indexOf(prefix) === -1) {
+									token['error'] = ErrorType.XPathPrefix;
+									problemTokens.push(token);
+								}
+							}
 							// don't include any current pending variable declarations when resolving
 							let globalVarName: string|null = null;
 							if (tagType === TagType.XSLTvar && elementStack.length === 1) {
@@ -876,7 +884,7 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.complexExpression:
-						let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						let valueText = token.value;
 						switch (valueText) {
 							case 'if':
 								ifThenStack.push(token);
