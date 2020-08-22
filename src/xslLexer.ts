@@ -628,7 +628,8 @@ export class XslLexer {
         if (this.timerOn) {
             console.time('xslLexer.analyse');
         }
-        this.globalInstructionData = [];
+        this.globalInstructionData.length = 0;
+        this.globalModeData.length = 0;
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.charCount = -1;
