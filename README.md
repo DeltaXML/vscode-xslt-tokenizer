@@ -155,6 +155,19 @@ See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getst
 
 ___
 
+## Code Folding
+
+Code-folding is currently works mostly by indentation indicating the nesting level. So, if code-folding does not work as expected, try reformatting using (for MacOS) - ```Shift + Option + F```.
+
+**Region code-folding** is also supported. This can be useful, for example, for blocks of templates for a specific mode. To set a region code-folding block, surround it with `<?region?>` and `<?endregion?>` processing instructions. You may optionally include a label for the processing instructions, for example: 
+
+```
+  <?region reconstruct?>
+    ...
+  <?endregion reconstruct?>
+```
+
+
 ## Support for other languages with embedded XPath
 
 In addition to XSLT, other XML-based languages/vocabularies with embedded XPath will be supported in future in this extension. Currently, DeltaXML's [Document Comparison Pipeline (DCP)](https://docs.deltaxml.com/xml-compare/latest/dcp-user-guide-9340381.html) format is supported, acting as a pilot for other languages.
