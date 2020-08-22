@@ -421,6 +421,20 @@ export class XsltTokenCompletions {
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
 								}
+								if (isOnRequiredToken) {
+									let completionStrings: string[] = [];
+									globalInstructionData.forEach((item) => {
+										if (item.type === GlobalInstructionType.Mode) {
+											if (completionStrings.indexOf(item.name) === -1 && item.name.charAt(0) !== '#') {
+												completionStrings.push(item.name);
+											}
+										}
+									});
+									let allCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.Constant);
+									let triples: [string, string, string][] = [['default mode','#default', '#default'], ['current mode', '#current', '#current']];
+									XsltTokenCompletions.createNonAlphanumericCompletions(triples, allCompletions);
+									resultCompletions = allCompletions;
+								}
 								break;
 							case AttributeType.UseAttributeSets:
 								if (isOnRequiredToken) {
@@ -752,6 +766,18 @@ export class XsltTokenCompletions {
 		}
 
 		return resultCompletions;
+	}
+
+	private static createNonAlphanumericCompletions(triples: [string, string, string][], allCompletions: vscode.CompletionItem[]) {
+		triples.forEach((pair) => {
+			const label = pair[0];
+			const text = pair[1];
+			const detail = pair[2];
+			const newItem = new vscode.CompletionItem(label, vscode.CompletionItemKind.Constant);
+			newItem.detail = detail;
+			newItem.insertText = text;
+			allCompletions.push(newItem);
+		});
 	}
 
 	private static internalFunctionCompletions(docType: DocumentTypes) {
