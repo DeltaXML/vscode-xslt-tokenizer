@@ -153,7 +153,7 @@ For word selection/navigation, by default, names like $two-parts are treated as 
 
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
-___
+
 
 ## Code Folding
 
@@ -166,7 +166,7 @@ Code-folding currently works by indentation indicating the nesting level. So, if
     ...
   <?endregion reconstruct?>
 ```
-
+___
 
 ## Support for other languages with embedded XPath
 
