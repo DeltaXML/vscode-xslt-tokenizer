@@ -125,6 +125,7 @@ export class XsltTokenCompletions {
 		let awaitingRequiredArity = false;
 		let keepProcessing = false;
 		let isOnStartOfRequiredToken = false;
+		let currentXSLTIterateParams: string[] = [];
 
 		let index = -1;
 		for (let token of allTokens) {
@@ -182,7 +183,9 @@ export class XsltTokenCompletions {
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
-							const isVar = 
+							if (tagElementName === 'xsl:iterate') {
+								currentXSLTIterateParams = [];
+							}
 							tagType = (xslVariable.indexOf(tagElementName) > -1) ? TagType.XSLTvar : TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
@@ -386,6 +389,12 @@ export class XsltTokenCompletions {
 						switch (attType) {
 							case AttributeType.Variable:
 								tagIdentifierName = variableName;
+								if (elementStack.length > 2) {
+									let parentElemmentName = elementStack[elementStack.length - 1].symbolName;
+									if (parentElemmentName === 'xsl:iterate') {
+										currentXSLTIterateParams.push(variableName);
+									}
+								}
 								variableData = { token: token, name: variableName };
 								break;
 							case AttributeType.InstructionName:
@@ -401,8 +410,13 @@ export class XsltTokenCompletions {
 										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
 									} else if (tagElementName === 'xsl:with-param' && elementStack.length > 0) {
 										// get name attribute of parent
-										let templateName = elementStack[elementStack.length - 1].symbolID;
-										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData, templateName);
+										let parentElemment = elementStack[elementStack.length - 1];
+										if (parentElemment.symbolName === 'xsl:next-iteration') {
+											resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(currentXSLTIterateParams, vscode.CompletionItemKind.Variable);
+										} else {
+											let templateName = parentElemment.symbolID;
+											resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData, templateName);
+										}
 									} else if (languageConfig.docType === DocumentTypes.DCP && languageConfig.resourceNames && tagElementName === 'resource') {
 										let varCompletionStrings = languageConfig.resourceNames;
 										resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
