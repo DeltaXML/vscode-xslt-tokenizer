@@ -1606,6 +1606,7 @@ export class XsltTokenDiagnostics {
 					case 'xsl:for-each':
 					case 'xsl:for-each-group':
 					case 'xsl:apply-templates':
+					case 'xsl:iterate':
 						kind = vscode.SymbolKind.EnumMember;
 						break;
 					case 'xsl:import':
