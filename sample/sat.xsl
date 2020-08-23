@@ -5,8 +5,17 @@
             <xsl:param name="p1" as="xs:string" select="'abc'"/>
             <xsl:param name="p2" as="xs:int" select="22"/>
             
+            <xsl:iterate select=".">
+                <xsl:param name="t1" as="xs:string" select="'abc'"/>
+                <xsl:param name="t2" as="xs:int" select="22"/>
+                
+                <xsl:next-iteration>
+                    <xsl:with-param name="t1" as="xs:string" select="$p1"/>
+                </xsl:next-iteration>
+            </xsl:iterate>
+            
             <xsl:next-iteration>
-                <xsl:with-param name="" as="xs:string" select="$p1"/>
+                <xsl:with-param name="p1" as="xs:string" select="$p1"/>
             </xsl:next-iteration>
         </xsl:iterate>
     </xsl:template>
