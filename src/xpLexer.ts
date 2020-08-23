@@ -1108,6 +1108,7 @@ export enum ErrorType {
     XPathTypeName,
     XSLTPrefix,
     MissingTemplateParam,
+    IterateParamInvalid,
     MissingPrefixInList,
     TemplateNameUnresolved,
     TemplateModeUnresolved,

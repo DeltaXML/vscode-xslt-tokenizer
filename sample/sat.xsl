@@ -9,6 +9,10 @@
                 <xsl:param name="t1" as="xs:string" select="'abc'"/>
                 <xsl:param name="t2" as="xs:int" select="22"/>
                 
+                <xsl:apply-templates select=".">
+                    <xsl:with-param name="my" as="" select="any"/>
+                </xsl:apply-templates>
+                
                 <xsl:next-iteration>
                     <xsl:with-param name="t1" as="xs:string" select="$p1"/>
                 </xsl:next-iteration>

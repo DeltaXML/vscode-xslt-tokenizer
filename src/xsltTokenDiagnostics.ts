@@ -199,6 +199,7 @@ export class XsltTokenDiagnostics {
 		let globalAttributeSetNames: string[] = [];
 		let tagExcludeResultPrefixes: {token: BaseToken, prefixes: string[]}|null = null;
 		let ifThenStack: BaseToken[] = [];
+		let currentXSLTIterateParams: string[][] = [];
 
 
 		globalInstructionData.forEach((instruction) => {
@@ -363,6 +364,9 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
+							if (tagElementName === 'xsl:iterate') {
+								currentXSLTIterateParams.push([]);
+							}
 							tagType = (xslVariable.indexOf(tagElementName) > -1)? TagType.XSLTvar: TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
@@ -541,6 +545,9 @@ export class XsltTokenDiagnostics {
 								// end of an element close-tag:
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
+									if (tagElementName === 'xsl:iterate' && currentXSLTIterateParams.length > 0) {
+										currentXSLTIterateParams.pop();
+									}
 									if (poppedData) {
 										if (poppedData.symbolName !== tagElementName) {											
 											let errorToken = Object.assign({}, poppedData.identifierToken);
@@ -661,6 +668,12 @@ export class XsltTokenDiagnostics {
 						switch (attType) {
 							case AttributeType.Variable:
 								tagIdentifierName = variableName;
+								if (elementStack.length > 2) {
+									let parentElemmentName = elementStack[elementStack.length - 1].symbolName;
+									if (parentElemmentName === 'xsl:iterate') {
+										currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push(variableName);
+									}
+								}
 								variableData = {token: token, name: variableName};
 								break;
 							case AttributeType.VariableRef:
@@ -737,6 +750,14 @@ export class XsltTokenDiagnostics {
 								if (templateParams?.indexOf(variableName) < 0) {
 									token['error'] = ErrorType.MissingTemplateParam;
 									token.value = `${callTemplateName}#${variableName}`;
+									problemTokens.push(token);
+									hasProblem = true;
+								}
+							} else if (currentXSLTIterateParams.length > 0 && elementStack.length > 2 && elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration') {
+								const params = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
+								if (params.indexOf(variableName) < 0) {
+									token['error'] = ErrorType.IterateParamInvalid;
+									token.value = variableName;
 									problemTokens.push(token);
 									hasProblem = true;
 								}
@@ -1765,6 +1786,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingTemplateParam:
 					let pParts = tokenValue.split('#');
 					msg = `XSLT: xsl:param '${pParts[0]}' is not declared for template '${pParts[1]}'`;
+					break;
+				case ErrorType.IterateParamInvalid:
+					msg = `XSLT: param name '${tokenValue}' in xsl:with-param is not declared in parent xsl:instruction:`;
 					break;
 				case ErrorType.TemplateNameUnresolved:
 					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
