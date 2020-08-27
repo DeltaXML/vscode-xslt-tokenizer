@@ -1548,8 +1548,16 @@ export class XsltTokenDiagnostics {
 	}
 
 	public static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
-		let startPos = new vscode.Position(lineNumber, token.startCharacter);
-		let endPos = new vscode.Position(lineNumber, token.startCharacter + token.length);
+		let start= token.startCharacter;
+		if (start < 0) {
+			console.error("ERROR: Found illegal token for document: " + document.fileName)
+			console.error("token.startCharacter less than zero: " + token.startCharacter);
+			console.error(token);
+			start = 0;
+		}
+
+		let startPos = new vscode.Position(lineNumber, start);
+		let endPos = new vscode.Position(lineNumber, start + token.length);
 		const currentLine = document.lineAt(lineNumber);
 		let valueRange = currentLine.range.with(startPos, endPos);
 		let valueText = document.getText(valueRange);

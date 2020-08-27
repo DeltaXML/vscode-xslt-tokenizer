@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 enum HasCharacteristic {
 	unknown,
@@ -144,13 +145,13 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					case XSLTokenLevelState.xslElementName:
 						complexStateStack = [[0, []]];
 						isXSLTStartTag = true;
-						elementName = this.getTextForToken(lineNumber, token, document);
+						elementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						isPreserveSpaceElement = elementName === 'xsl:text';
 						break;
 					case XSLTokenLevelState.elementName:
 						complexStateStack = [[0, []]];
 						isXSLTStartTag = false;
-						elementName = this.getTextForToken(lineNumber, token, document);
+						elementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						break;
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
@@ -242,7 +243,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						attributeNameOnNewLine = lineNumberDiff > 0;
 						nameIndentRequired = true;
 						if (token.length === 9 || (isXSLTStartTag && this.minimiseXPathIndents)) {
-							let valueText = this.getTextForToken(lineNumber, token, document);
+							let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							awaitingXmlSpaceAttributeValue = (valueText === 'xml:space');
 							nameIndentRequired = !(isXSLTStartTag && attributeNameOnNewLine && this.xslLexer.isExpressionAtt(valueText));
 						}
@@ -255,7 +256,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						break;
 					case XSLTokenLevelState.attributeValue:
 						const attValueLine = document.lineAt(lineNumber);
-						let attValueText = this.getTextForToken(lineNumber, token, document);
+						let attValueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						// token constains single/double quotes also
 						let textOnFirstLine = token.length > 1 && attValueText.trim().length > 1;
 						let indentRemainder = attributeNameOffset % indentCharLength;
@@ -277,7 +278,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						attributeNameOffset = 0;
 						newMultiLineState = (multiLineState === MultiLineState.None) ? MultiLineState.Start : MultiLineState.Middle;
 						// TODO: outdent ?> on separate line - when token value is only whitespace
-						let piText = this.getTextForToken(lineNumber, token, document);
+						let piText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let trimPi = piText.trim();
 
 						if (newMultiLineState === MultiLineState.Middle && trimPi.length > 0) {
@@ -286,7 +287,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						break;
 					case XSLTokenLevelState.xmlComment:
 						newMultiLineState = (multiLineState === MultiLineState.None) ? MultiLineState.Start : MultiLineState.Middle;
-						let commentLineText = this.getTextForToken(lineNumber, token, document);
+						let commentLineText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let trimLine = commentLineText.trimLeft();
 
 						let doIndent = newMultiLineState === MultiLineState.Middle 
@@ -306,7 +307,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 				switch (xpathTokenType) {
 					case TokenLevelState.complexExpression:
-						let valueText = this.getTextForToken(lineNumber, token, document);
+						let valueText = token.value;
 						switch (valueText) {
 							case 'if':
 								if (lineNumber === elseLineNumber) {
@@ -358,7 +359,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								}
 								break;
 							case CharLevelState.dSep:
-								let valueText = this.getTextForToken(lineNumber, token, document);
+								let valueText = token.value;
 								if (valueText === ':=') {
 									indent = -1;
 								}
@@ -478,15 +479,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			let valueRange = currentLine.range.with(startPos, endPos);
 			return vscode.TextEdit.replace(valueRange, indentString);
 		}
-	}
-
-	private getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
-		let startPos = new vscode.Position(lineNumber, token.startCharacter);
-		let endPos = new vscode.Position(lineNumber, token.startCharacter + token.length);
-		const currentLine = document.lineAt(lineNumber);
-		let valueRange = currentLine.range.with(startPos, endPos);
-		let valueText = document.getText(valueRange);
-		return valueText;
 	}
 }
 
