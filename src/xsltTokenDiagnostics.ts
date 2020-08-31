@@ -355,7 +355,7 @@ export class XsltTokenDiagnostics {
 
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xmlText:
-						if (elementStack.length === 0) {
+						if (elementStack.length === 0 && token.startCharacter > -1) {
 							token['error'] = ErrorType.ParentLessText;
 							token['value'] = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							problemTokens.push(token);
