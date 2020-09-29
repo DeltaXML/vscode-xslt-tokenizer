@@ -3,16 +3,16 @@ import { XMLConfiguration } from './languageConfigurations';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
 
 export interface TagRenameEdit {
-	range: vscode.Range,
-	text: string
-	fullTagName: string
+	range: vscode.Range;
+	text: string;
+	fullTagName: string;
 }
 export class DocumentChangeHandler {
-	private onDidChangeRegistration: vscode.Disposable|null = null;
+	private onDidChangeRegistration: vscode.Disposable | null = null;
 	private xmlDocumentRegistered = false;
-	private lastChangePerformed: TagRenameEdit|null = null;
+	private lastChangePerformed: TagRenameEdit | null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
-	private cachedFailedEdit: TagRenameEdit|null = null;
+	private cachedFailedEdit: TagRenameEdit | null = null;
 
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
@@ -67,7 +67,7 @@ export class DocumentChangeHandler {
 			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
 			if ((prevChar === '\n' || prevChar === ' ') && activeChange.text === 'x') {
 				triggerSuggest = true;
-			} else if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1 )  {
+			} else if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
 				triggerSuggest = true;
 			}
 		}
@@ -100,7 +100,7 @@ export class DocumentChangeHandler {
 						let updateEndPos = new vscode.Position(startLline, startChar + endTagPosData.endTag.length);
 						let updateRange = new vscode.Range(updateStartPos, updateEndPos);
 						// replace the whole endtag to be safe:
-						this.lastChangePerformed = {range: updateRange, text: endTagPosData.startTag, fullTagName: endTagPosData.startTag};
+						this.lastChangePerformed = { range: updateRange, text: endTagPosData.startTag, fullTagName: endTagPosData.startTag };
 						await this.performRename(e.document, Object.assign(this.lastChangePerformed));
 					}
 					let endTagNameOk = this.checkEndTag(endTagPosData, tagNameLengthBeforeEdit, activeChange);
@@ -110,7 +110,7 @@ export class DocumentChangeHandler {
 						let updateStartPos = new vscode.Position(endTagPos.line, adjustedStartTagPos);
 						let updateEndPos = new vscode.Position(endTagPos.line, adjustedStartTagPos + activeChange.rangeLength);
 						let updateRange = new vscode.Range(updateStartPos, updateEndPos);
-						this.lastChangePerformed = {range: updateRange, text: activeChange.text, fullTagName: endTagPosData.startTag};
+						this.lastChangePerformed = { range: updateRange, text: activeChange.text, fullTagName: endTagPosData.startTag };
 						await this.performRename(e.document, Object.assign(this.lastChangePerformed));
 					} else {
 						this.lastChangePerformed = null;
@@ -141,7 +141,7 @@ export class DocumentChangeHandler {
 		return result;
 	}
 
-	public registerXMLEditor = (editor: vscode.TextEditor|undefined) => {
+	public registerXMLEditor = (editor: vscode.TextEditor | undefined) => {
 		if (editor) {
 			this.registerXMLDocument(editor.document);
 		} else {
@@ -162,10 +162,10 @@ export class DocumentChangeHandler {
 	}
 
 	public async performRename(document: vscode.TextDocument, edit: TagRenameEdit) {
-        let wse = new vscode.WorkspaceEdit();
+		let wse = new vscode.WorkspaceEdit();
 		wse.replace(document.uri, edit.range, edit.text);
 		let success = false;
-        await vscode.workspace.applyEdit(wse).then((result) => {
+		await vscode.workspace.applyEdit(wse).then((result) => {
 			success = result;
 		});
 		if (success) {
@@ -175,16 +175,16 @@ export class DocumentChangeHandler {
 			this.lastChangePerformed = null;
 		}
 		return success;
-    }
+	}
 
 	private changesAreEqual(tagRenameEdit: TagRenameEdit, change2: vscode.TextDocumentContentChangeEvent) {
 		if (tagRenameEdit && change2) {
 			let result = (
-			tagRenameEdit.range.start.line === change2.range.start.line &&
-			tagRenameEdit.range.start.character === change2.range.start.character &&
-			tagRenameEdit.range.end.character === change2.range.end.character &&
-			tagRenameEdit.range.end.line === change2.range.end.line &&
-			tagRenameEdit.text === change2.text);
+				tagRenameEdit.range.start.line === change2.range.start.line &&
+				tagRenameEdit.range.start.character === change2.range.start.character &&
+				tagRenameEdit.range.end.character === change2.range.end.character &&
+				tagRenameEdit.range.end.line === change2.range.end.line &&
+				tagRenameEdit.text === change2.text);
 			return result;
 		} else {
 			return false;
