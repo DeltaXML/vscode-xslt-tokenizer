@@ -14,16 +14,16 @@
  to transform core-dcp-v1_0.xsd - included in XML Compare
 */
 
-import { SchemaData, ComplexType, SimpleType } from './xsltSchema'
+import { SchemaData, ComplexType, SimpleType } from './xsltSchema';
 import { DocumentTypes } from './xslLexer';
 
 export interface SubstitutionGroupType {
-    type: string,
-    elements: { [name: string]: ComplexType }
+    type: string;
+    elements: { [name: string]: ComplexType };
 }
 
 export interface AttributeItem {
-    name: string,
+    name: string;
     enum?: string[];
 }
 export class DCPSchema implements SchemaData {
@@ -193,7 +193,7 @@ export class DCPSchema implements SchemaData {
             }
         },
         "anyNameType": { base: ['xs:string'] },
-    }
+    };
     complexTypes: { [name: string]: ComplexType } = {
         "processingModeType": {
             attrs: {
@@ -253,7 +253,7 @@ export class DCPSchema implements SchemaData {
         "outputExtensionPointsType": {
             elementNames: ['preTablePoint', 'postTablePoint', 'preAttributePoint', 'finalPoint']
         },
-    }
+    };
     elements: { [name: string]: ComplexType } = {
         "lexicalPreservation": {
             elementNames: ['defaults', 'overrides'],
@@ -761,7 +761,7 @@ export class DCPSchema implements SchemaData {
             type: 'filterChainType',
             detail: `The filter extension point immediately after table processing.
 `},
-    }
+    };
     attributeGroups: { [name: string]: any } = {
         "parameterRefGroup": {
             attrs: {
@@ -769,5 +769,5 @@ export class DCPSchema implements SchemaData {
                 'xpath': 'xpathExpressionType'
             }
         },
-    }
+    };
 }
