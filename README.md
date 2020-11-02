@@ -153,6 +153,10 @@ For word selection/navigation, by default, names like $two-parts are treated as 
 
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
+For XSLT, keeping most of the default separator charators it is useful to disable `.` but enable `:` as word separators, as below:
+
+
+  `~!@#%^&*()=+[{]}\|;'",:<>/?$
 
 
 ## Code Folding
