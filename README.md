@@ -31,7 +31,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
    - XML Context-Aware Snippets
    - XML Well-Formedness Checking
    - Tag Rename
-   - Auto tag-close
+   - Auto tag-close (requires 'formatOnType' setting)
    - Auto clean orphaned end tag after `/` added to make start tag self-close
 
  
