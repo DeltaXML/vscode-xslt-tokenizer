@@ -1793,7 +1793,7 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.MissingTemplateParam:
 					let pParts = tokenValue.split('#');
-					msg = `XSLT: xsl:param '${pParts[0]}' is not declared for template '${pParts[1]}'`;
+					msg = `XSLT: xsl:param '${pParts[1]}' is not declared for template '${pParts[0]}'`;
 					break;
 				case ErrorType.IterateParamInvalid:
 					msg = `XSLT: param name '${tokenValue}' in xsl:with-param is not declared in parent xsl:instruction:`;
