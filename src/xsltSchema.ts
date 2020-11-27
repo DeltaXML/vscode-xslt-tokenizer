@@ -216,7 +216,6 @@ export class XSLTSchema implements SchemaData {
                         '_validation': 'xs:string'
                     }
                 },
-                "xsl:break": { type: 'xsl:sequence-constructor-or-select' },
                 "xsl:call-template": {
                     base: 'xsl:element-only-versioned-element-type',
                     attrs: {
@@ -403,10 +402,6 @@ export class XSLTSchema implements SchemaData {
                         'name': 'xsl:avt',
                         '_name': 'xs:string'
                     }
-                },
-                "xsl:next-iteration": {
-                    base: 'xsl:element-only-versioned-element-type',
-                    elementNames: ['xsl:with-param']
                 },
                 "xsl:next-match": {
                     base: 'xsl:element-only-versioned-element-type',

@@ -1163,11 +1163,21 @@ export class XsltTokenCompletions {
 		let xsltParent: string|null = null;
 		let stackPos = elementStack.length - 1;
 		let isXSLT = docType === DocumentTypes.XSLT;
+		let isWithinXslIterate = false;
+		let isWithinXslNextIteration = false;
 		while (stackPos > -1) {
 			let elementName = elementStack[stackPos].symbolName;
 			if (isXSLT && elementName.startsWith('xsl:')) {
-				xsltParent = elementName;
-				break;
+				if (!xsltParent) {
+					xsltParent = elementName;
+				}
+				if (elementName === 'xsl:next-iteration') {
+					isWithinXslNextIteration = true;
+					break;
+				}
+				if (!isWithinXslIterate) {
+					isWithinXslIterate = elementName === 'xsl:iterate';
+				}
 			} else if (!isXSLT) {
 				xsltParent = elementName;
 				break;
@@ -1177,6 +1187,21 @@ export class XsltTokenCompletions {
 		expectedTags = xsltParent? schemaQuery.getExpected(xsltParent).elements: [];
 
 		let completionItems: vscode.CompletionItem[] = [];
+		if (isWithinXslIterate) {
+			const newItem = new vscode.CompletionItem('xsl:next-iteration', vscode.CompletionItemKind.Struct);
+			newItem.documentation = "start next iteration with provided xsl:param context";
+			newItem.insertText = new vscode.SnippetString('xsl:next-iteration>\n\t<xsl:param name="$1" select="$2"/>$0\n</xsl:next-iteration>');
+			completionItems.push(newItem);
+			const newItem1 = new vscode.CompletionItem('xsl:break', vscode.CompletionItemKind.Struct);
+			newItem1.documentation = "terminate the iteration without processing further items in the input sequence";
+			newItem1.insertText = new vscode.SnippetString('xsl:break/>');
+			completionItems.push(newItem1);
+		} else if (isWithinXslNextIteration) {
+			const newItem = new vscode.CompletionItem('xsl:param', vscode.CompletionItemKind.Struct);
+			newItem.documentation = "provide xsl:param context for next iteration";
+			newItem.insertText = new vscode.SnippetString('xsl:param name="$1" select="$2"/>$0');
+			completionItems.push(newItem);
+		}
 		expectedTags.forEach((tagData) => {
 			let tagName = tagData[0];
 			let tagDetail = tagData[1];
