@@ -89,7 +89,7 @@
 					"description": "Associate file paths with xsl:package names",
 					"type": "array",
 					"items": {
-						"type":"object",
+						"type": "object",
 						"properties": {
 							"name": {
 								"type": "string",
@@ -103,8 +103,11 @@
 								"type": "string",
 								"description": "Path to named XSLT Package"
 							}
-						}, 
-						"required": ["name", "path"]
+						},
+						"required": [
+							"name",
+							"path"
+						]
 					}
 				}
 			}
@@ -158,21 +161,35 @@
 					},
 					"dtd": {
 						"type": "string",
-						"enum": ["on","off"],
+						"enum": [
+							"on",
+							"off"
+						],
 						"description": "Requests DTD-based validation of the source file and of any files read using the document() function"
 					},
 					"enableAssertions": {
-						"type": ["string"],
-						"enum": ["on", "off", "recover"],
+						"type": [
+							"string"
+						],
+						"enum": [
+							"on",
+							"off",
+							"recover"
+						],
 						"description": "Enables assertions both at compile time and at run time"
 					},
 					"expandValues": {
 						"type": "string",
-						"enum": ["on","off"],
+						"enum": [
+							"on",
+							"off"
+						],
 						"description": "Specifying 'off' suppresses expansion of DTD/Schema fixed or default values"
 					},
 					"explainFilename": {
-						"type": ["string"],
+						"type": [
+							"string"
+						],
 						"description": "Writes an execution plan and other diagnostic information for the stylesheet to the specified filename"
 					},
 					"exportFilename": {
@@ -186,7 +203,7 @@
 					"timing": {
 						"type": "string",
 						"description": "Display version and timing information to the standard error output"
-					},					
+					},
 					"parameters": {
 						"description": "The xsl:param values for the XSLT",
 						"type": "array",
