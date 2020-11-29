@@ -45,7 +45,7 @@
 			{
 				"scopes": {
 					"xmlPunctuation": [
-						"punctuation.definition.tag.xml"
+						"punctuation.definition.tag.xml", "punctuation.definition.tag.xi"
 					],
 					"processingInstrName": [
 						"storage.type"
@@ -571,7 +571,6 @@
 			},
 			{
 				"id": "xmlPunctuation",
-				"superType": "struct",
 				"description": "XML angle-brackets etc."
 			},
 			{
