@@ -47,6 +47,9 @@
 					"xmlPunctuation": [
 						"punctuation.definition.tag.xml", "punctuation.definition.tag.xi"
 					],
+					"attributeEquals": [
+						"punctuation.definition.tag.xml", "punctuation.definition.tag.xi"
+					],
 					"processingInstrName": [
 						"storage.type"
 					],
