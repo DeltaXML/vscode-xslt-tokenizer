@@ -1190,7 +1190,7 @@ export class XsltTokenCompletions {
 		if (isWithinXslIterate) {
 			const newItem = new vscode.CompletionItem('xsl:next-iteration', vscode.CompletionItemKind.Struct);
 			newItem.documentation = "start next iteration with provided xsl:param context";
-			newItem.insertText = new vscode.SnippetString('xsl:next-iteration>\n\t<xsl:param name="$1" select="$2"/>$0\n</xsl:next-iteration>');
+			newItem.insertText = new vscode.SnippetString('xsl:next-iteration>\n\t<xsl:with-param name="$1" select="$2"/>$0\n</xsl:next-iteration>');
 			completionItems.push(newItem);
 			const newItem1 = new vscode.CompletionItem('xsl:break', vscode.CompletionItemKind.Struct);
 			newItem1.documentation = "terminate the iteration without processing further items in the input sequence";
