@@ -24,10 +24,7 @@
           <xsl:when test="empty($prevDate) or $thisDate eq $prevDate">
             <balance date="{$thisDate}" 
                      value="{format-number($newBalance, '0.00')}"/>
-            <xsl:next-iteration>
-              <xsl:param name="" select=""/>
-              <xsl:param name="abc" select="def"/>
-            </xsl:next-iteration>
+            
           </xsl:when>
           <xsl:otherwise>
             <xsl:break/>

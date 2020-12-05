@@ -394,7 +394,7 @@ export class XsltTokenCompletions {
 								tagIdentifierName = variableName;
 								if (elementStack.length > 2) {
 									let parentElemmentName = elementStack[elementStack.length - 1].symbolName;
-									if (parentElemmentName === 'xsl:iterate') {
+									if (parentElemmentName === 'xsl:iterate' && tagElementName === 'xsl:param') {
 										currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push(variableName);
 									}
 								}
@@ -1199,7 +1199,7 @@ export class XsltTokenCompletions {
 		} else if (isWithinXslNextIteration) {
 			const newItem = new vscode.CompletionItem('xsl:with-param', vscode.CompletionItemKind.Struct);
 			newItem.documentation = "provide xsl:param context for next iteration";
-			newItem.insertText = new vscode.SnippetString('xsl:param name="$1" select="$2"/>$0');
+			newItem.insertText = new vscode.SnippetString('xsl:with-param name="$1" select="$2"/>$0');
 			completionItems.push(newItem);
 		}
 		expectedTags.forEach((tagData) => {
