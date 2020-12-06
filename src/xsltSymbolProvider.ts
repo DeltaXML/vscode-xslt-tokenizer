@@ -74,7 +74,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						let errorData = globalInstructionData.find((dataObject) => {
 							let result = false;
 							if (dataObject.type === GlobalInstructionType.Import || dataObject.type === GlobalInstructionType.Include) {
-								let resolvedName = this.resolvePath(dataObject.name, document.fileName);
+								let resolvedName = XsltSymbolProvider.resolvePath(dataObject.name, document.fileName);
 								result = resolvedName === globals.href;
 							} else if (dataObject.type === GlobalInstructionType.UsePackage) {
 								// TODO:
@@ -151,7 +151,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-					let resolvedName = this.resolvePath(data.name, importedG.href);
+					let resolvedName = XsltSymbolProvider.resolvePath(data.name, importedG.href);
 					if (existingHrefs.indexOf(resolvedName) < 0) {
 						existingHrefs.push(resolvedName);
 						result.push(resolvedName);
@@ -173,7 +173,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result;
 	}
 
-	private resolvePath(href: string, documentPath: string) {
+	public static resolvePath(href: string, documentPath: string) {
 
 		if (path.isAbsolute(href)) {
 			return href;

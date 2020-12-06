@@ -161,7 +161,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-					let resolvedName = this.resolvePath(data.name, importedG.href);
+					let resolvedName = XsltSymbolProvider.resolvePath(data.name, importedG.href);
 					if (existingHrefs.indexOf(resolvedName) < 0) {
 						existingHrefs.push(resolvedName);
 						result.push(resolvedName);
@@ -181,17 +181,6 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			});
 		});
 		return result;
-	}
-
-	private resolvePath(href: string, documentPath: string) {
-
-		if (path.isAbsolute(href)) {
-			return href;
-		} else {
-			let basePath = path.dirname(documentPath);
-			let joinedPath = path.join(basePath, href);
-			return path.normalize(joinedPath);
-		}
 	}
 
 	private async fetchImportedGlobals(inputHrefs: string[]): Promise<ImportedGlobals[]> {
