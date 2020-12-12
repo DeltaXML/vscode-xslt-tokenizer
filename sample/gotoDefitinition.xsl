@@ -19,14 +19,14 @@
         
     </xsl:function>
     
-   <xsl:template name="template1">
-       <xsl:param name="p1" as="node()"/>
-       <xsl:copy>
-           <xsl:apply-templates select="@*, node()" mode="#current"/>
-       </xsl:copy>
-       
-   </xsl:template>
+    <xsl:template name="template1">
+        <xsl:param name="p1" as="node()"/>
+        <xsl:copy>
+            <xsl:apply-templates select="@*, node()" mode="#current"/>
+        </xsl:copy>
         
+    </xsl:template>
+    
     <xsl:variable name="variable1" as="xs:integer" select="2"/>
     
     

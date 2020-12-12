@@ -25,16 +25,21 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
    - [Peek Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
    - [VScode Tasks](https://code.visualstudio.com/Docs/editor/tasks) include custom [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
    - [Bracket Matching](https://code.visualstudio.com/Docs/editor/editingevolved#_bracket-matching)
-   - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax
+   - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax *
  -  Follow `xsl:include` / `xsl:import` / `xsl:use-package` links
  - Custom XML Editing Featues:
    - XML Context-Aware Snippets
-   - XML Well-Formedness Checking
+   - XML Well-Formedness Checking *
    - Tag Rename
    - Auto tag-close (requires 'formatOnType' setting)
    - Auto clean orphaned end tag after `/` added to make start tag self-close
 
- 
+ ---
+
+   \* Problem-reporting currently depends upon the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`
+  
+ ---
+
  ## Introduction
  
 For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. Avoiding the much more common use of regular expressions on a line-by-line basis brings significant benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and full integrity for syntax highlighting.
