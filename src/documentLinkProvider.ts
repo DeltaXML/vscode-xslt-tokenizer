@@ -23,8 +23,7 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 
 		data.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Import || instruction.type === GlobalInstructionType.Include) {
-				const basePath = path.dirname(document.fileName);
-				const resolvedPath = path.resolve(basePath, instruction.name);
+				const resolvedPath = XsltSymbolProvider.resolvePath(instruction.name, document.fileName);
 				const uri = vscode.Uri.parse(resolvedPath);
 				const startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
 				const endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + (instruction.token.length + 2));
