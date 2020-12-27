@@ -104,7 +104,10 @@ export class XsltTokenDiagnostics {
 		return XsltTokenDiagnostics.brackets.indexOf(charState) !== -1;
 	}
 
-	private static validateName(name: string, type: ValidationType, startCharRgx: RegExp, charRgx: RegExp, xmlnsPrefixes: string[]): NameValidationError {
+	private static nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
+	private static nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
+
+	private static validateName(name: string, type: ValidationType, xmlnsPrefixes: string[]): NameValidationError {
 		let valid = NameValidationError.None
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
@@ -132,12 +135,12 @@ export class XsltTokenDiagnostics {
 							if (firstChar) {
 								firstChar = false;
 								charExists = true;
-								charsOK = startCharRgx.test(s);
+								charsOK = XsltTokenDiagnostics.nameStartCharRgx.test(s);
 								if (!charsOK) {
 									break;
 								}
 							} else {
-								charsOK = charRgx.test(s);
+								charsOK = XsltTokenDiagnostics.nameCharRgx.test(s);
 								if (!charsOK) {
 									break;
 								}
@@ -294,8 +297,6 @@ export class XsltTokenDiagnostics {
 					break;
 			}
 		});
-		let nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
-		let nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
 		allTokens.forEach((token, index) => {
 			lineNumber = token.line;
@@ -456,7 +457,7 @@ export class XsltTokenDiagnostics {
 								let attsWithXmlnsErrors: string[] = [];
 								let attsWithNameErrors: string[] = [];
 								tagAttributeNames.forEach((attName) => {
-									let validateResult = XsltTokenDiagnostics.validateName(attName, ValidationType.XMLAttribute, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+									let validateResult = XsltTokenDiagnostics.validateName(attName, ValidationType.XMLAttribute, inheritedPrefixes);
 									if (validateResult === NameValidationError.NameError) {
 										attsWithNameErrors.push(attName);
 									} else if (validateResult === NameValidationError.NamespaceError) {
@@ -474,7 +475,7 @@ export class XsltTokenDiagnostics {
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
 										problemTokens.push(startTagToken);
 									} else {
-										let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.PrefixedName, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+										let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.PrefixedName, inheritedPrefixes);
 										if (validationError !== NameValidationError.None) {
 											startTagToken['error'] = validationError === NameValidationError.NameError? ErrorType.XMLName: ErrorType.XMLXMLNS;
 											startTagToken['value'] = tagElementName;
@@ -767,7 +768,7 @@ export class XsltTokenDiagnostics {
 						if (!hasProblem && attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute')? ValidationType.XMLAttribute: ValidationType.PrefixedName;
-								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError? ErrorType.XSLTName: ErrorType.XSLTPrefix;
 									token['value'] = fullVariableName;
@@ -787,7 +788,7 @@ export class XsltTokenDiagnostics {
 								isXMLDeclaration = true;
 							}
 						} else {
-							let validateResult = XsltTokenDiagnostics.validateName(piName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+							let validateResult = XsltTokenDiagnostics.validateName(piName, ValidationType.Name, inheritedPrefixes);
 							validPiName = validateResult === NameValidationError.None;
 						}
 						if (!validPiName) {
@@ -799,7 +800,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.entityRef:
 						let entityName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let validationResult;
-						({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(entityName, dtdEnded, nameStartCharRgx, nameCharRgx, inheritedPrefixes));
+						({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(entityName, dtdEnded, inheritedPrefixes));
 						if (validationResult !== NameValidationError.None){
 							token['error'] = ErrorType.EntityName;
 							token['value'] = entityName;
@@ -1214,7 +1215,7 @@ export class XsltTokenDiagnostics {
 								}
 							}
 							if (!skipValidation) {
-								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError? ErrorType.XPathName: ErrorType.XPathPrefix;
 									token['value'] = token.value;
@@ -1267,7 +1268,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.entityRef:
 						let validationResult, entityName;
-						({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, nameStartCharRgx, nameCharRgx, inheritedPrefixes));
+						({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes));
 						if (validationResult !== NameValidationError.None){
 							token['error'] = ErrorType.EntityName;
 							token['value'] = entityName;
@@ -1334,7 +1335,7 @@ export class XsltTokenDiagnostics {
 				let isXmlChar = XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1;
 				validationResult = isXmlChar ? NameValidationError.None : NameValidationError.NameError;
 			} else {
-				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, nameStartCharRgx, nameCharRgx, inheritedPrefixes);
+				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, inheritedPrefixes);
 			}
 		} else {
 			validationResult = NameValidationError.NameError;
