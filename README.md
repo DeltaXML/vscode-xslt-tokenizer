@@ -52,9 +52,7 @@ This extension performs a comprehensive set of checks on the code, before any XS
 
 ![xslt-tasks](xslt-tasks.png)
 
-*XSLT transforms are configured and run as special VSCode Tasks*
-
-For more detail, see [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
+XSLT transforms are configured and run as special VSCode Tasks. For more detail, see [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
 
 ## Release Notes
 
