@@ -1319,7 +1319,7 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	}
 
-	private static validateEntityRef(entityName: string, dtdEnded: boolean, nameStartCharRgx: RegExp, nameCharRgx: RegExp, inheritedPrefixes: string[]) {
+	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[]) {
 		let validationResult = NameValidationError.None;
 		if (entityName.length > 2 && entityName.endsWith(';')) {
 			entityName = entityName.substring(1, entityName.length - 1);
