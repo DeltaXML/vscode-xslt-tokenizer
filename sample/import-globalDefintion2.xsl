@@ -42,7 +42,7 @@
     
     <xsl:template match="/" mode="#all">
         <xsl:copy>
-            <xsl:apply-templates select="" mode="#current"/>
+            <xsl:apply-templates select="*" mode="#current"/>
         </xsl:copy>        
     </xsl:template>
     
