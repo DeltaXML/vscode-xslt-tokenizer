@@ -23,6 +23,11 @@
         <xsl:param name="p1" as="node()"/>
         <xsl:copy>
             <xsl:apply-templates select="@*, node()" mode="#current"/>
+            <xsl:sequence select="
+                let $f := function ($seq, $delim) 
+                    { fold-left($seq, '', concat(?, $delim, ?)) },
+                    $paf := $f(?, '.')
+                return $paf(1 to 5)"/>
         </xsl:copy>
         
     </xsl:template>
