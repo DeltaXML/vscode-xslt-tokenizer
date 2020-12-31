@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration} from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
+import { SchemaQuery } from './schemaQuery';
 
 enum HasCharacteristic {
 	unknown,
@@ -52,7 +53,8 @@ interface ElementData {
 	symbolName: string;
 	symbolID: string,
 	childSymbols: vscode.DocumentSymbol[],
-	namespacePrefixes: string[]
+	namespacePrefixes: string[],
+	expectedChildElements: string[]
 }
 interface XPathData {
 	token: BaseToken;
@@ -78,6 +80,7 @@ enum NameValidationError {
 
 enum ValidationType {
 	XMLAttribute,
+	XMLElement,
 	PrefixedName,
 	Name
 }
@@ -107,7 +110,7 @@ export class XsltTokenDiagnostics {
 	private static nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 	private static nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
-	private static validateName(name: string, type: ValidationType, xmlnsPrefixes: string[]): NameValidationError {
+	private static validateName(name: string, type: ValidationType, xmlnsPrefixes: string[], expectedNames?: string[]): NameValidationError {
 		let valid = NameValidationError.None
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
@@ -123,7 +126,15 @@ export class XsltTokenDiagnostics {
 		} else {
 			if (nameParts.length === 2) {
 				let prefix = nameParts[0];
-				valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
+				if (type === ValidationType.XMLElement) {
+					if (prefix === 'xsl' && expectedNames) {
+						valid = expectedNames.indexOf(name) > -1? NameValidationError.None: NameValidationError.NamespaceError;
+					} else {
+						valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
+					}
+				} else {
+					valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
+				}
 			}
 			if (valid === NameValidationError.None) {
 				nameParts.forEach(namePart => {
@@ -203,7 +214,7 @@ export class XsltTokenDiagnostics {
 		let tagExcludeResultPrefixes: {token: BaseToken, prefixes: string[]}|null = null;
 		let ifThenStack: BaseToken[] = [];
 		let currentXSLTIterateParams: string[][] = [];
-
+		let schemaQuery = languageConfig.schemaData? new SchemaQuery(languageConfig.schemaData): undefined;
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -475,7 +486,7 @@ export class XsltTokenDiagnostics {
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
 										problemTokens.push(startTagToken);
 									} else {
-										let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.PrefixedName, inheritedPrefixes);
+										let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, inheritedPrefixes);
 										if (validationError !== NameValidationError.None) {
 											startTagToken['error'] = validationError === NameValidationError.NameError? ErrorType.XMLName: ErrorType.XMLXMLNS;
 											startTagToken['value'] = tagElementName;
@@ -503,11 +514,13 @@ export class XsltTokenDiagnostics {
 										}
 										if (startTagToken){
 											// if a top-level element, use global variables instad of inScopeVariablesList;
+											const expectedNames = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
 											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList, 
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: expectedNames});
 										}
 									} else if (startTagToken) {
-										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: []});
+										const expectedNames = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
+										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: expectedNames});
 									}
 									inScopeVariablesList = [];
 									newVariablesList = [];
@@ -1317,6 +1330,19 @@ export class XsltTokenDiagnostics {
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
+	}
+
+	private static getExpectedElementNames(parentName: string, schemaQuery: SchemaQuery|undefined, elementStack: ElementData[]) {
+		let expectedNames: string[] = [];
+		if (parentName.startsWith('xsl')) {
+			let nameDetailArray = schemaQuery? schemaQuery.getExpected(parentName).elements: [];
+			expectedNames = nameDetailArray.map(item => item[0]);
+		} else if (elementStack.length > 0) {
+			expectedNames = elementStack[elementStack.length - 1].expectedChildElements
+		} else {
+			expectedNames = [];
+		}
+		return expectedNames;
 	}
 
 	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[]) {
