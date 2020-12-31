@@ -75,7 +75,8 @@ interface VariableData {
 enum NameValidationError {
 	None,
 	NamespaceError,
-	NameError
+	NameError,
+	XSLTElementNameError
 }
 
 enum ValidationType {
@@ -110,7 +111,7 @@ export class XsltTokenDiagnostics {
 	private static nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 	private static nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
-	private static validateName(name: string, type: ValidationType, xmlnsPrefixes: string[], expectedNames?: string[]): NameValidationError {
+	private static validateName(name: string, type: ValidationType, xmlnsPrefixes: string[], elementStack?: ElementData[]): NameValidationError {
 		let valid = NameValidationError.None
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
@@ -127,8 +128,9 @@ export class XsltTokenDiagnostics {
 			if (nameParts.length === 2) {
 				let prefix = nameParts[0];
 				if (type === ValidationType.XMLElement) {
+					const expectedNames: string[] = elementStack && elementStack.length > 0? elementStack[elementStack.length - 1].expectedChildElements: ['xsl:transform', 'xsl:stylesheet', 'xsl:package'];
 					if (prefix === 'xsl' && expectedNames) {
-						valid = expectedNames.indexOf(name) > -1? NameValidationError.None: NameValidationError.NamespaceError;
+						valid = expectedNames.indexOf(name) > -1? NameValidationError.None: NameValidationError.XSLTElementNameError;
 					} else {
 						valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 					}
@@ -486,9 +488,9 @@ export class XsltTokenDiagnostics {
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
 										problemTokens.push(startTagToken);
 									} else {
-										let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, inheritedPrefixes);
+										let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, inheritedPrefixes, elementStack);
 										if (validationError !== NameValidationError.None) {
-											startTagToken['error'] = validationError === NameValidationError.NameError? ErrorType.XMLName: ErrorType.XMLXMLNS;
+											startTagToken['error'] = validationError === NameValidationError.NameError? ErrorType.XMLName: validationError === NameValidationError.NamespaceError? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
 											startTagToken['value'] = tagElementName;
 											problemTokens.push(startTagToken);
 										}
@@ -1814,6 +1816,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XSLTName:
 					msg = `XSLT: Invalid XSLT name: '${tokenValue}'`;
+					break;
+				case ErrorType.XSLTInstrUnexpected:
+					msg = `XSLT: instruction: ${tokenValue} not valid in this context`;
 					break;
 				case ErrorType.DuplicateParameterName:
 					msg = `XSLT: Duplicate parameter name: '${tokenValue}'`;

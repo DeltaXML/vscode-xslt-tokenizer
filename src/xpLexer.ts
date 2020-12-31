@@ -1105,6 +1105,7 @@ export enum ErrorType {
     XMLName,
     XMLSyntax,
     XSLTName,
+    XSLTInstrUnexpected,
     XPathTypeName,
     XSLTPrefix,
     MissingTemplateParam,
