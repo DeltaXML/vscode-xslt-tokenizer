@@ -83,6 +83,7 @@ enum NameValidationError {
 enum ValidationType {
 	XMLAttribute,
 	XMLElement,
+	XSLTAttribute,
 	PrefixedName,
 	Name
 }
@@ -117,7 +118,7 @@ export class XsltTokenDiagnostics {
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
 		}
-		if (type === ValidationType.XMLAttribute) {
+		if (type === ValidationType.XMLAttribute || type === ValidationType.XSLTAttribute) {
 			if (name === 'xml:space' || name === 'xml:lang' || name === 'xml:base' || name === 'xml:id') {
 				return NameValidationError.None;
 			}
@@ -147,8 +148,10 @@ export class XsltTokenDiagnostics {
 					} else {
 						valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 					}
-				} else {
+				} else if (type !== ValidationType.XSLTAttribute) {
 					valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
+				} else {
+					
 				}
 			}
 			if (valid === NameValidationError.None) {
@@ -482,8 +485,9 @@ export class XsltTokenDiagnostics {
 								}
 								let attsWithXmlnsErrors: string[] = [];
 								let attsWithNameErrors: string[] = [];
+								const valType = tagElementName.startsWith('xsl:')? ValidationType.XSLTAttribute : ValidationType.XMLAttribute;
 								tagAttributeNames.forEach((attName) => {
-									let validateResult = XsltTokenDiagnostics.validateName(attName, ValidationType.XMLAttribute, inheritedPrefixes);
+									let validateResult = XsltTokenDiagnostics.validateName(attName, valType, inheritedPrefixes, elementStack);
 									if (validateResult === NameValidationError.NameError) {
 										attsWithNameErrors.push(attName);
 									} else if (validateResult === NameValidationError.NamespaceError) {
