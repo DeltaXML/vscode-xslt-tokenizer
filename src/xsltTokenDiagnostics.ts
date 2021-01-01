@@ -129,8 +129,20 @@ export class XsltTokenDiagnostics {
 				let prefix = nameParts[0];
 				if (type === ValidationType.XMLElement) {
 					const expectedNames: string[] = elementStack && elementStack.length > 0? elementStack[elementStack.length - 1].expectedChildElements: ['xsl:transform', 'xsl:stylesheet', 'xsl:package'];
-					if (prefix === 'xsl' && expectedNames) {
-						valid = expectedNames.indexOf(name) > -1? NameValidationError.None: NameValidationError.XSLTElementNameError;
+					if (prefix === 'xsl') {
+						if (expectedNames.length === 0 && elementStack) {
+							const withinNextIteration = elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration';
+							valid = name === 'xsl:with-param' && withinNextIteration? NameValidationError.None: NameValidationError.XSLTElementNameError;
+						} else {
+							valid = expectedNames.indexOf(name) > -1? NameValidationError.None: NameValidationError.XSLTElementNameError;
+							if (valid !== NameValidationError.None && (name === 'xsl:next-iteration' || name === 'xsl:break')) {
+								const withinIterarator = elementStack?.find(item => item.symbolName === 'xsl:iterate');
+								if (withinIterarator) {
+									valid = NameValidationError.None;
+								}
+							}
+						}
+						return valid;
 					} else {
 						valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 					}
