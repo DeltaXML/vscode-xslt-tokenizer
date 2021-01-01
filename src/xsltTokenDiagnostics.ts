@@ -54,7 +54,8 @@ interface ElementData {
 	symbolID: string,
 	childSymbols: vscode.DocumentSymbol[],
 	namespacePrefixes: string[],
-	expectedChildElements: string[]
+	expectedChildElements: string[],
+	expectedAttributes: string[],
 }
 interface XPathData {
 	token: BaseToken;
@@ -528,13 +529,13 @@ export class XsltTokenDiagnostics {
 										}
 										if (startTagToken){
 											// if a top-level element, use global variables instad of inScopeVariablesList;
-											const expectedNames = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
+											const [expectedNames, expectedAttrs] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
 											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList, 
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: expectedNames});
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: expectedNames, expectedAttributes: expectedAttrs});
 										}
 									} else if (startTagToken) {
-										const expectedNames = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
-										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: expectedNames});
+										const [expectedNames, expectedAttrs] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
+										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: expectedNames, expectedAttributes: expectedAttrs});
 									}
 									inScopeVariablesList = [];
 									newVariablesList = [];
@@ -1347,16 +1348,20 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static getExpectedElementNames(parentName: string, schemaQuery: SchemaQuery|undefined, elementStack: ElementData[]) {
-		let expectedNames: string[] = [];
-		if (parentName.startsWith('xsl')) {
-			let nameDetailArray = schemaQuery? schemaQuery.getExpected(parentName).elements: [];
-			expectedNames = nameDetailArray.map(item => item[0]);
+		let expectedElements: string[] = [];
+		let expectedAttributes: string[] = [];
+
+		if (parentName.startsWith('xsl') && schemaQuery) {
+			const allExpected = schemaQuery.getExpected(parentName);
+			const nameDetailArray = allExpected.elements;
+			expectedElements = nameDetailArray.map(item => item[0]);
+			expectedAttributes = allExpected.attrs;
 		} else if (elementStack.length > 0) {
-			expectedNames = elementStack[elementStack.length - 1].expectedChildElements
+			expectedElements = elementStack[elementStack.length - 1].expectedChildElements
 		} else {
-			expectedNames = [];
+			expectedElements = [];
 		}
-		return expectedNames;
+		return [expectedElements, expectedAttributes];
 	}
 
 	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[]) {
