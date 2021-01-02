@@ -130,6 +130,7 @@ export class XsltTokenDiagnostics {
 			if (nameParts.length === 2) {
 				let prefix = nameParts[0];
 				if (type === ValidationType.XMLElement) {
+					// TODO: when within literal result element, iterate up stack until we get to an XSLT instruction:
 					const expectedNames: string[] = elementStack && elementStack.length > 0? elementStack[elementStack.length - 1].expectedChildElements: ['xsl:transform', 'xsl:stylesheet', 'xsl:package'];
 					if (prefix === 'xsl') {
 						if (expectedNames.length === 0 && elementStack) {
