@@ -55,7 +55,6 @@ interface ElementData {
 	childSymbols: vscode.DocumentSymbol[],
 	namespacePrefixes: string[],
 	expectedChildElements: string[],
-	expectedAttributes: string[],
 }
 interface XPathData {
 	token: BaseToken;
@@ -77,7 +76,8 @@ enum NameValidationError {
 	None,
 	NamespaceError,
 	NameError,
-	XSLTElementNameError
+	XSLTElementNameError,
+	XSLTAttributeNameError
 }
 
 enum ValidationType {
@@ -113,7 +113,7 @@ export class XsltTokenDiagnostics {
 	private static nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 	private static nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
-	private static validateName(name: string, type: ValidationType, xmlnsPrefixes: string[], elementStack?: ElementData[]): NameValidationError {
+	private static validateName(name: string, type: ValidationType, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
 		let valid = NameValidationError.None
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
@@ -148,11 +148,15 @@ export class XsltTokenDiagnostics {
 					} else {
 						valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 					}
-				} else if (type !== ValidationType.XSLTAttribute) {
-					valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
+				} else if (prefix === 'xsl' && type === ValidationType.XSLTAttribute) {
+					// TODO: for attributes on non-xsl instructions, check that name is in the attributeGroup: xsl:literal-result-element-attributes (e.g. xsl:expand-text)
+					//valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 				} else {
-					
+					valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 				}
+			} else if (type === ValidationType.XSLTAttribute && expectedAttributes) {
+				valid = expectedAttributes.indexOf(name) > -1? NameValidationError.None: NameValidationError.XSLTAttributeNameError;
+				return valid;
 			}
 			if (valid === NameValidationError.None) {
 				nameParts.forEach(namePart => {
@@ -196,6 +200,8 @@ export class XsltTokenDiagnostics {
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
+		let tagElementAttributes: string[] = [];
+		let tagElementChildren: string[] = [];
 		let startTagToken: XSLTToken|null = null;
 		let preXPathVariable = false;
 		let anonymousFunctionParams = false;
@@ -393,6 +399,8 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						[tagElementChildren, tagElementAttributes] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
+
 						if (tagType === TagType.Start) {
 							if (tagElementName === 'xsl:iterate') {
 								currentXSLTIterateParams.push([]);
@@ -485,13 +493,16 @@ export class XsltTokenDiagnostics {
 								}
 								let attsWithXmlnsErrors: string[] = [];
 								let attsWithNameErrors: string[] = [];
+								let xsltAttsWithNameErrors: string[] = [];
 								const valType = tagElementName.startsWith('xsl:')? ValidationType.XSLTAttribute : ValidationType.XMLAttribute;
 								tagAttributeNames.forEach((attName) => {
-									let validateResult = XsltTokenDiagnostics.validateName(attName, valType, inheritedPrefixes, elementStack);
+									let validateResult = XsltTokenDiagnostics.validateName(attName, valType, inheritedPrefixes, elementStack, tagElementAttributes);
 									if (validateResult === NameValidationError.NameError) {
 										attsWithNameErrors.push(attName);
 									} else if (validateResult === NameValidationError.NamespaceError) {
 										attsWithXmlnsErrors.push(attName);
+									} else if (validateResult === NameValidationError.XSLTAttributeNameError) {
+										xsltAttsWithNameErrors.push(attName);
 									}
 								});
 
@@ -500,17 +511,22 @@ export class XsltTokenDiagnostics {
 										startTagToken['error'] = ErrorType.XMLAttributeName;
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithNameErrors.join('\', ');
 										problemTokens.push(startTagToken);
-									} else if (attsWithXmlnsErrors.length > 0) {
+									} 
+									if (attsWithXmlnsErrors.length > 0) {
 										startTagToken['error'] = ErrorType.XMLAttributeXMLNS;
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
 										problemTokens.push(startTagToken);
-									} else {
-										let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, inheritedPrefixes, elementStack);
-										if (validationError !== NameValidationError.None) {
-											startTagToken['error'] = validationError === NameValidationError.NameError? ErrorType.XMLName: validationError === NameValidationError.NamespaceError? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
-											startTagToken['value'] = tagElementName;
-											problemTokens.push(startTagToken);
-										}
+									} 
+									if (xsltAttsWithNameErrors.length > 0) {
+										startTagToken['error'] = ErrorType.XSLTAttrUnexpected;
+										startTagToken['value'] = tagElementName + '\': \'' + xsltAttsWithNameErrors.join('\', ');
+										problemTokens.push(startTagToken);
+									} 
+									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, inheritedPrefixes, elementStack);
+									if (validationError !== NameValidationError.None) {
+										startTagToken['error'] = validationError === NameValidationError.NameError? ErrorType.XMLName: validationError === NameValidationError.NamespaceError? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
+										startTagToken['value'] = tagElementName;
+										problemTokens.push(startTagToken);
 									}
 								}
 
@@ -533,13 +549,11 @@ export class XsltTokenDiagnostics {
 										}
 										if (startTagToken){
 											// if a top-level element, use global variables instad of inScopeVariablesList;
-											const [expectedNames, expectedAttrs] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
 											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList, 
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: expectedNames, expectedAttributes: expectedAttrs});
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: tagElementChildren});
 										}
 									} else if (startTagToken) {
-										const [expectedNames, expectedAttrs] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
-										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: expectedNames, expectedAttributes: expectedAttrs});
+										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: tagElementChildren});
 									}
 									inScopeVariablesList = [];
 									newVariablesList = [];
@@ -1940,6 +1954,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLAttributeXMLNS:
 					msg = `XML: Invalid prefix for attribute on element '${tokenValue}'`;
+					break;
+				case ErrorType.XSLTAttrUnexpected:
+					msg = `XSLT: Invalid attribute on element '${tokenValue}'`;
 					break;
 				case ErrorType.DuplicateVarName:
 					msg = `XSLT: Duplicate global variable/parameter name: '${tokenValue}'`;
