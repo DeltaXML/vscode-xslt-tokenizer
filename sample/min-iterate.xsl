@@ -4,6 +4,13 @@
                 version="3.0">
   
   <xsl:template match="/*" mode="#all">
+    <test>
+      <xsl:sequence select="2"/>      
+      <xsl:call-template name="test"/>
+    </test>
+    <xsl:sequence select="2"/>
+    <xsl:call-template name="test">      
+    </xsl:call-template>
     <xsl:iterate select=".">
       <xsl:on-completion select="."/>
       <xsl:param name="test" as="" select="."/>
@@ -12,6 +19,10 @@
       </xsl:next-iteration>
       <xsl:break/>
     </xsl:iterate>
+  </xsl:template>
+  
+  <xsl:template name="test" as="">
+    
   </xsl:template>
   
   

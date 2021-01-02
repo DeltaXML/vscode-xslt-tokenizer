@@ -543,6 +543,7 @@ export class XsltTokenDiagnostics {
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
 									let newVariablesList = elementStack.length === 0? globalVariableData: inScopeVariablesList;
+									const stackElementChildren = valType === ValidationType.XMLAttribute && elementStack.length > 0? elementStack[elementStack.length - 1].expectedChildElements : tagElementChildren;
 									//let newVariablesList = inScopeVariablesList;
 									if (variableData !== null) {
 										if (elementStack.length > 1) {
@@ -551,10 +552,10 @@ export class XsltTokenDiagnostics {
 										if (startTagToken){
 											// if a top-level element, use global variables instad of inScopeVariablesList;
 											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList, 
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: tagElementChildren});
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: stackElementChildren});
 										}
 									} else if (startTagToken) {
-										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: tagElementChildren});
+										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: stackElementChildren});
 									}
 									inScopeVariablesList = [];
 									newVariablesList = [];
