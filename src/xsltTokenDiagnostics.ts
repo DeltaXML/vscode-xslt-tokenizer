@@ -505,30 +505,30 @@ export class XsltTokenDiagnostics {
 									} else if (validateResult === NameValidationError.XSLTAttributeNameError) {
 										xsltAttsWithNameErrors.push(attName);
 									}
-								});
+								});								
 
 								if (startTagToken && !problem) {
-									if (attsWithNameErrors.length > 0) {
-										startTagToken['error'] = ErrorType.XMLAttributeName;
-										startTagToken['value'] = tagElementName + '\': \'' + attsWithNameErrors.join('\', ');
-										problemTokens.push(startTagToken);
-									} 
-									if (attsWithXmlnsErrors.length > 0) {
-										startTagToken['error'] = ErrorType.XMLAttributeXMLNS;
-										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
-										problemTokens.push(startTagToken);
-									} 
-									if (xsltAttsWithNameErrors.length > 0) {
-										startTagToken['error'] = ErrorType.XSLTAttrUnexpected;
-										startTagToken['value'] = tagElementName + '\': \'' + xsltAttsWithNameErrors.join('\', ');
-										problemTokens.push(startTagToken);
-									} 
 									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, inheritedPrefixes, elementStack);
 									if (validationError !== NameValidationError.None) {
 										startTagToken['error'] = validationError === NameValidationError.NameError? ErrorType.XMLName: validationError === NameValidationError.NamespaceError? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
 										startTagToken['value'] = tagElementName;
 										problemTokens.push(startTagToken);
 									}
+									else if (attsWithNameErrors.length > 0) {
+										startTagToken['error'] = ErrorType.XMLAttributeName;
+										startTagToken['value'] = tagElementName + '\': \'' + attsWithNameErrors.join('\', ');
+										problemTokens.push(startTagToken);
+									} 
+									else if (attsWithXmlnsErrors.length > 0) {
+										startTagToken['error'] = ErrorType.XMLAttributeXMLNS;
+										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
+										problemTokens.push(startTagToken);
+									} 
+									else if (xsltAttsWithNameErrors.length > 0) {
+										startTagToken['error'] = ErrorType.XSLTAttrUnexpected;
+										startTagToken['value'] = tagElementName + '\': \'' + xsltAttsWithNameErrors.join('\', ');
+										problemTokens.push(startTagToken);
+									} 
 								}
 
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
