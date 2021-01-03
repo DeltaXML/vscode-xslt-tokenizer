@@ -56,7 +56,7 @@ export class DocumentChangeHandler {
 				}
 			} else {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-				if (prevChar === '"') {
+				if (prevChar === '"' || activeChange.text.endsWith('>')) {
 					skipTrigger = true;
 				} else {
 					triggerSuggest = true;
@@ -77,11 +77,7 @@ export class DocumentChangeHandler {
 			}, 10);
 			return;
 		}
-		//console.log('didChange');
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, activeChange)) {
-			if (e.contentChanges.length > 1) {
-				//console.log('multi-change');
-			}
 			let tagNameLengthBeforeEdit = this.lexer.isStartTagChange(e.document, activeChange);
 			if (tagNameLengthBeforeEdit > -1) {
 				let startBracketPos = activeChange.range.start.character - (tagNameLengthBeforeEdit + 1);
