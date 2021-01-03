@@ -56,7 +56,7 @@ export class DocumentChangeHandler {
 				}
 			} else {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-				if (prevChar === '"' || activeChange.text.endsWith('>')) {
+				if (prevChar === '"' || activeChange.text.endsWith('>') || activeChange.text.endsWith('/')) {
 					skipTrigger = true;
 				} else {
 					triggerSuggest = true;
