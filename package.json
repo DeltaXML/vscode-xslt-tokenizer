@@ -519,7 +519,7 @@
 			},
 			{
 				"id": "xmlnsName",
-				"superType": "number",
+				"superType": "comment",
 				"description": "First part of an XML Namespace Declaration"
 			},
 			{
@@ -574,6 +574,7 @@
 			},
 			{
 				"id": "xmlPunctuation",
+				"superType": "comment",
 				"description": "XML angle-brackets etc."
 			},
 			{
