@@ -122,7 +122,7 @@ To enable syntax highighting for a custom theme you need to change User Settings
 ```json
 {
     "editor.semanticTokenColorCustomizations":{
-      "[Monokai +Blue]": {"enabled": true}
+      "[Monokai +Lights]": {"enabled": true}
     },
 }
   ```
