@@ -190,4 +190,4 @@ Comprehensive API’s, configurable output formats and full audit trail capabili
  
 
 See our products and download an evaluation here:
-http://www.deltaxml.com/?utm_source=VS-Code&utm_medium=documentation&utm_campaign=XSLT-XPATH
+https://www.deltaxml.com/?utm_source=VisualStudio&utm_medium=Dev-Tools&utm_campaign=XSLT-XPATH
