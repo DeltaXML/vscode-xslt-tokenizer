@@ -1,7 +1,7 @@
+[<img src="deltaxmlLogo.png">](https://www.deltaxml.com/?utm_source=VisualStudio&utm_medium=Dev-Tools&utm_campaign=XSLT-XPATH)
 # XSLT/XPath for Visual Studio Code
 
 The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1.
-
 
 ![vscode-xslt](vscode-xslt.png)
 
