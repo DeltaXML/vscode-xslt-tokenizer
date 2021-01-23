@@ -17,17 +17,17 @@
     xmlns:fn="def"
     version="3.0">
     
-<!--     <xsl:include href="included1.xsl"/>
-    <xsl:import href="features/included2.xsl"/> -->
+    <!--     <xsl:include href="included1.xsl"/>
+         <xsl:import href="features/included2.xsl"/> -->
     
     <xsl:use-package name="example.com.package1"/>
     <xsl:use-package name="example.com.package2"/>
     <xsl:use-package name="example.com.package3"/>
     <xsl:use-package name="example.com.package4"/>
-   
-   
+    
+    
     <xsl:param name="p1" as="xs:integer" select="abc:test1(2)"/>
-
+    
     <xsl:variable name="va" as="xs:integer" select="2"/>
     <xsl:variable name="v1" as="xs:integer" select="$inc1p1"/>
     <xsl:variable name="v2" as="xs:integer" select="$inc2p1"/>
@@ -38,6 +38,13 @@
     <xsl:variable name="f1" as="xs:string" select="abc:test1('a')"/>
     
     <xsl:template match="/" mode="#all">
+        <xsl:variable name="document" as="xs:string" select="'abcd'"/>
+        <xsl:variable name="net" as="xs:string" select="'newer'"/>
+        <xsl:message expand-text="yes">
+            ---- scope variables ----
+            document:     {$document}
+            net:          {$net}
+        </xsl:message>
         <xsl:sequence select="let $a := ($v1, $va) return $a"/>
         
         <xsl:call-template name="included">
@@ -53,10 +60,10 @@
         </xsl:copy>
         
     </xsl:template>
-
+    
     <xsl:function name="fn:name" as="xs:string">
         <xsl:param name="fp1" as="node()"/>
         <xsl:sequence select="'test'"/>
     </xsl:function>       
-                
+    
 </xsl:stylesheet>
