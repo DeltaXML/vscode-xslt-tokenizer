@@ -487,8 +487,11 @@ export class XPathLexer {
                     if (result.length > 0) {
                         let lastToken = result[result.length - 1];
                         if (lastToken.tokenType === TokenLevelState.string) {
+                            let firstChar = lastToken.value.charAt(0);
                             let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
-                            if (!(lastChar === '"' || lastChar === '\'')) {
+                            if (!((lastChar === firstChar && lastToken.value.length > 1)  || (lastToken.value.length > 6 && 
+                                (lastToken.value.startsWith('&quot;') && lastToken.value.endsWith('&quot;')) || (lastToken.value.startsWith('&apos;') && lastToken.value.endsWith('&apos;'))))
+                             ){
                                 lastToken['error'] = ErrorType.XPathStringLiteral;
                             }
                         }
