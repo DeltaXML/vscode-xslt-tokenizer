@@ -110,6 +110,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let attributeValueOffset = 0;
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
+		let withinCDATA = false;
 		let complexStateStack: [number, number[]][] = [];
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
@@ -233,6 +234,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								break;
 							case XMLCharState.rPi:
 								indent = 0;
+								break;
+							case XMLCharState.rCdataEnd:
+								withinCDATA = true;
 								break;
 						}
 						break;
@@ -392,7 +396,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					result.push(edit);
 
 				}
-			} else if (lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
+			} else if (!withinCDATA && lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
 				for (let i = lineNumberDiff - 1; i > -1; i--) {
 					let loopLineNumber = lineNumber - i;
@@ -445,6 +449,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					}
 				}
 			}
+			withinCDATA = false;
 			prevLineNumber = lineNumber;
 			nestingLevel = newNestingLevel;
 			multiLineState = newMultiLineState;
