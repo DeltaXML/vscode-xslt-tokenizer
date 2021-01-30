@@ -1187,6 +1187,8 @@ export class XsltTokenCompletions {
 		expectedTags = xsltParent ? schemaQuery.getExpected(xsltParent).elements : [];
 
 		let completionItems: vscode.CompletionItem[] = [];
+		XsltTokenCompletions.addNewCompletionItem(completionItems, 'literal-xml-comment', '', '!-- $0 -->');
+		XsltTokenCompletions.addNewCompletionItem(completionItems, 'literal-xml-processing-instruction', '', '?${1:name} ${0:value} ?>');
 		if (isWithinXslIterate) {
 			const newItem = new vscode.CompletionItem('xsl:next-iteration', vscode.CompletionItemKind.Struct);
 			newItem.documentation = "start next iteration with provided xsl:param context";
@@ -1228,18 +1230,19 @@ export class XsltTokenCompletions {
 				} else if (tagName === 'xsl:literal-result-element') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem('literal-self-closing-element', vscode.CompletionItemKind.Struct);
-					newItem.documentation = "self-closing tag for literal result element";
+					newItem.documentation = "self-closing tag";
 					newItem.insertText = new vscode.SnippetString('${1:div} ${2:class}="$3"/>$0');
 					completionItems.push(newItem);
 					const newItem2 = new vscode.CompletionItem('literal-start-element', vscode.CompletionItemKind.Struct);
-					newItem2.documentation = "start tag for literal result element";
+					newItem2.documentation = "start tag only";
 					newItem2.insertText = new vscode.SnippetString('${1:div}>$0');
 					completionItems.push(newItem2);
 					const newItem3 = new vscode.CompletionItem('literal-element', vscode.CompletionItemKind.Struct);
-					newItem3.documentation = "start and close tag for literal result element";
+					newItem3.documentation = "start and close tags";
 					newItem3.insertText = new vscode.SnippetString('${1:div}>\n\t$0\n</${1:div}>');
-
 					completionItems.push(newItem3);
+					XsltTokenCompletions.addNewCompletionItem(completionItems, 'literal-xml-CDATA', '', '![CDATA[${0:text}]]>');
+
 				} else if (tagName === 'xsl:message') {
 					useCurrent = false;
 					if (inScopeVariablesList.length > 0) {
@@ -1308,6 +1311,13 @@ export class XsltTokenCompletions {
 			}
 		});
 		return completionItems;
+	}
+
+	private static addNewCompletionItem(completionItems: vscode.CompletionItem[], itemLabel: string, documentation: string, snippetString: string) {
+		const newItem4 = new vscode.CompletionItem(itemLabel, vscode.CompletionItemKind.Struct);
+		newItem4.documentation = documentation;
+		newItem4.insertText = new vscode.SnippetString(snippetString);
+		completionItems.push(newItem4);
 	}
 
 	private static getXSLTSnippetCompletions(snippets: Snippet[] | undefined) {
