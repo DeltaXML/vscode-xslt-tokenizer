@@ -5,8 +5,8 @@
  *  DeltaXML Ltd. - xmlDocumentFormattingProvider
  */
 import * as vscode from 'vscode';
-import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration} from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken } from './xpLexer';
+import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration, DocumentTypes } from './xslLexer';
+import { CharLevelState, TokenLevelState, BaseToken, XPathLexer } from './xpLexer';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 enum HasCharacteristic {
@@ -21,15 +21,19 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	public minimiseXPathIndents = true;
 	public indentMixedContent = false;
 	private xslLexer: XslLexer;
+	private xpLexer: XPathLexer;
+	private docType: DocumentTypes;
 	private onType = false;
 	private onTypeLineEmpty = false;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private isCloseTag = false;
-	private closeTagLine: vscode.TextLine|null = null;
-	private closeTagPos: vscode.Position|null = null;
+	private closeTagLine: vscode.TextLine | null = null;
+	private closeTagPos: vscode.Position | null = null;
 
 	constructor(xsltConfiguration: LanguageConfiguration) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
+		this.docType = xsltConfiguration.docType;
+		this.xpLexer = new XPathLexer();
 		this.xslLexer.provideCharLevelState = true;
 	}
 
@@ -48,18 +52,18 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			this.onTypeLineEmpty = newLine.text.trim().length === 0;
 			const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
 			this.onType = true;
-			let formatEdit =  this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+			let formatEdit = this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
 			this.onType = false;
-			return formatEdit;			
+			return formatEdit;
 		} else {
 			return [];
 		}
 	}
 
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
-        const lastLine = document.lineAt(document.lineCount - 1);
-        const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
-        return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+		const lastLine = document.lineAt(document.lineCount - 1);
+		const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
+		return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
 	}
 
 	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
@@ -83,7 +87,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 		let startFormattingLineNumber = range.start.line;
 		const firstLine = document.lineAt(0);
-        const adjustedStartRange = new vscode.Range(firstLine.range.start, range.end);
+		const adjustedStartRange = new vscode.Range(firstLine.range.start, range.end);
 
 		let stringForTokens: string
 		if (this.onTypeLineEmpty) {
@@ -118,10 +122,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let documenthasNewLines: HasCharacteristic = HasCharacteristic.unknown;
 		let awaitingSecondTag: HasCharacteristic = HasCharacteristic.unknown;
 		let firstStartTagLineNumber = -1;
-		let prevToken: BaseToken|null = null;
+		let prevToken: BaseToken | null = null;
 		let elementName = '';
 		let closeTagWithinText = false;
-		let closeTagName: string|null = null;
+		let closeTagName: string | null = null;
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -164,7 +168,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 									firstStartTagLineNumber = lineNumber;
 									awaitingSecondTag = HasCharacteristic.yes;
 								} else if (awaitingSecondTag === HasCharacteristic.yes) {
-									documenthasNewLines = lineNumber > firstStartTagLineNumber? HasCharacteristic.yes: HasCharacteristic.no;
+									documenthasNewLines = lineNumber > firstStartTagLineNumber ? HasCharacteristic.yes : HasCharacteristic.no;
 									awaitingSecondTag = HasCharacteristic.no;
 								}
 								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken);
@@ -196,9 +200,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								newNestingLevel--;
 								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken);
 								if (this.isCloseTag) {
-									closeTagWithinText = this.closeTagPos?.line === token.line && 
-									this.closeTagPos.character >= token.startCharacter && 
-									this.closeTagPos.character <= token.startCharacter + token.length;
+									closeTagWithinText = this.closeTagPos?.line === token.line &&
+										this.closeTagPos.character >= token.startCharacter &&
+										this.closeTagPos.character <= token.startCharacter + token.length;
 									if (closeTagWithinText && xmlelementStack.length > 0) {
 										closeTagName = xmlelementStack[xmlelementStack.length - 1];
 									}
@@ -252,7 +256,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							attributeNameOffset = 0;
 						} else if (!attributeNameOnNewLine && attributeNameOffset === 0) {
 							attributeNameOffset = token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
-						} 
+						}
 						break;
 					case XSLTokenLevelState.attributeValue:
 						const attValueLine = document.lineAt(lineNumber);
@@ -262,8 +266,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						let indentRemainder = attributeNameOffset % indentCharLength;
 						let adjustedIndentChars = attributeNameOffset + (indentCharLength - indentRemainder);
 
-						let calcOffset =  token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex;
-						calcOffset = attributeNameOnNewLine? calcOffset + attributeNameOffset: calcOffset;
+						let calcOffset = token.startCharacter - attValueLine.firstNonWhitespaceCharacterIndex;
+						calcOffset = attributeNameOnNewLine ? calcOffset + attributeNameOffset : calcOffset;
 
 						let newValueOffset = textOnFirstLine ? 1 + calcOffset : adjustedIndentChars;
 						attributeValueOffset = lineNumberDiff > 0 ? attributeValueOffset : newValueOffset;
@@ -290,17 +294,17 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						let commentLineText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let trimLine = commentLineText.trimLeft();
 
-						let doIndent = newMultiLineState === MultiLineState.Middle 
+						let doIndent = newMultiLineState === MultiLineState.Middle
 							&& token.length > 0 && !trimLine.startsWith('-->') && !trimLine.startsWith('<!--');
-						indent = doIndent? 1 : 0;
-						attributeNameOffset = doIndent? 5 : 0;
+						indent = doIndent ? 1 : 0;
+						attributeNameOffset = doIndent ? 5 : 0;
 						break;
 				}
 
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				let currentStateLevel: [number, number[]] = complexStateStack.length > 0? complexStateStack[complexStateStack.length - 1] : [0, []];
+				let currentStateLevel: [number, number[]] = complexStateStack.length > 0 ? complexStateStack[complexStateStack.length - 1] : [0, []];
 				let bracketNesting: number = currentStateLevel[0];
 				let ifElseStack: number[] = currentStateLevel[1];
 				let ifElseStackLength = ifElseStack.length;
@@ -321,7 +325,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case 'let':
 							case 'some':
 								indent = -1;
-								// no-break;
+							// no-break;
 							case 'then':
 								preThen = false;
 								xpathNestingLevel++;
@@ -331,7 +335,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case 'satisfies':
 							case 'else':
 								elseLineNumber = lineNumber;
-								xpathNestingLevel = ifElseStackLength > 0? ifElseStack[ifElseStackLength - 1] : 0;
+								xpathNestingLevel = ifElseStackLength > 0 ? ifElseStack[ifElseStackLength - 1] : 0;
 								if (ifElseStack.length > 0) {
 									ifElseStack.pop();
 								}
@@ -343,8 +347,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						switch (xpathCharType) {
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
-							case CharLevelState.lBr:	
-								complexStateStack.push([xpathNestingLevel, []]);							
+							case CharLevelState.lBr:
+								complexStateStack.push([xpathNestingLevel, []]);
 								xpathNestingLevel++;
 								indent = -1;
 								break;
@@ -375,7 +379,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			if (this.onType && result.length > 0) {
 			} else if (this.isCloseTag) {
 				if (nestingLevel > 0 && closeTagName !== null && this.closeTagPos !== null) {
-					let nonWsStart = this.closeTagLine? this.closeTagLine.firstNonWhitespaceCharacterIndex: 0;
+					let nonWsStart = this.closeTagLine ? this.closeTagLine.firstNonWhitespaceCharacterIndex : 0;
 					let replacementString = '';
 					let edit: vscode.TextEdit;
 					if ((nonWsStart + 2) === this.closeTagPos.character) {
@@ -405,12 +409,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					if (!isXMLToken && this.minimiseXPathIndents) {
 						totalAttributeOffset = 0;
 					} else {
-						totalAttributeOffset = attributeValueOffset > 0? attributeValueOffset: attributeNameOffset;
+						totalAttributeOffset = attributeValueOffset > 0 ? attributeValueOffset : attributeNameOffset;
 					}
 
-					let indentExtraAsNoNameIndent = (!nameIndentRequired && !isXMLToken)? 1 : 0;
+					let indentExtraAsNoNameIndent = (!nameIndentRequired && !isXMLToken) ? 1 : 0;
 					// guard against attempt to indent negative:
-					let guardedNestingLevel = xpathNestingLevel > -1? xpathNestingLevel: 0;
+					let guardedNestingLevel = xpathNestingLevel > -1 ? xpathNestingLevel : 0;
 					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + guardedNestingLevel + indentExtraAsNoNameIndent) * indentCharLength);
 					if (totalAttributeOffset > 0) {
 						indent = -1 + indent;
@@ -420,7 +424,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					} else {
 						requiredIndentLength += (indent * indentCharLength);
 					}
-					requiredIndentLength = requiredIndentLength < 0? 0: requiredIndentLength;
+					requiredIndentLength = requiredIndentLength < 0 ? 0 : requiredIndentLength;
 
 					if (!(preserveSpace || isPreserveSpaceElement)) {
 						if (this.replaceIndendation) {
@@ -454,17 +458,17 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		return result;
 	}
 
-	private shouldAddNewLine(documenthasNewLines: HasCharacteristic, prevToken: BaseToken| null): boolean {
+	private shouldAddNewLine(documenthasNewLines: HasCharacteristic, prevToken: BaseToken | null): boolean {
 		let result = false
 		if (documenthasNewLines === HasCharacteristic.no) {
 			if (this.indentMixedContent) {
 				result = true;
 			} else {
 				// TODO!!! check if prevtoken was a right-close-tag or a self-closing tag or comment????
-				let pct= prevToken?.charType;
-				result  = pct === XMLCharState.rSelfCt || pct === XMLCharState.rSt || pct === XMLCharState.rCt ||
-				  pct === XMLCharState.rSelfCtNoAtt || pct === XMLCharState.rStNoAtt || 				  
-				  pct === XMLCharState.rComment || pct === XMLCharState.rPi
+				let pct = prevToken?.charType;
+				result = pct === XMLCharState.rSelfCt || pct === XMLCharState.rSt || pct === XMLCharState.rCt ||
+					pct === XMLCharState.rSelfCtNoAtt || pct === XMLCharState.rStNoAtt ||
+					pct === XMLCharState.rComment || pct === XMLCharState.rPi
 			}
 		}
 		return result;

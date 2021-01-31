@@ -8,14 +8,14 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
-import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
-import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
-import {SaxonTaskProvider} from './saxonTaskProvider';
-import {SaxonJsTaskProvider} from './saxonJsTaskProvider';
-import {XSLTConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration} from './languageConfigurations';
+import { XPathLexer, ExitCondition, LexPosition } from './xpLexer';
+import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
+import { SaxonTaskProvider } from './saxonTaskProvider';
+import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
+import { XSLTConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration } from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer, LanguageConfiguration } from './xslLexer';
-import {DocumentChangeHandler} from './documentChangeHandler';
+import { DocumentChangeHandler } from './documentChangeHandler';
 import { on } from 'process';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { DocumentLinkProvider } from './documentLinkProvider';
@@ -63,45 +63,45 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
-	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt'}, xsltSymbolProvider));
-	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp'}, dcpSymbolProvider));
-	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml'}, xmlSymbolProvider));
-	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt'}, xsltDefintiionProvider));
-	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt'}, xsltDefintiionProvider));
-	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp'}, dcpDefintiionProvider));
-	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xml'}, xmlDefinitionProvider));
-	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt'}, xsltLinkProvider));
-	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp'}, dcpLinkProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt' }, xsltSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp' }, dcpSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml' }, xmlSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt' }, xsltDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xml' }, xmlDefinitionProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
 
 
 	// syntax highlighters
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp'}, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt' }, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp' }, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, new XPathSemanticTokensProvider(), legend));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
 	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
 	let dcpFormatter = new XMLDocumentFormattingProvider(DCPConfiguration.configuration);
 
-	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt', 
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider(['xslt', 'xpath'],
 		xsltFormatter));
-	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xslt', 
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider(['xslt', 'xpath'],
 		xsltFormatter));
-	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt', 
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider(['xslt', 'xpath'],
 		xsltFormatter, '\n', '/'));
 
-	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xml', 
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xml',
 		xmlFormatter));
-	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xml', 
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xml',
 		xmlFormatter));
-	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xml', 
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xml',
 		xmlFormatter, '\n', '/'));
 
-	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('dcp', 
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('dcp',
 		dcpFormatter));
-	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('dcp', 
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('dcp',
 		dcpFormatter));
-	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('dcp', 
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('dcp',
 		dcpFormatter, '\n', '/'));
 
 	let workspaceRoot = vscode.workspace.rootPath;
@@ -114,7 +114,7 @@ export function activate(context: vscode.ExtensionContext) {
 		let xsltTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
 		context.subscriptions.push(xsltTaskProvider);
 	}
-	
+
 	let xsltJsTaskEnabled = vscode.workspace.getConfiguration('XSLT.tasks.js').get('enabled');
 	if (xsltJsTaskEnabled) {
 		let xsltjsTaskProvider = vscode.tasks.registerTaskProvider(SaxonJsTaskProvider.SaxonBuildScriptType, new SaxonJsTaskProvider(workspaceRoot));
@@ -128,7 +128,7 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 	private xpLexer = new XPathLexer();
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
-		const lexPosition: LexPosition = {line: 0, startCharacter: 0, documentOffset: 0};
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		this.xpLexer.documentTokens = [];
 		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition);
 		const builder = new vscode.SemanticTokensBuilder();
