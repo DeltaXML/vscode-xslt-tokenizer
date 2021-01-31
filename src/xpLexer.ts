@@ -487,10 +487,7 @@ export class XPathLexer {
                     if (result.length > 0) {
                         let lastToken = result[result.length - 1];
                         if (lastToken.tokenType === TokenLevelState.string) {
-                            let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
-                            if (!(lastChar === '"' || lastChar === '\'')) {
-                                lastToken['error'] = ErrorType.XPathStringLiteral;
-                            }
+                            XPathLexer.checkStringLiteralEnd(lastToken);
                         }
                     }
                     position.line = this.lineNumber;
@@ -651,6 +648,15 @@ export class XPathLexer {
             console.timeEnd('xplexer.analyse');
         }
         return result;
+    }
+
+    public static checkStringLiteralEnd(lastToken: BaseToken) {
+        let firstChar = lastToken.value.charAt(0);
+        let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
+        if (!((lastChar === firstChar && lastToken.value.length > 1) || (lastToken.value.length > 6 &&
+            (lastToken.value.startsWith('&quot;') && lastToken.value.endsWith('&quot;')) || (lastToken.value.startsWith('&apos;') && lastToken.value.endsWith('&apos;'))))) {
+            lastToken['error'] = ErrorType.XPathStringLiteral;
+        }
     }
 
     private static closeMatchesOpen(close: CharLevelState, stack: Token[]): boolean {
@@ -1127,6 +1133,7 @@ export enum ErrorType {
     XPathOperatorUnexpected,
     XPathPrefix,
     XPathKeyword,
+    XPathExpectedComplex,
     XMLXMLNS,
     XMLAttributeName,
     XSLTNamesapce,

@@ -31,6 +31,18 @@ export class XSLTConfiguration {
 	} 
 }
 
+export class XPathConfiguration {
+	static configuration: LanguageConfiguration = {
+		expressionAtts: [],
+		variableElementNames: [],
+		nativePrefix: '',
+		tvtAttributes: [],
+		nonNativeAvts: true,
+		rootElementSnippets: [],
+		docType: DocumentTypes.XPath
+	} 
+}
+
 export class DCPConfiguration {
 	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {

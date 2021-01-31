@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration} from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
 
@@ -345,34 +345,7 @@ export class XsltTokenDiagnostics {
 					ifThenStack = [];
 				}
 				if (prevToken && prevToken.tokenType === TokenLevelState.operator && !prevToken.error) {
-					let isValid = false;
-					switch(prevToken.charType) {
-						case CharLevelState.rB:
-						case CharLevelState.rBr:
-						case CharLevelState.rPr:
-							isValid = true;
-							break;
-						case CharLevelState.dSep:
-							isValid = prevToken.value === '()' || prevToken.value === '[]' || prevToken.value === '{}';
-							break;
-						default:
-							if (prevToken.value === '/' || prevToken.value === '.') {
-								// these are ok provided that the previous token was XSLT or previous token was ,;
-								let prevToken2 = allTokens[index - 2];
-								let tokenBeforePrevWasXSLT = prevToken2.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
-								isValid = tokenBeforePrevWasXSLT || (
-									prevToken2.tokenType === TokenLevelState.operator && 
-									prevToken2.charType !== CharLevelState.rB && 
-									prevToken2.charType !== CharLevelState.rBr && 
-									prevToken2.charType !== CharLevelState.rPr
-									);
-							}
-							break;
-					}
-					if (!isValid) {
-						prevToken['error'] = ErrorType.XPathOperatorUnexpected;
-						problemTokens.push(prevToken);
-					}
+					XsltTokenDiagnostics.checkFinalXPathToken(prevToken, allTokens, index, problemTokens);
 				} else if (prevToken && prevToken.tokenType === TokenLevelState.complexExpression && !prevToken.error) {
 						prevToken['error'] = ErrorType.XPathAwaiting;
 						problemTokens.push(prevToken);
@@ -959,10 +932,21 @@ export class XsltTokenDiagnostics {
 							case 'if':
 								ifThenStack.push(token);
 								break;
-							case 'every':
+						  case 'every':
 							case 'for':
 							case 'let':
 							case 'some':
+								if (allTokens.length > index + 2) {
+									const opToken = allTokens[index + 2];
+									const expectedOp = valueText === 'let'? ':=' : 'in';
+									if (opToken.value !== expectedOp) {
+										opToken['error'] = ErrorType.XPathExpectedComplex;
+										problemTokens.push(opToken);
+									}
+								}
+								if (index > 0) {
+									XsltTokenDiagnostics.checkTokenIsExpected(prevToken, allTokens[index - 1], problemTokens, TokenLevelState.Unset);
+								}
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
 								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true});
@@ -1324,9 +1308,23 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 				}
-				if (index === lastTokenIndex) {
-					// TODO: show error if xpath token is last
-				}
+				if (index === lastTokenIndex && !token.error) {
+					if (token.tokenType === TokenLevelState.operator) {
+						XsltTokenDiagnostics.checkFinalXPathToken(token, allTokens, index, problemTokens);
+					}
+					if (xpathStack.length > 0 && !token.error) {
+						const errToken = xpathStack[xpathStack.length - 1].token;
+						errToken['error'] = ErrorType.BracketNesting;
+						problemTokens.push(errToken);
+					}
+					if (token.tokenType === TokenLevelState.string && !token.error) {
+						XPathLexer.checkStringLiteralEnd(token);
+						if (token.error) {
+							problemTokens.push(token);
+						}
+
+					}
+ 				}
 			}
 			prevToken = token.tokenType === TokenLevelState.comment? prevToken: token;
 			if (index === lastTokenIndex && elementStack.length > 0) {
@@ -1365,6 +1363,37 @@ export class XsltTokenDiagnostics {
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
+	}
+
+	private static checkFinalXPathToken(prevToken: BaseToken, allTokens: BaseToken[], index: number, problemTokens: BaseToken[]) {
+		let isValid = false;
+		switch (prevToken.charType) {
+			case CharLevelState.rB:
+			case CharLevelState.rBr:
+			case CharLevelState.rPr:
+				isValid = true;
+				break;
+			case CharLevelState.dSep:
+				isValid = prevToken.value === '()' || prevToken.value === '[]' || prevToken.value === '{}';
+				break;
+			default:
+				if (prevToken.value === '/' || prevToken.value === '.') {
+					// these are ok provided that the previous token was XSLT or previous token was ,;
+					let prevToken2 = allTokens[index - 2];
+					let tokenBeforePrevWasXSLT = prevToken2.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+					isValid = tokenBeforePrevWasXSLT || (
+						prevToken2.tokenType === TokenLevelState.operator &&
+						prevToken2.charType !== CharLevelState.rB &&
+						prevToken2.charType !== CharLevelState.rBr &&
+						prevToken2.charType !== CharLevelState.rPr
+					);
+				}
+				break;
+		}
+		if (!isValid) {
+			prevToken['error'] = ErrorType.XPathOperatorUnexpected;
+			problemTokens.push(prevToken);
+		}
 	}
 
 	private static getExpectedElementNames(parentName: string, schemaQuery: SchemaQuery|undefined, elementStack: ElementData[]) {
@@ -1935,6 +1964,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunctionNamespace:
 					let partsNs = tokenValue.split('#');
 					msg = `XPath: Undeclared prefix in function: '${partsNs[0]}'`;
+					break;
+				case ErrorType.XPathExpectedComplex:
+					const expected = tokenValue === ':='?  'in': ':=';
+					msg = `XPath: '${tokenValue}' is invalid here, expected  '${expected}'`;
 					break;
 				case ErrorType.XPathPrefix:
 					msg = `XPath: Undeclared prefix in name: '${tokenValue}'`;
