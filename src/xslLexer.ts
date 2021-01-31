@@ -13,7 +13,8 @@ import { SchemaData } from "./xsltSchema";
 import { Snippet} from './xsltSnippets';
 
 export enum DocumentTypes {
-	XSLT,
+    XSLT,
+    XPath,
 	DCP,
 	Other
 }

@@ -8,13 +8,13 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
-import {XPathLexer, ExitCondition, LexPosition} from './xpLexer';
+import {XPathLexer, ExitCondition, LexPosition, Token} from './xpLexer';
 import {XMLDocumentFormattingProvider} from './xmlDocumentFormattingProvider';
 import {SaxonTaskProvider} from './saxonTaskProvider';
 import {SaxonJsTaskProvider} from './saxonJsTaskProvider';
-import {XSLTConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration} from './languageConfigurations';
+import {XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration} from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
-import { XslLexer, LanguageConfiguration } from './xslLexer';
+import { XslLexer, LanguageConfiguration, DocumentTypes } from './xslLexer';
 import {DocumentChangeHandler} from './documentChangeHandler';
 import { on } from 'process';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
@@ -22,6 +22,7 @@ import { DocumentLinkProvider } from './documentLinkProvider';
 import { FullDocumentLinkProvider } from './fullDocumentLinkProvider';
 
 import { DCPSymbolProvider } from './dcpSymbolProvider';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 
 const tokenModifiers = new Map<string, number>();
@@ -77,7 +78,8 @@ export function activate(context: vscode.ExtensionContext) {
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt'}, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp'}, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(), legend));
+	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath'}, new XPathSemanticTokensProvider(xpathDiagnosticsCollection), legend));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
 	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
@@ -123,19 +125,32 @@ export function activate(context: vscode.ExtensionContext) {
 
 }
 
-
 class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 	private xpLexer = new XPathLexer();
+	private collection: vscode.DiagnosticCollection;
+	public constructor(collection: vscode.DiagnosticCollection) {
+		this.collection = collection;
+	}
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		const lexPosition: LexPosition = {line: 0, startCharacter: 0, documentOffset: 0};
 		this.xpLexer.documentTokens = [];
 		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition);
+		setTimeout(() => this.reportProblems(allTokens, document), 0);
 		const builder = new vscode.SemanticTokensBuilder();
 		allTokens.forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
 		return builder.build();
+	}
+
+	private reportProblems(allTokens: Token[], document: vscode.TextDocument) {
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, [], [], []);
+		if (diagnostics.length > 0) {
+			this.collection.set(document.uri, diagnostics);
+		} else {
+			this.collection.clear();
+		};
 	}
 }
 
