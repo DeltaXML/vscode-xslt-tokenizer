@@ -971,6 +971,9 @@ export class XsltTokenDiagnostics {
 										problemTokens.push(opToken);
 									}
 								}
+								if (index > 0) {
+									XsltTokenDiagnostics.checkTokenIsExpected(prevToken, allTokens[index - 1], problemTokens, TokenLevelState.Unset);
+								}
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
 								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true});
