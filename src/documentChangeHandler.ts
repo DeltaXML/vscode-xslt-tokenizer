@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { XMLConfiguration } from './languageConfigurations';
+import { XPathDocumentChangeHandler } from './xpathDocumentChangeHandler';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
 
 export interface TagRenameEdit {
@@ -13,6 +14,7 @@ export class DocumentChangeHandler {
 	private lastChangePerformed: TagRenameEdit | null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
 	private cachedFailedEdit: TagRenameEdit | null = null;
+	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler|null = null;
 
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
@@ -145,15 +147,27 @@ export class DocumentChangeHandler {
 		}
 	}
 
+	private getXPathDocumentChangeHandler() {
+		if (this.xpathDocumentChangeHanlder === null) {
+			this.xpathDocumentChangeHanlder = new XPathDocumentChangeHandler();
+		}
+		return this.xpathDocumentChangeHanlder;
+	}
+
 	private registerXMLDocument = (document: vscode.TextDocument) => {
 		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp';
+		let isXPathDocument = document.languageId === 'xpath';
 
-		if (this.xmlDocumentRegistered && !isXMLDocument && this.onDidChangeRegistration) {
+		if (this.xmlDocumentRegistered && (!isXMLDocument || !isXPathDocument) && this.onDidChangeRegistration) {
 			this.onDidChangeRegistration.dispose();
 			this.xmlDocumentRegistered = false;
-		} else if (isXMLDocument && !this.xmlDocumentRegistered) {
+		} 
+		if (isXMLDocument && !this.xmlDocumentRegistered) {
 			this.xmlDocumentRegistered = true;
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.onDocumentChange(e, isXMLDocument));
+		} else if (isXPathDocument && !this.xmlDocumentRegistered) {
+			this.xmlDocumentRegistered = true;
+			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
 		}
 	}
 
