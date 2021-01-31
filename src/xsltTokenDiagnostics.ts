@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration} from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
 
@@ -1316,6 +1316,13 @@ export class XsltTokenDiagnostics {
 						const errToken = xpathStack[xpathStack.length - 1].token;
 						errToken['error'] = ErrorType.BracketNesting;
 						problemTokens.push(errToken);
+					}
+					if (token.tokenType === TokenLevelState.string && !token.error) {
+						XPathLexer.checkStringLiteralEnd(token);
+						if (token.error) {
+							problemTokens.push(token);
+						}
+
 					}
  				}
 			}
