@@ -1130,6 +1130,7 @@ export enum ErrorType {
     XPathOperatorUnexpected,
     XPathPrefix,
     XPathKeyword,
+    XPathExpectedComplex,
     XMLXMLNS,
     XMLAttributeName,
     XSLTNamesapce,

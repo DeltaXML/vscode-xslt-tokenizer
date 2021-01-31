@@ -959,10 +959,18 @@ export class XsltTokenDiagnostics {
 							case 'if':
 								ifThenStack.push(token);
 								break;
-							case 'every':
+						  case 'every':
 							case 'for':
 							case 'let':
 							case 'some':
+								if (allTokens.length > index + 2) {
+									const opToken = allTokens[index + 2];
+									const expectedOp = valueText === 'let'? ':=' : 'in';
+									if (opToken.value !== expectedOp) {
+										opToken['error'] = ErrorType.XPathExpectedComplex;
+										problemTokens.push(opToken);
+									}
+								}
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
 								xpathStack.push({token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true});
@@ -1935,6 +1943,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunctionNamespace:
 					let partsNs = tokenValue.split('#');
 					msg = `XPath: Undeclared prefix in function: '${partsNs[0]}'`;
+					break;
+				case ErrorType.XPathExpectedComplex:
+					const expected = tokenValue === ':='?  'in': ':=';
+					msg = `XPath: '${tokenValue}' is invalid here, expected  '${expected}'`;
 					break;
 				case ErrorType.XPathPrefix:
 					msg = `XPath: Undeclared prefix in name: '${tokenValue}'`;
