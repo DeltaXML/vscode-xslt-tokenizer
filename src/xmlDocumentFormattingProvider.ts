@@ -133,7 +133,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 		if (this.docType === DocumentTypes.XPath) {
 			complexStateStack = [[0, []]];
-			this.xpLexer = new XPathLexer();
+			this.xpLexer.reset();
 		}
 
 		allTokens.forEach((token) => {
