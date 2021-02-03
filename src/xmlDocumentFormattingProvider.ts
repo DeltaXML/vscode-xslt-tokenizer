@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { XslLexer, XMLCharState, XSLTokenLevelState, LanguageConfiguration, DocumentTypes } from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, XPathLexer } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, XPathLexer, ExitCondition, LexPosition } from './xpLexer';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 enum HasCharacteristic {
@@ -96,7 +96,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		} else {
 			stringForTokens = document.getText(adjustedStartRange);
 		}
-		let allTokens = this.xslLexer.analyse(stringForTokens);
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		let allTokens = this.docType === DocumentTypes.XPath ?
+			this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition) :
+			this.xslLexer.analyse(stringForTokens);
 
 		let lineNumber = -1;
 		let prevLineNumber = -1;
@@ -127,6 +130,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let elementName = '';
 		let closeTagWithinText = false;
 		let closeTagName: string | null = null;
+
+		if (this.docType === DocumentTypes.XPath) {
+			complexStateStack = [[0, []]];
+		}
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
@@ -416,7 +423,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						totalAttributeOffset = attributeValueOffset > 0 ? attributeValueOffset : attributeNameOffset;
 					}
 
-					let indentExtraAsNoNameIndent = (!nameIndentRequired && !isXMLToken) ? 1 : 0;
+					let indentExtraAsNoNameIndent = (!nameIndentRequired && !isXMLToken) && this.docType !== DocumentTypes.XPath ? 1 : 0;
 					// guard against attempt to indent negative:
 					let guardedNestingLevel = xpathNestingLevel > -1 ? xpathNestingLevel : 0;
 					let requiredIndentLength = totalAttributeOffset + ((nestingLevel + guardedNestingLevel + indentExtraAsNoNameIndent) * indentCharLength);
@@ -429,6 +436,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						requiredIndentLength += (indent * indentCharLength);
 					}
 					requiredIndentLength = requiredIndentLength < 0 ? 0 : requiredIndentLength;
+					console.log('line:', lineNumber, 'requiredIndentLength:', requiredIndentLength, 'val:', token.value, 'tao', totalAttributeOffset, 'indent:', indent);
 
 					if (!(preserveSpace || isPreserveSpaceElement)) {
 						if (this.replaceIndendation) {

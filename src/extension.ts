@@ -82,15 +82,23 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, new XPathSemanticTokensProvider(xpathDiagnosticsCollection), legend));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
+	let xpathFormatter = new XMLDocumentFormattingProvider(XPathConfiguration.configuration);
 	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
 	let dcpFormatter = new XMLDocumentFormattingProvider(DCPConfiguration.configuration);
 
-	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider(['xslt', 'xpath'],
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt',
 		xsltFormatter));
-	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider(['xslt', 'xpath'],
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xslt',
 		xsltFormatter));
-	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider(['xslt', 'xpath'],
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt',
 		xsltFormatter, '\n', '/'));
+
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xpath',
+		xpathFormatter));
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xpath',
+		xpathFormatter));
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xpath',
+		xpathFormatter, '\n', '/'));
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xml',
 		xmlFormatter));

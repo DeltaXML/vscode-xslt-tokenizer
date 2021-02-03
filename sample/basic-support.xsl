@@ -6,9 +6,15 @@
     xmlns:ext="com.example.functions"
     exclude-result-prefixes="xs fn j" version="3.0">
     
-   <xsl:function name="ext:test" as="xs:string">
+    <xsl:function name="ext:test" as="xs:string">
         <xsl:sequence select="22 + (8 * 15)"/>
+        <xsl:sequence select="
+            if (true()) 
+                then
+                'abcd'
+            else
+                'defg'"/>
     </xsl:function>
-
+    
     
 </xsl:stylesheet>

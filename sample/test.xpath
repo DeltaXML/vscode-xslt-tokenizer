@@ -1,0 +1,5 @@
+if (true()) 
+then
+'abcd'
+else
+'defg'
