@@ -7,6 +7,7 @@ import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
 import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
+import { ExitCondition, LexPosition, XPathLexer } from './xpLexer';
 
 interface ImportedGlobals {
 	href: string,
@@ -22,6 +23,7 @@ interface GlobalsSummary {
 export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode.CompletionItemProvider {
 
 	private readonly xslLexer: XslLexer;
+	private xpLexer: XPathLexer | null = null;
 	private gp = new GlobalsProvider();
 	private docType: DocumentTypes;
 	private schemaData: SchemaData|undefined;
@@ -35,8 +37,20 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		this.schemaData = xsltConfiguration.schemaData;
 	}
 
+	private getXPLexer() {
+		if (this.xpLexer === null) {
+			this.xpLexer = new XPathLexer();
+		}
+		return this.xpLexer;
+	}
+
 	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Location | undefined> {
-		const allTokens = this.xslLexer.analyse(document.getText());
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+
+		let allTokens = this.docType === DocumentTypes.XPath ?
+			this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition) :
+			this.xslLexer.analyse(document.getText());
+
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
@@ -84,7 +98,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
 		const keepNameTests = true;
-		const allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		
+		let allTokens = this.docType === DocumentTypes.XPath ?
+			this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition) :
+			this.xslLexer.analyse(document.getText(), keepNameTests);
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
