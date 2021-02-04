@@ -437,7 +437,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						requiredIndentLength += (indent * indentCharLength);
 					}
 					requiredIndentLength = requiredIndentLength < 0 ? 0 : requiredIndentLength;
-					console.log('line:', lineNumber, 'requiredIndentLength:', requiredIndentLength, 'val:', token.value, 'tao', totalAttributeOffset, 'indent:', indent);
 
 					if (!(preserveSpace || isPreserveSpaceElement)) {
 						if (this.replaceIndendation) {
