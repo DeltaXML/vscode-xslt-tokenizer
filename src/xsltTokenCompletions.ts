@@ -166,16 +166,15 @@ export class XsltTokenCompletions {
 				}
 			}
 			if (overranPos) {
-				console.log('!!!!!!! overran')
 				return resultCompletions;
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			if (isOnRequiredToken) {
-				console.log('--------- on required token ---------');
-				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			}
+			// if (isOnRequiredToken) {
+			// 	console.log('--------- on required token ---------');
+			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
