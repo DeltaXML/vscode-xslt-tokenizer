@@ -126,6 +126,7 @@ export class XsltTokenCompletions {
 		let keepProcessing = false;
 		let isOnStartOfRequiredToken = false;
 		let currentXSLTIterateParams: string[][] = [];
+		const lastTokenIndex = allTokens.length - 1;
 
 		let index = -1;
 		for (let token of allTokens) {
@@ -136,6 +137,10 @@ export class XsltTokenCompletions {
 				return resultCompletions;
 			}
 			let overranPos = !keepProcessing && (lineNumber > requiredLine || (lineNumber === requiredLine && token.startCharacter > requiredChar));
+			if (docType === DocumentTypes.XPath && index === lastTokenIndex && requiredChar > token.startCharacter + token.length) {
+				resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+				return resultCompletions;
+			}
 			if (prevToken) {
 				if (overranPos) {
 					let prevIsXML = prevToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
