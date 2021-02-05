@@ -449,6 +449,9 @@ export class XPathLexer {
         let currentState: [CharLevelState, number] = [CharLevelState.init, 0];
         let currentChar: string = '';
         let tokenChars: string[] = [];
+        if (exitCondition === ExitCondition.None) {
+            this.documentTokens.length = 0;
+        }
         let result = this.documentTokens;
         let nestedTokenStack: Token[] = [];
         let poppedContext: Token | undefined | null = null;
