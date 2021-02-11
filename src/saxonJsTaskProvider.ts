@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 
 function exists(file: string): Promise<boolean> {
     return new Promise<boolean>((resolve, _reject) => {
@@ -146,7 +147,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             }
             
             for (const propName in xsltTask) {
-                let propValue = this.getProp(xsltTask, propName);
+                let propValue = SaxonTaskProvider.escapeString2(this.getProp(xsltTask, propName));
                 switch (propName) {
                     case 'xsltFile': 
                         commandLineArgs.push('-xsl:' + propValue);
@@ -178,7 +179,8 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             let resolvedCommandLine = commandLineArgs.join(' ');         
             // this is overriden if problemMatcher is set in the tasks.json file      
             let problemMatcher = "$saxon-xslt-js";
-            let commandline = `${nodeModulesPath}xslt3 ${resolvedCommandLine}`;
+            let escapedModulesPath = SaxonTaskProvider.escapeString(nodeModulesPath + 'xslt3');
+            let commandline = `${escapedModulesPath} ${resolvedCommandLine}`;
             let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
             return newTask;
         } else {

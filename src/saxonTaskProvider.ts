@@ -158,7 +158,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             }
 
             for (const propName in xsltTask) {
-                let propValue = this.getProp(xsltTask, propName);
+                let propValue = SaxonTaskProvider.escapeString(this.getProp(xsltTask, propName));
                 switch (propName) {
                     case 'xsltFile':
                         commandLineArgs.push('-xsl:' + propValue);
@@ -209,7 +209,8 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 commandLineArgs.push(xsltParametersCommand.join(' '));
             }
 
-            let classPathString = classPaths.join(pathSeparator());
+            let rawClassPathString = classPaths.join(pathSeparator());
+            const classPathString = SaxonTaskProvider.escapeString(rawClassPathString);
             let resolvedCommandLine = commandLineArgs.join(' ');
             // this is overriden if problemMatcher is set in the tasks.json file      
             let problemMatcher = "$saxon-xslt";
@@ -219,8 +220,24 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         } else {
             return undefined;
         }
-        
+    }
 
+    public static escapeString(text: string) {
+        if (typeof text === 'string') {
+            const result = text;
+            return '"' + text + '"';
+        } else {
+            return text;
+        }
+    }
 
+    public static escapeString2(text: string) {
+        if (typeof text === 'string') {
+            const result = text.replace(/\s/, '\ ');
+            console.log(result);
+            return '"' + text + '"';
+        } else {
+            return text;
+        }
     }
 }
