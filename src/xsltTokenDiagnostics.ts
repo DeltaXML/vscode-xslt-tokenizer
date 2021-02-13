@@ -996,7 +996,10 @@ export class XsltTokenDiagnostics {
 						let tv = token.value;
 						
 						// start checks
-						if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error) {
+						if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
+							token['error'] = ErrorType.XPathUnexpected;
+							problemTokens.push(token);
+						} else if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 							let currCharType = <CharLevelState>token.charType;
 							let nextToken = index + 1 < allTokens.length? allTokens[index + 1]: undefined;
@@ -1009,7 +1012,7 @@ export class XsltTokenDiagnostics {
 									isXPathError = true;
 								}
 							}
-                         	if (tv === 'map' || tv === 'array') {
+            	if (tv === 'map' || tv === 'array') {
 								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens, TokenLevelState.function);
 							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType !== TokenLevelState.string) {
 								// either a number of an operator so show no error
@@ -1464,8 +1467,9 @@ export class XsltTokenDiagnostics {
 				let isXPathError = false;
 				if (prevToken.tokenType === TokenLevelState.complexExpression || prevToken.tokenType === TokenLevelState.entityRef) {
 					// no error
-				}
-				else if (prevToken.tokenType === TokenLevelState.operator) {
+				} else if (prevToken.tokenType === TokenLevelState.uriLiteral && tokenType !== TokenLevelState.nodeNameTest) {
+					isXPathError = true;
+				} else if (prevToken.tokenType === TokenLevelState.operator) {
 					if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rPr) {
 						isXPathError = true;
 					}
@@ -1479,7 +1483,9 @@ export class XsltTokenDiagnostics {
 						}
 					}
 				}
-				else {
+				else if (tokenType === TokenLevelState.nodeNameTest && prevToken.tokenType === TokenLevelState.uriLiteral) {
+					// no error
+				} else {
 					isXPathError = true;
 				}
 				if (isXPathError) {
