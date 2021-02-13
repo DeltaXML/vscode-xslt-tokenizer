@@ -147,26 +147,31 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             }
             
             for (const propName in xsltTask) {
-                let propValue = SaxonTaskProvider.escapeString2(this.getProp(xsltTask, propName));
+                let propValue = this.getProp(xsltTask, propName);
+                let propNameValue = '';
                 switch (propName) {
                     case 'xsltFile': 
-                        commandLineArgs.push('-xsl:' + propValue);
+                        propNameValue = '-xsl:' + propValue;
                         break
                     case 'xmlSource':
-                        commandLineArgs.push('-s:' + propValue);
+                        propNameValue = '-s:' + propValue;
                         break;
                     case 'resultPath': 
-                        commandLineArgs.push('-o:' + propValue);
+                        propNameValue = '-o:' + propValue;
                         break
                     case 'initialTemplate':
-                        commandLineArgs.push('-it:' + propValue);
+                        propNameValue = '-it:' + propValue;
                         break;
                     case 'initialMode': 
-                        commandLineArgs.push('-im:' + propValue);
+                        propNameValue = '-im:' + propValue;
                         break;
                     case 'export':
-                        commandLineArgs.push('-export:' + propValue);
+                        propNameValue = '-export:' + propValue;
                         break;
+                }
+                if (propNameValue !== '') {
+                    const escapedArg = SaxonTaskProvider.escapeString2(propNameValue);
+                    commandLineArgs.push(escapedArg);
                 }
             }
 
@@ -181,6 +186,8 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             let problemMatcher = "$saxon-xslt-js";
             let escapedModulesPath = SaxonTaskProvider.escapeString(nodeModulesPath + 'xslt3');
             let commandline = `${escapedModulesPath} ${resolvedCommandLine}`;
+            console.log('commandline:');
+            console.log(commandline);
             let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
             return newTask;
         } else {
