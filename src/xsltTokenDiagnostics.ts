@@ -334,6 +334,16 @@ export class XsltTokenDiagnostics {
 			}
 		});
 
+		if (docType === DocumentTypes.XPath) {
+			xsltPrefixesToURIs.set('array', XSLTnamespaces.Array);
+			xsltPrefixesToURIs.set('map', XSLTnamespaces.Map);
+			xsltPrefixesToURIs.set('math', XSLTnamespaces.Map);
+			xsltPrefixesToURIs.set('xs', XSLTnamespaces.XMLSchema);
+			xsltPrefixesToURIs.set('fn', XSLTnamespaces.XPath);
+			xsltPrefixesToURIs.set('xsl', XSLTnamespaces.XSLT);
+			inheritedPrefixes = ['array', 'map', 'math', 'xs', 'fn', 'xsl'];
+		}
+
 		allTokens.forEach((token, index) => {
 			lineNumber = token.line;
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
