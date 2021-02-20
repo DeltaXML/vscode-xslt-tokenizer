@@ -1268,6 +1268,7 @@ export enum GlobalInstructionType {
     Include,
     Import,
     UsePackage,
+    RootXMLNS,
     Unknown
 }
 

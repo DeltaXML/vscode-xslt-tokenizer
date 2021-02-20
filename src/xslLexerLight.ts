@@ -15,7 +15,7 @@ import * as vscode from 'vscode';
 
 
 export class XslLexerLight extends XslLexer {
-    public analyseLight(xsl: string): GlobalInstructionData[] {
+    public analyseLight(xsl: string, xmlnsPrefixesOnly?: boolean): GlobalInstructionData[] {
 
         this.globalInstructionData = [];
         this.globalModeData = [];
@@ -125,6 +125,9 @@ export class XslLexerLight extends XslLexer {
                                 xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
+                            } else if (xmlElementStack < 3 && xmlnsPrefixesOnly) {
+                                tokenChars.push(currentChar);
+                                storeToken = true;
                             }
                             break;
                         case XMLCharState.lStEq:
@@ -147,6 +150,21 @@ export class XslLexerLight extends XslLexer {
                                 isGlobalParameterName = true;
                             } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                 isGlobalUsePackageVersion = true;
+                            } else if (xmlnsPrefixesOnly && attName.startsWith('xmlns:')) {
+                                let xmlnsTkn: BaseToken = {
+                                    line: lineNumber,
+                                    length: attName.length,
+                                    startCharacter: lineNumberChar,
+                                    value: attName,
+                                    tokenType: XSLTokenLevelState.attributeName
+                                };
+                                const gData: GlobalInstructionData = {
+                                    idNumber: 0,
+                                    name: attName,
+                                    token: xmlnsTkn,
+                                    type: GlobalInstructionType.RootXMLNS
+                                }
+                                this.globalInstructionData.push(gData);
                             }
                             tokenChars = [];
                             storeToken = false;

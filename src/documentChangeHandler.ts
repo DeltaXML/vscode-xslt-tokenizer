@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
-import { XMLConfiguration } from './languageConfigurations';
+import { XMLConfiguration, XSLTLightConfiguration } from './languageConfigurations';
 import { XPathDocumentChangeHandler } from './xpathDocumentChangeHandler';
+import { GlobalInstructionData, GlobalInstructionType } from './xslLexer';
+import { XslLexerLight } from './xslLexerLight';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
 
 export interface TagRenameEdit {
@@ -16,6 +18,8 @@ export class DocumentChangeHandler {
 	private cachedFailedEdit: TagRenameEdit | null = null;
 	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler|null = null;
 	private static lastActiveXMLDocument: vscode.TextDocument|null = null;
+	private static lastXMLDocumentPrefixes: string[] = [];
+	private static lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
 		if (!isXML) {
@@ -164,6 +168,7 @@ export class DocumentChangeHandler {
 		} 
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLDocument = document;
+			DocumentChangeHandler.getLastDocXmlnsPrefixes();
 		}
 		if (isXMLDocument && !this.xmlDocumentRegistered) {
 			this.xmlDocumentRegistered = true;
@@ -202,5 +207,19 @@ export class DocumentChangeHandler {
 		} else {
 			return false;
 		}
+	}
+
+	private static getLastDocXmlnsPrefixes() {
+		let prefixes: string[] = [];
+		if (DocumentChangeHandler.lastActiveXMLDocument) {
+			let data: GlobalInstructionData[] = this.lexer.analyseLight(DocumentChangeHandler.lastActiveXMLDocument.getText(), true);
+			data.forEach((item) => {
+				if (item.type === GlobalInstructionType.RootXMLNS) {
+					// remove xmlns:
+					prefixes.push(item.name.substring(6));
+				}
+			});
+		}
+		DocumentChangeHandler.lastXMLDocumentPrefixes = prefixes;
 	}
 }
