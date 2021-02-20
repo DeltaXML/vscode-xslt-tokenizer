@@ -298,10 +298,13 @@ export class XsltTokenDiagnostics {
 					if (docType === DocumentTypes.XPath) {
 						inheritedPrefixes.push(instruction.name);
 					}
-					break;
-				
+					break;				
 			}
 		});
+
+		if (docType === DocumentTypes.XPath) {
+			importedGlobalVarNames.push('_');
+		}
 
 		importedInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
