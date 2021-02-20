@@ -15,7 +15,7 @@ export class DocumentChangeHandler {
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
 	private cachedFailedEdit: TagRenameEdit | null = null;
 	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler|null = null;
-
+	private static lastActiveXMLDocument: vscode.TextDocument|null = null;
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
 		if (!isXML) {
@@ -162,6 +162,9 @@ export class DocumentChangeHandler {
 			this.onDidChangeRegistration.dispose();
 			this.xmlDocumentRegistered = false;
 		} 
+		if (isXMLDocument) {
+			DocumentChangeHandler.lastActiveXMLDocument = document;
+		}
 		if (isXMLDocument && !this.xmlDocumentRegistered) {
 			this.xmlDocumentRegistered = true;
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.onDocumentChange(e, isXMLDocument));
