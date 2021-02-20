@@ -11,14 +11,15 @@ export interface TagRenameEdit {
 	fullTagName: string;
 }
 export class DocumentChangeHandler {
+	public static lastActiveXMLDocument: vscode.TextDocument|null = null;
+	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
+
 	private onDidChangeRegistration: vscode.Disposable | null = null;
 	private xmlDocumentRegistered = false;
 	private lastChangePerformed: TagRenameEdit | null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
 	private cachedFailedEdit: TagRenameEdit | null = null;
 	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler|null = null;
-	private static lastActiveXMLDocument: vscode.TextDocument|null = null;
-	private static lastXMLDocumentPrefixes: string[] = [];
 	private static lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
@@ -210,16 +211,8 @@ export class DocumentChangeHandler {
 	}
 
 	private static getLastDocXmlnsPrefixes() {
-		let prefixes: string[] = [];
 		if (DocumentChangeHandler.lastActiveXMLDocument) {
-			let data: GlobalInstructionData[] = this.lexer.analyseLight(DocumentChangeHandler.lastActiveXMLDocument.getText(), true);
-			data.forEach((item) => {
-				if (item.type === GlobalInstructionType.RootXMLNS) {
-					// remove xmlns:
-					prefixes.push(item.name.substring(6));
-				}
-			});
+			DocumentChangeHandler.lastXMLDocumentGlobalData = this.lexer.analyseLight(DocumentChangeHandler.lastActiveXMLDocument.getText(), true);
 		}
-		DocumentChangeHandler.lastXMLDocumentPrefixes = prefixes;
 	}
 }

@@ -155,7 +155,7 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 	}
 
 	private reportProblems(allTokens: Token[], document: vscode.TextDocument) {
-		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, [], [], []);
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, [], []);
 		if (diagnostics.length > 0) {
 			this.collection.set(document.uri, diagnostics);
 		} else {

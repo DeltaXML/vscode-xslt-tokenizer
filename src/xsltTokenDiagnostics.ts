@@ -294,6 +294,11 @@ export class XsltTokenDiagnostics {
 				case GlobalInstructionType.AttributeSet:
 					globalAttributeSetNames.push(instruction.name);
 					break;
+				case GlobalInstructionType.RootXMLNS:
+					if (docType === DocumentTypes.XPath) {
+						inheritedPrefixes.push(instruction.name);
+					}
+					break;
 				
 			}
 		});
@@ -341,7 +346,7 @@ export class XsltTokenDiagnostics {
 			xsltPrefixesToURIs.set('xs', XSLTnamespaces.XMLSchema);
 			xsltPrefixesToURIs.set('fn', XSLTnamespaces.XPath);
 			xsltPrefixesToURIs.set('xsl', XSLTnamespaces.XSLT);
-			inheritedPrefixes = ['array', 'map', 'math', 'xs', 'fn', 'xsl'];
+			inheritedPrefixes = inheritedPrefixes.concat(['array', 'map', 'math', 'xs', 'fn', 'xsl']);
 		}
 
 		allTokens.forEach((token, index) => {

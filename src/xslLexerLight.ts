@@ -160,7 +160,7 @@ export class XslLexerLight extends XslLexer {
                                 };
                                 const gData: GlobalInstructionData = {
                                     idNumber: 0,
-                                    name: attName,
+                                    name: attName.substring(6),
                                     token: xmlnsTkn,
                                     type: GlobalInstructionType.RootXMLNS
                                 }
