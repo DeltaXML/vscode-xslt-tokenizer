@@ -3,6 +3,7 @@ import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructio
 import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
+import { exit } from 'process';
 
 interface ImportedGlobals {
 	href: string,
@@ -21,6 +22,8 @@ export interface XsltPackage {
 	version?: string
 }
 
+type Entry = [string, number];
+
 export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
@@ -28,6 +31,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private gp = new GlobalsProvider();
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
+	public static documentSymbols: vscode.DocumentSymbol[] = [];
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
@@ -38,6 +42,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
+		XsltSymbolProvider.documentSymbols = [];
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
@@ -116,9 +121,63 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			} else {
 				this.collection.clear();
 			};
+			XsltSymbolProvider.documentSymbols = symbols;
 			resolve(symbols);
 		});
 
+	}
+
+ 
+	public static getSymbolsFromXPathLocator(rawText: string) {
+		const text = rawText.startsWith('/')? rawText.substring(1): '';
+		const pathParts = text.split('/');
+		const symbols = XsltSymbolProvider.documentSymbols;
+
+		if (symbols.length === 0) {
+			return;
+		}
+	
+		let currentSymbol: vscode.DocumentSymbol|undefined = symbols[0];
+
+		pathParts.forEach((item, i) => {
+			const isLastItem = i === pathParts.length - 1;
+			if (currentSymbol === undefined || (isLastItem && item.startsWith('@'))) {
+				// can't yet handle attribute-test: /element/@attribute
+				return;
+			}
+			const pos = item.indexOf('[');
+			let pathName: string = ''
+			// only want one result;
+			let pathIndex = 1;
+			if (pos === -1) {
+				pathName = item;
+			} else {
+				const predicateString = item.substring(pos + 1, item.length - 1);
+				const predicateNum = Number(predicateString);
+				pathIndex = -1;
+				if (predicateNum !== NaN) {
+					pathIndex = predicateNum;
+				}
+				pathName = item.substr(0, pos)
+			}
+
+			if (i === 0) {
+				currentSymbol = currentSymbol.name === pathName && pathIndex === 1? currentSymbol : undefined;
+			} else {
+				let nameCount = 0;
+				currentSymbol = currentSymbol.children.find((symbol) => {
+					const spacePos = symbol.name.indexOf(' ');
+					const symbolName = spacePos === -1? symbol.name : symbol.name.substring(0, spacePos -1);
+					if (symbolName === pathName) {
+						nameCount++;
+						return pathIndex === nameCount;
+					} else {
+						return false;
+					}
+				});
+			}
+		});
+		return currentSymbol;
 	}
 
 	private async processImportedGlobals(xsltPackages: XsltPackage[], importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {

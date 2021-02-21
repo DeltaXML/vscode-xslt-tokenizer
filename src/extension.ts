@@ -23,6 +23,8 @@ import { FullDocumentLinkProvider } from './fullDocumentLinkProvider';
 
 import { DCPSymbolProvider } from './dcpSymbolProvider';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { window } from 'vscode';
+
 
 
 const tokenModifiers = new Map<string, number>();
@@ -61,6 +63,23 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(activeEditor);
 	}
 
+	async function showGotoXPathInputBox() {
+		const result = await window.showInputBox({
+			value: '',
+			valueSelection: [0, 16],
+			placeHolder: '/html/body/p[1]',
+			validateInput: text => {
+				return text.startsWith('/') ? null : 'XPath should start with "/"';
+			}
+		});
+		if (result) {
+			const symbols = XsltSymbolProvider.getSymbolsFromXPathLocator(result);
+			const foundSymbol = symbols !== undefined;
+			const msg = foundSymbol? `Matching element found: ${symbols?.name}` : 'No matching elements';
+			window.showInformationMessage(msg);
+		}
+	}
+
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
@@ -75,6 +94,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xpath' }, xpathDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.test', (args) => XsltSymbolProvider.getSymbolsFromXPathLocator(args[0])));
 
 
 	// syntax highlighters

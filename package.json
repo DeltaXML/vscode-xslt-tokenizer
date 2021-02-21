@@ -41,6 +41,18 @@
 		}
 	},
 	"contributes": {
+		"commands": [
+			{
+				"command": "xslt-xpath.gotoXPath",
+				"title": "Goto XPath",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.test",
+				"title": "Test Goto XPath",
+				"category": "XML"
+			}
+		],
 		"semanticTokenScopes": [
 			{
 				"scopes": {
