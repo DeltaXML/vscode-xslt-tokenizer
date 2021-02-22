@@ -135,6 +135,47 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
+	public static getXPathFromSelection() {
+		const editor = vscode.window.activeTextEditor;
+		if (editor) {
+			const selection = editor.selection;
+			const rootSymbol = XsltSymbolProvider.documentSymbols[0];
+			const newPath = ['/' + rootSymbol.name.split(' ')[0]];
+			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath);		
+			const fullPath = newPath.join('');
+			return fullPath;
+		}
+	}
+
+	private static getChildSymbolForSelection(selection: vscode.Selection, symbol: vscode.DocumentSymbol, path: string[]): vscode.DocumentSymbol {
+		const result = symbol.children.find((sym) => {
+			const selectionPos = new vscode.Position(selection.start.line, selection.start.character);
+			return sym.range.contains(selectionPos);
+		});
+		console.log('path', path.join(''));
+		console.log('resultLine', result?.range.start.line);
+
+		if (result) {
+			const resultName = result.name.split(' ')[0];
+			let precedingSymbolNames = 1;
+			symbol.children.forEach((sibling) => {
+				if (sibling.range.start.line === result.range.start.line && sibling.range.start.character === result.range.start.character) {
+					return;
+				}
+				console.log('---------');
+				console.log('siblingName', sibling.name, 'siblingLine', sibling.range.start.line);
+				const siblingName = sibling.name.split(' ')[0];
+				if (siblingName === resultName) {
+					precedingSymbolNames++;
+				}
+			});
+			path.push('/' + resultName  + `[${precedingSymbolNames}]`);
+			return this.getChildSymbolForSelection(selection, result, path);
+		} else {
+			return symbol;
+		}
+	}
+
  
 	public static getSymbolFromXPathLocator(rawText: string) {
 		const text = rawText.startsWith('/')? rawText.substring(1): '';

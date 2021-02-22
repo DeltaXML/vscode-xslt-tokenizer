@@ -65,10 +65,12 @@ export function activate(context: vscode.ExtensionContext) {
 
 	async function showGotoXPathInputBox() {
 		let symbol: vscode.DocumentSymbol|undefined;
+		const xpath = XsltSymbolProvider.getXPathFromSelection();
+		const inboxValue = xpath? xpath : '';
 		const result = await window.showInputBox({
-			value: '',
-			valueSelection: [0, 16],
-			placeHolder: '/books/book[2]/author[3]',
+			value: inboxValue,
+			valueSelection: [0, inboxValue.length],
+			placeHolder: '/element/element[2]/element[3]',
 			validateInput: text => {
 				if (!text.startsWith('/')) {
 					return 'XPath should start with "/"';
