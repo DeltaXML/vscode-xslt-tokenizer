@@ -11,7 +11,7 @@ export interface TagRenameEdit {
 	fullTagName: string;
 }
 export class DocumentChangeHandler {
-	public static lastActiveXMLDocument: vscode.TextDocument|null = null;
+	public static lastActiveXMLEditor: vscode.TextEditor|null = null;
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 
 	private onDidChangeRegistration: vscode.Disposable | null = null;
@@ -146,7 +146,7 @@ export class DocumentChangeHandler {
 
 	public registerXMLEditor = (editor: vscode.TextEditor | undefined) => {
 		if (editor) {
-			this.registerXMLDocument(editor.document);
+			this.registerXMLDocument(editor);
 		} else {
 
 		}
@@ -159,7 +159,8 @@ export class DocumentChangeHandler {
 		return this.xpathDocumentChangeHanlder;
 	}
 
-	private registerXMLDocument = (document: vscode.TextDocument) => {
+	private registerXMLDocument = (editor: vscode.TextEditor) => {
+		const document = editor.document;
 		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp';
 		let isXPathDocument = document.languageId === 'xpath';
 
@@ -168,7 +169,7 @@ export class DocumentChangeHandler {
 			this.xmlDocumentRegistered = false;
 		} 
 		if (isXMLDocument) {
-			DocumentChangeHandler.lastActiveXMLDocument = document;
+			DocumentChangeHandler.lastActiveXMLEditor = editor;
 			DocumentChangeHandler.getLastDocXmlnsPrefixes();
 		}
 		if (isXMLDocument && !this.xmlDocumentRegistered) {
@@ -211,8 +212,8 @@ export class DocumentChangeHandler {
 	}
 
 	private static getLastDocXmlnsPrefixes() {
-		if (DocumentChangeHandler.lastActiveXMLDocument) {
-			DocumentChangeHandler.lastXMLDocumentGlobalData = this.lexer.analyseLight(DocumentChangeHandler.lastActiveXMLDocument.getText(), true);
+		if (DocumentChangeHandler.lastActiveXMLEditor) {
+			DocumentChangeHandler.lastXMLDocumentGlobalData = this.lexer.analyseLight(DocumentChangeHandler.lastActiveXMLEditor.document.getText(), true);
 		}
 	}
 }

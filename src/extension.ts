@@ -64,20 +64,32 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	async function showGotoXPathInputBox() {
+		let symbol: vscode.DocumentSymbol|undefined;
 		const result = await window.showInputBox({
 			value: '',
 			valueSelection: [0, 16],
-			placeHolder: '/html/body/p[1]',
+			placeHolder: '/books/book[2]/author[3]',
 			validateInput: text => {
-				return text.startsWith('/') ? null : 'XPath should start with "/"';
+				if (!text.startsWith('/')) {
+					return 'XPath should start with "/"';
+				} else {
+					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text);
+					return symbol? null : 'No matching elements'
+				}
+				
 			}
 		});
 		if (result) {
-			const symbols = XsltSymbolProvider.getSymbolsFromXPathLocator(result);
-			const foundSymbol = symbols !== undefined;
-			const msg = foundSymbol? `Matching element found: ${symbols?.name}` : 'No matching elements';
+			XsltSymbolProvider.selectTextWithSymbol(symbol);
+			const foundSymbol = symbol !== undefined;
+			const msg = foundSymbol? `Matching element found: ${symbol?.name}` : 'No matching elements';
 			window.showInformationMessage(msg);
 		}
+	}
+
+	function selectTextFromXPath(xpathText: string) {
+		const symbol = XsltSymbolProvider.getSymbolFromXPathLocator(xpathText);
+		XsltSymbolProvider.selectTextWithSymbol(symbol);
 	}
 
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
@@ -95,7 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
-	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.test', (args) => XsltSymbolProvider.getSymbolsFromXPathLocator(args[0])));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPath', (args) => selectTextFromXPath(args[0])));
 
 
 	// syntax highlighters

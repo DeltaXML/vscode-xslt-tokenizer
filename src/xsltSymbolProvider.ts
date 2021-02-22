@@ -4,6 +4,7 @@ import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { exit } from 'process';
+import { DocumentChangeHandler } from './documentChangeHandler';
 
 interface ImportedGlobals {
 	href: string,
@@ -127,8 +128,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
+	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol|undefined) {
+		if (DocumentChangeHandler.lastActiveXMLEditor && symbol) {
+			const range = symbol.range;
+			DocumentChangeHandler.lastActiveXMLEditor.selection = new vscode.Selection(range.start, range.end);
+		}
+	}
+
  
-	public static getSymbolsFromXPathLocator(rawText: string) {
+	public static getSymbolFromXPathLocator(rawText: string) {
 		const text = rawText.startsWith('/')? rawText.substring(1): '';
 		const pathParts = text.split('/');
 		const symbols = XsltSymbolProvider.documentSymbols;
@@ -167,7 +175,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				let nameCount = 0;
 				currentSymbol = currentSymbol.children.find((symbol) => {
 					const spacePos = symbol.name.indexOf(' ');
-					const symbolName = spacePos === -1? symbol.name : symbol.name.substring(0, spacePos -1);
+					const symbolName = spacePos === -1? symbol.name : symbol.name.substring(0, spacePos);
 					if (symbolName === pathName) {
 						nameCount++;
 						return pathIndex === nameCount;
