@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
-import {XsltTokenDiagnostics} from './xsltTokenDiagnostics';
-import {GlobalsProvider} from './globalsProvider';
+import { XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { GlobalsProvider } from './globalsProvider';
 import * as path from 'path';
 import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
@@ -49,13 +49,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
-		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
+		let importedG: ImportedGlobals = { data: globalInstructionData, href: document.fileName, error: false };
 		let importedGlobals1 = [importedG];
 		let accumulatedHrefs: string[] = [importedG.href];
 		let topLevelHrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
 
 
-		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs};
+		let globalsSummary0: GlobalsSummary = { globals: importedGlobals1, hrefs: accumulatedHrefs };
 		const maxImportLevel = 20;
 
 		let processNestedGlobals = async () => {
@@ -107,7 +107,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						global['href'] = globals.href;
 						allImportedGlobals.push(global);
 					});
-				}		
+				}
 			});
 
 			let importDiagnostics: vscode.Diagnostic[] = [];
@@ -128,7 +128,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
-	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol|undefined) {
+	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol | undefined) {
 		if (DocumentChangeHandler.lastActiveXMLEditor && symbol) {
 			const range = symbol.range;
 			DocumentChangeHandler.lastActiveXMLEditor.selection = new vscode.Selection(range.start, range.end);
@@ -141,7 +141,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			const selection = editor.selection;
 			const rootSymbol = XsltSymbolProvider.documentSymbols[0];
 			const newPath = ['/' + rootSymbol.name.split(' ')[0]];
-			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath);		
+			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath);
 			const fullPath = newPath.join('');
 			return fullPath;
 		}
@@ -152,41 +152,39 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			const selectionPos = new vscode.Position(selection.start.line, selection.start.character);
 			return sym.range.contains(selectionPos);
 		});
-		console.log('path', path.join(''));
-		console.log('resultLine', result?.range.start.line);
 
 		if (result) {
 			const resultName = result.name.split(' ')[0];
 			let precedingSymbolNames = 1;
-			symbol.children.forEach((sibling) => {
-				if (sibling.range.start.line === result.range.start.line && sibling.range.start.character === result.range.start.character) {
-					return;
+			for (const sibling of symbol.children) {
+				if (sibling === result) {
+					break;
+				} else {
+					const siblingName = sibling.name.split(' ')[0];
+					if (siblingName === resultName) {
+						precedingSymbolNames++;
+					}
 				}
-				console.log('---------');
-				console.log('siblingName', sibling.name, 'siblingLine', sibling.range.start.line);
-				const siblingName = sibling.name.split(' ')[0];
-				if (siblingName === resultName) {
-					precedingSymbolNames++;
-				}
-			});
-			path.push('/' + resultName  + `[${precedingSymbolNames}]`);
+			}
+
+			path.push('/' + resultName + `[${precedingSymbolNames}]`);
 			return this.getChildSymbolForSelection(selection, result, path);
 		} else {
 			return symbol;
 		}
 	}
 
- 
+
 	public static getSymbolFromXPathLocator(rawText: string) {
-		const text = rawText.startsWith('/')? rawText.substring(1): '';
+		const text = rawText.startsWith('/') ? rawText.substring(1) : '';
 		const pathParts = text.split('/');
 		const symbols = XsltSymbolProvider.documentSymbols;
 
 		if (symbols.length === 0) {
 			return;
 		}
-	
-		let currentSymbol: vscode.DocumentSymbol|undefined = symbols[0];
+
+		let currentSymbol: vscode.DocumentSymbol | undefined = symbols[0];
 
 		pathParts.forEach((item, i) => {
 			const isLastItem = i === pathParts.length - 1;
@@ -211,12 +209,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 
 			if (i === 0) {
-				currentSymbol = currentSymbol.name === pathName && pathIndex === 1? currentSymbol : undefined;
+				currentSymbol = currentSymbol.name === pathName && pathIndex === 1 ? currentSymbol : undefined;
 			} else {
 				let nameCount = 0;
 				currentSymbol = currentSymbol.children.find((symbol) => {
 					const spacePos = symbol.name.indexOf(' ');
-					const symbolName = spacePos === -1? symbol.name : symbol.name.substring(0, spacePos);
+					const symbolName = spacePos === -1 ? symbol.name : symbol.name.substring(0, spacePos);
 					if (symbolName === pathName) {
 						nameCount++;
 						return pathIndex === nameCount;
@@ -247,13 +245,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		});
 
 		if (topLevel) {
-			return {globals: newGlobals, hrefs: level2Hrefs};
+			return { globals: newGlobals, hrefs: level2Hrefs };
 		} else {
-			return {globals: importedGlobals1, hrefs: level2Hrefs};
+			return { globals: importedGlobals1, hrefs: level2Hrefs };
 		}
 	}
 
-	private accumulateImportHrefs(xsltPackages: XsltPackage[],importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
+	private accumulateImportHrefs(xsltPackages: XsltPackage[], importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
 		let result: string[] = [];
 		const rootPath = vscode.workspace.rootPath;
 		importedGlobals.forEach((importedG) => {
@@ -288,7 +286,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		} else if (href.startsWith('file:///')) {
 			return href.substring(7);
 		} else {
-			href = href.startsWith('file:')? href.substring(5) : href;
+			href = href.startsWith('file:') ? href.substring(5) : href;
 			let basePath = path.dirname(documentPath);
 			let joinedPath = path.join(basePath, href);
 			return path.normalize(joinedPath);
@@ -315,7 +313,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return new Promise((resolve, reject) => {
 				inputHrefs.forEach((href, index) => {
 					this.gp.provideGlobals(href).then((globals) => {
-						result.push({href: href, data: globals.data, error: globals.error});
+						result.push({ href: href, data: globals.data, error: globals.error });
 						if (index === lastIndex) {
 							resolve(result);
 						}
