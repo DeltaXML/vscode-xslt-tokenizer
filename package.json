@@ -46,6 +46,26 @@
 				"command": "xslt-xpath.gotoXPath",
 				"title": "Goto XPath",
 				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.selectCurrentElement",
+				"title": "Select current element",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.selectPrecedingElement",
+				"title": "Select preceding element",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.selectFollowingElement",
+				"title": "Select following element",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.selectParentElement",
+				"title": "Select parent element",
+				"category": "XML"
 			}
 		],
 		"semanticTokenScopes": [

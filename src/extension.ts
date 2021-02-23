@@ -13,7 +13,7 @@ import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration } from './languageConfigurations';
-import { XsltSymbolProvider } from './xsltSymbolProvider';
+import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer, LanguageConfiguration, DocumentTypes } from './xslLexer';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import { on } from 'process';
@@ -91,7 +91,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	function selectTextFromXPath(xpathText: string) {
 		const symbol = XsltSymbolProvider.getSymbolFromXPathLocator(xpathText);
-		XsltSymbolProvider.selectTextWithSymbol(symbol);
+		if (symbol) {
+			XsltSymbolProvider.selectTextWithSymbol(symbol);
+		}
 	}
 
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
@@ -109,6 +111,10 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectCurrentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Current)));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectPrecedingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Previous)));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFollowingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Next)));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectParentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Parent)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPath', (args) => selectTextFromXPath(args[0])));
 
 
