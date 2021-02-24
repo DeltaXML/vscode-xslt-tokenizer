@@ -33,6 +33,7 @@ This XSLT/XPath extension for VSCode provides comprehensive language support for
    - Tag Rename
    - Auto tag-close (requires 'formatOnType' setting)
    - Auto clean orphaned end tag after `/` added to make start tag self-close
+   - `XML: Goto XPath` - editor command that selects the suppled XPath location, initially showing the current XPath
    - Element Selection Commands:
      - `XML: Select Current element`
      - `XML Select Preceding element`
