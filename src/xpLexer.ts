@@ -990,8 +990,12 @@ export class XPathLexer {
                             }
                         } else if (isStar && (prevTokenT === TokenLevelState.operator || prevTokenT === TokenLevelState.complexExpression)) {
                             // $a and * or if ($a) then * else book
-                            currentToken.charType = CharLevelState.lName;
-                            currentToken.tokenType = TokenLevelState.nodeType;
+                            if (prevTokenT === TokenLevelState.operator && prevToken.charType === CharLevelState.dSep && prevToken.value === '()') {
+                                // keep the same
+                            } else {
+                                currentToken.charType = CharLevelState.lName;
+                                currentToken.tokenType = TokenLevelState.nodeType;
+                            }
                         }
                     }
                 }
