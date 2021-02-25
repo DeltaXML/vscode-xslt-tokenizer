@@ -839,11 +839,15 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.entityRef:
 						let entityName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let validationResult;
-						({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(entityName, dtdEnded, inheritedPrefixes));
-						if (validationResult !== NameValidationError.None){
-							token['error'] = ErrorType.EntityName;
-							token['value'] = entityName;
+						if (token.error) {
 							problemTokens.push(token);
+						} else {
+							({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(entityName, dtdEnded, inheritedPrefixes));
+							if (validationResult !== NameValidationError.None){
+								token['error'] = ErrorType.EntityName;
+								token['value'] = entityName;
+								problemTokens.push(token);
+							}
 						}
 					case XSLTokenLevelState.processingInstrValue:
 						if (isXMLDeclaration) {
@@ -1320,12 +1324,16 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.entityRef:
-						let validationResult, entityName;
-						({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes));
-						if (validationResult !== NameValidationError.None){
-							token['error'] = ErrorType.EntityName;
-							token['value'] = entityName;
+						if (token.error) {
 							problemTokens.push(token);
+						} else {
+							let validationResult, entityName;
+							({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes));
+							if (validationResult !== NameValidationError.None){
+								token['error'] = ErrorType.EntityName;
+								token['value'] = entityName;
+								problemTokens.push(token);
+							}
 						}
 						break;
 				}
