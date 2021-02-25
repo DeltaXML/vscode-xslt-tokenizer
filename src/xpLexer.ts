@@ -686,6 +686,11 @@ export class XPathLexer {
             const lastCharIsSingleQuote = lastChar === "'";
             if (lastChar !== '"' && !lastCharIsSingleQuote && !lastToken.value.endsWith('&quot;') && !lastToken.value.startsWith('&apos;')) {
                 lastToken['error'] = ErrorType.XPathStringLiteral;
+            } else if (lastChar === '"' || lastChar === "'" && lastToken.length > 1) {
+                const mod2Chars = [...lastToken.value].filter(l => l === lastChar).length % 2;
+                if (mod2Chars === 0) {
+                    lastToken['error'] = ErrorType.XPathStringLiteral;
+                }
             }
         } else {
             this.checkStringLiteralEnd(lastToken);
