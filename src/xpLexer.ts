@@ -503,7 +503,16 @@ export class XPathLexer {
                     if (result.length > 0) {
                         let lastToken = result[result.length - 1];
                         if (lastToken.tokenType === TokenLevelState.string) {
-                            XPathLexer.checkStringLiteralEnd(lastToken);
+                            XPathLexer.checkExitStringLiteralEnd(lastToken, result);
+                        } else if (lastToken.tokenType === TokenLevelState.entityRef) {
+                            if (result.length > 1) {
+                                const nextLastToken = result[result.length - 2];
+                                if (nextLastToken.tokenType === TokenLevelState.string) {
+                                    if (!lastToken.value.endsWith('&quot;') && !lastToken.value.startsWith('&apos;')) {
+                                        lastToken['error'] = ErrorType.XPathStringLiteral;
+                                    }
+                                }
+                            }
                         }
                     }
                     position.line = this.lineNumber;
@@ -666,13 +675,30 @@ export class XPathLexer {
         return result;
     }
 
+    public static checkExitStringLiteralEnd(lastToken: BaseToken, result: BaseToken[]) {
+        let followsEntityRef = false;
+        if (result.length > 1) {
+            const nextLastToken = result[result.length - 2];
+            followsEntityRef = nextLastToken.tokenType === TokenLevelState.entityRef;
+        }
+        if (followsEntityRef) {
+            let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
+            const lastCharIsSingleQuote = lastChar === "'";
+            if (lastChar !== '"' && !lastCharIsSingleQuote && !lastToken.value.endsWith('&quot;') && !lastToken.value.startsWith('&apos;')) {
+                lastToken['error'] = ErrorType.XPathStringLiteral;
+            }
+        } else {
+            this.checkStringLiteralEnd(lastToken);
+        }
+    }
+
     public static checkStringLiteralEnd(lastToken: BaseToken) {
-        let firstChar = lastToken.value.charAt(0);
         let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
+        let firstChar = lastToken.value.charAt(0);
         if (!((lastChar === firstChar && lastToken.value.length > 1) || (lastToken.value.length > 6 &&
             (lastToken.value.startsWith('&quot;') && lastToken.value.endsWith('&quot;')) || (lastToken.value.startsWith('&apos;') && lastToken.value.endsWith('&apos;'))))) {
             lastToken['error'] = ErrorType.XPathStringLiteral;
-        }
+        }       
     }
 
     private static closeMatchesOpen(close: CharLevelState, stack: Token[]): boolean {
