@@ -150,7 +150,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
             let xsltParametersCommand: string[] = []
             for (const param of xsltParameters) {
-                xsltParametersCommand.push('"' + param.name + '=' + param.value + '"');
+                xsltParametersCommand.push(param.name + '=' + param.value);
             }
             let classPaths: string[] = [xsltTask.saxonJar];
             if (xsltTask.classPathEntries) {
@@ -158,7 +158,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             }
 
             for (const propName in xsltTask) {
-                let propValue = SaxonTaskProvider.escapeString(this.getProp(xsltTask, propName));
+                let propValue = this.getProp(xsltTask, propName);
                 switch (propName) {
                     case 'xsltFile':
                         commandLineArgs.push('-xsl:' + propValue);
@@ -205,17 +205,13 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 }
             }
 
-            if (xsltParametersCommand.length > 0) {
-                commandLineArgs.push(xsltParametersCommand.join(' '));
-            }
 
             let rawClassPathString = classPaths.join(pathSeparator());
-            const classPathString = SaxonTaskProvider.escapeString(rawClassPathString);
-            let resolvedCommandLine = commandLineArgs.join(' ');
             // this is overriden if problemMatcher is set in the tasks.json file      
             let problemMatcher = "$saxon-xslt";
-            let commandline = `java -cp ${classPathString} net.sf.saxon.Transform ${resolvedCommandLine}`;
-            let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
+            const javaArgs = ['-cp', rawClassPathString, 'net.sf.saxon.Transform'];
+            const processExecution = new vscode.ProcessExecution('java', javaArgs.concat(commandLineArgs).concat(xsltParametersCommand));
+            let newTask = new vscode.Task(xsltTask, xsltTask.label, source, processExecution, problemMatcher);
             return newTask;
         } else {
             return undefined;
