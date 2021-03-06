@@ -76,8 +76,6 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 }
             });
             const jsonString = jsonTaskLines.join('\n');
-            console.log(jsonString);
-
             tasksObject = JSON.parse(jsonString);
 
         } else {
@@ -215,25 +213,6 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             return newTask;
         } else {
             return undefined;
-        }
-    }
-
-    public static escapeString(text: string) {
-        if (typeof text === 'string') {
-            const result = text;
-            return '"' + text + '"';
-        } else {
-            return text;
-        }
-    }
-
-    public static escapeString2(text: string) {
-        if (typeof text === 'string') {
-            const result = text.replace(/\s/, '\ ');
-            console.log(result);
-            return '"' + text + '"';
-        } else {
-            return text;
         }
     }
 }
