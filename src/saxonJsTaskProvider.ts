@@ -143,7 +143,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
             let xsltParametersCommand: string[] = []
             for (const param of xsltParameters) {
-                xsltParametersCommand.push('"' + param.name + '=' + param.value + '"');
+                xsltParametersCommand.push(param.name + '=' + param.value);
             }
             
             for (const propName in xsltTask) {
@@ -170,25 +170,19 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         break;
                 }
                 if (propNameValue !== '') {
-                    const escapedArg = SaxonTaskProvider.escapeString2(propNameValue);
-                    commandLineArgs.push(escapedArg);
+                    commandLineArgs.push(propNameValue);
                 }
             }
 
             let nodeModulesPath = xsltTask.nodeModulesFolder + path.sep + '.bin' + path.sep;
 
-            if (xsltParametersCommand.length > 0) {
-                commandLineArgs.push(xsltParametersCommand.join(' '));
-            }
-
-            let resolvedCommandLine = commandLineArgs.join(' ');         
             // this is overriden if problemMatcher is set in the tasks.json file      
             let problemMatcher = "$saxon-xslt-js";
-            let escapedModulesPath = SaxonTaskProvider.escapeString(nodeModulesPath + 'xslt3');
-            let commandline = `${escapedModulesPath} ${resolvedCommandLine}`;
-            console.log('commandline:');
-            console.log(commandline);
-            let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
+
+            const processExecution = new vscode.ProcessExecution(nodeModulesPath + 'xslt3', commandLineArgs.concat(xsltParametersCommand));
+            let newTask = new vscode.Task(xsltTask, xsltTask.label, source, processExecution, problemMatcher);
+
+            //let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
             return newTask;
         } else {
             return undefined;
