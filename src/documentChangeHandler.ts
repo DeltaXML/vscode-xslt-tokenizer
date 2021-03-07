@@ -11,15 +11,16 @@ export interface TagRenameEdit {
 	fullTagName: string;
 }
 export class DocumentChangeHandler {
-	public static lastActiveXMLEditor: vscode.TextEditor|null = null;
+	public static lastActiveXMLEditor: vscode.TextEditor | null = null;
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 
 	private onDidChangeRegistration: vscode.Disposable | null = null;
+	private noteBookSelectionChangeReg: vscode.Disposable | null = null;
 	private xmlDocumentRegistered = false;
 	private lastChangePerformed: TagRenameEdit | null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
 	private cachedFailedEdit: TagRenameEdit | null = null;
-	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler|null = null;
+	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler | null = null;
 	private static lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
@@ -163,11 +164,12 @@ export class DocumentChangeHandler {
 		const document = editor.document;
 		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp';
 		let isXPathDocument = document.languageId === 'xpath';
+		let isXNotebook = document.notebook?.viewType === 'xbook';
 
 		if (this.xmlDocumentRegistered && (!isXMLDocument || !isXPathDocument) && this.onDidChangeRegistration) {
 			this.onDidChangeRegistration.dispose();
 			this.xmlDocumentRegistered = false;
-		} 
+		}
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLEditor = editor;
 			DocumentChangeHandler.getLastDocXmlnsPrefixes();
@@ -178,6 +180,15 @@ export class DocumentChangeHandler {
 		} else if (isXPathDocument && !this.xmlDocumentRegistered) {
 			this.xmlDocumentRegistered = true;
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
+		}
+		// may also be xpathDocument
+		if (isXNotebook) {
+			this.noteBookSelectionChangeReg = vscode.window.onDidChangeNotebookEditorSelection(e => {
+				console.log('notebookSelection', e.selection);
+			});
+			vscode.window.onDidChangeTextEditorSelection(e => {
+				console.log('onDidChangeTextEditorSelection', e);
+			})
 		}
 	}
 
