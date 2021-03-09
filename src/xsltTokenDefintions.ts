@@ -421,7 +421,7 @@ export class XsltTokenDefinitions {
 								let resolvedVariable = XsltTokenDefinitions.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
 								if (resolvedVariable) {
-									let uri = resolvedVariable.uri ? vscode.Uri.parse(resolvedVariable.uri) : document.uri;
+									let uri = resolvedVariable.uri ? vscode.Uri.parse(url.pathToFileURL(resolvedVariable.uri).toString()) : document.uri;
 									let startPos = new vscode.Position(resolvedVariable.token.line, resolvedVariable.token.startCharacter);
 									let endPos = new vscode.Position(resolvedVariable.token.line, resolvedVariable.token.startCharacter + resolvedVariable.token.length);
 									resultLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
