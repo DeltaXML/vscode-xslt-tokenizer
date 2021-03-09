@@ -9,6 +9,8 @@ import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, Glob
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import * as url from 'url';
+
 
 enum TagType {
 	XSLTstart,
@@ -388,7 +390,7 @@ export class XsltTokenDefinitions {
 								)
 							)) {
 								let keyVal = token.value.substring(1, token.value.length - 1);
-								let instrType = xp.function.value === 'key'? GlobalInstructionType.Key: GlobalInstructionType.Accumulator;
+								let instrType = xp.function.value === 'key' ? GlobalInstructionType.Key : GlobalInstructionType.Accumulator;
 								let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, keyVal, instrType);
 								resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 							}
@@ -585,7 +587,8 @@ export class XsltTokenDefinitions {
 
 	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
 		if (instruction) {
-			let uri = instruction?.href ? vscode.Uri.parse(instruction.href) : document.uri;
+			let s = url.pathToFileURL
+			let uri = instruction?.href ? vscode.Uri.parse(url.pathToFileURL(instruction.href).toString()) : document.uri;
 			let startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
 			let endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
 			return new vscode.Location(uri, new vscode.Range(startPos, endPos));
