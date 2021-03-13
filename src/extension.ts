@@ -96,6 +96,13 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
+	function getSymbolFromXPath(xpathText: string) {
+		const symbol = XsltSymbolProvider.getSymbolFromXPathLocator(xpathText);
+		if (symbol) {
+			return symbol;
+		}
+	}
+
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
@@ -116,6 +123,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFollowingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Next)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectParentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Parent)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPath', (args) => selectTextFromXPath(args[0])));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (args) => getSymbolFromXPath(args[0])));
 
 
 	// syntax highlighters
