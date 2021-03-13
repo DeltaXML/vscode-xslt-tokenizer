@@ -23,6 +23,7 @@ interface XSLTJSTask {
     nodeModulesFolder: string,
     xsltFile: string,
     xmlSource: string,
+    useJsonSource?: boolean,
     resultPath: string,
     parameters?: XSLTParameter[],
     initialTemplate?: string,
@@ -141,7 +142,8 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             let commandLineArgs: string[] = [];
 
             let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
-            let xsltParametersCommand: string[] = []
+            let xsltParametersCommand: string[] = [];
+            let useJSON = !!xsltTask.useJsonSource;
             for (const param of xsltParameters) {
                 xsltParametersCommand.push(param.name + '=' + param.value);
             }
@@ -154,7 +156,11 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         propNameValue = '-xsl:' + propValue;
                         break
                     case 'xmlSource':
-                        propNameValue = '-s:' + propValue;
+                        const prefix = useJSON? '-json:' : '-s:';
+                        propNameValue = prefix + propValue;
+                        break;
+                    case 'jsonSource':
+                        propNameValue = '-json:' + propValue;
                         break;
                     case 'resultPath': 
                         propNameValue = '-o:' + propValue;

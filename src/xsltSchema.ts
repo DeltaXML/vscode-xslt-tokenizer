@@ -76,7 +76,7 @@ export class XSLTSchema implements SchemaData {
         "xsl:prefixes": { list: 'xs:NCName' },
         "xsl:prefix-list-or-all": { base: ['xs:token'], enum: ['#all'] },
         "xsl:prefix-list": { list: 'xsl:prefix-or-default' },
-        "xsl:method": { base: ['xs:token', 'xsl:EQName'], enum: ['xml', 'xhtml', 'html', 'text'] },
+        "xsl:method": { base: ['xs:token', 'xsl:EQName'], enum: ['xml', 'xhtml', 'html', 'text', 'adaptive', 'json'] },
         "xsl:pattern": { base: ['xsl:expression'] },
         "xsl:prefix-or-default": { base: ['xs:token'], enum: ['#default'] },
         "xsl:EQNames": { list: 'xsl:EQName' },
