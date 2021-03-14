@@ -44,7 +44,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private docType: DocumentTypes;
 	public static documentSymbols: vscode.DocumentSymbol[] = [];
 
-	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection|null) {
+	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
@@ -124,7 +124,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					});
 				}
 			});
-			
+
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			if (this.collection) {
 				let importDiagnostics: vscode.Diagnostic[] = [];
@@ -206,8 +206,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					}
 				}
 			}
-
-			path.push('/' + resultName + `[${precedingSymbolNames}]`);
+			if (symbol.kind === vscode.SymbolKind.Array && symbol.name === 'attributes') {
+				path.push('/@' + resultName);				
+			} else if (!(result.kind === vscode.SymbolKind.Array && result.name === 'attributes')) {
+				path.push('/' + resultName + `[${precedingSymbolNames}]`);
+			}
 			return this.getChildSymbolForSelection(selection, result, path, selectionType, symbol, precedingSibling, nextSibling);
 		} else if (selectionType === SelectionType.Parent) {
 			return parentSymbol;
@@ -225,6 +228,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const text = rawText.startsWith('/') ? rawText.substring(1) : '';
 		const pathParts = text.split('/');
 
+		console.log('symbolsLength:', symbols.length);
+
 		if (symbols.length === 0) {
 			return;
 		}
@@ -233,8 +238,18 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 		pathParts.forEach((item, i) => {
 			const isLastItem = i === pathParts.length - 1;
-			if (currentSymbol === undefined || (isLastItem && item.startsWith('@'))) {
+			if (currentSymbol === undefined) {
 				// can't yet handle attribute-test: /element/@attribute
+				return;
+			} else if (isLastItem && item.startsWith('@') && currentSymbol.children.length > 0) {
+				const attrName = item.substring(1);
+				const attributesSymbol: vscode.DocumentSymbol | undefined = undefined;
+				const firstChild = currentSymbol.children[0];
+				if (firstChild.kind === vscode.SymbolKind.Array && firstChild.name === 'attributes') {
+					currentSymbol = firstChild.children.find(symbol => symbol.name === attrName);
+				} else {
+					currentSymbol = undefined;
+				}
 				return;
 			}
 			const pos = item.indexOf('[');
@@ -254,7 +269,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 
 			if (i === 0) {
-				currentSymbol = currentSymbol.name === pathName && pathIndex === 1 ? currentSymbol : undefined;
+				const spacePos = currentSymbol.name.indexOf(' ');
+				const symbolName = spacePos === -1 ? currentSymbol.name : currentSymbol.name.substring(0, spacePos);
+				currentSymbol = symbolName === pathName && pathIndex === 1 ? currentSymbol : undefined;
 			} else {
 				let nameCount = 0;
 				currentSymbol = currentSymbol.children.find((symbol) => {
