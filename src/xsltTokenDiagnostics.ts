@@ -216,6 +216,7 @@ export class XsltTokenDiagnostics {
 		let tagIdentifierName: string = '';
 		let lastTokenIndex = allTokens.length - 1;
 		let tagAttributeNames: string[] = [];
+		let tagAttributeSymbols: vscode.DocumentSymbol[] = [];
 		let tagXmlnsNames: string[] = [];
 		let rootXmlnsBindings: [string, string][] = [];
 		let inheritedPrefixes: string[] = [];
@@ -428,6 +429,7 @@ export class XsltTokenDiagnostics {
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
 								tagAttributeNames = [];
+								tagAttributeSymbols = [];
 								tagXmlnsNames = [];
 								tagIdentifierName = '';
 								variableData = null;
@@ -496,8 +498,8 @@ export class XsltTokenDiagnostics {
 									} else if (validateResult === NameValidationError.XSLTAttributeNameError) {
 										xsltAttsWithNameErrors.push(attName);
 									}
-								});								
-
+								});
+								
 								if (startTagToken && !problem) {
 									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, inheritedPrefixes, elementStack);
 									if (validationError !== NameValidationError.None) {
@@ -536,6 +538,9 @@ export class XsltTokenDiagnostics {
 									let newVariablesList = elementStack.length === 0? globalVariableData: inScopeVariablesList;
 									const stackElementChildren = valType === ValidationType.XMLAttribute && elementStack.length > 0? elementStack[elementStack.length - 1].expectedChildElements : tagElementChildren;
 									//let newVariablesList = inScopeVariablesList;
+
+									const childSymbols: vscode.DocumentSymbol[] = []; //XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
+
 									if (variableData !== null) {
 										if (elementStack.length > 1) {
 											xsltVariableDeclarations.push(variableData.token);
@@ -543,10 +548,10 @@ export class XsltTokenDiagnostics {
 										if (startTagToken){
 											// if a top-level element, use global variables instad of inScopeVariablesList;
 											elementStack.push({namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList, 
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: stackElementChildren});
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren});
 										}
 									} else if (startTagToken) {
-										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [], expectedChildElements: stackElementChildren});
+										elementStack.push({namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren});
 									}
 									inScopeVariablesList = [];
 									newVariablesList = [];
@@ -673,6 +678,7 @@ export class XsltTokenDiagnostics {
 										rootXmlnsName = attNameText;
 									}
 								} else {
+									tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token));
 									tagAttributeNames.push(attNameText);
 								}
 							}
@@ -1813,6 +1819,27 @@ export class XsltTokenDiagnostics {
 		} else {
 			return null;
 		}
+	}
+
+	public static createSymbolForAttribute(innerToken: BaseToken) {
+		const startPos = new vscode.Position(innerToken.line, innerToken.startCharacter);
+		const endPos = new vscode.Position(innerToken.line, innerToken.startCharacter + innerToken.length);	
+		const range = new vscode.Range(startPos, endPos);
+		const detail = '';
+		return new vscode.DocumentSymbol(innerToken.value, detail, vscode.SymbolKind.Field, range, range);
+	}
+
+	public static initChildrenSymbols(attrSymbols: vscode.DocumentSymbol[]) {
+		if (attrSymbols.length === 0) {
+			return [];
+		}
+		const startPos = new vscode.Position(attrSymbols[0].range.start.line, attrSymbols[0].range.start.character);
+		const endPos = new vscode.Position(attrSymbols[attrSymbols.length - 1].range.end.line, attrSymbols[attrSymbols.length - 1].range.end.character);
+		const range = new vscode.Range(startPos, endPos);
+		const detail = '';
+		const attrSymbol = new vscode.DocumentSymbol('attributes', detail, vscode.SymbolKind.Array, range, range);
+		attrSymbol.children = attrSymbols;
+		return [attrSymbol];
 	}
 
 	public static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData|null): boolean {
