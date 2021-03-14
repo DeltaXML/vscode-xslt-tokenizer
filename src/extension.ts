@@ -75,7 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (!text.startsWith('/')) {
 					return 'XPath should start with "/"';
 				} else {
-					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text);
+					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text, XsltSymbolProvider.documentSymbols);
 					return symbol? null : 'No matching elements'
 				}
 				
@@ -90,14 +90,30 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function selectTextFromXPath(xpathText: string) {
-		const symbol = XsltSymbolProvider.getSymbolFromXPathLocator(xpathText);
+		const symbol = XsltSymbolProvider.getSymbolFromXPathLocator(xpathText, XsltSymbolProvider.documentSymbols);
 		if (symbol) {
 			XsltSymbolProvider.selectTextWithSymbol(symbol);
 		}
 	}
 
-	function getSymbolFromXPath(xpathText: string) {
-		const symbol = XsltSymbolProvider.getSymbolFromXPathLocator(xpathText);
+	let cachedSymbols: vscode.DocumentSymbol[] = [];
+	let cachedSymbolsDocUri = vscode.Uri.parse('file:/empty');
+
+	async function getSymbolFromXPath(args: any[]) {
+		const { xpath, uri } = args[0];
+		const docUri = vscode.Uri.parse(uri);
+		const useCachedSymbols = cachedSymbolsDocUri === docUri;
+		const docs = vscode.workspace.textDocuments;
+		const foundDoc = docs.find(doc => doc.uri.toString() === uri);
+		if (!useCachedSymbols && foundDoc) {
+			const sp = new XsltSymbolProvider(XMLConfiguration.configuration, null);
+			const newSymbols = await sp.getDocumentSymbols(foundDoc);
+			if (newSymbols) {
+				cachedSymbols = newSymbols;
+				cachedSymbolsDocUri = foundDoc.uri;
+			}
+		}
+		const symbol = XsltSymbolProvider.getSymbolFromXPathLocator(xpath, cachedSymbols);
 		if (symbol) {
 			return symbol;
 		}
@@ -123,8 +139,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFollowingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Next)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectParentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Parent)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPath', (args) => selectTextFromXPath(args[0])));
-	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (args) => getSymbolFromXPath(args[0])));
-
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
 
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt' }, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));

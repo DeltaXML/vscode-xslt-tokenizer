@@ -38,13 +38,13 @@ type Entry = [string, number];
 export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
-	private readonly collection: vscode.DiagnosticCollection;
+	private readonly collection: vscode.DiagnosticCollection | null;
 	private gp = new GlobalsProvider();
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
 	public static documentSymbols: vscode.DocumentSymbol[] = [];
 
-	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection) {
+	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection|null) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
@@ -53,6 +53,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
+		const result = this.getDocumentSymbols(document);
+		return result;
+	}
+
+	public async getDocumentSymbols(document: vscode.TextDocument): Promise<vscode.DocumentSymbol[] | undefined> {
 		XsltSymbolProvider.documentSymbols = [];
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
@@ -119,19 +124,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					});
 				}
 			});
-
-			let importDiagnostics: vscode.Diagnostic[] = [];
-			importErrors.forEach((importError) => {
-				importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
-			});
-
+			
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
-			let allDiagnostics = importDiagnostics.concat(diagnostics);
-			if (allDiagnostics.length > 0) {
-				this.collection.set(document.uri, allDiagnostics);
-			} else {
-				this.collection.clear();
-			};
+			if (this.collection) {
+				let importDiagnostics: vscode.Diagnostic[] = [];
+				importErrors.forEach((importError) => {
+					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
+				});
+				let allDiagnostics = importDiagnostics.concat(diagnostics);
+				if (allDiagnostics.length > 0) {
+					this.collection.set(document.uri, allDiagnostics);
+				} else {
+					this.collection.clear();
+				};
+			}
 			XsltSymbolProvider.documentSymbols = symbols;
 			resolve(symbols);
 		});
@@ -215,10 +221,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 
-	public static getSymbolFromXPathLocator(rawText: string) {
+	public static getSymbolFromXPathLocator(rawText: string, symbols: vscode.DocumentSymbol[]) {
 		const text = rawText.startsWith('/') ? rawText.substring(1) : '';
 		const pathParts = text.split('/');
-		const symbols = XsltSymbolProvider.documentSymbols;
 
 		if (symbols.length === 0) {
 			return;
