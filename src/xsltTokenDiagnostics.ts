@@ -539,7 +539,7 @@ export class XsltTokenDiagnostics {
 									const stackElementChildren = valType === ValidationType.XMLAttribute && elementStack.length > 0? elementStack[elementStack.length - 1].expectedChildElements : tagElementChildren;
 									//let newVariablesList = inScopeVariablesList;
 
-									const childSymbols: vscode.DocumentSymbol[] = []; //XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
+									const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
 
 									if (variableData !== null) {
 										if (elementStack.length > 1) {
@@ -678,7 +678,7 @@ export class XsltTokenDiagnostics {
 										rootXmlnsName = attNameText;
 									}
 								} else {
-									tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token));
+									tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token, attNameText));
 									tagAttributeNames.push(attNameText);
 								}
 							}
@@ -705,6 +705,13 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.attributeValue:
 						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						if (tagAttributeSymbols.length > 0) {
+							if (fullVariableName.length !== 1) {
+								tagAttributeSymbols[tagAttributeSymbols.length - 1].detail = fullVariableName;
+							} else {
+								tagAttributeSymbols[tagAttributeSymbols.length - 1].kind = vscode.SymbolKind.Event;
+							}
+						}
 						let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
 						let hasProblem = false;
 						if (rootXmlnsName !== null) {
@@ -1821,12 +1828,12 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	public static createSymbolForAttribute(innerToken: BaseToken) {
+	public static createSymbolForAttribute(innerToken: BaseToken, attrName: string) {
 		const startPos = new vscode.Position(innerToken.line, innerToken.startCharacter);
 		const endPos = new vscode.Position(innerToken.line, innerToken.startCharacter + innerToken.length);	
 		const range = new vscode.Range(startPos, endPos);
 		const detail = '';
-		return new vscode.DocumentSymbol(innerToken.value, detail, vscode.SymbolKind.Field, range, range);
+		return new vscode.DocumentSymbol(attrName, detail, vscode.SymbolKind.Field, range, range);
 	}
 
 	public static initChildrenSymbols(attrSymbols: vscode.DocumentSymbol[]) {
