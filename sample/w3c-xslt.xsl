@@ -233,6 +233,7 @@
         <xsl:value-of>
             <xsl:for-each select="string-to-codepoints($in)">
                 <xsl:choose>
+                    <new/>
                     <xsl:when test=". gt 65535">
                         <xsl:value-of select="concat('\u', j:hex4((. - 65536) idiv 1024 + 55296))"/>
                         <xsl:value-of select="concat('\u', j:hex4((. - 65536) mod 1024 + 56320))"/>
