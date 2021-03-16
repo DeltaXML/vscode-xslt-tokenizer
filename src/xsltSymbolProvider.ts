@@ -228,8 +228,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const text = rawText.startsWith('/') ? rawText.substring(1) : '';
 		const pathParts = text.split('/');
 
-		console.log('symbolsLength:', symbols.length);
-
 		if (symbols.length === 0) {
 			return;
 		}
