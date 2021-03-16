@@ -576,6 +576,8 @@ export class XsltTokenDiagnostics {
 									if (startTagToken) {
 										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(tagElementName, tagIdentifierName, startTagToken, token);
 										if (symbol !== null) {
+											const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
+											symbol.children = childSymbols;
 											if (elementStack.length > 0) {
 												elementStack[elementStack.length - 1].childSymbols.push(symbol);
 											} else {
