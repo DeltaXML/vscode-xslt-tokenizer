@@ -8,6 +8,10 @@
                     
             version="3.0">
     
-    <xsl:import href="sat.xsl"/>
+    <xsl:import href="sat.xsl"/>   
+    
+    <xsl:variable name="test" as="xs:string" select="$map ! ?a"/>
+    
+    <xsl:variable name="map" as="xs:string" select="map {'a': 1}"/>
     
 </xsl:stylesheet>
