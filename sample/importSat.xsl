@@ -10,8 +10,12 @@
     
     <xsl:import href="sat.xsl"/>   
     
-    <xsl:variable name="test" as="xs:string" select="$map ! ?a"/>
+    <xsl:variable name="test" as="xs:string" select="$map.new ! ?a"/>
     
-    <xsl:variable name="map" as="xs:string" select="map {'a': 1}"/>
+    <xsl:variable name="map.new" as="xs:string" select="
+        let $a := map {
+                'a': ('test')
+            } 
+        return $a"/>
     
 </xsl:stylesheet>

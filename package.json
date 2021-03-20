@@ -41,6 +41,9 @@
 		},
 		"[xsl]": {
 			"editor.semanticHighlighting.enabled": true
+		},
+		"[xpath]": {
+			"editor.semanticHighlighting.enabled": true
 		}
 	},
 	"contributes": {
