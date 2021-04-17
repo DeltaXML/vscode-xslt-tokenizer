@@ -148,7 +148,7 @@ export class XsltTokenCompletions {
 						let prevXmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
 						switch (prevXmlTokenType) {
 							case XSLTokenLevelState.attributeValue:
-								if (prevToken.startCharacter + prevToken.length > requiredChar) {
+								if (prevToken.line === requiredLine && prevToken.startCharacter + prevToken.length > requiredChar) {
 									// we're within the attribute value
 								} else {
 									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
@@ -156,6 +156,7 @@ export class XsltTokenCompletions {
 								break;
 							case XSLTokenLevelState.elementName:
 							case XSLTokenLevelState.xslElementName:
+							case XSLTokenLevelState.attributeName:
 								resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 								break;
 						}
@@ -382,9 +383,6 @@ export class XsltTokenCompletions {
 							}
 						} else {
 							attType = AttributeType.Xmlns;
-						}
-						if (isOnRequiredToken && attNameText !== '/') {
-							resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltXMLNS);
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
