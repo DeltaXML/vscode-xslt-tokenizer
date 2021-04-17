@@ -671,20 +671,24 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(prevToken);
 						}
 						if (!problemReported) {
-							if (tagAttributeNames.indexOf(attNameText) > -1) {
-								token['error'] = ErrorType.XMLDupllicateAtt;
-								token['value'] = attNameText;
-								problemTokens.push(token);
-							} else {
-								if (xmlTokenType === XSLTokenLevelState.xmlnsName) {
-									tagXmlnsNames.push(attNameText);
-									if (onRootStartTag) {
-										rootXmlnsName = attNameText;
-									}
-								} else {
-									tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token, attNameText));
-									tagAttributeNames.push(attNameText);
+							if (xmlTokenType === XSLTokenLevelState.xmlnsName) {
+								if (tagXmlnsNames.indexOf(attNameText) > -1) {
+									token['error'] = ErrorType.XMLDupllicateAtt;
+									token['value'] = attNameText;
+									problemTokens.push(token);
+								} 
+								tagXmlnsNames.push(attNameText);
+								if (onRootStartTag) {
+									rootXmlnsName = attNameText;
 								}
+							} else {
+								if (tagAttributeNames.indexOf(attNameText) > -1) {
+									token['error'] = ErrorType.XMLDupllicateAtt;
+									token['value'] = attNameText;
+									problemTokens.push(token);
+								}
+								tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token, attNameText));
+								tagAttributeNames.push(attNameText);
 							}
 						}
 						if (tagType === TagType.XSLTvar) {
