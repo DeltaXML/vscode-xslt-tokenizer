@@ -65,20 +65,18 @@ export class DocumentChangeHandler {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
 				if (prevChar === '"' || activeChange.text.endsWith('>') || activeChange.text.endsWith('/')) {
 					skipTrigger = true;
-				} else {
-					triggerSuggest = true;
 				}
 			}
 		}
 		if (!skipTrigger && activeChange.rangeOffset > 10) {
 			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-			if ((prevChar === '\n' || prevChar === ' ') && activeChange.text === 'x') {
-				triggerSuggest = true;
-			} else if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
+      if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
 				triggerSuggest = true;
 			}
 		}
-		if (triggerSuggest || activeChange.text === ' ' || activeChange.text === '(' || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
+		// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
+		if (triggerSuggest || activeChange.text === '(' || activeChange.text === '/'  ||  activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
+			// console.log('triggering...');
 			setTimeout(() => {
 				vscode.commands.executeCommand('editor.action.triggerSuggest');
 			}, 10);
