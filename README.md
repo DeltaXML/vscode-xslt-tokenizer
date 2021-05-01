@@ -1,22 +1,21 @@
 [<img src="deltaxmlLogo.png">](https://www.deltaxml.com/?utm_source=VisualStudio&utm_medium=Dev-Tools&utm_campaign=XSLT-XPATH)
 # XSLT/XPath for Visual Studio Code
 
-This XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1.
+The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1.
 
-![vscode-xslt](vscode-xslt.png)
+![xslt-xpath screenshot](vscode-xslt.png)
 
-*Screenshot showing XSLT symbol-outline, problem-reporting and syntax-highlighting:*
 # XSLT/XPath Features
 
 | Feature  | Details |
 | ------- | ------- |
 | **XSLT 3.0/XPath 3.1**    | See W3C specifications for [XSLT](https://www.w3.org/TR/xslt-30/) and [XPath](https://www.w3.org/TR/xpath-31/)
 | **Syntax Highlighting**   | Fast and precise - using [Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
-| **[Code Formatting](https://code.visualstudio.com/docs/editor/codebasics#_formatting)**       | XSLT instruction elements, attributes and multi-line XPath expressions
+| **Code Formatting**       | XSLT instruction elements, attributes and multi-line XPath expressions
 | **Code Diagnostics\***      | For: XPath Syntax, XSLT Instructions, XPath variable references, XPath symbols
-| **[XSLT/XPath Processing](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)** | VS Code Task Support for [Saxon (Java)](https://www.saxonica.com/documentation10/index.html) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html)
+| **XSLT/XPath Processing** | VS Code Task Support for [Saxon (Java)](https://www.saxonica.com/documentation10/index.html) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html)
 | **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names etc.
-| **Color Theme Support**   | Tested with all popular color themes ([Semantic Highlighting]() must be enabled in settings) 
+| **Color Theme Support**   | Tested with most popular color themes ([Semantic Highlighting]() must be enabled in settings) 
 | **Code Folding**          | Either uses indentation or `region` XML processing-instructions
 | **Snippets**              | Set of snippets accessed via auto-completion
 | **Symbol Outline**        | Tree-view of XSLT instructions and symbols (named templates, modes, variables, functions, accumulators etc.)
@@ -150,6 +149,7 @@ Or, to enable syntax highlighting for all themes:
 {
   "[xslt]": {
     "editor.defaultFormatter": "deltaxml.xslt-xpath",
+    "editor.formatOnSaveMode": "modifications",
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
     "editor.formatOnType": true
