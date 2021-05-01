@@ -1,4 +1,5 @@
 import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument } from "vscode";
+import { XPathFunctionDetails } from "./xpathFunctionDetails";
 
 enum CharType {
 	none,
@@ -11,11 +12,25 @@ enum CharType {
 
 export class XSLTHoverProvider implements HoverProvider {
 
+	private functionData = XPathFunctionDetails.data;
+
 	provideHover(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<Hover> {
 		const line = document.lineAt(position.line);
-		const s = this.getFunctionName(line.text, position.character);
+		const fnName = this.getFunctionName(line.text, position.character);
+		console.log('======= fn name =======', fnName);
 
-		return this.createHover('analyze\u2011string( input as xs:string?, pattern as xs:string, flags as xs:string ) as element(fn:analyze-string-result)', '*Something* is going to happen now');
+		if (fnName) {
+			const trimmedFnName = fnName.trimRight();
+			const matchingData = this.functionData.find((item) => {
+				return item.name === trimmedFnName;
+			});
+
+			if (matchingData) {
+				return this.createHover(matchingData.signature, matchingData.description);
+			}
+		}
+
+		//return this.createHover('analyze\u2011string( input as xs:string?, pattern as xs:string, flags as xs:string ) as element(fn:analyze-string-result)', '*Something* is going to happen now');
 	}
 
 	private createHover(signature: string, description: string) {
@@ -87,8 +102,11 @@ export class XSLTHoverProvider implements HoverProvider {
 		console.log('charType', CharType[charType]);
 		console.log('startChar', startChar);
 		console.log('startString', line.substring(startChar, char));
-		
-		console.log(line.substring(startChar, endChar));
+
+		const result = line.substring(startChar, endChar);
+		console.log(result);
+		return result;
+
 	}
 
 
