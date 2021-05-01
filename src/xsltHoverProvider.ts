@@ -68,11 +68,6 @@ export class XSLTHoverProvider implements HoverProvider {
 			endChar++;
 		}
 
-		console.log('-----forwards--------');
-		console.log('charType', CharType[charType]);
-		console.log('endChar', endChar);
-		console.log('endString', line.substring(char, endChar));
-
 		if (charType !== CharType.openBracket) {
 			return null;
 		}
@@ -98,13 +93,7 @@ export class XSLTHoverProvider implements HoverProvider {
 
 		startChar++;
 
-		console.log('-----backwards--------');
-		console.log('charType', CharType[charType]);
-		console.log('startChar', startChar);
-		console.log('startString', line.substring(startChar, char));
-
 		const result = line.substring(startChar, endChar);
-		console.log(result);
 		return result;
 
 	}
