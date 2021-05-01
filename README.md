@@ -6,47 +6,48 @@ This XSLT/XPath extension for VSCode provides comprehensive language support for
 ![vscode-xslt](vscode-xslt.png)
 
 *Screenshot showing XSLT symbol-outline, problem-reporting and syntax-highlighting:*
-## Features
+# XSLT/XPath Features
 
- - XSLT 3.0 / XPATH 3.1
- - Syntax Highlighter uses [Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
- - Built-in Code Diagnostics
- - Integration with [Saxon/Saxon-JS XSLT Processors](http://www.saxonica.com/products/products.xml)
- - XSLT Language support for VSCode features:
-   - [Auto Completion/Intellisense](https://code.visualstudio.com/docs/editor/intellisense)
-   - [Syntax Highlighting Themes](https://code.visualstudio.com/docs/getstarted/themes)
-   - [Code Formatting](https://code.visualstudio.com/docs/editor/codebasics#_formatting)
-   - [Code Folding](https://code.visualstudio.com/docs/editor/codebasics#_folding)
-   - [Snippets](https://code.visualstudio.com/docs/editor/userdefinedsnippets) for XSLT/XPath context
-   - [Code symbol outline](https://code.visualstudio.com/docs/getstarted/userinterface#_outline-view)
-   - [Goto Symbol](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
-   - [Symbol Breadcrumbs](https://code.visualstudio.com/docs/getstarted/userinterface#_breadcrumbs)
-   - [Goto Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_go-to-definition)
-   - [Peek Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
-   - [VScode Tasks](https://code.visualstudio.com/Docs/editor/tasks) include custom [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
-   - [Bracket Matching](https://code.visualstudio.com/Docs/editor/editingevolved#_bracket-matching)
-   - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax *
- -  Follow `xsl:include` / `xsl:import` / `xsl:use-package` links
- - Custom XML Editing Featues:
-   - XML Context-Aware Snippets
-   - XML Well-Formedness Checking *
-   - Tag Rename
-   - Auto tag-close (requires 'formatOnType' setting)
-   - Auto clean orphaned end tag after `/` added to make start tag self-close
-   - `XML: Goto XPath` - editor command that selects the suppled XPath location, initially showing the current XPath
-   - Element Selection Commands:
-     - `XML: Select Current element`
-     - `XML Select Preceding element`
-     - `XML: Select Following element`
-     - `XML: Select Parent element`
+| Feature  | Details |
+| ------- | ------- |
+| **XSLT 3.0/XPath 3.1**    | See W3C specifications for [XSLT](https://www.w3.org/TR/xslt-30/) and [XPath](https://www.w3.org/TR/xpath-31/)
+| **Syntax Highlighting**   | Fast and precise - using [Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
+| **[Code Formatting](https://code.visualstudio.com/docs/editor/codebasics#_formatting)**       | XSLT instruction elements, attributes and multi-line XPath expressions
+| **Code Diagnostics\***      | For: XPath Syntax, XSLT Instructions, XPath variable references, XPath symbols
+| **[XSLT/XPath Processing](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)** | VS Code Task Support for [Saxon (Java)](https://www.saxonica.com/documentation10/index.html) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html)
+| **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names etc.
+| **Color Theme Support**   | Tested with all popular color themes ([Semantic Highlighting]() must be enabled in settings) 
+| **Code Folding**          | Either uses indentation or `region` XML processing-instructions
+| **Snippets**              | Set of snippets accessed via auto-completion
+| **Symbol Outline**        | Tree-view of XSLT instructions and symbols (named templates, modes, variables, functions, accumulators etc.)
+| **Symbol Breadcrumbs**    | Shows location within the code hierarchy
+| **Goto Symbol**           | Quick access via filterable list of code symbols
+| **Goto Definition**       | For all symbol references like variables, parameters, functions, modes, accumulators etc.
+| **Peek Definition**       | View symbol declarations inline with corresponding references
+| **VS Code Tasks**         | Configurable task templates for Saxon and Saxon-JS Prcoessors
+| **Bracket Matching**      | For `()`, `{}`, and `[]`
+| **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
+| **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
+|||
+   \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
 
- ---
 
-   \* Problem-reporting currently depends upon the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`
-  
- ---
+# General XML Features
+| Feature  | Details |
+| ------- | ------- |
+| **Well-formedness checking** | Checks XML syntax and checks prefixes against in-scope namespace declarations
+| **XML Formatting**       | Indents XML elements, attributes and multi-line attribute-values
+| **XML Tree-view**        | Outline of XML elements and attributes in document
+| **XML Breadcrumbs**      | Shows ancestors of current XML node
+| **Tag Rename**           | When start-tag is modified, corresponding end-tag is also updated
+| **Tag Self-Close**       | Convert start-tag to self-closed tag by inserting `/` before  `>` (end-tag is removed) 
+| **Selection Commands**   | `Select current`/`preceding`/`following`/`parent element`
+| **`Goto XPath` Command**         | Enter XPath location in quick-editor (initally shows current XPath)
+| **`Comment` Command**    | (`⌘/`) Convert lines to an XML comment
+| **XML Snippets**         | For XML elements, attributes, processing-instrucitons and comments
+|||
 
- ## Introduction
+ # Introduction
  
 For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. Avoiding the much more common use of regular expressions on a line-by-line basis brings significant benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and full integrity for syntax highlighting.
 
@@ -54,25 +55,25 @@ Auto-completion is available for XSLT and XPath, this includes contex-aware comp
 
 This extension performs a comprehensive set of checks on the code, before any XSLT compilation. Thsese checks ensure that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows checking of references to symbol definitions regardless of the location of the definition.
 
-## Running XSLT
+# Running XSLT
 
 ![xslt-tasks](xslt-tasks.png)
 
 XSLT transforms are configured and run as special VSCode Tasks. For more detail, see [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
 
-## Release Notes
+# Release Notes
 
 See: [Release Notes](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/Release-Notes) on the project wiki
 
-## Sample Screenshots
+# Sample Screenshots
 
 See: [XSLT/XPath Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
 
-## Extension Settings
+# Extension Settings
 
 See: [VSCode Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
-### XSLT Tasks
+## XSLT Tasks
 
 To use the task-provider for the _Java_ Saxon XSLT Processor, the following setting is required (alter path to suit actual jar location):
 
@@ -87,7 +88,7 @@ The Saxon XSLT-Java and XSLT-JS TaskProviders are enabled by default. These can 
 "XSLT.tasks.js.enabled": true
 ```
 
-### XSLT Packages
+## XSLT Packages
 
 If your XSLT contains xsl:use-package instructions, XSLT package names are resolved to lookup symbols to support the following features:
 
@@ -180,6 +181,26 @@ Code-folding currently works by indentation indicating the nesting level. So, if
   <?endregion reconstruct?>
 ```
 ___
+
+# Visual Studio Code Features
+
+For reference, links to built-in Visual Studio Code language features that are supported/enhanced by this extension are listed below:
+   - [Auto Completion/Intellisense](https://code.visualstudio.com/docs/editor/intellisense)
+   - [Syntax Highlighting Themes](https://code.visualstudio.com/docs/getstarted/themes)
+   - [Code Formatting](https://code.visualstudio.com/docs/editor/codebasics#_formatting)
+   - [Code Folding](https://code.visualstudio.com/docs/editor/codebasics#_folding)
+   - [Snippets](https://code.visualstudio.com/docs/editor/userdefinedsnippets) for XSLT/XPath context
+   - [Code symbol outline](https://code.visualstudio.com/docs/getstarted/userinterface#_outline-view)
+   - [Goto Symbol](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
+   - [Symbol Breadcrumbs](https://code.visualstudio.com/docs/getstarted/userinterface#_breadcrumbs)
+   - [Goto Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_go-to-definition)
+   - [Peek Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
+   - [VScode Tasks](https://code.visualstudio.com/Docs/editor/tasks) include custom [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
+   - [Bracket Matching](https://code.visualstudio.com/Docs/editor/editingevolved#_bracket-matching)
+   - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax *
+
+---
+
 
 ## Support for other languages with embedded XPath
 
