@@ -29,6 +29,7 @@ This XSLT/XPath extension for VSCode provides comprehensive language support for
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
 |||
+
    \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
 
 
@@ -163,15 +164,9 @@ For word selection/navigation, by default, names like $two-parts are treated as 
 
 See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
-For XSLT, keeping most of the default separator charators it is useful to disable `.` but enable `:` as word separators, as below:
-
-
-  `~!@#%^&*()=+[{]}\|;'",:<>/?$
-
-
 ## Code Folding
 
-Code-folding currently works by indentation indicating the nesting level. So, if code-folding does not work as expected, try reformatting using (for MacOS) - ```Shift + Option + F```.
+Code-folding currently works by indentation indicating the nesting level. So, if code-folding does not work as expected, try reformatting using (for MacOS) - ```Shift-⌥-F```.
 
 **Region code-folding** is also supported. This can be useful, for example, for blocks of templates for a specific mode. To set a region code-folding block, surround it with `<?region?>` and `<?endregion?>` processing instructions. You may optionally include a label for the processing instructions, for example: 
 
