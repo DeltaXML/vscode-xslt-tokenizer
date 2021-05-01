@@ -63,11 +63,7 @@ XSLT transforms are configured and run as special VSCode Tasks. For more detail,
 
 # Release Notes
 
-See: [Release Notes](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/Release-Notes) on the project wiki
-
-# Sample Screenshots
-
-See: [XSLT/XPath Wiki](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/)
+The project changelog is maintained on the project wiki. See [Release Notes](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/Release-Notes).
 
 # Extension Settings
 
