@@ -16,9 +16,10 @@ export class XSLTHoverProvider implements HoverProvider {
 
 	provideHover(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<Hover> {
 		const line = document.lineAt(position.line);
-		const fnName = this.getFunctionName(line.text, position.character);
+		let fnName = this.getFunctionName(line.text, position.character);
 
 		if (fnName) {
+			fnName = fnName.startsWith('fn:')? fnName.substring(3) : fnName;
 			const trimmedFnName = fnName.trimRight();
 			const matchingData = this.functionData.find((item) => {
 				return item.name === trimmedFnName;
