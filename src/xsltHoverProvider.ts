@@ -17,7 +17,6 @@ export class XSLTHoverProvider implements HoverProvider {
 	provideHover(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<Hover> {
 		const line = document.lineAt(position.line);
 		const fnName = this.getFunctionName(line.text, position.character);
-		console.log('======= fn name =======', fnName);
 
 		if (fnName) {
 			const trimmedFnName = fnName.trimRight();
@@ -107,6 +106,8 @@ export class XSLTHoverProvider implements HoverProvider {
 		const CHAR_CODE_ZS = 122;
 		const CHAR_CODE_0 = 48;
 		const CHAR_CODE_9 = 57;
+		const CHAR_CODE_DASH = 45;
+		const CHAR_CODE_UNDERSCORE = 95;
 	
 		let code = line.charCodeAt(charPos);
 
@@ -120,7 +121,8 @@ export class XSLTHoverProvider implements HoverProvider {
 			const isAlphaNumeric = (
 				(code >= CHAR_CODE_A && code <= CHAR_CODE_Z) ||
 				(code >= CHAR_CODE_AS && code <= CHAR_CODE_ZS) ||
-				(code >= CHAR_CODE_0 && code <= CHAR_CODE_9)
+				(code >= CHAR_CODE_0 && code <= CHAR_CODE_9) || 
+				(code === CHAR_CODE_DASH || code === CHAR_CODE_UNDERSCORE )
 			);
 			const result = isAlphaNumeric? CharType.alphaNumeric : CharType.other;
 			return result;
