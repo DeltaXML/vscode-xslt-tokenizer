@@ -385,9 +385,12 @@ export class XsltTokenDiagnostics {
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xmlText:
 						if (elementStack.length === 0 && token.startCharacter > -1) {
-							token['error'] = ErrorType.ParentLessText;
-							token['value'] = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							problemTokens.push(token);
+							const tValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+							if (tValue.trim().length !== 0) {
+								token['error'] = ErrorType.ParentLessText;
+								token['value'] = tValue;
+								problemTokens.push(token);
+							}
 						}
 						break;
 					case XSLTokenLevelState.xslElementName:
