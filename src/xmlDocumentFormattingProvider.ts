@@ -118,7 +118,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let attributeNameOnNewLine = false;
 		let isPreserveSpaceElement = false;
 		let withinCDATA = false;
-		let complexStateStack: [number, number[]][] = [];
+		let complexStateStack: [number, number[], boolean][] = [];
 		let elseLineNumber = -1;
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
@@ -130,9 +130,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let elementName = '';
 		let closeTagWithinText = false;
 		let closeTagName: string | null = null;
+		let emptyStackIsElseBlock = false;
 
 		if (this.docType === DocumentTypes.XPath) {
-			complexStateStack = [[0, []]];
+			complexStateStack = [[0, [], false]];
 			this.xpLexer.reset();
 		}
 
@@ -156,13 +157,15 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber);
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
-						complexStateStack = [[0, []]];
+						complexStateStack = [[0, [], false]];
+						emptyStackIsElseBlock = false;
 						isXSLTStartTag = true;
 						elementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						isPreserveSpaceElement = elementName === 'xsl:text';
 						break;
 					case XSLTokenLevelState.elementName:
-						complexStateStack = [[0, []]];
+						complexStateStack = [[0, [], false]];
+						emptyStackIsElseBlock = false;
 						isXSLTStartTag = false;
 						elementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						break;
@@ -316,9 +319,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				let currentStateLevel: [number, number[]] = complexStateStack.length > 0 ? complexStateStack[complexStateStack.length - 1] : [0, []];
+				let currentStateLevel: [number, number[], boolean] = complexStateStack.length > 0 ? complexStateStack[complexStateStack.length - 1] : [0, [], emptyStackIsElseBlock];
 				let bracketNesting: number = currentStateLevel[0];
 				let ifElseStack: number[] = currentStateLevel[1];
+				let isElseBlock: boolean = currentStateLevel[2];
+
 				let ifElseStackLength = ifElseStack.length;
 
 				switch (xpathTokenType) {
@@ -343,9 +348,15 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								xpathNestingLevel++;
 								ifElseStack.push(xpathNestingLevel);
 								break;
+							case 'else':
+								isElseBlock = true;
+								if (complexStateStack.length === 0) {
+									emptyStackIsElseBlock = true;
+								} else {
+									complexStateStack[complexStateStack.length - 1][2] = true;
+								}
 							case 'return':
 							case 'satisfies':
-							case 'else':
 								elseLineNumber = lineNumber;
 								xpathNestingLevel = ifElseStackLength > 0 ? ifElseStack[ifElseStackLength - 1] : 0;
 								if (ifElseStack.length > 0) {
@@ -360,7 +371,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case CharLevelState.lB:
 							case CharLevelState.lPr:
 							case CharLevelState.lBr:
-								complexStateStack.push([xpathNestingLevel, []]);
+								complexStateStack.push([xpathNestingLevel, [], false]);
 								xpathNestingLevel++;
 								indent = -1;
 								break;
@@ -378,6 +389,19 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								let valueText = token.value;
 								if (valueText === ':=') {
 									indent = -1;
+								}
+								break;
+							case CharLevelState.sep:
+								if (token.value === ',') {
+									if (isElseBlock) {
+										xpathNestingLevel--;
+										if (complexStateStack.length === 0) {
+											emptyStackIsElseBlock = false;
+										} else {
+											complexStateStack[complexStateStack.length - 1][2] = false;
+										}
+									}
+									console.log('comma');
 								}
 								break;
 						}

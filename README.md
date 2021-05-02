@@ -27,6 +27,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Bracket Matching**      | For `()`, `{}`, and `[]`
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
+| **Variable watcher**      | `xsl:message` instruction for local XSLT/XPath parameters/variables generated on auto-completion
 |||
 
    \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
