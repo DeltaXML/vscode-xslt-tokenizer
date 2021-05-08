@@ -1454,7 +1454,7 @@ export class XsltTokenDiagnostics {
 		let expectedElements: string[] = [];
 		let expectedAttributes: string[] = [];
 
-		if (parentName.startsWith('xsl') && schemaQuery) {
+		if (parentName.startsWith('xsl') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT) {
 			const allExpected = schemaQuery.getExpected(parentName);
 			const nameDetailArray = allExpected.elements;
 			expectedElements = nameDetailArray.map(item => item[0]);

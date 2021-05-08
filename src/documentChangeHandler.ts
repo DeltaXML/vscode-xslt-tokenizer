@@ -159,7 +159,7 @@ export class DocumentChangeHandler {
 
 	private registerXMLDocument = (editor: vscode.TextEditor) => {
 		const document = editor.document;
-		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp';
+		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp' || document.languageId === 'sch';
 		let isXPathDocument = document.languageId === 'xpath';
 
 		if (this.xmlDocumentRegistered && (!isXMLDocument || !isXPathDocument) && this.onDidChangeRegistration) {
