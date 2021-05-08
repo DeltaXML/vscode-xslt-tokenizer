@@ -165,6 +165,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let xpathFormatter = new XMLDocumentFormattingProvider(XPathConfiguration.configuration);
 	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
 	let dcpFormatter = new XMLDocumentFormattingProvider(DCPConfiguration.configuration);
+	let schFormatter = new XMLDocumentFormattingProvider(SchConfiguration.configuration);
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt',
 		xsltFormatter));
@@ -193,6 +194,13 @@ export function activate(context: vscode.ExtensionContext) {
 		dcpFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('dcp',
 		dcpFormatter, '\n', '/'));
+		
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('sch',
+		schFormatter));
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('sch',
+		schFormatter));
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('sch',
+		schFormatter, '\n', '/'));
 
 	let workspaceRoot = vscode.workspace.rootPath;
 	if (!workspaceRoot) {
