@@ -30,6 +30,7 @@
 		"onLanguage:xpath",
 		"onLanguage:xslt",
 		"onLanguage:dcp",
+		"onLanguage:sch",
 		"onLanguage:xml",
 		"onCommand:workbench.action.tasks.runTask"
 	],
@@ -675,6 +676,17 @@
 				],
 				"extensions": [
 					".dcp"
+				],
+				"configuration": "./language-configuration.json"
+			},
+			{
+				"id": "sch",
+				"aliases": [
+					"Schematron",
+					"sch"
+				],
+				"extensions": [
+					".sch"
 				],
 				"configuration": "./language-configuration.json"
 			},

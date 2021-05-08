@@ -5,6 +5,7 @@ import { XSLTSchema } from './xsltSchema';
 import { DCPSnippets } from './dcpSnippets';
 import { XSLTSnippets } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
+import { SchSchema } from './schSchema';
 
 export class XSLTConfiguration {
 	// Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
@@ -76,6 +77,21 @@ export class DCPConfiguration {
 			'http://apache.org/xml/properties/schema/external-schemaLocation',
 			'http://apache.org/xml/properties/schema/external-noNamespaceSchemaLocation',
 		]
+	} 
+}
+
+export class SchConfiguration {
+	// initial configuration is for basic XProc support only
+	public static configuration: LanguageConfiguration = {
+		expressionAtts: ['context', 'test', 'subject', 'path', 'select'],
+		variableElementNames: ['stringParameter', 'booleanParameter'],
+		linkElementAttrNames: ['file', 'path'],
+		nativePrefix: '',
+		tvtAttributes: [],
+		nonNativeAvts: false,
+		schemaData: new SchSchema(),
+		docType: DocumentTypes.SCH,
+		rootElementSnippets: DCPSnippets.xsltRootTags
 	} 
 }
 

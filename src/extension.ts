@@ -12,7 +12,7 @@ import { XPathLexer, ExitCondition, LexPosition, Token } from './xpLexer';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
-import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration } from './languageConfigurations';
+import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration } from './languageConfigurations';
 import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer, LanguageConfiguration, DocumentTypes } from './xslLexer';
 import { DocumentChangeHandler } from './documentChangeHandler';
@@ -45,16 +45,23 @@ const legend = (function () {
 export function activate(context: vscode.ExtensionContext) {
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
+
 	const dcpDiagnosticsCollection = vscode.languages.createDiagnosticCollection('dcp');
 	const dcpSymbolProvider = new DCPSymbolProvider(DCPConfiguration.configuration, dcpDiagnosticsCollection);
 	const dcpDefintiionProvider = new XsltDefinitionProvider(DCPConfiguration.configuration);
+	const dcpLinkProvider = new FullDocumentLinkProvider(DCPConfiguration.configuration);
+
+	const schDiagnosticsCollection = vscode.languages.createDiagnosticCollection('sch');
+	const schSymbolProvider = new DCPSymbolProvider(SchConfiguration.configuration, schDiagnosticsCollection);
+	const schDefintiionProvider = new XsltDefinitionProvider(SchConfiguration.configuration);
+	const schLinkProvider = new FullDocumentLinkProvider(SchConfiguration.configuration);
+
 	const xmlDefinitionProvider = new XsltDefinitionProvider(XMLConfiguration.configuration);
 	const xpathDefinitionProvider = new XsltDefinitionProvider(XPathConfiguration.configuration);
 
 
 	const xsltDefintiionProvider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
 	const xsltLinkProvider = new DocumentLinkProvider(XSLTLightConfiguration.configuration);
-	const dcpLinkProvider = new FullDocumentLinkProvider(DCPConfiguration.configuration);
 
 	const xmlDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xml');
 	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection);
@@ -126,14 +133,17 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt' }, xsltSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp' }, dcpSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'sch' }, schSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml' }, xmlSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'sch' }, schDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xml' }, xmlDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xpath' }, xpathDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, schLinkProvider));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider()));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
@@ -147,6 +157,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt' }, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp' }, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'sch' }, new XsltSemanticTokensProvider(SchConfiguration.configuration), legend));
 	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, new XPathSemanticTokensProvider(xpathDiagnosticsCollection), legend));
 	// formatter

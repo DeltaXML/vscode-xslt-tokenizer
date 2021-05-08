@@ -15,7 +15,8 @@ export interface ComplexType {
     elementNames?: string[],
     attributeList?: AttributeItem[];
     primitive?: string,
-    detail?: string
+    detail?: string,
+    attributeGroup?: string
 }
 
 export interface SubstitutionGroupType {
