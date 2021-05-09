@@ -1217,7 +1217,9 @@ export class XsltTokenCompletions {
 			let description: string | undefined;
 			let useCurrent = true;
 			if (docType === DocumentTypes.XSLT) {
-				if (tagName === 'xsl:template') {
+				if (tagName === 'xsl:break' || tagName === 'xsl:next-iteration') {
+					useCurrent = false;
+				} else if (tagName === 'xsl:template') {
 					const newItem = new vscode.CompletionItem(tagName + ' match', vscode.CompletionItemKind.Struct);
 					newItem.documentation = "xsl:template with 'match' attribute";
 					newItem.insertText = new vscode.SnippetString('xsl:template match="$1" mode="${2:#default}">\n\t$0\n</xsl:template>');
