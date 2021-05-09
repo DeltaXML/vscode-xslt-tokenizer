@@ -9,6 +9,7 @@ import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, Glob
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
+import { XSLTConfiguration } from './languageConfigurations';
 
 enum HasCharacteristic {
 	unknown,
@@ -113,7 +114,7 @@ export class XsltTokenDiagnostics {
 	private static nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 	private static nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
-	private static validateName(name: string, type: ValidationType, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
+	private static validateName(name: string, type: ValidationType, isSchematron: boolean, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
 		let valid = NameValidationError.None
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
@@ -133,7 +134,9 @@ export class XsltTokenDiagnostics {
 					// TODO: when within literal result element, iterate up stack until we get to an XSLT instruction:
 					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : ['xsl:transform', 'xsl:stylesheet', 'xsl:package'];
 					if (prefix === 'xsl') {
-						if (expectedNames.length === 0 && elementStack) {
+						if (isSchematron) {
+							valid = NameValidationError.None;
+						} else if (expectedNames.length === 0 && elementStack) {
 							const withinNextIteration = elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration';
 							valid = name === 'xsl:with-param' && withinNextIteration ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 						} else {
@@ -241,6 +244,11 @@ export class XsltTokenDiagnostics {
 		let ifThenStack: BaseToken[] = [];
 		let currentXSLTIterateParams: string[][] = [];
 		let schemaQuery = languageConfig.schemaData ? new SchemaQuery(languageConfig.schemaData) : undefined;
+		let xsltSchemaQuery: SchemaQuery | undefined;
+		const isSchematron = docType === DocumentTypes.SCH;
+		if (isSchematron && XSLTConfiguration.configuration.schemaData) {
+			xsltSchemaQuery = new SchemaQuery(XSLTConfiguration.configuration.schemaData);
+		}
 
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
@@ -394,8 +402,14 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.xslElementName:
+						// this is xslt or schematron element
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						[tagElementChildren, tagElementAttributes] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, schemaQuery, elementStack);
+						const isXsltElementName = tagElementName.startsWith('xsl:');
+						const isSchElementName = tagElementName.startsWith('sch:');
+						const lookupElementName = isSchematron && !isXsltElementName && !isSchElementName? 'sch:' + tagElementName : tagElementName;
+						const realSchemaQuery = xsltSchemaQuery && tagElementName.startsWith('xsl:')? xsltSchemaQuery : schemaQuery;
+						
+						[tagElementChildren, tagElementAttributes] = XsltTokenDiagnostics.getExpectedElementNames(lookupElementName, realSchemaQuery, elementStack);
 
 						if (tagType === TagType.Start) {
 							if (tagElementName === 'xsl:iterate') {
@@ -493,7 +507,7 @@ export class XsltTokenDiagnostics {
 								let xsltAttsWithNameErrors: string[] = [];
 								const valType = tagElementName.startsWith('xsl:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute;
 								tagAttributeNames.forEach((attName) => {
-									let validateResult = XsltTokenDiagnostics.validateName(attName, valType, inheritedPrefixes, elementStack, tagElementAttributes);
+									let validateResult = XsltTokenDiagnostics.validateName(attName, valType, isSchematron, inheritedPrefixes, elementStack, tagElementAttributes);
 									if (validateResult === NameValidationError.NameError) {
 										attsWithNameErrors.push(attName);
 									} else if (validateResult === NameValidationError.NamespaceError) {
@@ -504,7 +518,7 @@ export class XsltTokenDiagnostics {
 								});
 
 								if (startTagToken && !problem) {
-									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, inheritedPrefixes, elementStack);
+									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, isSchematron, inheritedPrefixes, elementStack);
 									if (validationError !== NameValidationError.None) {
 										startTagToken['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
 										startTagToken['value'] = tagElementName;
@@ -831,7 +845,7 @@ export class XsltTokenDiagnostics {
 						if (!hasProblem && attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;
-								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, isSchematron, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
 									token['value'] = fullVariableName;
@@ -851,7 +865,7 @@ export class XsltTokenDiagnostics {
 								isXMLDeclaration = true;
 							}
 						} else {
-							let validateResult = XsltTokenDiagnostics.validateName(piName, ValidationType.Name, inheritedPrefixes);
+							let validateResult = XsltTokenDiagnostics.validateName(piName, ValidationType.Name, isSchematron, inheritedPrefixes);
 							validPiName = validateResult === NameValidationError.None;
 						}
 						if (!validPiName) {
@@ -1297,7 +1311,7 @@ export class XsltTokenDiagnostics {
 								}
 							}
 							if (!skipValidation) {
-								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, isSchematron, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XPathName : ErrorType.XPathPrefix;
 									token['value'] = token.value;
@@ -1454,7 +1468,8 @@ export class XsltTokenDiagnostics {
 		let expectedElements: string[] = [];
 		let expectedAttributes: string[] = [];
 
-		if (parentName.startsWith('xsl') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT) {
+		if (parentName.startsWith('xsl') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT ||
+		   (parentName.startsWith('sch') && schemaQuery && schemaQuery.docType === DocumentTypes.SCH)) {
 			const allExpected = schemaQuery.getExpected(parentName);
 			const nameDetailArray = allExpected.elements;
 			expectedElements = nameDetailArray.map(item => item[0]);
@@ -1483,7 +1498,7 @@ export class XsltTokenDiagnostics {
 				let isXmlChar = XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1;
 				validationResult = isXmlChar ? NameValidationError.None : NameValidationError.NameError;
 			} else {
-				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, inheritedPrefixes);
+				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, false, inheritedPrefixes);
 			}
 		} else {
 			validationResult = NameValidationError.NameError;

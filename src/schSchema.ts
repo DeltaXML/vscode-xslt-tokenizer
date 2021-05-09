@@ -26,7 +26,7 @@ export interface AttributeItem {
     enum?: string[];
 }
 export class SchSchema implements SchemaData {
-    docType = DocumentTypes.DCP;
+    docType = DocumentTypes.SCH;
     simpleTypes: { [name: string]: SimpleType } = {
         "URI": { base: ['xs:string'] },
         "PATH": { base: ['xs:string'] },
@@ -35,70 +35,70 @@ export class SchSchema implements SchemaData {
     }
     complexTypes: { [name: string]: ComplexType } = {}
     elements: { [name: string]: ComplexType } = {
-        "schema": {
+        "sch:schema": {
             elementNames: ['sch:title', 'sch:ns', 'sch:p', 'sch:phase', 'sch:key', 'sch:pattern', 'sch:p', 'sch:diagnostics'],
             attributeGroup: 'sch:attlist.schema'
         },
-        "active": {
+        "sch:active": {
             elementNames: ['sch:dir', 'sch:emph', 'sch:span'],
             attributeGroup: 'sch:attlist.active'
         },
-        "assert": {
+        "sch:assert": {
             elementNames: ['sch:name', 'sch:emph', 'sch:dir', 'sch:span'],
             attributeGroup: 'sch:attlist.assert'
         },
-        "dir": {
+        "sch:dir": {
             attributeGroup: 'sch:attlist.dir'
         },
-        "emph": {
+        "sch:emph": {
             type: 'xs:string'
         },
-        "extends": {
+        "sch:extends": {
             attributeGroup: 'sch:attlist.extends'
         },
-        "diagnostic": {
+        "sch:diagnostic": {
             elementNames: ['sch:value-of', 'sch:emph', 'sch:dir', 'sch:span'],
             attributeGroup: 'sch:attlist.diagnostic'
         },
-        "diagnostics": {
+        "sch:diagnostics": {
             elementNames: ['sch:diagnostic']
         },
-        "key": {
+        "sch:key": {
             attributeGroup: 'sch:attlist.key'
         },
-        "name": {
+        "sch:name": {
             attributeGroup: 'sch:attlist.name'
         },
-        "ns": {
+        "sch:ns": {
             attributeGroup: 'sch:attlist.ns'
         },
-        "p": {
+        "sch:p": {
             elementNames: ['sch:dir', 'sch:emph', 'sch:span'],
             attributeGroup: 'sch:attlist.p'
         },
-        "pattern": {
+        "sch:pattern": {
             elementNames: ['sch:p', 'sch:rule'],
             attributeGroup: 'sch:attlist.pattern'
         },
-        "phase": {
+        "sch:phase": {
             elementNames: ['sch:p', 'sch:active'],
             attributeGroup: 'sch:attlist.phase'
         },
-        "report": {
+        "sch:report": {
             elementNames: ['sch:name', 'sch:emph', 'sch:dir', 'sch:span'],
             attributeGroup: 'sch:attlist.report'
         },
-        "rule": {
+        "sch:rule": {
             elementNames: ['sch:assert', 'sch:report', 'sch:key', 'sch:extends'],
             attributeGroup: 'sch:attlist.rule'
         },
-        "span": {
+        "sch:span": {
             attributeGroup: 'sch:attlist.span'
         },
-        "title": {
+        "sch:title": {
             elementNames: ['sch:dir']
         },
-        "value-of": {
+        "sch:value-of": {
             attributeGroup: 'sch:attlist.value-of'
         },
     }
