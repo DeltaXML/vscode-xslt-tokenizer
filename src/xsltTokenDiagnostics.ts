@@ -262,6 +262,7 @@ export class XsltTokenDiagnostics {
 		let schemaQuery = languageConfig.schemaData ? new SchemaQuery(languageConfig.schemaData) : undefined;
 		let xsltSchemaQuery: SchemaQuery | undefined;
 		const isSchematron = docType === DocumentTypes.SCH;
+		let pendingTemplateParamErrors: BaseToken[] = [];
 		if (isSchematron && XSLTConfiguration.configuration.schemaData) {
 			xsltSchemaQuery = new SchemaQuery(XSLTConfiguration.configuration.schemaData);
 		}
@@ -419,6 +420,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.xslElementName:
 						// this is xslt or schematron element
+						pendingTemplateParamErrors = [];
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						const isXsltElementName = tagElementName.startsWith('xsl:');
 						const isSchElementName = tagElementName.startsWith('sch:');
@@ -522,7 +524,13 @@ export class XsltTokenDiagnostics {
 								let attsWithNameErrors: string[] = [];
 								let xsltAttsWithNameErrors: string[] = [];
 								const valType = tagElementName.startsWith('xsl:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute;
+
+								let tunnelAttributeFound = false;
+								const checkPendingErrors = pendingTemplateParamErrors.length !== 0;
 								tagAttributeNames.forEach((attName) => {
+									if ( checkPendingErrors && !tunnelAttributeFound) {
+										tunnelAttributeFound = attName === 'tunnel';
+									}
 									let validateResult = XsltTokenDiagnostics.validateName(attName, valType, isSchematron, inheritedPrefixes, elementStack, tagElementAttributes);
 									if (validateResult === NameValidationError.NameError) {
 										attsWithNameErrors.push(attName);
@@ -532,6 +540,10 @@ export class XsltTokenDiagnostics {
 										xsltAttsWithNameErrors.push(attName);
 									}
 								});
+								if (checkPendingErrors && !tunnelAttributeFound) {
+									pendingTemplateParamErrors.forEach((item) => problemTokens.push(item));
+								}
+
 
 								if (startTagToken && !problem) {
 									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, isSchematron, inheritedPrefixes, elementStack);
@@ -844,8 +856,7 @@ export class XsltTokenDiagnostics {
 								if (templateParams?.indexOf(variableName) < 0) {
 									token['error'] = ErrorType.MissingTemplateParam;
 									token.value = `${callTemplateName}#${variableName}`;
-									problemTokens.push(token);
-									hasProblem = true;
+									pendingTemplateParamErrors.push(token);
 								}
 							} else if (currentXSLTIterateParams.length > 0 && elementStack.length > 2 && elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration') {
 								const params = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
