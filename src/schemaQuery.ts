@@ -51,6 +51,25 @@ export class SchemaQuery {
             }
             return result;
         }
+        if (this.schema.docType === DocumentTypes.SCH && !name.startsWith('xsl:')) {
+            let attGroupName = this.schema.elements[name]? this.schema.elements[name].attributeGroup : undefined;
+            if (attGroupName) {
+                let attGroup = this.schema.attributeGroups[attGroupName];
+                if (attGroup.attrs) {
+                    this.mergeAttrArrays(result, Object.keys(attGroup.attrs));
+                    if (attributeName) {
+                        let simpleTypeName = attGroup.attrs[attributeName];
+                        if (simpleTypeName) {
+                            let sType = this.schema.simpleTypes[simpleTypeName];
+                            if (sType) {
+                                this.lookupSimpleType(sType, result);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         name = name === 'xsl:stylesheet'? 'xsl:transform': name;
         let ct = <ComplexType>this.schema.elements[name];
         if (ct) {

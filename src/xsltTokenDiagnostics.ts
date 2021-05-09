@@ -135,6 +135,7 @@ export class XsltTokenDiagnostics {
 					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : ['xsl:transform', 'xsl:stylesheet', 'xsl:package'];
 					if (prefix === 'xsl') {
 						if (isSchematron) {
+							// TODO: check xslt elements within schematron
 							valid = NameValidationError.None;
 						} else if (expectedNames.length === 0 && elementStack) {
 							const withinNextIteration = elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration';
@@ -149,6 +150,14 @@ export class XsltTokenDiagnostics {
 							}
 						}
 						return valid;
+					} else if (isSchematron) {
+						if (prefix === 'sch' ) {
+							if (elementStack?.length === 0) {
+								valid = name === 'sch:schema' ? NameValidationError.None : NameValidationError.XSLTElementNameError;
+							} else {
+								valid = expectedNames.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
+							}
+						}
 					} else {
 						valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
 					}
@@ -157,6 +166,13 @@ export class XsltTokenDiagnostics {
 					//valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 				} else {
 					valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
+				}
+			} else if (isSchematron && type !== ValidationType.XSLTAttribute) {
+				const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : [];
+				if (elementStack?.length === 0) {
+					valid = name === 'schema' ? NameValidationError.None : NameValidationError.XSLTElementNameError;
+				} else {
+					valid = expectedNames.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 				}
 			} else if (type === ValidationType.XSLTAttribute && expectedAttributes) {
 				valid = expectedAttributes.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTAttributeNameError;

@@ -103,7 +103,7 @@ export class SchSchema implements SchemaData {
         },
     }
     attributeGroups: { [name: string]: any } = {
-        "attlist.schema": {
+        "sch:attlist.schema": {
             attrs: {
                 'xsi:schemaLocation': '',
                 'id': 'xs:ID',
@@ -115,12 +115,12 @@ export class SchSchema implements SchemaData {
                 'version': ''
             }
         },
-        "attlist.active": {
+        "sch:attlist.active": {
             attrs: {
                 'pattern': 'xs:IDREF'
             }
         },
-        "attlist.assert": {
+        "sch:attlist.assert": {
             attrs: {
                 'test': 'sch:EXPR',
                 'role': 'xs:NMTOKEN',
@@ -130,23 +130,23 @@ export class SchSchema implements SchemaData {
                 'subject': 'sch:PATH'
             }
         },
-        "attlist.dir": {
+        "sch:attlist.dir": {
             attrs: {
                 'value': ['ltr','rtl']
             }
         },
-        "attlist.extends": {
+        "sch:attlist.extends": {
             attrs: {
                 'rule': 'xs:IDREF'
             }
         },
-        "attlist.diagnostic": {
+        "sch:attlist.diagnostic": {
             attrs: {
                 'id': 'xs:ID',
                 'icon': 'sch:URI'
             }
         },
-        "attlist.key": {
+        "sch:attlist.key": {
             attrs: {
                 'match': '',
                 'name': 'xs:NMTOKEN',
@@ -154,19 +154,19 @@ export class SchSchema implements SchemaData {
                 'icon': 'sch:URI'
             }
         },
-        "attlist.name": {
+        "sch:attlist.name": {
             attrs: {
                 'path': 'sch:PATH'
             }
         },
-        "attlist.p": {
+        "sch:attlist.p": {
             attrs: {
                 'id': 'xs:ID',
                 'class': '',
                 'icon': 'sch:URI'
             }
         },
-        "attlist.pattern": {
+        "sch:attlist.pattern": {
             attrs: {
                 'name': '',
                 'see': 'sch:URI',
@@ -174,25 +174,25 @@ export class SchSchema implements SchemaData {
                 'icon': 'sch:URI'
             }
         },
-        "attlist.ns": {
+        "sch:attlist.ns": {
             attrs: {
                 'uri': 'sch:URI',
                 'prefix': 'xs:NMTOKEN'
             }
         },
-        "attlist.phase": {
+        "sch:attlist.phase": {
             attrs: {
                 'id': 'xs:ID',
                 'fpi': 'sch:FPI',
                 'icon': 'sch:URI'
             }
         },
-        "attlist.span": {
+        "sch:attlist.span": {
             attrs: {
                 'class': ''
             }
         },
-        "attlist.report": {
+        "sch:attlist.report": {
             attrs: {
                 'test': 'sch:EXPR',
                 'role': 'xs:NMTOKEN',
@@ -202,7 +202,7 @@ export class SchSchema implements SchemaData {
                 'subject': 'sch:PATH'
             }
         },
-        "attlist.rule": {
+        "sch:attlist.rule": {
             attrs: {
                 'context': 'sch:PATH',
                 'abstract': ['true', 'false'],
@@ -210,7 +210,7 @@ export class SchSchema implements SchemaData {
                 'id': 'xs:ID'
             }
         },
-        "attlist.value-of": {
+        "sch:attlist.value-of": {
             attrs: {
                 'select': 'sch:PATH'
             }

@@ -4,7 +4,7 @@
 
 <schema xmlns="http://purl.oclc.org/dsdl/schematron" xmlns:saxon="http://saxon.sf.net/"
   xmlns:xsl="http://www.w3.org/1999/XSL/Transform" queryBinding="xslt3" defaultPhase="structure">
-  <ns prefix="xsl" uri="http://www.w3.org/1999/XSL/Transform" />
+  <nsq prefix="xsl" uri="http://www.w3.org/1999/XSL/Transform" />
   <ns prefix="cals" uri="http://www.deltaxml.com/ns/cals-table"/>
   <ns prefix="saxon" uri="http://saxon.sf.net/" />
   <ns prefix="functx" uri="http://www.functx.com" />
