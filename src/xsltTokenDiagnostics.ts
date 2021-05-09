@@ -91,7 +91,7 @@ enum ValidationType {
 
 export class XsltTokenDiagnostics {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
-	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:linenumber', 'err:column-number'];
+	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number'];
 	private static readonly xslInclude = 'xsl:include';
 	private static readonly xslImport = 'xsl:import';
 	private static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
