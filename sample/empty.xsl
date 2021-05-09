@@ -4,6 +4,7 @@
                 xmlns:array="http://www.w3.org/2005/xpath-functions/array"
                 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
                 xmlns:math="http://www.w3.org/2005/xpath-functions/math"
+                xmlns:p="http://example.com"
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="3.0">
@@ -12,6 +13,10 @@
     <xsl:mode on-no-match="shallow-copy"/>
 
     <xsl:template match="/*" mode="#all">
+        <xsl:variable name="bounds" as="" select="'abc'"/>
+        <xsl:variable name="p:x2-units-per-pixel" as="" select="'abc'"/>
+        <xsl:variable name="right" as="xs:decimal"
+            select="$bounds[3] * $p:x2-units-per-pixel"/>
         <xsl:copy>
             <xsl:apply-templates select="node()" mode="#current"/>
         </xsl:copy>

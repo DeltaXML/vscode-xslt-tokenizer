@@ -987,7 +987,7 @@ export class XPathLexer {
                             // xs:integer? etc
                             currentToken.charType = CharLevelState.lName;
                             currentToken.tokenType = TokenLevelState.simpleType;
-                        } else if (prevTokenT === TokenLevelState.operator && prevToken.value === ')') {
+                        } else if (prevTokenT === TokenLevelState.operator && (prevToken.value === ')') || prevToken.value === ']') {
                             // ($a) * 9 or count($a) * 8 or abc as map(*)* or $item as node()+
                             if (poppedContext && poppedContext.tokenType === TokenLevelState.simpleType) {
                                 currentToken.charType = CharLevelState.lName;
