@@ -1514,7 +1514,7 @@ export class XsltTokenDiagnostics {
 		let validationResult = NameValidationError.None;
 		if (entityName.length > 2 && entityName.endsWith(';')) {
 			entityName = entityName.substring(1, entityName.length - 1);
-			if (entityName.length > 2 && entityName.charAt(0) === '#') {
+			if (entityName.length > 1 && entityName.charAt(0) === '#') {
 				let validNumber;
 				if (entityName.charAt(1).toLocaleLowerCase() === 'x') {
 					validNumber = /^#[Xx][0-9a-fA-F]+$/.test(entityName);
