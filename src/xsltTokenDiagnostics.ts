@@ -168,11 +168,11 @@ export class XsltTokenDiagnostics {
 					valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
 				}
 			} else if (isSchematron && type !== ValidationType.XSLTAttribute) {
-				const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : [];
 				if (elementStack?.length === 0) {
 					valid = name === 'schema' ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 				} else {
-					valid = expectedNames.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
+					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : [];
+					valid = expectedNames.indexOf('sch:' + name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 				}
 			} else if (type === ValidationType.XSLTAttribute && expectedAttributes) {
 				valid = expectedAttributes.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTAttributeNameError;
