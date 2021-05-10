@@ -167,14 +167,14 @@ export class XsltTokenDiagnostics {
 				} else {
 					valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
 				}
-			} else if (isSchematron && type !== ValidationType.XSLTAttribute) {
+			} else if (isSchematron && type === ValidationType.XMLElement) {
 				if (elementStack?.length === 0) {
 					valid = name === 'schema' ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 				} else {
 					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : [];
 					valid = expectedNames.indexOf('sch:' + name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 				}
-			} else if (type === ValidationType.XSLTAttribute && expectedAttributes) {
+			} else if ((type === ValidationType.XSLTAttribute || (isSchematron && type === ValidationType.XMLAttribute)) && expectedAttributes) {
 				valid = expectedAttributes.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTAttributeNameError;
 				return valid;
 			}
@@ -450,6 +450,10 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.elementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						if (isSchematron) {
+							// this must be an xsl element
+							[tagElementChildren, tagElementAttributes] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, xsltSchemaQuery, elementStack);
+						}
 						if (tagType === TagType.Start) {
 							tagType = TagType.XMLstart;
 							startTagToken = token;
