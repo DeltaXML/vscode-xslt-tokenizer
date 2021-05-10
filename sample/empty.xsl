@@ -13,6 +13,7 @@
     <xsl:mode on-no-match="shallow-copy"/>
 
     <xsl:template match="/*" mode="#all">
+        <xsl:sequence xmlns:h="example.com" select="h:test"/>
         <xsl:variable name="bounds" as="" select="'abc'"/>
         <xsl:variable name="p:x2-units-per-pixel" as="" select="'abc'"/>
         <xsl:variable name="right" as="xs:decimal"

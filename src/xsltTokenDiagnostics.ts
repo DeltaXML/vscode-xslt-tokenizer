@@ -499,15 +499,6 @@ export class XsltTokenDiagnostics {
 								}
 								onRootStartTag = false;
 								let orginalPrefixes = inheritedPrefixes.slice();
-								tagXmlnsNames.forEach((attName) => {
-									// only need 'xmlns:pfx' - not default xmlns
-									if (attName.length > 6) {
-										let prefix = attName.substring(6);
-										if (inheritedPrefixes.indexOf(prefix) < 0) {
-											inheritedPrefixes.push(prefix);
-										}
-									}
-								});
 								let problem = false;
 								if (tagExcludeResultPrefixes) {
 									let missingPrefix;
@@ -727,6 +718,12 @@ export class XsltTokenDiagnostics {
 									problemTokens.push(token);
 								} 
 								tagXmlnsNames.push(attNameText);
+								if (attNameText.length > 6) {
+									let prefix = attNameText.substring(6);
+									if (inheritedPrefixes.indexOf(prefix) < 0) {
+										inheritedPrefixes.push(prefix);
+									}
+								}
 								if (onRootStartTag) {
 									rootXmlnsName = attNameText;
 								}
