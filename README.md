@@ -42,11 +42,20 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **XML Breadcrumbs**      | Shows ancestors of current XML node
 | **Tag Rename**           | When start-tag is modified, corresponding end-tag is also updated
 | **Tag Self-Close**       | Convert start-tag to self-closed tag by inserting `/` before  `>` (end-tag is removed) 
-| **Selection Commands**   | `Select current`/`preceding`/`following`/`parent element`
-| **`Goto XPath` Command**         | Enter XPath location in quick-editor (initally shows current XPath)
-| **`Comment` Command**    | (`⌘/`) Convert lines to an XML comment
+| **Comment Command**    | keyboard hortcut: `⌘/` - convert lines to an XML comment
 | **XML Snippets**         | For XML elements, attributes, processing-instrucitons and comments
 |||
+
+# XML Commands
+| Command  | Details |
+| ------- | ------- |
+| XML: Goto XPath  | Initially shows current XPath at the text prompt  |
+| XML: Select current element | Includes start/end tags |
+| XML: Select preceding element |  |
+| XML: Select following element |  |
+| XML: Select parent element |  |
+|||
+
 
  # Introduction
  
