@@ -32,6 +32,7 @@ export class SchSchema implements SchemaData {
         "PATH": { base: ['xs:string'] },
         "EXPR": { base: ['xs:string'] },
         "FPI": { base: ['xs:string'] },
+        "QB": { base: ['xs:string'], enum: ['xslt3'] },
     }
     complexTypes: { [name: string]: ComplexType } = {}
     elements: { [name: string]: ComplexType } = {
@@ -111,6 +112,7 @@ export class SchSchema implements SchemaData {
                 'ns': 'sch:FPI',
                 'schemaVersion': '',
                 'defaultPhase': 'xs:IDREF',
+                'queryBinding': 'QB',
                 'icon': 'sch:URI',
                 'version': ''
             }
