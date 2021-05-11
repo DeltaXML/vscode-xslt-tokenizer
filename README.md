@@ -9,11 +9,11 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 
 | Feature  | Details |
 | ------- | ------- |
-| **XSLT 3.0/XPath 3.1**    | See W3C specifications for [XSLT](https://www.w3.org/TR/xslt-30/) and [XPath](https://www.w3.org/TR/xpath-31/)
+| **XSLT 3.0/XPath 3.1**    | See W3C specifications for [XSLT 3.0](https://www.w3.org/TR/xslt-30/) and [XPath 3.1](https://www.w3.org/TR/xpath-31/)
 | **Syntax Highlighting**   | Fast and precise - using [Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
 | **Code Formatting**       | XSLT instruction elements, attributes and multi-line XPath expressions
-| **Code Diagnostics\***      | For: XPath Syntax, XSLT Instructions, XPath variable references, XPath symbols
-| **XSLT/XPath Processing** | VS Code Task Support for [Saxon (Java)](https://www.saxonica.com/documentation10/index.html) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html)
+| **Code Diagnostics\***      | For XPath Syntax, XSLT Instructions, variable/param references, all XPath symbols
+| **XSLT/XPath Processing** | VS Code Task Support for [Saxon](https://www.saxonica.com/documentation10/index.html) ([Java](https://adoptopenjdk.net/installation.html)) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html) ([NodeJS](https://nodejs.org/en/))
 | **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names etc.
 | **Color Theme Support**   | Tested with most popular color themes ([Semantic Highlighting]() must be enabled in settings) 
 | **Code Folding**          | Either uses indentation or `region` XML processing-instructions
