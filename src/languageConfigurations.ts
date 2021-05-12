@@ -83,7 +83,7 @@ export class DCPConfiguration {
 export class SchConfiguration {
 	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {
-		expressionAtts: ['context', 'test', 'subject', 'path', 'select'],
+		expressionAtts: ['context', 'test', 'subject', 'path', 'select', 'value'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
 		linkElementAttrNames: ['file', 'path'],
 		nativePrefix: '',

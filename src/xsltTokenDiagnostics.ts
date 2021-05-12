@@ -576,7 +576,7 @@ export class XsltTokenDiagnostics {
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
 									let newVariablesList = elementStack.length === 0 ? globalVariableData : inScopeVariablesList;
-									const stackElementChildren = attrValType === ValidationType.XMLAttribute && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : tagElementChildren;
+									const stackElementChildren = isSchematron? tagElementChildren : attrValType === ValidationType.XMLAttribute && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : tagElementChildren;
 									//let newVariablesList = inScopeVariablesList;
 
 									const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);

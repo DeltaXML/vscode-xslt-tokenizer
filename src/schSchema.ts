@@ -40,12 +40,16 @@ export class SchSchema implements SchemaData {
             elementNames: ['sch:title', 'sch:ns', 'sch:p', 'sch:phase', 'sch:key', 'sch:pattern', 'sch:p', 'sch:diagnostics'],
             attributeGroup: 'sch:attlist.schema'
         },
+        'sch:let': {
+            elementNames: [],
+            attributeGroup: 'sch:attlist.let'
+        },
         "sch:active": {
             elementNames: ['sch:dir', 'sch:emph', 'sch:span'],
             attributeGroup: 'sch:attlist.active'
         },
         "sch:assert": {
-            elementNames: ['sch:name', 'sch:emph', 'sch:dir', 'sch:span'],
+            elementNames: ['sch:name', 'sch:emph', 'sch:dir', 'sch:span', 'sch:value-of'],
             attributeGroup: 'sch:attlist.assert'
         },
         "sch:dir": {
@@ -90,7 +94,7 @@ export class SchSchema implements SchemaData {
             attributeGroup: 'sch:attlist.report'
         },
         "sch:rule": {
-            elementNames: ['sch:assert', 'sch:report', 'sch:key', 'sch:extends'],
+            elementNames: ['sch:assert', 'sch:report', 'sch:key', 'sch:extends', 'sch:let'],
             attributeGroup: 'sch:attlist.rule'
         },
         "sch:span": {
@@ -217,5 +221,11 @@ export class SchSchema implements SchemaData {
                 'select': 'sch:PATH'
             }
         },
+        "sch:attlist.let": {
+            attrs: {
+                'name': 'xs:string',
+                'value': 'sch:PATH'
+            }
+        }
     }
 }
