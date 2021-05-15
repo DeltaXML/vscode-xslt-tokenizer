@@ -8,7 +8,7 @@
     
     <xsl:param name="param1" as="" select="22"/>
     <xsl:variable name="myVar" as="xs:string" select="'test'"/>
-    <xsl:variable name="myVar2" as="xs:string" select="'test' || $param1 || $myVar/descendant-or-self::bravo || fn:name()"/>
+    <xsl:variable name="myVar2" as="xs:string" select="'test' || $param1 || $myVar/descendant-or-self::bravo || fn:name(abc)"/>
     
     
     <xsl:template match="@*" mode="#all">

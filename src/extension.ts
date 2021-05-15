@@ -64,7 +64,11 @@ export function activate(context: vscode.ExtensionContext) {
 	const xsltLinkProvider = new DocumentLinkProvider(XSLTLightConfiguration.configuration);
 
 	const xmlDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xml');
+	const bpmnDiagnosticsCollection = vscode.languages.createDiagnosticCollection('bpmn');
+
 	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection);
+	const bpmnSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, bpmnDiagnosticsCollection);
+
 	const docChangeHandler = new DocumentChangeHandler();
 	let activeEditor = vscode.window.activeTextEditor;
 	if (activeEditor) {
@@ -135,6 +139,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp' }, dcpSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'sch' }, schSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml' }, xmlSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'bpmn' }, bpmnSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));
@@ -158,6 +163,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt' }, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp' }, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'sch' }, new XsltSemanticTokensProvider(SchConfiguration.configuration), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'bpmn' }, new XsltSemanticTokensProvider(XMLConfiguration.configuration), legend));
+
 	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, new XPathSemanticTokensProvider(xpathDiagnosticsCollection), legend));
 	// formatter
@@ -181,11 +188,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xpath',
 		xpathFormatter, '\n', '/'));
 
-	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xml',
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider(['xml', 'bpmn'],
 		xmlFormatter));
-	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xml',
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider(['xml', 'bpmn'],
 		xmlFormatter));
-	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xml',
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider(['xml', 'bpmn'],
 		xmlFormatter, '\n', '/'));
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('dcp',
