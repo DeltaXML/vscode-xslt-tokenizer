@@ -52,7 +52,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const dcpLinkProvider = new FullDocumentLinkProvider(DCPConfiguration.configuration);
 
 	const schDiagnosticsCollection = vscode.languages.createDiagnosticCollection('sch');
-	const schSymbolProvider = new DCPSymbolProvider(SchConfiguration.configuration, schDiagnosticsCollection);
+	const schSymbolProvider = new XsltSymbolProvider(SchConfiguration.configuration, schDiagnosticsCollection);
 	const schDefintiionProvider = new XsltDefinitionProvider(SchConfiguration.configuration);
 	const schLinkProvider = new FullDocumentLinkProvider(SchConfiguration.configuration);
 
