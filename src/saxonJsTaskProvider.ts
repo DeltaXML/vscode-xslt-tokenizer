@@ -139,7 +139,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                 this.templateTaskFound = true;
             }
 
-            let commandLineArgs: string[] = [];
+            let commandLineArgs: string[] = ['xslt3'];
 
             let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
             let xsltParametersCommand: string[] = [];
@@ -180,12 +180,11 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                 }
             }
 
-            let nodeModulesPath = xsltTask.nodeModulesFolder + path.sep + '.bin' + path.sep;
 
             // this is overriden if problemMatcher is set in the tasks.json file      
             let problemMatcher = "$saxon-xslt-js";
 
-            const processExecution = new vscode.ProcessExecution(nodeModulesPath + 'xslt3', commandLineArgs.concat(xsltParametersCommand));
+            const processExecution = new vscode.ProcessExecution('npx', commandLineArgs.concat(xsltParametersCommand));
             let newTask = new vscode.Task(xsltTask, xsltTask.label, source, processExecution, problemMatcher);
 
             //let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
