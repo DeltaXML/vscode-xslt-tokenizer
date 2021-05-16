@@ -538,6 +538,7 @@ export class XsltTokenDiagnostics {
 								if (checkPendingErrors && !tunnelAttributeFound) {
 									pendingTemplateParamErrors.forEach((item) => problemTokens.push(item));
 								}
+								pendingTemplateParamErrors = [];
 
 
 								if (startTagToken && !problem) {
