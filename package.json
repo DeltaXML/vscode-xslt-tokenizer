@@ -299,8 +299,7 @@
 					"label",
 					"xsltFile",
 					"xmlSource",
-					"resultPath",
-					"nodeModulesFolder"
+					"resultPath"
 				],
 				"properties": {
 					"label": {
@@ -309,7 +308,7 @@
 					},
 					"nodeModulesFolder": {
 						"type": "string",
-						"description": "The path of the node_modules folder"
+						"description": "[No longer used] The path of the node_modules folder"
 					},
 					"xsltFile": {
 						"type": "string",

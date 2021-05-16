@@ -21,7 +21,7 @@ function exists(file: string): Promise<boolean> {
 interface XSLTJSTask {
     type: string,
     label: string,
-    nodeModulesFolder: string,
+    nodeModulesFolder?: string,
     xsltFile: string,
     xmlSource: string,
     useJsonSource?: boolean,
@@ -110,14 +110,12 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     }
 
     private addTemplateTask() {
-		let nodeModulesDefault = '${workspaceFolder}/node_modules'
 		let xmlSourceValue = '${file}';
 		let xsltFilePath = '${file}';
         let resultPathValue = '${workspaceFolder}/xslt-out/result1.xml';
 
         let xsltTask: XSLTJSTask = {
             type: 'xslt-js',
-            nodeModulesFolder: nodeModulesDefault,
             label: this.templateTaskLabel,
             xsltFile: xsltFilePath,
             xmlSource: xmlSourceValue,
