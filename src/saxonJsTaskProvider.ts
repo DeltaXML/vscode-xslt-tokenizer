@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { SaxonTaskProvider } from './saxonTaskProvider';
+import { DocumentChangeHandler } from './documentChangeHandler';
 
 function exists(file: string): Promise<boolean> {
     return new Promise<boolean>((resolve, _reject) => {
@@ -139,6 +140,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                 this.templateTaskFound = true;
             }
 
+            let npxCommand = DocumentChangeHandler.isWindowsOS? 'npx.cmd' : 'npx';
             let commandLineArgs: string[] = ['xslt3'];
 
             let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
@@ -184,7 +186,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             // this is overriden if problemMatcher is set in the tasks.json file      
             let problemMatcher = "$saxon-xslt-js";
 
-            const processExecution = new vscode.ProcessExecution('npx', commandLineArgs.concat(xsltParametersCommand));
+            const processExecution = new vscode.ProcessExecution(npxCommand, commandLineArgs.concat(xsltParametersCommand));
             let newTask = new vscode.Task(xsltTask, xsltTask.label, source, processExecution, problemMatcher);
 
             //let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);

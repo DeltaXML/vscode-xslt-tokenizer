@@ -25,6 +25,7 @@ import { DCPSymbolProvider } from './dcpSymbolProvider';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { window } from 'vscode';
 import { XSLTHoverProvider } from './xsltHoverProvider';
+import * as os from 'os';
 
 
 
@@ -43,6 +44,7 @@ const legend = (function () {
 })();
 
 export function activate(context: vscode.ExtensionContext) {
+	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
 

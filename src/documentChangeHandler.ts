@@ -13,6 +13,7 @@ export interface TagRenameEdit {
 export class DocumentChangeHandler {
 	public static lastActiveXMLEditor: vscode.TextEditor|null = null;
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
+	public static isWindowsOS: boolean | undefined;
 
 	private onDidChangeRegistration: vscode.Disposable | null = null;
 	private xmlDocumentRegistered = false;
