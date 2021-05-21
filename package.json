@@ -785,8 +785,8 @@
 		"@types/jest": "^24.9.1",
 		"@types/node": "^10.17.17",
 		"@types/vscode": "^1.44.0",
-		"jest": "^25.2.3",
-		"ts-jest": "^24.3.0",
+		"jest": "^26.6.3",
+		"ts-jest": "^26.5.6",
 		"tslint": "^5.20.1",
 		"typescript": "^3.8.3",
 		"xslt3": "^2.0.3"
