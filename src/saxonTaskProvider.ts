@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as  os from 'os';
+import * as jsc from 'jsonc-parser'
 
 function exists(file: string): Promise<boolean> {
     return new Promise<boolean>((resolve, _reject) => {
@@ -63,21 +64,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 
         if (await exists(tasksPath)) {
             const tasksText = fs.readFileSync(tasksPath).toString('utf-8');
-            const commaFixedTasksText1 = tasksText.replace(/,\s*}/, '}');
-            const commaFixedTasksText2 = commaFixedTasksText1.replace(/,\s*\]/, ']');
-
-            const taskLines = commaFixedTasksText2.split("\n");
-            const jsonTaskLines: string[] = [];
-            taskLines.forEach((taskLine) => {
-                if (taskLine.trimLeft().startsWith('//')) {
-                    // don't add comment
-                } else {
-                    jsonTaskLines.push(taskLine);
-                }
-            });
-            const jsonString = jsonTaskLines.join('\n');
-            tasksObject = JSON.parse(jsonString);
-
+            tasksObject = jsc.parse(tasksText);
         } else {
             tasksObject = { tasks: [] };
         }
