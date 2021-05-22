@@ -1,5 +1,6 @@
 // tslint:disable
 import { XslLexerLight } from "./xslLexerLight";
+import * as vscode from 'vscode'
 import * as fs from 'fs';
 import {XSLTLightConfiguration} from './languageConfigurations';
 import { GlobalInstructionData } from "./xslLexer";
@@ -11,20 +12,22 @@ export interface GlobalImportData {
 
 export class GlobalsProvider {
 
-	// -------------
 	public async provideGlobals(href: string): Promise<GlobalImportData> {
-		let xsltText = '';
 		let lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
 		let data: GlobalInstructionData[] = [];
-		let error = true;
 
-		if (href.length !== 0 && await GlobalsProvider.fileExists(href)) {
-			xsltText= fs.readFileSync(href).toString('utf-8');
-			data = lexer.analyseLight(xsltText);
-			error = false;
+		if (href.length === 0) {
+			return {data: data, error: true}; 
 		}
 
-		return {data: data, error: error};
+		try {
+			const doc = await vscode.workspace.openTextDocument(href);
+			const text = doc.getText();
+			data = lexer.analyseLight(text);
+			return {data: data, error: false};
+		} catch (e) {
+			return {data: data, error: true};
+		}
 	}
 
 	public static fileExists(file: string): Promise<boolean> {
