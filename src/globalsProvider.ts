@@ -1,7 +1,6 @@
 // tslint:disable
 import { XslLexerLight } from "./xslLexerLight";
 import * as vscode from 'vscode'
-import * as fs from 'fs';
 import {XSLTLightConfiguration} from './languageConfigurations';
 import { GlobalInstructionData } from "./xslLexer";
 
@@ -30,18 +29,15 @@ export class GlobalsProvider {
 		}
 	}
 
-	public static fileExists(file: string): Promise<boolean> {
-		return new Promise<boolean>((resolve, _reject) => {
-			fs.exists(file, (exists) => {
-				if (exists) {
-					let stats = fs.stat(file, (err, stats) => {
-						resolve(stats.isFile());
-					});
-				} else {
-					resolve(exists);
-				}
-			});
-		});
+	public static async fileExists(file: string): Promise<boolean> {
+		let exists = false;
+		try {
+			await vscode.workspace.openTextDocument(file);
+			exists = true;
+		} catch (e) {
+			// do nothing
+		}
+		return exists;
 	}
 }
 

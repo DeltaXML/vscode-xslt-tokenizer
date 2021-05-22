@@ -6,17 +6,8 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import * as  os from 'os';
 import * as jsc from 'jsonc-parser'
-
-function exists(file: string): Promise<boolean> {
-    return new Promise<boolean>((resolve, _reject) => {
-        fs.exists(file, (value) => {
-            resolve(value);
-        });
-    });
-}
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -62,13 +53,12 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         let tasksPath = path.join(rootPath, '.vscode', 'tasks.json');
         let tasksObject = undefined;
 
-        if (await exists(tasksPath)) {
-            const tasksText = fs.readFileSync(tasksPath).toString('utf-8');
-            tasksObject = jsc.parse(tasksText);
-        } else {
+        try {
+            const doc = await vscode.workspace.openTextDocument(tasksPath);
+            tasksObject = jsc.parse(doc.getText());
+        } catch (e) {
             tasksObject = { tasks: [] };
         }
-
         return this.getTasks(tasksObject.tasks);
     }
 
