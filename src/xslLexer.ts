@@ -649,6 +649,7 @@ export class XslLexer {
         let tokenChars: string[] = [];
         let result: BaseToken[] = [];
         let attName: string = '';
+        let avtExit = false;
 
         let xpLexer: XPathLexer = new XPathLexer();
         xpLexer.elementNameTests = this.elementNameTests;
@@ -1039,8 +1040,10 @@ export class XslLexer {
                                 if (newCharCount > this.charCount) {
                                     this.charCount = newCharCount;
                                 }
+                                // fix issue with last char of xpath
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
+                                avtExit = true;
                             }
                             nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             break;
@@ -1102,6 +1105,10 @@ export class XslLexer {
 
                     }
                     tokenStartChar = this.lineCharCount > 0? this.lineCharCount - 1: 0;
+                    if (avtExit) {
+                        avtExit = false;
+                        tokenStartChar++;
+                    }
                     tokenStartLine = this.lineNumber;
                 } // else ends
                 if (isCurrentCharNewLIne) {
