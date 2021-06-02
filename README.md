@@ -33,6 +33,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
    \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
 
 
+
 # General XML Features
 | Feature  | Details |
 | ------- | ------- |
@@ -69,7 +70,7 @@ This extension performs a comprehensive set of checks on the code, before any XS
 
 ![xslt-tasks](xslt-tasks.png)
 
-XSLT transforms are configured and run as special VSCode Tasks. For more detail, see [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
+XSLT transforms are configured and run as special VSCode Tasks. For more detail, see [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html)
 
 # Release Notes
 
@@ -183,22 +184,16 @@ Code-folding currently works by indentation indicating the nesting level. So, if
 ```
 ___
 
-# Visual Studio Code Features
+# XSLT/XPath User Guide
 
-For reference, links to built-in Visual Studio Code language features that are supported/enhanced by this extension are listed below:
-   - [Auto Completion/Intellisense](https://code.visualstudio.com/docs/editor/intellisense)
-   - [Syntax Highlighting Themes](https://code.visualstudio.com/docs/getstarted/themes)
-   - [Code Formatting](https://code.visualstudio.com/docs/editor/codebasics#_formatting)
-   - [Code Folding](https://code.visualstudio.com/docs/editor/codebasics#_folding)
-   - [Snippets](https://code.visualstudio.com/docs/editor/userdefinedsnippets) for XSLT/XPath context
-   - [Code symbol outline](https://code.visualstudio.com/docs/getstarted/userinterface#_outline-view)
-   - [Goto Symbol](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
-   - [Symbol Breadcrumbs](https://code.visualstudio.com/docs/getstarted/userinterface#_breadcrumbs)
-   - [Goto Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_go-to-definition)
-   - [Peek Definition](https://code.visualstudio.com/Docs/editor/editingevolved#_peek)
-   - [VScode Tasks](https://code.visualstudio.com/Docs/editor/tasks) include custom [XSLT Tasks](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/XSLT-Tasks)
-   - [Bracket Matching](https://code.visualstudio.com/Docs/editor/editingevolved#_bracket-matching)
-   - [Errors and Warnings](https://code.visualstudio.com/Docs/editor/editingevolved#_errors-warnings) for XSLT/XPath Syntax *
+The [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) provides an introduction to features supported by this extension for XSLT and XPath developers:
+
+- [Overview](https://deltaxml.github.io/vscode-xslt-xpath/index.html)
+- [Editing XML](https://deltaxml.github.io/vscode-xslt-xpath/editing.html)
+- [Editing XSLT/XPath](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html)
+- [Code Navigation](https://deltaxml.github.io/vscode-xslt-xpath/navigation.html)
+- [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html)
+- [Settings](https://deltaxml.github.io/vscode-xslt-xpath/settings.html)
 
 ---
 
