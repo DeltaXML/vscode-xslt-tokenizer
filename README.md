@@ -1,7 +1,7 @@
 [<img src="deltaxmlLogo.png">](https://www.deltaxml.com/?utm_source=VisualStudio&utm_medium=Dev-Tools&utm_campaign=XSLT-XPATH)
 # XSLT/XPath for Visual Studio Code
 
-The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1.
+The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1. This ReadMe is a quick start guide, see the [Extension User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for more comprehensive help.
 
 ![xslt-xpath screenshot](vscode-xslt.png)
 
