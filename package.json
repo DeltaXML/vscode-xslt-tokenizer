@@ -99,7 +99,7 @@
 						"storage.type"
 					],
 					"attributeNameTest": [
-						"storage.type"
+						"variable.parameter"
 					],
 					"xslElementName": [
 						"storage.type"

@@ -8,14 +8,12 @@
                     
             version="3.0">
     
-    <xsl:import href="sat.xsl"/>   
+    <xsl:template match="*" mode="#default one two">
+        <xsl:apply-templates select="*" mode="two"/>
+    </xsl:template>
     
-    <xsl:variable name="test" as="xs:string" select="$map.new ! ?a"/>
-    
-    <xsl:variable name="map.new" as="xs:string" select="
-        let $a := map {
-                'a': ('test')
-            } 
-        return $a"/>
+    <xsl:template match="any" mode="#default">
+        <xsl:apply-templates select="six" mode="one"/>
+    </xsl:template>
     
 </xsl:stylesheet>
