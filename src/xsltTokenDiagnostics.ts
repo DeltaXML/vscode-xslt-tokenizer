@@ -2041,10 +2041,10 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.ParentLessText:
-					msg = `XML: Text found outside root element: '${tokenValue}`
+					msg = `XML: Text found outside root element: '${tokenValue}`;
 					break;
 				case ErrorType.XSLTNamesapce:
-					msg = `Expected on the root element: xmlns:xsl='http://www.w3.org/1999/XSL/Transform' prefix/namespace-uri binding`
+					msg = `Expected on the root element: xmlns:xsl='http://www.w3.org/1999/XSL/Transform' prefix/namespace-uri binding`;
 					break;
 				case ErrorType.XSLTPrefix:
 					msg = `XSLT: Undeclared prefix in name: '${tokenValue}'`;
@@ -2175,7 +2175,7 @@ export class XsltTokenDiagnostics {
 				break;
 			case 'let':
 			case 'for':
-				r = 'return'
+				r = 'return';
 				break;
 			case 'every':
 			case 'some':
@@ -2196,7 +2196,7 @@ export class XsltTokenDiagnostics {
 		switch (text) {
 			case 'let':
 			case 'for':
-				r = 'return'
+				r = 'return';
 				break;
 			case 'every':
 			case 'some':

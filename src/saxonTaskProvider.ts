@@ -24,6 +24,7 @@ interface XSLTTask extends vscode.TaskDefinition {
     xmlSource: string,
     resultPath: string,
     parameters?: XSLTParameter[],
+    features?: XSLTParameter[],
     initialTemplate?: string,
     initialMode?: string,
     classPathEntries?: string[],
@@ -127,6 +128,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             for (const param of xsltParameters) {
                 xsltParametersCommand.push(param.name + '=' + param.value);
             }
+            let saxonFeatures: XSLTParameter[] = xsltTask.features ? xsltTask.features : [];
+            let saxonFeaturesCommand: string[] = []
+            for (const feature of saxonFeatures) {
+                saxonFeaturesCommand.push('--' + feature.name + ':' + feature.value);
+            }
             let classPaths: string[] = [xsltTask.saxonJar];
             if (xsltTask.classPathEntries) {
                 classPaths = classPaths.concat(xsltTask.classPathEntries);
@@ -185,7 +191,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             // this is overriden if problemMatcher is set in the tasks.json file      
             let problemMatcher = "$saxon-xslt";
             const javaArgs = ['-cp', rawClassPathString, 'net.sf.saxon.Transform'];
-            const processExecution = new vscode.ProcessExecution('java', javaArgs.concat(commandLineArgs).concat(xsltParametersCommand));
+            const processExecution = new vscode.ProcessExecution('java', javaArgs.concat(commandLineArgs).concat(saxonFeaturesCommand).concat(xsltParametersCommand));
             let newTask = new vscode.Task(xsltTask, xsltTask.label, source, processExecution, problemMatcher);
             return newTask;
         } else {

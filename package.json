@@ -2,7 +2,7 @@
 	"name": "xslt-xpath",
 	"displayName": "XSLT/XPath for Visual Studio Code",
 	"description": "Comprehensive language support for XSLT 3.0 / XPath 3.1",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"publisher": "deltaxml",
 	"icon": "xslt-xpath.png",
 	"bugs": {
@@ -265,6 +265,28 @@
 								"value": {
 									"type": "string",
 									"description": "The xsl:param value. Special leading characters are: '?' (XPath), '!' (xsl:output), '+' (filename): See: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+								}
+							},
+							"required": [
+								"name",
+								"value"
+							]
+						},
+						"minItems": 1
+					},
+					"features": {
+						"description": "Set a feature defined in the Saxon Configuration interface. See https://www.saxonica.com/documentation10/index.html#!configuration/config-features",
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "The feature name - the last part of the Configuration name after the '/' char (name may have a uri suffix). E.g. for 'http://saxon.sf.net/feature/parserFeature?uri=' enter  'parserFeature?uri='"
+								},
+								"value": {
+									"type": "string",
+									"description": "The value for the given feature"
 								}
 							},
 							"required": [
