@@ -54,6 +54,11 @@
 	"contributes": {
 		"commands": [
 			{
+				"command": "xslt-xpath.formatUnchecked",
+				"title": "Format XML with newlines inside mixed-content",
+				"category": "XML"
+			},
+			{
 				"command": "xslt-xpath.gotoXPath",
 				"title": "Goto XPath",
 				"category": "XML"

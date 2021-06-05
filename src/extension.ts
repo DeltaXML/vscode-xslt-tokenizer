@@ -77,6 +77,32 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(activeEditor);
 	}
 
+	async function formatUnchecked() {
+		if (vscode.window.activeTextEditor) {
+			const formatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
+			formatter.indentMixedContent = true;
+			const opts = vscode.window.activeTextEditor.options;
+			const tabSize = opts.tabSize? opts.tabSize : 2;
+			const cTabSize = typeof tabSize === 'number'? tabSize : Number(tabSize); 
+			const insertSpaces = opts.insertSpaces !== undefined? opts.insertSpaces : true;
+			const cInsertSpaces = typeof insertSpaces === 'boolean'? insertSpaces : Boolean(insertSpaces); 
+			const formattingOpts: vscode.FormattingOptions = { tabSize: cTabSize, insertSpaces: cInsertSpaces};
+			const tokenSource = new vscode.CancellationTokenSource();
+			const edits = formatter.provideDocumentFormattingEdits(vscode.window.activeTextEditor.document, formattingOpts, tokenSource.token);
+			const docUri = vscode.window.activeTextEditor.document.uri;
+			for (let index = edits.length - 1; index > -1; index--) {
+				const e = edits[index];
+				const wse = new vscode.WorkspaceEdit();
+				wse.replace(docUri, e.range, e.newText);
+				let result = false;
+				await vscode.workspace.applyEdit(wse).then(success => result = success);
+				if (!result) {
+					break;
+				}
+			}			
+		}
+	}
+
 	async function showGotoXPathInputBox() {
 		let symbol: vscode.DocumentSymbol|undefined;
 		const xpath = XsltSymbolProvider.getXPathFromSelection();
@@ -153,6 +179,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, schLinkProvider));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider()));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectCurrentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Current)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectPrecedingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Previous)));

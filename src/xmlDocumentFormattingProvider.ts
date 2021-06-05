@@ -183,7 +183,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 									documenthasNewLines = lineNumber > firstStartTagLineNumber ? HasCharacteristic.yes : HasCharacteristic.no;
 									awaitingSecondTag = HasCharacteristic.no;
 								}
-								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken);
+								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken, token);
 								break;
 							case XMLCharState.rStNoAtt:
 								let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
@@ -210,7 +210,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								// outdent:
 								indent = -1;
 								newNestingLevel--;
-								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken);
+								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken, token);
 								if (this.isCloseTag) {
 									closeTagWithinText = this.closeTagPos?.line === token.line &&
 										this.closeTagPos.character >= token.startCharacter &&
@@ -495,20 +495,24 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		return result;
 	}
 
-	private shouldAddNewLine(documenthasNewLines: HasCharacteristic, prevToken: BaseToken | null): boolean {
-		let result = false
+	private shouldAddNewLine(documenthasNewLines: HasCharacteristic, prevToken: BaseToken | null, token: BaseToken): boolean {
+		let addNewLine = false;
+		
 		if (documenthasNewLines === HasCharacteristic.no) {
 			if (this.indentMixedContent) {
-				result = true;
+				addNewLine = true;
 			} else {
 				// TODO!!! check if prevtoken was a right-close-tag or a self-closing tag or comment????
 				let pct = prevToken?.charType;
-				result = pct === XMLCharState.rSelfCt || pct === XMLCharState.rSt || pct === XMLCharState.rCt ||
+				addNewLine = pct === XMLCharState.rSelfCt || pct === XMLCharState.rSt || pct === XMLCharState.rCt ||
 					pct === XMLCharState.rSelfCtNoAtt || pct === XMLCharState.rStNoAtt ||
-					pct === XMLCharState.rComment || pct === XMLCharState.rPi
+					pct === XMLCharState.rComment || pct === XMLCharState.rPi;
 			}
+		} else if (this.indentMixedContent) {
+      // add a new line if we're on the same line
+			addNewLine = prevToken?.line === token.line;
 		}
-		return result;
+		return addNewLine;
 	}
 
 	private getReplaceLineIndentTextEdit = (currentLine: vscode.TextLine, indentString: string): vscode.TextEdit => {
