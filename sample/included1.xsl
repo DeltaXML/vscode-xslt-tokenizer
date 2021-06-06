@@ -5,22 +5,27 @@
                 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
                 xmlns:math="http://www.w3.org/2005/xpath-functions/math"
                 xmlns:abc="namespace-uri.com"
+                xmlns:fn="def"
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="3.0">
     
     <xsl:import href="included3.xsl"/>
+    <xsl:import href="included5.xsl"/>
     
     <xsl:variable name="inc1p1" as="xs:integer" select="2"/>
-       
-    <xsl:template name="included" xmlns:xsl="abc" xmlns:fn="def">
+    
+    <xsl:template name="included" xmlns:xsl="abc">
                 
         <xsl:param name="inc1p1" as="xs:integer" select="1"/>
-        <xsl:variable name="inc1v1" as="xs:integer" select="2"/>
-        <xsl:function name="fn:inc1name" as="xs:string">
-            <xsl:param name="fp1" as="node()"/>        
-        </xsl:function>        
+        <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc1name(2)"/>
+        <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc5name(2)"/>
     </xsl:template> 
+    
+    <xsl:function name="fn:inc1name" as="xs:string">
+        <xsl:param name="fp1" as="node()"/>        
+    </xsl:function>
+    
     
     <xsl:function name="abc:test1" as="xs:string">
         <xsl:param name="p1" as="xs:string"/>
