@@ -83,19 +83,39 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let accumulatedHrefs: string[];
 		if (matchingParent) {
 			// TODO: get globalInstructionData for this point!
+			const localGlobals1 = {data: globalInstructionData, href: matchingParent, error: false};
+
+			const parentURL = url.pathToFileURL(matchingParent);
+			const parentURIType = vscode.Uri.parse(parentURL.toString());
+			const parentDocument = await vscode.workspace.openTextDocument(parentURIType);
+			this.xslLexer.analyse(parentDocument.getText());
+			const parentGlobalInstructionData = this.xslLexer.globalInstructionData;
+
 			importedGlobals1 = await this.fetchImportedGlobals([matchingParent]);
+			const localParentGlobals1 = {data: parentGlobalInstructionData, href: matchingParent, error: false};
+			importedGlobals1.push(localParentGlobals1);
 			accumulatedHrefs = [matchingParent];
+			const inheritHrefs = this.getImportHrefs(xsltPackages, [localGlobals1]);
+			XsltSymbolProvider.importHrefs.set(document.fileName, inheritHrefs);
 		} else {
 			const importedG = { data: globalInstructionData, href: document.fileName, error: false };
 			accumulatedHrefs = [importedG.href];
 			importedGlobals1 = [importedG];
+			const inheritHrefs = this.getImportHrefs(xsltPackages, importedGlobals1);
+			XsltSymbolProvider.importHrefs.set(document.fileName, inheritHrefs);
 		}
 
 		let topLevelHrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
-		XsltSymbolProvider.importHrefs.set(document.fileName, [...topLevelHrefs]);
-		console.log('matchingParent');
-		console.log(matchingParent);
-		console.log(importedGlobals1);
+		// console.log('XsltSymbolProvider.importHrefs:');
+		// const rows: any[] = []
+		// for (const entry of XsltSymbolProvider.importHrefs.entries()) {
+		// 	rows.push([entry[0], entry[1]]);
+		// }
+		// console.log(rows);
+		// console.log('matchingParent');
+		// console.log(matchingParent);
+		// console.log('importedGlobals1');
+		// console.log(importedGlobals1);
 
 
 
@@ -362,6 +382,28 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							existingHrefs.push(resolvedName);
 							result.push(resolvedName);
 						}
+					}
+				}
+			});
+		});
+		return result;
+	}
+
+	private getImportHrefs(xsltPackages: XsltPackage[], importedGlobals: ImportedGlobals[]): string[] {
+		let result: string[] = [];
+		const rootPath = vscode.workspace.rootPath;
+		importedGlobals.forEach((importedG) => {
+			importedG.data.forEach((data) => {
+				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
+					let resolvedName = XsltSymbolProvider.resolvePath(data.name, importedG.href);
+					result.push(resolvedName);
+				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
+					let packageLookup = xsltPackages.find((pkg) => {
+						return pkg.name === data.name;
+					});
+					if (packageLookup) {
+						let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
+						result.push(resolvedName);
 					}
 				}
 			});

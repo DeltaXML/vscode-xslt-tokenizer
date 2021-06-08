@@ -8,19 +8,21 @@
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="3.0">
+  
+  <xsl:output method="xml" indent="yes"/>
+  <xsl:mode on-no-match="shallow-copy"/>
+  
+  <xsl:template name="level5">       
+    <xsl:param name="inc5p1" as="xs:integer" select="1"/>
+    <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc1name(2)"/>
     
-    <xsl:output method="xml" indent="yes"/>
-    <xsl:mode on-no-match="shallow-copy"/>
-    
-    <xsl:template name="level5">       
-        <xsl:param name="inc5p1" as="xs:integer" select="1"/>
-        <xsl:variable name="inc5v1" as="xs:integer" select="2"/>
-        <xsl:sequence select="$inc5p1"/>
-    </xsl:template>
-    
-    <xsl:function name="fn:inc5name" as="xs:string">
-      <xsl:param name="fp1" as="node()"/>
-      <xsl:sequence select="'abc'"/>      
-    </xsl:function>
-    
+    <xsl:variable name="inc5v1" as="xs:integer" select="2"/>
+    <xsl:sequence select="$inc5p1"/>
+  </xsl:template>
+  
+  <xsl:function name="fn:inc5name" as="xs:string">
+    <xsl:param name="fp1" as="node()"/>
+    <xsl:sequence select="'abc'"/>      
+  </xsl:function>
+  
 </xsl:stylesheet>

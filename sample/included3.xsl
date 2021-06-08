@@ -14,8 +14,10 @@
     
     <xsl:template name="level3">               
         <xsl:param name="inc3p1" as="xs:integer" select="1"/>
-        <xsl:variable name="inc3v1" as="xs:integer" select="2"/>  
-        <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc5name(2)"/>       
+        <xsl:variable name="inc3v1" as="xs:integer" select="2"/>
+        <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc1name(2)"/>
+        <xsl:variable name="inc5v1" as="xs:integer" select="fn:inc5name(2)"/> 
+        <xsl:sequence select="$inc1v1, $inc3v1, $inc5v1"/>
     </xsl:template>
     
     <xsl:function name="fn:inc3name" as="xs:string">
