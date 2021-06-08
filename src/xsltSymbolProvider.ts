@@ -44,7 +44,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
 	public static documentSymbols: vscode.DocumentSymbol[] = [];
-	public importHrefs: Map<string, string[]> = new Map();
+	private importHrefs: Map<string, string[]> = new Map();
+	public static importSymbolHrefs: Map<string, string[]> = new Map();
+
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
@@ -77,10 +79,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
-		const localImportedHrefs = this.importHrefs;
+		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
 		let { importedGlobals1, accumulatedHrefs }:
 			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[]; }
-			= await XsltSymbolProvider.processTopLevelImports(this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
+			= await XsltSymbolProvider.processTopLevelImports(true, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
 
 		let topLevelHrefs = XsltSymbolProvider.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
 
@@ -160,7 +162,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
-	public static async processTopLevelImports(xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
+	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
 		const matchingParent = this.findMatchingParent(localImportedHrefs, document.fileName);
 		let importedGlobals1: ImportedGlobals[] = [];
 		let accumulatedHrefs: string[];
@@ -185,7 +187,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			accumulatedHrefs = [importedG.href];
 			importedGlobals1 = [importedG];
 			const inheritHrefs = this.getImportHrefs(xsltPackages, importedGlobals1);
-			localImportedHrefs.set(document.fileName, inheritHrefs);
+			if (update) {
+				localImportedHrefs.set(document.fileName, inheritHrefs);
+			}
 		}
 		return { importedGlobals1, accumulatedHrefs };
 	}
