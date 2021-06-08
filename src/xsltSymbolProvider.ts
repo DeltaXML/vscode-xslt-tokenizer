@@ -45,7 +45,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
 	public static documentSymbols: vscode.DocumentSymbol[] = [];
-	public static importHrefs: Map<string, string[]> = new Map();
+	public importHrefs: Map<string, string[]> = new Map();
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
@@ -53,6 +53,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.collection = collection;
 		this.languageConfig = xsltConfiguration;
 		this.docType = xsltConfiguration.docType;
+		this.importHrefs = new Map();
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
@@ -78,7 +79,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
-		const matchingParent = this.findMatchingParent(XsltSymbolProvider.importHrefs, document.fileName);
+		const matchingParent = this.findMatchingParent(this.importHrefs, document.fileName);
 		let importedGlobals1: ImportedGlobals[] = [];
 		let accumulatedHrefs: string[];
 		if (matchingParent) {
@@ -96,13 +97,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			importedGlobals1.push(localParentGlobals1);
 			accumulatedHrefs = [matchingParent];
 			const inheritHrefs = this.getImportHrefs(xsltPackages, [localGlobals1]);
-			XsltSymbolProvider.importHrefs.set(document.fileName, inheritHrefs);
+			this.importHrefs.set(document.fileName, inheritHrefs);
 		} else {
 			const importedG = { data: globalInstructionData, href: document.fileName, error: false };
 			accumulatedHrefs = [importedG.href];
 			importedGlobals1 = [importedG];
 			const inheritHrefs = this.getImportHrefs(xsltPackages, importedGlobals1);
-			XsltSymbolProvider.importHrefs.set(document.fileName, inheritHrefs);
+			this.importHrefs.set(document.fileName, inheritHrefs);
 		}
 
 		let topLevelHrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
