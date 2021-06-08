@@ -83,7 +83,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[]; }
 			= await XsltSymbolProvider.processTopLevelImports(this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
 
-		let topLevelHrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
+		let topLevelHrefs = XsltSymbolProvider.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
 
 
 		let globalsSummary0: GlobalsSummary = { globals: importedGlobals1, hrefs: accumulatedHrefs };
@@ -92,7 +92,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let processNestedGlobals = async () => {
 			let level = 0;
 			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel) {
-				globalsSummary0 = await this.processImportedGlobals(xsltPackages, globalsSummary0.globals, accumulatedHrefs, level === 0);
+				globalsSummary0 = await XsltSymbolProvider.processImportedGlobals(xsltPackages, globalsSummary0.globals, accumulatedHrefs, level === 0);
 				level++;
 			}
 		};
@@ -334,9 +334,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return currentSymbol;
 	}
 
-	private async processImportedGlobals(xsltPackages: XsltPackage[], importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {
+	public static async processImportedGlobals(xsltPackages: XsltPackage[], importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {
 		let level2Globals: Promise<ImportedGlobals[]>[] = [];
-		let level2Hrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, level1Hrefs);
+		let level2Hrefs = XsltSymbolProvider.accumulateImportHrefs(xsltPackages, importedGlobals1, level1Hrefs);
 		let newGlobals: ImportedGlobals[] = [];
 
 		level2Hrefs.forEach((href) => {
@@ -358,7 +358,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	private accumulateImportHrefs(xsltPackages: XsltPackage[], importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
+	public static accumulateImportHrefs(xsltPackages: XsltPackage[], importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
 		let result: string[] = [];
 		const rootPath = vscode.workspace.rootPath;
 		importedGlobals.forEach((importedG) => {
