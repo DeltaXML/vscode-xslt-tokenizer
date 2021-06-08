@@ -41,7 +41,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
 	private readonly collection: vscode.DiagnosticCollection | null;
-	private gp = new GlobalsProvider();
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
 	public static documentSymbols: vscode.DocumentSymbol[] = [];
@@ -61,7 +60,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result;
 	}
 
-	findMatchingParent(map: Map<string, string[]>, path: string) {
+	private static findMatchingParent(map: Map<string, string[]>, path: string) {
 		let matchingKey: string | undefined;
 		// use last entry
 		for (const entry of map.entries()) {
@@ -82,7 +81,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const localImportedHrefs = this.importHrefs;
 		let { importedGlobals1, accumulatedHrefs }:
 			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[]; }
-			= await this.processTopLevelImports(this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
+			= await XsltSymbolProvider.processTopLevelImports(this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
 
 		let topLevelHrefs = this.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
 
@@ -162,7 +161,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
-	private async processTopLevelImports(xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
+	public static async processTopLevelImports(xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
 		const matchingParent = this.findMatchingParent(localImportedHrefs, document.fileName);
 		let importedGlobals1: ImportedGlobals[] = [];
 		let accumulatedHrefs: string[];
@@ -174,9 +173,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			const parentURIType = vscode.Uri.parse(parentURL.toString());
 			const parentDocument = await vscode.workspace.openTextDocument(parentURIType);
 			xslLexer.analyse(parentDocument.getText());
-			const parentGlobalInstructionData = this.xslLexer.globalInstructionData;
+			const parentGlobalInstructionData = xslLexer.globalInstructionData;
 
-			importedGlobals1 = await this.fetchImportedGlobals([matchingParent]);
+			importedGlobals1 = await XsltSymbolProvider.fetchImportedGlobals([matchingParent]);
 			const localParentGlobals1 = { data: parentGlobalInstructionData, href: matchingParent, error: false };
 			importedGlobals1.push(localParentGlobals1);
 			accumulatedHrefs = [matchingParent];
@@ -341,7 +340,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let newGlobals: ImportedGlobals[] = [];
 
 		level2Hrefs.forEach((href) => {
-			level2Globals.push(this.fetchImportedGlobals([href]));
+			level2Globals.push(XsltSymbolProvider.fetchImportedGlobals([href]));
 		});
 		let importedGlobals2Array = await Promise.all(level2Globals);
 		importedGlobals2Array.forEach((importedGlobals2) => {
@@ -387,7 +386,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result;
 	}
 
-	private getImportHrefs(xsltPackages: XsltPackage[], importedGlobals: ImportedGlobals[]): string[] {
+	private static getImportHrefs(xsltPackages: XsltPackage[], importedGlobals: ImportedGlobals[]): string[] {
 		let result: string[] = [];
 		const rootPath = vscode.workspace.rootPath;
 		importedGlobals.forEach((importedG) => {
@@ -433,7 +432,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	private async fetchImportedGlobals(inputHrefs: string[]): Promise<ImportedGlobals[]> {
+	public static async fetchImportedGlobals(inputHrefs: string[]): Promise<ImportedGlobals[]> {
 		let result: ImportedGlobals[] = [];
 		//let inputHrefs: string[] = this.accumulateImportHrefs(globalInstructionData, existingHrefs, docHref);
 		let lastIndex = inputHrefs.length - 1;
@@ -442,7 +441,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		} else {
 			return new Promise((resolve, reject) => {
 				inputHrefs.forEach((href, index) => {
-					this.gp.provideGlobals(href).then((globals) => {
+					GlobalsProvider.provideGlobals(href).then((globals) => {
 						result.push({ href: href, data: globals.data, error: globals.error });
 						if (index === lastIndex) {
 							resolve(result);

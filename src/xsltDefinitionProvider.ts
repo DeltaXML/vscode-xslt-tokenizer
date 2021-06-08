@@ -155,7 +155,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let newGlobals: ImportedGlobals[] = [];
 
 		level2Hrefs.forEach((href) => {
-			level2Globals.push(this.fetchImportedGlobals([href]));
+			level2Globals.push(XsltSymbolProvider.fetchImportedGlobals([href]));
 		});
 		let importedGlobals2Array = await Promise.all(level2Globals);
 		importedGlobals2Array.forEach((importedGlobals2) => {
@@ -199,25 +199,5 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			});
 		});
 		return result;
-	}
-
-	private async fetchImportedGlobals(inputHrefs: string[]): Promise<ImportedGlobals[]> {
-		let result: ImportedGlobals[] = [];
-		//let inputHrefs: string[] = this.accumulateImportHrefs(globalInstructionData, existingHrefs, docHref);
-		let lastIndex = inputHrefs.length - 1;
-		if (lastIndex < 0) {
-			return result;
-		} else {
-			return new Promise((resolve, reject) => {
-				inputHrefs.forEach((href, index) => {
-					this.gp.provideGlobals(href).then((globals) => {
-						result.push({href: href, data: globals.data, error: globals.error});
-						if (index === lastIndex) {
-							resolve(result);
-						}
-					});
-				});
-			});
-		}
 	}
 }

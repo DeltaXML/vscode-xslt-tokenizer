@@ -11,7 +11,7 @@ export interface GlobalImportData {
 
 export class GlobalsProvider {
 
-	public async provideGlobals(href: string): Promise<GlobalImportData> {
+	public static async provideGlobals(href: string): Promise<GlobalImportData> {
 		let lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
 		let data: GlobalInstructionData[] = [];
 
