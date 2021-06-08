@@ -52,7 +52,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.collection = collection;
 		this.languageConfig = xsltConfiguration;
 		this.docType = xsltConfiguration.docType;
-		this.importHrefs = new Map();
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {

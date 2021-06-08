@@ -28,6 +28,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	private docType: DocumentTypes;
 	private schemaData: SchemaData|undefined;
 	private languageConfig: LanguageConfiguration;
+	public importHrefs: Map<string, string[]> = new Map();
+
 
 	public constructor(xsltConfiguration: LanguageConfiguration) {
 		this.languageConfig = xsltConfiguration;
@@ -55,9 +57,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
-		let importedG: ImportedGlobals = {data: globalInstructionData, href: document.fileName, error: false};
-		let importedGlobals1 = [importedG];
-		let accumulatedHrefs: string[] = [importedG.href];
+		const localImportedHrefs = this.importHrefs;
+		let { importedGlobals1, accumulatedHrefs }:
+			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[]; }
+			= await XsltSymbolProvider.processTopLevelImports(this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
 
 
 		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs};
