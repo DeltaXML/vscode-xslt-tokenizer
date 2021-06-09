@@ -6,6 +6,7 @@ import * as path from 'path';
 import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
+import { BaseToken } from './xpLexer';
 
 interface ImportedGlobals {
 	href: string,
@@ -168,6 +169,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let accumulatedHrefs: string[];
 		if (matchingParent) {
 			// TODO: get globalInstructionData for this point!
+			const token: BaseToken = {
+				line: 1,
+				startCharacter: 0,
+				length: matchingParent?.length,
+				value: matchingParent,
+				tokenType: 0
+			}
+			const importInstruction: GlobalInstructionData = {
+				type: GlobalInstructionType.Import,
+				name: matchingParent,
+				token: token,
+				idNumber: 0
+			}
 			const localGlobals1 = { data: globalInstructionData, href: matchingParent, error: false };
 
 			const parentURL = url.pathToFileURL(matchingParent);
