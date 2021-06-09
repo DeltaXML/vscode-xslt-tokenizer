@@ -182,29 +182,18 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				token: token,
 				idNumber: 0
 			}
-			const localGlobals1 = { data: globalInstructionData, href: matchingParent, error: false };
 
-			const parentURL = url.pathToFileURL(matchingParent);
-			const parentURIType = vscode.Uri.parse(parentURL.toString());
-			const parentDocument = await vscode.workspace.openTextDocument(parentURIType);
-			xslLexer.analyse(parentDocument.getText());
-			const parentGlobalInstructionData = xslLexer.globalInstructionData;
+			globalInstructionData.push(importInstruction);
+		} 
 
-			importedGlobals1 = await XsltSymbolProvider.fetchImportedGlobals([matchingParent]);
-			const localParentGlobals1 = { data: parentGlobalInstructionData, href: matchingParent, error: false };
-			importedGlobals1.push(localParentGlobals1);
-			accumulatedHrefs = [matchingParent];
-			// const inheritHrefs = this.getImportHrefs(xsltPackages, [localGlobals1]);
-			// localImportedHrefs.set(document.fileName, inheritHrefs);
-		} else {
-			const importedG = { data: globalInstructionData, href: document.fileName, error: false };
-			accumulatedHrefs = [importedG.href];
-			importedGlobals1 = [importedG];
-			const inheritHrefs = this.getImportHrefs(xsltPackages, importedGlobals1);
-			if (update) {
-				localImportedHrefs.set(document.fileName, inheritHrefs);
-			}
+		const importedG = { data: globalInstructionData, href: document.fileName, error: false };
+		accumulatedHrefs = [importedG.href];
+		importedGlobals1 = [importedG];
+		const inheritHrefs = this.getImportHrefs(xsltPackages, importedGlobals1);
+		if (update && !matchingParent) {
+			localImportedHrefs.set(document.fileName, inheritHrefs);
 		}
+		
 		return { importedGlobals1, accumulatedHrefs };
 	}
 
