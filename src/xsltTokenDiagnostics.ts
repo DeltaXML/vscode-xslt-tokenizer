@@ -1336,7 +1336,7 @@ export class XsltTokenDiagnostics {
 								skipValidation = token.value === '@xml';
 								if (!skipValidation && token.value === '@') {
 									let nextToken = allTokens.length > index + 1 ? allTokens[index + 1] : null;
-									skipValidation = nextToken ? token.value === '@' && nextToken.value === '*' : false;
+									skipValidation = nextToken ? token.value === '@' && (nextToken.value === '*' || nextToken.value === '*:') : false;
 								}
 							}
 							if (!skipValidation) {
