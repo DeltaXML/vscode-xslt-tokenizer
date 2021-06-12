@@ -147,7 +147,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const foundDoc = docs.find(doc => doc.uri.toString() === uri);
 		if (!useCachedSymbols && foundDoc) {
 			const sp = new XsltSymbolProvider(XMLConfiguration.configuration, null);
-			const newSymbols = await sp.getDocumentSymbols(foundDoc);
+			const newSymbols = await sp.getDocumentSymbols(foundDoc, false);
 			if (newSymbols) {
 				cachedSymbols = newSymbols;
 				cachedSymbolsDocUri = foundDoc.uri;

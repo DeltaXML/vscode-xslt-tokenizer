@@ -58,7 +58,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
-		const result = this.getDocumentSymbols(document);
+		const result = this.getDocumentSymbols(document, true);
 		return result;
 	}
 
@@ -73,8 +73,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return matchingKey;
 	}
 
-	public async getDocumentSymbols(document: vscode.TextDocument): Promise<vscode.DocumentSymbol[] | undefined> {
+	public async getDocumentSymbols(document: vscode.TextDocument, onlyActiveDocument: boolean): Promise<vscode.DocumentSymbol[] | undefined> {
 		XsltSymbolProvider.documentSymbols = [];
+		if (onlyActiveDocument && vscode.window.activeTextEditor) {
+			if (document.fileName !== vscode.window.activeTextEditor.document.fileName) {
+				return [];
+			}
+		}
 		const allTokens = this.xslLexer.analyse(document.getText());
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
