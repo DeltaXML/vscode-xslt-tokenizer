@@ -76,11 +76,18 @@ export class DocumentChangeHandler {
 			}
 		}
 		// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
-		if (triggerSuggest || activeChange.text === '(' || activeChange.text === '/'  ||  activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
+		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/')  ||  activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
 			// console.log('triggering...');
-			setTimeout(() => {
-				vscode.commands.executeCommand('editor.action.triggerSuggest');
-			}, 10);
+			let isCloseTagFeature = false;
+			if (activeChange.text === '/') {
+				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
+				isCloseTagFeature = prevChar === '<';
+			}
+			if (!isCloseTagFeature) {
+				setTimeout(() => {
+					vscode.commands.executeCommand('editor.action.triggerSuggest');
+				}, 10);
+			}
 			return;
 		}
 		if (this.lastChangePerformed === null || !this.changesAreEqual(this.lastChangePerformed, activeChange)) {
