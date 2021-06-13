@@ -42,6 +42,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **XML Formatting**       | Indents XML elements, attributes and multi-line attribute-values
 | **XML Tree-view**        | Outline of XML elements and attributes in document
 | **XML Breadcrumbs**      | Shows ancestors of current XML node
+| **Auto Tag-Close**       | Pressing `</` results in the auto-completion for the close tag of the current element
 | **Tag Rename**           | When start-tag is modified, corresponding end-tag is also updated
 | **Tag Self-Close**       | Convert start-tag to self-closed tag by inserting `/` before  `>` (end-tag is removed) 
 | **Comment Command**    | keyboard hortcut: `⌘/` - convert lines to an XML comment
