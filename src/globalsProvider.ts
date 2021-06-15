@@ -3,6 +3,7 @@ import { XslLexerLight } from "./xslLexerLight";
 import * as vscode from 'vscode'
 import {XSLTLightConfiguration} from './languageConfigurations';
 import { GlobalInstructionData } from "./xslLexer";
+import * as fs from 'fs';
 
 export interface GlobalImportData {
 	data: GlobalInstructionData[];
@@ -20,8 +21,8 @@ export class GlobalsProvider {
 		}
 
 		try {
-			const doc = await vscode.workspace.openTextDocument(href);
-			const text = doc.getText();
+
+			const text = fs.readFileSync(href).toString('utf-8');
 			data = lexer.analyseLight(text);
 			return {data: data, error: false};
 		} catch (e) {
@@ -29,17 +30,17 @@ export class GlobalsProvider {
 		}
 	}
 
-	public static async fileExists(file: string): Promise<boolean> {
-		let exists = false;
-		try {
-			await vscode.workspace.openTextDocument(file);
-			exists = true;
-		} catch (e) {
-			// do nothing
-		}
-		return exists;
+	public static fileExists(file: string): Promise<boolean> {
+		return new Promise<boolean>((resolve, _reject) => {
+			fs.exists(file, (exists) => {
+				if (exists) {
+					fs.stat(file, (err, stats) => {
+						resolve(stats.isFile());
+					});
+				} else {
+					resolve(exists);
+				}
+			});
+		});
 	}
 }
-
-
-
