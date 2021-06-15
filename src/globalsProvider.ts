@@ -21,7 +21,8 @@ export class GlobalsProvider {
 		}
 
 		try {
-
+			// TODO: USE VSCODE API (but it needs a URI not a filepath) e.g. 
+			//const t = vscode.workspace.fs.readFile
 			const text = fs.readFileSync(href).toString('utf-8');
 			data = lexer.analyseLight(text);
 			return {data: data, error: false};
