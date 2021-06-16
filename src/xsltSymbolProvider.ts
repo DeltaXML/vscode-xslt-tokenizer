@@ -195,8 +195,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		accumulatedHrefs = [importedG.href];
 		importedGlobals1 = [importedG];
 		const inheritHrefs = this.getImportHrefs(xsltPackages, importedGlobals1);
-		if (update && !matchingParent) {
-			localImportedHrefs.set(document.fileName, inheritHrefs);
+		if (update) {
+			if (matchingParent) {
+				const newInheritHres = localImportedHrefs.get(matchingParent)?.concat(inheritHrefs);
+				if (newInheritHres) {
+					localImportedHrefs.set(matchingParent, newInheritHres);
+				}
+			} else {
+				localImportedHrefs.set(document.fileName, inheritHrefs);
+			}
 		}
 		
 		return { importedGlobals1, accumulatedHrefs };
