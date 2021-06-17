@@ -1077,7 +1077,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lEntity:
                             if (this.entityContext !== EntityPosition.text) {
-                                this.addCharTokenToResult(tokenStartChar - 2, (this.lineCharCount + 1) - tokenStartChar,
+                                this.addCharTokenToResult(tokenStartChar, (this.lineCharCount - 1) - tokenStartChar,
                                     XSLTokenLevelState.attributeValue, result, nextState);
                             }
                             break;
