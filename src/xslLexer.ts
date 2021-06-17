@@ -1090,11 +1090,11 @@ export class XslLexer {
                                     break;
                                 case EntityPosition.attrSq:
                                     nextState = XMLCharState.lSq;
-                                    this.lineCharCount++;
+                                    avtExit = true;
                                     break;
                                 case EntityPosition.attrDq:
                                     nextState = XMLCharState.lDq;
-                                    this.lineCharCount++;
+                                    avtExit = true;
                                     break;
                             }
                             break;
