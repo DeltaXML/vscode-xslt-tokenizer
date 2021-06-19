@@ -45,7 +45,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Auto Tag-Close**       | Pressing `</` results in the auto-completion for the close tag of the current element
 | **Tag Rename**           | When start-tag is modified, corresponding end-tag is also updated
 | **Tag Self-Close**       | Convert start-tag to self-closed tag by inserting `/` before  `>` (end-tag is removed) 
-| **Comment Command**    | keyboard hortcut: `⌘/` - convert lines to an XML comment
+| **Comment Command**    | keyboard shortcut: `⌘/` - convert lines to an XML comment
 | **XML Snippets**         | For XML elements, attributes, processing-instrucitons and comments
 |||
 
