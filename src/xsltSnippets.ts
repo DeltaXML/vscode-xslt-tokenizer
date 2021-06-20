@@ -5,7 +5,8 @@ export interface Snippet {
 }
 
 export class XSLTSnippets {
-	static xsltRootTags: Snippet[] = [{
+	static xsltRootTags: Snippet[] = [
+		{
 		name: 'xsl:stylesheet',
 		description: 'xsl:stylesheet` snippet for identity transform ',
 		body:
@@ -31,7 +32,38 @@ export class XSLTSnippets {
 \t$0
 
 </xsl:stylesheet>`
-	}];
+	},
+	{
+		name: 'xsl:package',
+		description: 'xsl:package` snippet - root element and required attributes',
+		body:
+			`?xml version="1.0" encoding="UTF-8"?>
+<xsl:package xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+						 xmlns:xs="http://www.w3.org/2001/XMLSchema"
+						 xmlns:array="http://www.w3.org/2005/xpath-functions/array"
+						 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
+						 xmlns:math="http://www.w3.org/2005/xpath-functions/math"
+						 name="\${1:package-uri}"
+						 package-version="1.0"
+						 exclude-result-prefixes="#all"
+						 expand-text="yes"
+						 version="3.0">
+
+\t<xsl:output method="xml" indent="yes"/>
+\t<xsl:mode name="\${2:mode-name}" streamable="false" on-no-match="shallow-copy" visibility="public"/>
+
+
+\t<xsl:template match="\${3:/*}" mode="\$2">
+\t\t<xsl:copy>
+\t\t\t<xsl:apply-templates select="\${4:@*, node()}" mode="#current"/>
+\t\t</xsl:copy>
+\t</xsl:template>
+
+\t$0
+
+</xsl:package>`
+	},
+];
 	static xsltXMLNS: Snippet[] = [
 		{
 			name: 'xmlns:xsl',
