@@ -114,7 +114,8 @@ export class XSLTHoverProvider implements HoverProvider {
 
 		if (code === 9 || code === 10 || code === 12 || code === 32 ) {
 			return CharType.whitespace;
-		} else if (code === 40) {
+		} else if (code === 35 || code === 40) {
+			// the '#' char or '(' char
 			return CharType.openBracket;
 		} else if (code === 58) {
 			return CharType.colon;
