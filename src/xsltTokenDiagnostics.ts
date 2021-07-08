@@ -1382,7 +1382,11 @@ export class XsltTokenDiagnostics {
 							let nsType = xsltPrefixesToURIs.get(tParts[0]);
 							if (nsType !== undefined) {
 								if (nsType === XSLTnamespaces.XMLSchema) {
-									isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
+									if (tParts[1] === 'numeric') {
+										isValidType = true;
+									} else {
+										isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
+									}
 								}
 							}
 						}
