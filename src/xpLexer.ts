@@ -101,7 +101,7 @@ export enum ModifierState {
 }
 
 export class Data {
-    public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|'];
+    public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%'];
 
     public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
 
