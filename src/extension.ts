@@ -8,13 +8,13 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
-import { XPathLexer, ExitCondition, LexPosition, Token } from './xpLexer';
+import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration } from './languageConfigurations';
 import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
-import { XslLexer, LanguageConfiguration, DocumentTypes } from './xslLexer';
+import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import { on } from 'process';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
@@ -257,11 +257,39 @@ export function activate(context: vscode.ExtensionContext) {
 
 }
 
-class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
+export class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 	private xpLexer = new XPathLexer();
 	private collection: vscode.DiagnosticCollection;
 	public constructor(collection: vscode.DiagnosticCollection) {
 		this.collection = collection;
+	}
+
+	private static globalInstructionData: GlobalInstructionData[] = [];
+
+	public static getGlobalInstructionData() {
+		return XPathSemanticTokensProvider.globalInstructionData;
+	}
+
+	public static setVariableNames = (names: string[]) => {
+		const data: GlobalInstructionData[] = [];
+
+		names.forEach((name) => {
+			const token: BaseToken = {
+				line: 1,
+				startCharacter: 0,
+				length: 1,
+				value: name,
+				tokenType: 0
+			}
+			const variableInstruction: GlobalInstructionData = {
+				type: GlobalInstructionType.Variable,
+				name: name,
+				token: token,
+				idNumber: 0
+			}
+			data.push(variableInstruction);
+		});
+		XPathSemanticTokensProvider.globalInstructionData = data;
 	}
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
@@ -277,7 +305,7 @@ class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvid
 	}
 
 	private reportProblems(allTokens: Token[], document: vscode.TextDocument) {
-		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, [], []);
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, XPathSemanticTokensProvider.globalInstructionData, []);
 		if (diagnostics.length > 0) {
 			this.collection.set(document.uri, diagnostics);
 		} else {

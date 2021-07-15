@@ -7,7 +7,8 @@ import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
 import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
-import { ExitCondition, LexPosition, XPathLexer } from './xpLexer';
+import { BaseToken, ExitCondition, LexPosition, XPathLexer } from './xpLexer';
+import { XPathSemanticTokensProvider } from './extension';
 
 interface ImportedGlobals {
 	href: string,
@@ -47,11 +48,16 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Location | undefined> {
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 
-		let allTokens = this.docType === DocumentTypes.XPath ?
-			this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition) :
-			this.xslLexer.analyse(document.getText());
+		let allTokens: BaseToken[] = [];
+		let globalInstructionData: GlobalInstructionData[] = [];
+		if (this.docType === DocumentTypes.XPath) {
+			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
+			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
+		} else {
+			allTokens = this.xslLexer.analyse(document.getText());
+			globalInstructionData = this.xslLexer.globalInstructionData;
+		}
 
-		const globalInstructionData = this.xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
@@ -100,11 +106,17 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
 		const keepNameTests = true;
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+
+		let allTokens: BaseToken[] = [];
+		let globalInstructionData: GlobalInstructionData[] = [];
+		if (this.docType === DocumentTypes.XPath) {
+			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
+			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
+		} else {
+			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
+			globalInstructionData = this.xslLexer.globalInstructionData;
+		}
 		
-		let allTokens = this.docType === DocumentTypes.XPath ?
-			this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition) :
-			this.xslLexer.analyse(document.getText(), keepNameTests);
-		const globalInstructionData = this.xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
