@@ -139,12 +139,12 @@ export function activate(context: vscode.ExtensionContext) {
 	let cachedSymbols: vscode.DocumentSymbol[] = [];
 	let cachedSymbolsDocUri = vscode.Uri.parse('file:/empty');
 
-	async function getSymbolFromXPath(args: any[]) {
+	async function getSymbolFromXPath(args: any[], textDocument?: vscode.TextDocument) {
 		const { xpath, uri } = args[0];
 		const docUri = vscode.Uri.parse(uri);
 		const useCachedSymbols = cachedSymbolsDocUri === docUri;
 		const docs = vscode.workspace.textDocuments;
-		const foundDoc = docs.find(doc => doc.uri.toString() === uri);
+		const foundDoc = textDocument? textDocument : docs.find(doc => doc.uri.toString() === uri);
 		if (!useCachedSymbols && foundDoc) {
 			const sp = new XsltSymbolProvider(XMLConfiguration.configuration, null);
 			const newSymbols = await sp.getDocumentSymbols(foundDoc, false);
@@ -165,9 +165,12 @@ export function activate(context: vscode.ExtensionContext) {
 		let doc = await vscode.workspace.openTextDocument(docUri);
     const viewColumn = vscode.ViewColumn.Beside;
 		const keepFocus = true;
-    await vscode.window.showTextDocument(doc, viewColumn, keepFocus);
-		selectTextFromXPath(xpath);
-
+    const editor = await vscode.window.showTextDocument(doc, viewColumn, keepFocus);
+		const symbol = await getSymbolFromXPath(args, doc);
+		if (symbol) {
+			editor.selection = new vscode.Selection(symbol.range.start, symbol.range.end);
+			XsltSymbolProvider.selectTextWithSymbol(symbol);
+		}
 	}
 
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
