@@ -212,6 +212,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol | undefined) {
 		if (DocumentChangeHandler.lastActiveXMLEditor && symbol) {
 			const range = symbol.range;
+			if (vscode.window.activeTextEditor) {
+				vscode.window.activeTextEditor.revealRange(range);
+			}
 			DocumentChangeHandler.lastActiveXMLEditor.selection = new vscode.Selection(range.start, range.end);
 		}
 	}
