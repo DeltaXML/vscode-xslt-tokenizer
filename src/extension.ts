@@ -159,6 +159,17 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
+	async function selectXPathInDocument(args: any[]) {
+		const { xpath, uri } = args[0];
+		const docUri = vscode.Uri.parse(uri);
+		let doc = await vscode.workspace.openTextDocument(docUri);
+    const viewColumn = vscode.ViewColumn.Beside;
+		const keepFocus = true;
+    await vscode.window.showTextDocument(doc, viewColumn, keepFocus);
+		selectTextFromXPath(xpath);
+
+	}
+
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
@@ -188,6 +199,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectParentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Parent)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPath', (args) => selectTextFromXPath(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPathInDocument', (...args) => selectXPathInDocument(args)));
+
 
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt' }, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
