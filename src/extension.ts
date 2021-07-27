@@ -169,7 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const symbol = await getSymbolFromXPath(args, doc);
 		if (symbol) {
 			editor.selection = new vscode.Selection(symbol.range.start, symbol.range.end);
-			XsltSymbolProvider.selectTextWithSymbol(symbol);
+			editor.revealRange(symbol.range);
 		}
 	}
 
