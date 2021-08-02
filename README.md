@@ -29,6 +29,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
 | **Variable watcher**      | `xsl:message` instruction for local XSLT/XPath parameters/variables generated on auto-completion
+| **XPath Tool**            | Experiment with XPath expressions with DeltaXML's companion [XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook)
 |||
 
    \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
