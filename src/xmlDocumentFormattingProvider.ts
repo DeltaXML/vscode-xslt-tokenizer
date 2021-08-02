@@ -401,7 +401,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 											complexStateStack[complexStateStack.length - 1][2] = false;
 										}
 									}
-									console.log('comma');
 								}
 								break;
 						}
