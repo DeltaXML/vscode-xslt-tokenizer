@@ -151,7 +151,7 @@ export class XsltTokenDiagnostics {
 						}
 						return valid;
 					} else if (isSchematron) {
-						if (prefix === 'sch' ) {
+						if (prefix === 'sch') {
 							if (elementStack?.length === 0) {
 								valid = name === 'sch:schema' ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 							} else {
@@ -420,9 +420,9 @@ export class XsltTokenDiagnostics {
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						const isXsltElementName = tagElementName.startsWith('xsl:');
 						const isSchElementName = tagElementName.startsWith('sch:');
-						const lookupElementName = isSchematron && !isXsltElementName && !isSchElementName? 'sch:' + tagElementName : tagElementName;
-						const realSchemaQuery = xsltSchemaQuery && tagElementName.startsWith('xsl:')? xsltSchemaQuery : schemaQuery;
-						
+						const lookupElementName = isSchematron && !isXsltElementName && !isSchElementName ? 'sch:' + tagElementName : tagElementName;
+						const realSchemaQuery = xsltSchemaQuery && tagElementName.startsWith('xsl:') ? xsltSchemaQuery : schemaQuery;
+
 						[tagElementChildren, tagElementAttributes] = XsltTokenDiagnostics.getExpectedElementNames(lookupElementName, realSchemaQuery, elementStack);
 
 						if (tagType === TagType.Start) {
@@ -519,7 +519,7 @@ export class XsltTokenDiagnostics {
 								let tunnelAttributeFound = false;
 								const checkPendingErrors = pendingTemplateParamErrors.length !== 0;
 								tagAttributeNames.forEach((attName) => {
-									if ( checkPendingErrors && !tunnelAttributeFound) {
+									if (checkPendingErrors && !tunnelAttributeFound) {
 										tunnelAttributeFound = attName === 'tunnel';
 									}
 									let validateResult = XsltTokenDiagnostics.validateName(attName, attrValType, isSchematron, inheritedPrefixes, elementStack, tagElementAttributes);
@@ -573,7 +573,7 @@ export class XsltTokenDiagnostics {
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
 									let newVariablesList = elementStack.length === 0 ? globalVariableData : inScopeVariablesList;
-									const stackElementChildren = isSchematron? tagElementChildren : attrValType === ValidationType.XMLAttribute && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : tagElementChildren;
+									const stackElementChildren = isSchematron ? tagElementChildren : attrValType === ValidationType.XMLAttribute && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : tagElementChildren;
 									//let newVariablesList = inScopeVariablesList;
 
 									const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
@@ -713,7 +713,7 @@ export class XsltTokenDiagnostics {
 									token['error'] = ErrorType.XMLDupllicateAtt;
 									token['value'] = attNameText;
 									problemTokens.push(token);
-								} 
+								}
 								tagXmlnsNames.push(attNameText);
 								if (attNameText.length > 6) {
 									let prefix = attNameText.substring(6);
@@ -1056,7 +1056,7 @@ export class XsltTokenDiagnostics {
 										if (valueText === 'else') {
 											preXPathVariable = poppedData.preXPathVariable;
 										} else {
-											// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c
+											// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c.
 											preXPathVariable = false;
 										}
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
@@ -1500,7 +1500,7 @@ export class XsltTokenDiagnostics {
 		let expectedAttributes: string[] = [];
 
 		if (parentName.startsWith('xsl') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT ||
-		   (parentName.startsWith('sch') && schemaQuery && schemaQuery.docType === DocumentTypes.SCH)) {
+			(parentName.startsWith('sch') && schemaQuery && schemaQuery.docType === DocumentTypes.SCH)) {
 			const allExpected = schemaQuery.getExpected(parentName);
 			const nameDetailArray = allExpected.elements;
 			expectedElements = nameDetailArray.map(item => item[0]);

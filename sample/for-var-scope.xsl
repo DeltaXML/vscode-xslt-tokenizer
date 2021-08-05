@@ -5,7 +5,7 @@
 	
 	<xsl:variable name="test1" as="item()*" 
 		select="
-			for $a in 1 return $a, 2
+		for $a in 1, $b in 2 return $a, $b
 		"/>
 	
 	<xsl:template match="/" mode="#default">
