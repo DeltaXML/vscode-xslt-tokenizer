@@ -166,7 +166,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('-dtd:' + propValue);
                         break;
                     case 'enableAssertions':
-                        commandLineArgs.push('-ea' + propValue);
+                        commandLineArgs.push('-ea:' + propValue);
                         break;
                     case 'expandValues':
                         commandLineArgs.push('-expand:' + propValue);
