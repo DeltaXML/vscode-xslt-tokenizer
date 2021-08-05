@@ -3,13 +3,19 @@
 
 The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1. This ReadMe is a quick start guide, see the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for more comprehensive help.
 
-![xslt-xpath screenshot](vscode-xslt.png)
+---
+
+<p align="center">
+  <em>View of XSLT with syntax highlighting, formatting,problem reporting and node-outline:</em>
+  <img alt="XSLT Editor" src="vscode-xslt.png" style="display:block; padding:0; margin:0">
+</p>
 
 # XSLT/XPath Features
 
 | Feature  | Details |
 | ------- | ------- |
-| **XSLT 3.0/XPath 3.1**    | See W3C specifications for [XSLT 3.0](https://www.w3.org/TR/xslt-30/) and [XPath 3.1](https://www.w3.org/TR/xpath-31/)
+| **XSLT 3.0**    | Full language support for [XSLT 3.0](https://www.w3.org/TR/xslt-30/) and [XPath 3.1](https://www.w3.org/TR/xpath-31/)
+| **XPath 3.1**            | Quickly test XPaths against current XML file *(requires DeltaXML's companion [XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook))*
 | **Syntax Highlighting**   | Fast and precise - using [Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
 | **Code Formatting**       | XSLT instruction elements, attributes and multi-line XPath expressions
 | **Code Diagnostics\***      | For XPath Syntax, XSLT Instructions, variable/param references, all XPath symbols
@@ -29,7 +35,6 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
 | **Variable watcher**      | `xsl:message` instruction for local XSLT/XPath parameters/variables generated on auto-completion
-| **XPath Tool**            | Experiment with XPath expressions with DeltaXML's companion [XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook)
 |||
 
    \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
