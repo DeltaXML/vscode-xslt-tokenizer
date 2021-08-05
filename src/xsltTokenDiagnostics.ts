@@ -395,8 +395,13 @@ export class XsltTokenDiagnostics {
 				if (xpathStack.length > 0) {
 					// report last issue with nesting in each xpath:
 					let lastLeftOver = xpathStack[xpathStack.length - 1].token;
-					lastLeftOver['error'] = ErrorType.BracketNesting;
-					problemTokens.push(lastLeftOver);
+					const tv = lastLeftOver.value;
+					if (tv !== 'return' && tv !== 'else' && tv !== 'satisfies') {
+						lastLeftOver['error'] = ErrorType.BracketNesting;
+						problemTokens.push(lastLeftOver);
+					} else {
+						// not required to check if same as prev token?
+					}
 				};
 				xpathStack = [];
 				preXPathVariable = false;
@@ -1034,7 +1039,7 @@ export class XsltTokenDiagnostics {
 								}
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
-								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
+								xpathStack.push({ token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
 								break;
 							case 'then':
 								if (ifThenStack.length > 0) {
@@ -1043,29 +1048,30 @@ export class XsltTokenDiagnostics {
 									token.error = ErrorType.XPathUnexpected;
 									problemTokens.push(token);
 								}
-								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
+								xpathStack.push({ token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
 								inScopeXPathVariablesList = [];
 								break;
 							case 'return':
 							case 'satisfies':
 							case 'else':
 								if (xpathStack.length > 0) {
-									let poppedData = xpathStack.pop();
-									if (poppedData) {
-										inScopeXPathVariablesList = poppedData.variables;
+									let peekedStack = xpathStack[xpathStack.length - 1]
+									if (peekedStack) {
 										if (valueText === 'else') {
-											preXPathVariable = poppedData.preXPathVariable;
+											preXPathVariable = peekedStack.preXPathVariable;
 										} else {
 											// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c.
 											preXPathVariable = false;
 										}
-										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
-										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(poppedData.token.value);
+										xpathVariableCurrentlyBeingDefined = peekedStack.xpathVariableCurrentlyBeingDefined;
+										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(peekedStack.token.value);
 										if (!token.error && matchingToken !== token.value) {
 											token['error'] = ErrorType.XPathUnexpected;
 											problemTokens.push(token);
-											poppedData.token['error'] = ErrorType.BracketNesting;
-											problemTokens.push(poppedData.token);
+											peekedStack.token['error'] = ErrorType.BracketNesting;
+											problemTokens.push(peekedStack.token);
+										} else {
+											peekedStack.token = token;
 										}
 									} else {
 										inScopeXPathVariablesList = [];
@@ -1285,6 +1291,20 @@ export class XsltTokenDiagnostics {
 										}
 										if (xp.isRangeVar) {
 											preXPathVariable = xp.preXPathVariable;
+										}
+										const sv = xp.token.value;
+										if (sv === 'return' || sv === 'else' || sv === 'satisfies' ) {
+											let poppedData = xpathStack.pop();
+											if (poppedData) {
+												inScopeXPathVariablesList = poppedData.variables;
+												if (sv === 'else') {
+													preXPathVariable = poppedData.preXPathVariable;
+												} else {
+													// todo: if after a return AND a ',' prePathVariable = true; see $pos := $c.
+													preXPathVariable = false;
+												}
+												xpathVariableCurrentlyBeingDefined = false;
+											}
 										}
 									}
 									xpathVariableCurrentlyBeingDefined = false;
