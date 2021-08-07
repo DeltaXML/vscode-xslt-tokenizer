@@ -394,14 +394,20 @@ export class XsltTokenDiagnostics {
 				xpathVariableCurrentlyBeingDefined = false;
 				if (xpathStack.length > 0) {
 					// report last issue with nesting in each xpath:
-					let lastLeftOver = xpathStack[xpathStack.length - 1].token;
-					const tv = lastLeftOver.value;
-					if (tv !== 'return' && tv !== 'else' && tv !== 'satisfies') {
-						lastLeftOver['error'] = ErrorType.BracketNesting;
-						problemTokens.push(lastLeftOver);
-					} else {
-						// not required to check if same as prev token?
+					let errorToken: BaseToken | undefined;
+					for (let index = xpathStack.length - 1; index > -1; index--) {
+						const trailingToken = xpathStack[index].token;
+						const tv = trailingToken.value;
+						const allowedToken = (tv === 'return' || tv === 'else' || tv === 'satisfies');
+						if (!allowedToken) {
+							errorToken = trailingToken;
+							break;
+						}
 					}
+					if (errorToken) {
+						errorToken['error'] = ErrorType.BracketNesting;
+						problemTokens.push(errorToken);
+					} 
 				};
 				xpathStack = [];
 				preXPathVariable = false;
@@ -1054,6 +1060,21 @@ export class XsltTokenDiagnostics {
 							case 'return':
 							case 'satisfies':
 							case 'else':
+								if (xpathStack.length > 1) {
+									let deleteCount = 0;
+									for (let i = xpathStack.length - 1; i > -1; i--) {
+										const sv = xpathStack[i].token.value;
+										if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
+											deleteCount++;
+										} else {
+											break;
+										}
+									}
+									if (deleteCount > 0) {
+										xpathStack.splice(xpathStack.length - deleteCount);
+									}
+								}
+
 								if (xpathStack.length > 0) {
 									let peekedStack = xpathStack[xpathStack.length - 1]
 									if (peekedStack) {
@@ -1064,8 +1085,10 @@ export class XsltTokenDiagnostics {
 											preXPathVariable = false;
 										}
 										xpathVariableCurrentlyBeingDefined = peekedStack.xpathVariableCurrentlyBeingDefined;
-										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(peekedStack.token.value);
-										if (!token.error && matchingToken !== token.value) {
+										const pv = peekedStack.token.value;
+										const isAllowed = (pv === 'return' || pv === 'else' || pv === 'satisfies');
+										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(pv);
+										if (!token.error && !isAllowed && matchingToken !== token.value) {
 											token['error'] = ErrorType.XPathUnexpected;
 											problemTokens.push(token);
 											peekedStack.token['error'] = ErrorType.BracketNesting;
@@ -1252,6 +1275,22 @@ export class XsltTokenDiagnostics {
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
+
+								if (xpathStack.length > 1) {
+									let deleteCount = 0;
+									for (let i = xpathStack.length - 1; i > -1; i--) {
+										const sv = xpathStack[i].token.value;
+										if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
+											deleteCount++;
+										} else {
+											break;
+										}
+									}
+									if (deleteCount > 0) {
+										xpathStack.splice(xpathStack.length - deleteCount);
+									}
+								}
+
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
 									if (poppedData) {
