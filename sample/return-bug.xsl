@@ -8,7 +8,7 @@
 																expand-text="yes"
 																version="3.0">
 	
-	<!-- <xsl:variable name="test"
+	<xsl:variable name="test"
 						select="
 						if (2) then (let $colspecs := 1, $b := 2 return $colspecs, $b) else 0
 						"/>  />	
@@ -26,7 +26,7 @@
 	<xsl:variable name="test4"
 		select="
 			if (2) then 3 else if (4) then 5 else 6
-		"/>  -->
+		"/> 
 	
 	<xsl:variable name="new-diff-col-count" as="xs:integer" 
 		select="

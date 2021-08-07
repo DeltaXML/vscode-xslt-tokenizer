@@ -1331,6 +1331,21 @@ export class XsltTokenDiagnostics {
 										if (xp.isRangeVar) {
 											preXPathVariable = xp.preXPathVariable;
 										}
+										let nonBracketedThen = -1;
+										for (let i = xpathStack.length - 1; i > -1; i--) {
+											const xpathItem = xpathStack[i].token;
+											const val = xpathItem.value;
+											if (!(val === 'return' || val === 'else' || val === 'satisfies' || val === 'then' )) {
+												break;
+											} else if (val === 'then') {
+												nonBracketedThen = i;
+											}
+										}
+										if (nonBracketedThen > -1) {
+											//xpathStack.splice(nonBracketedThen, 1);
+											token['error'] = ErrorType.ExpectedElseAfterThen;
+											problemTokens.push(token);
+										}
 										const sv = xp.token.value;
 										if (sv === 'return' || sv === 'else' || sv === 'satisfies' ) {
 											let poppedData = xpathStack.pop();
@@ -2041,6 +2056,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ElementNesting:
 					msg = `XML: Start tag '${tokenValue}' has no matching close tag`;
+					break;
+				case ErrorType.ExpectedElseAfterThen:
+					msg = `XML: Expected 'else' but found '${tokenValue}'`;
 					break;
 				case ErrorType.EntityName:
 					msg = `XML: Invalid entity name '${tokenValue}'`;
