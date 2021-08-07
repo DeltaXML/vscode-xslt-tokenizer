@@ -255,6 +255,10 @@
 					},
 					"timing": {
 						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
 						"description": "Display version and timing information to the standard error output"
 					},
 					"parameters": {

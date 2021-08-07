@@ -111,7 +111,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return this.getTask(xsltTask);
     }
 
-    private getTask(genericTask: vscode.TaskDefinition): vscode.Task|undefined {
+    private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt';
 
@@ -181,7 +181,9 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('-traceOut:' + propValue);
                         break;
                     case 'timing':
-                        commandLineArgs.push('-t');
+                        if (propValue !== "off") {
+                            commandLineArgs.push('-t');
+                        }
                         break;
                 }
             }
