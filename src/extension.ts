@@ -115,7 +115,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (!text.startsWith('/')) {
 					return 'XPath should start with "/"';
 				} else {
-					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text, XsltSymbolProvider.documentSymbols);
+					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text, XsltSymbolProvider.getSymbolsForActiveDocument());
 					return symbol? null : 'No matching elements'
 				}
 				
@@ -126,13 +126,6 @@ export function activate(context: vscode.ExtensionContext) {
 			const foundSymbol = symbol !== undefined;
 			const msg = foundSymbol? `Matching element found: ${symbol?.name}` : 'No matching elements';
 			window.showInformationMessage(msg);
-		}
-	}
-
-	function selectTextFromXPath(xpathText: string) {
-		const symbol = XsltSymbolProvider.getSymbolFromXPathLocator(xpathText, XsltSymbolProvider.documentSymbols);
-		if (symbol) {
-			XsltSymbolProvider.selectTextWithSymbol(symbol);
 		}
 	}
 
@@ -200,7 +193,6 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectPrecedingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Previous)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFollowingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Next)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectParentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Parent)));
-	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPath', (args) => selectTextFromXPath(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPathInDocument', (...args) => selectXPathInDocument(args)));
 

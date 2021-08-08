@@ -44,7 +44,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private readonly collection: vscode.DiagnosticCollection | null;
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
-	public static documentSymbols: vscode.DocumentSymbol[] = [];
+	public static documentSymbols = new Map<vscode.Uri, vscode.DocumentSymbol[]>();
 	private importHrefs: Map<string, string[]> = new Map();
 	public static importSymbolHrefs: Map<string, string[]> = new Map();
 
@@ -57,8 +57,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.docType = xsltConfiguration.docType;
 	}
 
+	public static getSymbolsForActiveDocument(): vscode.DocumentSymbol[] {
+		if (vscode.window.activeTextEditor) {
+			const result = XsltSymbolProvider.documentSymbols.get(vscode.window.activeTextEditor.document.uri);
+			return result? result : [];
+		} else {
+			return []
+		}
+	}
+
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
-		const result = this.getDocumentSymbols(document, true);
+		const result = this.getDocumentSymbols(document, false);
 		return result;
 	}
 
@@ -74,7 +83,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public async getDocumentSymbols(document: vscode.TextDocument, onlyActiveDocument: boolean): Promise<vscode.DocumentSymbol[] | undefined> {
-		XsltSymbolProvider.documentSymbols = [];
 		if (onlyActiveDocument && vscode.window.activeTextEditor) {
 			if (document.fileName !== vscode.window.activeTextEditor.document.fileName) {
 				return [];
@@ -162,7 +170,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					this.collection.clear();
 				};
 			}
-			XsltSymbolProvider.documentSymbols = symbols;
+			XsltSymbolProvider.documentSymbols.set(document.uri, symbols);
 			resolve(symbols);
 		});
 
@@ -222,7 +230,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static selectXMLElement(selectionType: SelectionType) {
 		const selection = vscode.window.activeTextEditor?.selection;
 		if (vscode.window.activeTextEditor && selection) {
-			const rootSymbol = XsltSymbolProvider.documentSymbols[0];
+			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
 			const path: string[] = [];
 			const result = this.getChildSymbolForSelection(selection, rootSymbol, path, selectionType, null, null, null);
 			if (result !== null) {
@@ -235,7 +243,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const editor = vscode.window.activeTextEditor;
 		if (editor) {
 			const selection = editor.selection;
-			const rootSymbol = XsltSymbolProvider.documentSymbols[0];
+			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
 			const newPath = ['/' + rootSymbol.name.split(' ')[0]];
 			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath, SelectionType.Current, null, null, null);
 			const fullPath = newPath.join('');
