@@ -52,6 +52,24 @@
 		}
 	},
 	"contributes": {
+		"keybindings": [
+			{
+				"command": "xslt-xpath.selectCurrentElement",
+				"key": "Shift+Cmd+0"
+			},
+			{
+				"command": "xslt-xpath.selectParentElement",
+				"key": "Shift+Cmd+9"
+			},
+			{
+				"command": "xslt-xpath.selectFollowingElement",
+				"key": "Shift+Cmd+8"
+			},
+			{
+				"command": "xslt-xpath.selectPrecedingElement",
+				"key": "Shift+Cmd+7"
+			}
+		],
 		"commands": [
 			{
 				"command": "xslt-xpath.formatUnchecked",
@@ -81,11 +99,6 @@
 			{
 				"command": "xslt-xpath.selectParentElement",
 				"title": "Select parent element",
-				"category": "XML"
-			},
-			{
-				"command": "xslt-xpath.test",
-				"title": "Test XPath",
 				"category": "XML"
 			}
 		],
