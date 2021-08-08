@@ -1493,9 +1493,20 @@ export class XsltTokenDiagnostics {
 						XsltTokenDiagnostics.checkFinalXPathToken(token, allTokens, index, problemTokens);
 					}
 					if (xpathStack.length > 0 && !token.error) {
-						const errToken = xpathStack[xpathStack.length - 1].token;
-						errToken['error'] = ErrorType.BracketNesting;
-						problemTokens.push(errToken);
+						let disallowedStackItem: BaseToken | undefined;
+						for (let index = xpathStack.length - 1; index > -1; index--) {
+							const trailingToken = xpathStack[index].token;
+							const tv = trailingToken.value;
+							const allowedToken = (tv === 'return' || tv === 'else' || tv === 'satisfies');
+							if (!allowedToken) {
+								disallowedStackItem = trailingToken;
+								break;
+							}
+						}
+						if (disallowedStackItem) {
+							disallowedStackItem['error'] = ErrorType.BracketNesting;
+							problemTokens.push(disallowedStackItem);
+						}
 					}
 					if (token.tokenType === TokenLevelState.string && !token.error) {
 						XPathLexer.checkStringLiteralEnd(token);
@@ -1507,36 +1518,41 @@ export class XsltTokenDiagnostics {
 				}
 			}
 			prevToken = token.tokenType === TokenLevelState.comment ? prevToken : token;
-			if (index === lastTokenIndex && elementStack.length > 0) {
+			if (index === lastTokenIndex) {
 				// xml is not well-nested if items still on the stack at the end
 				// but report errors and try to keep some part of the tree:
-				let usedtoken = false;
-				while (elementStack.length > 0) {
-					let poppedData = elementStack.pop();
-					let endToken: BaseToken;
-					if (poppedData) {
-						if (usedtoken) {
-							// use final token as we don't know what the end token is 
-							// but reduce lendth by one on each iteration - so its well nested
-							endToken = token;
-							endToken.length = endToken.length - 1;
-						} else {
-							endToken = token;
-							usedtoken = true;
-						}
-						let errorToken = Object.assign({}, poppedData.identifierToken);
-						errorToken['error'] = ErrorType.ElementNesting;
-						problemTokens.push(errorToken);
-						let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
-						if (symbol !== null) {
-							if (elementStack.length > 0) {
-								elementStack[elementStack.length - 1].childSymbols.push(symbol);
+				if (token.tokenType === TokenLevelState.complexExpression) {
+					token['error'] = ErrorType.XPathAwaiting;
+					problemTokens.push(token);
+				}
+				if (elementStack.length > 0) {
+					let usedtoken = false;
+					while (elementStack.length > 0) {
+						let poppedData = elementStack.pop();
+						let endToken: BaseToken;
+						if (poppedData) {
+							if (usedtoken) {
+								// use final token as we don't know what the end token is 
+								// but reduce lendth by one on each iteration - so its well nested
+								endToken = token;
+								endToken.length = endToken.length - 1;
 							} else {
-								topLevelSymbols.push(symbol);
+								endToken = token;
+								usedtoken = true;
+							}
+							let errorToken = Object.assign({}, poppedData.identifierToken);
+							errorToken['error'] = ErrorType.ElementNesting;
+							problemTokens.push(errorToken);
+							let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
+							if (symbol !== null) {
+								if (elementStack.length > 0) {
+									elementStack[elementStack.length - 1].childSymbols.push(symbol);
+								} else {
+									topLevelSymbols.push(symbol);
+								}
 							}
 						}
 					}
-
 				}
 			}
 		});

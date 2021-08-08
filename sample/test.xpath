@@ -1,11 +1,1 @@
-if (1) then 'a'
-else
-  'db',
-if (2) then 'c' else 'b',
-if (1) then
-  'a'
-else 
-  if (2) then 
-    'b'
-  else 
-    'c'
+for $a in 2 + 3 return
