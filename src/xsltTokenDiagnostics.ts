@@ -959,6 +959,15 @@ export class XsltTokenDiagnostics {
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
+				if (xpathStack.length > 0) {
+					const tv = xpathStack[xpathStack.length - 1].token.value;
+					if (prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && (tv === 'for' || tv === 'let' || tv === 'every')) {
+						if (xpathTokenType !== TokenLevelState.variable) {
+							token['error'] = ErrorType.ExpectedDollarAfterComma;
+							problemTokens.push(token);
+						}
+					}
+				}
 
 				switch (xpathTokenType) {
 					case TokenLevelState.string:
@@ -2059,6 +2068,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ExpectedElseAfterThen:
 					msg = `XML: Expected 'else' but found '${tokenValue}'`;
+					break;
+				case ErrorType.ExpectedDollarAfterComma:
+					msg = `XML: Expected '$' but found '${tokenValue}'`;
 					break;
 				case ErrorType.EntityName:
 					msg = `XML: Invalid entity name '${tokenValue}'`;

@@ -8,7 +8,7 @@
 																expand-text="yes"
 																version="3.0">
 	
-	<xsl:variable name="test"
+	<!-- <xsl:variable name="test"
 						select="
 						if (2) then (let $colspecs := 1, $b := 2 return $colspecs, $b) else 0
 						"/>  />	
@@ -21,19 +21,24 @@
 						<xsl:variable name="test3"
 						select="
 						if (2) then 3 else 4
-						"/>
+						"/> -->
 	
 	<xsl:variable name="test4"
 		select="
-			if (2) then 3 else if (4) then 5 else 6
-		"/> 
+			for $a in 2, $b in 22 return 4
+		"/>   
 	
-	<xsl:variable name="new-diff-col-count" as="xs:integer" 
+	<!-- <xsl:variable name="test5"
+		select="
+				if (2) then 3 else if (4) then 5 else 6
+		"/>  -->
+	
+	<!-- <xsl:variable name="new-diff-col-count" as="xs:integer" 
 		select="
 			if (2) then 
 				let $av := 3, $bv := 4 return 
 					(: following should show error for ',' - expected 'else':)
 					if ($av) then 5 else let $cv := 9 return $bv, $cv
-			else 2"/>
+			else 2"/> -->
 	
 </xsl:stylesheet>
