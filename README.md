@@ -61,15 +61,14 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 |||
 
 # XML Commands
-| Command  | Details |
-| ------- | ------- |
-| XML: Goto XPath  | Initially shows current XPath at the text prompt  |
-| XML: Select current element | Includes start/end tags |
-| XML: Select preceding element |  |
-| XML: Select following element |  |
-| XML: Select parent element |  |
-|||
-
+| Command  | Key-Binding | Details |
+| ------- | ------- | --------- |
+| XML: Goto XPath |  | Initially shows current XPath at the text prompt  |
+| XML: Select current element | ⇧⌘0 | Includes start/end tags |
+| XML: Select parent element | ⇧⌘9 | Includes start/end tags |
+| XML: Select child element | ⇧⌘8 | Includes start/end tags |
+| XML: Select following element | ⇧⌘7 | Includes start/end tags |
+| XML: Select preceding element | ⇧⌘6 | Includes start/end tags |
 
  # Introduction
  
