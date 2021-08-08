@@ -29,7 +29,8 @@ export enum SelectionType {
 	Current,
 	Next,
 	Previous,
-	Parent
+	Parent,
+	FirstChild
 }
 
 
@@ -262,6 +263,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			const resultName = result.name.split(' ')[0];
 			let nextSibling = null;
 			let precedingSibling = null;
+			let firstChild = null;
 			let precedingSymbolNames = 1;
 			let breakNext = false;
 			for (const sibling of symbol.children) {
@@ -294,6 +296,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return precedingSymbol;
 		} else if (selectionType === SelectionType.Next) {
 			return nextSymbol;
+		} else if (selectionType === SelectionType.FirstChild) {
+			const firstChild = symbol.children.length > 0? symbol.children[0] : null;
+			if (firstChild) {
+				if (firstChild.kind === vscode.SymbolKind.Array && firstChild.name === 'attributes') {
+					return symbol.children.length > 1? symbol.children[1] : null;
+				} else {
+					return firstChild;
+				}
+			} else {
+				return null;
+			}
 		} else {
 			return symbol;
 		}

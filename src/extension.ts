@@ -193,6 +193,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectPrecedingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Previous)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFollowingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Next)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectParentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Parent)));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFirstChildElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.FirstChild)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPathInDocument', (...args) => selectXPathInDocument(args)));
 
