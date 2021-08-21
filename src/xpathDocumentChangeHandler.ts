@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { Data } from './xpLexer';
 
 export class XPathDocumentChangeHandler {
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent) {
@@ -6,25 +7,49 @@ export class XPathDocumentChangeHandler {
 		if (!activeChange) {
 			return;
 		}
-		let triggerSuggest = false;
-		let skipTrigger = false;
-		if (activeChange.text === '/' && activeChange.rangeLength === 0) {
-			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-			if (activeChange.text.endsWith('/')) {
-				skipTrigger = true;
+		let doTrigger = false;
+		const docText = e.document.getText();
+
+		let precededByWS = false;
+		let followsSeparator = false;
+		const pos = activeChange.rangeOffset - 1;
+		let wsEndPos = -1;
+		let keywordPos = -1;
+		let keyword: string | undefined;
+
+		const char = activeChange.text;
+		let charIsWs = (char === ' ' || char === '\t' || char === '\n');
+
+		for (let x = pos; x > -1; x--) {
+			const char = docText.charAt(x);
+			if (char === ' ' || char === '\t' || char === '\n') {
+				precededByWS = true;
+				if (keywordPos !== -1) {
+					break;
+				}
+			} else if (Data.anySeps.indexOf(char) !== -1) {
+				followsSeparator = true;
+				break;
+			} else if (charIsWs) {
+				if (wsEndPos === -1) {
+					wsEndPos = x + 1;
+				}
+				keywordPos = x;
 			} else {
-				triggerSuggest = true;
+				break;
 			}
 		}
-		if (!skipTrigger && activeChange.rangeOffset > 10) {
-			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-			if ((prevChar === '\n' || prevChar === ' ') && activeChange.text === 'x') {
-				triggerSuggest = true;
-			} else if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
-				triggerSuggest = true;
-			}
+		keyword = keywordPos !== -1 ? docText.substring(keywordPos, (wsEndPos)) : undefined;
+
+		if (charIsWs) {
+			doTrigger = followsSeparator || (keyword !== undefined && Data.triggerWords.indexOf(keyword) !== -1);
+		} else if (char === '$' || char === '/' || char === '[' || char === '?') {
+			doTrigger = true;
+		} else {
+			doTrigger = precededByWS && followsSeparator;
 		}
-		if (triggerSuggest || activeChange.text === ' ' || activeChange.text === '(' || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
+
+		if (doTrigger) {
 			setTimeout(() => {
 				vscode.commands.executeCommand('editor.action.triggerSuggest');
 			}, 10);

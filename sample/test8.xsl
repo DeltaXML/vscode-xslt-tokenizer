@@ -16,7 +16,7 @@
         <xsl:value-of select="count($depth)"/>
         <xsl:for-each select="*">
             <xsl:value-of select="count($depth)"/>
-            <xsl:sequence select="for $new in 1 to 20 return $new, $new"/>
+            <xsl:sequence select="let $a := 2 return for $new in 1 to 20 return $new, $a"/>
             <xsl:sequence select="alpha/bravo/charlie"/>
             
             

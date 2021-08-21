@@ -104,6 +104,13 @@ export class Data {
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%'];
 
     public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
+    public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!','*','+',',','-','.','?','['];
+    public static triggerWords = ["and", "array", "as", "div",
+        "else", "eq", "except",
+        "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
+        "lt", "mod", "ne", "of", "or", "otherwise", "return", "satisfies",
+        "then", "to", "union", "&lt;", "&gt;"];
+
 
     public static axes = ["ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self",
         "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"];
