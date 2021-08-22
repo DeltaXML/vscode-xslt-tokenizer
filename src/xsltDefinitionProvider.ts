@@ -9,6 +9,7 @@ import { SchemaQuery } from './schemaQuery';
 import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
 import { BaseToken, ExitCondition, LexPosition, XPathLexer } from './xpLexer';
 import { XPathSemanticTokensProvider } from './extension';
+import { DocumentChangeHandler } from './documentChangeHandler';
 
 interface ImportedGlobals {
 	href: string,
@@ -106,12 +107,20 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
 		const keepNameTests = true;
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		let symbolsForXPath: vscode.DocumentSymbol[] = [];
 
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];
 		if (this.docType === DocumentTypes.XPath) {
 			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
+			const uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
+			if (uri) {
+				const lastSymbols = XsltSymbolProvider.documentSymbols.get(uri);
+				if (lastSymbols) {
+					symbolsForXPath = lastSymbols;
+				}
+			}
 		} else {
 			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 			globalInstructionData = this.xslLexer.globalInstructionData;
@@ -157,7 +166,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let xslVariable = ['xsl:variable', 'xsl:param'];
 			
 			let completions: vscode.CompletionItem[]|undefined;
-			completions= XsltTokenCompletions.getCompletions(this.languageConfig, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			completions= XsltTokenCompletions.getCompletions(this.languageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 			resolve(completions);
 		});
 

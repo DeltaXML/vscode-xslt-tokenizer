@@ -6,7 +6,7 @@ import * as path from 'path';
 import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
-import { BaseToken } from './xpLexer';
+import { BaseToken, CharLevelState, TokenLevelState } from './xpLexer';
 
 interface ImportedGlobals {
 	href: string,
@@ -61,7 +61,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static getSymbolsForActiveDocument(): vscode.DocumentSymbol[] {
 		if (vscode.window.activeTextEditor) {
 			const result = XsltSymbolProvider.documentSymbols.get(vscode.window.activeTextEditor.document.uri);
-			return result? result : [];
+			return result ? result : [];
 		} else {
 			return []
 		}
@@ -198,7 +198,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 
 			globalInstructionData.push(importInstruction);
-		} 
+		}
 
 		const importedG = { data: globalInstructionData, href: document.fileName, error: false };
 		accumulatedHrefs = [importedG.href];
@@ -214,7 +214,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				localImportedHrefs.set(document.fileName, inheritHrefs);
 			}
 		}
-		
+
 		return { importedGlobals1, accumulatedHrefs };
 	}
 
@@ -297,10 +297,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		} else if (selectionType === SelectionType.Next) {
 			return nextSymbol;
 		} else if (selectionType === SelectionType.FirstChild) {
-			const firstChild = symbol.children.length > 0? symbol.children[0] : null;
+			const firstChild = symbol.children.length > 0 ? symbol.children[0] : null;
 			if (firstChild) {
 				if (firstChild.kind === vscode.SymbolKind.Array && firstChild.name === 'attributes') {
-					return symbol.children.length > 1? symbol.children[1] : null;
+					return symbol.children.length > 1 ? symbol.children[1] : null;
 				} else {
 					return firstChild;
 				}
@@ -310,6 +310,106 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		} else {
 			return symbol;
 		}
+	}
+
+	public static filterPathTokens(tokens: BaseToken[], position: number) {
+		const resultSymbols: vscode.DocumentSymbol[] = [];
+		let cleanedTokens: BaseToken[] = [];
+		const bracketTokens: BaseToken[] = [];
+		let skipToken = false;
+		let nesting = 0;
+		let exitLoop = false;
+
+		// track backwards to get all tokens in path
+		for (let i = position; i > -1; i--) {
+			const token = tokens[i];
+			let xpathCharType = <CharLevelState>token.charType;
+			let xpathTokenType = <TokenLevelState>token.tokenType;
+			if (nesting > 0) {
+				if (xpathTokenType === TokenLevelState.operator && xpathCharType === CharLevelState.lPr) {
+					skipToken = true;
+					nesting--;
+				}
+			} else if (bracketTokens.length > 0) {
+				switch (xpathTokenType) {
+					case TokenLevelState.operator:
+						switch (xpathCharType) {
+							case CharLevelState.lB:
+							  cleanedTokens = cleanedTokens.concat(...bracketTokens);
+								bracketTokens.length = 0;
+								break;
+							case CharLevelState.sep:
+								// TODO: handle '*' what token type is this?
+								exitLoop = (token.value !== '|' && token.value !== ',');
+								break;
+							default:
+								exitLoop = true;
+						}
+						break;
+					case TokenLevelState.nodeNameTest:
+						bracketTokens.push(token);
+						break;
+					default:
+						exitLoop = true;
+						break;
+				}
+			} else {
+				switch (xpathTokenType) {
+					case TokenLevelState.operator:
+						switch (xpathCharType) {
+							case CharLevelState.rPr:
+								nesting++;
+								break;
+							case CharLevelState.rB:
+								bracketTokens.push(token);
+								break;
+							case CharLevelState.dSep:
+								exitLoop = (token.value !== '//' && token.value !== '::');
+								skipToken = !exitLoop && token.value === '::';
+								break;
+							case CharLevelState.sep:
+								// TODO: handle '*' what token type is this?
+								exitLoop = token.value !== '/'
+								break;
+						}
+						break;
+					case TokenLevelState.nodeNameTest:
+					case TokenLevelState.axisName:
+						break;
+					default:
+						exitLoop = true;
+						break;
+				}
+			}
+			if (exitLoop) {
+				break;
+			} else if (nesting === 0 && !skipToken && bracketTokens.length === 0) {
+				cleanedTokens.push(token);
+			}
+			skipToken = false;
+		}
+		return cleanedTokens.reverse();
+	}
+
+	public static getSymbolsFittingXPath(tokens: BaseToken[], symbols: vscode.DocumentSymbol[]) {
+
+		let currentSymbols: vscode.DocumentSymbol[] = symbols.slice();
+		const resultSymbols: vscode.DocumentSymbol[] = [];
+
+		const lastTokenIndex = tokens.length - 1;
+
+		// track backwards to get all tokens in path
+		for (let i = lastTokenIndex; i > -1; i--) {
+			const token = tokens[i];
+			for (let x = 0; x < currentSymbols.length; x++) {
+				const symbol = currentSymbols[x];
+			}
+
+		}
+
+		return resultSymbols;
+
+
 	}
 
 
