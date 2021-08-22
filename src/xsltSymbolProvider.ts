@@ -313,7 +313,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public static filterPathTokens(tokens: BaseToken[], position: number) {
-		const resultSymbols: vscode.DocumentSymbol[] = [];
 		let cleanedTokens: BaseToken[] = [];
 		const bracketTokens: BaseToken[] = [];
 		let saveToken = false;
@@ -374,7 +373,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							case CharLevelState.lPr:
 								break;
 							default:
-							  exitLoop = true;
+								exitLoop = true;
 								break;
 						}
 						break;
@@ -398,28 +397,50 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 			saveToken = false;
 		}
-		return cleanedTokens.reverse();
+		return cleanedTokens;
 	}
 
 	public static getSymbolsFittingXPath(tokens: BaseToken[], symbols: vscode.DocumentSymbol[]) {
 
-		let currentSymbols: vscode.DocumentSymbol[] = symbols.slice();
-		const resultSymbols: vscode.DocumentSymbol[] = [];
+		let currentSymbols: vscode.DocumentSymbol[] = symbols;
+		let resultSymbols: vscode.DocumentSymbol[] = symbols;
 
 		const lastTokenIndex = tokens.length - 1;
 
 		// track backwards to get all tokens in path
 		for (let i = lastTokenIndex; i > -1; i--) {
 			const token = tokens[i];
+			const tv = token.value;
+			let xpathCharType = <CharLevelState>token.charType;
+			let xpathTokenType = <TokenLevelState>token.tokenType;
+
+			switch (xpathTokenType) {
+				case TokenLevelState.nodeNameTest:
+					if (i === lastTokenIndex) {
+						// starting point: assume root element
+						const symbol = symbols[0];
+						if (symbol.name === token.value) {
+							currentSymbols = [symbol];
+						}
+					}
+					break;
+				case TokenLevelState.axisName:
+					break;
+				case TokenLevelState.nodeType:
+					break;
+				case TokenLevelState.operator:
+					break;
+			}
+
+
 			for (let x = 0; x < currentSymbols.length; x++) {
-				const symbol = currentSymbols[x];
+				const curentSymbol = currentSymbols[x];
+				resultSymbols = resultSymbols.concat(curentSymbol.children);
 			}
 
 		}
 
 		return resultSymbols;
-
-
 	}
 
 
