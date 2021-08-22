@@ -316,7 +316,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const resultSymbols: vscode.DocumentSymbol[] = [];
 		let cleanedTokens: BaseToken[] = [];
 		const bracketTokens: BaseToken[] = [];
-		let skipToken = false;
+		let saveToken = false;
 		let nesting = 0;
 		let exitLoop = false;
 
@@ -327,7 +327,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			let xpathTokenType = <TokenLevelState>token.tokenType;
 			if (nesting > 0) {
 				if (xpathTokenType === TokenLevelState.operator && xpathCharType === CharLevelState.lPr) {
-					skipToken = true;
 					nesting--;
 				}
 			} else if (bracketTokens.length > 0) {
@@ -335,7 +334,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					case TokenLevelState.operator:
 						switch (xpathCharType) {
 							case CharLevelState.lB:
-							  cleanedTokens = cleanedTokens.concat(...bracketTokens);
+								cleanedTokens = cleanedTokens.concat(...bracketTokens);
+								saveToken = true;
 								bracketTokens.length = 0;
 								break;
 							case CharLevelState.sep:
@@ -365,16 +365,26 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								break;
 							case CharLevelState.dSep:
 								exitLoop = (token.value !== '//' && token.value !== '::');
-								skipToken = !exitLoop && token.value === '::';
+								saveToken = token.value === '//';
 								break;
 							case CharLevelState.sep:
 								// TODO: handle '*' what token type is this?
-								exitLoop = token.value !== '/'
+								exitLoop = token.value !== '/';
+								break;
+							case CharLevelState.lPr:
+								break;
+							default:
+							  exitLoop = true;
 								break;
 						}
 						break;
 					case TokenLevelState.nodeNameTest:
 					case TokenLevelState.axisName:
+						saveToken = true;
+						break;
+					case TokenLevelState.nodeType:
+						exitLoop = ['*', '.', '..'].indexOf(token.value) === -1;
+						saveToken = !exitLoop;
 						break;
 					default:
 						exitLoop = true;
@@ -383,10 +393,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 			if (exitLoop) {
 				break;
-			} else if (nesting === 0 && !skipToken && bracketTokens.length === 0) {
+			} else if (nesting === 0 && saveToken && bracketTokens.length === 0) {
 				cleanedTokens.push(token);
 			}
-			skipToken = false;
+			saveToken = false;
 		}
 		return cleanedTokens.reverse();
 	}
