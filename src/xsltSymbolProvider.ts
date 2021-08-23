@@ -400,12 +400,22 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return cleanedTokens;
 	}
 
-	public static getSymbolsFittingXPath(tokens: BaseToken[], symbols: vscode.DocumentSymbol[]) {
+	public static getExpectedForXPathLocation(tokens: BaseToken[], symbols: vscode.DocumentSymbol[]) {
 
 		let currentSymbols: vscode.DocumentSymbol[] = symbols;
 		let resultSymbols: vscode.DocumentSymbol[] = symbols;
+		let elementNames = new Set<string>();
+		let attrNames = new Set<string>();
+
+		if (symbols.length === 0) {
+			return [[],[]];
+		}
 
 		const lastTokenIndex = tokens.length - 1;
+		if (tokens.length === 0) {
+			 const rootSymbol = symbols[0];
+			 return [[rootSymbol.name], []];
+		}
 
 		// track backwards to get all tokens in path
 		for (let i = lastTokenIndex; i > -1; i--) {
@@ -435,12 +445,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 			for (let x = 0; x < currentSymbols.length; x++) {
 				const curentSymbol = currentSymbols[x];
-				resultSymbols = resultSymbols.concat(curentSymbol.children);
+				//resultSymbols = resultSymbols.concat(curentSymbol.children);
+				curentSymbol.children.forEach(child => {
+					if (child.kind === vscode.SymbolKind.Array && child.name === 'attributes') {
+						child.children.forEach(child => attrNames.add('@' + child.name));
+					} else {
+						elementNames.add(child.name);
+					}
+				});
 			}
 
 		}
 
-		return resultSymbols;
+		return [[...elementNames], [...attrNames]];
 	}
 
 

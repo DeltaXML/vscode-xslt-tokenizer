@@ -718,6 +718,11 @@ export class XsltTokenCompletions {
 									} else if (token.value === '/') {
 										const pathTokens = XsltSymbolProvider.filterPathTokens(allTokens, index - 1);
 										console.log(pathTokens);
+										const [elementNames, attrNames] = XsltSymbolProvider.getExpectedForXPathLocation(pathTokens, xpathDocSymbols);
+										console.log('elementNames');
+										console.log(elementNames);
+										console.log('attrtNames');
+										console.log(attrNames);
 										resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									} else if (token.value === '!') {
 										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType));
