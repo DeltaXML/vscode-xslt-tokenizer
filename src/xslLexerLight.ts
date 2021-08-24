@@ -201,7 +201,8 @@ export class XslLexerLight extends XslLexer {
                                 }
                                 targetGlobal.push({type: globalType, name: attValue, token: tkn, idNumber: 0});
                                 isGlobalInstructionName = false;
-                                tagGlobalInstructionType = GlobalInstructionType.Unknown;
+                                // fix bug where function arity was added to by following template params
+                                //tagGlobalInstructionType = GlobalInstructionType.Unknown;
                             } else if (isGlobalParameterName || isGlobalUsePackageVersion) {
                                 let attValue = tokenChars.join('');
                                 if (this.globalInstructionData.length > 0) {
