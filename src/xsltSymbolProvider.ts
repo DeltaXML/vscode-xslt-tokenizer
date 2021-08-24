@@ -402,21 +402,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	public static getExpectedForXPathLocation(tokens: BaseToken[], symbols: vscode.DocumentSymbol[]) {
 
-		let currentSymbols: vscode.DocumentSymbol[] = symbols;
-		let resultSymbols: vscode.DocumentSymbol[] = symbols;
+		
+		if (symbols.length === 0) {
+			return [[], []];
+		}		
+		if (tokens.length === 0) {
+			const rootSymbol = symbols[0];
+			return [[rootSymbol.name], []];
+		}
+
+		const lastTokenIndex = tokens.length - 1;		
 		let elementNames = new Set<string>();
 		let attrNames = new Set<string>();
 
-		if (symbols.length === 0) {
-			return [[],[]];
-		}
-
-		const lastTokenIndex = tokens.length - 1;
-		if (tokens.length === 0) {
-			 const rootSymbol = symbols[0];
-			 return [[rootSymbol.name], []];
-		}
-
+		let currentSymbols: vscode.DocumentSymbol[] = [];
 		// track backwards to get all tokens in path
 		for (let i = lastTokenIndex; i > -1; i--) {
 			const token = tokens[i];
@@ -424,13 +423,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			let xpathCharType = <CharLevelState>token.charType;
 			let xpathTokenType = <TokenLevelState>token.tokenType;
 
+			let nextSymbols: vscode.DocumentSymbol[] = [];
+
 			switch (xpathTokenType) {
 				case TokenLevelState.nodeNameTest:
 					if (i === lastTokenIndex) {
 						// starting point: assume root element
-						const symbol = symbols[0];
-						if (symbol.name === token.value) {
-							currentSymbols = [symbol];
+						if (symbols[0].name === token.value) {
+							nextSymbols = symbols;
+						}
+					} else {
+						for (let i = 0; i < currentSymbols.length; i++) {
+							const symbol = currentSymbols[i];
+							const next = symbol.children.filter(child => child.name === token.value);
+							nextSymbols = nextSymbols.concat(next);
 						}
 					}
 					break;
@@ -442,18 +448,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					break;
 			}
 
+			currentSymbols = nextSymbols;
 
-			for (let x = 0; x < currentSymbols.length; x++) {
-				const curentSymbol = currentSymbols[x];
-				//resultSymbols = resultSymbols.concat(curentSymbol.children);
-				curentSymbol.children.forEach(child => {
-					if (child.kind === vscode.SymbolKind.Array && child.name === 'attributes') {
-						child.children.forEach(child => attrNames.add('@' + child.name));
-					} else {
-						elementNames.add(child.name);
-					}
-				});
-			}
+			if (i === 0) {
+				for (let x = 0; x < currentSymbols.length; x++) {
+					const curentSymbol = currentSymbols[x];
+					curentSymbol.children.forEach(child => {
+						if (child.kind === vscode.SymbolKind.Array && child.name === 'attributes') {
+							child.children.forEach(child => attrNames.add('@' + child.name));
+						} else {
+							elementNames.add(child.name);
+						}
+					});
+				}
+			} // end if
 
 		}
 
