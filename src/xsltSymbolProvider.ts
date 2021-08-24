@@ -157,21 +157,26 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				}
 			});
 
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
-			// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
-			if (this.collection && this.docType !== DocumentTypes.SCH) {
-				let importDiagnostics: vscode.Diagnostic[] = [];
-				importErrors.forEach((importError) => {
-					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
-				});
-				let allDiagnostics = importDiagnostics.concat(diagnostics);
-				if (allDiagnostics.length > 0) {
-					this.collection.set(document.uri, allDiagnostics);
-				} else {
-					this.collection.clear();
-				};
+			if (vscode.window.activeTextEditor && document.fileName !== vscode.window.activeTextEditor.document.fileName) {
+
+			} else {
+				let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
+				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
+				if (this.collection && this.docType !== DocumentTypes.SCH) {
+					let importDiagnostics: vscode.Diagnostic[] = [];
+					importErrors.forEach((importError) => {
+						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
+					});
+					let allDiagnostics = importDiagnostics.concat(diagnostics);
+					if (allDiagnostics.length > 0) {
+						this.collection.set(document.uri, allDiagnostics);
+					} else {
+						this.collection.clear();
+					};
+				}
+				XsltSymbolProvider.documentSymbols.set(document.uri, symbols);
 			}
-			XsltSymbolProvider.documentSymbols.set(document.uri, symbols);
+
 			resolve(symbols);
 		});
 
