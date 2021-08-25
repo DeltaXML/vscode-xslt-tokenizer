@@ -37,7 +37,7 @@ interface XSLTToken extends BaseToken {
 	tagType?: TagType
 }
 
-interface ElementData {
+export interface ElementData {
 	variables: VariableData[]
 	currentVariable?: VariableData,
 	xpathVariableCurrentlyBeingDefined?: boolean;
@@ -47,7 +47,7 @@ interface ElementData {
 	childSymbols: vscode.DocumentSymbol[],
 	namespacePrefixes: string[]
 }
-interface XPathData {
+export interface XPathData {
 	token: BaseToken;
 	variables: VariableData[];
 	preXPathVariable: boolean;
@@ -56,6 +56,7 @@ interface XPathData {
 	functionArity?: number;
 	isRangeVar?: boolean;
 	awaitingArity: boolean;
+	tokenIndex?: number;
 }
 
 interface VariableData {
@@ -651,6 +652,7 @@ export class XsltTokenCompletions {
 										xpathItem.functionArity = 0;
 									}
 								}
+								xpathItem.tokenIndex = index;
 								xpathStack.push(xpathItem);
 								preXPathVariable = false;
 								inScopeXPathVariablesList = [];
@@ -716,7 +718,7 @@ export class XsltTokenCompletions {
 										let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 										resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									} else if (token.value === '/') {
-										const pathTokens = XsltSymbolProvider.filterPathTokens(allTokens, index - 1);
+										const pathTokens = XsltSymbolProvider.filterPathTokens(allTokens, index - 1, xpathStack);
 										console.log(pathTokens);
 										const [elementNames, attrNames] = XsltSymbolProvider.getExpectedForXPathLocation(pathTokens, xpathDocSymbols);
 										console.log('elementNames');

@@ -7,6 +7,7 @@ import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
 import { BaseToken, CharLevelState, TokenLevelState } from './xpLexer';
+import { ElementData, XPathData } from './xsltTokenCompletions'
 
 interface ImportedGlobals {
 	href: string,
@@ -317,12 +318,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static filterPathTokens(tokens: BaseToken[], position: number) {
+	public static filterPathTokens(tokens: BaseToken[], position: number, xpathStack: XPathData[]) {
 		let cleanedTokens: BaseToken[] = [];
 		const bracketTokens: BaseToken[] = [];
 		let saveToken = false;
 		let nesting = 0;
 		let exitLoop = false;
+		let finalSlashToken: BaseToken|undefined;
 
 		// track backwards to get all tokens in path
 		for (let i = position; i > -1; i--) {
@@ -334,6 +336,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					nesting--;
 				}
 			} else if (bracketTokens.length > 0) {
+				// test to see if: (element1|element2)
 				switch (xpathTokenType) {
 					case TokenLevelState.operator:
 						switch (xpathCharType) {
@@ -374,6 +377,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							case CharLevelState.sep:
 								// TODO: handle '*' what token type is this?
 								exitLoop = token.value !== '/';
+								finalSlashToken = token;
 								break;
 							case CharLevelState.lPr:
 								break;
@@ -396,7 +400,18 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				}
 			}
 			if (exitLoop) {
-				break;
+				// check to see if we're still within a predicate: el1[el2 and el3]
+				exitLoop = false;
+				let predicateStart = -1;
+				for (let x = xpathStack.length -1 ; x > -1; x--) {
+					const item = xpathStack[x];
+					if (item.token.charType === CharLevelState.lPr && item.tokenIndex) {
+						predicateStart = item.tokenIndex;
+						break;
+					}
+				}
+				// warning: changes the loop counter which will be decremented next!!
+				i = predicateStart;
 			} else if (nesting === 0 && saveToken && bracketTokens.length === 0) {
 				cleanedTokens.push(token);
 			}
