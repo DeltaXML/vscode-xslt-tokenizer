@@ -326,6 +326,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let exitLoop = false;
 		let finalSlashToken: BaseToken|undefined;
 		let xpathStacksChecked = 0;
+		let lastTokenWasSlash = false;
+		let lastTokenWasSlash2 = false;
 
 		// track backwards to get all tokens in path
 		for (let i = position; i > -1; i--) {
@@ -376,9 +378,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								saveToken = token.value === '//';
 								break;
 							case CharLevelState.sep:
-								// TODO: handle '*' what token type is this?
+								// keep '/' char if it's the last part of the reversed path meaning we're on an absolute path
 								exitLoop = token.value !== '/';
-								finalSlashToken = token;
+								if (!exitLoop && i === 0) {
+									cleanedTokens.push(token);
+								} if (!exitLoop) {
+									finalSlashToken = token;
+									lastTokenWasSlash = true;
+								}
 								break;
 							case CharLevelState.lPr:
 							case CharLevelState.lB:
@@ -416,11 +423,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						break;
 					}
 				}
-				// warning: changes the loop counter which will be decremented next!!
-				i = predicateStart;
+				if (predicateStart === -1) {
+					if (lastTokenWasSlash2 && finalSlashToken) {
+						cleanedTokens.push(finalSlashToken)
+					}
+					break;
+				} else {
+					// warning: changes the loop counter which will be decremented next!!
+					i = predicateStart;
+				}
 			} else if (nesting === 0 && saveToken && bracketTokens.length === 0) {
 				cleanedTokens.push(token);
 			}
+			lastTokenWasSlash2 = lastTokenWasSlash;
+			lastTokenWasSlash = false;
 			saveToken = false;
 		}
 		return cleanedTokens;
