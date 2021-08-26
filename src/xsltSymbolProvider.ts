@@ -474,6 +474,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								isDocumentNode = token.value === '/'
 							}
 							break;
+						case CharLevelState.dSep:
+							if (token.value === '//') {
+								if (i === lastTokenIndex) {
+									nextSymbols.push(symbols[0])
+								}
+								// recursive descent to get all descendants
+							}
 					}
 					break;
 				case TokenLevelState.nodeNameTest:
