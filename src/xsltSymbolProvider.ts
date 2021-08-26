@@ -456,6 +456,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let attrNames = new Set<string>();
 
 		let currentSymbols: vscode.DocumentSymbol[] = [];
+		let isDocumentNode = false;
 		// track backwards to get all tokens in path
 		for (let i = lastTokenIndex; i > -1; i--) {
 			const token = tokens[i];
@@ -466,8 +467,18 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			let nextSymbols: vscode.DocumentSymbol[] = [];
 
 			switch (xpathTokenType) {
+				case TokenLevelState.operator:
+					switch (xpathCharType) {
+						case CharLevelState.sep:
+							if (i === lastTokenIndex) {
+								isDocumentNode = token.value === '/'
+							}
+							break;
+					}
+					break;
 				case TokenLevelState.nodeNameTest:
-					if (i === lastTokenIndex) {
+					if (isDocumentNode) {
+						isDocumentNode = false;
 						// starting point: assume root element
 						if (symbols[0].name === token.value) {
 							nextSymbols = symbols;
@@ -483,6 +494,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				case TokenLevelState.axisName:
 					break;
 				case TokenLevelState.nodeType:
+					if (i === lastTokenIndex) {
+						nextSymbols = symbols
+					}
+					if (token.value === '*') {
+						if (isDocumentNode) {
+							isDocumentNode = false;
+							nextSymbols = symbols;
+						} else {
+							currentSymbols.forEach(symbol => {
+								nextSymbols = nextSymbols.concat(symbol.children);
+							});
+						}
+					}
 					break;
 				case TokenLevelState.operator:
 					break;
