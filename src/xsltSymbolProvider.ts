@@ -325,6 +325,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let nesting = 0;
 		let exitLoop = false;
 		let finalSlashToken: BaseToken|undefined;
+		let xpathStacksChecked = 0;
 
 		// track backwards to get all tokens in path
 		for (let i = position; i > -1; i--) {
@@ -380,6 +381,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								finalSlashToken = token;
 								break;
 							case CharLevelState.lPr:
+							case CharLevelState.lB:
+								xpathStacksChecked++;
 								break;
 							default:
 								exitLoop = true;
@@ -391,8 +394,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						saveToken = true;
 						break;
 					case TokenLevelState.nodeType:
-						exitLoop = ['*', '.', '..'].indexOf(token.value) === -1;
-						saveToken = !exitLoop;
+						saveToken = ['*', '..'].indexOf(token.value) !== -1;
+						exitLoop = !(saveToken || token.value === '.');
 						break;
 					default:
 						exitLoop = true;
@@ -403,7 +406,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				// check to see if we're still within a predicate: el1[el2 and el3]
 				exitLoop = false;
 				let predicateStart = -1;
-				for (let x = xpathStack.length -1 ; x > -1; x--) {
+
+				const xpathStackEnd = xpathStack.length - (xpathStacksChecked + 1);
+				for (let x = xpathStackEnd; x > -1; x--) {
+					xpathStacksChecked++;
 					const item = xpathStack[x];
 					if (item.token.charType === CharLevelState.lPr && item.tokenIndex) {
 						predicateStart = item.tokenIndex;
@@ -420,9 +426,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return cleanedTokens;
 	}
 
-	public static getExpectedForXPathLocation(tokens: BaseToken[], symbols: vscode.DocumentSymbol[]) {
-
-		
+	public static getExpectedForXPathLocation(tokens: BaseToken[], symbols: vscode.DocumentSymbol[]) {		
 		if (symbols.length === 0) {
 			return [[], []];
 		}		
