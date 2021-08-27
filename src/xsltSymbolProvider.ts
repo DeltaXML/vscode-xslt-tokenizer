@@ -402,6 +402,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						break;
 					case TokenLevelState.nodeType:
 						saveToken = ['*', '..'].indexOf(token.value) !== -1;
+						// TODO: for '..' case, we can just pop cleanedTokens and not save?
 						exitLoop = !(saveToken || token.value === '.');
 						break;
 					default:
