@@ -494,7 +494,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								// 1. //*
 								// 2. //element
 								nextAxis = AxisType.Descendant;
-								nextSymbols = currentSymbols;								
+								nextSymbols = isPathStart? [symbols[0]] : currentSymbols;								
 							}
 					}
 					break;
@@ -509,7 +509,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (currentAxis === AxisType.Child) {
 							for (let i = 0; i < currentSymbols.length; i++) {
 								const symbol = currentSymbols[i];
-								const next = symbol.children.filter(child => child.name === token.value);
+								const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && child.name === token.value);
 								nextSymbols = nextSymbols.concat(next);
 							}
 						} else if (currentAxis === AxisType.Descendant) {
@@ -530,7 +530,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								nextSymbols = [symbols[0]];
 							} else {
 								currentSymbols.forEach(symbol => {
-									nextSymbols = nextSymbols.concat(symbol.children);
+									const elementChildren = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array);
+									nextSymbols = nextSymbols.concat(elementChildren);
 								});
 							}
 						} else if (currentAxis === AxisType.Descendant) {
@@ -546,6 +547,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			isPathStart = false;
 
 			if (i === 0) {
+				console.log('symbols');
+				console.log(currentSymbols);
 				for (let x = 0; x < currentSymbols.length; x++) {
 					const curentSymbol = currentSymbols[x];
 					curentSymbol.children.forEach(child => {
@@ -579,9 +582,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			nextSymbols = [];
 		} while (currentSymbols.length > 0);
 		if (isNameTest) {
-			nextSymbols = newSymbols.filter(symbol => symbol.name === nodeName);
+			nextSymbols = newSymbols.filter(symbol => symbol.kind !== vscode.SymbolKind.Array && symbol.name === nodeName);
 		} else {
-			nextSymbols = newSymbols;
+			nextSymbols = newSymbols.filter(symbol => symbol.kind !== vscode.SymbolKind.Array);
 		}
 		return nextSymbols;
 	}
