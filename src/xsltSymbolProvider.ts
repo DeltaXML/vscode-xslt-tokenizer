@@ -485,7 +485,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					switch (xpathCharType) {
 						case CharLevelState.sep:
 							if (isPathStart) {
-								isDocumentNode = token.value === '/'
+								isDocumentNode = token.value === '/';
+								nextSymbols = [symbols[0]];
 							}
 							break;
 						case CharLevelState.dSep:
@@ -502,8 +503,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					if (isDocumentNode) {
 						isDocumentNode = false;
 						// starting point: assume root element
-						if (symbols[0].name === token.value) {
-							nextSymbols = [symbols[0]];
+						if (currentSymbols[0].name === token.value) {
+							nextSymbols = currentSymbols;
 						}
 					} else {
 						if (currentAxis === AxisType.Child) {
@@ -521,13 +522,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					break;
 				case TokenLevelState.nodeType:
 					if (isPathStart) {
+						// TODO: start with all descendants?
 						currentSymbols = [symbols[0]];
 					}
 					if (token.value === '*') {
 						if (currentAxis === AxisType.Child) {
 							if (isDocumentNode) {
 								isDocumentNode = false;								
-								nextSymbols = [symbols[0]];
+								nextSymbols = currentSymbols;
 							} else {
 								currentSymbols.forEach(symbol => {
 									const elementChildren = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array);

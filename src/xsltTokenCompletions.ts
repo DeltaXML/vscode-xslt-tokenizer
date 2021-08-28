@@ -174,10 +174,10 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			if (isOnRequiredToken) {
-				console.log('--------- on required token ---------');
-				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			}
+			// if (isOnRequiredToken) {
+			// 	console.log('--------- on required token ---------');
+			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -719,6 +719,7 @@ export class XsltTokenCompletions {
 										resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 									} else if (token.value === '/') {
 										const pathTokens = XsltSymbolProvider.filterPathTokens(allTokens, index - 1, xpathStack);
+										console.log('pathTokens')
 										console.log(pathTokens);
 										const [elementNames, attrNames] = XsltSymbolProvider.getExpectedForXPathLocation(pathTokens, xpathDocSymbols);
 										console.log('elementNames');
