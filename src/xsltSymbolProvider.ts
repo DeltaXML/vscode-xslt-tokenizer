@@ -34,6 +34,13 @@ export enum SelectionType {
 	FirstChild
 }
 
+enum AxisType {
+	Child,
+	Descendant,
+	Parent,
+	Ancestor
+}
+
 
 type possDocumentSymbol = vscode.DocumentSymbol | null;
 
@@ -455,15 +462,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const lastTokenIndex = tokens.length - 1;		
 		let elementNames = new Set<string>();
 		let attrNames = new Set<string>();
-
+		// start with root element symbol:
 		let currentSymbols: vscode.DocumentSymbol[] = [];
 		let isDocumentNode = false;
+		let nextAxis = AxisType.Child;
+		let isPathStart = true;
+
 		// track backwards to get all tokens in path
 		for (let i = lastTokenIndex; i > -1; i--) {
 			const token = tokens[i];
 			const tv = token.value;
 			let xpathCharType = <CharLevelState>token.charType;
 			let xpathTokenType = <TokenLevelState>token.tokenType;
+			let currentAxis = nextAxis;
+			nextAxis = AxisType.Child;
+
 
 			let nextSymbols: vscode.DocumentSymbol[] = [];
 
@@ -471,16 +484,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				case TokenLevelState.operator:
 					switch (xpathCharType) {
 						case CharLevelState.sep:
-							if (i === lastTokenIndex) {
+							if (isPathStart) {
 								isDocumentNode = token.value === '/'
 							}
 							break;
 						case CharLevelState.dSep:
 							if (token.value === '//') {
-								if (i === lastTokenIndex) {
-									nextSymbols.push(symbols[0])
-								}
-								// recursive descent to get all descendants
+								// need to just hold and wait for next token
+								// 1. //*
+								// 2. //element
+								nextAxis = AxisType.Descendant;
+								nextSymbols = currentSymbols;								
 							}
 					}
 					break;
@@ -489,7 +503,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						isDocumentNode = false;
 						// starting point: assume root element
 						if (symbols[0].name === token.value) {
-							nextSymbols = symbols;
+							nextSymbols = [symbols[0]];
 						}
 					} else {
 						for (let i = 0; i < currentSymbols.length; i++) {
@@ -502,17 +516,32 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				case TokenLevelState.axisName:
 					break;
 				case TokenLevelState.nodeType:
-					if (i === lastTokenIndex) {
-						nextSymbols = symbols
+					if (isPathStart) {
+						currentSymbols = [symbols[0]];
 					}
 					if (token.value === '*') {
-						if (isDocumentNode) {
-							isDocumentNode = false;
-							nextSymbols = symbols;
-						} else {
-							currentSymbols.forEach(symbol => {
-								nextSymbols = nextSymbols.concat(symbol.children);
-							});
+						if (currentAxis === AxisType.Child) {
+							if (isDocumentNode) {
+								isDocumentNode = false;								
+								nextSymbols = [symbols[0]];
+							} else {
+								currentSymbols.forEach(symbol => {
+									nextSymbols = nextSymbols.concat(symbol.children);
+								});
+							}
+						} else if (currentAxis === AxisType.Descendant) {
+							let newSymbols: vscode.DocumentSymbol[] = [];
+							nextSymbols = [...currentSymbols];
+							do {
+								// recursive descent to get all descendants
+								currentSymbols.forEach(symbol => {
+									nextSymbols = nextSymbols.concat(symbol.children);
+								});
+								newSymbols = newSymbols.concat(nextSymbols);
+								currentSymbols = nextSymbols;
+								nextSymbols = [];
+							} while (currentSymbols.length > 0)
+							nextSymbols = newSymbols;
 						}
 					}
 					break;
@@ -521,6 +550,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 
 			currentSymbols = nextSymbols;
+			isPathStart = false;
 
 			if (i === 0) {
 				for (let x = 0; x < currentSymbols.length; x++) {
