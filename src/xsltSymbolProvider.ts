@@ -325,6 +325,22 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
+	public static getCompletionNodeNames(
+		allTokens: BaseToken[], index: number,
+		xpathStack: XPathData[], symbols: vscode.DocumentSymbol[]
+		) {
+		const pathTokens = XsltSymbolProvider.filterPathTokens(allTokens, index, xpathStack);
+		console.log('pathTokens')
+		console.log(pathTokens);
+		const result = XsltSymbolProvider.getExpectedForXPathLocation(pathTokens, symbols);
+		const [elementNames, attrNames] = result;
+		console.log('elementNames');
+		console.log(elementNames);
+		console.log('attrtNames');
+		console.log(attrNames);
+		return result;
+	}
+
 	public static filterPathTokens(tokens: BaseToken[], position: number, xpathStack: XPathData[]) {
 		let cleanedTokens: BaseToken[] = [];
 		const bracketTokens: BaseToken[] = [];
@@ -549,19 +565,23 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			isPathStart = false;
 
 			if (i === 0) {
-				console.log('symbols');
-				console.log(currentSymbols);
-				for (let x = 0; x < currentSymbols.length; x++) {
-					const curentSymbol = currentSymbols[x];
-					curentSymbol.children.forEach(child => {
-						if (child.kind === vscode.SymbolKind.Array && child.name === 'attributes') {
-							child.children.forEach(child => attrNames.add('@' + child.name));
-						} else {
-							elementNames.add(child.name);
-						}
-					});
+				if (isDocumentNode) {
+					elementNames.add(currentSymbols[0].name);
+				} else {
+					console.log('symbols');
+					console.log(currentSymbols);
+					for (let x = 0; x < currentSymbols.length; x++) {
+						const curentSymbol = currentSymbols[x];
+						curentSymbol.children.forEach(child => {
+							if (child.kind === vscode.SymbolKind.Array && child.name === 'attributes') {
+								child.children.forEach(child => attrNames.add('@' + child.name));
+							} else {
+								elementNames.add(child.name);
+							}
+						});
+					}
 				}
-			} // end if
+			} // end if (i == 0)
 
 		}
 
