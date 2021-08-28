@@ -506,10 +506,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							nextSymbols = [symbols[0]];
 						}
 					} else {
-						for (let i = 0; i < currentSymbols.length; i++) {
-							const symbol = currentSymbols[i];
-							const next = symbol.children.filter(child => child.name === token.value);
-							nextSymbols = nextSymbols.concat(next);
+						if (currentAxis === AxisType.Child) {
+							for (let i = 0; i < currentSymbols.length; i++) {
+								const symbol = currentSymbols[i];
+								const next = symbol.children.filter(child => child.name === token.value);
+								nextSymbols = nextSymbols.concat(next);
+							}
+						} else if (currentAxis === AxisType.Descendant) {
+							nextSymbols = XsltSymbolProvider.getDescendantSymbols(currentSymbols, token.value);
 						}
 					}
 					break;
@@ -530,18 +534,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								});
 							}
 						} else if (currentAxis === AxisType.Descendant) {
-							let newSymbols: vscode.DocumentSymbol[] = [];
-							nextSymbols = [...currentSymbols];
-							do {
-								// recursive descent to get all descendants
-								currentSymbols.forEach(symbol => {
-									nextSymbols = nextSymbols.concat(symbol.children);
-								});
-								newSymbols = newSymbols.concat(nextSymbols);
-								currentSymbols = nextSymbols;
-								nextSymbols = [];
-							} while (currentSymbols.length > 0)
-							nextSymbols = newSymbols;
+							nextSymbols = XsltSymbolProvider.getDescendantSymbols(currentSymbols);
 						}
 					}
 					break;
@@ -570,6 +563,28 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return [[...elementNames], [...attrNames]];
 	}
 
+
+	private static getDescendantSymbols(currentSymbols: vscode.DocumentSymbol[], nodeName?: string) {
+		let newSymbols: vscode.DocumentSymbol[] = [];
+		const descendantOrSelf = false;
+		const isNameTest = nodeName !== undefined;
+		let nextSymbols:vscode.DocumentSymbol[] = descendantOrSelf? [...currentSymbols] : [];
+		do {
+			// recursive descent to get all descendants
+			currentSymbols.forEach(symbol => {
+				nextSymbols = nextSymbols.concat(symbol.children);
+			});
+			newSymbols = newSymbols.concat(nextSymbols);
+			currentSymbols = nextSymbols;
+			nextSymbols = [];
+		} while (currentSymbols.length > 0);
+		if (isNameTest) {
+			nextSymbols = newSymbols.filter(symbol => symbol.name === nodeName);
+		} else {
+			nextSymbols = newSymbols;
+		}
+		return nextSymbols;
+	}
 
 	public static getSymbolFromXPathLocator(rawText: string, symbols: vscode.DocumentSymbol[]) {
 		const text = rawText.startsWith('/') ? rawText.substring(1) : '';
