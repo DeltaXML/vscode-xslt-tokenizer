@@ -483,6 +483,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let isDocumentNode = false;
 		let nextAxis = AxisType.Child;
 		let isPathStart = true;
+		let isPathEnd = false;
 
 		// track backwards to get all tokens in path
 		for (let i = lastTokenIndex; i > -1; i--) {
@@ -491,6 +492,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			let xpathCharType = <CharLevelState>token.charType;
 			let xpathTokenType = <TokenLevelState>token.tokenType;
 			let currentAxis = nextAxis;
+			isPathEnd = i === 0;
 			nextAxis = AxisType.Child;
 
 
@@ -510,8 +512,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								// need to just hold and wait for next token
 								// 1. //*
 								// 2. //element
+								nextSymbols = isPathStart? [symbols[0]] : currentSymbols;
+								const descendantOrSelf = true;
+								nextSymbols = XsltSymbolProvider.getDescendantSymbols(nextSymbols, descendantOrSelf);
 								nextAxis = AxisType.Descendant;
-								nextSymbols = isPathStart? [symbols[0]] : currentSymbols;								
 							}
 					}
 					break;
@@ -523,14 +527,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							nextSymbols = currentSymbols;
 						}
 					} else {
-						if (currentAxis === AxisType.Child) {
-							for (let i = 0; i < currentSymbols.length; i++) {
-								const symbol = currentSymbols[i];
-								const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && child.name === token.value);
-								nextSymbols = nextSymbols.concat(next);
-							}
-						} else if (currentAxis === AxisType.Descendant) {
-							nextSymbols = XsltSymbolProvider.getDescendantSymbols(currentSymbols, token.value);
+						for (let i = 0; i < currentSymbols.length; i++) {
+							const symbol = currentSymbols[i];
+							const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && child.name === token.value);
+							nextSymbols = nextSymbols.concat(next);
 						}
 					}
 					break;
@@ -542,18 +542,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						currentSymbols = [symbols[0]];
 					}
 					if (token.value === '*') {
-						if (currentAxis === AxisType.Child) {
-							if (isDocumentNode) {
-								isDocumentNode = false;								
-								nextSymbols = currentSymbols;
-							} else {
-								currentSymbols.forEach(symbol => {
-									const elementChildren = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array);
-									nextSymbols = nextSymbols.concat(elementChildren);
-								});
-							}
-						} else if (currentAxis === AxisType.Descendant) {
-							nextSymbols = XsltSymbolProvider.getDescendantSymbols(currentSymbols);
+						if (isDocumentNode) {
+							isDocumentNode = false;								
+							nextSymbols = currentSymbols;
+						} else {
+							currentSymbols.forEach(symbol => {
+								const elementChildren = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array);
+								nextSymbols = nextSymbols.concat(elementChildren);
+							});
 						}
 					}
 					break;
@@ -589,9 +585,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 
-	private static getDescendantSymbols(currentSymbols: vscode.DocumentSymbol[], nodeName?: string) {
+	private static getDescendantSymbols(currentSymbols: vscode.DocumentSymbol[], descendantOrSelf: boolean, nodeName?: string) {
 		let newSymbols: vscode.DocumentSymbol[] = [];
-		const descendantOrSelf = false;
 		const isNameTest = nodeName !== undefined;
 		let nextSymbols:vscode.DocumentSymbol[] = descendantOrSelf? [...currentSymbols] : [];
 		do {

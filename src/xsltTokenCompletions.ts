@@ -772,7 +772,7 @@ export class XsltTokenCompletions {
 												break;
 										}
 									}
-								} else if (token.value === '//') {
+								} else if (isOnRequiredToken && requiredChar === token.startCharacter + 2 && token.value === '//') {
 									const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, index, xpathStack, xpathDocSymbols);
 									resultCompletions = XsltTokenCompletions.getPathCompletions(position, elementNameTests.concat(elementNames), attNameTests.concat(attrNames), globalInstructionData, importedInstructionData);
 								}
