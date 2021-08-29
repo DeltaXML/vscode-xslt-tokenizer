@@ -496,6 +496,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			nextAxis = AxisType.Child;
 			let nextSymbols: vscode.DocumentSymbol[] = [];
 			let descendantAttrNames: string[] = [];
+			let parentSymbols: vscode.DocumentSymbol[] = [];
 
 			switch (xpathTokenType) {
 				case TokenLevelState.operator:
@@ -630,6 +631,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private static getDescendantSymbols(currentSymbols: vscode.DocumentSymbol[], descendantOrSelf: boolean, nodeName?: string) {
 		let newSymbols: vscode.DocumentSymbol[] = [];
+		let parentSymbols: vscode.DocumentSymbol[] = [];
 		const isNameTest = nodeName !== undefined;
 		let outSymbols:vscode.DocumentSymbol[] = descendantOrSelf? [...currentSymbols] : [];
 		let attrNames = new Set<string>();
