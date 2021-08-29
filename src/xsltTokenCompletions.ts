@@ -606,7 +606,7 @@ export class XsltTokenCompletions {
 					case TokenLevelState.nodeNameTest:
 						if (isOnRequiredToken) {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, index - 1, xpathStack, xpathDocSymbols);
-							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/','//','::'].indexOf(prevToken.value) != -1 )) {
+							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/','//','::'].indexOf(prevToken.value) !== -1 )) {
 								resultCompletions = XsltTokenCompletions.getTokenPathCompletions(token, elementNameTests.concat(elementNames), attNameTests.concat(attrNames), globalInstructionData, importedInstructionData);
 							} else {
 								resultCompletions = XsltTokenCompletions.getAllTokenCompletions(docType, position, token, elementNameTests.concat(elementNames), attNameTests.concat(attrNames), globalInstructionData, importedInstructionData);
@@ -762,13 +762,14 @@ export class XsltTokenCompletions {
 									incrementFunctionArity = true;
 								} else if (token.value === '::') {
 									if (isOnRequiredToken && prevToken) {
+										const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, index - 1, xpathStack, xpathDocSymbols);
 										switch (prevToken.value) {
 											case 'attribute':
 												let attNames = attNameTests.map((name) => name.substring(1));
-												resultCompletions = XsltTokenCompletions.getNormalCompletions(position, attNames, vscode.CompletionItemKind.Unit);
+												resultCompletions = XsltTokenCompletions.getNormalCompletions(position, attNames.concat(attrNames), vscode.CompletionItemKind.Unit);
 												break;
 											default:
-												resultCompletions = XsltTokenCompletions.getNormalCompletions(position, elementNameTests, vscode.CompletionItemKind.Unit);
+												resultCompletions = XsltTokenCompletions.getNormalCompletions(position, elementNameTests.concat(elementNames), vscode.CompletionItemKind.Unit);
 												let nodeTypes = Data.cNodeTypes.map(axis => axis + '()');
 												let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
 

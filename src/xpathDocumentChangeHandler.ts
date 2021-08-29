@@ -16,6 +16,7 @@ export class XPathDocumentChangeHandler {
 		let wsEndPos = -1;
 		let keywordPos = -1;
 		let keyword: string | undefined;
+		let separatorChar: string|undefined;
 
 		const char = activeChange.text;
 		let charIsWs = (char === ' ' || char === '\t' || char === '\n');
@@ -29,6 +30,7 @@ export class XPathDocumentChangeHandler {
 				}
 			} else if (Data.anySeps.indexOf(char) !== -1) {
 				followsSeparator = true;
+				separatorChar = char;
 				break;
 			} else if (charIsWs) {
 				if (wsEndPos === -1) {
@@ -44,6 +46,8 @@ export class XPathDocumentChangeHandler {
 		if (charIsWs) {
 			doTrigger = followsSeparator || (keyword !== undefined && Data.triggerWords.indexOf(keyword) !== -1);
 		} else if (char === '$' || char === '/' || char === '[' || char === '?' || char === '@') {
+			doTrigger = true;
+		} else if (followsSeparator && (char === ':' && separatorChar === ':')) {
 			doTrigger = true;
 		} else {
 			doTrigger = precededByWS && followsSeparator;

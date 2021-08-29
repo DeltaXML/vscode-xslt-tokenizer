@@ -35,6 +35,7 @@ export enum SelectionType {
 }
 
 enum AxisType {
+	Self,
 	Child,
 	Descendant,
 	Parent,
@@ -525,6 +526,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (currentSymbols[0].name === token.value) {
 							nextSymbols = currentSymbols;
 						}
+					} else if (currentAxis = AxisType.Self) {
+						nextSymbols = currentSymbols.filter(current => current.name === token.value);
 					} else {
 						for (let i = 0; i < currentSymbols.length; i++) {
 							const symbol = currentSymbols[i];
@@ -534,6 +537,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					}
 					break;
 				case TokenLevelState.axisName:
+					switch (token.value) {
+						case 'self':
+							nextAxis = AxisType.Self;
+							nextSymbols = currentSymbols;
+							break;
+					}
 					break;
 				case TokenLevelState.nodeType:
 					if (isPathStart) {
@@ -543,6 +552,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					if (token.value === '*') {
 						if (isDocumentNode) {
 							isDocumentNode = false;								
+							nextSymbols = currentSymbols;
+						} else if (currentAxis = AxisType.Self) {
 							nextSymbols = currentSymbols;
 						} else {
 							currentSymbols.forEach(symbol => {
@@ -562,6 +573,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			if (i === 0) {
 				if (isDocumentNode) {
 					elementNames.add(currentSymbols[0].name);
+				} else if (nextAxis === AxisType.Self) {
+					currentSymbols.forEach(current => elementNames.add(current.name));
 				} else {
 					console.log('symbols');
 					console.log(currentSymbols);
