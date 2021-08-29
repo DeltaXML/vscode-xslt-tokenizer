@@ -165,10 +165,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				}
 			});
 
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			if (vscode.window.activeTextEditor && document.fileName !== vscode.window.activeTextEditor.document.fileName) {
 
 			} else {
-				let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
 				if (this.collection && this.docType !== DocumentTypes.SCH) {
 					let importDiagnostics: vscode.Diagnostic[] = [];
@@ -182,9 +182,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						this.collection.clear();
 					};
 				}
-				XsltSymbolProvider.documentSymbols.set(document.uri, symbols);
 			}
-
+			XsltSymbolProvider.documentSymbols.set(document.uri, symbols);
 			resolve(symbols);
 		});
 
