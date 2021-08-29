@@ -174,10 +174,10 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -538,7 +538,8 @@ export class XsltTokenCompletions {
 						break;
 					case TokenLevelState.attributeNameTest:
 						if (isOnRequiredToken) {
-							resultCompletions = XsltTokenCompletions.createVariableCompletions('', attNameTests, token, vscode.CompletionItemKind.Unit, '@');
+							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, index - 1, xpathStack, xpathDocSymbols);
+							resultCompletions = XsltTokenCompletions.createVariableCompletions('', attNameTests.concat(attrNames), token, vscode.CompletionItemKind.Unit, '@');
 						}
 						break;
 					case TokenLevelState.variable:

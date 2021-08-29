@@ -43,7 +43,7 @@ export class XPathDocumentChangeHandler {
 
 		if (charIsWs) {
 			doTrigger = followsSeparator || (keyword !== undefined && Data.triggerWords.indexOf(keyword) !== -1);
-		} else if (char === '$' || char === '/' || char === '[' || char === '?') {
+		} else if (char === '$' || char === '/' || char === '[' || char === '?' || char === '@') {
 			doTrigger = true;
 		} else {
 			doTrigger = precededByWS && followsSeparator;
