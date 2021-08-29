@@ -35,6 +35,7 @@ export enum SelectionType {
 }
 
 enum AxisType {
+	Attribute,
 	Self,
 	Child,
 	Descendant,
@@ -495,8 +496,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			let currentAxis = nextAxis;
 			isPathEnd = i === 0;
 			nextAxis = AxisType.Child;
-
-
 			let nextSymbols: vscode.DocumentSymbol[] = [];
 
 			switch (xpathTokenType) {
@@ -527,7 +526,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (currentSymbols[0].name === token.value) {
 							nextSymbols = currentSymbols;
 						}
-					} else if (currentAxis === AxisType.Self || currentAxis === AxisType.Descendant || currentAxis === AxisType.DescendantOrSelf ) {
+					} else if (currentAxis !== AxisType.Child ) {
 						nextSymbols = currentSymbols.filter(current => current.name === token.value);
 					} else {
 						for (let i = 0; i < currentSymbols.length; i++) {
@@ -552,6 +551,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							}
 							nextSymbols = XsltSymbolProvider.getDescendantSymbols(nextSymbols, nextAxis === AxisType.DescendantOrSelf);
 							break;
+						case 'attribute':
+							nextAxis = AxisType.Attribute;
+							currentSymbols.forEach((current) => {
+								const firstChild = current.children[0];
+								if (firstChild.kind = vscode.SymbolKind.Array) {
+									firstChild.children.forEach(attr => {
+										nextSymbols.push(attr);
+									});
+								}
+							});
+							break;
 					}
 					break;
 				case TokenLevelState.nodeType:
@@ -563,7 +573,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (isDocumentNode) {
 							isDocumentNode = false;								
 							nextSymbols = currentSymbols;
-						} else if (currentAxis === AxisType.Self) {
+						} else if (currentAxis != AxisType.Child) {
 							nextSymbols = currentSymbols;
 						} else {
 							currentSymbols.forEach(symbol => {
@@ -583,7 +593,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			if (i === 0) {
 				if (isDocumentNode) {
 					elementNames.add(currentSymbols[0].name);
-				} else if (nextAxis === AxisType.Self || nextAxis === AxisType.DescendantOrSelf || nextAxis === AxisType.Descendant) {
+				} else if (nextAxis !== AxisType.Child) {
 					currentSymbols.forEach(current => elementNames.add(current.name));
 				} else {
 					console.log('symbols');
