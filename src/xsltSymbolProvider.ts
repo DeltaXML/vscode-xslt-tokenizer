@@ -421,7 +421,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						break;
 					case TokenLevelState.nodeNameTest:
 					case TokenLevelState.axisName:
-						saveToken = true;
+						saveToken = token.value !== 'child';
 						break;
 					case TokenLevelState.nodeType:
 						saveToken = ['*', '..'].indexOf(token.value) !== -1;
