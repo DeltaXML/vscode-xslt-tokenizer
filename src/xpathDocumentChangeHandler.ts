@@ -49,6 +49,8 @@ export class XPathDocumentChangeHandler {
 			doTrigger = precededByWS && followsSeparator;
 		}
 
+		console.log('doTrigger', doTrigger);
+
 		if (doTrigger) {
 			setTimeout(() => {
 				vscode.commands.executeCommand('editor.action.triggerSuggest');
