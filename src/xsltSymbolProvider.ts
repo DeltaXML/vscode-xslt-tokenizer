@@ -38,6 +38,7 @@ enum AxisType {
 	Self,
 	Child,
 	Descendant,
+	DescendantOrSelf,
 	Parent,
 	Ancestor
 }
@@ -542,6 +543,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							nextAxis = AxisType.Self;
 							nextSymbols = currentSymbols;
 							break;
+						case 'descendant-or-self':
+							nextSymbols = isPathStart? [symbols[0]] : currentSymbols;
+							const descendantOrSelf = true;
+							nextSymbols = XsltSymbolProvider.getDescendantSymbols(nextSymbols, descendantOrSelf);
+							nextAxis = AxisType.DescendantOrSelf;
+							break;
 					}
 					break;
 				case TokenLevelState.nodeType:
@@ -573,7 +580,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			if (i === 0) {
 				if (isDocumentNode) {
 					elementNames.add(currentSymbols[0].name);
-				} else if (nextAxis === AxisType.Self) {
+				} else if (nextAxis === AxisType.Self || nextAxis === AxisType.DescendantOrSelf) {
 					currentSymbols.forEach(current => elementNames.add(current.name));
 				} else {
 					console.log('symbols');
