@@ -495,6 +495,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			isPathEnd = i === 0;
 			nextAxis = AxisType.Child;
 			let nextSymbols: vscode.DocumentSymbol[] = [];
+			let descendantAttrNames: string[] = [];
 
 			switch (xpathTokenType) {
 				case TokenLevelState.operator:
@@ -512,7 +513,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								// 2. //element
 								nextSymbols = isPathStart? [symbols[0]] : currentSymbols;
 								const descendantOrSelf = true;
-								nextSymbols = XsltSymbolProvider.getDescendantSymbols(nextSymbols, descendantOrSelf);
+								const {outSymbols, attrNameArray} = XsltSymbolProvider.getDescendantSymbols(nextSymbols, descendantOrSelf);
+								nextSymbols = outSymbols;
+								descendantAttrNames = attrNameArray;
 								nextAxis = AxisType.Descendant;
 							}
 					}
@@ -547,7 +550,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							if (token.value === 'descendant-or-self') {
 								nextAxis = AxisType.DescendantOrSelf;
 							}
-							nextSymbols = XsltSymbolProvider.getDescendantSymbols(nextSymbols, nextAxis === AxisType.DescendantOrSelf);
+							const {outSymbols, attrNameArray} = XsltSymbolProvider.getDescendantSymbols(nextSymbols, nextAxis === AxisType.DescendantOrSelf);
+							nextSymbols = outSymbols;
+							descendantAttrNames = attrNameArray;
 							break;
 						case 'attribute':
 							nextSymbols = currentSymbols;
@@ -612,7 +617,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						});
 					}
 				}
-				return [[...elementNames], [...attrNames]];
+				const attrNameArray = (nextAxis === AxisType.Descendant || nextAxis === AxisType.DescendantOrSelf)
+				? descendantAttrNames : [...attrNames];
+				return [[...elementNames], attrNameArray];
 			} // end if (i == 0)
 
 		}
@@ -624,22 +631,33 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private static getDescendantSymbols(currentSymbols: vscode.DocumentSymbol[], descendantOrSelf: boolean, nodeName?: string) {
 		let newSymbols: vscode.DocumentSymbol[] = [];
 		const isNameTest = nodeName !== undefined;
-		let nextSymbols:vscode.DocumentSymbol[] = descendantOrSelf? [...currentSymbols] : [];
+		let outSymbols:vscode.DocumentSymbol[] = descendantOrSelf? [...currentSymbols] : [];
+		let attrNames = new Set<string>();
+
 		do {
 			// recursive descent to get all descendants
 			currentSymbols.forEach(symbol => {
-				nextSymbols = nextSymbols.concat(symbol.children);
+				symbol.children.forEach(child => {
+					if (child.kind === vscode.SymbolKind.Array) {
+						child.children.forEach(attr => {
+							attrNames.add('@' + attr.name);
+						});
+					} else {
+						outSymbols.push(child);
+					}
+				});
 			});
-			newSymbols = newSymbols.concat(nextSymbols);
-			currentSymbols = nextSymbols;
-			nextSymbols = [];
+			newSymbols = newSymbols.concat(outSymbols);
+			currentSymbols = outSymbols;
+			outSymbols = [];
 		} while (currentSymbols.length > 0);
 		if (isNameTest) {
-			nextSymbols = newSymbols.filter(symbol => symbol.kind !== vscode.SymbolKind.Array && symbol.name === nodeName);
+			outSymbols = newSymbols.filter(symbol => symbol.name === nodeName);
 		} else {
-			nextSymbols = newSymbols.filter(symbol => symbol.kind !== vscode.SymbolKind.Array);
+			outSymbols = newSymbols;
 		}
-		return nextSymbols;
+		const attrNameArray = [...attrNames];
+		return {outSymbols, attrNameArray};
 	}
 
 	public static getSymbolFromXPathLocator(rawText: string, symbols: vscode.DocumentSymbol[]) {
