@@ -360,6 +360,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let lastTokenWasSlash = false;
 		let lastTokenWasSlash2 = false;
 		let hasParentAxis = false;
+		let foundVariableToken = false;
 
 		// track backwards to get all tokens in path
 		for (let i = position; i > -1; i--) {
@@ -414,7 +415,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								exitLoop = token.value !== '/';
 								if (!exitLoop && i === 0) {
 									cleanedTokens.push(token);
-								} if (!exitLoop) {
+								} 
+								if (!exitLoop) {
 									finalSlashToken = token;
 									lastTokenWasSlash = true;
 								}
@@ -445,12 +447,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						// TODO: for '..' case, we can just pop cleanedTokens and not save?
 						exitLoop = !(saveToken || token.value === '.');
 						break;
+					case TokenLevelState.variable:
+						// e.g. $dev/body
+						foundVariableToken = true;
+						// add the $dev token
+						cleanedTokens.push(token);
+						exitLoop = true;
 					default:
 						exitLoop = true;
 						break;
 				}
 			}
-			if (exitLoop) {
+			if (foundVariableToken) {
+				// $var gives context so don't check if we're in a predicate
+				break;
+			} else if (exitLoop) {
 				// check to see if we're still within a predicate: el1[el2 and el3]
 				exitLoop = false;
 				let predicateStart = -1;
@@ -669,6 +680,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						currentSymbols.forEach(symbol => {if (symbol.parent) nextSymbols.push(symbol.parent)})
 						nextAxis = AxisType.Parent;
 					}
+					break;
+				case TokenLevelState.variable:
+					// can only happen at start of path - assume all descendant-or-self
+					const descendantOrSelf = true;
+					nextSymbols = [symbols[0]];
+					const { outSymbols, attrNameArray } = XsltSymbolProvider.getDescendantSymbols(nextSymbols, descendantOrSelf, hasParentAxis);
+					nextSymbols = outSymbols;
+					descendantAttrNames = attrNameArray;
+					nextAxis = AxisType.DescendantOrSelf;
 					break;
 				case TokenLevelState.operator:
 					break;
