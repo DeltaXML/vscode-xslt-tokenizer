@@ -436,6 +436,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						break;
 					case TokenLevelState.nodeType:
 						saveToken = ['*', '..'].indexOf(token.value) !== -1;
+						if (!hasParentAxis) {
+							hasParentAxis = token.value === '..';
+						}
 						// TODO: for '..' case, we can just pop cleanedTokens and not save?
 						exitLoop = !(saveToken || token.value === '.');
 						break;
@@ -544,7 +547,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							if (hasParentAxis) {
 								symbol.children.forEach((child: SymbolWithParent) => {
 									if (child.kind !== vscode.SymbolKind.Array && child.name === token.value) {
-										child['parent'] = symbol;
+										if (!child.parent) {
+											child.parent = symbol;
+										}
 										nextSymbols.push(child);
 									}
 								})
@@ -577,7 +582,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							nextAxis = AxisType.Attribute;
 							break;
 						case 'parent':
-							nextSymbols = currentSymbols.map(symbol => symbol.parent!)
+							currentSymbols.forEach(symbol => {if (symbol.parent) nextSymbols.push(symbol.parent)})
 							nextAxis = AxisType.Parent;
 							break;
 					}
@@ -610,6 +615,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								}
 							});
 						}
+					} else if (token.value === '..') {
+						currentSymbols.forEach(symbol => {if (symbol.parent) nextSymbols.push(symbol.parent)})
+						nextAxis = AxisType.Parent;
 					}
 					break;
 				case TokenLevelState.operator:
@@ -635,7 +643,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						}
 					});
 				} else if (nextAxis !== AxisType.Child) {
-					currentSymbols.forEach(current => {if (current !== undefined) elementNames.add(current.name)});
+					currentSymbols.forEach(current => elementNames.add(current.name));
 				} else {
 					console.log('symbols');
 					console.log(currentSymbols);
