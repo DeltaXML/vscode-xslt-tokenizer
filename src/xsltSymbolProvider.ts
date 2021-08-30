@@ -42,7 +42,9 @@ enum AxisType {
 	DescendantOrSelf,
 	Parent,
 	Ancestor,
-	AncestorOrSelf
+	AncestorOrSelf,
+	FollowingSibling,
+	PrecedingSibling
 }
 
 interface SymbolWithParent extends vscode.DocumentSymbol {
@@ -585,6 +587,33 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						case 'parent':
 							currentSymbols.forEach(symbol => { if (symbol.parent) nextSymbols.push(symbol.parent) })
 							nextAxis = AxisType.Parent;
+							break;
+					  case 'following-sibling':
+							nextAxis = AxisType.FollowingSibling;
+						case 'preceding-sibling':
+							// include all siblings
+							const isFollowing = nextAxis === AxisType.FollowingSibling;
+							currentSymbols.forEach(symbol => {
+								const sParent = symbol.parent;
+								if (sParent) {
+									const pos = symbol.range.start;
+									sParent.children.forEach((c: SymbolWithParent) => {
+										if (c.kind !== vscode.SymbolKind.Array && (
+											(isFollowing && c.range.start.isAfter(pos) ||
+											(!isFollowing && c.range.start.isBefore(pos))
+											)
+										)) {
+											if (!c.parent) {
+												c.parent = sParent;
+											}
+											nextSymbols.push(c);
+										}
+									});
+								} 
+							});
+							if (!isFollowing) {
+								nextAxis = AxisType.PrecedingSibling;
+							}
 							break;
 						case 'ancestor-or-self':
 							nextAxis = AxisType.AncestorOrSelf;
