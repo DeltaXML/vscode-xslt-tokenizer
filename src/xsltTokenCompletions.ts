@@ -608,6 +608,9 @@ export class XsltTokenCompletions {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, index - 1, xpathStack, xpathDocSymbols);
 							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/','//','::'].indexOf(prevToken.value) !== -1 )) {
 								resultCompletions = XsltTokenCompletions.getTokenPathCompletions(token, elementNameTests.concat(elementNames), attNameTests.concat(attrNames), globalInstructionData, importedInstructionData);
+								let axes = Data.cAxes.map(axis => axis + '::');
+								let axisCompletions = XsltTokenCompletions.getTokenCommandCompletions(token, position, axes, vscode.CompletionItemKind.Function);
+								resultCompletions = resultCompletions.concat(axisCompletions);
 							} else {
 								resultCompletions = XsltTokenCompletions.getAllTokenCompletions(docType, position, token, elementNameTests.concat(elementNames), attNameTests.concat(attrNames), globalInstructionData, importedInstructionData);
 							}
