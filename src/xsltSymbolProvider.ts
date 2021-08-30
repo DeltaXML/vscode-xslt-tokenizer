@@ -44,6 +44,9 @@ enum AxisType {
 	Ancestor
 }
 
+interface SymbolWithParent extends vscode.DocumentSymbol {
+	parent?: vscode.DocumentSymbol;
+}
 
 type possDocumentSymbol = vscode.DocumentSymbol | null;
 
@@ -331,10 +334,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		allTokens: BaseToken[], index: number,
 		xpathStack: XPathData[], symbols: vscode.DocumentSymbol[]
 		) {
-		const pathTokens = XsltSymbolProvider.filterPathTokens(allTokens, index, xpathStack);
+		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, index, xpathStack);
 		console.log('pathTokens')
-		console.log(pathTokens);
-		const result = XsltSymbolProvider.getExpectedForXPathLocation(pathTokens, symbols);
+		console.log(cleanedTokens);
+		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
 		const [elementNames, attrNames] = result;
 		console.log('elementNames');
 		console.log(elementNames);
@@ -353,6 +356,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let xpathStacksChecked = 0;
 		let lastTokenWasSlash = false;
 		let lastTokenWasSlash2 = false;
+		let hasParentAxis = false;
 
 		// track backwards to get all tokens in path
 		for (let i = position; i > -1; i--) {
@@ -422,8 +426,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						}
 						break;
 					case TokenLevelState.nodeNameTest:
+						saveToken = true;
+						break;
 					case TokenLevelState.axisName:
 						saveToken = token.value !== 'child';
+						if (!hasParentAxis) {
+							hasParentAxis = ['parent', 'ancestor', 'following-sibling', 'preceding-sibling'].indexOf(token.value) !== -1;
+						}
 						break;
 					case TokenLevelState.nodeType:
 						saveToken = ['*', '..'].indexOf(token.value) !== -1;
@@ -465,10 +474,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			lastTokenWasSlash = false;
 			saveToken = false;
 		}
-		return cleanedTokens;
+		return {cleanedTokens, hasParentAxis};
 	}
 
-	public static getExpectedForXPathLocation(tokens: BaseToken[], symbols: vscode.DocumentSymbol[]) {		
+	public static getExpectedForXPathLocation(tokens: BaseToken[], symbols: vscode.DocumentSymbol[], hasParentAxis: boolean) {		
 		if (symbols.length === 0) {
 			return [[], []];
 		}		
@@ -479,7 +488,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 		const lastTokenIndex = tokens.length - 1;		
 		// start with root element symbol:
-		let currentSymbols: vscode.DocumentSymbol[] = [];
+		let currentSymbols: SymbolWithParent[] = [];
 		let isDocumentNode = false;
 		let nextAxis = AxisType.Child;
 		let isPathStart = true;
@@ -494,9 +503,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			let currentAxis = nextAxis;
 			isPathEnd = i === 0;
 			nextAxis = AxisType.Child;
-			let nextSymbols: vscode.DocumentSymbol[] = [];
+			let nextSymbols: SymbolWithParent[] = [];
 			let descendantAttrNames: string[] = [];
-			let parentSymbols: vscode.DocumentSymbol[] = [];
 
 			switch (xpathTokenType) {
 				case TokenLevelState.operator:
@@ -514,7 +522,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								// 2. //element
 								nextSymbols = isPathStart? [symbols[0]] : currentSymbols;
 								const descendantOrSelf = true;
-								const {outSymbols, attrNameArray} = XsltSymbolProvider.getDescendantSymbols(nextSymbols, descendantOrSelf);
+								const {outSymbols, attrNameArray} = XsltSymbolProvider.getDescendantSymbols(nextSymbols, descendantOrSelf, hasParentAxis);
 								nextSymbols = outSymbols;
 								descendantAttrNames = attrNameArray;
 								nextAxis = AxisType.Descendant;
@@ -533,8 +541,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					} else {
 						for (let i = 0; i < currentSymbols.length; i++) {
 							const symbol = currentSymbols[i];
-							const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && child.name === token.value);
-							nextSymbols = nextSymbols.concat(next);
+							if (hasParentAxis) {
+								symbol.children.forEach((child: SymbolWithParent) => {
+									if (child.kind !== vscode.SymbolKind.Array && child.name === token.value) {
+										child['parent'] = symbol;
+										nextSymbols.push(child);
+									}
+								})
+							} else {
+								const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && child.name === token.value);
+								nextSymbols = nextSymbols.concat(next);
+							}
 						}
 					}
 					break;
@@ -551,13 +568,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							if (token.value === 'descendant-or-self') {
 								nextAxis = AxisType.DescendantOrSelf;
 							}
-							const {outSymbols, attrNameArray} = XsltSymbolProvider.getDescendantSymbols(nextSymbols, nextAxis === AxisType.DescendantOrSelf);
+							const {outSymbols, attrNameArray} = XsltSymbolProvider.getDescendantSymbols(nextSymbols, nextAxis === AxisType.DescendantOrSelf, hasParentAxis);
 							nextSymbols = outSymbols;
 							descendantAttrNames = attrNameArray;
 							break;
 						case 'attribute':
 							nextSymbols = currentSymbols;
 							nextAxis = AxisType.Attribute;
+							break;
+						case 'parent':
+							nextSymbols = currentSymbols.map(symbol => symbol.parent!)
+							nextAxis = AxisType.Parent;
 							break;
 					}
 					break;
@@ -570,12 +591,23 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (isDocumentNode) {
 							isDocumentNode = false;								
 							nextSymbols = currentSymbols;
-						} else if (currentAxis != AxisType.Child) {
+						} else if (currentAxis !== AxisType.Child) {
 							nextSymbols = currentSymbols;
 						} else {
 							currentSymbols.forEach(symbol => {
-								const elementChildren = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array);
-								nextSymbols = nextSymbols.concat(elementChildren);
+								if (hasParentAxis) {
+									symbol.children.forEach((child: SymbolWithParent) => {
+										if (child.kind !== vscode.SymbolKind.Array) {
+											if (!child.parent) {
+												child.parent = symbol;
+											}
+											nextSymbols.push(child);
+										}
+									});
+								} else {
+									const elementChildren = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array);
+									nextSymbols = nextSymbols.concat(elementChildren);
+								}
 							});
 						}
 					}
@@ -603,7 +635,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						}
 					});
 				} else if (nextAxis !== AxisType.Child) {
-					currentSymbols.forEach(current => elementNames.add(current.name));
+					currentSymbols.forEach(current => {if (current !== undefined) elementNames.add(current.name)});
 				} else {
 					console.log('symbols');
 					console.log(currentSymbols);
@@ -629,7 +661,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 
-	private static getDescendantSymbols(currentSymbols: vscode.DocumentSymbol[], descendantOrSelf: boolean, nodeName?: string) {
+	private static getDescendantSymbols(currentSymbols: vscode.DocumentSymbol[], descendantOrSelf: boolean, hasParentAxis: boolean, nodeName?: string) {
 		let newSymbols: vscode.DocumentSymbol[] = [];
 		let parentSymbols: vscode.DocumentSymbol[] = [];
 		const isNameTest = nodeName !== undefined;
@@ -639,12 +671,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		do {
 			// recursive descent to get all descendants
 			currentSymbols.forEach(symbol => {
-				symbol.children.forEach(child => {
+				symbol.children.forEach((child: SymbolWithParent)  => {
 					if (child.kind === vscode.SymbolKind.Array) {
 						child.children.forEach(attr => {
 							attrNames.add('@' + attr.name);
 						});
 					} else {
+						if (hasParentAxis){
+							child['parent'] = symbol;
+						}
 						outSymbols.push(child);
 					}
 				});
