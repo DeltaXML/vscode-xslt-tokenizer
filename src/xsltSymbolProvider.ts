@@ -406,7 +406,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								bracketTokens.push(token);
 								break;
 							case CharLevelState.dSep:
-								exitLoop = (token.value !== '//' && token.value !== '::');
+								exitLoop = (token.value !== '//' && token.value !== '::' && token.value !== '()');
 								saveToken = token.value === '//';
 								break;
 							case CharLevelState.sep:
@@ -438,7 +438,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						}
 						break;
 					case TokenLevelState.nodeType:
-						saveToken = ['*', '..'].indexOf(token.value) !== -1;
+						saveToken = ['*', '..','node','element','item'].indexOf(token.value) !== -1;
 						if (!hasParentAxis) {
 							hasParentAxis = token.value === '..';
 						}
@@ -642,7 +642,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						// TODO: start with all descendants?
 						currentSymbols = [symbols[0]];
 					}
-					if (token.value === '*') {
+					if (['*','node','element','item'].indexOf(token.value) !== -1) {
 						if (isDocumentNode) {
 							isDocumentNode = false;								
 							nextSymbols = currentSymbols;
