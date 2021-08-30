@@ -499,8 +499,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return [[], []];
 		}		
 		if (tokens.length === 0) {
-			const rootSymbol = symbols[0];
-			return [[rootSymbol.name], []];
+			const token: BaseToken = {
+				line: 1,
+				startCharacter: 0,
+				length: 1,
+				value: '//',
+				tokenType: TokenLevelState.operator,
+				charType: CharLevelState.dSep
+			}
+			tokens.push(token);
 		}
 
 		const lastTokenIndex = tokens.length - 1;		
