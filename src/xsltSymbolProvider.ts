@@ -41,7 +41,8 @@ enum AxisType {
 	Descendant,
 	DescendantOrSelf,
 	Parent,
-	Ancestor
+	Ancestor,
+	AncestorOrSelf
 }
 
 interface SymbolWithParent extends vscode.DocumentSymbol {
@@ -431,7 +432,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					case TokenLevelState.axisName:
 						saveToken = token.value !== 'child';
 						if (!hasParentAxis) {
-							hasParentAxis = ['parent', 'ancestor', 'following-sibling', 'preceding-sibling'].indexOf(token.value) !== -1;
+							hasParentAxis = ['parent', 'ancestor', 'ancestor-or-self', 'following-sibling', 'preceding-sibling'].indexOf(token.value) !== -1;
 						}
 						break;
 					case TokenLevelState.nodeType:
@@ -568,12 +569,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							break;
 						case 'descendant-or-self':
 						case 'descendant':
-							nextSymbols = isPathStart? [symbols[0]] : currentSymbols;
+							nextSymbols = isPathStart ? [symbols[0]] : currentSymbols;
 							nextAxis = AxisType.Descendant;
 							if (token.value === 'descendant-or-self') {
 								nextAxis = AxisType.DescendantOrSelf;
 							}
-							const {outSymbols, attrNameArray} = XsltSymbolProvider.getDescendantSymbols(nextSymbols, nextAxis === AxisType.DescendantOrSelf, hasParentAxis);
+							const { outSymbols, attrNameArray } = XsltSymbolProvider.getDescendantSymbols(nextSymbols, nextAxis === AxisType.DescendantOrSelf, hasParentAxis);
 							nextSymbols = outSymbols;
 							descendantAttrNames = attrNameArray;
 							break;
@@ -582,8 +583,28 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							nextAxis = AxisType.Attribute;
 							break;
 						case 'parent':
-							currentSymbols.forEach(symbol => {if (symbol.parent) nextSymbols.push(symbol.parent)})
+							currentSymbols.forEach(symbol => { if (symbol.parent) nextSymbols.push(symbol.parent) })
 							nextAxis = AxisType.Parent;
+							break;
+						case 'ancestor-or-self':
+							nextAxis = AxisType.AncestorOrSelf;
+						case 'ancestor':
+							const includeSelf = nextAxis === AxisType.AncestorOrSelf;
+							currentSymbols.forEach(symbol => {
+								let s: SymbolWithParent | undefined = symbol;
+								if (includeSelf) {
+									nextSymbols.push(s);
+								}
+								while (s) {
+									s = s.parent;
+									if (s) {
+										nextSymbols.push(s);
+									}
+								}
+							});
+							if (!includeSelf) {
+								nextAxis = AxisType.Ancestor;
+							}
 							break;
 					}
 					break;
