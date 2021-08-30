@@ -497,7 +497,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static getExpectedForXPathLocation(tokens: BaseToken[], symbols: vscode.DocumentSymbol[], hasParentAxis: boolean) {		
 		if (symbols.length === 0) {
 			return [[], []];
-		}		
+		}	
+
 		if (tokens.length === 0) {
 			const token: BaseToken = {
 				line: 1,
@@ -508,9 +509,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				charType: CharLevelState.dSep
 			}
 			tokens.push(token);
-		}
-
-		const lastTokenIndex = tokens.length - 1;		
+		} else {
+			const tv = tokens[tokens.length - 1].value;
+			if (!(tv === '/' || tv === '//')) {
+				const token: BaseToken = {
+					line: 1,
+					startCharacter: 0,
+					length: 1,
+					value: '//',
+					tokenType: TokenLevelState.operator,
+					charType: CharLevelState.dSep
+				}
+				tokens.push(token);
+			}
+		}	
+		const lastTokenIndex = tokens.length - 1;	
 		// start with root element symbol:
 		let currentSymbols: SymbolWithParent[] = [];
 		let isDocumentNode = false;
