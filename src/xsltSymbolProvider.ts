@@ -377,8 +377,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					case TokenLevelState.operator:
 						switch (xpathCharType) {
 							case CharLevelState.lB:
-								cleanedTokens = cleanedTokens.concat(...bracketTokens);
-								saveToken = true;
+								// TODO: handle case of: /countries/(sibling|sibling2)
+								//cleanedTokens = cleanedTokens.concat(...bracketTokens);
+								// saveToken = true;
+								// temp fix to terminate when finding (...)/country
+								exitLoop = true;
 								bracketTokens.length = 0;
 								break;
 							case CharLevelState.sep:
