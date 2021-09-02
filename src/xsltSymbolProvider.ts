@@ -41,6 +41,7 @@ enum AxisType {
 	Descendant,
 	DescendantOrSelf,
 	Parent,
+	ParentKeep,
 	Ancestor,
 	AncestorOrSelf,
 	FollowingSibling,
@@ -435,6 +436,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						}
 						break;
 					case TokenLevelState.nodeNameTest:
+					case TokenLevelState.attributeNameTest:
 						saveToken = true;
 						break;
 					case TokenLevelState.axisName:
@@ -598,6 +600,25 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						}
 					}
 					break;
+				case TokenLevelState.attributeNameTest:
+					const attrTokenValue = token.value.substring(1);
+					currentSymbols.forEach(symbol => {
+						const attrContainer = symbol.children.length > 0? symbol.children[0] : undefined;
+						if (attrContainer && attrContainer.kind === vscode.SymbolKind.Array) {
+							const attributes = attrContainer.children;
+							attributes.forEach((attr: SymbolWithParent) => {
+								if (attr.name === attrTokenValue) {
+									attr.isAttr = true;
+									if (hasParentAxis) {
+										attr.parent = symbol;
+									}
+									nextSymbols.push(attr);
+								}
+							});
+						} 
+					});
+					// leave axisType as child
+					break;
 				case TokenLevelState.axisName:
 					switch (token.value) {
 						case 'self':
@@ -628,12 +649,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 										nextSymbols.push(attr);
 									})
 								} 
-							})
+							});
 							nextAxis = AxisType.Attribute;
 							break;
 						case 'parent':
 							currentSymbols.forEach(symbol => { if (symbol.parent) nextSymbols.push(symbol.parent) })
-							nextAxis = AxisType.Parent;
+							nextAxis = AxisType.ParentKeep;
 							break;
 					  case 'following-sibling':
 							nextAxis = AxisType.FollowingSibling;
