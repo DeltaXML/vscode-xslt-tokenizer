@@ -562,7 +562,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								// 1. //*
 								// 2. //element
 								nextSymbols = isPathStart? [symbols[0]] : currentSymbols;
-								const descendantOrSelf = true;
+								const descendantOrSelf = isPathStart;
 								const {outSymbols, attrNameArray} = XsltSymbolProvider.getDescendantSymbols(nextSymbols, descendantOrSelf, hasParentAxis);
 								nextSymbols = outSymbols;
 								descendantAttrNames = attrNameArray;
