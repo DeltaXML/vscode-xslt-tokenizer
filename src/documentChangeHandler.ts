@@ -12,6 +12,8 @@ export interface TagRenameEdit {
 }
 export class DocumentChangeHandler {
 	public static lastActiveXMLEditor: vscode.TextEditor|null = null;
+	public static lastActiveXMLNonXSLEditor: vscode.TextEditor|null = null;
+
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 	public static isWindowsOS: boolean | undefined;
 
@@ -176,6 +178,9 @@ export class DocumentChangeHandler {
 		} 
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLEditor = editor;
+			if (document.languageId !== 'xslt') {
+				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
+			}
 			DocumentChangeHandler.getLastDocXmlnsPrefixes();
 		}
 		if (isXMLDocument && !this.xmlDocumentRegistered) {

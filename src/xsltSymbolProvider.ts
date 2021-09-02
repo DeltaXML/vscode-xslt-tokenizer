@@ -340,14 +340,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		xpathStack: XPathData[], symbols: vscode.DocumentSymbol[]
 		) {
 		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, index, xpathStack);
-		console.log('pathTokens')
-		console.log(cleanedTokens);
+		// console.log('pathTokens')
+		// console.log(cleanedTokens);
 		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
 		const [elementNames, attrNames] = result;
-		console.log('elementNames');
-		console.log(elementNames);
-		console.log('attrtNames');
-		console.log(attrNames);
+		// console.log('elementNames');
+		// console.log(elementNames);
+		// console.log('attrtNames');
+		// console.log(attrNames);
 		return result;
 	}
 

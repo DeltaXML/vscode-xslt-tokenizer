@@ -111,19 +111,27 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];
+		let uri: vscode.Uri|undefined;
 		if (this.docType === DocumentTypes.XPath) {
 			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
-			const uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
-			if (uri) {
-				const lastSymbols = XsltSymbolProvider.documentSymbols.get(uri);
-				if (lastSymbols) {
-					symbolsForXPath = lastSymbols;
-				}
-			}
+			uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
+
 		} else {
+			if (this.docType === DocumentTypes.XSLT) {
+				uri = DocumentChangeHandler.lastActiveXMLNonXSLEditor?.document.uri;
+			} else {
+				uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
+			}
 			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 			globalInstructionData = this.xslLexer.globalInstructionData;
+		}
+
+		if (uri) {
+			const lastSymbols = XsltSymbolProvider.documentSymbols.get(uri);
+			if (lastSymbols) {
+				symbolsForXPath = lastSymbols;
+			}
 		}
 		
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
