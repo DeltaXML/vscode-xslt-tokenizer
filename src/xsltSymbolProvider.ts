@@ -49,6 +49,7 @@ enum AxisType {
 
 interface SymbolWithParent extends vscode.DocumentSymbol {
 	parent?: vscode.DocumentSymbol;
+	isAttr?: boolean;
 }
 
 type possDocumentSymbol = vscode.DocumentSymbol | null;
@@ -615,7 +616,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							descendantAttrNames = attrNameArray;
 							break;
 						case 'attribute':
-							nextSymbols = currentSymbols;
+							currentSymbols.forEach(symbol => {
+								const attrContainer = symbol.children.length > 0? symbol.children[0] : undefined;
+								if (attrContainer && attrContainer.kind === vscode.SymbolKind.Array) {
+									const attributes = attrContainer.children;
+									attributes.forEach((attr: SymbolWithParent) => {
+										attr.isAttr = true;
+										if (hasParentAxis) {
+											attr.parent = symbol;
+										}
+										nextSymbols.push(attr);
+									})
+								} 
+							})
 							nextAxis = AxisType.Attribute;
 							break;
 						case 'parent':
@@ -637,7 +650,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 											(!isFollowing && c.range.start.isBefore(pos))
 											)
 										)) {
-											if (!c.parent) {
+											if (hasParentAxis && !c.parent) {
 												c.parent = sParent;
 											}
 											nextSymbols.push(c);
@@ -727,16 +740,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				if (isDocumentNode) {
 					elementNames.add(currentSymbols[0].name);
 				} else if (nextAxis === AxisType.Attribute) {
-					currentSymbols.forEach((current) => {
-						const firstChild = current.children[0];
-						if (firstChild.kind = vscode.SymbolKind.Array) {
-							firstChild.children.forEach(attr => {
-								attrNames.add(attr.name);
-							});
-						}
+					currentSymbols.forEach(current => {
+						if (current.isAttr) {
+							attrNames.add(current.name)
+						}});
+				} else if (nextAxis !== AxisType.Child && nextAxis !== AxisType.Parent) {
+					currentSymbols.forEach(current => {
+						if (current.isAttr) {
+							attrNames.add(current.name)
+						} else {
+						elementNames.add(current.name)}
 					});
-				} else if (nextAxis !== AxisType.Child) {
-					currentSymbols.forEach(current => elementNames.add(current.name));
 				} else {
 					console.log('symbols');
 					console.log(currentSymbols);
@@ -774,12 +788,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			currentSymbols.forEach(symbol => {
 				symbol.children.forEach((child: SymbolWithParent)  => {
 					if (child.kind === vscode.SymbolKind.Array) {
-						child.children.forEach(attr => {
+						child.children.forEach((attr: SymbolWithParent) => {
 							attrNames.add('@' + attr.name);
+							attr.isAttr = true;
+							if (hasParentAxis){
+								attr.parent = symbol;
+							}
 						});
 					} else {
 						if (hasParentAxis){
-							child['parent'] = symbol;
+							child.parent = symbol;
 						}
 						outSymbols.push(child);
 					}
