@@ -7,7 +7,7 @@ import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
 import { BaseToken, CharLevelState, TokenLevelState } from './xpLexer';
-import { ElementData, XPathData } from './xsltTokenCompletions'
+import { ElementData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions'
 
 interface ImportedGlobals {
 	href: string,
@@ -367,6 +367,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// track backwards to get all tokens in path
 		for (let i = position; i > -1; i--) {
 			const token = tokens[i];
+			const isXSLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			let xpathCharType = <CharLevelState>token.charType;
 			let xpathTokenType = <TokenLevelState>token.tokenType;
 			if (nesting > 0) {
