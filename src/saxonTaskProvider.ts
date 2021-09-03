@@ -145,7 +145,9 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('-xsl:' + propValue);
                         break
                     case 'xmlSource':
-                        commandLineArgs.push('-s:' + propValue);
+                        if (propValue !== "") {
+                            commandLineArgs.push('-s:' + propValue);
+                        }
                         break;
                     case 'resultPath':
                         commandLineArgs.push('-o:' + propValue);

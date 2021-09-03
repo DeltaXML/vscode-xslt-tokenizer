@@ -131,7 +131,9 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         break
                     case 'xmlSource':
                         const prefix = useJSON? '-json:' : '-s:';
-                        propNameValue = prefix + propValue;
+                        if (propValue !== "") {
+                            propNameValue = prefix + propValue;
+                        }
                         break;
                     case 'jsonSource':
                         propNameValue = '-json:' + propValue;
