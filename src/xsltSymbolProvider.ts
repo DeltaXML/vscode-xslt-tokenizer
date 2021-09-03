@@ -54,9 +54,11 @@ interface SymbolWithParent extends vscode.DocumentSymbol {
 }
 
 type possDocumentSymbol = vscode.DocumentSymbol | null;
-
-
 type Entry = [string, number];
+enum UseSource {
+	none = "none",
+	latest = "latest"
+}
 
 export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
@@ -67,6 +69,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static documentSymbols = new Map<vscode.Uri, vscode.DocumentSymbol[]>();
 	private importHrefs: Map<string, string[]> = new Map();
 	public static importSymbolHrefs: Map<string, string[]> = new Map();
+	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
+
 
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null) {
@@ -336,9 +340,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public static getCompletionNodeNames(
-		allTokens: BaseToken[], index: number,
-		xpathStack: XPathData[], symbols: vscode.DocumentSymbol[]
-		) {
+		allTokens: BaseToken[], 
+		index: number,
+		xpathStack: XPathData[], 
+		symbols: vscode.DocumentSymbol[],
+		eNames: string[],
+		aNames: string[]
+		) 
+		{
+		if (this.useSourceFile === UseSource.none) {
+			return [eNames, aNames];
+		}
 		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, index, xpathStack);
 		// console.log('pathTokens')
 		// console.log(cleanedTokens);

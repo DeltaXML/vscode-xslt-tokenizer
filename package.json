@@ -160,6 +160,16 @@
 					"default": true,
 					"description": "Enable Saxon-JS Tasks"
 				},
+				"XSLT.resources.useSourceFile": {
+					"type": [
+						"string"
+					],
+					"enum": [
+						"none",
+						"latest"
+					],
+					"default": "latest"
+				},
 				"XSLT.resources.xsltPackages": {
 					"description": "Associate file paths with xsl:package names",
 					"type": "array",
