@@ -161,6 +161,7 @@
 					"description": "Enable Saxon-JS Tasks"
 				},
 				"XSLT.resources.useSourceFile": {
+					"description": "Control how completion-list for XPath node names is populated",
 					"type": [
 						"string"
 					],
