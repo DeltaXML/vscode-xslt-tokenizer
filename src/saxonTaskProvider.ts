@@ -144,8 +144,8 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                     case 'xsltFile':
                         commandLineArgs.push('-xsl:' + propValue);
                         break
-                    case 'xmlSource':
-                        if (propValue !== "") {
+                    case 'xmlSource':                        
+                    if (propValue !== "") {
                             commandLineArgs.push('-s:' + propValue);
                         }
                         break;
