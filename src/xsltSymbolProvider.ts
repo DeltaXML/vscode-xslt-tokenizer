@@ -357,8 +357,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return [eNames, aNames];
 		}
 		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, index, xpathStack);
-		console.log('pathTokens')
-		console.log(cleanedTokens);
+		// console.log('pathTokens')
+		// console.log(cleanedTokens);
 		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
 		const [elementNames, attrNames] = result;
 		// console.log('elementNames');
@@ -500,7 +500,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				for (let x = xpathStackEnd; x > -1; x--) {
 					xpathStacksChecked++;
 					const item = xpathStack[x];
-					if (item.token.charType === CharLevelState.lPr && item.tokenIndex) {
+					if ((item.token.charType === CharLevelState.lPr || item.token.charType === CharLevelState.lB) && item.tokenIndex) {
 						predicateStart = item.tokenIndex;
 						break;
 					}

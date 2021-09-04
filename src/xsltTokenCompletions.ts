@@ -140,7 +140,8 @@ export class XsltTokenCompletions {
 			}
 			let overranPos = !keepProcessing && (lineNumber > requiredLine || (lineNumber === requiredLine && token.startCharacter > requiredChar));
 			if (docType === DocumentTypes.XPath && index === lastTokenIndex && requiredChar > token.startCharacter + token.length) {
-				resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+				const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
+				resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
 				return resultCompletions;
 			}
 			if (prevToken) {
@@ -164,7 +165,8 @@ export class XsltTokenCompletions {
 						}
 					} else {
 						let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
-						resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+						const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
+						resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
 					}
 				}
 			}
@@ -174,10 +176,10 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -612,7 +614,7 @@ export class XsltTokenCompletions {
 								let axisCompletions = XsltTokenCompletions.getTokenCommandCompletions(token, position, axes, vscode.CompletionItemKind.Function);
 								resultCompletions = resultCompletions.concat(axisCompletions);
 							} else {
-								resultCompletions = XsltTokenCompletions.getAllTokenCompletions(docType, position, token, elementNameTests.concat(elementNames), attNameTests.concat(attrNames), globalInstructionData, importedInstructionData);
+								resultCompletions = XsltTokenCompletions.getAllTokenCompletions(docType, position, token, elementNames, attrNames, globalInstructionData, importedInstructionData);
 							}
 						}
 						break;
