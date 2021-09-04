@@ -361,8 +361,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// console.log(cleanedTokens);
 		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
 		const [elementNames, attrNames] = result;
-		// console.log('elementNames');
-		// console.log(elementNames);
+		console.log('elementNames');
+		console.log(elementNames);
 		// console.log('attrtNames');
 		// console.log(attrNames);
 		return result;
@@ -816,6 +816,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				}
 				const attrNameArray = (nextAxis === AxisType.Descendant || nextAxis === AxisType.DescendantOrSelf)
 				? descendantAttrNames : [...attrNames];
+				if (elementNames.size === 0) {
+					console.log('elementNames empty');
+				}
 				return [[...elementNames], attrNameArray];
 			} // end if (i == 0)
 
