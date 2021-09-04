@@ -53,7 +53,7 @@ export class XPathDocumentChangeHandler {
 			doTrigger = precededByWS && followsSeparator;
 		}
 
-		console.log('doTrigger', doTrigger);
+		//console.log('doTrigger', doTrigger);
 
 		if (doTrigger) {
 			setTimeout(() => {
