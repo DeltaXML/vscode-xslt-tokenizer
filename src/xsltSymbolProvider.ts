@@ -45,12 +45,17 @@ enum AxisType {
 	Ancestor,
 	AncestorOrSelf,
 	FollowingSibling,
-	PrecedingSibling
+	PrecedingSibling,
+	Union
 }
 
 interface SymbolWithParent extends vscode.DocumentSymbol {
 	parent?: vscode.DocumentSymbol;
 	isAttr?: boolean;
+}
+
+interface TokenWithUnion extends BaseToken {
+	union?: boolean;
 }
 
 type possDocumentSymbol = vscode.DocumentSymbol | null;
@@ -352,8 +357,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return [eNames, aNames];
 		}
 		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, index, xpathStack);
-		// console.log('pathTokens')
-		// console.log(cleanedTokens);
+		console.log('pathTokens')
+		console.log(cleanedTokens);
 		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
 		const [elementNames, attrNames] = result;
 		// console.log('elementNames');
@@ -364,7 +369,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public static filterPathTokens(tokens: BaseToken[], position: number, xpathStack: XPathData[]) {
-		let cleanedTokens: BaseToken[] = [];
+		let cleanedTokens: TokenWithUnion[] = [];
 		const bracketTokens: BaseToken[] = [];
 		let saveToken = false;
 		let nesting = 0;
@@ -375,10 +380,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let lastTokenWasSlash2 = false;
 		let hasParentAxis = false;
 		let foundVariableToken = false;
+		let isNextBracketUnion = false;
+		let collectBracketTokens = false;
 
 		// track backwards to get all tokens in path
 		for (let i = position; i > -1; i--) {
-			const token = tokens[i];
+			const token: TokenWithUnion = tokens[i];
 			const isXSLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			let xpathCharType = <CharLevelState>token.charType;
 			let xpathTokenType = <TokenLevelState>token.tokenType;
@@ -386,28 +393,32 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				if (xpathTokenType === TokenLevelState.operator && xpathCharType === CharLevelState.lPr) {
 					nesting--;
 				}
-			} else if (bracketTokens.length > 0) {
+			} else if (collectBracketTokens) {
 				// test to see if: (element1|element2)
 				switch (xpathTokenType) {
 					case TokenLevelState.operator:
 						switch (xpathCharType) {
 							case CharLevelState.lB:
 								// TODO: handle case of: /countries/(sibling|sibling2)
-								//cleanedTokens = cleanedTokens.concat(...bracketTokens);
+								cleanedTokens = cleanedTokens.concat(...bracketTokens);
 								// saveToken = true;
 								// temp fix to terminate when finding (...)/country
-								exitLoop = true;
 								bracketTokens.length = 0;
+								isNextBracketUnion = false;
+								collectBracketTokens = false;
 								break;
 							case CharLevelState.sep:
-								// TODO: handle '*' what token type is this?
 								exitLoop = (token.value !== '|' && token.value !== ',');
+								isNextBracketUnion = !exitLoop;
 								break;
 							default:
 								exitLoop = true;
 						}
 						break;
 					case TokenLevelState.nodeNameTest:
+						if (isNextBracketUnion) {
+							token.union = true;
+						}
 						bracketTokens.push(token);
 						break;
 					default:
@@ -422,7 +433,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								nesting++;
 								break;
 							case CharLevelState.rB:
-								bracketTokens.push(token);
+								collectBracketTokens = true;
 								break;
 							case CharLevelState.dSep:
 								exitLoop = (token.value !== '//' && token.value !== '::' && token.value !== '()');
@@ -513,7 +524,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return {cleanedTokens, hasParentAxis};
 	}
 
-	public static getExpectedForXPathLocation(tokens: BaseToken[], symbols: vscode.DocumentSymbol[], hasParentAxis: boolean) {		
+	public static getExpectedForXPathLocation(tokens: TokenWithUnion[], symbols: vscode.DocumentSymbol[], hasParentAxis: boolean) {		
 		if (symbols.length === 0) {
 			return [[], []];
 		}	
@@ -549,6 +560,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let nextAxis = AxisType.Child;
 		let isPathStart = true;
 		let isPathEnd = false;
+		let unionElementNames: string[] = [];
 
 		// track backwards to get all tokens in path
 		for (let i = lastTokenIndex; i > -1; i--) {
@@ -592,14 +604,18 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (currentSymbols[0].name === token.value) {
 							nextSymbols = currentSymbols;
 						}
+					} else if (token.union) {
+						unionElementNames.push(token.value);
+						nextSymbols = currentSymbols;
 					} else if (currentAxis !== AxisType.Child ) {
 						nextSymbols = currentSymbols.filter(current => current.name === token.value);
 					} else {
+						unionElementNames.push(token.value);
 						for (let i = 0; i < currentSymbols.length; i++) {
 							const symbol = currentSymbols[i];
 							if (hasParentAxis) {
 								symbol.children.forEach((child: SymbolWithParent) => {
-									if (child.kind !== vscode.SymbolKind.Array && child.name === token.value) {
+									if (child.kind !== vscode.SymbolKind.Array && unionElementNames.indexOf(child.name) !== -1) {
 										if (!child.parent) {
 											child.parent = symbol;
 										}
@@ -607,10 +623,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 									}
 								})
 							} else {
-								const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && child.name === token.value);
+								const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && unionElementNames.indexOf(child.name) !== -1);
 								nextSymbols = nextSymbols.concat(next);
 							}
 						}
+						unionElementNames.length = 0;
 					}
 					break;
 				case TokenLevelState.attributeNameTest:
@@ -786,8 +803,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						elementNames.add(current.name)}
 					});
 				} else {
-					console.log('symbols');
-					console.log(currentSymbols);
 					for (let x = 0; x < currentSymbols.length; x++) {
 						const curentSymbol = currentSymbols[x];
 						curentSymbol.children.forEach(child => {
