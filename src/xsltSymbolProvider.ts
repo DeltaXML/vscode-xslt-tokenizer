@@ -492,11 +492,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						foundVariableToken = true;
 						const xpv = xpathVariables.find(v => v.token.value === token.value);
 						if (xpv) {
-							console.log('xpv', xpv);
-							const variableTokens = XsltSymbolProvider.fetchXPathVariableTokens(tokens, xpv);
-							console.log('variableTokens', variableTokens);
+							const lastTokenIndex = XsltSymbolProvider.fetchXPathVariableTokens(tokens, xpv);
 							// recursive call:
-							const result: Cleaned = XsltSymbolProvider.filterPathTokens(variableTokens, xsltVariables, xpathVariables, variableTokens.length - 1, xpathStack );
+							const result: Cleaned = XsltSymbolProvider.filterPathTokens(tokens, xsltVariables, xpathVariables, lastTokenIndex, xpathStack );
+							console.log('xpv', xpv);
+							console.log('lastTokenIndex', lastTokenIndex, tokens[lastTokenIndex]);
 							console.log('filteredVarTokens', result.cleanedTokens);
 							if (!hasParentAxis) {
 								hasParentAxis = result.hasParentAxis;
@@ -549,11 +549,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	static fetchXPathVariableTokens(tokens: BaseToken[], xpv: VariableData) {
-		const result: BaseToken[] = [];
+		let result = -1;
 		let nesting = 0;
 		let exitForLoop = false;
 
-		for (let index = xpv.index + 2; index < tokens.length; index++) {
+		const startPosiiton = xpv.index + 2;
+
+		for (let index = startPosiiton; index < tokens.length; index++) {
 			const token = tokens[index];
 			const isXSLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXSLToken) {
@@ -582,11 +584,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			if (exitForLoop) {
 				break;
 			} else {
-				result.push(token);
+				result++;
 			}
 		}
 
-		return result;
+		return result + startPosiiton;
 	}
 
 	public static getExpectedForXPathLocation(tokens: TokenWithUnion[], symbols: vscode.DocumentSymbol[], hasParentAxis: boolean) {		
