@@ -7,12 +7,17 @@ import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
 import { BaseToken, CharLevelState, TokenLevelState } from './xpLexer';
-import { ElementData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions'
+import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions'
 
 interface ImportedGlobals {
 	href: string,
 	data: GlobalInstructionData[],
 	error: boolean
+}
+
+interface Cleaned {
+	cleanedTokens: TokenWithUnion[],
+	hasParentAxis: boolean;
 }
 
 interface GlobalsSummary {
@@ -345,7 +350,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public static getCompletionNodeNames(
-		allTokens: BaseToken[], 
+		allTokens: BaseToken[],
+		xsltVariables: VariableData[], 
+		xpathVariables: VariableData[], 
 		index: number,
 		xpathStack: XPathData[], 
 		symbols: vscode.DocumentSymbol[],
@@ -356,7 +363,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		if (this.useSourceFile === UseSource.none) {
 			return [eNames, aNames];
 		}
-		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, index, xpathStack);
+		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, xsltVariables, xpathVariables,index, xpathStack);
 		// console.log('pathTokens')
 		// console.log(cleanedTokens);
 		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
@@ -368,7 +375,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result;
 	}
 
-	public static filterPathTokens(tokens: BaseToken[], position: number, xpathStack: XPathData[]) {
+	public static filterPathTokens(tokens: BaseToken[], xsltVariables: VariableData[], xpathVariables: VariableData[], position: number, xpathStack: XPathData[]) {
 		let cleanedTokens: TokenWithUnion[] = [];
 		const bracketTokens: BaseToken[] = [];
 		let saveToken = false;
@@ -483,9 +490,23 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					case TokenLevelState.variable:
 						// e.g. $dev/body
 						foundVariableToken = true;
-						// add the $dev token
-						cleanedTokens.push(token);
-						exitLoop = true;
+						const xpv = xpathVariables.find(v => v.token.value === token.value);
+						if (xpv) {
+							console.log('xpv', xpv);
+							const variableTokens = XsltSymbolProvider.fetchXPathVariableTokens(tokens, xpv);
+							console.log('variableTokens', variableTokens);
+							// recursive call:
+							const result: Cleaned = XsltSymbolProvider.filterPathTokens(variableTokens, xsltVariables, xpathVariables, variableTokens.length - 1, xpathStack );
+							console.log('filteredVarTokens', result.cleanedTokens);
+							if (!hasParentAxis) {
+								hasParentAxis = result.hasParentAxis;
+							}
+							cleanedTokens = cleanedTokens.concat(result.cleanedTokens);
+						} else {
+							// add the $dev token
+							cleanedTokens.push(token);
+							exitLoop = true;
+						}
 					default:
 						exitLoop = true;
 						break;
@@ -525,6 +546,47 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			saveToken = false;
 		}
 		return {cleanedTokens, hasParentAxis};
+	}
+
+	static fetchXPathVariableTokens(tokens: BaseToken[], xpv: VariableData) {
+		const result: BaseToken[] = [];
+		let nesting = 0;
+		let exitForLoop = false;
+
+		for (let index = xpv.index + 2; index < tokens.length; index++) {
+			const token = tokens[index];
+			const isXSLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
+			if (isXSLToken) {
+				break;
+			}
+			let xpathCharType = <CharLevelState>token.charType;
+			let xpathTokenType = <TokenLevelState>token.tokenType;
+			switch (xpathTokenType) {
+				case TokenLevelState.operator:
+					if (xpathCharType === CharLevelState.lPr) {
+						nesting++;
+					} else if (xpathCharType === CharLevelState.rPr) {
+						nesting--;
+					} else if (nesting === 0 && xpathCharType === CharLevelState.sep && token.value === ',') {
+						exitForLoop = true;
+					}				
+					break;
+				case TokenLevelState.complexExpression:
+					if (nesting === 0) {
+						exitForLoop = true;
+					}
+					break;
+				default:
+					break;
+			}
+			if (exitForLoop) {
+				break;
+			} else {
+				result.push(token);
+			}
+		}
+
+		return result;
 	}
 
 	public static getExpectedForXPathLocation(tokens: TokenWithUnion[], symbols: vscode.DocumentSymbol[], hasParentAxis: boolean) {		
@@ -1049,3 +1111,4 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 }
+
