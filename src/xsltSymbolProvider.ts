@@ -490,7 +490,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					case TokenLevelState.variable:
 						// e.g. $dev/body
 						foundVariableToken = true;
-						const xpv = xpathVariables.find(v => v.token.value === token.value);
+						let xpv = xpathVariables.find(v => v.token.value === token.value);
+						if (!xpv) {
+							const tv = token.value.substring(1);
+							xpv = xsltVariables.find(v => v.name === tv);
+						}
 						if (xpv) {
 							const lastTokenIndex = XsltSymbolProvider.fetchXPathVariableTokens(tokens, xpv);
 							// recursive call:
@@ -552,15 +556,28 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let result = -1;
 		let nesting = 0;
 		let exitForLoop = false;
+		let onXsltTokensAtStart = false;
 
 		const startPosiiton = xpv.index + 2;
 
 		for (let index = startPosiiton; index < tokens.length; index++) {
 			const token = tokens[index];
+
 			const isXSLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXSLToken) {
-				break;
+				if (index === startPosiiton) {
+					onXsltTokensAtStart = true;
+				}
+				if (onXsltTokensAtStart) {
+					result++;
+					continue;
+				} else {
+					break;
+				}
+			} else {
+				onXsltTokensAtStart = false;
 			}
+
 			let xpathCharType = <CharLevelState>token.charType;
 			let xpathTokenType = <TokenLevelState>token.tokenType;
 			switch (xpathTokenType) {
