@@ -351,6 +351,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	public static getCompletionNodeNames(
 		allTokens: BaseToken[],
+		globalInstructionData: GlobalInstructionData[],
 		xsltVariables: VariableData[], 
 		xpathVariables: VariableData[], 
 		index: number,
@@ -363,7 +364,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		if (this.useSourceFile === UseSource.none) {
 			return [eNames, aNames];
 		}
-		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, xsltVariables, xpathVariables,index, xpathStack);
+		const {cleanedTokens, hasParentAxis} = XsltSymbolProvider.filterPathTokens(allTokens, globalInstructionData, xsltVariables, xpathVariables,index, xpathStack);
 		// console.log('pathTokens')
 		// console.log(cleanedTokens);
 		const result = XsltSymbolProvider.getExpectedForXPathLocation(cleanedTokens, symbols, hasParentAxis);
@@ -375,7 +376,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result;
 	}
 
-	public static filterPathTokens(tokens: BaseToken[], xsltVariables: VariableData[], xpathVariables: VariableData[], position: number, xpathStack: XPathData[]) {
+	public static filterPathTokens(tokens: BaseToken[], globalInstructionData: GlobalInstructionData[], xsltVariables: VariableData[], xpathVariables: VariableData[], position: number, xpathStack: XPathData[]) {
 		let cleanedTokens: TokenWithUnion[] = [];
 		const bracketTokens: BaseToken[] = [];
 		let saveToken = false;
@@ -495,13 +496,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							const tv = token.value.substring(1);
 							xpv = xsltVariables.find(v => v.name === tv);
 						}
+						if (!xpv) {
+							const tv = token.value.substring(1);
+							const gd = globalInstructionData.find(d => d.type === GlobalInstructionType.Variable && d.name === tv);
+							if (gd?.idNumber) {
+								xpv = { index: gd.idNumber, token: gd.token, name: gd.name }
+							}
+						}
 						if (xpv) {
 							const lastTokenIndex = XsltSymbolProvider.fetchXPathVariableTokens(tokens, xpv);
 							// recursive call:
-							const result: Cleaned = XsltSymbolProvider.filterPathTokens(tokens, xsltVariables, xpathVariables, lastTokenIndex, xpathStack );
-							console.log('xpv', xpv);
-							console.log('lastTokenIndex', lastTokenIndex, tokens[lastTokenIndex]);
-							console.log('filteredVarTokens', result.cleanedTokens);
+							const result: Cleaned = XsltSymbolProvider.filterPathTokens(tokens, globalInstructionData, xsltVariables, xpathVariables, lastTokenIndex, xpathStack );
+							// console.log('xpv', xpv);
+							// console.log('lastTokenIndex', lastTokenIndex, tokens[lastTokenIndex]);
+							// console.log('filteredVarTokens', result.cleanedTokens);
 							if (!hasParentAxis) {
 								hasParentAxis = result.hasParentAxis;
 							}
