@@ -699,7 +699,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					} else if (token.union) {
 						unionElementNames.push(token.value);
 						nextSymbols = currentSymbols;
-					} else if (currentAxis !== AxisType.Child ) {
+					} else if (currentAxis !== AxisType.Child && currentAxis !== AxisType.Parent ) {
 						nextSymbols = currentSymbols.filter(current => current.name === token.value);
 					} else {
 						unionElementNames.push(token.value);
@@ -836,7 +836,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (isDocumentNode) {
 							isDocumentNode = false;								
 							nextSymbols = currentSymbols;
-						} else if (currentAxis !== AxisType.Child) {
+						} else if (currentAxis !== AxisType.Child && currentAxis !== AxisType.Parent) {
 							nextSymbols = currentSymbols;
 						} else {
 							currentSymbols.forEach(symbol => {
