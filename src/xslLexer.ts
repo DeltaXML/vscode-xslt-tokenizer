@@ -947,7 +947,8 @@ export class XslLexer {
                                     targetGlobal = this.globalInstructionData;
                                     tagInstructionNameAdded = true;
                                 }
-                                targetGlobal.push({type: globalType, name: attValue, token: newTokenCopy, idNumber: result.length});
+                                const idNumber = globalType === GlobalInstructionType.Variable? result.length : 0;
+                                targetGlobal.push({type: globalType, name: attValue, token: newTokenCopy, idNumber: idNumber});
                             } else if (isGlobalParameterName) {
                                 let attValue = tokenChars.join('');
                                 if (this.globalInstructionData.length > 0) {
