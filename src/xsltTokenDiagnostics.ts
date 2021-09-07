@@ -1216,7 +1216,8 @@ export class XsltTokenDiagnostics {
 												} else if (!(
 													(pv === '?' && (tv === ',' || tv === ')')) ||
 													(tv === '?' && (pv === '(' || pv === ')' || pv === ',')) ||
-													(pv === '!' && tv === '?')
+													(pv === '!' && tv === '?') ||
+													(pv === '[' && tv === '?')
 												)) {
 													isXPathError = true;
 												}
