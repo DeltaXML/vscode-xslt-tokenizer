@@ -6,7 +6,7 @@ import * as path from 'path';
 import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
-import { BaseToken, CharLevelState, TokenLevelState } from './xpLexer';
+import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
 import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions'
 
 interface ImportedGlobals {
@@ -80,8 +80,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private importHrefs: Map<string, string[]> = new Map();
 	public static importSymbolHrefs: Map<string, string[]> = new Map();
 	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
-
-
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
@@ -516,8 +514,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							cleanedTokens = cleanedTokens.concat(result.cleanedTokens);
 						} else {
 							// add the $dev token
-							cleanedTokens.push(token);
-							exitLoop = true;
+							const varFromExtXPath = XsltTokenCompletions.extXPathVariables.get(token.value.substring(1));
+							if (varFromExtXPath) {
+								const xpLexer = new XPathLexer();
+								const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+								const extTokens = xpLexer.analyse(varFromExtXPath, ExitCondition.None, lexPosition);
+								const result: Cleaned = XsltSymbolProvider.filterPathTokens(extTokens, globalInstructionData, xsltVariables, xpathVariables, extTokens.length - 1, [] );
+								if (!hasParentAxis) {
+									hasParentAxis = result.hasParentAxis;
+								}
+								cleanedTokens = cleanedTokens.concat(result.cleanedTokens);
+							} else {
+								cleanedTokens.push(token);
+								exitLoop = true;
+							}
 						}
 					default:
 						exitLoop = true;

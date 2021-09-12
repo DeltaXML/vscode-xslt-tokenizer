@@ -68,6 +68,7 @@ export interface VariableData {
 
 export class XsltTokenCompletions {
 	static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	static extXPathVariables: Map<string, string> = new Map(); 
 	private static readonly xslInclude = 'xsl:include';
 	private static readonly xslImport = 'xsl:import';
 	private static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];

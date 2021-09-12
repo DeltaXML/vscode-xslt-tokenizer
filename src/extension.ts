@@ -26,6 +26,7 @@ import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { window } from 'vscode';
 import { XSLTHoverProvider } from './xsltHoverProvider';
 import * as os from 'os';
+import { XsltTokenCompletions } from './xsltTokenCompletions';
 
 
 
@@ -196,7 +197,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFirstChildElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.FirstChild)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPathInDocument', (...args) => selectXPathInDocument(args)));
-
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setExtensionXPathVariable', (...args) => XsltTokenCompletions.extXPathVariables.set(args[0], args[1])));
 
 	// syntax highlighters
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt' }, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
@@ -264,6 +265,8 @@ export function activate(context: vscode.ExtensionContext) {
 		let xsltjsTaskProvider = vscode.tasks.registerTaskProvider(SaxonJsTaskProvider.SaxonBuildScriptType, new SaxonJsTaskProvider(workspaceRoot));
 		context.subscriptions.push(xsltjsTaskProvider);
 	}
+
+	//vscode.commands.executeCommand('xslt-xpath.setExtensionXPathVariable', 'new', '/countries/country');
 
 }
 
