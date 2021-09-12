@@ -122,6 +122,10 @@
 						"punctuation.definition.tag.xml",
 						"punctuation.definition.tag.xi"
 					],
+					"attributeName": [
+						"entity.other.attribute-name.localname.xml",
+						"meta.tag.xml"
+					],
 					"processingInstrName": [
 						"storage.type"
 					],
