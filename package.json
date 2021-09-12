@@ -133,6 +133,7 @@
 						"variable.parameter"
 					],
 					"xslElementName": [
+						"entity.name.tag.localname.xml",
 						"storage.type"
 					],
 					"uriLiteral": [
