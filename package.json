@@ -126,6 +126,9 @@
 						"entity.other.attribute-name.localname.xml",
 						"meta.tag.xml"
 					],
+					"xmlText": [
+						"text.xml"
+					],
 					"processingInstrName": [
 						"storage.type"
 					],
