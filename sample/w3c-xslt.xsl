@@ -35,6 +35,7 @@
     <!-- The static parameter VALIDATE controls whether the input, if untyped, should be validated -->
     
     <xsl:param name="VALIDATE" static="yes" as="xs:boolean" select="false()"/>
+    
     <xsl:import-schema namespace="http://www.w3.org/2005/xpath-functions" use-when="$VALIDATE"/>
     
     <!-- Entry point: function to convert a supplied XML node to a JSON string -->
@@ -134,6 +135,8 @@
             <xsl:text>]</xsl:text>
         </xsl:value-of>
     </xsl:template>
+    
+    <new xsl:expand-text="yes">normal {abc/new[@cater] + 22} <![CDATA[test]]>this is interesting</new>
     
     <!-- Template rule for fn:string elements in which 
          special characters are already escaped -->
