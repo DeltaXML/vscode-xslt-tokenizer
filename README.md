@@ -10,10 +10,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
   <img alt="XSLT Editor" src="vscode-xslt.png" style="display:block; padding:0; margin:0">
 </p>
 
-<p align="center">
-  <em>Supports <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension for XML Analysis or XPath Testing</em>
-  <img alt="XPath Notebook" src="xpath-notebook-small.png" style="display:block; padding:0; margin:0">
-</p>
+
 
 # XSLT/XPath Features
 
@@ -26,6 +23,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Code Diagnostics\***      | For XPath Syntax, XSLT Instructions, variable/param references, all XPath symbols
 | **XSLT/XPath Processing** | VS Code Task Support for [Saxon](https://www.saxonica.com/documentation10/index.html) ([Java](https://adoptopenjdk.net/installation.html)) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html) ([NodeJS](https://nodejs.org/en/))
 | **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names etc.
+| **XPath Tester**          | Support for companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension for XML Analysis or XPath Testing
 | **Color Theme Support**   | Tested with most popular color themes ([Semantic Highlighting]() must be enabled in settings) 
 | **Inferred xsl:import**   | When navigating from parent stylesheet to non-standalone stylesheet modules with missing `xsl:import`
 | **Code Folding**          | Either uses indentation or `region` XML processing-instructions
@@ -145,23 +143,27 @@ If file paths are relative they are resolved from the first Visual Studio Code W
 
 Syntax highlighting is currently only enabled by default in VSCode's built-in themes. This is because some extension themes may not yet have specific language support for VSCode's 'Semantic Highlighting' as used by this extension.
 
-To enable syntax highighting for a custom theme you need to change User Settings. For example, to enable syntax highlighting for XSLT in the *City Lights* theme use:
+To enable syntax highighting for a custom theme you need to change User Settings. You can also customize
+XSLT token colors. For example, to enable syntax highlighting for XSLT and add some customizations in the [Gruvbox Material Dark](https://marketplace.visualstudio.com/items?itemName=sainnhe.gruvbox-material) theme you could use:
 ```json
-{
-    "editor.semanticTokenColorCustomizations":{
-      "[Monokai +Lights]": {"enabled": true}
-    },
-}
+  "editor.semanticTokenColorCustomizations": {
+    "[Gruvbox Material Dark]": {
+      "enabled": true,
+      "rules": {
+        "xmlPunctuation": "#b75a1e",
+        "anonymousFunction": "#d3869b",
+        "xmlText": "#928374",
+        "attributeNameTest": "#89b482",
+        "elementName": "#d3869b"
+      },
+    }
+  },
   ```
 
 Or, to enable syntax highlighting for all themes:
 
 ```json
-{
-    "editor.semanticTokenColorCustomizations":{
-      "enabled": true
-    },
-}
+  "editor.semanticHighlighting.enabled": true,
   ```
 
 ### Editor Settings For Formatting

@@ -236,7 +236,7 @@
         <xsl:value-of>
             <xsl:for-each select="string-to-codepoints($in)">
                 <xsl:choose>
-                    <new/>
+                    <new abc="also">testing</new>
                     <xsl:when test=". gt 65535">
                         <xsl:value-of select="concat('\u', j:hex4((. - 65536) idiv 1024 + 55296))"/>
                         <xsl:value-of select="concat('\u', j:hex4((. - 65536) mod 1024 + 56320))"/>
@@ -258,7 +258,7 @@
             </xsl:for-each>
         </xsl:value-of>
     </xsl:function>
-    
+        
     <!-- Function to convert a UTF16 codepoint into a string of four hex digits -->
     <xsl:function name="j:hex4" as="xs:string" visibility="final">
         <xsl:param name="ch" as="xs:integer"/>
