@@ -2239,15 +2239,16 @@ export class XsltTokenDiagnostics {
 					msg = 'Unexepected Error';
 					break;
 			}
-
-			variableRefDiagnostics.push({
-				code: '',
-				message: msg,
-				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
-				severity: severity,
-				tags: diagnosticMetadata,
-				source: ''
-			});
+			if (token.startCharacter > -1 && endChar > -1) {
+				variableRefDiagnostics.push({
+					code: '',
+					message: msg,
+					range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
+					severity: severity,
+					tags: diagnosticMetadata,
+					source: ''
+				});
+			}
 		});
 		return variableRefDiagnostics;
 	}

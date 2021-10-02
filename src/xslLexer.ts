@@ -686,6 +686,10 @@ export class XslLexer {
             console.log("xsl:\n" + xsl);
         }
 
+        if (xslLength === 0) {
+            return [];
+        }
+
         while (this.charCount < xslLength) {
             this.charCount++;
             this.lineCharCount++;
