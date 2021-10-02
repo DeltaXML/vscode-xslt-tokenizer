@@ -88,9 +88,9 @@ export enum ExitCondition {
 }
 
 export interface LexPosition {
-    line: number,
-    startCharacter: number,
-    documentOffset: number
+    line: number;
+    startCharacter: number;
+    documentOffset: number;
 }
 
 export type TokenTypeStrings = keyof typeof TokenLevelState;
@@ -147,7 +147,7 @@ export class Data {
     public static setAsOperatorIfKeyword(token: Token) {
         if (token.value === 'return' || token.value === 'satisfies' || token.value === 'in' ||
             Data.nonFunctionConditional.indexOf(token.value) > -1) {
-            token.tokenType = TokenLevelState.complexExpression
+            token.tokenType = TokenLevelState.complexExpression;
         } else if (Data.keywords.indexOf(token.value) > -1) {
             token.tokenType = TokenLevelState.operator;
         } else {
