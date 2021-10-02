@@ -469,6 +469,10 @@ export class XPathLexer {
             Debug.debugHeading();
         }
 
+        if (xpath.length === 0) {
+            return [];
+        }
+
         for (let i = position.documentOffset; i < xpath.length + 1; i++) {
             let nextChar: string = xpath.charAt(i);
 
