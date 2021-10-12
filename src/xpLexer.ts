@@ -869,6 +869,8 @@ export class XPathLexer {
             } else {
                 prevToken.tokenType = TokenLevelState.function;
             }
+        } else if (prevToken.tokenType === TokenLevelState.simpleType && (Data.nodeTypes.indexOf(prevToken.value) > -1)) {
+            prevToken.tokenType = TokenLevelState.nodeType;
         }
     }
 
@@ -988,7 +990,12 @@ export class XPathLexer {
             case CharLevelState.sep:
                 let prevTokenT = prevToken.tokenType;
                 let isStar = currentToken.value === '*';
-                if (isStar && (prevTokenT === TokenLevelState.attributeNameTest || prevTokenT === TokenLevelState.uriLiteral || (prevTokenT === TokenLevelState.operator && prevToken.value === '?'))) {
+                if (isStar && (
+                    prevTokenT === TokenLevelState.attributeNameTest || 
+                    prevTokenT === TokenLevelState.uriLiteral || 
+                    (prevTokenT === TokenLevelState.operator && prevToken.value === '?') ||
+                    prevTokenT === TokenLevelState.nodeType && prevToken.value === '()')
+                    ) {
                     // @* or {example.com}*
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
@@ -1019,6 +1026,9 @@ export class XPathLexer {
                 break;
             case CharLevelState.dSep:
                 if (currentToken.value === ':*' || currentToken.value === '..') {
+                    currentToken.charType = CharLevelState.lName;
+                    currentToken.tokenType = TokenLevelState.nodeType;
+                } else if (currentToken.value === '()' && prevToken.tokenType === TokenLevelState.nodeType) {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
                 }
