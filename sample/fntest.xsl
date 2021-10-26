@@ -8,5 +8,5 @@
 								expand-text="yes"
 								version="3.0">
 	
-	<xsl:variable name="fn" as="xs:string" select="function($a as node()*) {$a}"/>
+	<xsl:variable name="fn" as="map(*)" select="map {'abc': n}"/>
 </xsl:stylesheet>

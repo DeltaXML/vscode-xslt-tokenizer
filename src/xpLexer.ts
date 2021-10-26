@@ -77,7 +77,8 @@ export enum TokenLevelState {
     complexExpression, // (xsl) keyword
     function,
     entityRef, // same name as xslLexer entity reference
-    anonymousFunction
+    anonymousFunction,
+    mapKey
 }
 
 export enum ExitCondition {
@@ -913,6 +914,9 @@ export class XPathLexer {
                         }
                         break;
                 }
+            } else if (currentState === CharLevelState.sep && 
+                prevToken.tokenType === TokenLevelState.string && currentToken.value === ':') {
+                    prevToken.tokenType = TokenLevelState.mapKey;
             }
         }
     }
