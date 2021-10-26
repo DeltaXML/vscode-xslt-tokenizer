@@ -1114,6 +1114,13 @@ export class XsltTokenDiagnostics {
 								break;
 						}
 						break;
+					case TokenLevelState.mapKey:
+						if (!(prevToken && prevToken.tokenType === TokenLevelState.operator 
+							&& (prevToken.value === ',' || prevToken.value === '{') )) {
+								token['error'] = ErrorType.XPathUnexpected;
+								problemTokens.push(token);
+							}
+						break;
 					case TokenLevelState.operator:
 						let isXPathError = false;
 						let tv = token.value;
