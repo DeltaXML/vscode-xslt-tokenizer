@@ -43,19 +43,19 @@ enum CurlyBraceType {
 }
 
 interface XSLTToken extends BaseToken {
-	tagType?: TagType
+	tagType?: TagType;
 }
 
 interface ElementData {
-	variables: VariableData[]
-	currentVariable?: VariableData,
+	variables: VariableData[];
+	currentVariable?: VariableData;
 	xpathVariableCurrentlyBeingDefined?: boolean;
 	identifierToken: XSLTToken;
 	symbolName: string;
-	symbolID: string,
-	childSymbols: vscode.DocumentSymbol[],
-	namespacePrefixes: string[],
-	expectedChildElements: string[],
+	symbolID: string;
+	childSymbols: vscode.DocumentSymbol[];
+	namespacePrefixes: string[];
+	expectedChildElements: string[];
 }
 interface XPathData {
 	token: BaseToken;
@@ -69,7 +69,7 @@ interface XPathData {
 }
 
 interface VariableData {
-	token: BaseToken,
+	token: BaseToken;
 	name: string;
 }
 
@@ -115,7 +115,7 @@ export class XsltTokenDiagnostics {
 	private static nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
 	private static validateName(name: string, type: ValidationType, isSchematron: boolean, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
-		let valid = NameValidationError.None
+		let valid = NameValidationError.None;
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
 		}
@@ -278,7 +278,7 @@ export class XsltTokenDiagnostics {
 						instruction.token.value = instruction.name;
 						problemTokens.push(instruction.token);
 					}
-					globalVariableData.push({ token: instruction.token, name: instruction.name })
+					globalVariableData.push({ token: instruction.token, name: instruction.name });
 					xsltVariableDeclarations.push(instruction.token);
 					break;
 				case GlobalInstructionType.Function:
@@ -408,7 +408,7 @@ export class XsltTokenDiagnostics {
 						errorToken['error'] = ErrorType.BracketNesting;
 						problemTokens.push(errorToken);
 					} 
-				};
+				}
 				xpathStack = [];
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
@@ -1085,7 +1085,7 @@ export class XsltTokenDiagnostics {
 								}
 
 								if (xpathStack.length > 0) {
-									let peekedStack = xpathStack[xpathStack.length - 1]
+									let peekedStack = xpathStack[xpathStack.length - 1];
 									if (peekedStack) {
 										if (valueText === 'else') {
 											preXPathVariable = peekedStack.preXPathVariable;
@@ -1606,7 +1606,7 @@ export class XsltTokenDiagnostics {
 			expectedElements = nameDetailArray.map(item => item[0]);
 			expectedAttributes = allExpected.attrs;
 		} else if (elementStack.length > 0) {
-			expectedElements = elementStack[elementStack.length - 1].expectedChildElements
+			expectedElements = elementStack[elementStack.length - 1].expectedChildElements;
 		} else {
 			expectedElements = [];
 		}
@@ -1848,7 +1848,7 @@ export class XsltTokenDiagnostics {
 	public static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
 		let start = token.startCharacter;
 		if (start < 0) {
-			console.error("ERROR: Found illegal token for document: " + document.fileName)
+			console.error("ERROR: Found illegal token for document: " + document.fileName);
 			console.error("token.startCharacter less than zero: " + token.startCharacter);
 			console.error(token);
 			start = 0;
@@ -2042,7 +2042,7 @@ export class XsltTokenDiagnostics {
 					globalXsltVariable = currentVar;
 				}
 			}
-			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable)
+			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable);
 			if (resolved) {
 				break;
 			}
@@ -2096,7 +2096,7 @@ export class XsltTokenDiagnostics {
 					msg = 'XML: More than one root element';
 					break;
 				case ErrorType.ProcessingInstructionName:
-					msg = `XML: Invalid processing instruction name: '${tokenValue}`
+					msg = `XML: Invalid processing instruction name: '${tokenValue}`;
 					break;
 				case ErrorType.ElementNestingX:
 					msg = `XML: Unexpected close tag '${tokenValue}'`;
@@ -2182,7 +2182,7 @@ export class XsltTokenDiagnostics {
 					msg = `XML: DTD position error: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathStringLiteral:
-					msg = `String literal not terminated properly: ${tokenValue}`
+					msg = `String literal not terminated properly: ${tokenValue}`;
 					break;
 				case ErrorType.XPathFunction:
 					let parts = tokenValue.split('#');
@@ -2328,7 +2328,7 @@ export class XsltTokenDiagnostics {
 			severity: vscode.DiagnosticSeverity.Hint,
 			tags: [vscode.DiagnosticTag.Unnecessary],
 			source: '',
-		}
+		};
 	}
 
 	public static createImportDiagnostic(data: GlobalInstructionData): vscode.Diagnostic {
@@ -2341,7 +2341,7 @@ export class XsltTokenDiagnostics {
 			range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 			severity: vscode.DiagnosticSeverity.Error,
 			source: '',
-		}
+		};
 	}
 
 	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken, includeOrImport: boolean): vscode.Diagnostic {
@@ -2353,14 +2353,14 @@ export class XsltTokenDiagnostics {
 				message: `XPath: The variable/parameter: ${token.value} cannot be resolved here, but it may be defined in an external module.`,
 				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 				severity: vscode.DiagnosticSeverity.Warning
-			}
+			};
 		} else {
 			return {
 				code: '',
 				message: `XPath: The variable/parameter ${token.value} cannot be resolved`,
 				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 				severity: vscode.DiagnosticSeverity.Error
-			}
+			};
 		}
 	}
 }

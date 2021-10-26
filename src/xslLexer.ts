@@ -118,30 +118,30 @@ interface XmlElement {
 }
 
 export interface LanguageConfiguration {
-    expressionAtts: string[],
-    variableElementNames: string[],
+    expressionAtts: string[];
+    variableElementNames: string[];
     linkElementAttrNames?: [string, string];
-    avtAtts?: string[],
-    nativePrefix: string,
-    tvtAttributes: string[],
-    nonNativeAvts: boolean,
-    schemaData?: SchemaData,
-    docType: DocumentTypes,
-    resourceNames?: string[],
-    featureNames?: string[],
-    propertyNames?: string[],
-    rootElementSnippets?: Snippet[],
-    elementSnippets?: Snippet[]
+    avtAtts?: string[];
+    nativePrefix: string;
+    tvtAttributes: string[];
+    nonNativeAvts: boolean;
+    schemaData?: SchemaData;
+    docType: DocumentTypes;
+    resourceNames?: string[];
+    featureNames?: string[];
+    propertyNames?: string[];
+    rootElementSnippets?: Snippet[];
+    elementSnippets?: Snippet[];
 }
 
 export interface GlobalInstructionData {
-    name: string,
-    type: GlobalInstructionType,
-    token: BaseToken,
-    idNumber: number,
-    memberNames?: string[],
-    href?: string,
-    version?: string
+    name: string;
+    type: GlobalInstructionType;
+    token: BaseToken;
+    idNumber: number;
+    memberNames?: string[];
+    href?: string;
+    version?: string;
 }
 
 export class XslLexer {
@@ -345,7 +345,7 @@ export class XslLexer {
                     rc = XMLCharState.rCd;
                 } else if (char === '{') {
                     if (nextChar === '{') {
-                        rc = XMLCharState.escTvtCdata
+                        rc = XMLCharState.escTvtCdata;
                     } else {
                         rc = XMLCharState.tvtCdata;
                     }
