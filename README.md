@@ -22,7 +22,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Code Formatting**       | XSLT instruction elements, attributes and multi-line XPath expressions
 | **Code Diagnostics\***      | For XPath Syntax, XSLT Instructions, variable/param references, all XPath symbols
 | **XSLT/XPath Processing** | VS Code Task Support for [Saxon](https://www.saxonica.com/documentation10/index.html) ([Java](https://adoptopenjdk.net/installation.html)) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html) ([NodeJS](https://nodejs.org/en/))
-| **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names etc.
+| **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names *(uses last XML opened in VS Code)*
 | **XPath Tester**          | Support for companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension for XML Analysis or XPath Testing
 | **Color Theme Support**   | Tested with most popular color themes ([Semantic Highlighting]() must be enabled in settings) 
 | **Inferred xsl:import**   | When navigating from parent stylesheet to non-standalone stylesheet modules with missing `xsl:import`
