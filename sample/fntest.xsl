@@ -9,5 +9,5 @@
 								version="3.0">
 	
 	<xsl:variable name="fn" as="map(*)" select="
-		map {'abc': 'def': 2: 'new'}"/>
+		map {'abc':'new'}"/>
 </xsl:stylesheet>

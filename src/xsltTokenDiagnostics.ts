@@ -65,6 +65,7 @@ interface XPathData {
 	function?: BaseToken;
 	functionArity?: number;
 	isRangeVar?: boolean;
+	awaitingMapKey?: boolean;
 	curlyBraceType?: CurlyBraceType;
 }
 
@@ -1126,6 +1127,18 @@ export class XsltTokenDiagnostics {
 						let tv = token.value;
 
 						// start checks
+						const stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+						if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
+							if (tv === ',') {
+								if (stackItem.awaitingMapKey) {
+									isXPathError = true;
+								} else {
+									stackItem.awaitingMapKey = true;
+								}
+							} else if (tv === '}' && stackItem.awaitingMapKey) {
+								isXPathError = true;
+							}
+						}
 						if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
@@ -1134,8 +1147,12 @@ export class XsltTokenDiagnostics {
 							let currCharType = <CharLevelState>token.charType;
 							let nextToken = index + 1 < allTokens.length ? allTokens[index + 1] : undefined;
 							if (tv === ':') {
-								if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].curlyBraceType === CurlyBraceType.Map) {
-									// not an error in a map
+								if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
+									if (stackItem.awaitingMapKey) {
+										stackItem.awaitingMapKey = false;
+									} else {
+										isXPathError = true;
+									}
 								} else if (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.attributeNameTest) {
 									isXPathError = !(prevToken.startCharacter + prevToken.length === token.startCharacter && nextToken?.value === '*');
 								} else {
@@ -1251,8 +1268,11 @@ export class XsltTokenDiagnostics {
 										curlyBraceType = CurlyBraceType.Array;
 									}
 								}
-
-								xpathStack.push({ token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType });
+                const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
+								if (curlyBraceType === CurlyBraceType.Map) {
+									stackItem.awaitingMapKey = true;
+								}
+								xpathStack.push(stackItem);
 								if (anonymousFunctionParams) {
 									// handle case: function($a) {$a + 8} pass params to inside '{...}'				
 									inScopeXPathVariablesList = anonymousFunctionParamList;
