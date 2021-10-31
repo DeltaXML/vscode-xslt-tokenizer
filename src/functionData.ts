@@ -278,7 +278,7 @@ export class FunctionData {
 "unparsed-entity-public-id#2",
 "unparsed-entity-uri#1",
 "unparsed-entity-uri#2"
-	]
+	];
 	public static readonly array = [
 "append#2",
 "filter#2",
@@ -301,7 +301,7 @@ export class FunctionData {
 "subarray#2",
 "subarray#3",
 "tail#1"
-	]
+	];
 
 	public static readonly map = [
 "contains#2",
@@ -315,7 +315,7 @@ export class FunctionData {
 "put#3",
 "remove#2",
 "size#1"
-	]
+	];
 
 	public static readonly math = [
 		"acos#1",
@@ -332,7 +332,7 @@ export class FunctionData {
  "sin#1",
  "sqrt#1",
  "tan#1"
-	]
+	];
 
 	public static readonly schema = [
 		"string#1",
