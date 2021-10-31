@@ -1,4 +1,4 @@
-import { FunctionCompletionData } from './xsltTokenCompletions'
+import { FunctionCompletionData } from './xsltTokenCompletions';
 
 export class XPathFunctionDetails {
 	public static xsltData: FunctionCompletionData[] = [
@@ -23,7 +23,7 @@ export class XPathFunctionDetails {
 		{name: "type-available",  signature: "fn:type-available( $type-name as xs:string ) asxs:boolean", description: "Used to control how a stylesheet behaves if a particular schema type is or is not available in the static context."},
 		{name: "unparsed-entity-public-id",  signature: "fn:unparsed-entity-public-id( $entity-name as xs:string, $doc as node() ) asxs:string", description: "Returns the public identifier of an unparsed entity.\n\nOptional argument: doc"},
 		{name: "unparsed-entity-uri",  signature: "fn:unparsed-entity-uri( $entity-name as xs:string, $doc as node() ) asxs:anyURI", description: "Returns the URI (system identifier) of an unparsed entity.\n\nOptional argument: doc"},
-	]
+	];
 	public static xpathData: FunctionCompletionData[] = [
 		{
 
@@ -1251,7 +1251,7 @@ export class XPathFunctionDetails {
 		{name: "xs:dayTimeDuration" , signature: "xs:dayTimeDuration( $arg as xs:anyAtomicType? ) as xs:dayTimeDuration?" , description: "Consctuctor function."},
 		{name: "xs:untypedAtomic" , signature: "xs:untypedAtomic( $arg as xs:anyAtomicType? ) as xs:untypedAtomic?" , description: "Consctuctor function."},
 		{name: "xs:dateTimeStamp" , signature: "xs:dateTimeStamp( $arg as xs:anyAtomicType? ) as xs:dateTimeStamp?" , description: "Consctuctor function."}
-	]
+	];
 
 	public static data: FunctionCompletionData[] = XPathFunctionDetails.xpathData.concat(XPathFunctionDetails.xsltData);
 }
