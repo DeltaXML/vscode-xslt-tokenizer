@@ -2,40 +2,40 @@ import {} from './schemaQuery';
 import { DocumentTypes } from './xslLexer';
 
 export interface SimpleType {
-    base?: string[],
-    enum?: string[],
-    list?: string,
-    detail?: {[name: string]: string}
+    base?: string[];
+    enum?: string[];
+    list?: string;
+    detail?: {[name: string]: string};
 }
 
 export interface ComplexType {
-    attrs?: any,
-    base?: string,
-    type?: string,
-    elementNames?: string[],
+    attrs?: any;
+    base?: string;
+    type?: string;
+    elementNames?: string[];
     attributeList?: AttributeItem[];
-    primitive?: string,
-    detail?: string,
-    attributeGroup?: string
+    primitive?: string;
+    detail?: string;
+    attributeGroup?: string;
 }
 
 export interface SubstitutionGroupType {
-    type: string,
-    elements: { [name: string]: ComplexType}
+    type: string;
+    elements: { [name: string]: ComplexType};
 }
 
 export interface AttributeItem {
-    name: string,
+    name: string;
     enum?: string[];
 }
 
 export interface SchemaData {
-    attributeGroups: { [name: string]: any },
-    simpleTypes: { [name: string]: SimpleType },
-    complexTypes: { [name: string]: ComplexType },
-    substitutionGroups?: { [name: string]: SubstitutionGroupType },
-    elements: {[name: string]: ComplexType},
-    docType: DocumentTypes
+    attributeGroups: { [name: string]: any };
+    simpleTypes: { [name: string]: SimpleType };
+    complexTypes: { [name: string]: ComplexType };
+    substitutionGroups?: { [name: string]: SubstitutionGroupType };
+    elements: {[name: string]: ComplexType};
+    docType: DocumentTypes;
 }
 
 export class XSLTSchema implements SchemaData {
@@ -58,7 +58,7 @@ export class XSLTSchema implements SchemaData {
                 'xsl:validation': 'xsl:validation-type'
             }
         }
-    }
+    };
     simpleTypes: { [name: string]: SimpleType } = {
         "xsl:accumulator-names": { base: ['xs:token'], list: 'xsl:EQName', enum: ['#all'] },
         "xsl:avt": { base: ['xs:string'] },
@@ -160,7 +160,7 @@ export class XSLTSchema implements SchemaData {
                 '_version': 'xs:string'
             }
         },
-    }
+    };
     substitutionGroups: { [name: string]: SubstitutionGroupType } = {
         instruction: {
             type: 'generic-element-type',
@@ -863,7 +863,7 @@ export class XSLTSchema implements SchemaData {
             }
 
         }
-    }
+    };
     elements: {[name: string]: ComplexType} = {
         "xsl:accept": {
             base: 'xsl:element-only-versioned-element-type',
@@ -1017,5 +1017,5 @@ export class XSLTSchema implements SchemaData {
                 '_tunnel': 'xs:string'
             }
         },
-    }
+    };
 }

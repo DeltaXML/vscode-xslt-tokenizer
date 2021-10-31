@@ -243,7 +243,7 @@ export class SchemaQuery {
         source.forEach((item) => {
             if (target.indexOf(item) === -1) {
                 if (this.soughtAttributes.indexOf(item) > -1) {
-                    expected.foundAttributes.push(item)
+                    expected.foundAttributes.push(item);
                 }
                 target.push(item);
             }
@@ -258,10 +258,10 @@ export class SchemaQuery {
             if (item[0] === 'xsl:instruction' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.instruction.elements);
                 newElements.push(['xsl:literal-result-element', '']);
-                subElements.forEach((se) => {newElements.push([se, ''])});
+                subElements.forEach((se) => {newElements.push([se, '']);});
             } else if (item[0] === 'xsl:declaration' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.declaration.elements);
-                subElements.forEach((se) => {newElements.push([se, ''])});
+                subElements.forEach((se) => {newElements.push([se, '']);});
             } else {
                 newElements.push(item);
             }
