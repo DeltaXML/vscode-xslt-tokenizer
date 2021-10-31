@@ -35,7 +35,8 @@ export class SchemaQuery {
 
     public getExpected(name: string, attributeName?: string) {
         let result: Expected = new Expected();
-        if (this.schema.docType === DocumentTypes.XSLT && !name.startsWith('xsl:')) {
+        const isXsltName = name.startsWith('xsl:') || name.startsWith('ixsl');
+        if (this.schema.docType === DocumentTypes.XSLT && !isXsltName) {
             let attGroup = this.schema.attributeGroups['xsl:literal-result-element-attributes'];
             if (attGroup.attrs) {
                 this.mergeAttrArrays(result, Object.keys(attGroup.attrs));
@@ -51,7 +52,7 @@ export class SchemaQuery {
             }
             return result;
         }
-        if (this.schema.docType === DocumentTypes.SCH && !name.startsWith('xsl:')) {
+        if (this.schema.docType === DocumentTypes.SCH && !isXsltName) {
             let attGroupName = this.schema.elements[name]? this.schema.elements[name].attributeGroup : undefined;
             if (attGroupName) {
                 let attGroup = this.schema.attributeGroups[attGroupName];
@@ -110,6 +111,9 @@ export class SchemaQuery {
             if (!sgElement) {
                 isInstructionSg = false;
                 sgElement = <ComplexType>this.schema.substitutionGroups.declaration.elements[name];
+            } 
+            if (!sgElement) {
+                sgElement = <ComplexType>this.schema.substitutionGroups.ixslInstruction.elements[name];
             }
             if (sgElement) {
                 this.collectAttributeDetails(sgElement, result, attributeName);
@@ -259,6 +263,11 @@ export class SchemaQuery {
                 let subElements = Object.keys(this.schema.substitutionGroups.instruction.elements);
                 newElements.push(['xsl:literal-result-element', '']);
                 subElements.forEach((se) => {newElements.push([se, '']);});
+                const useIxsl = true;
+                if (useIxsl) {
+                    let subElements = Object.keys(this.schema.substitutionGroups.ixslInstruction.elements);
+                    subElements.forEach((se) => {newElements.push([se, '']);});                   
+                }
             } else if (item[0] === 'xsl:declaration' && this.schema.substitutionGroups) {
                 let subElements = Object.keys(this.schema.substitutionGroups.declaration.elements);
                 subElements.forEach((se) => {newElements.push([se, '']);});

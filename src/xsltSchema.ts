@@ -162,6 +162,58 @@ export class XSLTSchema implements SchemaData {
         },
     };
     substitutionGroups: { [name: string]: SubstitutionGroupType } = {
+        ixslInstruction: {
+            type: 'generic-element-type',
+            elements: {
+                "ixsl:remove-attribute": {
+                    base: 'xsl:element-only-versioned-element-type',
+                    attrs: {
+                        'name': 'xsl:avt',
+                        'object': 'xsl:expression',
+                    }                    
+                },
+                "ixsl:remove-property": {
+                    base: 'xsl:element-only-versioned-element-type',
+                    attrs: {
+                        'name': 'xsl:avt',
+                        'object': 'xsl:expression',
+                    }                    
+                },
+                "ixsl:set-attribute": {
+                    base: 'xsl:element-only-versioned-element-type',
+                    attrs: {
+                        'name': 'xsl:avt',
+                        'select': 'xsl:expression',
+                        'object': 'xsl:expression',
+                    }                    
+                },
+                "ixsl:set-property": {
+                    base: 'xsl:element-only-versioned-element-type',
+                    attrs: {
+                        'name': 'xsl:avt',
+                        'select': 'xsl:expression',
+                        'object': 'xsl:expression',
+                    }                    
+                },
+                "ixsl:set-style": {
+                    base: 'xsl:element-only-versioned-element-type',
+                    attrs: {
+                        'name': 'xsl:avt',
+                        'select': 'xsl:expression',
+                        'object': 'xsl:expression',
+                    }                    
+                },
+                "ixsl:schedule-action": {
+                    base: 'xsl:element-only-versioned-element-type',
+                    attrs: {
+                        'wait': 'xsl:expression',
+                        'document': 'xsl:avt',
+                        'http-request': 'xsl:expression'
+                    },
+                    elementNames: ['xsl:call-template']                   
+                },
+            }
+        },
         instruction: {
             type: 'generic-element-type',
             elements: {
