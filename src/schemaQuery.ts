@@ -21,7 +21,7 @@ export class SchemaQuery {
         switch (schemaData.docType) {
             case DocumentTypes.XSLT:
                 this.soughtAttributes =  ['name', 'as', 'select', 'test', 'href'];
-                this.emptyElements = ['xsl:variable', 'xsl:value-of', 'xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param']
+                this.emptyElements = ['xsl:variable', 'xsl:value-of', 'xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param'];
                 break;
             case DocumentTypes.DCP:
                 this.soughtAttributes =  ['name', 'defaultValue', 'literalValue','version','id','description', 'path'];
@@ -147,7 +147,7 @@ export class SchemaQuery {
         if (ct.elementNames) {
             ct.elementNames.forEach((name) => {
                 let elementDefinition = this.schema.elements[name];
-                let detail: string | undefined;;
+                let detail: string | undefined;
                 if (elementDefinition && elementDefinition.detail) {
                     detail = elementDefinition.detail;
                 }
@@ -224,7 +224,7 @@ export class SchemaQuery {
     private lookupSimpleType(sgType: SimpleType, result: Expected) {
         if (sgType && sgType.enum) {
             sgType.enum.forEach((attrValue) => {
-                let detail = ''
+                let detail = '';
                 if (sgType.detail) {
                     let lookup = sgType.detail[attrValue];
                     detail = lookup? lookup: '';
