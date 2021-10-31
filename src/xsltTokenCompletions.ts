@@ -1318,6 +1318,11 @@ export class XsltTokenCompletions {
 					newItem.documentation = "xsl:message";
 					newItem.insertText = new vscode.SnippetString(`xsl:message select="\${1:'debug message'}"/>$0`);
 					completionItems.push(newItem);
+				} else if (tagName === 'ixsl:schedule-action') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('ixsl:schedule-action>\n\t<xsl:call-template name="$1">\n\t\t$0\n\t</xsl:call-template>\n</ixsl:schedule-action>');
+					completionItems.push(newItem);
 				}
 			} else if (docType === DocumentTypes.DCP) {
 				if (snippetAttrs.length === 1 && snippetAttrs.indexOf('literalValue') !== -1) {
