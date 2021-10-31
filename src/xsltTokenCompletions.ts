@@ -365,6 +365,9 @@ export class XsltTokenCompletions {
 									tagXmlnsNames.push(attNameText);
 									if (onRootStartTag) {
 										rootXmlnsName = attNameText;
+										if (attNameText === 'xmlns:ixsl' && schemaQuery) {
+											schemaQuery.useIxsl = true;
+										}
 									}
 								} else {
 									tagAttributeNames.push(attNameText);

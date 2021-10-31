@@ -14,6 +14,7 @@ export class SchemaQuery {
     public soughtAttributes: string[] = [];
     public emptyElements: string[] = [];
     public docType: DocumentTypes;
+    public useIxsl: boolean = false;
 
     constructor (schemaData: SchemaData) {
         this.schema = schemaData;
@@ -263,8 +264,7 @@ export class SchemaQuery {
                 let subElements = Object.keys(this.schema.substitutionGroups.instruction.elements);
                 newElements.push(['xsl:literal-result-element', '']);
                 subElements.forEach((se) => {newElements.push([se, '']);});
-                const useIxsl = true;
-                if (useIxsl) {
+                if (this.useIxsl) {
                     let subElements = Object.keys(this.schema.substitutionGroups.ixslInstruction.elements);
                     subElements.forEach((se) => {newElements.push([se, '']);});                   
                 }
