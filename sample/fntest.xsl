@@ -10,4 +10,7 @@
 	
 	<xsl:variable name="fn" as="map(*)" select="
 		map {'abc':'new'}"/>
+	<xsl:template match="/*" mode="#default">
+		<xsl:sequence select="$fn"/>
+	</xsl:template>
 </xsl:stylesheet>
