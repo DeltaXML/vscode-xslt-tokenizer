@@ -24,6 +24,68 @@ export class XPathFunctionDetails {
 		{name: "unparsed-entity-public-id",  signature: "fn:unparsed-entity-public-id( $entity-name as xs:string, $doc as node() ) asxs:string", description: "Returns the public identifier of an unparsed entity.\n\nOptional argument: doc"},
 		{name: "unparsed-entity-uri",  signature: "fn:unparsed-entity-uri( $entity-name as xs:string, $doc as node() ) asxs:anyURI", description: "Returns the URI (system identifier) of an unparsed entity.\n\nOptional argument: doc"},
 	];
+	public static ixslData: FunctionCompletionData[] = [
+		{
+			name: "ixsl:apply",
+			signature: "apply($function as item(), $arguments as array(*)) ➔ item()*",
+			description: "Applies a JavaScript function using actual arguments passed in the $arguments array" 
+		},
+		{
+			name: "ixsl:call",
+			signature: "call($object as item(), $method as xs:string, $arguments as array(*)) ➔ item()*",
+			description: "Calls a JavaScript function from a specified object" 
+		},
+		{
+			name: "ixsl:contains",
+			signature: "contains($object as item(), $property as xs:string) ➔ xs:boolean",
+			description: "Test if a property is present on a JavaScript object (for instance an object returned by another extension function, or a node in the HTML DOM)"
+		},
+		{
+			name: "ixsl:eval",
+			signature: "eval($script as xs:string) ➔ item()*",
+			description: "Executes JavaScript code, supplied as a string"
+		},
+		{
+			name: "ixsl:event",
+			signature: "event() ➔ item()?",
+			description: "Returns the current Event object while processing a user input event (or the empty sequence otherwise)"
+		},
+		{
+			name: "ixsl:get",
+			signature: "get($object as item(), $property as xs:string) ➔ item()*",
+			description: "Gets a property of a JavaScript object (for instance an object returned by another extension function, or a node in the HTML DOM"
+		},
+		{
+			name: "ixsl:location",
+			signature: "location() ➔ xs:string",
+			description: "Returns the value of the href property of the Window.location object. Used to get the current location URL as a string",
+		},
+		{
+			name: "ixsl:page",
+			signature: "page() ➔ node()",
+			description: "In the browser, this returns the document node of the HTML DOM document. In Node.js, it returns the document node supplied as the master document, if any. The result is both a node and a JavaScript object."
+		},
+		{
+			name: "ixsl:query-params",
+			signature: "query-params() ➔ map(*)",
+			description: "Parses the query parameters of the HTML page URI, returning the values as an XPath map",
+		},
+		{
+			name: "ixsl:source",
+			signature: "source() ➔ node()?",
+			description: "Returns the global context item - the document node supplied as input to the transformation using a parameter such as sourceNode, sourceLocation, or sourceText, if such a source document was supplied, or the empty sequence otherwise"
+		},
+		{
+			name: "ixsl:style",
+			signature: "style($node as item()?) ➔ map(*)",
+			description: "Returns an XPath map containing the style properties of an HTML element node"
+		},
+		{
+			name: "ixsl:window",
+			signature: "window() ➔ item()",
+			description: "Returns the Window object"
+		},
+	];
 	public static xpathData: FunctionCompletionData[] = [
 		{
 
