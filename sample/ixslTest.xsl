@@ -15,6 +15,7 @@
   <xsl:template match="/*" mode="#all">
     <xsl:erro/>
     <ixsl:remove-attribute/>
+    <xsl:sequence select="ixsl:call(1,2,3)"/>
     <xsl:copy>
       <xsl:apply-templates select="@*, node()" mode="#current"/>
     </xsl:copy>

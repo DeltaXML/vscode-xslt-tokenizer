@@ -10,7 +10,8 @@ export enum XSLTnamespaces {
 	SQL,
 	XMLSchema,
 	XPath,
-	XSLT
+	XSLT,
+	IXSL
 }
 
 interface NamespaceData {
@@ -316,6 +317,20 @@ export class FunctionData {
 "remove#2",
 "size#1"
 	];
+	public static readonly ixsl = [
+		"apply#2",
+		"call#3",
+		"contains#2",
+		"eval#1",
+		"event#0",
+		"get#2",
+		"location#0",
+		"page#0",
+		"query-params#0",
+		"source#2",
+		"style#1",
+		"window#0",
+	];
 
 	public static readonly math = [
 		"acos#1",
@@ -400,6 +415,7 @@ export class FunctionData {
 ["http://saxon.sf.net/sql", XSLTnamespaces.SQL],
 ["http://www.w3.org/2001/XMLSchema", XSLTnamespaces.XMLSchema],
 ["http://www.w3.org/2005/xpath-functions", XSLTnamespaces.XPath],
-["http://www.w3.org/1999/XSL/Transform", XSLTnamespaces.XSLT]
+["http://www.w3.org/1999/XSL/Transform", XSLTnamespaces.XSLT],
+["http://saxonica.com/ns/interactiveXSLT", XSLTnamespaces.IXSL]
 	  ]);
 }
