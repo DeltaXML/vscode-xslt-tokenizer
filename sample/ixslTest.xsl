@@ -13,6 +13,7 @@
   <xsl:mode on-no-match="shallow-copy"/>
 
   <xsl:template match="/*" mode="#all">
+    <xsl:erro/>
     <ixsl:remove-attribute/>
     <xsl:copy>
       <xsl:apply-templates select="@*, node()" mode="#current"/>

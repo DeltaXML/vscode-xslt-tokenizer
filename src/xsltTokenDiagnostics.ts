@@ -134,7 +134,7 @@ export class XsltTokenDiagnostics {
 				if (type === ValidationType.XMLElement) {
 					// TODO: when within literal result element, iterate up stack until we get to an XSLT instruction:
 					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : ['xsl:transform', 'xsl:stylesheet', 'xsl:package'];
-					if (prefix === 'xsl') {
+					if (prefix === 'xsl' || prefix === 'ixsl') {
 						if (isSchematron) {
 							// TODO: check xslt elements within schematron
 							valid = NameValidationError.None;
@@ -458,7 +458,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.elementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						if (isSchematron) {
+						if (isSchematron || tagElementName.startsWith('ixsl:')) {
 							// this must be an xsl element
 							[tagElementChildren, tagElementAttributes] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, xsltSchemaQuery, elementStack);
 						}
@@ -731,6 +731,14 @@ export class XsltTokenDiagnostics {
 									let prefix = attNameText.substring(6);
 									if (inheritedPrefixes.indexOf(prefix) < 0) {
 										inheritedPrefixes.push(prefix);
+									}
+									if (prefix === 'ixsl') {
+										if (schemaQuery) {
+											schemaQuery.useIxsl = true;
+										}
+										if (xsltSchemaQuery) {
+											xsltSchemaQuery.useIxsl = true;
+										}
 									}
 								}
 								if (onRootStartTag) {
