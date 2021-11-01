@@ -7,31 +7,31 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { DocumentChangeHandler } from './documentChangeHandler';
-import * as jsc from 'jsonc-parser'
+import * as jsc from 'jsonc-parser';
 
 interface XSLTJSTask {
-    type: string,
-    label: string,
-    nodeModulesFolder?: string,
-    xsltFile: string,
-    xmlSource: string,
-    useJsonSource?: boolean,
-    resultPath: string,
-    parameters?: XSLTParameter[],
-    initialTemplate?: string,
-    initialMode?: string,
-    useWorkspace?: boolean,
-    export?: string,
-    group?: TaskGroup
+    type: string;
+    label: string;
+    nodeModulesFolder?: string;
+    xsltFile: string;
+    xmlSource: string;
+    useJsonSource?: boolean;
+    resultPath: string;
+    parameters?: XSLTParameter[];
+    initialTemplate?: string;
+    initialMode?: string;
+    useWorkspace?: boolean;
+    export?: string;
+    group?: TaskGroup;
 }
 
 interface TaskGroup {
-    kind: string
+    kind: string;
 }
 
 interface XSLTParameter {
-    name: string,
-    value: string
+    name: string;
+    value: string;
 }
 
 export class SaxonJsTaskProvider implements vscode.TaskProvider {
@@ -72,7 +72,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             if (newTask) {
                 result.push(newTask);
             }
-        })
+        });
         if (!this.templateTaskFound) {
             let templateTask = this.addTemplateTask();
             if (templateTask) {
@@ -128,7 +128,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                 switch (propName) {
                     case 'xsltFile': 
                         propNameValue = '-xsl:' + propValue;
-                        break
+                        break;
                     case 'xmlSource':
                         const prefix = useJSON? '-json:' : '-s:';
                         if (propValue !== "") {
@@ -140,7 +140,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         break;
                     case 'resultPath': 
                         propNameValue = '-o:' + propValue;
-                        break
+                        break;
                     case 'initialTemplate':
                         propNameValue = '-it:' + propValue;
                         break;
