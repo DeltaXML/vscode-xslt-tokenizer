@@ -328,6 +328,7 @@ export class FunctionData {
 		"page#0",
 		"query-params#0",
 		"source#2",
+		"style#0",
 		"style#1",
 		"window#0",
 	];
