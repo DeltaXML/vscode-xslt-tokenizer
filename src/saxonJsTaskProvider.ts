@@ -149,6 +149,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         break;
                     case 'export':
                         propNameValue = '-export:' + propValue;
+                        // TODO: add '-nogo' to prevent attempted execution?
                         break;
                 }
                 if (propNameValue !== '') {
