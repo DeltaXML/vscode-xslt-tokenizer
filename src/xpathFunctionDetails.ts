@@ -1,3 +1,4 @@
+import { Data } from './xpLexer';
 import { FunctionCompletionData } from './xsltTokenCompletions';
 
 export class XPathFunctionDetails {
@@ -1316,4 +1317,5 @@ export class XPathFunctionDetails {
 	];
 
 	public static data: FunctionCompletionData[] = XPathFunctionDetails.xpathData.concat(XPathFunctionDetails.xsltData);
+	public static dataPlusIxsl: FunctionCompletionData[] =XPathFunctionDetails.data.concat(XPathFunctionDetails.ixslData);
 }

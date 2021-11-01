@@ -34,18 +34,18 @@ enum AttributeType {
 }
 
 interface XSLTToken extends BaseToken {
-	tagType?: TagType
+	tagType?: TagType;
 }
 
 export interface ElementData {
-	variables: VariableData[]
-	currentVariable?: VariableData,
+	variables: VariableData[];
+	currentVariable?: VariableData;
 	xpathVariableCurrentlyBeingDefined?: boolean;
 	identifierToken: XSLTToken;
 	symbolName: string;
-	symbolID: string,
-	childSymbols: vscode.DocumentSymbol[],
-	namespacePrefixes: string[]
+	symbolID: string;
+	childSymbols: vscode.DocumentSymbol[];
+	namespacePrefixes: string[];
 }
 export interface XPathData {
 	token: BaseToken;
@@ -60,7 +60,7 @@ export interface XPathData {
 }
 
 export interface VariableData {
-	token: BaseToken,
+	token: BaseToken;
 	name: string;
 	uri?: string;
 	index: number;
@@ -84,6 +84,7 @@ export class XsltTokenCompletions {
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 	private static readonly sequenceTypes = FunctionData.simpleTypes.concat(Data.nodeTypesBrackets, Data.nonFunctionTypesBrackets);
 	private static readonly doubleParts = ['castable as', 'cast as', 'instance of', 'treat as'];
+	private static useIxslFunctions = false;
 
 	public static getCompletions = (languageConfig: LanguageConfiguration, xpathDocSymbols: vscode.DocumentSymbol[], xslVariable: string[], attNameTests: string[], elementNameTests: string[], document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let schemaQuery = languageConfig.schemaData ? new SchemaQuery(languageConfig.schemaData) : undefined;
@@ -91,7 +92,6 @@ export class XsltTokenCompletions {
 		let docType = languageConfig.docType;
 		let isXSLT = docType === DocumentTypes.XSLT;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
-
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;
 		let elementStack: ElementData[] = [];
@@ -121,6 +121,7 @@ export class XsltTokenCompletions {
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default'];
 		let attNameText: string = '';
+		XsltTokenCompletions.useIxslFunctions = false;
 
 		let tagExcludeResultPrefixes: { token: BaseToken, prefixes: string[] } | null = null;
 		let requiredLine = position.line;
@@ -224,7 +225,7 @@ export class XsltTokenCompletions {
 									if (elementStack.length === 0) {
 										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
 									} else {
-										resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList)
+										resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList);
 									}
 								}
 								tagAttributeNames = [];
@@ -367,6 +368,7 @@ export class XsltTokenCompletions {
 										rootXmlnsName = attNameText;
 										if (attNameText === 'xmlns:ixsl' && schemaQuery) {
 											schemaQuery.useIxsl = true;
+											XsltTokenCompletions.useIxslFunctions = true;
 										}
 									}
 								} else {
@@ -831,7 +833,7 @@ export class XsltTokenCompletions {
 
 	private static internalFunctionCompletions(docType: DocumentTypes) {
 		if (docType === DocumentTypes.XSLT) {
-			return XPathFunctionDetails.data;
+			return XsltTokenCompletions.useIxslFunctions? XPathFunctionDetails.dataPlusIxsl : XPathFunctionDetails.data;
 		} else {
 			return XPathFunctionDetails.xpathData;
 		}
@@ -1309,7 +1311,7 @@ export class XsltTokenCompletions {
 						const scopeVariables = scopeVarNames.map((name) => {
 							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) + '{\\$' + name + '}';
 						});
-						const header = '==== ${1:Watch Variables} ====\n'
+						const header = '==== ${1:Watch Variables} ====\n';
 						const scopeVariablesString = header + scopeVariables.join('\n');
 						newItem.insertText = new vscode.SnippetString(`xsl:message expand-text="yes">\n${scopeVariablesString}\n</xsl:message>$0`);
 						completionItems.push(newItem);
@@ -1344,7 +1346,7 @@ export class XsltTokenCompletions {
 					default:
 						schemaQuery.soughtAttributes.forEach((attr, index) => {
 							if (snippetAttrs.indexOf(attr) > -1) {
-								attrText += ` ${attr}="$${index + 1}"`
+								attrText += ` ${attr}="$${index + 1}"`;
 							}
 						});
 						break;
@@ -1482,7 +1484,7 @@ export class XsltTokenCompletions {
 				inheritedVariables.forEach((varData: VariableData) => {
 					const varName = varData.name;
 					if (varNames.indexOf(varName) < 0) {
-						varNames.push(varName)
+						varNames.push(varName);
 					}
 				});
 			}
