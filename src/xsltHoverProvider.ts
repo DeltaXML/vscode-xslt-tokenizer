@@ -12,7 +12,7 @@ enum CharType {
 
 export class XSLTHoverProvider implements HoverProvider {
 
-	private functionData = XPathFunctionDetails.data;
+	private functionData = XPathFunctionDetails.dataPlusIxsl;
 
 	provideHover(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<Hover> {
 		const line = document.lineAt(position.line);
