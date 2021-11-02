@@ -463,6 +463,9 @@ export class XsltTokenCompletions {
 											}
 										}
 									});
+									if (XsltTokenCompletions.useIxslFunctions && tagElementName === 'xsl:template') {
+										completionStrings = completionStrings.concat(FunctionData.ixslEventName);
+									}
 									let allCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.Constant);
 									let triples: [string, string, string][] = [['default mode', '#default', '#default'], ['current mode', '#current', '#current']];
 									XsltTokenCompletions.createNonAlphanumericCompletions(triples, allCompletions);
