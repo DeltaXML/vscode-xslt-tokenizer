@@ -70,7 +70,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let result: vscode.TextEdit[] = [];
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
-		let newLineString = (document.eol === vscode.EndOfLine.CRLF) ? "\r\n" : "\n"
+		let newLineString = (document.eol === vscode.EndOfLine.CRLF) ? "\r\n" : "\n";
 		// using non-whitespace for testing only!!
 		if (useTabs) {
 			indentString = '\t';
@@ -89,7 +89,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		const firstLine = document.lineAt(0);
 		const adjustedStartRange = new vscode.Range(firstLine.range.start, range.end);
 
-		let stringForTokens: string
+		let stringForTokens: string;
 		if (this.onTypeLineEmpty) {
 			// add extra char to make token on newline - so it can be indented
 			stringForTokens = document.getText(adjustedStartRange) + '< ';
