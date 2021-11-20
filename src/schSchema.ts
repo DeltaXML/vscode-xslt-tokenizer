@@ -13,16 +13,16 @@
  NOTE: this code was auto-generated using .resources/xsd-to-typescript
 */
 
-import { SchemaData, ComplexType, SimpleType } from './xsltSchema'
+import { SchemaData, ComplexType, SimpleType } from './xsltSchema';
 import { DocumentTypes } from './xslLexer';
 
 export interface SubstitutionGroupType {
-    type: string,
-    elements: { [name: string]: ComplexType }
+    type: string;
+    elements: { [name: string]: ComplexType };
 }
 
 export interface AttributeItem {
-    name: string,
+    name: string;
     enum?: string[];
 }
 export class SchSchema implements SchemaData {
@@ -33,8 +33,8 @@ export class SchSchema implements SchemaData {
         "EXPR": { base: ['xs:string'] },
         "FPI": { base: ['xs:string'] },
         "QB": { base: ['xs:string'], enum: ['xslt3'] },
-    }
-    complexTypes: { [name: string]: ComplexType } = {}
+    };
+    complexTypes: { [name: string]: ComplexType } = {};
     elements: { [name: string]: ComplexType } = {
         "sch:schema": {
             elementNames: ['sch:title', 'sch:ns', 'sch:p', 'sch:phase', 'sch:key', 'sch:pattern', 'sch:p', 'sch:diagnostics'],
@@ -106,7 +106,7 @@ export class SchSchema implements SchemaData {
         "sch:value-of": {
             attributeGroup: 'sch:attlist.value-of'
         },
-    }
+    };
     attributeGroups: { [name: string]: any } = {
         "sch:attlist.schema": {
             attrs: {
@@ -227,5 +227,5 @@ export class SchSchema implements SchemaData {
                 'value': 'sch:PATH'
             }
         }
-    }
+    };
 }

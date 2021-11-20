@@ -58,13 +58,13 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		} else {
 			return [];
 		}
-	}
+	};
 
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		const lastLine = document.lineAt(document.lineCount - 1);
 		const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
 		return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
-	}
+	};
 
 	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		let result: vscode.TextEdit[] = [];
@@ -492,7 +492,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		});
 		this.isCloseTag = false;
 		return result;
-	}
+	};
 
 	private shouldAddNewLine(documenthasNewLines: HasCharacteristic, prevToken: BaseToken | null, token: BaseToken): boolean {
 		let addNewLine = false;
@@ -523,7 +523,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			let valueRange = currentLine.range.with(startPos, endPos);
 			return vscode.TextEdit.replace(valueRange, indentString);
 		}
-	}
+	};
 }
 
 

@@ -24,7 +24,7 @@ export class Debug {
         let ts: Token[] = `;
         let postamble: string = `
         expect (r).toEqual(ts);
-    });`
+    });`;
         let r = tokens.reduce(this.serializeTokens, '');
         let result = '[' + r + ']';
 
@@ -33,7 +33,7 @@ export class Debug {
 
     public static printTokenValues(xpathExpr: string, resultTokens: Token[]) {
         let lines = xpathExpr.split(/\r\n|\r|\n/);
-        console.log('-----------------')
+        console.log('-----------------');
         console.log('line count: ' + lines.length);
         console.log('token count: ' + resultTokens.length);
         for (let i = 0; i < resultTokens.length; i++) {
@@ -66,7 +66,7 @@ charType: ${charType},
 tokenType: ${tokenType + childrenString}
 },`;
          return accumulator + objectString;
-    }
+    };
 
 
     public static printMinSerializedTokens(testTitle: string, testXpath: string, tokens: Token[]) {
@@ -79,7 +79,7 @@ tokenType: ${tokenType + childrenString}
         let ts: Token[] = `;
         let postamble: string = `
         expect (r).toEqual(ts);
-    });`
+    });`;
         let r = tokens.reduce(this.minSerializeTokens, '');
         let result = '[' + r + ']';
 
@@ -107,7 +107,7 @@ tokenType: ${tokenType + childrenString}
     },`;
             return accumulator + objectString;
         }   
-    }
+    };
 
 
     private static showTokens = function(token: Token) {
@@ -120,7 +120,7 @@ tokenType: ${tokenType + childrenString}
             token.children.forEach(Debug.showTokens);
             console.log('--- children-end ----');
         }
-    }
+    };
 
     public static printDebugOutput(cachedRealToken: Token|null, newValue: Token, lineNumber: number, startCharacter: number) {
         if (newValue.value !== '') {

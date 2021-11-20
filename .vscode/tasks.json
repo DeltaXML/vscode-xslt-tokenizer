@@ -18,13 +18,9 @@
 		{
 			"type": "npm",
 			"script": "lint",
-			"problemMatcher": [],
+			"problemMatcher": "$eslint-stylish",
 			"label": "npm: lint",
-			"detail": "tslint -p ./",
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			}
+			"detail": "eslint -c .eslintrc.js --ext .ts src"
 		}
 	]
 }

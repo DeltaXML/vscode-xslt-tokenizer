@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as  os from 'os';
-import * as jsc from 'jsonc-parser'
+import * as jsc from 'jsonc-parser';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -18,27 +18,27 @@ function pathSeparator() {
 }
 
 interface XSLTTask extends vscode.TaskDefinition {
-    label: string,
-    saxonJar: string,
-    xsltFile: string,
-    xmlSource: string,
-    resultPath: string,
-    parameters?: XSLTParameter[],
-    features?: XSLTParameter[],
-    initialTemplate?: string,
-    initialMode?: string,
-    classPathEntries?: string[],
-    useWorkspace?: boolean,
-    group?: TaskGroup
+    label: string;
+    saxonJar: string;
+    xsltFile: string;
+    xmlSource: string;
+    resultPath: string;
+    parameters?: XSLTParameter[];
+    features?: XSLTParameter[];
+    initialTemplate?: string;
+    initialMode?: string;
+    classPathEntries?: string[];
+    useWorkspace?: boolean;
+    group?: TaskGroup;
 }
 
 interface TaskGroup {
-    kind: string
+    kind: string;
 }
 
 interface XSLTParameter {
-    name: string,
-    value: string
+    name: string;
+    value: string;
 }
 
 export class SaxonTaskProvider implements vscode.TaskProvider {
@@ -79,7 +79,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             if (newTask) {
                 result.push(newTask);
             }
-        })
+        });
         if (!this.templateTaskFound) {
             let templateTask = this.addTemplateTask();
             if (templateTask) {
@@ -91,7 +91,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     }
 
     private addTemplateTask() {
-        let saxonJarDefault = '${config:XSLT.tasks.saxonJar}'
+        let saxonJarDefault = '${config:XSLT.tasks.saxonJar}';
         let xmlSourceValue = '${file}';
         let xsltFilePath = '${file}';
         let resultPathValue = '${workspaceFolder}/xslt-out/result1.xml';
@@ -124,12 +124,12 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             let commandLineArgs: string[] = [];
 
             let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
-            let xsltParametersCommand: string[] = []
+            let xsltParametersCommand: string[] = [];
             for (const param of xsltParameters) {
                 xsltParametersCommand.push(param.name + '=' + param.value);
             }
             let saxonFeatures: XSLTParameter[] = xsltTask.features ? xsltTask.features : [];
-            let saxonFeaturesCommand: string[] = []
+            let saxonFeaturesCommand: string[] = [];
             for (const feature of saxonFeatures) {
                 saxonFeaturesCommand.push('--' + feature.name + ':' + feature.value);
             }
@@ -143,7 +143,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 switch (propName) {
                     case 'xsltFile':
                         commandLineArgs.push('-xsl:' + propValue);
-                        break
+                        break;
                     case 'xmlSource':                        
                     if (propValue !== "") {
                             commandLineArgs.push('-s:' + propValue);
@@ -151,7 +151,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         break;
                     case 'resultPath':
                         commandLineArgs.push('-o:' + propValue);
-                        break
+                        break;
                     case 'initialTemplate':
                         commandLineArgs.push('-it:' + propValue);
                         break;

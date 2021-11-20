@@ -30,18 +30,18 @@ enum AttributeType {
 }
 
 interface XSLTToken extends BaseToken {
-	tagType?: TagType
+	tagType?: TagType;
 }
 
 interface ElementData {
-	variables: VariableData[]
-	currentVariable?: VariableData,
+	variables: VariableData[];
+	currentVariable?: VariableData;
 	xpathVariableCurrentlyBeingDefined?: boolean;
 	identifierToken: XSLTToken;
 	symbolName: string;
-	symbolID: string,
-	childSymbols: vscode.DocumentSymbol[],
-	namespacePrefixes: string[]
+	symbolID: string;
+	childSymbols: vscode.DocumentSymbol[];
+	namespacePrefixes: string[];
 }
 interface XPathData {
 	token: BaseToken;
@@ -55,9 +55,9 @@ interface XPathData {
 }
 
 interface VariableData {
-	token: BaseToken,
+	token: BaseToken;
 	name: string;
-	uri?: string
+	uri?: string;
 }
 
 export class XsltTokenDefinitions {
@@ -112,7 +112,7 @@ export class XsltTokenDefinitions {
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default'];
 
-		let tagExcludeResultPrefixes: { token: BaseToken, prefixes: string[] } | null = null;
+		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
 		let requiredLine = position.line;
 		let requiredChar = position.character;
 		let isOnRequiredToken = false;
@@ -583,11 +583,11 @@ export class XsltTokenDefinitions {
 		}
 
 		return resultLocation;
-	}
+	};
 
 	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
 		if (instruction) {
-			let s = url.pathToFileURL
+			let s = url.pathToFileURL;
 			let uri = instruction?.href ? vscode.Uri.parse(url.pathToFileURL(instruction.href).toString()) : document.uri;
 			let startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
 			let endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
@@ -624,7 +624,7 @@ export class XsltTokenDefinitions {
 		if (!resolved) {
 			let instruction = importedVariables.get(varName);
 			if (instruction) {
-				resolved = { name: instruction.name, token: instruction.token, uri: instruction.href }
+				resolved = { name: instruction.name, token: instruction.token, uri: instruction.href };
 			}
 		}
 
@@ -665,7 +665,7 @@ export class XsltTokenDefinitions {
 					globalXsltVariable = currentVar;
 				}
 			}
-			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable)
+			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable);
 			if (resolved) {
 				break;
 			}

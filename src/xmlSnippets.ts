@@ -57,12 +57,12 @@ export class XMLSnippets {
 			body:
 			`\${1:element}$0/>`
 		}
-	]
+	];
 	static generalAttributes: Snippet[] = [
 		{
 			name: 'attribute',
 			description: 'attribute name="value"',
 			body: `\${1:name}="\${2:value}"$0`
 		}		
-	]
+	];
 }

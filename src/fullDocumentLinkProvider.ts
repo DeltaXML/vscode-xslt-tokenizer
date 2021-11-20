@@ -1,7 +1,7 @@
 // tslint:disable
 import { GlobalInstructionData, GlobalInstructionType } from "./xslLexer";
 import * as vscode from "vscode";
-import { LanguageConfiguration, XslLexer} from "./xslLexer"
+import { LanguageConfiguration, XslLexer} from "./xslLexer";
 import * as path from 'path';
 
 export class FullDocumentLinkProvider implements vscode.DocumentLinkProvider {
@@ -14,7 +14,7 @@ export class FullDocumentLinkProvider implements vscode.DocumentLinkProvider {
 
 	provideDocumentLinks(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.DocumentLink[] {
 		this.lexer.analyse(document.getText());
-		this.lexer.globalInstructionData
+		this.lexer.globalInstructionData;
 		let data: GlobalInstructionData[] = this.lexer.globalInstructionData;
 
 		let result: vscode.DocumentLink[] = [];

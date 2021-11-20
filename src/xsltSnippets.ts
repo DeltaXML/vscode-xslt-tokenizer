@@ -1,7 +1,7 @@
 export interface Snippet {
-	name: string
-	body: string
-	description: string
+	name: string;
+	body: string;
+	description: string;
 }
 
 export class XSLTSnippets {
@@ -175,7 +175,7 @@ export class XSLTSnippets {
 			description: 'W3C SVG namespace',
 			body: `xmlns:svg="http://www.w3.org/2000/svg"$0`
 		},
-	]
+	];
 
 }
 

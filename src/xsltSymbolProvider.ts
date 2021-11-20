@@ -7,28 +7,28 @@ import { exit } from 'process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
-import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions'
+import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
 
 interface ImportedGlobals {
-	href: string,
-	data: GlobalInstructionData[],
-	error: boolean
+	href: string;
+	data: GlobalInstructionData[];
+	error: boolean;
 }
 
 interface Cleaned {
-	cleanedTokens: TokenWithUnion[],
+	cleanedTokens: TokenWithUnion[];
 	hasParentAxis: boolean;
 }
 
 interface GlobalsSummary {
-	globals: ImportedGlobals[],
-	hrefs: string[]
+	globals: ImportedGlobals[];
+	hrefs: string[];
 }
 
 export interface XsltPackage {
-	name: string,
-	path: string,
-	version?: string
+	name: string;
+	path: string;
+	version?: string;
 }
 
 export enum SelectionType {
@@ -94,7 +94,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			const result = XsltSymbolProvider.documentSymbols.get(vscode.window.activeTextEditor.document.uri);
 			return result ? result : [];
 		} else {
-			return []
+			return [];
 		}
 	}
 
@@ -127,7 +127,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
 		let { importedGlobals1, accumulatedHrefs }:
-			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[]; }
+			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[] }
 			= await XsltSymbolProvider.processTopLevelImports(true, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
 
 		let topLevelHrefs = XsltSymbolProvider.accumulateImportHrefs(xsltPackages, importedGlobals1, []);
@@ -224,13 +224,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				length: matchingParent?.length,
 				value: matchingParent,
 				tokenType: 0
-			}
+			};
 			const importInstruction: GlobalInstructionData = {
 				type: GlobalInstructionType.Import,
 				name: matchingParent,
 				token: token,
 				idNumber: 0
-			}
+			};
 
 			globalInstructionData.push(importInstruction);
 		}
@@ -498,7 +498,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							const tv = token.value.substring(1);
 							const gd = globalInstructionData.find(d => d.type === GlobalInstructionType.Variable && d.name === tv);
 							if (gd?.idNumber) {
-								xpv = { index: gd.idNumber, token: gd.token, name: gd.name }
+								xpv = { index: gd.idNumber, token: gd.token, name: gd.name };
 							}
 						}
 						if (xpv) {
@@ -553,7 +553,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				}
 				if (predicateStart === -1) {
 					if (lastTokenWasSlash2 && finalSlashToken) {
-						cleanedTokens.push(finalSlashToken)
+						cleanedTokens.push(finalSlashToken);
 					}
 					break;
 				} else {
@@ -639,7 +639,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				value: '//',
 				tokenType: TokenLevelState.operator,
 				charType: CharLevelState.dSep
-			}
+			};
 			tokens.push(token);
 		} else {
 			const tv = tokens[tokens.length - 1].value;
@@ -651,7 +651,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					value: '//',
 					tokenType: TokenLevelState.operator,
 					charType: CharLevelState.dSep
-				}
+				};
 				tokens.push(token);
 			}
 		}	
@@ -723,7 +723,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 										}
 										nextSymbols.push(child);
 									}
-								})
+								});
 							} else {
 								const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && unionElementNames.indexOf(child.name) !== -1);
 								nextSymbols = nextSymbols.concat(next);
@@ -779,13 +779,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 											attr.parent = symbol;
 										}
 										nextSymbols.push(attr);
-									})
+									});
 								} 
 							});
 							nextAxis = AxisType.Attribute;
 							break;
 						case 'parent':
-							currentSymbols.forEach(symbol => { if (symbol.parent) nextSymbols.push(symbol.parent) })
+							currentSymbols.forEach(symbol => { if (symbol.parent) nextSymbols.push(symbol.parent); });
 							nextAxis = AxisType.ParentKeep;
 							break;
 					  case 'following-sibling':
@@ -866,7 +866,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							});
 						}
 					} else if (token.value === '..') {
-						currentSymbols.forEach(symbol => {if (symbol.parent) nextSymbols.push(symbol.parent)})
+						currentSymbols.forEach(symbol => {if (symbol.parent) nextSymbols.push(symbol.parent);});
 						nextAxis = AxisType.Parent;
 					}
 					break;
@@ -895,14 +895,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				} else if (nextAxis === AxisType.Attribute) {
 					currentSymbols.forEach(current => {
 						if (current.isAttr) {
-							attrNames.add(current.name)
+							attrNames.add(current.name);
 						}});
 				} else if (nextAxis !== AxisType.Child && nextAxis !== AxisType.Parent) {
 					currentSymbols.forEach(current => {
 						if (current.isAttr) {
-							attrNames.add(current.name)
+							attrNames.add(current.name);
 						} else {
-						elementNames.add(current.name)}
+						elementNames.add(current.name);}
 					});
 				} else {
 					for (let x = 0; x < currentSymbols.length; x++) {
@@ -994,7 +994,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				return;
 			}
 			const pos = item.indexOf('[');
-			let pathName: string = ''
+			let pathName: string = '';
 			// only want one result;
 			let pathIndex = 1;
 			if (pos === -1) {
@@ -1006,7 +1006,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				if (predicateNum !== NaN) {
 					pathIndex = predicateNum;
 				}
-				pathName = item.substr(0, pos)
+				pathName = item.substr(0, pos);
 			}
 
 			if (i === 0) {

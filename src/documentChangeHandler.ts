@@ -158,7 +158,7 @@ export class DocumentChangeHandler {
 		} else {
 
 		}
-	}
+	};
 
 	private getXPathDocumentChangeHandler() {
 		if (this.xpathDocumentChangeHanlder === null) {
@@ -190,7 +190,7 @@ export class DocumentChangeHandler {
 			this.xmlDocumentRegistered = true;
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
 		}
-	}
+	};
 
 	public async performRename(document: vscode.TextDocument, edit: TagRenameEdit) {
 		let wse = new vscode.WorkspaceEdit();

@@ -12,14 +12,14 @@ import { XPathSemanticTokensProvider } from './extension';
 import { DocumentChangeHandler } from './documentChangeHandler';
 
 interface ImportedGlobals {
-	href: string,
-	data: GlobalInstructionData[],
-	error: boolean
+	href: string;
+	data: GlobalInstructionData[];
+	error: boolean;
 }
 
 interface GlobalsSummary {
-	globals: ImportedGlobals[],
-	hrefs: string[]
+	globals: ImportedGlobals[];
+	hrefs: string[];
 }
 
 export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode.CompletionItemProvider {
@@ -64,7 +64,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
 		let { importedGlobals1, accumulatedHrefs }:
-			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[]; }
+			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[] }
 			= await XsltSymbolProvider.processTopLevelImports(false, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
 
 
@@ -139,7 +139,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
 		let { importedGlobals1, accumulatedHrefs }:
-			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[]; }
+			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[] }
 			= await XsltSymbolProvider.processTopLevelImports(false, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
 
 

@@ -29,7 +29,7 @@ export class XSLTConfiguration {
 		rootElementSnippets: XSLTSnippets.xsltRootTags,
 		schemaData: new XSLTSchema(),
 		docType: DocumentTypes.XSLT
-	} 
+	}; 
 }
 
 export class XPathConfiguration {
@@ -41,7 +41,7 @@ export class XPathConfiguration {
 		nonNativeAvts: true,
 		rootElementSnippets: [],
 		docType: DocumentTypes.XPath
-	} 
+	}; 
 }
 
 export class DCPConfiguration {
@@ -77,7 +77,7 @@ export class DCPConfiguration {
 			'http://apache.org/xml/properties/schema/external-schemaLocation',
 			'http://apache.org/xml/properties/schema/external-noNamespaceSchemaLocation',
 		]
-	} 
+	}; 
 }
 
 export class SchConfiguration {
@@ -92,7 +92,7 @@ export class SchConfiguration {
 		schemaData: new SchSchema(),
 		docType: DocumentTypes.SCH,
 		rootElementSnippets: DCPSnippets.xsltRootTags
-	} 
+	}; 
 }
 
 export class XProcConfiguration {
@@ -104,7 +104,7 @@ export class XProcConfiguration {
 		tvtAttributes: ['expand-text', 'inline-expand-text'],
 		nonNativeAvts: true,
 		docType: DocumentTypes.Other
-	} 
+	}; 
 }
 
 export class XMLConfiguration {
@@ -117,7 +117,7 @@ export class XMLConfiguration {
 		rootElementSnippets: XMLSnippets.xsltRootTags,
 		elementSnippets: XMLSnippets.generalTags,
 		docType: DocumentTypes.Other
-	} 
+	}; 
 }
 
 export class XSLTLightConfiguration {
@@ -129,5 +129,5 @@ export class XSLTLightConfiguration {
 		tvtAttributes: [],
 		nonNativeAvts: false,
 		docType: DocumentTypes.XSLT
-	} 
+	}; 
 }

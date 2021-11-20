@@ -117,7 +117,7 @@ export function activate(context: vscode.ExtensionContext) {
 					return 'XPath should start with "/"';
 				} else {
 					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text, XsltSymbolProvider.getSymbolsForActiveDocument());
-					return symbol? null : 'No matching elements'
+					return symbol? null : 'No matching elements';
 				}
 				
 			}
@@ -293,17 +293,17 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 				length: 1,
 				value: name,
 				tokenType: 0
-			}
+			};
 			const variableInstruction: GlobalInstructionData = {
 				type: GlobalInstructionType.Variable,
 				name: name,
 				token: token,
 				idNumber: 0
-			}
+			};
 			data.push(variableInstruction);
 		});
 		XPathSemanticTokensProvider.globalInstructionData = data;
-	}
+	};
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };

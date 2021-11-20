@@ -123,7 +123,7 @@ export class XsltTokenCompletions {
 		let attNameText: string = '';
 		XsltTokenCompletions.useIxslFunctions = false;
 
-		let tagExcludeResultPrefixes: { token: BaseToken, prefixes: string[] } | null = null;
+		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
 		let requiredLine = position.line;
 		let requiredChar = position.character;
 		let isOnRequiredToken = false;
@@ -820,7 +820,7 @@ export class XsltTokenCompletions {
 		}
 
 		return resultCompletions;
-	}
+	};
 
 	private static createNonAlphanumericCompletions(triples: [string, string, string][], allCompletions: vscode.CompletionItem[]) {
 		triples.forEach((pair) => {

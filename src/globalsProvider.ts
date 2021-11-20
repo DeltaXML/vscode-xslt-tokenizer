@@ -1,13 +1,13 @@
 // tslint:disable
 import { XslLexerLight } from "./xslLexerLight";
-import * as vscode from 'vscode'
+import * as vscode from 'vscode';
 import {XSLTLightConfiguration} from './languageConfigurations';
 import { GlobalInstructionData } from "./xslLexer";
 import * as fs from 'fs';
 
 export interface GlobalImportData {
 	data: GlobalInstructionData[];
-	error: boolean
+	error: boolean;
 }
 
 export class GlobalsProvider {

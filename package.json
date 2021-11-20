@@ -854,7 +854,8 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
-		"lint": "tslint -p ./",
+		"lint": "eslint -c .eslintrc.js --ext .ts src",
+		"lint-fix": "eslint -c .eslintrc.js --fix --ext .ts src",
 		"watch": "tsc -watch -p ./",
 		"test": "jest"
 	},
@@ -862,7 +863,12 @@
 		"@types/jest": "^24.9.1",
 		"@types/node": "^10.17.17",
 		"@types/vscode": "^1.44.0",
+		"@typescript-eslint/eslint-plugin": "^5.4.0",
+		"@typescript-eslint/parser": "^5.4.0",
+		"eslint": "^8.2.0",
+		"eslint-config-prettier": "^8.3.0",
 		"jest": "^26.6.3",
+		"prettier": "^2.4.1",
 		"ts-jest": "^26.5.6",
 		"tslint": "^5.20.1",
 		"typescript": "^3.8.3",

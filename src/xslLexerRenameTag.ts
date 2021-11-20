@@ -12,9 +12,9 @@ import { XslLexer, XMLCharState, GlobalInstructionType, XSLTokenLevelState, Enti
 import * as vscode from 'vscode';
 
 export interface TagRenamePosition {
-	startPosition: vscode.Position,
-    endTag: string
-    startTag: string
+	startPosition: vscode.Position;
+    endTag: string;
+    startTag: string;
 }
 
 export class XslLexerRenameTag extends XslLexer {

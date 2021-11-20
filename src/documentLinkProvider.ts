@@ -2,9 +2,9 @@
 import { XslLexerLight } from "./xslLexerLight";
 import { GlobalInstructionData, GlobalInstructionType } from "./xslLexer";
 import * as vscode from "vscode";
-import { LanguageConfiguration } from "./xslLexer"
+import { LanguageConfiguration } from "./xslLexer";
 import * as path from 'path';
-import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider'
+import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
 import * as url from 'url';
 
 

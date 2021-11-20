@@ -163,7 +163,7 @@ export class XslLexerLight extends XslLexer {
                                     name: attName.substring(6),
                                     token: xmlnsTkn,
                                     type: GlobalInstructionType.RootXMLNS
-                                }
+                                };
                                 this.globalInstructionData.push(gData);
                             }
                             tokenChars = [];

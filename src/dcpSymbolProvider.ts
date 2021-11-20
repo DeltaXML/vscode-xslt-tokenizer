@@ -40,7 +40,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 			if (item.type === GlobalInstructionType.Import || item.type === GlobalInstructionType.Include) {
 				fileChecks.push(returnBadFileLinks(item));
 			}
-		})
+		});
 		let errorFileRefs = await Promise.all(fileChecks);
 
 		return new Promise((resolve, reject) => {
@@ -57,7 +57,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 				this.collection.set(document.uri, allDiagnostics);
 			} else {
 				this.collection.clear();
-			};
+			}
 			resolve(symbols);
 		});
 
