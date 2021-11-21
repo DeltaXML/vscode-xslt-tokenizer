@@ -1079,6 +1079,7 @@ export class XsltTokenDiagnostics {
 							case 'return':
 							case 'satisfies':
 							case 'else':
+								let tokenValBeforeDelete = xpathStack.length > 0? xpathStack[xpathStack.length - 1].token.value : '';
 								if (xpathStack.length > 1) {
 									let deleteCount = 0;
 									for (let i = xpathStack.length - 1; i > -1; i--) {
@@ -1104,14 +1105,10 @@ export class XsltTokenDiagnostics {
 											preXPathVariable = false;
 										}
 										xpathVariableCurrentlyBeingDefined = peekedStack.xpathVariableCurrentlyBeingDefined;
-										const pv = peekedStack.token.value;
-										const isAllowed = (pv === 'return' || pv === 'else' || pv === 'satisfies');
-										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(pv);
-										if (!token.error && !isAllowed && matchingToken !== token.value) {
-											token['error'] = ErrorType.XPathUnexpected;
+										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(tokenValBeforeDelete);
+										if (!token.error && matchingToken !== token.value) {
+											token['error'] = ErrorType.BracketNesting;
 											problemTokens.push(token);
-											peekedStack.token['error'] = ErrorType.BracketNesting;
-											problemTokens.push(peekedStack.token);
 										} else {
 											peekedStack.token = token;
 										}
@@ -1119,6 +1116,12 @@ export class XsltTokenDiagnostics {
 										inScopeXPathVariablesList = [];
 										preXPathVariable = false;
 										xpathVariableCurrentlyBeingDefined = false;
+									}
+								} else if (tokenValBeforeDelete !== '') {
+									let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(tokenValBeforeDelete);
+									if (!token.error && matchingToken !== token.value) {
+										token['error'] = ErrorType.BracketNesting;
+										problemTokens.push(token);
 									}
 								}
 								break;

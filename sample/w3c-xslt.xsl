@@ -231,7 +231,7 @@
                     else if ($s = 12) then '\f' 
                     else if ($s = 13) then '\r'
                     else if ($s lt 32 or ($s ge 127 and $s le 160)) then '\u' || j:hex4($s)
-                    else codepoints-to-string(.)                              
+                    else codepoints-to-string(.)                            
                         "/>
         <xsl:value-of>
             <xsl:for-each select="string-to-codepoints($in)">
