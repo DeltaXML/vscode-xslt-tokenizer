@@ -1151,7 +1151,15 @@ export class XsltTokenDiagnostics {
 								isXPathError = true;
 							}
 						}
-						if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
+						if (prevToken?.tokenType === TokenLevelState.complexExpression) {
+							let currCharType = <CharLevelState>token.charType;
+							if (currCharType === CharLevelState.rB || currCharType === CharLevelState.rBr || currCharType === CharLevelState.rPr) {
+								if (prevToken.value === 'return' || prevToken.value === 'satisfies' || prevToken.value === 'else' || prevToken.value === 'then') {
+									prevToken['error'] = ErrorType.XPathAwaiting;
+									problemTokens.push(prevToken);
+								}
+							}
+						} else if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
 						} else if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error) {
@@ -1343,6 +1351,10 @@ export class XsltTokenDiagnostics {
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
 									if (poppedData) {
+										if (poppedData.token.value === 'then') {
+											poppedData.token['error'] = ErrorType.BracketNesting;
+											problemTokens.push(poppedData.token);
+										}
 										inScopeXPathVariablesList = poppedData.variables;
 										preXPathVariable = poppedData.preXPathVariable;
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;

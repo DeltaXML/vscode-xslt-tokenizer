@@ -9,7 +9,10 @@
 	expand-text="yes"
 	version="3.0">
 	
-	<xsl:variable select="(22 +)"/> 	
+	<xsl:variable select="(if (2) then 22 )"/> 
+	
+	<xsl:variable select="if (2) then"/> 	
+	
 	
 	<!-- <xsl:variable select="
 		if (22) then 
