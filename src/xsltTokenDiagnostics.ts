@@ -1139,7 +1139,12 @@ export class XsltTokenDiagnostics {
 						let tv = token.value;
 
 						// start checks
-						const stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+						let stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+						const sv = stackItem?.token.value;
+						const popStackLaterForComma = sv && tv === ',' && (sv === 'return' || sv === 'else' || sv === 'satisfies' );
+						if (popStackLaterForComma && xpathStack.length > 1) {
+							stackItem = xpathStack[xpathStack.length - 2];
+						}
 						if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
 							if (tv === ',') {
 								if (stackItem.awaitingMapKey) {
