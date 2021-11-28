@@ -8,16 +8,9 @@
 	exclude-result-prefixes="#all"
 	expand-text="yes"
 	version="3.0">
+
 	
-	<xsl:variable name="q" as="xs:string" 
-		select="
-			map {
-				'a' : if (7) then 1 else 2,
-				'b' : 2
-			}	
-		"/> 
-	
-	<!-- <xsl:variable name="a" select="
+	<xsl:variable name="a" select="
 		if (22) then 
 			let $m := 5 return 5			
 		else $m"/>
@@ -29,15 +22,24 @@
 	
 	<xsl:variable select="(if (2) then 22 )"/> 
 	
-	<xsl:variable select="if (2) then"/> 	 -->
+	<xsl:variable select="if (2) then 6 else 7"/> 	
 	
 	
-	<!-- <xsl:variable select="
+	<xsl:variable select="
 						if (22) then 
 						22 
 						else 
 						if (22) then 
 						25
 						else 26
-						else 22"/> 	 -->
+						else 22"/> 	
+	
+	<xsl:variable name="q" as="xs:string" 
+		select="
+			map {
+				'a' : if (7) then 1 else 2,
+				'b' : 2
+			}	
+		"/> 
+	
 				</xsl:stylesheet>

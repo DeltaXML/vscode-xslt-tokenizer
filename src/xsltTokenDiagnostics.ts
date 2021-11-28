@@ -1105,7 +1105,7 @@ export class XsltTokenDiagnostics {
 											preXPathVariable = false;
 										}
 										xpathVariableCurrentlyBeingDefined = peekedStack.xpathVariableCurrentlyBeingDefined;
-										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(tokenValBeforeDelete);
+										let matchingToken: string = XsltTokenDiagnostics.getMatchingToken(peekedStack.token.value);
 										if (!token.error && matchingToken !== token.value) {
 											token['error'] = ErrorType.BracketNesting;
 											problemTokens.push(token);
