@@ -49,6 +49,21 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Location | undefined> {
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 
+		let { allTokens, globalInstructionData, allImportedGlobals }:
+		 { allTokens: BaseToken[]; globalInstructionData: GlobalInstructionData[]; allImportedGlobals: GlobalInstructionData[] } = 
+		 await this.getImportedGlobals(document, lexPosition);
+
+		return new Promise((resolve, reject) => {
+			let location: vscode.Location|undefined = undefined;
+
+			let isXSLT = this.docType === DocumentTypes.XSLT;
+			location= XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+
+			resolve(location);
+		});
+	}
+
+	private async getImportedGlobals(document: vscode.TextDocument, lexPosition: LexPosition) {
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];
 		if (this.docType === DocumentTypes.XPath) {
@@ -63,12 +78,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
-		let { importedGlobals1, accumulatedHrefs }:
-			{ importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[] }
-			= await XsltSymbolProvider.processTopLevelImports(false, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
+		let { importedGlobals1, accumulatedHrefs }: { importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[] } =
+		 await XsltSymbolProvider.processTopLevelImports(false, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
 
-
-		let globalsSummary0: GlobalsSummary = {globals: importedGlobals1, hrefs: accumulatedHrefs};
+		let globalsSummary0: GlobalsSummary = { globals: importedGlobals1, hrefs: accumulatedHrefs };
 		const maxImportLevel = 20;
 
 		let processNestedGlobals = async () => {
@@ -81,27 +94,19 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		await processNestedGlobals();
 
-		return new Promise((resolve, reject) => {
-			let location: vscode.Location|undefined = undefined;
-			let allImportedGlobals: GlobalInstructionData[] = [];
+		let allImportedGlobals: GlobalInstructionData[] = [];
 
-			globalsSummary0.globals.forEach((globals) => {
-				if (globals.error) {
-					// ignore 
-				} else {
-					globals.data.forEach((global) => {
-						global['href'] = globals.href;
-						allImportedGlobals.push(global);
-					});
-				}		
-			});
-
-			let isXSLT = this.docType === DocumentTypes.XSLT;
-			location= XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
-
-			resolve(location);
+		globalsSummary0.globals.forEach((globals) => {
+			if (globals.error) {
+				// ignore 
+			} else {
+				globals.data.forEach((global) => {
+					global['href'] = globals.href;
+					allImportedGlobals.push(global);
+				});
+			}
 		});
-
+		return { allTokens, globalInstructionData, allImportedGlobals };
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
