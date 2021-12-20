@@ -1742,6 +1742,11 @@ export class XsltTokenDiagnostics {
 				}
 				else if (tokenType === TokenLevelState.nodeNameTest && prevToken.tokenType === TokenLevelState.uriLiteral) {
 					// no error
+				} else if (tokenType === TokenLevelState.string && prevToken.tokenType === TokenLevelState.string) {
+					const currentTokenFirstChar = token.value.charAt(0);
+					if (currentTokenFirstChar === '"' || currentTokenFirstChar === '\'') {
+						isXPathError = true;
+					}
 				} else {
 					isXPathError = true;
 				}

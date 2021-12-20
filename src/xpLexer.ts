@@ -690,9 +690,11 @@ export class XPathLexer {
 
     public static checkExitStringLiteralEnd(lastToken: BaseToken, result: BaseToken[]) {
         let followsEntityRef = false;
+        let followsString = false;
         if (result.length > 1) {
             const nextLastToken = result[result.length - 2];
             followsEntityRef = nextLastToken.tokenType === TokenLevelState.entityRef;
+            followsString = nextLastToken.tokenType === TokenLevelState.string;
         }
         if (followsEntityRef) {
             let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
@@ -705,7 +707,7 @@ export class XPathLexer {
                     lastToken['error'] = ErrorType.XPathStringLiteral;
                 }
             }
-        } else {
+        } else if (!followsString) {
             this.checkStringLiteralEnd(lastToken);
         }
     }
