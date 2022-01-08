@@ -5,7 +5,6 @@
  *  DeltaXML Ltd. - saxonTaskProvider
  */
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as jsc from 'jsonc-parser';
 
@@ -43,22 +42,28 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     constructor(private workspaceRoot: string) { }
 
     public async provideTasks(): Promise<vscode.Task[]> {
-        let rootPath = vscode.workspace.rootPath ? vscode.workspace.rootPath : '/';
-        let tasksPath = path.join(rootPath, '.vscode', 'tasks.json');
-        let tasksObject = undefined;
-
-        try {
-            const doc = await vscode.workspace.openTextDocument(tasksPath);
-            tasksObject = jsc.parse(doc.getText());
-        } catch (e) {
-            tasksObject = { tasks: [] };
-        }
+        const tasksObject = await SaxonJsTaskProvider.getTasksObject();
         return this.getTasks(tasksObject.tasks);
     }
 
     public resolveTask(_task: vscode.Task): vscode.Task | undefined {
         return this.getTask(_task.definition);
     }
+
+    public static async getTasksObject() {
+        let workspaceUri = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri : vscode.Uri.file('/');
+        let workspaceTaskUri = workspaceUri.with({ path: workspaceUri.path + '/.vscode/tasks.json' }) ;
+        let tasksObject = undefined;
+
+        try {
+            const doc = await vscode.workspace.openTextDocument(workspaceTaskUri);
+            tasksObject = jsc.parse(doc.getText());
+        } catch (e) {
+            tasksObject = { tasks: [] };
+        }
+        return tasksObject;
+    }
+
 
     private getProp(obj: any, prop: string): string {
         return obj[prop];

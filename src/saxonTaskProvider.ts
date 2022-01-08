@@ -5,9 +5,8 @@
  *  DeltaXML Ltd. - saxonTaskProvider
  */
 import * as vscode from 'vscode';
-import * as path from 'path';
 import * as  os from 'os';
-import * as jsc from 'jsonc-parser';
+import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -50,16 +49,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     constructor(private workspaceRoot: string) { }
 
     public async provideTasks(): Promise<vscode.Task[]> {
-        let rootPath = vscode.workspace.rootPath ? vscode.workspace.rootPath : '/';
-        let tasksPath = path.join(rootPath, '.vscode', 'tasks.json');
-        let tasksObject = undefined;
-
-        try {
-            const doc = await vscode.workspace.openTextDocument(tasksPath);
-            tasksObject = jsc.parse(doc.getText());
-        } catch (e) {
-            tasksObject = { tasks: [] };
-        }
+        const tasksObject = await SaxonJsTaskProvider.getTasksObject();
         return this.getTasks(tasksObject.tasks);
     }
 
