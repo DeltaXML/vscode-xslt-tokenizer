@@ -142,7 +142,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         propNameValue = '-o:' + propValue;
                         break;
                     case 'initialTemplate':
-                        propNameValue = '-it:' + propValue;
+                        propNameValue = propValue.length === 0 ? '-it' : '-it:' + propValue;
                         break;
                     case 'initialMode': 
                         propNameValue = '-im:' + propValue;

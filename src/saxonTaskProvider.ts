@@ -153,7 +153,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('-o:' + propValue);
                         break;
                     case 'initialTemplate':
-                        commandLineArgs.push('-it:' + propValue);
+                        if (propValue !== "") {
+                            commandLineArgs.push('-it:' + propValue);
+                        } else {
+                            commandLineArgs.push('-it');
+                        }
                         break;
                     case 'initialMode':
                         commandLineArgs.push('-im:' + propValue);
