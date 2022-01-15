@@ -2,7 +2,7 @@
 	"name": "xslt-xpath",
 	"displayName": "XSLT/XPath for Visual Studio Code",
 	"description": "Comprehensive language support for XSLT 3.0 / XPath 3.1",
-	"version": "0.3.17",
+	"version": "1.0.0",
 	"publisher": "deltaxml",
 	"icon": "xslt-xpath.png",
 	"bugs": {
@@ -406,6 +406,10 @@
 					"export": {
 						"type": "string",
 						"description": "Export filename: If set, exports the compiled stylesheet, in a form suitable for subsequent execution"
+					},
+					"execute": {
+            "type": "boolean",
+						"description": "Default: 'true'. If set 'false' any -export output is generated but XSLT is not executed"
 					},
 					"resultPath": {
 						"type": "string",

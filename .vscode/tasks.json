@@ -21,6 +21,20 @@
 			"problemMatcher": "$eslint-stylish",
 			"label": "npm: lint",
 			"detail": "eslint -c .eslintrc.js --ext .ts src"
+		},
+		{
+			"type": "xslt-js",
+			"label": "xslt-js: Saxon-JS Transform (New)",
+			"xsltFile": "${file}",
+			"xmlSource": "${file}",
+			"export": "",
+			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
+			"group": {
+				"kind": "build"
+			},
+			"problemMatcher": [
+				"$saxon-xslt-js"
+			]
 		}
 	]
 }
