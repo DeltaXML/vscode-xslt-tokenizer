@@ -857,6 +857,9 @@ export class XslLexer {
                             attName = tokenChars.join('');
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
+                                // if (attName === 'as') {
+                                //     isXPathAttribute = true;
+                                // } 
                                 if (attName === 'saxon:options') {
                                     isXPathAttribute = true;
                                 } else if (this.genericTvtAttributes.indexOf(attName) > -1) {

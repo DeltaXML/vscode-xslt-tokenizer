@@ -869,6 +869,8 @@ export class XPathLexer {
                 prevToken.tokenType = TokenLevelState.complexExpression;
             } else if (prevToken.value === 'function') {
                 prevToken.tokenType = TokenLevelState.anonymousFunction;
+            } else if (prevToken.value === 'map' || prevToken.value === 'array') {
+                prevToken.tokenType = TokenLevelState.simpleType;
             } else {
                 prevToken.tokenType = TokenLevelState.function;
             }
