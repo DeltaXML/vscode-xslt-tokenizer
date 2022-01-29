@@ -1277,6 +1277,11 @@ export class XsltTokenCompletions {
 					completionItems.push(newItem);
 					competionName = tagName + ' name';
 					description = "xsl:template with 'name' attribute";
+				} else if (tagName === 'xsl:text') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString(`xsl:text>$1</xsl:text>$0`);
+					completionItems.push(newItem);
 				} else if (xsltParent === 'xsl:function' && tagName === 'xsl:param') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
