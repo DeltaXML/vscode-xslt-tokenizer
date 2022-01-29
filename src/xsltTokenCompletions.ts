@@ -1282,6 +1282,11 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString(`xsl:text>$1</xsl:text>$0`);
 					completionItems.push(newItem);
+				} else if (tagName === 'xsl:choose') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:choose>\n\t<xsl:when test="${1:$expr}">\n\t\t$2\n\t</xsl:when>\n</xsl:choose>');
+					completionItems.push(newItem);
 				} else if (xsltParent === 'xsl:function' && tagName === 'xsl:param') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
