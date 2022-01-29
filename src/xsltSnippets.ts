@@ -178,7 +178,7 @@ export class XSLTSnippets {
 		{
 			name: 'xmlns:exsl',
 			description: 'EXSLT namespace',
-			body: `xmlns:exsl="http://exslt.org/functions"$0`
+			body: `xmlns:exsl="http://exslt.org/common"$0`
 		},
 	];
 

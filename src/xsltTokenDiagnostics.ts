@@ -1905,6 +1905,10 @@ export class XsltTokenDiagnostics {
 					case XSLTnamespaces.ExpathBinary:
 					case XSLTnamespaces.ExpathFile:
 					case XSLTnamespaces.Exslt:
+					case XSLTnamespaces.ExsltMath:
+					case XSLTnamespaces.ExsltRegex:
+					case XSLTnamespaces.ExsltSets:
+					case XSLTnamespaces.ExsltStrings:
 						isValid = true;
 						break;
 				}
