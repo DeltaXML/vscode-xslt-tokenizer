@@ -4,6 +4,7 @@ export enum XSLTnamespaces {
 	ExpathArchive,
 	ExpathBinary,
 	ExpathFile,
+	Exslt,
 	Map,
 	Math,
 	Saxon,
@@ -417,7 +418,8 @@ export class FunctionData {
 		["http://www.w3.org/2001/XMLSchema", XSLTnamespaces.XMLSchema],
 		["http://www.w3.org/2005/xpath-functions", XSLTnamespaces.XPath],
 		["http://www.w3.org/1999/XSL/Transform", XSLTnamespaces.XSLT],
-		["http://saxonica.com/ns/interactiveXSLT", XSLTnamespaces.IXSL]
+		["http://saxonica.com/ns/interactiveXSLT", XSLTnamespaces.IXSL],
+		["http://exslt.org/functions", XSLTnamespaces.Exslt]
 	]);
 
 	public static readonly ixslEventName = [

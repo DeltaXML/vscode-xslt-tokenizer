@@ -175,6 +175,11 @@ export class XSLTSnippets {
 			description: 'W3C SVG namespace',
 			body: `xmlns:svg="http://www.w3.org/2000/svg"$0`
 		},
+		{
+			name: 'xmlns:exsl',
+			description: 'EXSLT namespace',
+			body: `xmlns:exsl="http://exslt.org/functions"$0`
+		},
 	];
 
 }
