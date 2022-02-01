@@ -1320,6 +1320,9 @@ export class XsltTokenDiagnostics {
 								}
 								if (prevToken?.tokenType === TokenLevelState.function) {
 									functionToken = prevToken;
+								} else if (prevToken?.tokenType === TokenLevelState.variable) {
+									// TODO: check arity of variables of type 'function'
+									incrementFunctionArity = false;
 								}
 							// intentionally no-break;	
 							case CharLevelState.lPr:
@@ -1435,7 +1438,8 @@ export class XsltTokenDiagnostics {
 								}
 								break;
 							case CharLevelState.dSep:
-								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
+								const isEmptyBracketsToken = token.value === '()';
+								if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity ? 1 : 0;
 									incrementFunctionArity = false;
 									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
@@ -1444,6 +1448,9 @@ export class XsltTokenDiagnostics {
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
 									}
+								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.variable) {
+									// TODO: check arity of variable of type 'function'
+									incrementFunctionArity = false;
 								} else if (token.value === '=>') {
 									incrementFunctionArity = true;
 								}
