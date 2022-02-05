@@ -10,6 +10,7 @@ import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './x
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import * as url from 'url';
+import { ExtractedImportData } from './xsltDefinitionProvider';
 
 
 enum TagType {
@@ -60,6 +61,11 @@ interface VariableData {
 	uri?: string;
 }
 
+export interface DefinitionLocation extends vscode.Location {
+	instruction?: GlobalInstructionData;
+	extractedImportData?: ExtractedImportData;
+}
+
 export class XsltTokenDefinitions {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
@@ -78,9 +84,9 @@ export class XsltTokenDefinitions {
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 
 
-	public static findDefinition = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.Location | undefined => {
+	public static findDefinition = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): DefinitionLocation | undefined => {
 		let lineNumber = -1;
-		let resultLocation: vscode.Location | undefined;
+		let resultLocation: DefinitionLocation | undefined;
 
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;
@@ -587,12 +593,21 @@ export class XsltTokenDefinitions {
 
 	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
 		if (instruction) {
-			let s = url.pathToFileURL;
 			let uri = instruction?.href ? vscode.Uri.parse(url.pathToFileURL(instruction.href).toString()) : document.uri;
 			let startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
 			let endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
-			return new vscode.Location(uri, new vscode.Range(startPos, endPos));
+			const location: DefinitionLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
+			location.instruction = instruction;
+			return location;
 		}
+	}
+
+	public static createLocationFromToken(token: BaseToken, document: vscode.TextDocument) {
+			let uri = document.uri;
+			let startPos = new vscode.Position(token.line, token.startCharacter);
+			let endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+			const location = new vscode.Location(uri, new vscode.Range(startPos, endPos));
+			return location;
 	}
 
 	public static resolveFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken) {

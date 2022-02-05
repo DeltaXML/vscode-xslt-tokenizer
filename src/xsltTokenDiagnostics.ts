@@ -17,7 +17,7 @@ enum HasCharacteristic {
 	no
 }
 
-enum TagType {
+export enum TagType {
 	XSLTstart,
 	XMLstart,
 	XSLTvar,
@@ -25,7 +25,7 @@ enum TagType {
 	NonStart
 }
 
-enum AttributeType {
+export enum AttributeType {
 	None,
 	Variable,
 	VariableRef,
@@ -36,17 +36,17 @@ enum AttributeType {
 	XPath
 }
 
-enum CurlyBraceType {
+export enum CurlyBraceType {
 	None,
 	Map,
 	Array
 }
 
-interface XSLTToken extends BaseToken {
+export interface XSLTToken extends BaseToken {
 	tagType?: TagType;
 }
 
-interface ElementData {
+export interface ElementData {
 	variables: VariableData[];
 	currentVariable?: VariableData;
 	xpathVariableCurrentlyBeingDefined?: boolean;
@@ -57,7 +57,7 @@ interface ElementData {
 	namespacePrefixes: string[];
 	expectedChildElements: string[];
 }
-interface XPathData {
+export interface XPathData {
 	token: BaseToken;
 	variables: VariableData[];
 	preXPathVariable: boolean;
@@ -69,7 +69,7 @@ interface XPathData {
 	curlyBraceType?: CurlyBraceType;
 }
 
-interface VariableData {
+export interface VariableData {
 	token: BaseToken;
 	name: string;
 }
@@ -82,7 +82,7 @@ enum NameValidationError {
 	XSLTAttributeNameError
 }
 
-enum ValidationType {
+export enum ValidationType {
 	XMLAttribute,
 	XMLElement,
 	XSLTAttribute,
@@ -91,24 +91,24 @@ enum ValidationType {
 }
 
 export class XsltTokenDiagnostics {
-	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	public static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number'];
-	private static readonly xslInclude = 'xsl:include';
-	private static readonly xslImport = 'xsl:import';
-	private static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
+	public static readonly xslInclude = 'xsl:include';
+	public static readonly xslImport = 'xsl:import';
+	public static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
 
 
-	private static readonly xslFunction = 'xsl:function';
+	public static readonly xslFunction = 'xsl:function';
 
-	private static readonly xslNameAtt = 'name';
-	private static readonly xslModeAtt = 'mode';
-	private static readonly useAttSet = 'use-attribute-sets';
-	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
-	private static readonly excludePrefixes = 'exclude-result-prefixes';
-	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
-	private static readonly brackets = [CharLevelState.lB, CharLevelState.lBr, CharLevelState.lPr, CharLevelState.rB, CharLevelState.rBr, CharLevelState.rPr];
+	public static readonly xslNameAtt = 'name';
+	public static readonly xslModeAtt = 'mode';
+	public static readonly useAttSet = 'use-attribute-sets';
+	public static readonly xslUseAttSet = 'xsl:use-attribute-sets';
+	public static readonly excludePrefixes = 'exclude-result-prefixes';
+	public static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
+	public static readonly brackets = [CharLevelState.lB, CharLevelState.lBr, CharLevelState.lPr, CharLevelState.rB, CharLevelState.rBr, CharLevelState.rPr];
 
-	private static isBracket(charState: CharLevelState) {
+	public static isBracket(charState: CharLevelState) {
 		return XsltTokenDiagnostics.brackets.indexOf(charState) !== -1;
 	}
 
@@ -933,6 +933,7 @@ export class XsltTokenDiagnostics {
 								problemTokens.push(token);
 							}
 						}
+						break;
 					case XSLTokenLevelState.processingInstrValue:
 						if (isXMLDeclaration) {
 							XsltTokenDiagnostics.validateXMLDeclaration(lineNumber, token, document, problemTokens);
@@ -1629,7 +1630,7 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	};
 
-	private static checkFinalXPathToken(prevToken: BaseToken, allTokens: BaseToken[], index: number, problemTokens: BaseToken[]) {
+	public static checkFinalXPathToken(prevToken: BaseToken, allTokens: BaseToken[], index: number, problemTokens: BaseToken[]) {
 		let isValid = false;
 		switch (prevToken.charType) {
 			case CharLevelState.rB:
@@ -1662,7 +1663,7 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static getExpectedElementNames(parentName: string, schemaQuery: SchemaQuery | undefined, elementStack: ElementData[]) {
+	public static getExpectedElementNames(parentName: string, schemaQuery: SchemaQuery | undefined, elementStack: ElementData[]) {
 		let expectedElements: string[] = [];
 		let expectedAttributes: string[] = [];
 
@@ -1942,7 +1943,7 @@ export class XsltTokenDiagnostics {
 		return valueText;
 	}
 
-	private static resolveXPathVariableReference(globalVarName: string | null, document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[],
+	public static resolveXPathVariableReference(globalVarName: string | null, document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[],
 		xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken | null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.startsWith('$') ? fullVarName.substring(1) : fullVarName.substring(1, fullVarName.length - 1);

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
-import { XsltTokenDefinitions } from './xsltTokenDefintions';
+import { DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
@@ -20,6 +20,13 @@ interface ImportedGlobals {
 interface GlobalsSummary {
 	globals: ImportedGlobals[];
 	hrefs: string[];
+}
+
+export interface ExtractedImportData {
+	allTokens: BaseToken[]; 
+	globalInstructionData: GlobalInstructionData[]; 
+	allImportedGlobals: GlobalInstructionData[]; 
+	accumulatedHrefs: string[]; 
 }
 
 export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode.CompletionItemProvider {
@@ -46,24 +53,26 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		return this.xpLexer;
 	}
 
-	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Location | undefined> {
+	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<DefinitionLocation | undefined> {
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 
-		let { allTokens, globalInstructionData, allImportedGlobals }:
-		 { allTokens: BaseToken[]; globalInstructionData: GlobalInstructionData[]; allImportedGlobals: GlobalInstructionData[] } = 
-		 await this.getImportedGlobals(document, lexPosition);
+		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
+		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
 
 		return new Promise((resolve, reject) => {
-			let location: vscode.Location|undefined = undefined;
+			let location: DefinitionLocation|undefined = undefined;
 
 			let isXSLT = this.docType === DocumentTypes.XSLT;
 			location= XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			if (location) {
+				location.extractedImportData = extractedImportData;
+			}
 
 			resolve(location);
 		});
 	}
 
-	private async getImportedGlobals(document: vscode.TextDocument, lexPosition: LexPosition) {
+	public async getImportedGlobals(document: vscode.TextDocument, lexPosition: LexPosition) {
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];
 		if (this.docType === DocumentTypes.XPath) {
@@ -80,7 +89,6 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
 		let { importedGlobals1, accumulatedHrefs }: { importedGlobals1: ImportedGlobals[]; accumulatedHrefs: string[] } =
 		 await XsltSymbolProvider.processTopLevelImports(false, this.xslLexer, localImportedHrefs, document, globalInstructionData, xsltPackages);
-
 		let globalsSummary0: GlobalsSummary = { globals: importedGlobals1, hrefs: accumulatedHrefs };
 		const maxImportLevel = 20;
 
@@ -106,7 +114,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				});
 			}
 		});
-		return { allTokens, globalInstructionData, allImportedGlobals };
+		return { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs };
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
