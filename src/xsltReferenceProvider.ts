@@ -3,12 +3,16 @@ import { XSLTnamespaces, FunctionData } from './functionData';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SchemaQuery } from './schemaQuery';
 import { LexPosition, BaseToken, CharLevelState, Data, ErrorType, TokenLevelState, XPathLexer } from './xpLexer';
-import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XMLCharState, XSLTokenLevelState } from './xslLexer';
+import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XMLCharState, XslLexer, XSLTokenLevelState } from './xslLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
+import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
 import { AttributeType, TagType, XSLTToken, XsltTokenDiagnostics, ElementData, XPathData, VariableData, ValidationType, CurlyBraceType} from './xsltTokenDiagnostics';
+import * as url from 'url';
 
 export class XSLTReferenceProvider implements vscode.ReferenceProvider {
+
+	private xslLexer = new XslLexer(XSLTConfiguration.configuration);
 
 	async provideReferences(document: vscode.TextDocument, position: vscode.Position, context: vscode.ReferenceContext, token: vscode.CancellationToken): Promise<vscode.Location[] | null | undefined> {
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
@@ -24,6 +28,20 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
 				locations = refLocations;
         locations.push(definition);
+				for (let index = 0; index < eid.accumulatedHrefs.length; index++) {
+					try {
+						const pathForUri = url.pathToFileURL(eid.accumulatedHrefs[index]).toString();
+						const docUri = vscode.Uri.parse(pathForUri);
+						let hrefDoc = await vscode.workspace.openTextDocument(docUri);
+						const hrefAllTokens = this.xslLexer.analyse(hrefDoc.getText());
+						const hrefGlobalInstructionData = this.xslLexer.globalInstructionData;
+						let refDocTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, hrefDoc, hrefAllTokens, hrefGlobalInstructionData, eid.allImportedGlobals);
+						const refLocations = refDocTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, hrefDoc));
+						locations = locations.concat(refLocations);
+					} catch (error) {
+						console.error(error);
+					}
+				}
 			}
 		} else {
 		}
@@ -184,12 +202,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 					ifToken['error'] = ErrorType.BracketNesting;
 					problemTokens.push(ifToken);
 					ifThenStack = [];
-				}
-				if (prevToken && prevToken.tokenType === TokenLevelState.operator && !prevToken.error) {
-					XsltTokenDiagnostics.checkFinalXPathToken(prevToken, allTokens, index, problemTokens);
-				} else if (prevToken && prevToken.tokenType === TokenLevelState.complexExpression && !prevToken.error) {
-					prevToken['error'] = ErrorType.XPathAwaiting;
-					problemTokens.push(prevToken);
 				}
 				inScopeXPathVariablesList = [];
 				xpathVariableCurrentlyBeingDefined = false;
