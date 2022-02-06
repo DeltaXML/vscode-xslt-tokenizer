@@ -72,6 +72,35 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		});
 	}
 
+	public async seekDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<DefinitionLocation | undefined> {
+		// extends provideDefinition so, if position within an instruction, it returns the instruction
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+
+		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
+		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
+		const matchingGlobal = globalInstructionData.find(global => { 
+			return global.token.line === position.line && 
+			position.character >= global.token.startCharacter && 
+			position.character <= global.token.startCharacter + global.token.length;
+		});
+
+		return new Promise((resolve, reject) => {
+			let location: DefinitionLocation|undefined = undefined;
+
+			if (matchingGlobal) {
+				location = XsltTokenDefinitions.createLocationFromInstrcution(matchingGlobal, document);
+			} else {
+				let isXSLT = this.docType === DocumentTypes.XSLT;
+				location= XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			}
+
+			if (location) {
+				location.extractedImportData = extractedImportData;
+			}
+			resolve(location);
+		});
+	}
+
 	public async getImportedGlobals(document: vscode.TextDocument, lexPosition: LexPosition) {
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];

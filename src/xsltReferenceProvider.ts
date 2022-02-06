@@ -17,8 +17,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 	async provideReferences(document: vscode.TextDocument, position: vscode.Position, context: vscode.ReferenceContext, token: vscode.CancellationToken): Promise<vscode.Location[] | null | undefined> {
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		const langConfig = XSLTConfiguration.configuration;
+		// TODO: first check if position is on a definition already
 		const dProvider = new XsltDefinitionProvider(langConfig);
-		const definition = await dProvider.provideDefinition(document, position, token);
+		const definition = await dProvider.seekDefinition(document, position, token);
 		let locations: vscode.Location[] = [];
 		if (definition) {
 			const { instruction, extractedImportData: eid } = definition;
