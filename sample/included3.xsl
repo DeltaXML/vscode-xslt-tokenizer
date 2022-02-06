@@ -29,6 +29,9 @@
     <xsl:function name="fn:inc3name" as="xs:string">
         <xsl:param name="fp1" as="node()"/>        
     </xsl:function>   
+    
+    <xsl:function name="fn:empty" as="xs:string">
+    </xsl:function>   
         
 </xsl:stylesheet>
 

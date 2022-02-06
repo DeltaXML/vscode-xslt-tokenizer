@@ -902,13 +902,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 								const isEmptyBracketsToken = token.value === '()';
 								if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity ? 1 : 0;
-									incrementFunctionArity = false;
-									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, prevToken, importedGlobalFnNames, fnArity);
-									if (!isValid) {
-										prevToken['error'] = fErrorType;
-										prevToken['value'] = qFunctionName;
-										problemTokens.push(prevToken);
+									if (seekInstruction.type === GlobalInstructionType.Function) {
+										const sameArity = fnArity == seekInstruction.idNumber;
+										if (prevToken.value === seekInstruction.name && sameArity) {
+											referenceTokens.push(prevToken);
+										}
 									}
+									incrementFunctionArity = false;
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variable of type 'function'
 									incrementFunctionArity = false;
@@ -919,11 +919,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 						}
 						break;
 					case TokenLevelState.functionNameTest:
-						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token, importedGlobalFnNames);
-						if (!isValid) {
-							token['error'] = fErrorType;
-							token['value'] = qFunctionName;
-							problemTokens.push(token);
+						if (seekInstruction.type === GlobalInstructionType.Function) {
+							const parts = token.value.split('#');
+							const arity = Number.parseInt(parts[1]);
+							const functionName = parts[0];
+							if (functionName === seekInstruction.name && arity === seekInstruction.idNumber) {
+								referenceTokens.push(token);
+							}
 						}
 						break;
 				}
