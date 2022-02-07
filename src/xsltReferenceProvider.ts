@@ -5,8 +5,7 @@ import { SchemaQuery } from './schemaQuery';
 import { LexPosition, BaseToken, CharLevelState, Data, ErrorType, TokenLevelState, XPathLexer } from './xpLexer';
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XMLCharState, XslLexer, XSLTokenLevelState } from './xslLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
-import { XsltSymbolProvider } from './xsltSymbolProvider';
-import { DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
+import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { AttributeType, TagType, XSLTToken, XsltTokenDiagnostics, ElementData, XPathData, VariableData, ValidationType, CurlyBraceType} from './xsltTokenDiagnostics';
 import * as url from 'url';
 
@@ -620,7 +619,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 							if (unResolvedToken !== null) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
-							if (seekInstruction.type === GlobalInstructionType.Variable) {
+							if (seekInstruction.type === GlobalInstructionType.Variable || seekInstruction.type === GlobalInstructionType.Parameter) {
 								if (fullVariableName === seekInstruction.name) {
 									referenceTokens.push(token);
 								}
