@@ -228,25 +228,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
 
 				switch (xmlTokenType) {
-					case XSLTokenLevelState.xmlText:
-						if (elementStack.length === 0 && token.startCharacter > -1) {
-							const tValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-							if (tValue.trim().length !== 0) {
-								token['error'] = ErrorType.ParentLessText;
-								token['value'] = tValue;
-								problemTokens.push(token);
-							}
-						}
-						break;
 					case XSLTokenLevelState.xslElementName:
 						// this is xslt or schematron element
 						pendingTemplateParamErrors = [];
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						const isXsltElementName = tagElementName.startsWith('xsl:');
-						const isSchElementName = tagElementName.startsWith('sch:');
-						const lookupElementName = isSchematron && !isXsltElementName && !isSchElementName ? 'sch:' + tagElementName : tagElementName;
-						const realSchemaQuery = xsltSchemaQuery && tagElementName.startsWith('xsl:') ? xsltSchemaQuery : schemaQuery;
-
 
 						if (tagType === TagType.Start) {
 							if (tagElementName === 'xsl:iterate') {
@@ -260,11 +245,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 							if (!includeOrImport && tagType !== TagType.XSLTvar && elementStack.length === 1) {
 								includeOrImport = tagElementName === XsltTokenDiagnostics.xslImport || tagElementName === XsltTokenDiagnostics.xslInclude;
 							}
-							if (!onRootStartTag && elementStack.length === 0) {
-								token['error'] = ErrorType.MultiRoot;
-								token['value'] = tagElementName;
-								problemTokens.push(token);
-							}
 						}
 						break;
 					case XSLTokenLevelState.elementName:
@@ -272,11 +252,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 						if (tagType === TagType.Start) {
 							tagType = TagType.XMLstart;
 							startTagToken = token;
-							if (!onRootStartTag && elementStack.length === 0) {
-								token['error'] = ErrorType.MultiRoot;
-								token['value'] = tagElementName;
-								problemTokens.push(token);
-							}
 						}
 						break;
 					case XSLTokenLevelState.xmlPunctuation:
@@ -305,34 +280,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 											xsltPrefixesToURIs.set(pfx, xsltType);
 										}
 									});
-									if (xsltPrefixesToURIs.get('xsl') !== XSLTnamespaces.XSLT) {
-										if (startTagToken !== null) {
-											startTagToken['error'] = ErrorType.XSLTNamesapce;
-											problemTokens.push(startTagToken);
-										}
-									}
 								}
 								onRootStartTag = false;
 								let orginalPrefixes = inheritedPrefixes.slice();
-								let problem = false;
-								if (tagExcludeResultPrefixes) {
-									let missingPrefix;
-									if (!(tagExcludeResultPrefixes.prefixes.length === 1 && tagExcludeResultPrefixes.prefixes[0] === '#all')) {
-										missingPrefix = tagExcludeResultPrefixes.prefixes.find((pfx) => {
-											if (pfx !== '#default' && inheritedPrefixes.indexOf(pfx) < 0) return pfx;
-										});
-									}
-									if (missingPrefix) {
-										let xToken = tagExcludeResultPrefixes.token;
-										xToken['error'] = ErrorType.MissingPrefixInList;
-										xToken.value = missingPrefix;
-										problemTokens.push(tagExcludeResultPrefixes.token);
-										problem = true;
-									}
-								}
-
 								const attrValType = tagElementName.startsWith('xsl:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute;
-
 
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
 									// on a start tag
@@ -417,32 +368,31 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-            const problemReported = false;
-						if (!problemReported) {
-							if (xmlTokenType === XSLTokenLevelState.xmlnsName) {
-								tagXmlnsNames.push(attNameText);
-								if (attNameText.length > 6) {
-									let prefix = attNameText.substring(6);
-									if (inheritedPrefixes.indexOf(prefix) < 0) {
-										inheritedPrefixes.push(prefix);
+
+						if (xmlTokenType === XSLTokenLevelState.xmlnsName) {
+							tagXmlnsNames.push(attNameText);
+							if (attNameText.length > 6) {
+								let prefix = attNameText.substring(6);
+								if (inheritedPrefixes.indexOf(prefix) < 0) {
+									inheritedPrefixes.push(prefix);
+								}
+								if (prefix === 'ixsl') {
+									if (schemaQuery) {
+										schemaQuery.useIxsl = true;
 									}
-									if (prefix === 'ixsl') {
-										if (schemaQuery) {
-											schemaQuery.useIxsl = true;
-										}
-										if (xsltSchemaQuery) {
-											xsltSchemaQuery.useIxsl = true;
-										}
+									if (xsltSchemaQuery) {
+										xsltSchemaQuery.useIxsl = true;
 									}
 								}
-								if (onRootStartTag) {
-									rootXmlnsName = attNameText;
-								}
-							} else {
-								tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token, attNameText));
-								tagAttributeNames.push(attNameText);
 							}
+							if (onRootStartTag) {
+								rootXmlnsName = attNameText;
+							}
+						} else {
+							tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token, attNameText));
+							tagAttributeNames.push(attNameText);
 						}
+						
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt ? AttributeType.Variable : AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
@@ -513,64 +463,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 								let excludePrefixes = variableName.split(/\s+/);
 								tagExcludeResultPrefixes = { token: token, prefixes: excludePrefixes };
 								break;
-							case AttributeType.None:
-								if (prevToken && prevToken.length === 1 && prevToken.tokenType === XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.attributeValue) {
-									token['error'] = ErrorType.XPathEmpty;
-								}
-								break;
 						}
-						if (!hasProblem && attType === AttributeType.UseAttributeSets) {
-							if (globalAttributeSetNames.indexOf(variableName) < 0 && variableName !== 'xsl:original') {
-								token['error'] = ErrorType.AttributeSetUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
-								hasProblem = true;
-							}
-						}
-						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
-							if (!namedTemplates.get(variableName)) {
-								token['error'] = ErrorType.TemplateNameUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
-								hasProblem = true;
-							}
-						}
-						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:function') {
-							if (!variableName.includes(':')) {
-								token['error'] = ErrorType.XSLTFunctionNamePrefix;
-								token.value = variableName;
-								problemTokens.push(token);
-								hasProblem = true;
-							}
-						}
-						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
-							if (globalModes.indexOf(variableName) < 0) {
-								token['error'] = ErrorType.TemplateModeUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
-								hasProblem = true;
-							}
-						}
-						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length > 0 && tagElementName === 'xsl:with-param') {
-							let callTemplateName = elementStack[elementStack.length - 1].symbolID;
-							let templateParams = namedTemplates.get(callTemplateName);
-							if (templateParams) {
-								if (templateParams?.indexOf(variableName) < 0) {
-									token['error'] = ErrorType.MissingTemplateParam;
-									token.value = `${callTemplateName}#${variableName}`;
-									pendingTemplateParamErrors.push(token);
-								}
-							} else if (currentXSLTIterateParams.length > 0 && elementStack.length > 2 && elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration') {
-								const params = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
-								if (params.indexOf(variableName) < 0) {
-									token['error'] = ErrorType.IterateParamInvalid;
-									token.value = variableName;
-									problemTokens.push(token);
-									hasProblem = true;
-								}
-							}
-						}
-
 						attType = AttributeType.None;
 						break;
 				}
