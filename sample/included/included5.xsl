@@ -12,6 +12,8 @@
   <xsl:output method="xml" indent="yes"/>
   <xsl:mode on-no-match="shallow-copy"/>
   
+  <xsl:variable name="new53" as="xs:string" select="$inc1p1"/>
+  
   <xsl:template name="level5">       
     <xsl:param name="inc5p1" as="xs:integer" select="1"/>
     <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc1name(2)"/>

@@ -598,9 +598,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 						}
 						break;
 					case TokenLevelState.variable:
+						let fullVariableName = token.value.substring(1);
 						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
-							let fullVariableName = token.value;
-							let currentVariable = { token: token, name: fullVariableName.substring(1) };
+							let currentVariable = { token: token, name: fullVariableName };
 							if (anonymousFunctionParams) {
 								anonymousFunctionParamList.push(currentVariable);
 								xsltVariableDeclarations.push(token);
@@ -610,14 +610,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 								xsltVariableDeclarations.push(token);
 							}
 						} else {
-							let prefixEnd = token.value.indexOf(':');
-							if (prefixEnd !== -1) {
-								let prefix = token.value.substring(1, prefixEnd);
-								if (inheritedPrefixes.indexOf(prefix) === -1) {
-									token['error'] = ErrorType.XPathPrefix;
-									problemTokens.push(token);
-								}
-							}
 							// don't include any current pending variable declarations when resolving
 							let globalVarName: string | null = null;
 							if (tagType === TagType.XSLTvar && elementStack.length === 1) {
@@ -627,6 +619,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 								xpathStack, inScopeVariablesList, elementStack);
 							if (unResolvedToken !== null) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
+							}
+							if (seekInstruction.type === GlobalInstructionType.Variable) {
+								if (fullVariableName === seekInstruction.name) {
+									referenceTokens.push(token);
+								}
 							}
 						}
 						break;

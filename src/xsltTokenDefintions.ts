@@ -427,10 +427,7 @@ export class XsltTokenDefinitions {
 								let resolvedVariable = XsltTokenDefinitions.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
 								if (resolvedVariable) {
-									let uri = resolvedVariable.uri ? vscode.Uri.parse(url.pathToFileURL(resolvedVariable.uri).toString()) : document.uri;
-									let startPos = new vscode.Position(resolvedVariable.token.line, resolvedVariable.token.startCharacter);
-									let endPos = new vscode.Position(resolvedVariable.token.line, resolvedVariable.token.startCharacter + resolvedVariable.token.length);
-									resultLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
+									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(resolvedVariable, document);									
 								}
 							}
 						}
@@ -598,6 +595,17 @@ export class XsltTokenDefinitions {
 			let endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
 			const location: DefinitionLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
 			location.instruction = instruction;
+			return location;
+		}
+	}
+
+	public static createLocationFromVariableData(variableData: VariableData | undefined, document: vscode.TextDocument) {
+		if (variableData) {
+			let uri = variableData.uri ? vscode.Uri.parse(url.pathToFileURL(variableData.uri).toString()) : document.uri;
+			let startPos = new vscode.Position(variableData.token.line, variableData.token.startCharacter);
+			let endPos = new vscode.Position(variableData.token.line, variableData.token.startCharacter + variableData.token.length);
+			const location: DefinitionLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
+			location.instruction = { idNumber: 0, name: variableData.token.value, type: GlobalInstructionType.Variable, token: variableData.token, href: uri.toString() };
 			return location;
 		}
 	}
