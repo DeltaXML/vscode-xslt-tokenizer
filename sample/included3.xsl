@@ -25,7 +25,7 @@
         <xsl:variable name="inc5v1" as="xs:integer" select="fn:inc6name(2)"/> 
         <xsl:variable name="newer" as="xs:string" select="$inc1p1"/>
                 
-        <xsl:sequence select="$inc1v1, $inc3v1, $inc5v1"/>
+        <xsl:sequence select="$inc1v1, $inc3v1, $inc5v1, $inc1p1"/>
     </xsl:template>
     
     <xsl:function name="fn:inc3name" as="xs:string">

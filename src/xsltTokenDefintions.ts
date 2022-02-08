@@ -608,7 +608,7 @@ export class XsltTokenDefinitions {
 			let startPos = new vscode.Position(variableData.token.line, variableData.token.startCharacter);
 			let endPos = new vscode.Position(variableData.token.line, variableData.token.startCharacter + variableData.token.length);
 			const location: DefinitionLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
-			location.instruction = { idNumber: 0, name: variableData.token.value, type: GlobalInstructionType.Variable, token: variableData.token, href: uri.toString() };
+			location.instruction = { idNumber: 0, name: variableData.name, type: GlobalInstructionType.Variable, token: variableData.token, href: uri.toString() };
 			return location;
 		}
 	}
