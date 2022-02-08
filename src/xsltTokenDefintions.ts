@@ -359,6 +359,9 @@ export class XsltTokenDefinitions {
 								if (isOnRequiredToken && tagElementName === 'xsl:call-template') {
 									let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
 									resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+									if (resultLocation) {
+										resultLocation.instruction = instruction;
+									}
 								}
 								break;
 							case AttributeType.InstructionMode:

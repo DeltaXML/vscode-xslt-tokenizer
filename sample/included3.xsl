@@ -29,7 +29,13 @@
     </xsl:template>
     
     <xsl:function name="fn:inc3name" as="xs:string">
-        <xsl:param name="fp1" as="node()"/>        
+        <xsl:param name="fp1" as="node()"/>
+        <xsl:call-template name="level3">
+            <xsl:with-param name="inc3p1" as="xs:integer" select="'new'"/>
+        </xsl:call-template>
+        <xsl:call-template name="level3">
+            <xsl:with-param name="inc3p1" as="xs:integer" select="'new'"/>
+        </xsl:call-template>
     </xsl:function>   
     
     <xsl:function name="fn:empty" as="xs:string">

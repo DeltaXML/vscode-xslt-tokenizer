@@ -10,7 +10,10 @@
                 version="3.0">
     
     <xsl:function name="fn:inc6name" as="xs:string">
-        <xsl:param name="fp1" as="node()"/>        
+        <xsl:param name="fp1" as="node()"/>
+        <xsl:call-template name="level3">
+            <xsl:with-param name="inc3p1" as="xs:integer" select="'new'"/>
+        </xsl:call-template>
     </xsl:function>
         
     

@@ -11,7 +11,11 @@ import * as url from 'url';
 
 export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 
-	private xslLexer = new XslLexer(XSLTConfiguration.configuration);
+	private xslLexer: XslLexer;
+	public constructor() {
+		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
+		this.xslLexer.provideCharLevelState = true;
+	}
 
 	async provideReferences(document: vscode.TextDocument, position: vscode.Position, context: vscode.ReferenceContext, token: vscode.CancellationToken): Promise<vscode.Location[] | null | undefined> {
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
@@ -29,8 +33,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 				locations = refLocations;
         locations.push(definition);
 				for (let index = 0; index < eid.accumulatedHrefs.length; index++) {
+					const currentHref = eid.accumulatedHrefs[index];
+					if (currentHref === document.fileName) {
+						continue;
+					}
 					try {
-						const pathForUri = url.pathToFileURL(eid.accumulatedHrefs[index]).toString();
+						const pathForUri = url.pathToFileURL(currentHref).toString();
 						const docUri = vscode.Uri.parse(pathForUri);
 						let hrefDoc = await vscode.workspace.openTextDocument(docUri);
 						const hrefAllTokens = this.xslLexer.analyse(hrefDoc.getText());
@@ -463,6 +471,14 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 								let excludePrefixes = variableName.split(/\s+/);
 								tagExcludeResultPrefixes = { token: token, prefixes: excludePrefixes };
 								break;
+						}
+						if (
+							seekInstruction.type === GlobalInstructionType.Template && 
+							attType === AttributeType.InstructionName && 
+							tagElementName === 'xsl:call-template') {
+							if (variableName === seekInstruction.name) {
+								referenceTokens.push(token);
+							}
 						}
 						attType = AttributeType.None;
 						break;
