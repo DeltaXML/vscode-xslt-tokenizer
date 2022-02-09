@@ -91,6 +91,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 		let inheritedPrefixes: string[] = [];
 		let globalVariableData: VariableData[] = [];		
 		let importedGlobalVarNames: string[] = [];
+		let importedGlobalVarTokens: BaseToken[] = [];
 		let importedGlobalFnNames: string[] = [];
 		let incrementFunctionArity = false;
 		let onRootStartTag = true;
@@ -165,6 +166,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 				case GlobalInstructionType.Variable:
 				case GlobalInstructionType.Parameter:
 					importedGlobalVarNames.push(instruction.name);
+					importedGlobalVarTokens.push(instruction.token);
 					break;
 				case GlobalInstructionType.Function:
 					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
@@ -523,14 +525,26 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 							if (tagType === TagType.XSLTvar && elementStack.length === 1) {
 								globalVarName = tagIdentifierName;
 							}
-							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(globalVarName, document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
-								xpathStack, inScopeVariablesList, elementStack);
-							if (unResolvedToken !== null) {
-								unresolvedXsltVariableReferences.push(unResolvedToken);
-							}
+
 							if (seekInstruction.type === GlobalInstructionType.Variable || seekInstruction.type === GlobalInstructionType.Parameter) {
 								if (fullVariableName === seekInstruction.name) {
-									referenceTokens.push(token);
+									let resolvedDefn = XsltTokenDiagnostics.getXPathVariableDefnToken(globalVarName, document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
+										xpathStack, inScopeVariablesList, elementStack);
+									const seekToken = seekInstruction.token;
+									if (resolvedDefn && resolvedDefn.line === seekToken.line && resolvedDefn.startCharacter === seekToken.startCharacter) {
+										referenceTokens.push(token);
+									} else {
+										if (globalVarName !== fullVariableName) {
+											const globalDefnIndex = importedGlobalVarNames.indexOf(fullVariableName);
+											if (globalDefnIndex > -1) {
+												const globalToken = importedGlobalVarTokens[globalDefnIndex];
+												if (resolvedDefn && globalToken.line === seekToken.line && globalToken.startCharacter === seekToken.startCharacter) {
+													referenceTokens.push(token);
+												}
+											}
+
+										}
+									}
 								}
 							}
 						}

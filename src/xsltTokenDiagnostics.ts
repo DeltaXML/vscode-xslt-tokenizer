@@ -1959,19 +1959,46 @@ export class XsltTokenDiagnostics {
 		}
 		if (!resolved) {
 			if (elementStack.length === 1 && globalVarName === varName) {
-				resolved = false;
+				// don't asign
 			} else {
 				resolved = this.resolveStackVariableName(elementStack, varName);
 			}
 		}
+		let importedResolved = false;
 		if (!resolved) {
-			resolved = globalVarName !== varName && importedVariables.indexOf(varName) > -1;
+			importedResolved = globalVarName !== varName && importedVariables.indexOf(varName) > -1;
 		}
-		if (!resolved) {
+		if (!resolved && !importedResolved) {
 			result = token;
 		}
 		return result;
 	}
+
+	public static getXPathVariableDefnToken(globalVarName: string | null, document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[],
+		xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]) {
+		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
+		let varName = fullVarName.startsWith('$') ? fullVarName.substring(1) : fullVarName.substring(1, fullVarName.length - 1);
+		let result: BaseToken | undefined;
+		let globalVariable = null;
+
+		result = this.resolveVariableName(inScopeXPathVariablesList, varName, xpathVariableCurrentlyBeingDefined, globalVariable);
+		if (!result) {
+			result = this.resolveStackVariableName(xpathStack, varName);
+		}
+		if (!result) {
+			result = this.resolveVariableName(inScopeVariablesList, varName, false, globalVariable);
+		}
+		if (!result) {
+			if (elementStack.length === 1 && globalVarName === varName) {
+				// don't assign
+			} else {
+				result = this.resolveStackVariableName(elementStack, varName);
+			}
+		}
+		return result;
+	}
+
+
 
 	private static createSymbolFromElementTokens(name: string, id: string, fullStartToken: XSLTToken, fullEndToken: BaseToken, innerToken?: BaseToken) {
 		// innerToken to be used if its an attribute-value for example
@@ -2088,26 +2115,27 @@ export class XsltTokenDiagnostics {
 		return [attrSymbol];
 	}
 
-	public static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData | null): boolean {
+	public static resolveVariableName(variableList: VariableData[], varName: string, xpathVariableCurrentlyBeingDefined: boolean, globalXsltVariable: VariableData | null) {
 		let resolved = false;
 		let decrementedLength = variableList.length - 1;
 		let globalVariableName = globalXsltVariable?.name;
+		let defnData: VariableData | undefined = undefined;
 		// last items in list of declared parameters must be resolved first:
 		for (let i = decrementedLength; i > -1; i--) {
 			let data = variableList[i];
 			if (xpathVariableCurrentlyBeingDefined && i === decrementedLength) {
 				// do nothing: we skip last item in list as it's currently being defined
 			} else if (data.name === varName && globalVariableName !== data.name) {
-				resolved = true;
+				defnData = data;
 				data.token['referenced'] = true;
 				break;
 			}
 		}
-		return resolved;
+		return defnData?.token;
 	}
 
-	public static resolveStackVariableName(elementStack: ElementData[] | XPathData[], varName: string): boolean {
-		let resolved = false;
+	public static resolveStackVariableName(elementStack: ElementData[] | XPathData[], varName: string) {
+		let resolvedDefnToken: BaseToken | undefined;
 		let globalXsltVariable: VariableData | null = null;
 
 		for (let i = elementStack.length - 1; i > -1; i--) {
@@ -2123,12 +2151,12 @@ export class XsltTokenDiagnostics {
 					globalXsltVariable = currentVar;
 				}
 			}
-			resolved = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable);
-			if (resolved) {
+			resolvedDefnToken = this.resolveVariableName(inheritedVariables, varName, xpathBeingDefined, globalXsltVariable);
+			if (resolvedDefnToken) {
 				break;
 			}
 		}
-		return resolved;
+		return resolvedDefnToken;
 	}
 
 	private static getDiagnosticsFromUnusedVariableTokens(document: vscode.TextDocument, unusedVariableTokens: BaseToken[], unresolvedVariableTokens: BaseToken[], includeOrImport: boolean): vscode.Diagnostic[] {
