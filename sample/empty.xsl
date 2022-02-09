@@ -26,6 +26,7 @@
             <xsl:sequence select="$de"/>
         </xsl:variable>
         <xsl:sequence select="$number"/>
+        <xsl:sequence select="$number"/>
     </xsl:variable>
     
 </xsl:stylesheet>

@@ -36,6 +36,7 @@
         <xsl:call-template name="level3">
             <xsl:with-param name="inc3p1" as="xs:integer" select="'new'"/>
         </xsl:call-template>
+        <xsl:sequence select="$fp1"/>
     </xsl:function>   
     
     <xsl:function name="fn:empty" as="xs:string">

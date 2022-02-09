@@ -347,6 +347,9 @@ export class XsltTokenDefinitions {
 							case AttributeType.Variable:
 								tagIdentifierName = variableName;
 								variableData = { token: token, name: variableName };
+								if (isOnRequiredToken) {
+									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(variableData, document);
+								}
 								break;
 							case AttributeType.InstructionName:
 								let slashPos = variableName.lastIndexOf('/');
@@ -423,6 +426,9 @@ export class XsltTokenDefinitions {
 								inScopeXPathVariablesList.push(currentVariable);
 								xpathVariableCurrentlyBeingDefined = true;
 								xsltVariableDeclarations.push(token);
+							}
+							if (isOnRequiredToken) {
+								resultLocation = XsltTokenDefinitions.createLocationFromVariableData(currentVariable, document);						
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
