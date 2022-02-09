@@ -535,11 +535,19 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 										referenceTokens.push(token);
 									} else {
 										if (globalVarName !== fullVariableName) {
-											const globalDefnIndex = importedGlobalVarNames.indexOf(fullVariableName);
-											if (globalDefnIndex > -1) {
-												const globalToken = importedGlobalVarTokens[globalDefnIndex];
-												if (resolvedDefn && globalToken.line === seekToken.line && globalToken.startCharacter === seekToken.startCharacter) {
+											let globalVar = globalVariableData.find(vdata => vdata.name === fullVariableName);
+											if (globalVar) {
+												const gToken = globalVar.token;
+												if (gToken.line === seekToken.line && gToken.startCharacter === seekToken.startCharacter) {
 													referenceTokens.push(token);
+												}
+											} else {
+												let globalDefnIndex = importedGlobalVarNames.indexOf(fullVariableName);
+												if (globalDefnIndex > -1) {
+													const globalToken = importedGlobalVarTokens[globalDefnIndex];
+													if (globalToken.line === seekToken.line && globalToken.startCharacter === seekToken.startCharacter) {
+														referenceTokens.push(token);
+													}
 												}
 											}
 
