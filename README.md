@@ -26,14 +26,16 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names *(uses last XML opened in VS Code)*
 | **XPath Tester**          | Support for companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension for XML Analysis or XPath Testing
 | **Color Theme Support**   | Tested with most popular color themes ([Semantic Highlighting]() must be enabled in settings) 
-| **Inferred xsl:import**   | When navigating from parent stylesheet to non-standalone stylesheet modules with missing `xsl:import`
+| **Inferred xsl:import**   | Open the 'master' XSLT module first. Now all subsequent XSLT modules opened infer 'missing' imports using the 'master'
 | **Code Folding**          | Either uses indentation or `region` XML processing-instructions
 | **Snippets**              | Set of snippets accessed via auto-completion
-| **Symbol Outline**        | Tree-view of XSLT instructions and symbols (named templates, modes, variables, functions, accumulators etc.)
+| **Symbol Outline**        | Tree-view of XSLT instructions *- this can be shown in the 'Side Panel' or 'Side Bar'*
 | **Symbol Breadcrumbs**    | Shows location within the code hierarchy
 | **Goto Symbol**           | Quick access via filterable list of code symbols
 | **Goto Definition**       | For all symbol references like variables, parameters, functions, modes, accumulators etc.
 | **Peek Definition**       | View symbol declarations inline with corresponding references
+| **Goto References**       | For all symbols like variables, functions etc. *(includes references from imported modules)*
+| **Peek References**       | View all references to a selected symbol
 | **VS Code Tasks**         | Configurable task templates for Saxon and Saxon-JS Prcoessors
 | **Bracket Matching**      | For `()`, `{}`, and `[]`
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
@@ -140,11 +142,27 @@ If file paths are relative they are resolved from the first Visual Studio Code W
 2. *On Mac* - ```Shift + Option + F```.
 3. *On Ubuntu* - ```Ctrl + Shift + I```.
 
-### Editor Settings for Highlighting in Color Theme Extensions
+### Editor Settings For Formatting
+```json
+{
+  "[xslt]": {
+    "editor.defaultFormatter": "deltaxml.xslt-xpath",
+    "editor.formatOnSaveMode": "modifications",
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.formatOnType": true
+  }
+}
+```
+
+## Editor Settings for Highlighting in Color Theme Extensions
 
 Syntax highlighting is currently only enabled by default in VSCode's built-in themes. This is because some extension themes may not yet have specific language support for VSCode's 'Semantic Highlighting' as used by this extension.
 
-To enable syntax highighting for a custom theme you need to change User Settings. You can also customize
+To enable syntax highighting for a custom theme you need to change User Settings. A set of dark color themes, specially enhanced
+for XSLT, are provided by the [XSLT Dark Themes](https://marketplace.visualstudio.com/items?itemName=deltaxml.xslt-dark-themes) extension. 
+
+You can also customize
 XSLT token colors. For example, to enable syntax highlighting for XSLT and add some customizations in the [Gruvbox Material Dark](https://marketplace.visualstudio.com/items?itemName=sainnhe.gruvbox-material) theme you could use:
 ```json
   "editor.semanticTokenColorCustomizations": {
@@ -167,19 +185,7 @@ Or, to enable syntax highlighting for all themes:
   "editor.semanticHighlighting.enabled": true,
   ```
 
-### Editor Settings For Formatting
-```json
-{
-  "[xslt]": {
-    "editor.defaultFormatter": "deltaxml.xslt-xpath",
-    "editor.formatOnSaveMode": "modifications",
-    "editor.formatOnSave": true,
-    "editor.formatOnPaste": true,
-    "editor.formatOnType": true
-  }
-}
-```
-### Editor Settings For Word Selection/Navigation
+## Editor Settings For Word Selection/Navigation
 
 For word selection/navigation, by default, names like $two-parts are treated as two words for selection purposes and $ is also excluded from the name. This behaviour can be altered using the VSCode setting: 
 
