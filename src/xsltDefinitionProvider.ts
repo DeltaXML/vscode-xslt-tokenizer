@@ -10,6 +10,7 @@ import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
 import { BaseToken, ExitCondition, LexPosition, XPathLexer } from './xpLexer';
 import { XPathSemanticTokensProvider } from './extension';
 import { DocumentChangeHandler } from './documentChangeHandler';
+import * as url from 'url';
 
 interface ImportedGlobals {
 	href: string;
@@ -78,11 +79,15 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
 		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
-		const matchingGlobal = globalInstructionData.find(global => { 
+		let matchingGlobal = globalInstructionData.find(global => { 
 			return global.token.line === position.line && 
 			position.character >= global.token.startCharacter && 
 			position.character <= global.token.startCharacter + global.token.length;
 		});
+
+		if (!matchingGlobal) {
+			matchingGlobal = XsltDefinitionProvider.functionInstructionFromDocPosition(document, position);
+		}
 
 		return new Promise((resolve, reject) => {
 			let location: DefinitionLocation|undefined = undefined;
@@ -99,6 +104,38 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			resolve(location);
 		});
+	}
+
+	private static nameCharRgx = new RegExp(/[A-Z]|[a-z]|_|-|:/);
+
+	public static functionInstructionFromDocPosition(document: vscode.TextDocument, position: vscode.Position) {
+		let fnName: string | undefined;
+		let fnInstruction: GlobalInstructionData | undefined;
+		const line = document.lineAt(position.line).text;
+		let startIndex = 0;
+		for (startIndex = position.character; startIndex > 0; startIndex--) {
+			const c = line.charAt(startIndex);
+			if (!XsltDefinitionProvider.nameCharRgx.test(c)) {
+				break;
+			}				
+		}
+		let endIndex = 0;
+		let isFunction = false;
+		for (endIndex = position.character + 1; endIndex < line.length; endIndex++) {
+			const c = line.charAt(endIndex);
+			if (!XsltDefinitionProvider.nameCharRgx.test(c)) {
+				if (c === '(') {
+					isFunction = true;
+				}
+				break;
+			}				
+		}
+		if (isFunction) {
+			fnName = line.substring(startIndex + 1, endIndex);
+			const token: BaseToken = { line: position.line, startCharacter: startIndex + 1, length: endIndex - (startIndex + 1), tokenType: 0, value: fnName};
+			fnInstruction = { token: token, idNumber: -1, name: fnName, type: GlobalInstructionType.Function, href: url.fileURLToPath(document.uri.toString())};
+		}
+		return fnInstruction;
 	}
 
 	public async getImportedGlobals(document: vscode.TextDocument, lexPosition: LexPosition) {

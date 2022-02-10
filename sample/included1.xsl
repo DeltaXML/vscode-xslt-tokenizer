@@ -19,7 +19,7 @@
     
     <xsl:template name="included">
                 
-        <xsl:param name="inc1p1" as="xs:integer" select="1"/>
+        <xsl:param name="inc1p1" as="xs:integer" select="count(1)"/>
         <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc1name(2)"/>
         <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc5name(2)"/>
     </xsl:template> 

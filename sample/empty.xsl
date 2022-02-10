@@ -5,7 +5,7 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="number" as="xs:string" select="'twenty'"/>
+    <xsl:variable name="number" as="xs:string" select="count('a')"/>
     <xsl:variable name="two" as="xs:string" select="$inner"/>
     <xsl:variable name="inner" as="xs:string" select="'outside'"/>
     
@@ -14,7 +14,7 @@
     
     <xsl:template match=".">
         <xsl:variable name="inner" as="xs:string" select="'inside'"/>
-        <xsl:sequence select="$inner"/>
+        <xsl:sequence select="count($inner)"/>
     </xsl:template>
     
     <xsl:variable name="ab" as="xs:string" select="$number"/>

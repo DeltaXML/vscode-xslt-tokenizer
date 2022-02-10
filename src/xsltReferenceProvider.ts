@@ -42,7 +42,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 						const docUri = vscode.Uri.parse(pathForUri);
 						let hrefDoc = await vscode.workspace.openTextDocument(docUri);
 						const hrefAllTokens = this.xslLexer.analyse(hrefDoc.getText());
-						const hrefGlobalInstructionData = this.xslLexer.globalInstructionData;
 						let refDocTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, hrefDoc, hrefAllTokens, eid.globalInstructionData, eid.allImportedGlobals);
 						const refLocations = refDocTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, hrefDoc));
 						locations = locations.concat(refLocations);
@@ -51,12 +50,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 					}
 				}
 			}
-		} else {
-		}
+		} 
 		return new Promise(resolve => {
 			resolve(locations);
 		});
-
 	}
 
 	public static calculateReferences = (seekInstruction: GlobalInstructionData, languageConfig: LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): BaseToken[] => {
@@ -767,7 +764,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 												} else {
 													functionName = fnToken.value;
 												}
-												if (functionName === seekInstruction.name && arity === seekInstruction.idNumber) {
+												if (functionName === seekInstruction.name && (arity === seekInstruction.idNumber || seekInstruction.idNumber < 0)) {
 													referenceTokens.push(fnToken);
 												}
 											}
@@ -832,7 +829,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 									const fnArity = incrementFunctionArity ? 1 : 0;
 									if (seekInstruction.type === GlobalInstructionType.Function) {
 										const sameArity = fnArity == seekInstruction.idNumber;
-										if (prevToken.value === seekInstruction.name && sameArity) {
+										if (prevToken.value === seekInstruction.name && (sameArity || seekInstruction.idNumber < 0)) {
 											referenceTokens.push(prevToken);
 										}
 									}
@@ -851,7 +848,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 							const parts = token.value.split('#');
 							const arity = Number.parseInt(parts[1]);
 							const functionName = parts[0];
-							if (functionName === seekInstruction.name && arity === seekInstruction.idNumber) {
+							if (functionName === seekInstruction.name && (arity === seekInstruction.idNumber || seekInstruction.idNumber < 0)) {
 								referenceTokens.push(token);
 							}
 						}
