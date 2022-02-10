@@ -43,7 +43,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 						let hrefDoc = await vscode.workspace.openTextDocument(docUri);
 						const hrefAllTokens = this.xslLexer.analyse(hrefDoc.getText());
 						const hrefGlobalInstructionData = this.xslLexer.globalInstructionData;
-						let refDocTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, hrefDoc, hrefAllTokens, hrefGlobalInstructionData, eid.allImportedGlobals);
+						let refDocTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, hrefDoc, hrefAllTokens, eid.globalInstructionData, eid.allImportedGlobals);
 						const refLocations = refDocTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, hrefDoc));
 						locations = locations.concat(refLocations);
 					} catch (error) {
@@ -533,7 +533,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 									const seekToken = seekInstruction.token;
 									if (resolvedDefn && resolvedDefn.line === seekToken.line && resolvedDefn.startCharacter === seekToken.startCharacter) {
 										referenceTokens.push(token);
-									} else {
+									} else if (!resolvedDefn) {
+										// only check for globals if it hasn't already been resolved
 										if (globalVarName !== fullVariableName) {
 											let globalVar = globalVariableData.find(vdata => vdata.name === fullVariableName);
 											if (globalVar) {
