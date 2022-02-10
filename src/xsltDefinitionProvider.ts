@@ -85,10 +85,6 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			position.character <= global.token.startCharacter + global.token.length;
 		});
 
-		if (!matchingGlobal) {
-			matchingGlobal = XsltDefinitionProvider.functionInstructionFromDocPosition(document, position);
-		}
-
 		return new Promise((resolve, reject) => {
 			let location: DefinitionLocation|undefined = undefined;
 
@@ -101,7 +97,14 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 			if (location) {
 				location.extractedImportData = extractedImportData;
-			}
+			} 
+			// else if (!matchingGlobal) {
+			// 	// special for internal XPath functions like 'count'
+			// 	matchingGlobal = XsltDefinitionProvider.functionInstructionFromDocPosition(document, position);
+			// 	if (matchingGlobal) {
+			// 		location = XsltTokenDefinitions.createLocationFromInstrcution(matchingGlobal, document);
+			// 	}
+			// }
 			resolve(location);
 		});
 	}

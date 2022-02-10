@@ -13,7 +13,8 @@
     <xsl:mode on-no-match="shallow-copy"/>
     <xsl:import href="included6.xsl"/>
     
-    <xsl:variable name="new3" as="xs:string" select="$inc1p1"/>
+    <xsl:variable name="new3" as="xs:string" select="count($inc1p1)"/>
+    <xsl:variable name="new4" as="xs:string" select="count($inc1p1)"/>
     
     <xsl:template name="level3">               
         <xsl:param name="inc3p1" as="xs:integer" select="1"/>
