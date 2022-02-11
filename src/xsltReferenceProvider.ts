@@ -77,7 +77,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 		let unresolvedXsltVariableReferences: BaseToken[] = [];
 		let prevToken: BaseToken | null = null;
 		let includeOrImport = false;
-		let problemTokens: BaseToken[] = [];
 		let referenceTokens: BaseToken[] = [];
 		let tagIdentifierName: string = '';
 		let lastTokenIndex = allTokens.length - 1;
@@ -123,9 +122,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 					break;
 				case GlobalInstructionType.Template:
 					if (namedTemplates.get(instruction.name)) {
-						instruction.token['error'] = ErrorType.DuplicateTemplateName;
-						instruction.token.value = instruction.name;
-						problemTokens.push(instruction.token);
+
 					} else {
 						let members = instruction.memberNames ? instruction.memberNames : [];
 						namedTemplates.set(instruction.name, members);
@@ -141,10 +138,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 				case GlobalInstructionType.Accumulator:
 					if (globalAccumulatorNames.indexOf(instruction.name) < 0) {
 						globalAccumulatorNames.push(instruction.name);
-					} else {
-						instruction.token['error'] = ErrorType.DuplicateAccumulatorName;
-						instruction.token.value = instruction.name;
-						problemTokens.push(instruction.token);
 					}
 					break;
 				case GlobalInstructionType.AttributeSet:
@@ -205,9 +198,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			if (isXMLToken) {
 				if (ifThenStack.length > 0) {
-					let ifToken = ifThenStack[0];
-					ifToken['error'] = ErrorType.BracketNesting;
-					problemTokens.push(ifToken);
 					ifThenStack = [];
 				}
 				inScopeXPathVariablesList = [];
@@ -224,10 +214,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 							break;
 						}
 					}
-					if (errorToken) {
-						errorToken['error'] = ErrorType.BracketNesting;
-						problemTokens.push(errorToken);
-					} 
 				}
 				xpathStack = [];
 				preXPathVariable = false;
@@ -465,6 +451,14 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
 								}
+								if (seekInstruction.type === GlobalInstructionType.Mode && variableName === seekInstruction.name) {
+									referenceTokens.push(token);
+								}
+								break;
+							case AttributeType.UseAttributeSets:
+								if (seekInstruction.type === GlobalInstructionType.AttributeSet && variableName === seekInstruction.name) {
+									referenceTokens.push(token);
+								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
 								let excludePrefixes = variableName.split(/\s+/);
@@ -573,9 +567,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 							case 'then':
 								if (ifThenStack.length > 0) {
 									ifThenStack.pop();
-								} else {
-									token.error = ErrorType.XPathUnexpected;
-									problemTokens.push(token);
 								}
 								xpathStack.push({ token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
 								inScopeXPathVariablesList = [];
@@ -618,13 +609,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 								}
 								break;
 						}
-						break;
-					case TokenLevelState.mapKey:
-						if (!(prevToken && prevToken.tokenType === TokenLevelState.operator 
-							&& (prevToken.value === ',' || prevToken.value === '{') )) {
-								token['error'] = ErrorType.XPathUnexpected;
-								problemTokens.push(token);
-							}
 						break;
 					case TokenLevelState.operator:
 						let isXPathError = false;
@@ -741,10 +725,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
 									if (poppedData) {
-										if (poppedData.token.value === 'then') {
-											poppedData.token['error'] = ErrorType.BracketNesting;
-											problemTokens.push(poppedData.token);
-										}
 										inScopeXPathVariablesList = poppedData.variables;
 										preXPathVariable = poppedData.preXPathVariable;
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
@@ -776,10 +756,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 										xpathVariableCurrentlyBeingDefined = false;
 									}
 								}
-								if (token.error && !isXPathError) {
-									// any error should already have been added by lexer:
-									problemTokens.push(token);
-								}
 								break;
 							case CharLevelState.sep:
 								if (token.value === ',') {
@@ -800,11 +776,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 											} else if (val === 'then') {
 												nonBracketedThen = i;
 											}
-										}
-										if (nonBracketedThen > -1) {
-											//xpathStack.splice(nonBracketedThen, 1);
-											token['error'] = ErrorType.ExpectedElseAfterThen;
-											problemTokens.push(token);
 										}
 										const sv = xp.token.value;
 										if (sv === 'return' || sv === 'else' || sv === 'satisfies' ) {
@@ -855,63 +826,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 						}
 						break;
 				}
-				if (index === lastTokenIndex && !token.error) {
-					if (token.tokenType === TokenLevelState.operator) {
-						XsltTokenDiagnostics.checkFinalXPathToken(token, allTokens, index, problemTokens);
-					}
-					if (xpathStack.length > 0 && !token.error) {
-						let disallowedStackItem: BaseToken | undefined;
-						for (let index = xpathStack.length - 1; index > -1; index--) {
-							const trailingToken = xpathStack[index].token;
-							const tv = trailingToken.value;
-							const allowedToken = (tv === 'return' || tv === 'else' || tv === 'satisfies');
-							if (!allowedToken) {
-								disallowedStackItem = trailingToken;
-								break;
-							}
-						}
-						if (disallowedStackItem) {
-							disallowedStackItem['error'] = ErrorType.BracketNesting;
-							problemTokens.push(disallowedStackItem);
-						}
-					}
-					if (token.tokenType === TokenLevelState.string && !token.error) {
-						XPathLexer.checkStringLiteralEnd(token);
-						if (token.error) {
-							problemTokens.push(token);
-						}
-
-					}
-				}
 			}
 			prevToken = token.tokenType === TokenLevelState.comment ? prevToken : token;
 			if (index === lastTokenIndex) {
-				// xml is not well-nested if items still on the stack at the end
-				// but report errors and try to keep some part of the tree:
-				if (token.tokenType === TokenLevelState.complexExpression) {
-					token['error'] = ErrorType.XPathAwaiting;
-					problemTokens.push(token);
-				}
 				if (elementStack.length > 0) {
-					let usedtoken = false;
 					while (elementStack.length > 0) {
-						let poppedData = elementStack.pop();
-						let endToken: BaseToken;
-						if (poppedData) {
-							if (usedtoken) {
-								// use final token as we don't know what the end token is 
-								// but reduce lendth by one on each iteration - so its well nested
-								endToken = token;
-								endToken.length = endToken.length - 1;
-							} else {
-								endToken = token;
-								usedtoken = true;
-							}
-							let errorToken = Object.assign({}, poppedData.identifierToken);
-							errorToken['error'] = ErrorType.ElementNesting;
-							problemTokens.push(errorToken);
-
-						}
+						elementStack.pop();
 					}
 				}
 			}

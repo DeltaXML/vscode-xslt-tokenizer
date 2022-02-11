@@ -12,6 +12,10 @@
         
     </xsl:template>
     
+    <xsl:template match="/*" mode="def">
+        
+    </xsl:template>
+    
     <xsl:template match="/" mode="mode1">
         <xsl:param name="mp1" as="element()" select="a"/>
         <xsl:param name="mp2" as="element()" select="b"/>          

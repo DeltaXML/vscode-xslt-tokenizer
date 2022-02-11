@@ -9,5 +9,9 @@
         <xsl:apply-templates select="abc" mode="def"/>
     </xsl:template>
     
+    <xsl:template match="/*" mode="def">
+        
+    </xsl:template>
+    
     
 </xsl:stylesheet>
