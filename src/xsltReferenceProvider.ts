@@ -491,15 +491,16 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 						if (xpathStack.length > 0) {
 							let xp = xpathStack[xpathStack.length - 1];
 							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
-								let keyVal = token.value.substring(1, token.value.length - 1);
-								if (xp.function.value === 'key') {
-									if (globalKeys.indexOf(keyVal) < 0) {
-										token['error'] = ErrorType.XSLTKeyUnresolved;
-										problemTokens.push(token);
+								if (xp.function?.value === 'key' && seekInstruction.type === GlobalInstructionType.Key) {
+									let keyVal = token.value.substring(1, token.value.length - 1);
+									if (seekInstruction.name === keyVal) {
+										referenceTokens.push(token);
 									}
-								} else if (globalAccumulatorNames.indexOf(keyVal) < 0) {
-									token['error'] = ErrorType.AccumulatorNameUnresolved;
-									problemTokens.push(token);
+								} else if (xp.function?.value.startsWith('accumulator-') && seekInstruction.type === GlobalInstructionType.Accumulator) {
+									let keyVal = token.value.substring(1, token.value.length - 1);
+									if (seekInstruction.name === keyVal) {
+										referenceTokens.push(token);
+									}
 								}
 							}
 						}
