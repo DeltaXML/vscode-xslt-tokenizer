@@ -34,13 +34,13 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Goto Symbol**           | Quick access via filterable list of code symbols
 | **Goto Definition**       | For all symbol references like variables, parameters, functions, modes, accumulators etc.
 | **Peek Definition**       | View symbol declarations inline with corresponding references
-| **Goto References**       | For all symbols like variables, functions etc. *(includes references from imported modules)*
-| **Peek References**       | View all references to a selected symbol
+| **Goto (Peek) References**  | Inline view of references for variables, functions etc. *(includes references from imported modules)*
+| **Find All References**       | View and navigate between all references for a selected symbol in the References Pane
 | **VS Code Tasks**         | Configurable task templates for Saxon and Saxon-JS Prcoessors
 | **Bracket Matching**      | For `()`, `{}`, and `[]`
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
-| **Variable watcher**      | `xsl:message` instruction for local XSLT/XPath parameters/variables generated on auto-completion
+| **Variable watcher**      | Auto-complete for `xsl:message` for local XSLT/XPath variables - output shown in terminal at runtime
 |||
 
    \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
