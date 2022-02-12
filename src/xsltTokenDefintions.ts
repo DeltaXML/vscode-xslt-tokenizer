@@ -371,10 +371,6 @@ export class XsltTokenDefinitions {
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
 								}
-								if (isOnRequiredToken) {
-									let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Mode);
-									resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
-								}
 								break;
 							case AttributeType.UseAttributeSets:
 								if (isOnRequiredToken) {

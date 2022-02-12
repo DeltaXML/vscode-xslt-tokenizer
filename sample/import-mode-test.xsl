@@ -5,11 +5,16 @@
     
     <xsl:import href="mode-test.xsl"/>
     
+    <xsl:mode name="def"/>
+    
     <xsl:template match="pattern" mode="#default"> 
         <xsl:apply-templates select="abc" mode="def"/>
     </xsl:template>
     
     <xsl:template match="/*" mode="def">
+        
+    </xsl:template>
+    <xsl:template match="alt" mode="def">
         
     </xsl:template>
     
