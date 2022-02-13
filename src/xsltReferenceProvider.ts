@@ -52,10 +52,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 
 	async provideRenameEdits(document: vscode.TextDocument, position: vscode.Position, newName: string, token: vscode.CancellationToken): Promise<vscode.WorkspaceEdit | undefined> {
 		// check that name is valid
-		let newNameIsValid = true;
+		let newNameIsValid = XsltTokenDiagnostics.validateSimpleName(newName);
 		if (!newNameIsValid || !this.definition) {
-			return new Promise((resolve, reject) => reject('invalid name'));
+			return new Promise((resolve, reject) => reject('new name is invalid: \'' + newName + '\''));
 		}
+		let newNameInUse = false;
+
 		const wse = new vscode.WorkspaceEdit();
 		this.refLocations.forEach(location => {
 		  wse.replace(location.uri, location.range, newName);

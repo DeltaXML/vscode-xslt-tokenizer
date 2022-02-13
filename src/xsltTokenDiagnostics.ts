@@ -208,6 +208,35 @@ export class XsltTokenDiagnostics {
 		return valid;
 	}
 
+	public static validateSimpleName(name: string) {
+	  let valid = false;
+		const nameParts = name.split(':');
+		if (nameParts.length > 2) {
+			return false;
+		}
+		nameParts.forEach(namePart => {
+				let charsOK = true;
+				let firstChar = true;
+				let charExists = false;
+				for (let s of namePart) {
+					if (firstChar) {
+						firstChar = false;
+						charExists = true;
+						charsOK = XsltTokenDiagnostics.nameStartCharRgx.test(s);
+						if (!charsOK) {
+							break;
+						}
+					} else {
+						charsOK = XsltTokenDiagnostics.nameCharRgx.test(s);
+						if (!charsOK) {
+							break;
+						}
+					}
+				}
+				valid = charExists && charsOK;
+		});
+		return valid;
+	}
 
 	public static calculateDiagnostics = (languageConfig: LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
 		let lineNumber = -1;
