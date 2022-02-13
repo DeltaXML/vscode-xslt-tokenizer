@@ -11,6 +11,7 @@ import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import * as url from 'url';
 import { ExtractedImportData, XsltDefinitionProvider } from './xsltDefinitionProvider';
+import { XSLTReferenceProvider } from './xsltReferenceProvider';
 
 
 enum TagType {
@@ -77,7 +78,7 @@ export interface InstructionTokenType {
 }
 
 export class XsltTokenDefinitions {
-	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	public static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
 	private static readonly xslInclude = 'xsl:include';
 	private static readonly xslImport = 'xsl:import';
@@ -373,6 +374,7 @@ export class XsltTokenDefinitions {
 									if (resultLocation) {
 										resultLocation.instruction = instruction;
 									}
+									resultInputToken = { token: token, type: GlobalInstructionType.Template };
 								}
 								break;
 							case AttributeType.InstructionMode:
@@ -615,9 +617,8 @@ export class XsltTokenDefinitions {
 	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
 		if (instruction) {
 			let uri = instruction?.href ? vscode.Uri.parse(url.pathToFileURL(instruction.href).toString()) : document.uri;
-			let startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
-			let endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
-			const location: DefinitionLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
+      const rawLocation = XsltTokenDefinitions.createLocationFromToken(instruction.token, document);
+			const location: DefinitionLocation = new vscode.Location(uri, rawLocation.range);
 			location.instruction = instruction;
 			return location;
 		}
@@ -635,9 +636,16 @@ export class XsltTokenDefinitions {
 	}
 
 	public static createLocationFromToken(token: BaseToken, document: vscode.TextDocument) {
-		  const range = XsltTokenDefinitions.createRangeFromToken(token);
-			const location = new vscode.Location(document.uri, range);
-			return location;
+		const isQuoted = XSLTReferenceProvider.isTokenQuoted(token);
+		let range: vscode.Range;
+		if (isQuoted) {
+			let startPos = new vscode.Position(token.line, token.startCharacter + 1);
+			let endPos = new vscode.Position(token.line, token.startCharacter + token.length - 1);
+			range = new vscode.Range(startPos, endPos);
+		} else {
+			range = XsltTokenDefinitions.createRangeFromToken(token);
+		}
+		return new vscode.Location(document.uri, range);
 	}
 
 	public static createRangeFromToken(token: BaseToken) {
