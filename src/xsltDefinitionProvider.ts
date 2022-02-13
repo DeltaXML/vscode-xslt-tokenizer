@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
-import { DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
+import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
@@ -64,7 +64,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let location: DefinitionLocation|undefined = undefined;
 
 			let isXSLT = this.docType === DocumentTypes.XSLT;
-			location= XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			const defnData = XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			location = defnData.definitionLocation;
 			if (location) {
 				location.extractedImportData = extractedImportData;
 			}
@@ -73,7 +74,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		});
 	}
 
-	public async seekDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<DefinitionLocation | undefined> {
+	public async seekDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<DefinitionData | undefined> {
 		// extends provideDefinition so, if position within an instruction, it returns the instruction
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 
@@ -87,12 +88,15 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		return new Promise((resolve, reject) => {
 			let location: DefinitionLocation|undefined = undefined;
+			let defnData: DefinitionData|undefined = undefined;
+			let isXSLT = this.docType === DocumentTypes.XSLT;
 
 			if (matchingGlobal) {
 				location = XsltTokenDefinitions.createLocationFromInstrcution(matchingGlobal, document);
+				defnData = { definitionLocation: location };
 			} else {
-				let isXSLT = this.docType === DocumentTypes.XSLT;
-				location= XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+				defnData = XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);
+				location = defnData.definitionLocation;
 			}
 
 			if (location) {
@@ -105,7 +109,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			// 		location = XsltTokenDefinitions.createLocationFromInstrcution(matchingGlobal, document);
 			// 	}
 			// }
-			resolve(location);
+			resolve(defnData);
 		});
 	}
 

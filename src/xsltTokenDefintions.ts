@@ -10,7 +10,7 @@ import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data } from './x
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import * as url from 'url';
-import { ExtractedImportData } from './xsltDefinitionProvider';
+import { ExtractedImportData, XsltDefinitionProvider } from './xsltDefinitionProvider';
 
 
 enum TagType {
@@ -66,6 +66,16 @@ export interface DefinitionLocation extends vscode.Location {
 	extractedImportData?: ExtractedImportData;
 }
 
+export interface DefinitionData {
+	definitionLocation: DefinitionLocation | undefined;
+	inputSymbol?: InstructionTokenType | undefined;
+}
+
+export interface InstructionTokenType {
+	token: BaseToken;
+	type: GlobalInstructionType;
+}
+
 export class XsltTokenDefinitions {
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private static readonly xslVariable = ['xsl:variable', 'xsl:param'];
@@ -84,10 +94,10 @@ export class XsltTokenDefinitions {
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 
 
-	public static findDefinition = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): DefinitionLocation | undefined => {
+	public static findDefinition = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): DefinitionData => {
 		let lineNumber = -1;
 		let resultLocation: DefinitionLocation | undefined;
-
+    let resultInputToken: InstructionTokenType | undefined;
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;
 		let elementStack: ElementData[] = [];
@@ -115,9 +125,6 @@ export class XsltTokenDefinitions {
 		let onRootStartTag = true;
 		let rootXmlnsName: string | null = null;
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
-		let namedTemplates: Map<string, string[]> = new Map();
-		let globalModes: string[] = ['#current', '#default'];
-
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
 		let requiredLine = position.line;
 		let requiredChar = position.character;
@@ -349,6 +356,7 @@ export class XsltTokenDefinitions {
 								variableData = { token: token, name: variableName };
 								if (isOnRequiredToken) {
 									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(variableData, document);
+									resultInputToken = { token: token, type: GlobalInstructionType.Variable };
 								}
 								break;
 							case AttributeType.InstructionName:
@@ -376,6 +384,7 @@ export class XsltTokenDefinitions {
 								if (isOnRequiredToken) {
 									let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.AttributeSet);
 									resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+									resultInputToken = { token: token, type: GlobalInstructionType.AttributeSet };
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
@@ -405,6 +414,7 @@ export class XsltTokenDefinitions {
 								let instrType = xp.function.value === 'key' ? GlobalInstructionType.Key : GlobalInstructionType.Accumulator;
 								let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, keyVal, instrType);
 								resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+								resultInputToken = { token: token, type: instrType };
 							}
 							preXPathVariable = xp.preXPathVariable;
 						}
@@ -428,7 +438,8 @@ export class XsltTokenDefinitions {
 								xsltVariableDeclarations.push(token);
 							}
 							if (isOnRequiredToken) {
-								resultLocation = XsltTokenDefinitions.createLocationFromVariableData(currentVariable, document);						
+								resultLocation = XsltTokenDefinitions.createLocationFromVariableData(currentVariable, document);
+								resultInputToken = { token: token, type: GlobalInstructionType.Variable };						
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
@@ -436,8 +447,9 @@ export class XsltTokenDefinitions {
 								let resolvedVariable = XsltTokenDefinitions.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
 								if (resolvedVariable) {
-									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(resolvedVariable, document);									
+									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(resolvedVariable, document);
 								}
+								resultInputToken = { token: token, type: GlobalInstructionType.Accumulator };
 							}
 						}
 						break;
@@ -542,6 +554,7 @@ export class XsltTokenDefinitions {
 												const fnName = poppedData.function.value;
 												let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 												resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+												resultInputToken = { token: poppedData.function, type: GlobalInstructionType.Function };
 											}
 										}
 									} else {
@@ -572,6 +585,7 @@ export class XsltTokenDefinitions {
 										const fnName = prevToken.value;
 										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+										resultInputToken = { token: token, type: GlobalInstructionType.Function };
 									}
 									awaitingRequiredArity = false;
 									incrementFunctionArity = false;
@@ -587,6 +601,7 @@ export class XsltTokenDefinitions {
 							let { name, arity } = XsltTokenDefinitions.resolveFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token);
 							let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, name, GlobalInstructionType.Function, arity);
 							resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+							resultInputToken = { token: token, type: GlobalInstructionType.Function };
 						}
 						break;
 				}
@@ -594,7 +609,7 @@ export class XsltTokenDefinitions {
 			prevToken = token;
 		}
 
-		return resultLocation;
+		return { definitionLocation: resultLocation, inputSymbol: resultInputToken };
 	};
 
 	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
@@ -620,19 +635,21 @@ export class XsltTokenDefinitions {
 	}
 
 	public static createLocationFromToken(token: BaseToken, document: vscode.TextDocument) {
-			let uri = document.uri;
-			let startPos = new vscode.Position(token.line, token.startCharacter);
-			let endPos = new vscode.Position(token.line, token.startCharacter + token.length);
-			const location = new vscode.Location(uri, new vscode.Range(startPos, endPos));
+		  const range = XsltTokenDefinitions.createRangeFromToken(token);
+			const location = new vscode.Location(document.uri, range);
 			return location;
 	}
 
-	public static resolveFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken) {
+	public static createRangeFromToken(token: BaseToken) {
+		let startPos = new vscode.Position(token.line, token.startCharacter);
+		let endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+		return new vscode.Range(startPos, endPos);
+}
 
+	public static resolveFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken) {
 		let parts = token.value.split('#');
 		let arity = Number.parseInt(parts[1]);
 		let name = parts[0];
-
 		return { name, arity };
 	}
 

@@ -5,16 +5,67 @@ import { SchemaQuery } from './schemaQuery';
 import { LexPosition, BaseToken, CharLevelState, Data, ErrorType, TokenLevelState, XPathLexer } from './xpLexer';
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XMLCharState, XslLexer, XSLTokenLevelState } from './xslLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
-import { XsltTokenDefinitions } from './xsltTokenDefintions';
+import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
 import { AttributeType, TagType, XSLTToken, XsltTokenDiagnostics, ElementData, XPathData, VariableData, ValidationType, CurlyBraceType} from './xsltTokenDiagnostics';
 import * as url from 'url';
 
-export class XSLTReferenceProvider implements vscode.ReferenceProvider {
+export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.RenameProvider {
 
 	private xslLexer: XslLexer;
+	private definition: DefinitionLocation | undefined = undefined;
+	private definitionData: DefinitionData | undefined = undefined;
+	private refLocations: vscode.Location[] = [];
 	public constructor() {
 		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
 		this.xslLexer.provideCharLevelState = true;
+	}
+
+	async prepareRename(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Range|undefined> {
+		let wse: vscode.WorkspaceEdit | undefined;
+
+		const refContext = {includeDeclaration: true};
+		// this call also sets this.definition + this.definitionData:
+		const references = await this.provideReferences(document, position, refContext, token);
+		if (references) {
+			this.refLocations = references;
+		}
+    let initialRange: vscode.Range | undefined;
+		if (this.definitionData) {
+			const isDefinitionAtPosition = !(this.definitionData.inputSymbol);
+			const tokenAtPosition = this.definitionData.inputSymbol? this.definitionData.inputSymbol.token : this.definitionData.definitionLocation?.instruction?.token;
+			if (tokenAtPosition) {
+				if (isDefinitionAtPosition) {
+					const startChar = document.lineAt(tokenAtPosition.line).text.charAt(tokenAtPosition.startCharacter);
+					const isQuoted = startChar === '\'' || startChar === '"';
+					if (isQuoted && tokenAtPosition.length > 2) {
+						tokenAtPosition.startCharacter++;
+						tokenAtPosition.length = tokenAtPosition.length - 2;
+					}
+				}
+				initialRange = XsltTokenDefinitions.createRangeFromToken(tokenAtPosition);
+			}
+		}
+		if (initialRange) {
+			return initialRange;
+		} else {
+			return new Promise((resolve, reject) => reject('unsupported symbol'));
+		}
+	}
+
+	async provideRenameEdits(document: vscode.TextDocument, position: vscode.Position, newName: string, token: vscode.CancellationToken): Promise<vscode.WorkspaceEdit | undefined> {
+		// check that name is valid
+		let newNameIsValid = true;
+		if (!newNameIsValid || !this.definition) {
+			return new Promise((resolve, reject) => reject('invalid name'));
+		}
+    const inputRange = XsltTokenDefinitions.createRangeFromToken(this.definitionData!.inputSymbol!.token);
+		const positionType = this.definitionData!.inputSymbol!.type;
+		const wse = new vscode.WorkspaceEdit();
+		this.refLocations.forEach(location => {
+		//	wse.replace(location.uri, location.range, newName);
+		});
+
+
 	}
 
 	async provideReferences(document: vscode.TextDocument, position: vscode.Position, context: vscode.ReferenceContext, token: vscode.CancellationToken): Promise<vscode.Location[] | null | undefined> {
@@ -22,16 +73,17 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 		const langConfig = XSLTConfiguration.configuration;
 		// TODO: first check if position is on a definition already
 		const dProvider = new XsltDefinitionProvider(langConfig);
-		const definition = await dProvider.seekDefinition(document, position, token);
+		this.definitionData = await dProvider.seekDefinition(document, position, token);
+		this.definition = this.definitionData?.definitionLocation;
 		let locations: vscode.Location[] = [];
-		if (definition) {
-			const { instruction, extractedImportData: eid } = definition;
+		if (this.definition) {
+			const { instruction, extractedImportData: eid } = this.definition;
 			if (instruction && eid) {
 				// find all references to this instruction
 				let refTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, document, eid.allTokens, eid.globalInstructionData, eid.allImportedGlobals);
 				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
 				locations = refLocations;
-        locations.push(definition);
+        locations.push(this.definition);
 				for (let index = 0; index < eid.accumulatedHrefs.length; index++) {
 					const currentHref = eid.accumulatedHrefs[index];
 					if (currentHref === document.fileName) {
@@ -52,6 +104,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider {
 			}
 		} 
 		return new Promise(resolve => {
+			this.refLocations = locations;
 			resolve(locations);
 		});
 	}
