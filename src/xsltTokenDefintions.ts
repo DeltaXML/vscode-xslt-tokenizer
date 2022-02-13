@@ -357,7 +357,6 @@ export class XsltTokenDefinitions {
 								variableData = { token: token, name: variableName };
 								if (isOnRequiredToken) {
 									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(variableData, document);
-									resultInputToken = { token: token, type: GlobalInstructionType.Variable };
 								}
 								break;
 							case AttributeType.InstructionName:
@@ -642,6 +641,10 @@ export class XsltTokenDefinitions {
 			let startPos = new vscode.Position(token.line, token.startCharacter + 1);
 			let endPos = new vscode.Position(token.line, token.startCharacter + token.length - 1);
 			range = new vscode.Range(startPos, endPos);
+		} else if (XSLTReferenceProvider.isTokenVariable(token)) {
+			let startPos = new vscode.Position(token.line, token.startCharacter + 1);
+			let endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+			range = new vscode.Range(startPos, endPos);			
 		} else {
 			range = XsltTokenDefinitions.createRangeFromToken(token);
 		}
@@ -652,7 +655,13 @@ export class XsltTokenDefinitions {
 		let startPos = new vscode.Position(token.line, token.startCharacter);
 		let endPos = new vscode.Position(token.line, token.startCharacter + token.length);
 		return new vscode.Range(startPos, endPos);
-}
+  }
+
+	public static createRangeFromTokenVals(line: number, startCharacter: number, length: number) {
+		let startPos = new vscode.Position(line, startCharacter);
+		let endPos = new vscode.Position(line, startCharacter + length);
+		return new vscode.Range(startPos, endPos);
+  }
 
 	public static resolveFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken) {
 		let parts = token.value.split('#');

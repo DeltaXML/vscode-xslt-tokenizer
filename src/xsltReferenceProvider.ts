@@ -34,13 +34,21 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			const isDefinitionAtPosition = !(this.definitionData.inputSymbol);
 			const tokenAtPosition = this.definitionData.inputSymbol? this.definitionData.inputSymbol.token : this.definitionData.definitionLocation?.instruction?.token;
 			if (tokenAtPosition) {
+				let tStart = tokenAtPosition.startCharacter;
+				let tLength = tokenAtPosition.length;
 				if (isDefinitionAtPosition) {
 					if (XSLTReferenceProvider.isTokenQuoted(tokenAtPosition) && tokenAtPosition.length > 2) {
-						tokenAtPosition.startCharacter++;
-						tokenAtPosition.length = tokenAtPosition.length - 2;
+						tStart++;
+						tLength = tokenAtPosition.length - 2;
+					} else if (XSLTReferenceProvider.isTokenVariable(tokenAtPosition)) {
+						tStart++;
+						tLength = tokenAtPosition.length - 1;						
 					}
+				} else if (XSLTReferenceProvider.isTokenVariable(tokenAtPosition)) {
+					tStart++;
+					tLength = tokenAtPosition.length - 1;
 				}
-				initialRange = XsltTokenDefinitions.createRangeFromToken(tokenAtPosition);
+				initialRange = XsltTokenDefinitions.createRangeFromTokenVals(tokenAtPosition.line, tStart, tLength);
 			}
 		}
 		if (initialRange) {
@@ -75,6 +83,17 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			isQuoted = xpathTokenType === TokenLevelState.string;
 		}
 		return isQuoted;
+	}
+
+	public static isTokenVariable(tokenAtPosition: BaseToken) {
+		let isXMLToken = tokenAtPosition.tokenType >= XsltTokenDefinitions.xsltStartTokenNumber;
+		let isVariable = false;
+
+		if (!isXMLToken) {
+			let xpathTokenType = <TokenLevelState>tokenAtPosition.tokenType;
+			isVariable = xpathTokenType === TokenLevelState.variable;
+		}
+		return isVariable;
 	}
 
 	async provideReferences(document: vscode.TextDocument, position: vscode.Position, context: vscode.ReferenceContext, token: vscode.CancellationToken): Promise<vscode.Location[] | null | undefined> {

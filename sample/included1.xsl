@@ -17,11 +17,11 @@
     <xsl:variable name="ep" as="xs:integer" select="fn:empty()"/>
     <xsl:variable name="fnRef1" as="function(*)" select="fn:inc5name#1"/>
     
-    <xsl:template name="included">
-                
+    <xsl:template name="included">               
         <xsl:param name="inc1p1" as="xs:integer" select="count(1)"/>
         <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc1name(2)"/>
         <xsl:variable name="inc1v1" as="xs:integer" select="fn:inc5name(2)"/>
+        <xsl:sequence select="$inc1p1"/>
     </xsl:template> 
     
     <xsl:function name="fn:inc1name" as="xs:string">
