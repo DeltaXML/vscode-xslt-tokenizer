@@ -16,6 +16,7 @@
     <xsl:param name="inc1p1" as="xs:integer" select="2"/>
     <xsl:variable name="ep" as="xs:integer" select="fn:empty()"/>
     <xsl:variable name="fnRef1" as="function(*)" select="fn:inc5name#1"/>
+    <xsl:variable name="tst" as="" select="$inc1p1"/>
     
     <xsl:template name="included">               
         <xsl:param name="inc1p1" as="xs:integer" select="count(1)"/>
