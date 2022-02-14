@@ -161,6 +161,9 @@ export class XsltTokenDefinitions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
+			// if (isOnRequiredToken) {
+			// 	console.log('onRequiredToken');
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenDefinitions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -450,7 +453,7 @@ export class XsltTokenDefinitions {
 								if (resolvedVariable) {
 									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(resolvedVariable, document);
 								}
-								resultInputToken = { token: token, type: GlobalInstructionType.Accumulator };
+								resultInputToken = { token: token, type: GlobalInstructionType.Variable };
 							}
 						}
 						break;
@@ -634,7 +637,11 @@ export class XsltTokenDefinitions {
 		}
 	}
 
-	public static createLocationFromToken(token: BaseToken, document: vscode.TextDocument) {
+	public static createLocationFromToken(token: BaseToken, doc: vscode.TextDocument) {
+		return this.createLocationFromTokenUri(token, doc.uri);
+	}
+
+	public static createLocationFromTokenUri(token: BaseToken, uri: vscode.Uri) {
 		const isQuoted = XSLTReferenceProvider.isTokenQuoted(token);
 		let range: vscode.Range;
 		if (isQuoted) {
@@ -648,7 +655,7 @@ export class XsltTokenDefinitions {
 		} else {
 			range = XsltTokenDefinitions.createRangeFromToken(token);
 		}
-		return new vscode.Location(document.uri, range);
+		return new vscode.Location(uri, range);
 	}
 
 	public static createRangeFromToken(token: BaseToken) {

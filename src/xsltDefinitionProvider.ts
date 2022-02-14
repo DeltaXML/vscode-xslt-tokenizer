@@ -109,6 +109,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			// 		location = XsltTokenDefinitions.createLocationFromInstrcution(matchingGlobal, document);
 			// 	}
 			// }
+			if (defnData.definitionLocation?.range) {
+      	const defRangeLength = defnData.definitionLocation?.range.end.character - defnData.definitionLocation?.range.start.character;
+				console.log({defRangeLength});
+			}
 			resolve(defnData);
 		});
 	}
