@@ -636,7 +636,7 @@ export class XsltTokenDefinitions {
 			let uri = variableData.uri ? vscode.Uri.parse(url.pathToFileURL(variableData.uri).toString()) : document.uri;
 			const sp = isDefinition? variableData.token.startCharacter + 1 : variableData.token.startCharacter;
 			let ep = variableData.token.startCharacter + variableData.token.length;
-			ep = isDefinition? ep - 1 : ep;
+			ep = isDefinition && variableData.token.tokenType !== TokenLevelState.variable? ep - 1 : ep;
 			let startPos = new vscode.Position(variableData.token.line, sp);
 			let endPos = new vscode.Position(variableData.token.line, ep);
 			const location: DefinitionLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
