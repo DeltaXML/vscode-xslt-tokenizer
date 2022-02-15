@@ -902,6 +902,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 							const arity = Number.parseInt(parts[1]);
 							const functionName = parts[0];
 							if (functionName === seekInstruction.name && (arity === seekInstruction.idNumber || seekInstruction.idNumber < 0)) {
+								token.length = functionName.length;
 								referenceTokens.push(token);
 							}
 						}

@@ -101,17 +101,6 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 			if (location) {
 				location.extractedImportData = extractedImportData;
-			} 
-			// else if (!matchingGlobal) {
-			// 	// special for internal XPath functions like 'count'
-			// 	matchingGlobal = XsltDefinitionProvider.functionInstructionFromDocPosition(document, position);
-			// 	if (matchingGlobal) {
-			// 		location = XsltTokenDefinitions.createLocationFromInstrcution(matchingGlobal, document);
-			// 	}
-			// }
-			if (defnData.definitionLocation?.range) {
-      	const defRangeLength = defnData.definitionLocation?.range.end.character - defnData.definitionLocation?.range.start.character;
-				console.log({defRangeLength});
 			}
 			resolve(defnData);
 		});
