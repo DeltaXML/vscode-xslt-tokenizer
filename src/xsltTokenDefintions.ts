@@ -443,7 +443,8 @@ export class XsltTokenDefinitions {
 								xsltVariableDeclarations.push(token);
 							}
 							if (isOnRequiredToken) {
-								resultLocation = XsltTokenDefinitions.createLocationFromVariableData(currentVariable, document);
+								const isDefinition = true;
+								resultLocation = XsltTokenDefinitions.createLocationFromVariableData(currentVariable, document, isDefinition);
 								resultInputToken = { token: token, type: GlobalInstructionType.Variable };						
 							}
 						} else {
