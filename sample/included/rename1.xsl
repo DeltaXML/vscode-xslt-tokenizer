@@ -4,6 +4,7 @@
                 version="3.0">
   <xsl:import href="rename2.xsl"/>
 
-  <xsl:variable name="var1" as="xs:integer" select="2"/>
-  <xsl:variable name="var2" as="xs:integer" select="$var1"/>
+  <xsl:variable name="var1-new" as="xs:integer" select="2"/>
+  <xsl:variable name="var2" as="xs:integer" select="$var1-new"/>
+  <xsl:variable name="abc" as="xs:integer" select="$var3"/>
 </xsl:stylesheet>

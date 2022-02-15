@@ -111,9 +111,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				let refTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, document, eid.allTokens, eid.globalInstructionData, eid.allImportedGlobals);
 				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
 				locations = refLocations;
-
-				const defLocation= XsltTokenDefinitions.createLocationFromTokenUri(instruction.token, this.definition.uri);
-        locations.push(defLocation);
+        locations.push(this.definition);
 				for (let index = 0; index < eid.accumulatedHrefs.length; index++) {
 					const currentHref = eid.accumulatedHrefs[index];
 					if (currentHref === document.fileName) {

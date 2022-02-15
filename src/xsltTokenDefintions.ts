@@ -161,9 +161,9 @@ export class XsltTokenDefinitions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
-			// if (isOnRequiredToken) {
-			// 	console.log('onRequiredToken');
-			// }
+			if (isOnRequiredToken) {
+				console.log('onRequiredToken');
+			}
 			let isXMLToken = token.tokenType >= XsltTokenDefinitions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -359,7 +359,8 @@ export class XsltTokenDefinitions {
 								tagIdentifierName = variableName;
 								variableData = { token: token, name: variableName };
 								if (isOnRequiredToken) {
-									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(variableData, document);
+									const isDefinition = true;
+									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(variableData, document, isDefinition);
 								}
 								break;
 							case AttributeType.InstructionName:
@@ -451,7 +452,8 @@ export class XsltTokenDefinitions {
 								let resolvedVariable = XsltTokenDefinitions.resolveXPathVariableReference(document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
 								if (resolvedVariable) {
-									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(resolvedVariable, document);
+									const isDefinition = true;
+									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(resolvedVariable, document, isDefinition);
 								}
 								resultInputToken = { token: token, type: GlobalInstructionType.Variable };
 							}
@@ -626,11 +628,14 @@ export class XsltTokenDefinitions {
 		}
 	}
 
-	public static createLocationFromVariableData(variableData: VariableData | undefined, document: vscode.TextDocument) {
+	public static createLocationFromVariableData(variableData: VariableData | undefined, document: vscode.TextDocument, isDefinition?: boolean) {
 		if (variableData) {
 			let uri = variableData.uri ? vscode.Uri.parse(url.pathToFileURL(variableData.uri).toString()) : document.uri;
-			let startPos = new vscode.Position(variableData.token.line, variableData.token.startCharacter);
-			let endPos = new vscode.Position(variableData.token.line, variableData.token.startCharacter + variableData.token.length);
+			const sp = isDefinition? variableData.token.startCharacter + 1 : variableData.token.startCharacter;
+			let ep = variableData.token.startCharacter + variableData.token.length;
+			ep = isDefinition? ep - 1 : ep;
+			let startPos = new vscode.Position(variableData.token.line, sp);
+			let endPos = new vscode.Position(variableData.token.line, ep);
 			const location: DefinitionLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
 			location.instruction = { idNumber: 0, name: variableData.name, type: GlobalInstructionType.Variable, token: variableData.token, href: uri.toString() };
 			return location;
