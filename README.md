@@ -31,6 +31,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Snippets**              | Set of snippets accessed via auto-completion
 | **Symbol Outline**        | Tree-view of XSLT instructions *- this can be shown in the 'Side Panel' or 'Side Bar'*
 | **Symbol Breadcrumbs**    | Shows location within the code hierarchy
+| **Rename Symbol**         | All in-scope usages of the symbol will be renamed - across all imported stylesheet modules 
 | **Goto Symbol**           | Quick access via filterable list of code symbols
 | **Goto Definition**       | For all symbol references like variables, parameters, functions, modes, accumulators etc.
 | **Peek Definition**       | View symbol declarations inline with corresponding references
