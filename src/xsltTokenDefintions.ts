@@ -161,9 +161,9 @@ export class XsltTokenDefinitions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
-			if (isOnRequiredToken) {
-				console.log('onRequiredToken');
-			}
+			// if (isOnRequiredToken) {
+			// 	console.log('onRequiredToken');
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenDefinitions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
