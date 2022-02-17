@@ -44,6 +44,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						tStart++;
 						tLength = tokenAtPosition.length - 1;						
 					}
+				}	else if (XSLTReferenceProvider.isTokenQuoted(tokenAtPosition) && tokenAtPosition.length > 2) {
+					tStart++;
+					tLength = tokenAtPosition.length - 2;
 				} else if (XSLTReferenceProvider.isTokenVariable(tokenAtPosition)) {
 					tStart++;
 					tLength = tokenAtPosition.length - 1;
