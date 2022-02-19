@@ -162,9 +162,9 @@ export class XsltTokenDefinitions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
-			if (isOnRequiredToken) {
-				console.log('onRequiredToken');
-			}
+			// if (isOnRequiredToken) {
+			// 	console.log('onRequiredToken');
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenDefinitions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -400,9 +400,8 @@ export class XsltTokenDefinitions {
 												const paramIndex = callTempDefn.memberNames.indexOf(variableName);
 												if (paramIndex > -1 && callTempDefn.memberTokens) {
 													const paramToken = callTempDefn.memberTokens[paramIndex];
-													// reuse callTemplate Definition - but set token to that of the current param
 													const uri = callTempDefn.href ? vscode.Uri.parse(url.pathToFileURL(callTempDefn.href).toString()) : document.uri;
-													const paramRange = XsltTokenDefinitions.createRangeFromToken(paramToken);
+													const paramRange = XsltTokenDefinitions.createRangeFromTokenVals(paramToken.line, paramToken.startCharacter + 1, paramToken.length - 2);
 													resultLocation = new vscode.Location(uri, paramRange);
 													const paramInstruction = { idNumber: 0, name: variableName, type: GlobalInstructionType.Variable, token: paramToken, href: uri.toString() };
                           resultLocation.instruction = paramInstruction;

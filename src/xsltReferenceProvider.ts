@@ -6,7 +6,7 @@ import { LexPosition, BaseToken, CharLevelState, Data, ErrorType, TokenLevelStat
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XMLCharState, XslLexer, XSLTokenLevelState } from './xslLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
-import { AttributeType, TagType, XSLTToken, XsltTokenDiagnostics, ElementData, XPathData, VariableData, ValidationType, CurlyBraceType} from './xsltTokenDiagnostics';
+import { AttributeType, TagType, XSLTToken, XsltTokenDiagnostics, ElementData, XPathData, VariableData, ValidationType, CurlyBraceType } from './xsltTokenDiagnostics';
 import * as url from 'url';
 
 export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.RenameProvider {
@@ -20,19 +20,19 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		this.xslLexer.provideCharLevelState = true;
 	}
 
-	async prepareRename(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Range|undefined> {
+	async prepareRename(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Range | undefined> {
 		let wse: vscode.WorkspaceEdit | undefined;
 
-		const refContext = {includeDeclaration: true};
+		const refContext = { includeDeclaration: true };
 		// this call also sets this.definition + this.definitionData:
 		const references = await this.provideReferences(document, position, refContext, token);
 		if (references) {
 			this.refLocations = references;
 		}
-    let initialRange: vscode.Range | undefined;
+		let initialRange: vscode.Range | undefined;
 		if (this.definitionData) {
 			const isDefinitionAtPosition = !(this.definitionData.inputSymbol);
-			const tokenAtPosition = this.definitionData.inputSymbol? this.definitionData.inputSymbol.token : this.definitionData.definitionLocation?.instruction?.token;
+			const tokenAtPosition = this.definitionData.inputSymbol ? this.definitionData.inputSymbol.token : this.definitionData.definitionLocation?.instruction?.token;
 			if (tokenAtPosition) {
 				let tStart = tokenAtPosition.startCharacter;
 				let tLength = tokenAtPosition.length;
@@ -42,9 +42,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						tLength = tokenAtPosition.length - 2;
 					} else if (XSLTReferenceProvider.isTokenVariable(tokenAtPosition)) {
 						tStart++;
-						tLength = tokenAtPosition.length - 1;						
+						tLength = tokenAtPosition.length - 1;
 					}
-				}	else if (XSLTReferenceProvider.isTokenQuoted(tokenAtPosition) && tokenAtPosition.length > 2) {
+				} else if (XSLTReferenceProvider.isTokenQuoted(tokenAtPosition) && tokenAtPosition.length > 2) {
 					tStart++;
 					tLength = tokenAtPosition.length - 2;
 				} else if (XSLTReferenceProvider.isTokenVariable(tokenAtPosition)) {
@@ -71,7 +71,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 
 		const wse = new vscode.WorkspaceEdit();
 		this.refLocations.forEach(location => {
-		  wse.replace(location.uri, location.range, newName);
+			wse.replace(location.uri, location.range, newName);
 		});
 		return wse;
 	}
@@ -114,7 +114,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				let refTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, document, eid.allTokens, eid.globalInstructionData, eid.allImportedGlobals);
 				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
 				locations = refLocations;
-        locations.push(this.definition);
+				locations.push(this.definition);
 				for (let index = 0; index < eid.accumulatedHrefs.length; index++) {
 					const currentHref = eid.accumulatedHrefs[index];
 					if (currentHref === document.fileName) {
@@ -133,7 +133,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					}
 				}
 			}
-		} 
+		}
 		return new Promise(resolve => {
 			this.refLocations = locations;
 			resolve(locations);
@@ -169,7 +169,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		let tagXmlnsNames: string[] = [];
 		let rootXmlnsBindings: [string, string][] = [];
 		let inheritedPrefixes: string[] = [];
-		let globalVariableData: VariableData[] = [];		
+		let globalVariableData: VariableData[] = [];
 		let importedGlobalVarNames: string[] = [];
 		let importedGlobalVarTokens: BaseToken[] = [];
 		let importedGlobalFnNames: string[] = [];
@@ -178,6 +178,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		let rootXmlnsName: string | null = null;
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 		let namedTemplates: Map<string, string[]> = new Map();
+		let namedTemplateTokens: Map<string, GlobalInstructionData> = new Map();
 		let globalModes: string[] = ['#current', '#default'];
 		let globalKeys: string[] = [];
 		let globalAccumulatorNames: string[] = [];
@@ -210,6 +211,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					} else {
 						let members = instruction.memberNames ? instruction.memberNames : [];
 						namedTemplates.set(instruction.name, members);
+						namedTemplateTokens.set(instruction.name, instruction);
 					}
 					break;
 				case GlobalInstructionType.Mode:
@@ -249,6 +251,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				case GlobalInstructionType.Template:
 					let members = instruction.memberNames ? instruction.memberNames : [];
 					namedTemplates.set(instruction.name, members);
+					namedTemplateTokens.set(instruction.name, instruction);
 					break;
 				case GlobalInstructionType.Mode:
 					let modes = instruction.name.split(/\s+/);
@@ -469,7 +472,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 							tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token, attNameText));
 							tagAttributeNames.push(attNameText);
 						}
-						
+
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt ? AttributeType.Variable : AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
@@ -512,7 +515,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								if (elementStack.length > 2) {
 									let parentElemmentName = elementStack[elementStack.length - 1].symbolName;
 									if (parentElemmentName === 'xsl:iterate') {
-										currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push({...variableData});
+										currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push({ ...variableData });
 									}
 								}
 								break;
@@ -530,15 +533,29 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 									variableName = variableName.substring(slashPos + 1);
 								}
 								tagIdentifierName = variableName;
-                if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
-									const parentName = elementStack[elementStack.length - 1].symbolName;
-                  if (seekInstruction.type === GlobalInstructionType.Variable && seekInstruction.name === variableName && parentName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
-										const definitions = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
-										let resolvedVariable = definitions.find(defn => defn.name === variableName);
-										if (resolvedVariable) {
-											const rToken = resolvedVariable.token;
-											if (rToken.line === seekInstruction.token.line && rToken.startCharacter === seekInstruction.token.startCharacter) {
-												referenceTokens.push(token);
+								if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
+									const {symbolName, symbolID } = elementStack[elementStack.length - 1];
+									if (seekInstruction.type === GlobalInstructionType.Variable && seekInstruction.name === variableName) {
+										if (symbolName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
+											const definitions = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
+											let resolvedVariable = definitions.find(defn => defn.name === variableName);
+											if (resolvedVariable) {
+												const rToken = resolvedVariable.token;
+												if (rToken.line === seekInstruction.token.line && rToken.startCharacter === seekInstruction.token.startCharacter) {
+													referenceTokens.push(token);
+												}
+											}
+										} else if (symbolName === 'xsl:call-template' && seekInstruction.name === variableName) {
+											// TODO: check that template definition token is same seekInstruction token:
+                      const templateInstruction = namedTemplateTokens.get(symbolID);
+											if (templateInstruction && templateInstruction.memberNames) {
+												const paramPos = templateInstruction.memberNames.indexOf(variableName);
+												if (paramPos > -1 && templateInstruction.memberTokens) {
+													const paramToken = templateInstruction.memberTokens[paramPos];
+														if (paramToken && paramToken.line === seekInstruction.token.line && paramToken.startCharacter === seekInstruction.token.startCharacter) {
+															referenceTokens.push(token);
+														}
+												}
 											}
 										}
 									}
@@ -563,8 +580,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								break;
 						}
 						if (
-							seekInstruction.type === GlobalInstructionType.Template && 
-							attType === AttributeType.InstructionName && 
+							seekInstruction.type === GlobalInstructionType.Template &&
+							attType === AttributeType.InstructionName &&
 							tagElementName === 'xsl:call-template') {
 							if (variableName === seekInstruction.name) {
 								referenceTokens.push(token);
@@ -671,7 +688,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 							case 'return':
 							case 'satisfies':
 							case 'else':
-								let tokenValBeforeDelete = xpathStack.length > 0? xpathStack[xpathStack.length - 1].token.value : '';
+								let tokenValBeforeDelete = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1].token.value : '';
 								if (xpathStack.length > 1) {
 									let deleteCount = 0;
 									for (let i = xpathStack.length - 1; i > -1; i--) {
@@ -715,7 +732,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						let stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
 						const sv = stackItem?.token.value;
 						const tokenIsComma = tv === ',';
-						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies' );
+						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies');
 						if (popStackLaterForComma && xpathStack.length > 1) {
 							stackItem = xpathStack[xpathStack.length - 2];
 						}
@@ -733,9 +750,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						if (prevToken?.tokenType === TokenLevelState.complexExpression) {
 							let currCharType = <CharLevelState>token.charType;
 							if (currCharType === CharLevelState.rB || currCharType === CharLevelState.rBr || currCharType === CharLevelState.rPr) {
-							  // do nothing
+								// do nothing
 							} else if (tokenIsComma) {
-                // do nothing								
+								// do nothing								
 							}
 						} else if (prevToken && tv === ':') {
 							if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
@@ -756,7 +773,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 										curlyBraceType = CurlyBraceType.Array;
 									}
 								}
-                const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
+								const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
 								if (curlyBraceType === CurlyBraceType.Map) {
 									stackItem.awaitingMapKey = true;
 								}
@@ -868,14 +885,14 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 										for (let i = xpathStack.length - 1; i > -1; i--) {
 											const xpathItem = xpathStack[i].token;
 											const val = xpathItem.value;
-											if (!(val === 'return' || val === 'else' || val === 'satisfies' || val === 'then' )) {
+											if (!(val === 'return' || val === 'else' || val === 'satisfies' || val === 'then')) {
 												break;
 											} else if (val === 'then') {
 												nonBracketedThen = i;
 											}
 										}
 										const sv = xp.token.value;
-										if (sv === 'return' || sv === 'else' || sv === 'satisfies' ) {
+										if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
 											let poppedData = xpathStack.pop();
 											if (poppedData) {
 												inScopeXPathVariablesList = poppedData.variables;

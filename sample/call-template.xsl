@@ -3,16 +3,12 @@
 																xmlns:xs="http://www.w3.org/2001/XMLSchema"
 																version="3.0">
 	
-	<xsl:template name="tname">
-		<xsl:param name="param1" as="xs:string"/>
-		<xsl:param name="param2" as="xs:string"/>
-		<xsl:sequence select="$param1, $param2"/>
-	</xsl:template>
+	<xsl:import href="name-template.xsl"/>
 	
 	<xsl:function name="xs:fname">
-		<xsl:call-template name="tname">
-			<xsl:with-param name="param1" as="xs:string" select="'one'"/>
-			<xsl:with-param name="param2" as="xs:string" select="'two'"/>
+		<xsl:call-template name="tnamePlus">
+			<xsl:with-param name="param1plusSave" as="xs:string" select="'one'"/>
+			<xsl:with-param name="param2new" as="xs:string" select="'two'"/>
 		</xsl:call-template>
 	</xsl:function>
 	
