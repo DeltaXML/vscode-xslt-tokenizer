@@ -98,7 +98,7 @@ export class XsltTokenDefinitions {
 	public static findDefinition = (isXSLT: boolean, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): DefinitionData => {
 		let lineNumber = -1;
 		let resultLocation: DefinitionLocation | undefined;
-    let resultInputToken: InstructionTokenType | undefined;
+		let resultInputToken: InstructionTokenType | undefined;
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;
 		let elementStack: ElementData[] = [];
@@ -132,6 +132,7 @@ export class XsltTokenDefinitions {
 		let isOnRequiredToken = false;
 		let awaitingRequiredArity = false;
 		let keepProcessing = false;
+		let currentXSLTIterateParams: VariableData[][] = [];
 
 		globalInstructionData.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) {
@@ -161,9 +162,9 @@ export class XsltTokenDefinitions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
-			// if (isOnRequiredToken) {
-			// 	console.log('onRequiredToken');
-			// }
+			if (isOnRequiredToken) {
+				console.log('onRequiredToken');
+			}
 			let isXMLToken = token.tokenType >= XsltTokenDefinitions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -177,6 +178,9 @@ export class XsltTokenDefinitions {
 					case XSLTokenLevelState.xslElementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
+							if (tagElementName === 'xsl:iterate') {
+								currentXSLTIterateParams.push([]);
+							}
 							tagType = (XsltTokenDefinitions.xslVariable.indexOf(tagElementName) > -1) ? TagType.XSLTvar : TagType.XSLTstart;
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
@@ -287,6 +291,9 @@ export class XsltTokenDefinitions {
 								// end of an element close-tag:
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
+									if (tagElementName === 'xsl:iterate' && currentXSLTIterateParams.length > 0) {
+										currentXSLTIterateParams.pop();
+									}
 									if (poppedData) {
 										if (poppedData.symbolName !== tagElementName) {
 											// not well-nested
@@ -358,6 +365,11 @@ export class XsltTokenDefinitions {
 							case AttributeType.Variable:
 								tagIdentifierName = variableName;
 								variableData = { token: token, name: variableName };
+								inScopeVariablesList.push(variableData);
+								let parentElemmentName = elementStack[elementStack.length - 1].symbolName;
+								if (parentElemmentName === 'xsl:iterate') {
+									currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push({...variableData});
+								}
 								if (isOnRequiredToken) {
 									const isDefinition = true;
 									resultLocation = XsltTokenDefinitions.createLocationFromVariableData(variableData, document, isDefinition);
@@ -371,13 +383,29 @@ export class XsltTokenDefinitions {
 								}
 								tagIdentifierName = variableName;
 
-								if (isOnRequiredToken && tagElementName === 'xsl:call-template') {
-									let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
-									resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
-									if (resultLocation) {
-										resultLocation.instruction = instruction;
+								if (isOnRequiredToken) {
+									let instruction: GlobalInstructionData | undefined = undefined;
+									if (tagElementName === 'xsl:call-template') {
+										instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+										if (resultLocation) {
+											resultLocation.instruction = instruction;
+										}
+										resultInputToken = { token: token, type: GlobalInstructionType.Template };
+									} else if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
+										const parentName = elementStack[elementStack.length - 1].symbolName;
+										if (parentName === 'xsl:template') {
+                      // TODO: this token is a definition so return this as resultLocation
+										} else if (parentName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
+											const definitions = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
+											let resolvedVariable = definitions.find(defn => defn.name === variableName);
+											if (resolvedVariable) {
+												const isDefinition = true;
+												resultLocation = XsltTokenDefinitions.createLocationFromVariableData(resolvedVariable, document, isDefinition);
+											}
+											resultInputToken = { token: token, type: GlobalInstructionType.Variable };
+										}
 									}
-									resultInputToken = { token: token, type: GlobalInstructionType.Template };
 								}
 								break;
 							case AttributeType.InstructionMode:
@@ -445,7 +473,7 @@ export class XsltTokenDefinitions {
 							if (isOnRequiredToken) {
 								const isDefinition = true;
 								resultLocation = XsltTokenDefinitions.createLocationFromVariableData(currentVariable, document, isDefinition);
-								resultInputToken = { token: token, type: GlobalInstructionType.Variable };						
+								resultInputToken = { token: token, type: GlobalInstructionType.Variable };
 							}
 						} else {
 							// don't include any current pending variable declarations when resolving
@@ -635,9 +663,9 @@ export class XsltTokenDefinitions {
 	public static createLocationFromVariableData(variableData: VariableData | undefined, document: vscode.TextDocument, isDefinition?: boolean) {
 		if (variableData) {
 			let uri = variableData.uri ? vscode.Uri.parse(url.pathToFileURL(variableData.uri).toString()) : document.uri;
-			const sp = isDefinition? variableData.token.startCharacter + 1 : variableData.token.startCharacter;
+			const sp = isDefinition ? variableData.token.startCharacter + 1 : variableData.token.startCharacter;
 			let ep = variableData.token.startCharacter + variableData.token.length;
-			ep = isDefinition && variableData.token.tokenType !== TokenLevelState.variable? ep - 1 : ep;
+			ep = isDefinition && variableData.token.tokenType !== TokenLevelState.variable ? ep - 1 : ep;
 			let startPos = new vscode.Position(variableData.token.line, sp);
 			let endPos = new vscode.Position(variableData.token.line, ep);
 			const location: DefinitionLocation = new vscode.Location(uri, new vscode.Range(startPos, endPos));
@@ -660,7 +688,7 @@ export class XsltTokenDefinitions {
 		} else if (XSLTReferenceProvider.isTokenVariable(token)) {
 			let startPos = new vscode.Position(token.line, token.startCharacter + 1);
 			let endPos = new vscode.Position(token.line, token.startCharacter + token.length);
-			range = new vscode.Range(startPos, endPos);			
+			range = new vscode.Range(startPos, endPos);
 		} else {
 			range = XsltTokenDefinitions.createRangeFromToken(token);
 		}
@@ -671,13 +699,13 @@ export class XsltTokenDefinitions {
 		let startPos = new vscode.Position(token.line, token.startCharacter);
 		let endPos = new vscode.Position(token.line, token.startCharacter + token.length);
 		return new vscode.Range(startPos, endPos);
-  }
+	}
 
 	public static createRangeFromTokenVals(line: number, startCharacter: number, length: number) {
 		let startPos = new vscode.Position(line, startCharacter);
 		let endPos = new vscode.Position(line, startCharacter + length);
 		return new vscode.Range(startPos, endPos);
-  }
+	}
 
 	public static resolveFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken) {
 		let parts = token.value.split('#');

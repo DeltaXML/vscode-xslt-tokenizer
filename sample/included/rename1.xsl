@@ -4,9 +4,9 @@
                 version="3.0">
   <xsl:import href="rename2.xsl"/>
 
-  <xsl:variable name="var1-new" as="xs:integer" 
+  <xsl:variable name="var1" as="xs:integer" 
     select="for $trial in 1 to 20 return ($trial, $trial + 1)"/>
-  <xsl:variable name="var2" as="xs:integer" select="$var1-new"/>
+  <xsl:variable name="var2" as="xs:integer" select="$var1"/>
   <xsl:variable name="abc" as="xs:integer" 
     select="function ($first-param, $parm2) { $first-param, $parm2}"/>
 </xsl:stylesheet>

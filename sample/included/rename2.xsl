@@ -3,5 +3,5 @@
                 xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 version="3.0">
   
-  <xsl:variable name="var3" as="xs:integer" select="$var1-new"/>
+  <xsl:variable name="var3" as="xs:integer" select="$var1"/>
 </xsl:stylesheet>
