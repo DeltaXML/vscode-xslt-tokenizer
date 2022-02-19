@@ -210,10 +210,19 @@ export class XslLexerLight extends XslLexer {
                                     if (isGlobalUsePackageVersion) {
                                         gd['version'] = attValue;
                                     } else {
+                                        let newToken: BaseToken = {
+                                            line: lineNumber,
+                                            length: attValue.length + 2,
+                                            startCharacter: lineNumberChar - (attValue.length + 2),
+                                            value: attValue,
+                                            tokenType: XSLTokenLevelState.attributeValue
+                                        };
                                         if (gd.memberNames) {
                                             gd.memberNames.push(attValue);
+                                            gd.memberTokens?.push(newToken);
                                         } else {
                                             gd['memberNames'] = [attValue];
+                                            gd['memberTokens'] = [newToken];
                                         }
                                         gd.idNumber++;
                                     }

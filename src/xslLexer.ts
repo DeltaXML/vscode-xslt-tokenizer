@@ -140,6 +140,7 @@ export interface GlobalInstructionData {
     token: BaseToken;
     idNumber: number;
     memberNames?: string[];
+    memberTokens?: BaseToken[];
     href?: string;
     version?: string;
 }
@@ -966,8 +967,10 @@ export class XslLexer {
                                             newToken.value = attValue;
                                         }
                                         gd.memberNames.push(attValue);
+                                        gd.memberTokens?.push({...newToken});
                                     } else {
                                         gd['memberNames'] = [attValue];
+                                        gd['memberTokens'] = [{...newToken}];
                                     }
                                     gd.idNumber++;
                                 }

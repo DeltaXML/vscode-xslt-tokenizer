@@ -393,18 +393,31 @@ export class XsltTokenDefinitions {
 										}
 										resultInputToken = { token: token, type: GlobalInstructionType.Template };
 									} else if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
-										const parentName = elementStack[elementStack.length - 1].symbolName;
-										if (parentName === 'xsl:template') {
-                      // TODO: this token is a definition so return this as resultLocation
-										} else if (parentName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
+										const {symbolName, symbolID} = elementStack[elementStack.length - 1];
+										if (symbolName === 'xsl:call-template') {
+										  const callTempDefn = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, symbolID, GlobalInstructionType.Template);
+											if (callTempDefn && callTempDefn.memberNames) {
+												const paramIndex = callTempDefn.memberNames.indexOf(variableName);
+												if (paramIndex > -1 && callTempDefn.memberTokens) {
+													const paramToken = callTempDefn.memberTokens[paramIndex];
+													// reuse callTemplate Definition - but set token to that of the current param
+													const uri = callTempDefn.href ? vscode.Uri.parse(url.pathToFileURL(callTempDefn.href).toString()) : document.uri;
+													const paramRange = XsltTokenDefinitions.createRangeFromToken(paramToken);
+													resultLocation = new vscode.Location(uri, paramRange);
+													const paramInstruction = { idNumber: 0, name: variableName, type: GlobalInstructionType.Variable, token: paramToken, href: uri.toString() };
+                          resultLocation.instruction = paramInstruction;
+												}
+											}
+										// TODO: this token is a definition so return this as resultLocation
+										} else if (symbolName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
 											const definitions = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
 											let resolvedVariable = definitions.find(defn => defn.name === variableName);
 											if (resolvedVariable) {
 												const isDefinition = true;
 												resultLocation = XsltTokenDefinitions.createLocationFromVariableData(resolvedVariable, document, isDefinition);
 											}
-											resultInputToken = { token: token, type: GlobalInstructionType.Variable };
 										}
+										resultInputToken = { token: token, type: GlobalInstructionType.Variable };
 									}
 								}
 								break;
