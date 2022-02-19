@@ -13,9 +13,9 @@
 
 	<xsl:template match="/*" mode="#all">
 		<xsl:iterate select="node()">
-			<xsl:param name="charPos" as="xs:integer" select="1"/>
+			<xsl:param name="charPos2" as="xs:integer" select="1"/>
 			<xsl:next-iteration>
-				<xsl:with-param name="charPos" select="$charPos + 1"/>
+				<xsl:with-param name="charPos2" select="$charPos2 + 1"/>
 			</xsl:next-iteration>
 		</xsl:iterate>
 	</xsl:template>

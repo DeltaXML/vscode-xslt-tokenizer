@@ -184,7 +184,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		let globalAttributeSetNames: string[] = [];
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
 		let ifThenStack: BaseToken[] = [];
-		let currentXSLTIterateParams: string[][] = [];
+		let currentXSLTIterateParams: VariableData[][] = [];
 		let schemaQuery = languageConfig.schemaData ? new SchemaQuery(languageConfig.schemaData) : undefined;
 		let xsltSchemaQuery: SchemaQuery | undefined;
 		const isSchematron = docType === DocumentTypes.SCH;
@@ -508,13 +508,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						switch (attType) {
 							case AttributeType.Variable:
 								tagIdentifierName = variableName;
+								variableData = { token: token, name: variableName };
 								if (elementStack.length > 2) {
 									let parentElemmentName = elementStack[elementStack.length - 1].symbolName;
 									if (parentElemmentName === 'xsl:iterate') {
-										currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push(variableName);
+										currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push({...variableData});
 									}
 								}
-								variableData = { token: token, name: variableName };
 								break;
 							case AttributeType.VariableRef:
 								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference('', document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
@@ -530,6 +530,19 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 									variableName = variableName.substring(slashPos + 1);
 								}
 								tagIdentifierName = variableName;
+                if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
+									const parentName = elementStack[elementStack.length - 1].symbolName;
+                  if (seekInstruction.type === GlobalInstructionType.Variable && seekInstruction.name === variableName && parentName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
+										const definitions = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
+										let resolvedVariable = definitions.find(defn => defn.name === variableName);
+										if (resolvedVariable) {
+											const rToken = resolvedVariable.token;
+											if (rToken.line === seekInstruction.token.line && rToken.startCharacter === seekInstruction.token.startCharacter) {
+												referenceTokens.push(token);
+											}
+										}
+									}
+								}
 								break;
 							case AttributeType.InstructionMode:
 								if (tagIdentifierName === '') {
