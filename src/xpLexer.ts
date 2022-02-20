@@ -104,7 +104,7 @@ export enum ModifierState {
 export class Data {
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%'];
 
-    public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '<<', '<=', '=>', '>=', '>>', '||'];
+    public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||'];
     public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!','*','+',',','-','.','?','['];
     public static triggerWords = ["and", "array", "as", "div",
         "else", "eq", "except",
