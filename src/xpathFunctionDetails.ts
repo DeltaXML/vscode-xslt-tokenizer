@@ -91,128 +91,128 @@ export class XPathFunctionDetails {
 	public static xpath40NewData: FunctionCompletionData[] = [
 		{
 			name: "all",
-			signature: "fn:all($sequence as item()*, $predicate as function(item()) as xs:boolean) as xs:integer*",
-			description: "Returns true if every item in $sequence satisfies the predicate."
+			signature: "all(sequence as item()*, predicate as function(item()) as xs:boolean) as xs:integer*",
+			description: "Returns true if every item in sequence satisfies the predicate."
 		},
 		{
 			name: "characters",
-			signature: "fnsig",
-			description: "desc"
+			signature: "characters(string as xs:string?) as xs:string*",
+			description: "Splits a string into a sequence of single-character strings."
 		},
 		{
 			name: "highest",
-			signature: "fnsig",
-			description: "desc"
+			signature: "highest(sequence as item()*) as item()*",
+			description: "Equivalent to fn:highest(sequence, default-collation())."
 		},
 		{
 			name: "highest",
-			signature: "fnsig",
-			description: "desc"
+			signature: "highest(sequence as item()*, collation as xs:string) as item()*",
+			description: "Equivalent to fn:highest(sequence, (), fn:data#1)."
 		},
 		{
 			name: "highest",
-			signature: "fnsig",
-			description: "desc"
+			signature: "highest(sequence as item()*, collation as xs:string?, key as function(item()) as xs:anyAtomicType) as item()*",
+			description: "Returns those items from the input sequence having the highest value for the supplied function, strings being compared using the supplied collation (which defaults to the default collation)."
 		},
 		{
 			name: "identity",
-			signature: "fnsig",
-			description: "desc"
+			signature: "identity(input as item()*) as item()*",
+			description: "Returns the value of the argument, unchanged. Useful in situations where a function must be supplied, but the desired action is to do nothing."
 		},
 		{
 			name: "in-scope-namespaces",
-			signature: "fnsig",
-			description: "desc"
+			signature: "in-scope-namespaces(in as element()) as map(xs:string, xs:string)",
+			description: "Returns the in-scope namespaces of an element as a map from prefixes to URIs."
 		},
 		{
 			name: "index-where",
-			signature: "fnsig",
-			description: "desc"
+			signature: "index-where(sequence as item()*, predicate as function(item()) as xs:boolean) as xs:integer*",
+			description: "Returns the positions of the items in the input $sequence that satisfy the supplied $predicate."
 		},
 		{
 			name: "is-NAN",
-			signature: "fnsig",
-			description: "desc"
+			signature: "is-NaN(in as xs:anyAtomicType) as xs:boolean",
+			description: "Returns true if the supplied value is the xs:float or xs:double value NaN."
 		},
 		{
 			name: "items-after",
-			signature: "fnsig",
-			description: "desc"
+			signature: "items-after(sequence as item()*, predicate as function(item()) as xs:boolean) as item()*",
+			description: "Returns the items in the input $sequence that follow the first one that satisfies the supplied $predicate."
 		},
 		{
 			name: "items-before",
-			signature: "fnsig",
-			description: "desc"
+			signature: "items-before(sequence as item()*, predicate as function(item()) as xs:boolean) as item()*",
+			description: "Returns the items in the input $sequence that precede the first one that satisfies the supplied $predicate."
 		},
 		{
 			name: "items-from",
-			signature: "fnsig",
-			description: "desc"
+			signature: "items-from(sequence as item()*, predicate as function(item()) as xs:boolean) as item()*",
+			description: "Returns the items in the input $sequence starting with the first one that satisfies the supplied $predicate."
 		},
 		{
 			name: "items-until",
-			signature: "fnsig",
-			description: "desc"
+			signature: "fn:items-until(sequence as item()*, predicate as function(item()) as xs:boolean) as item()*",
+			description: "Returns the items in the input $sequence up to and including the first one that satisfies the supplied $predicate."
 		},
 		{
 			name: "lowest",
-			signature: "fnsig",
-			description: "desc"
+			signature: "lowest(sequence as item()*) as item()*",
+			description: "Equivalent to fn:lowest(sequence, default-collation())."
 		},
 		{
 			name: "lowest",
-			signature: "fnsig",
-			description: "desc"
+			signature: "lowest(sequence as item()*, collation as xs:string?) as item()*",
+			description: "Equivalent to fn:lowest(sequence, (), fn:data#1)."
 		},
 		{
 			name: "lowest",
-			signature: "fnsig",
-			description: "desc"
+			signature: "lowest(sequence as item()*, collation as xs:string?, function(item()) as xs:anyAtomicType) as item()*",
+			description: "Returns those items from the input sequence having the lowest value for the supplied function, strings being compared using the supplied collation (which defaults to the default collation)."
 		},
 		{
 			name: "parcel",
-			signature: "fnsig",
-			description: "desc"
+			signature: "parcel(sequence as item()*) as record(value)",
+			description: "Wraps an arbitrary sequence of items as a parcel: a parcel is a map with a single entry, whose key is the string 'value' and whose value is the wrapped sequence. Parcels are useful because they enable an array to be treated as a sequence of items, by wrapping each member of the array as a parcel."
 		},
 		{
 			name: "parts",
-			signature: "fnsig",
-			description: "desc"
+			signature: "parts(in as item()) as map(xs:string, xs:anyAtomicType)",
+			description: "Decomposes a composite 'atomic' value into its parts, in the form of a map. For example, an xs:dateTime value is decomposed into year, month, day, hour, minute, second, and timezone."
 		},
 		{
 			name: "range",
-			signature: "fnsig",
-			description: "desc"
+			signature: "range()",
+			description: "specification is likely to change"
 		},
 		{
 			name: "slice",
-			signature: "fnsig",
-			description: "desc"
+			signature: "slice(input as item()*, start as xs:integer?, end as xs:integer?, step as xs:integer?) as item()*",
+			description: "Selects items from an input sequence, starting at $start (default 1), ending at $end (defaulting to the length of the sequence), and stepping by $step (defaulting to 1). If $start or $end is negative, counting is from the end of the sequence. If $step is negative, the sequence runs backwards."
 		},
 		{
 			name: "some",
-			signature: "fnsig",
-			description: "desc"
+			signature: "some(sequence as item()*, predicate as function(item()) as xs:boolean) as xs:boolean",
+			description: "Returns true if at least one item in $sequence satisfies the predicate."
 		},
 		{
 			name: "unparcel",
-			signature: "fnsig",
-			description: "desc"
+			signature: "unparcel(parcel as record(value, *)) as item()*",
+			description: "Reverses the effect of the fn:parcel() function. (Equivalent to $parcel?value.)"
 		},
 		{
 			name: "array:members",
-			signature: "fnsig",
-			description: "desc"
+			signature: "array:members(array(*)) as record(value)*",
+			description: "Accepts an array as input, and turns it into a sequence of parcels: the inverse of the array:of() function."
 		},
 		{
 			name: "array:of",
-			signature: "fnsig",
-			description: "desc"
+			signature: "array:of(record(value, *)*) as array(*)",
+			description: "Accepts a sequence of parcels (as produced by the fn:parcel() function), and returns an array whose members are the sequences obtained by applying fn:unparcel() to each parcel in turn."
 		},
 		{
 			name: "map:entries",
-			signature: "fnsig",
-			description: "desc"
+			signature: "entries(map(*)) as record(key as xs:anyAtomicType, value as item()*)*",
+			description: "Accepts a map as input, and turns it into a sequence of maps representing the key-value pairs contained in the map. Equivalent to map:for-each($map, ->($k, $v){map{"key":$k, "value":$v}})."
 		}
 	];
 	public static xpathData: FunctionCompletionData[] = [
