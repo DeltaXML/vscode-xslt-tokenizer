@@ -87,6 +87,134 @@ export class XPathFunctionDetails {
 			description: "Returns the Window object"
 		},
 	];
+
+	public static xpath40NewData: FunctionCompletionData[] = [
+		{
+			name: "all",
+			signature: "fn:all($sequence as item()*, $predicate as function(item()) as xs:boolean) as xs:integer*",
+			description: "Returns true if every item in $sequence satisfies the predicate."
+		},
+		{
+			name: "characters",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "highest",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "highest",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "highest",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "identity",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "in-scope-namespaces",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "index-where",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "is-NAN",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "items-after",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "items-before",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "items-from",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "items-until",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "lowest",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "lowest",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "lowest",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "parcel",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "parts",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "range",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "slice",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "some",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "unparcel",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "array:members",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "array:of",
+			signature: "fnsig",
+			description: "desc"
+		},
+		{
+			name: "map:entries",
+			signature: "fnsig",
+			description: "desc"
+		}
+	];
 	public static xpathData: FunctionCompletionData[] = [
 		{
 
