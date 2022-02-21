@@ -212,7 +212,7 @@ export class XPathFunctionDetails {
 		{
 			name: "map:entries",
 			signature: "entries(map(*)) as record(key as xs:anyAtomicType, value as item()*)*",
-			description: "Accepts a map as input, and turns it into a sequence of maps representing the key-value pairs contained in the map. Equivalent to map:for-each($map, ->($k, $v){map{"key":$k, "value":$v}})."
+			description: "Accepts a map as input, and turns it into a sequence of maps representing the key-value pairs contained in the map. Equivalent to map:for-each($map, ->($k, $v){map{'key':$k, 'value':$v}})."
 		}
 	];
 	public static xpathData: FunctionCompletionData[] = [
@@ -1446,4 +1446,5 @@ export class XPathFunctionDetails {
 
 	public static data: FunctionCompletionData[] = XPathFunctionDetails.xpathData.concat(XPathFunctionDetails.xsltData);
 	public static dataPlusIxsl: FunctionCompletionData[] =XPathFunctionDetails.data.concat(XPathFunctionDetails.ixslData);
+	public static dataPlusIxslPlus40: FunctionCompletionData[] = XPathFunctionDetails.dataPlusIxsl.concat(XPathFunctionDetails.xpath40NewData);
 }
