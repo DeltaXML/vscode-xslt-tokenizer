@@ -22,6 +22,7 @@ interface XSLTTask extends vscode.TaskDefinition {
     xsltFile: string;
     xmlSource: string;
     resultPath: string;
+    allowSyntaxExtensions40?: string;
     parameters?: XSLTParameter[];
     features?: XSLTParameter[];
     initialTemplate?: string;
@@ -93,6 +94,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             xsltFile: xsltFilePath,
             xmlSource: xmlSourceValue,
             resultPath: resultPathValue,
+            allowSyntaxExtensions40: 'off',
             group: {
                 kind: "build"
             }
@@ -180,6 +182,9 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         if (propValue !== "off") {
                             commandLineArgs.push('-t');
                         }
+                        break;
+                    case 'allowSyntaxExtensions40':
+                        commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
                         break;
                 }
             }

@@ -272,6 +272,16 @@
 						],
 						"description": "Enables assertions both at compile time and at run time"
 					},
+					"allowSyntaxExtensions40": {
+						"type": [
+							"string"
+						],
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Enables experimental XPath 4.0 extensions. See: https://www.saxonica.com/documentation11/index.html#!v4extensions"
+					},
 					"expandValues": {
 						"type": "string",
 						"enum": [
@@ -325,7 +335,7 @@
 						"minItems": 1
 					},
 					"features": {
-						"description": "Set a feature defined in the Saxon Configuration interface. See https://www.saxonica.com/documentation10/index.html#!configuration/config-features",
+						"description": "Set a feature defined in the Saxon Configuration interface. See https://www.saxonica.com/documentation11/index.html#!configuration/config-features",
 						"type": "array",
 						"items": {
 							"type": "object",

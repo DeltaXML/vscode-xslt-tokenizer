@@ -49,15 +49,18 @@
 		},
 		{
 			"type": "xslt",
-			"label": "xslt: Saxon Transform (New)",
+			"label": "XSLT 4 Experimental",
 			"saxonJar": "${config:XSLT.tasks.saxonJar}",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
 			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
+			"allowSyntaxExtensions40": "on",
 			"group": {
 				"kind": "build"
 			},
-			"problemMatcher": "$saxon-xslt"
+			"problemMatcher": [
+				"$saxon-xslt"
+			]
 		}
 	]
 }
