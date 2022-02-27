@@ -132,6 +132,7 @@ export interface LanguageConfiguration {
     propertyNames?: string[];
     rootElementSnippets?: Snippet[];
     elementSnippets?: Snippet[];
+    isVersion4?: boolean;
 }
 
 export interface GlobalInstructionData {
@@ -153,6 +154,7 @@ export class XslLexer {
     public globalInstructionData: GlobalInstructionData[] = [];
     public attributeNameTests: string[]|undefined;
     public elementNameTests: string[]|undefined;
+    public isXSLT40 = false;
     protected globalModeData: GlobalInstructionData[] = [];
     private lineNumber: number = 0;
     private charCount = 0;
@@ -667,6 +669,7 @@ export class XslLexer {
         let tagInstructionNameAdded = false;
         let tagMatchToken: BaseToken|null = null;
         let contextGlobalInstructionType = GlobalInstructionType.Unknown;
+        let isGlobalVersion = false;
         let isXPathAttribute = false;
         let isExpandTextAttribute = false;
         let isGlobalInstructionName = false;
@@ -795,7 +798,9 @@ export class XslLexer {
                             tagInstructionNameAdded = false;
                             tagMatchToken = null;
                             collectParamName = false;
-                            if (xmlElementStack.length === 1) {
+                            if (xmlElementStack.length === 0 && tokenChars.length > 5) {
+                                tagGlobalInstructionType = GlobalInstructionType.RootXSLT;
+                            } if (xmlElementStack.length === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
                             } else if (xmlElementStack.length === 2 
                                 && (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template)
@@ -855,6 +860,7 @@ export class XslLexer {
                             isGlobalParameterName = false;
                             isGlobalInstructionMatch = false;
                             isGlobalUsePackageVersion = false;
+                            isGlobalVersion = false;
                             attName = tokenChars.join('');
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
@@ -870,6 +876,8 @@ export class XslLexer {
                                     isExpandTextAttribute = false;
                                     isXMLNSattribute = true;
                                     attributeNameToken = XSLTokenLevelState.xmlnsName;
+                                } else if (tagGlobalInstructionType === GlobalInstructionType.RootXSLT && attName === 'version') {
+                                    isGlobalVersion = true;
                                 } else if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
                                      && (attName === 'href' || (this.languageConfiguration.docType === DocumentTypes.DCP && this.languageConfiguration.linkElementAttrNames && attName === this.languageConfiguration?.linkElementAttrNames[1]))) {
                                     isExpandTextAttribute = false;
@@ -984,13 +992,17 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 tagMatchToken = newToken;
                                 tagMatchToken.value = attValue;
+                            } else if (isGlobalVersion) {
+                                let attValue = tokenChars.join('');
+                                this.isXSLT40 = attValue === '4.0';
+                                isGlobalVersion = false;
                             }
                             tokenChars = [];
                             storeToken = false;
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage) {
+                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage || tagGlobalInstructionType === GlobalInstructionType.RootXSLT) {
                                 storeToken = true;
                             }
                             if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode) {
@@ -1290,6 +1302,7 @@ export enum GlobalInstructionType {
     Import,
     UsePackage,
     RootXMLNS,
+    RootXSLT,
     Unknown
 }
 

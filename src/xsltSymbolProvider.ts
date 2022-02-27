@@ -121,6 +121,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 		}
 		const allTokens = this.xslLexer.analyse(document.getText());
+		this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 

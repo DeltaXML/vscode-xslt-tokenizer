@@ -1,44 +1,9 @@
 import { } from './schemaQuery';
+import { SubstitutionGroupType } from './schSchema';
 import { DocumentTypes } from './xslLexer';
+import { SchemaData, SimpleType, ComplexType } from './xsltSchema';
 
-export interface SimpleType {
-    base?: string[];
-    enum?: string[];
-    list?: string;
-    detail?: { [name: string]: string };
-}
-
-export interface ComplexType {
-    attrs?: any;
-    base?: string;
-    type?: string;
-    elementNames?: string[];
-    attributeList?: AttributeItem[];
-    primitive?: string;
-    detail?: string;
-    attributeGroup?: string;
-}
-
-export interface SubstitutionGroupType {
-    type: string;
-    elements: { [name: string]: ComplexType };
-}
-
-export interface AttributeItem {
-    name: string;
-    enum?: string[];
-}
-
-export interface SchemaData {
-    attributeGroups: { [name: string]: any };
-    simpleTypes: { [name: string]: SimpleType };
-    complexTypes: { [name: string]: ComplexType };
-    substitutionGroups?: { [name: string]: SubstitutionGroupType };
-    elements: { [name: string]: ComplexType };
-    docType: DocumentTypes;
-}
-
-export class XSLTSchema implements SchemaData {
+export class XSLTSchema4 implements SchemaData {
     docType = DocumentTypes.XSLT;
     attributeGroups: { [name: string]: any } = {
         "xsl:literal-result-element-attributes": {

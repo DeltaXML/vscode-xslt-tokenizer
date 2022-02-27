@@ -2,6 +2,7 @@ import {LanguageConfiguration, DocumentTypes} from './xslLexer';
 import { DCPSymbolProvider } from './dcpSymbolProvider';
 import { DCPSchema } from './dcpSchema';
 import { XSLTSchema } from './xsltSchema';
+import { XSLTSchema4 } from './xsltSchema4';
 import { DCPSnippets } from './dcpSnippets';
 import { XSLTSnippets } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
@@ -29,7 +30,9 @@ export class XSLTConfiguration {
 		rootElementSnippets: XSLTSnippets.xsltRootTags,
 		schemaData: new XSLTSchema(),
 		docType: DocumentTypes.XSLT
-	}; 
+	};
+	
+	static schemaData4 = new XSLTSchema4();
 }
 
 export class XPathConfiguration {

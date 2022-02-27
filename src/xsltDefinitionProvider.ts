@@ -204,6 +204,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 			globalInstructionData = this.xslLexer.globalInstructionData;
+			this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
 		}
 
 		if (uri) {

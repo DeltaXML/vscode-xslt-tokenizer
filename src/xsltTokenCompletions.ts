@@ -14,6 +14,7 @@ import { SchemaQuery } from './schemaQuery';
 import { XSLTSnippets, Snippet } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
+import { XSLTConfiguration } from './languageConfigurations';
 
 enum TagType {
 	XSLTstart,
@@ -87,7 +88,7 @@ export class XsltTokenCompletions {
 	private static useIxslFunctions = false;
 
 	public static getCompletions = (languageConfig: LanguageConfiguration, xpathDocSymbols: vscode.DocumentSymbol[], xslVariable: string[], attNameTests: string[], elementNameTests: string[], document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
-		let schemaQuery = languageConfig.schemaData ? new SchemaQuery(languageConfig.schemaData) : undefined;
+		let schemaQuery: SchemaQuery | undefined;
 		let lineNumber = -1;
 		let docType = languageConfig.docType;
 		let isXSLT = docType === DocumentTypes.XSLT;
@@ -134,6 +135,12 @@ export class XsltTokenCompletions {
 		// don't include imported for path completions:
 		let allInstructionData = globalInstructionData;
 		const lastTokenIndex = allTokens.length - 1;
+
+		if (languageConfig.isVersion4) {
+			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
+		} else if (languageConfig.schemaData) {
+			schemaQuery = new SchemaQuery(languageConfig.schemaData);
+		}
 
 		let index = -1;
 		for (let token of allTokens) {

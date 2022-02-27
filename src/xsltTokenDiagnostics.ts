@@ -289,10 +289,17 @@ export class XsltTokenDiagnostics {
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
 		let ifThenStack: BaseToken[] = [];
 		let currentXSLTIterateParams: string[][] = [];
-		let schemaQuery = languageConfig.schemaData ? new SchemaQuery(languageConfig.schemaData) : undefined;
+		let schemaQuery: SchemaQuery | undefined;
 		let xsltSchemaQuery: SchemaQuery | undefined;
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
+		
+		if (languageConfig.isVersion4) {
+			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
+		} else if (languageConfig.schemaData) {
+			schemaQuery = new SchemaQuery(languageConfig.schemaData);
+		}
+		
 		if (isSchematron && XSLTConfiguration.configuration.schemaData) {
 			xsltSchemaQuery = new SchemaQuery(XSLTConfiguration.configuration.schemaData);
 		}
