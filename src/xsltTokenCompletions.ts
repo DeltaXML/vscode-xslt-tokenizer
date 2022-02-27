@@ -90,7 +90,7 @@ export class XsltTokenCompletions {
 	public static getCompletions = (languageConfig: LanguageConfiguration, xpathDocSymbols: vscode.DocumentSymbol[], xslVariable: string[], attNameTests: string[], elementNameTests: string[], document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], position: vscode.Position): vscode.CompletionItem[] | undefined => {
 		let schemaQuery: SchemaQuery | undefined;
 		let lineNumber = -1;
-		let docType = languageConfig.docType;
+		let docType = languageConfig.isVersion4? DocumentTypes.XSLT40: languageConfig.docType;
 		let isXSLT = docType === DocumentTypes.XSLT;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let inScopeVariablesList: VariableData[] = [];
@@ -844,6 +844,8 @@ export class XsltTokenCompletions {
 	private static internalFunctionCompletions(docType: DocumentTypes) {
 		if (docType === DocumentTypes.XSLT) {
 			return XsltTokenCompletions.useIxslFunctions? XPathFunctionDetails.dataPlusIxsl : XPathFunctionDetails.data;
+		} else if (docType === DocumentTypes.XSLT40) {
+			return XsltTokenCompletions.useIxslFunctions? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlus40;
 		} else {
 			return XPathFunctionDetails.xpathData;
 		}
@@ -1223,7 +1225,7 @@ export class XsltTokenCompletions {
 		let expectedTags: [string, string][] = [];
 		let xsltParent: string | null = null;
 		let stackPos = elementStack.length - 1;
-		let isXSLT = docType === DocumentTypes.XSLT;
+		let isXSLT = docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40;
 		let isWithinXslIterate = false;
 		let isWithinXslNextIteration = false;
 		while (stackPos > -1) {

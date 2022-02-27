@@ -1446,5 +1446,6 @@ export class XPathFunctionDetails {
 
 	public static data: FunctionCompletionData[] = XPathFunctionDetails.xpathData.concat(XPathFunctionDetails.xsltData);
 	public static dataPlusIxsl: FunctionCompletionData[] =XPathFunctionDetails.data.concat(XPathFunctionDetails.ixslData);
+	public static dataPlus40: FunctionCompletionData[] = XPathFunctionDetails.data.concat(XPathFunctionDetails.xpath40NewData);
 	public static dataPlusIxslPlus40: FunctionCompletionData[] = XPathFunctionDetails.dataPlusIxsl.concat(XPathFunctionDetails.xpath40NewData);
 }

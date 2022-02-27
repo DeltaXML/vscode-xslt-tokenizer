@@ -14,6 +14,7 @@ import { Snippet} from './xsltSnippets';
 
 export enum DocumentTypes {
     XSLT,
+    XSLT40,
     XPath,
 	DCP,
     SCH,
