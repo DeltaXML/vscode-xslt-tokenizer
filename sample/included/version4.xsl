@@ -6,6 +6,7 @@
   <xsl:item-type name="complex" as="record(r as xs:double, i as xs:double)"/>
   <!-- <xsl:variable name="new" as="xs:string" select="parcel((2,2))"/> -->
   <xsl:variable name="also" as="xs:string" select="->($a, $b){$a + $b}"/>
+  <xsl:variable name="als2" as="xs:string" select="->{@code}"/>
   <xsl:template match="/" mode="#default">
 
   </xsl:template>

@@ -921,7 +921,7 @@ export class XPathLexer {
             } else if (currentState === CharLevelState.sep && 
                 prevToken.tokenType === TokenLevelState.string && currentToken.value === ':') {
                     prevToken.tokenType = TokenLevelState.mapKey;
-            }else if (currentState === CharLevelState.lB && prevToken.charType === CharLevelState.dSep && prevToken.value === '->') {
+            } else if ((currentState === CharLevelState.lB || currentState === CharLevelState.lBr) && prevToken.charType === CharLevelState.dSep && prevToken.value === '->') {
                 prevToken.tokenType = TokenLevelState.anonymousFunction;
             }
         }
