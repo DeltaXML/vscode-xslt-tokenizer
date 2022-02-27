@@ -285,6 +285,32 @@ export class FunctionData {
 		"unparsed-entity-uri#1",
 		"unparsed-entity-uri#2"
 	];
+
+	public static readonly xpath40 = [
+    "all#2",
+		"characters#1",
+		"highest#1",
+		"highest#2",
+		"highest#3",
+		"identity#1",
+		"in-scope-namespace#1",
+		"index-where#2",
+		"is-NAN#1",
+		"items-after#2",
+		"items-before#2",
+		"items-from#2",
+		"items-until#2",
+		"lowest#1",
+		"lowest#2",
+		"lowest#3",
+		"parcel#1",
+		"parts#1",
+		"range#0",
+		"slice#4",
+		"some#2",
+		"unparcel#1"
+	].concat(FunctionData.xpath);
+
 	public static readonly array = [
 		"append#2",
 		"filter#2",
@@ -309,6 +335,11 @@ export class FunctionData {
 		"tail#1"
 	];
 
+	public static readonly array40 = [
+		"members#1",
+		"of#1"
+	].concat(FunctionData.array);
+
 	public static readonly map = [
 		"contains#2",
 		"entry#2",
@@ -322,6 +353,11 @@ export class FunctionData {
 		"remove#2",
 		"size#1"
 	];
+
+	public static readonly map40 = [
+		"entries#1"
+	].concat(FunctionData.map);
+
 	public static readonly ixsl = [
 		"apply#2",
 		"call#3",
