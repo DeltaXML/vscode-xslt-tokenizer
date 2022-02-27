@@ -527,7 +527,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
-								if (docType === DocumentTypes.XSLT && onRootStartTag) {
+								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40 ) && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
 										let pfx = prefixNsPair[0];
 										let namespaceURI = prefixNsPair[1];
@@ -1913,7 +1913,7 @@ export class XsltTokenDiagnostics {
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
 		if (fNameParts.length === 1) {
-			if (tokenValue === 'concat') {
+			if (tokenValue === 'concat' || tokenValue === 'codepoints-to-string') {
 				isValid = arity > 0;
 			} else if (useXPath40) {
 				isValid = FunctionData.xpath40.indexOf(fNameParts[0]) > -1;
@@ -1934,7 +1934,11 @@ export class XsltTokenDiagnostics {
 						isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.Array:
-						isValid = FunctionData.array40.indexOf(fNameParts[1]) > -1;
+						if (tokenValue.endsWith('members') || tokenValue.endsWith('of')) {
+							isValid = arity > 0;
+						} else {
+							isValid = FunctionData.array40.indexOf(fNameParts[1]) > -1;
+						}
 						break;
 					case XSLTnamespaces.Map:
 						isValid = FunctionData.map40.indexOf(fNameParts[1]) > -1;
