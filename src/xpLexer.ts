@@ -921,6 +921,8 @@ export class XPathLexer {
             } else if (currentState === CharLevelState.sep && 
                 prevToken.tokenType === TokenLevelState.string && currentToken.value === ':') {
                     prevToken.tokenType = TokenLevelState.mapKey;
+            }else if (currentState === CharLevelState.lB && prevToken.charType === CharLevelState.dSep && prevToken.value === '->') {
+                prevToken.tokenType = TokenLevelState.anonymousFunction;
             }
         }
     }
@@ -1105,7 +1107,6 @@ export class XPathLexer {
                 rv = CharLevelState.lWs;
                 break;
             case '+':
-            case '-':
                 rv = CharLevelState.sep;
                 break;
             case '&':
