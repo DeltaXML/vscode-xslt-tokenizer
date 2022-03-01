@@ -1276,7 +1276,7 @@ export class XsltTokenCompletions {
 			let competionName = tagName;
 			let description: string | undefined;
 			let useCurrent = true;
-			if (docType === DocumentTypes.XSLT) {
+			if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 				if (tagName === 'xsl:break' || tagName === 'xsl:next-iteration') {
 					useCurrent = false;
 				} else if (tagName === 'xsl:template') {
@@ -1378,7 +1378,7 @@ export class XsltTokenCompletions {
 				let makeEmpty = false;
 				if (docType === DocumentTypes.DCP) {
 					makeEmpty = (tagName !== 'description' && schemaQuery.getExpected(tagName).elements.length === 0) || schemaQuery.emptyElements.indexOf(tagName) !== -1;
-				} else if (docType === DocumentTypes.XSLT) {
+				} else if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 					makeEmpty = schemaQuery.emptyElements.indexOf(tagName) !== -1 || schemaQuery.getExpected(tagName).elements.length === 0;
 				}
 				let tagClose = makeEmpty ? selfCloseTag : ">\n\t$0\n</" + tagName + ">";

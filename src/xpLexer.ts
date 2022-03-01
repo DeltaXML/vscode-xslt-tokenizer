@@ -104,12 +104,12 @@ export enum ModifierState {
 export class Data {
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%'];
 
-    public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||'];
+    public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||', '!!', '??'];
     public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!','*','+',',','-','.','?','['];
-    public static triggerWords = ["and", "array", "as", "div",
+    public static triggerWords = ["and", "andAlso", "array", "as", "div",
         "else", "eq", "except",
         "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
-        "lt", "mod", "ne", "of", "or", "otherwise", "return", "satisfies",
+        "lt", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
         "then", "to", "union", "&lt;", "&gt;"];
 
 
@@ -130,10 +130,10 @@ export class Data {
         "processing-instruction", "text"];
 
     // note: 'otherwise' is a Saxon extension operator:
-    public static keywords = ["and", "array", "as", "div",
+    public static keywords = ["and", "andAlso", "array", "as", "div",
         "else", "eq", "except",
         "function", "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
-        "lt", "map", "mod", "ne", "of", "or", "otherwise", "return", "satisfies",
+        "lt", "map", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
         "then", "to", "treat", "union", "&lt;", "&gt;"];
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
