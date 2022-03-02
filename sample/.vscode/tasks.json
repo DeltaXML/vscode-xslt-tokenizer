@@ -61,6 +61,21 @@
 			"problemMatcher": [
 				"$saxon-xslt"
 			]
+		},
+		{
+			"type": "xslt",
+			"label": "xslt3",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${file}",
+			"xmlSource": "${file}",
+			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
+			"allowSyntaxExtensions40": "off",
+			"group": {
+				"kind": "build"
+			},
+			"problemMatcher": [
+				"$saxon-xslt"
+			]
 		}
 	]
 }
