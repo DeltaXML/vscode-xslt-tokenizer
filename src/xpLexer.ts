@@ -142,7 +142,7 @@ export class Data {
     public static secondParts = ["as", "of"];
 
     public static nonFunctionConditional = ["if", "then", "else"];
-    public static nonFunctionTypes = ["map", "array", "function"];
+    public static nonFunctionTypes = ["map", "array", "function", "enum", "union", "record"];
     public static nonFunctionTypesBrackets = Data.nonFunctionTypes.map(t => t + '(*)');
 
     public static setAsOperatorIfKeyword(token: Token) {

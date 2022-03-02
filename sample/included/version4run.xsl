@@ -7,6 +7,7 @@
   <xsl:item-type name="complex" as="record(r as xs:double, i as xs:double)"/>
 
   <xsl:template match="/*" mode="#default">
+    <xsl:variable name="new" as="xs:string" select="abc?'new'"/>
     <xsl:variable name="chars" as="xs:string*" select="characters('quick')"/>
     <result>
       <xsl:sequence select="count($chars)"/>

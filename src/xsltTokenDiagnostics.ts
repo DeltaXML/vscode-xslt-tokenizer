@@ -1751,7 +1751,7 @@ export class XsltTokenDiagnostics {
 		if (tokenType === TokenLevelState.number) {
 			errorSingleSeparators = ['|'];
 		} else if (tokenType === TokenLevelState.string) {
-			errorSingleSeparators = ['|', '+', '-', '*', '?'];
+			errorSingleSeparators = ['|', '+', '-', '*'];
 		} else {
 			errorSingleSeparators = [];
 		}
