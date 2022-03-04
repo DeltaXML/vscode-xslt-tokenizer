@@ -1307,6 +1307,11 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('xsl:copy>\n\t$0\n</xsl:copy>');
 					completionItems.push(newItem);
+				} else if (docType === DocumentTypes.XSLT40 && tagName === 'xsl:if') {
+					useCurrent = true;
+					const newItem = new vscode.CompletionItem(tagName + ' then else', vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:if test="$1" then="$2" else="$3"/>$0');
+					completionItems.push(newItem);
 				} else if (tagName === 'xsl:literal-result-element') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem('literal-self-closing-element', vscode.CompletionItemKind.Struct);
