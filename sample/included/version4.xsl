@@ -12,5 +12,17 @@
   <xsl:template match="/" mode="#default">
 
   </xsl:template>
+  
+  <xsl:function name="f:days-in-month" as="xs:integer?">
+    <xsl:param name="month-number" as="xs:integer"/>
+    <xsl:param name="leap-year" as="xs:boolean"/>
+    <xsl:switch select="$month-number">
+      <xsl:when test="1, 3, 5, 7, 8, 10, 12" select="31"/>
+      <xsl:when test="4, 6, 9, 11" select="30"/>
+      <xsl:when test="2">
+        <xsl:if test="$leap-year" then="29" else="28"/>
+      </xsl:when>
+    </xsl:switch>
+  </xsl:function>
 
 </xsl:stylesheet>

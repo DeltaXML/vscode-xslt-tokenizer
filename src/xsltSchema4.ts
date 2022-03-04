@@ -386,10 +386,12 @@ export class XSLTSchema4 implements SchemaData {
                 "xsl:if": {
                     base: 'xsl:sequence-constructor',
                     attrs: {
-                        'select': 'xsl:expression',
-                        '_select': 'xsl:expression',
+                        'else': 'xsl:expression',
+                        '_else': 'xs:string',
+                        'then': 'xsl:expression',
+                        '_then': 'xs:string',
                         'test': 'xsl:expression',
-                        '_test': 'xs:string'
+                        '_test': 'xs:string',
                     }
                 },
                 "xsl:iterate": {
