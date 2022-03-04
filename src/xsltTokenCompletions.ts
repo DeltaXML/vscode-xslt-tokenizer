@@ -1296,6 +1296,11 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('xsl:choose>\n\t<xsl:when test="${1:$expr}">\n\t\t$2\n\t</xsl:when>\n</xsl:choose>');
 					completionItems.push(newItem);
+				} else if (tagName === 'xsl:switch') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:switch>\n\t<xsl:when test="${1:$expr}">\n\t\t$2\n\t</xsl:when>\n</xsl:switch>');
+					completionItems.push(newItem);
 				} else if (xsltParent === 'xsl:function' && tagName === 'xsl:param') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
