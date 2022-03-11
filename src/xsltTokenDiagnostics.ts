@@ -1931,10 +1931,14 @@ export class XsltTokenDiagnostics {
 			} else if (useXPath40) {
 				switch (xsltType) {
 					case XSLTnamespaces.XPath:
-						isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
+						if (tokenValue.endsWith(':concat') || tokenValue.endsWith(':codepoints-to-string')) {
+							isValid = arity > 0;
+						} else {
+							isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
+						}
 						break;
 					case XSLTnamespaces.Array:
-						if (tokenValue.endsWith('members') || tokenValue.endsWith('of')) {
+						if (tokenValue.endsWith(':members') || tokenValue.endsWith(':of')) {
 							isValid = arity > 0;
 						} else {
 							isValid = FunctionData.array40.indexOf(fNameParts[1]) > -1;
@@ -1967,7 +1971,11 @@ export class XsltTokenDiagnostics {
 			} else {
 				switch (xsltType) {
 					case XSLTnamespaces.XPath:
-						isValid = FunctionData.xpath.indexOf(fNameParts[1]) > -1;
+						if (tokenValue.endsWith(':concat') || tokenValue.endsWith(':codepoints-to-string')) {
+							isValid = arity > 0;
+						} else {
+							isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
+						}
 						break;
 					case XSLTnamespaces.Array:
 						isValid = FunctionData.array.indexOf(fNameParts[1]) > -1;
