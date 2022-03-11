@@ -9,7 +9,7 @@
                 expand-text="yes"
                 version="3.0">
 
-  <xsl:variable name="test1" as="xs:string" select="string('abc')"/>
+  <xsl:variable name="test1" as="xs:string" select="2 &lt;= 3"/>
   <xsl:variable name="test" as="xs:string" select="concat('abc','cde')"/>
 
 </xsl:stylesheet>

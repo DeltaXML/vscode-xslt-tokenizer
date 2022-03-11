@@ -1298,8 +1298,8 @@ export class XsltTokenDiagnostics {
 												break;
 											default:
 												// (+ or ++ are not ok
-												if ((pv === '&gt;' && tv === '&gt;') || (pv === '&lt;' && (tv === '&lt;' || tv === '&gt;'))) {
-													// allow << <> or >>
+												if ((pv === '&gt;' && (tv === '&gt;' || tv === '=')) || (pv === '&lt;' && (tv === '&lt;' || tv === '&gt;' || tv === '='))) {
+													// allow << <> >> <= >=
 												} else if (tv === 'as') {
 													isXPathError = pv !== 'castable' && pv !== 'cast' && pv !== 'treat';
 												} else if (tv === 'of') {
