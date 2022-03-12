@@ -878,6 +878,7 @@ export class XslLexer {
                                     isXMLNSattribute = true;
                                     attributeNameToken = XSLTokenLevelState.xmlnsName;
                                 } else if (tagGlobalInstructionType === GlobalInstructionType.RootXSLT && attName === 'version') {
+                                    isExpandTextAttribute = false;
                                     isGlobalVersion = true;
                                 } else if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
                                      && (attName === 'href' || (this.languageConfiguration.docType === DocumentTypes.DCP && this.languageConfiguration.linkElementAttrNames && attName === this.languageConfiguration?.linkElementAttrNames[1]))) {
