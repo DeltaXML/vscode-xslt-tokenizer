@@ -1089,20 +1089,27 @@ export class XsltTokenDiagnostics {
 							case 'for':
 							case 'let':
 							case 'some':
+							case 'member':
 								if (allTokens.length > index + 2) {
-									const opToken = allTokens[index + 2];
-									const expectedOp = valueText === 'let' ? ':=' : 'in';
-									if (opToken.value !== expectedOp) {
-										opToken['error'] = ErrorType.XPathExpectedComplex;
-										problemTokens.push(opToken);
+									const nextToken = allTokens[index + 1];
+									const isForMember = valueText === 'for' && nextToken.value === 'member';
+									if (!isForMember) {
+										const opToken = allTokens[index + 2];
+										const expectedOp = valueText === 'let' ? ':=' : 'in';
+										if (opToken.value !== expectedOp) {
+											opToken['error'] = ErrorType.XPathExpectedComplex;
+											problemTokens.push(opToken);
+										}
 									}
 								}
 								if (index > 0) {
 									XsltTokenDiagnostics.checkTokenIsExpected(prevToken, allTokens[index - 1], problemTokens, TokenLevelState.Unset);
 								}
-								preXPathVariable = true;
-								xpathVariableCurrentlyBeingDefined = false;
-								xpathStack.push({ token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
+								if (valueText !== 'member') {
+									preXPathVariable = true;
+									xpathVariableCurrentlyBeingDefined = false;
+									xpathStack.push({ token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
+								}
 								break;
 							case 'then':
 								if (ifThenStack.length > 0) {
@@ -2498,6 +2505,7 @@ export class XsltTokenDiagnostics {
 		switch (text) {
 			case 'let':
 			case 'for':
+			case 'member':
 				r = 'return';
 				break;
 			case 'every':
