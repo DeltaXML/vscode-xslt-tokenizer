@@ -1128,8 +1128,11 @@ export class XsltTokenDiagnostics {
 								if (xpathStack.length > 1) {
 									let deleteCount = 0;
 									for (let i = xpathStack.length - 1; i > -1; i--) {
-										const sv = xpathStack[i].token.value;
+										const stackItem = xpathStack[i];
+										const sv = stackItem.token.value;
 										if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
+											inScopeXPathVariablesList = stackItem.variables;
+											xpathVariableCurrentlyBeingDefined = stackItem.xpathVariableCurrentlyBeingDefined;
 											deleteCount++;
 										} else {
 											break;
