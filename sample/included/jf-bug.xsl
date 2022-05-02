@@ -15,11 +15,10 @@
   <xsl:variable name="test3"
     select="let $a :=2, $b := if ($a) then 2 else $a return if ($a) then $a else $b
     "/>
-  <xsl:variable name="test4"
-    select="
-    "/>
-  <xsl:variable name="test5"
-    select="
-    "/>
+  
+  <xsl:template name="new" as="item()">
+    
+  </xsl:template>
+  
   
 </xsl:stylesheet>
