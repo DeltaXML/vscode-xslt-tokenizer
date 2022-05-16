@@ -1133,6 +1133,7 @@ export class XsltTokenDiagnostics {
 										if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
 											inScopeXPathVariablesList = stackItem.variables;
 											xpathVariableCurrentlyBeingDefined = stackItem.xpathVariableCurrentlyBeingDefined;
+											preXPathVariable = stackItem.xpathVariableCurrentlyBeingDefined;
 											deleteCount++;
 										} else {
 											break;
@@ -1193,6 +1194,24 @@ export class XsltTokenDiagnostics {
 						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies' );
 						if (popStackLaterForComma && xpathStack.length > 1) {
 							stackItem = xpathStack[xpathStack.length - 2];
+							if (xpathStack.length > 1) {
+								let deleteCount = 0;
+								for (let i = xpathStack.length - 1; i > -1; i--) {
+									const stackItem = xpathStack[i];
+									const sv = stackItem.token.value;
+									if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
+										inScopeXPathVariablesList = stackItem.variables;
+										xpathVariableCurrentlyBeingDefined = stackItem.xpathVariableCurrentlyBeingDefined;
+										preXPathVariable = stackItem.xpathVariableCurrentlyBeingDefined;
+										deleteCount++;
+									} else {
+										break;
+									}
+								}
+								if (deleteCount > 0) {
+									xpathStack.splice(xpathStack.length - deleteCount);
+								}
+							}
 						}
 						if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
 							if (tokenIsComma) {
