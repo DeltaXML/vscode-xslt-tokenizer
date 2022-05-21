@@ -4,14 +4,14 @@
 					description="short description" >
 	
 	<pipelineParameters>
-		<stringParameter name="true-also" defaultValue="new"/>
+		<booleanParameter name="lexicalPreservation" defaultValue="true"/>
 	</pipelineParameters>
 			 
 	<standardConfig>
 
 		<lexicalPreservation>
 			<defaults>
-				<retain literalValue="{$true-also}"/>
+				<retain literalValue="{$lexicalPreservation}"/>
 			</defaults>
 			<overrides>
 				<preserveItems>
