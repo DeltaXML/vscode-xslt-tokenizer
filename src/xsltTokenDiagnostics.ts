@@ -184,7 +184,7 @@ export class XsltTokenDiagnostics {
 					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : [];
 					valid = expectedNames.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 				}
-			} else if ((type === ValidationType.XSLTAttribute || (isSchematron && type === ValidationType.XMLAttribute)) && expectedAttributes) {
+			} else if ((type === ValidationType.XSLTAttribute || ((isSchematron || isDCP) && type === ValidationType.XMLAttribute)) && expectedAttributes) {
 				valid = expectedAttributes.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTAttributeNameError;
 				return valid;
 			}
