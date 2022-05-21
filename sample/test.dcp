@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <documentComparator version="1.0"
-					id="pipeline-id" 
-					description="short description" >
+																				id="pipeline-id" 
+																				description="short description" >
 	
 	<pipelineParameters>
 		<booleanParameter name="lexicalPreservation" defaultValue="true"/>
 	</pipelineParameters>
-			 
+	
 	<standardConfig>
-
+		
+		<resultReadabilityOptions>
+			<modifiedWhitespaceBehaviour literalValue="normjalize"/>
+			<mixedContentDetectionScope literalValue="local"/>
+		</resultReadabilityOptions>
+		
 		<lexicalPreservation>
 			<defaults>
 				<retain literalValue="{$lexicalPreservation}"/>
@@ -25,14 +30,9 @@
 		<calsTableConfiguration>
 			<processCalsTables literalValue="true"/>
 		</calsTableConfiguration>
-
-		<resultReadabilityOptions>
-			<modifiedWhitespaceBehaviour literalValue="normalize"/>
-			<mixedContentDetectionScope literalValue="local"/>
-		</resultReadabilityOptions>
-
+		
 	</standardConfig>
-
 	
-			 
+	
+	
 </documentComparator>

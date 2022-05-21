@@ -54,7 +54,7 @@ export class SchemaQuery {
             }
             return result;
         }
-        if (this.schema.docType === DocumentTypes.SCH && !isXsltName) {
+        if ((this.schema.docType === DocumentTypes.SCH || this.schema.docType === DocumentTypes.DCP) && !isXsltName) {
             let attGroupName = this.schema.elements[name]? this.schema.elements[name].attributeGroup : undefined;
             if (attGroupName) {
                 let attGroup = this.schema.attributeGroups[attGroupName];
