@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<documentComparator version="1.0"
+					id="pipeline-id" 
+					description="short description" >
+	
+	<pipelineParameters>
+		<stringParameter name="true-also" defaultValue="new"/>
+	</pipelineParameters>
+			 
+	<standardConfig>
+
+		<lexicalPreservation>
+			<defaults>
+				<retain literalValue="{$true-also}"/>
+			</defaults>
+			<overrides>
+				<preserveItems>
+					<ignorableWhitespace>
+						<retain literalValue="false"/>
+					</ignorableWhitespace>
+				</preserveItems>
+			</overrides>
+		</lexicalPreservation>
+		
+		<calsTableConfiguration>
+			<processCalsTables literalValue="true"/>
+		</calsTableConfiguration>
+
+		<resultReadabilityOptions>
+			<modifiedWhitespaceBehaviour literalValue="normalize"/>
+			<mixedContentDetectionScope literalValue="local"/>
+		</resultReadabilityOptions>
+
+	</standardConfig>
+
+	
+			 
+</documentComparator>

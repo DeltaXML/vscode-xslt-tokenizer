@@ -115,7 +115,9 @@ export class XsltTokenDiagnostics {
 	private static nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 	private static nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
-	private static validateName(name: string, type: ValidationType, isSchematron: boolean, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
+	private static validateName(name: string, type: ValidationType, docType: DocumentTypes, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
+		const isSchematron = docType === DocumentTypes.SCH;
+		const isDCP = docType === DocumentTypes.DCP;
 		let valid = NameValidationError.None;
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
@@ -174,6 +176,13 @@ export class XsltTokenDiagnostics {
 				} else {
 					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : [];
 					valid = expectedNames.indexOf('sch:' + name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
+				}
+			} else if (isDCP && type === ValidationType.XMLElement) {
+				if (elementStack?.length === 0) {
+					valid = name === 'documentComparator' ? NameValidationError.None : NameValidationError.XSLTElementNameError;
+				} else {
+					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : [];
+					valid = expectedNames.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 				}
 			} else if ((type === ValidationType.XSLTAttribute || (isSchematron && type === ValidationType.XMLAttribute)) && expectedAttributes) {
 				valid = expectedAttributes.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTAttributeNameError;
@@ -572,7 +581,7 @@ export class XsltTokenDiagnostics {
 									if (checkPendingErrors && !tunnelAttributeFound) {
 										tunnelAttributeFound = attName === 'tunnel';
 									}
-									let validateResult = XsltTokenDiagnostics.validateName(attName, attrValType, isSchematron, inheritedPrefixes, elementStack, tagElementAttributes);
+									let validateResult = XsltTokenDiagnostics.validateName(attName, attrValType, docType, inheritedPrefixes, elementStack, tagElementAttributes);
 									if (validateResult === NameValidationError.NameError) {
 										attsWithNameErrors.push(attName);
 									} else if (validateResult === NameValidationError.NamespaceError) {
@@ -588,7 +597,7 @@ export class XsltTokenDiagnostics {
 
 
 								if (startTagToken && !problem) {
-									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, isSchematron, inheritedPrefixes, elementStack);
+									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, docType, inheritedPrefixes, elementStack);
 									if (validationError !== NameValidationError.None) {
 										startTagToken['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
 										startTagToken['value'] = tagElementName;
@@ -623,7 +632,11 @@ export class XsltTokenDiagnostics {
 									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
 									let newVariablesList = elementStack.length === 0 ? globalVariableData : inScopeVariablesList;
-									const stackElementChildren = isSchematron ? tagElementChildren : attrValType === ValidationType.XMLAttribute && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : tagElementChildren;
+									const stackElementChildren = isSchematron || docType === DocumentTypes.DCP ?
+										tagElementChildren :
+										attrValType === ValidationType.XMLAttribute && elementStack.length > 0 ?
+											elementStack[elementStack.length - 1].expectedChildElements :
+											tagElementChildren;
 									//let newVariablesList = inScopeVariablesList;
 
 									const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
@@ -928,7 +941,7 @@ export class XsltTokenDiagnostics {
 						if (!hasProblem && attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;
-								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, isSchematron, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, docType, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
 									token['value'] = fullVariableName;
@@ -948,7 +961,7 @@ export class XsltTokenDiagnostics {
 								isXMLDeclaration = true;
 							}
 						} else {
-							let validateResult = XsltTokenDiagnostics.validateName(piName, ValidationType.Name, isSchematron, inheritedPrefixes);
+							let validateResult = XsltTokenDiagnostics.validateName(piName, ValidationType.Name, docType, inheritedPrefixes);
 							validPiName = validateResult === NameValidationError.None;
 						}
 						if (!validPiName) {
@@ -1554,7 +1567,7 @@ export class XsltTokenDiagnostics {
 								}
 							}
 							if (!skipValidation) {
-								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, isSchematron, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, docType, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XPathName : ErrorType.XPathPrefix;
 									token['value'] = token.value;
@@ -1733,8 +1746,9 @@ export class XsltTokenDiagnostics {
 		let expectedElements: string[] = [];
 		let expectedAttributes: string[] = [];
 
-		if (parentName.startsWith('xsl') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT ||
-			(parentName.startsWith('sch') && schemaQuery && schemaQuery.docType === DocumentTypes.SCH)) {
+		if (schemaQuery?.docType === DocumentTypes.DCP ||
+			(parentName.startsWith('xsl:') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT) ||
+			(parentName.startsWith('sch:') && schemaQuery && schemaQuery.docType === DocumentTypes.SCH)) {
 			const allExpected = schemaQuery.getExpected(parentName);
 			const nameDetailArray = allExpected.elements;
 			expectedElements = nameDetailArray.map(item => item[0]);
@@ -1763,7 +1777,7 @@ export class XsltTokenDiagnostics {
 				let isXmlChar = XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1;
 				validationResult = isXmlChar ? NameValidationError.None : NameValidationError.NameError;
 			} else {
-				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, false, inheritedPrefixes);
+				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, DocumentTypes.Other, inheritedPrefixes);
 			}
 		} else {
 			validationResult = NameValidationError.NameError;
