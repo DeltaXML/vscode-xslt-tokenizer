@@ -8,7 +8,7 @@
 								expand-text="yes"
 								version="3.0">
 	
-	<xsl:template match="/*" mode="#default">
+	<xsl:template match="/*" mode="#defjault">
 		<xsl:variable name="fn" as="map(*)" select="
 			map {'abc':'new'}"/>
 		<xsl:sequence select="$fn"/>
