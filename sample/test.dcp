@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<documentComparator version="1.0"
-																				id="pipeline-id" 
-																				description="short description" >
+<documentComparator 
+	version="1.0"
+	id="pipeline-id" 
+	description="short description" >
 	
 	<pipelineParameters>
 		<booleanParameter name="lexicalPreservation" defaultValue="true"/>
@@ -10,7 +11,7 @@
 	<standardConfig>
 		
 		<resultReadabilityOptions>
-			<modifiedWhitespaceBehaviour literalValue="normjalize"/>
+			<modifiedWhitespaceBehaviour literalValue="normalize"/>
 			<mixedContentDetectionScope literalValue="local"/>
 		</resultReadabilityOptions>
 		

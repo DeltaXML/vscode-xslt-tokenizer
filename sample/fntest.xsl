@@ -8,9 +8,9 @@
 								expand-text="yes"
 								version="3.0">
 	
-	<xsl:variable name="fn" as="map(*)" select="
-		map {'abc':'new'}"/>
 	<xsl:template match="/*" mode="#default">
+		<xsl:variable name="fn" as="map(*)" select="
+			map {'abc':'new'}"/>
 		<xsl:sequence select="$fn"/>
 	</xsl:template>
 </xsl:stylesheet>

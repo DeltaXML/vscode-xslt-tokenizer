@@ -1218,6 +1218,7 @@ export enum ErrorType {
     XPathExpectedComplex,
     XMLXMLNS,
     XMLAttributeName,
+    XMLAttributeValueUnexpected,
     XSLTNamesapce,
     XMLAttributeXMLNS,
     XMLAttNameSyntax,

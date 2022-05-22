@@ -876,6 +876,24 @@ export class XsltTokenDiagnostics {
 								tagExcludeResultPrefixes = { token: token, prefixes: excludePrefixes };
 								break;
 							case AttributeType.None:
+								const tagAttributeName = tagAttributeNames.length > 0 ? tagAttributeNames[tagAttributeNames.length - 1] : undefined;
+								let isAVTbracket = token.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
+								if (!isAVTbracket && schemaQuery && tagAttributeName && variableName.indexOf('{') === -1) {
+									const expectedValues = schemaQuery.getExpected(tagElementName, tagAttributeName);
+									if (expectedValues.attributeValues && expectedValues.attributeValues.length > 0) {
+										const matchingNameAndDesc = expectedValues.attributeValues.find(arr => arr[0] === variableName);
+										if (!matchingNameAndDesc) {
+											const isHashedExpected = expectedValues.attributeValues[0][0].charAt(0) === '#';
+											const isHashedValue = (variableName.charAt(0) === '#');
+											const ignoreHashNoMatch = isHashedExpected && !isHashedValue;
+											if (!ignoreHashNoMatch) {
+												token['error'] = ErrorType.XMLAttributeValueUnexpected;
+												const expectedNames = expectedValues.attributeValues.map(arr => arr[0]);
+												token.value = variableName + '!' + tagAttributeName + '!' + expectedNames.join(', ');
+											}
+										}
+									}
+								}
 								if (prevToken && prevToken.length === 1 && prevToken.tokenType === XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.attributeValue) {
 									token['error'] = ErrorType.XPathEmpty;
 								}
@@ -2358,6 +2376,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingTemplateParam:
 					let pParts = tokenValue.split('#');
 					msg = `XSLT: xsl:param '${pParts[1]}' is not declared for template '${pParts[0]}'`;
+					break;
+				case ErrorType.XMLAttributeValueUnexpected:
+					let aParts = tokenValue.split('!');
+					msg = `ATTRIBUTE: value '${aParts[0]}' is invalid for attribute '${aParts[1]}' - expected values: ${aParts[2]}`;
 					break;
 				case ErrorType.IterateParamInvalid:
 					msg = `XSLT: param name '${tokenValue}' in xsl:with-param is not declared in parent xsl:instruction:`;
