@@ -192,6 +192,15 @@ export class DCPSchema implements SchemaData {
                 'processingInstructions': `Reports warning using processing instructions with the format <?dxml_warn warning content ?>.`
             }
         },
+        "columnKeyingModeType": {
+            base: ['xs:string'],
+            enum: ['auto', 'colname', 'position'],
+            detail: {
+                'auto': `Automatically handles table column keying.`,
+                'colname': `Uses @colname attribute values as keys.`,
+                'position': `Uses table column positions as keys.`
+            }
+        },
         "anyNameType": { base: ['xs:string'] },
     };
     complexTypes: { [name: string]: ComplexType } = {
@@ -571,7 +580,7 @@ export class DCPSchema implements SchemaData {
  options can be specified on a DocumentComparator to configure its behaviour when comparing
  tables.`},
         "calsTableConfiguration": {
-            elementNames: ['warningReportMode', 'processCalsTables', 'calsValidationLevel', 'invalidCalsTableBehaviour'],
+            elementNames: ['warningReportMode', 'processCalsTables', 'calsValidationLevel', 'invalidCalsTableBehaviour', 'ignoreColumnOrder', 'columnKeyingMode'],
             detail: `Specifies configuration options for CALS table comparison. These configuration
  options can be specified on a DocumentComparator to configure its behaviour when comparing
  tables.`},
@@ -647,6 +656,22 @@ export class DCPSchema implements SchemaData {
             detail: `Sets whether the Document Comparator should normalize the specification of columns in HTML tables. 
  This setting is recommended when there is a difference between inputs of specifying columns, e.g. if one uses just
  * <colgroup> and another uses <col> without <colgroup>.`},
+ "ignoreColumnOrder": {
+    attrs: {
+        'literalValue': 'xs:boolean'
+    },
+    detail: `Sets whether the DocumentComparator should ignore CALS table column order.`
+},
+"columnKeyingMode": {
+    attrs: {
+        'literalValue': 'columnKeyingModeType'
+    },
+    detail: `Sets the column keying mode used to align CALS table columns when the table
+processing is enabled. In AUTO mode, the comparator will automatically handle the entire keying process.
+Only AUTO mode allows for user-defined keys in the input files. This is not possible in other modes.
+In COLNAME mode, comparator will use column names (defined by @colname) as keys. In POSITION mode,
+comparator will use column positions as keys. Indexing starts from 1 and the maximum position
+is defined by the number of columns described by @cols attribute.`},
         "mathmlConfiguration": {
             elementNames: ['enableMathml', 'mathmlGranularity'],
             detail: `Specifies configuration options for MathML processing. These configuration options can be specified on a
