@@ -291,7 +291,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private static getChildSymbolForSelection(selection: vscode.Selection, symbol: vscode.DocumentSymbol, path: string[], selectionType: SelectionType, parentSymbol: possDocumentSymbol, precedingSymbol: possDocumentSymbol, nextSymbol: possDocumentSymbol): possDocumentSymbol {
 		const result = symbol.children.find((sym) => {
-			const selectionPos = new vscode.Position(selection.start.line, selection.start.character);
+			const selectionPos = new vscode.Position(selection.start.line, selection.start.character + 1);
 			return sym.range.contains(selectionPos);
 		});
 
