@@ -2211,7 +2211,7 @@ export class XsltTokenDiagnostics {
 		}
 		let startCharPos = fullStartToken.startCharacter > 0 ? fullStartToken.startCharacter - 1 : 0;
 		let startPos = new vscode.Position(fullStartToken.line, startCharPos);
-		let endPos = new vscode.Position(fullEndToken.line, fullEndToken.startCharacter + fullEndToken.length + 1);
+		let endPos = new vscode.Position(fullEndToken.line, fullEndToken.startCharacter + fullEndToken.length);
 		let innerStartPos;
 		let innerEndPos;
 		if (innerToken) {
