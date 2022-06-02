@@ -1,5 +1,17 @@
-<element>
-  <new/><other/><yeta/><newer abc="new">new</newer><later/>
+<element 
+  xmlns:tx="sugar" 
+  treatment="abc" 
+  later="123">
+  this
+  
+  <new/><other/><yeta/>
+  <newer abc="new">
+    <newsted>newer</newsted>
+    <later>and</later>
+    
+    this
+  </newer>
+  <later/>
   <also name="abc">this</also><newer-elemtn/><newerabc name="newer"/>
   <one/>
   <two/>

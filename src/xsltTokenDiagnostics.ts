@@ -1042,8 +1042,11 @@ export class XsltTokenDiagnostics {
 					const tv = xpathStack[xpathStack.length - 1].token.value;
 					if (prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && (tv === 'for' || tv === 'let' || tv === 'every')) {
 						if (xpathTokenType !== TokenLevelState.variable) {
-							token['error'] = ErrorType.ExpectedDollarAfterComma;
-							problemTokens.push(token);
+							const realType = (xpathTokenType === TokenLevelState.comment && index + 1 < allTokens.length) ? allTokens[index + 1].tokenType : xpathTokenType;
+							if (realType != TokenLevelState.variable) {
+								token['error'] = ErrorType.ExpectedDollarAfterComma;
+								problemTokens.push(token);
+							}
 						}
 					}
 				}
