@@ -169,6 +169,15 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						isXSLTStartTag = false;
 						elementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						break;
+					case XSLTokenLevelState.dtdEnd:
+						if (awaitingSecondTag === HasCharacteristic.unknown) {
+							firstStartTagLineNumber = lineNumber;
+						} else if (awaitingSecondTag === HasCharacteristic.yes) {
+							documenthasNewLines = lineNumber > firstStartTagLineNumber ? HasCharacteristic.yes : HasCharacteristic.no;
+							awaitingSecondTag = HasCharacteristic.no;
+						}
+						addNewLine = documenthasNewLines === HasCharacteristic.no;
+						break;
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
