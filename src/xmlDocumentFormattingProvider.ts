@@ -281,6 +281,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						} else if (!attributeNameOnNewLine && attributeNameOffset === 0) {
 							attributeNameOffset = token.startCharacter - attNameLine.firstNonWhitespaceCharacterIndex;
 						}
+						if (useTabs) {
+							attributeNameOffset = 1;
+						}
 						break;
 					case XSLTokenLevelState.attributeValue:
 						const attValueLine = document.lineAt(lineNumber);
@@ -299,6 +302,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							// token includes surrounding quotes.
 							xmlSpaceAttributeValue = attValueText === '\"preserve\"' || attValueText === '\'preserve\'';
 							awaitingXmlSpaceAttributeValue = false;
+						}
+						if (useTabs) {
+							attributeValueOffset = 2;
 						}
 						break;
 					case XSLTokenLevelState.processingInstrValue:
@@ -453,7 +459,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					if (!isXMLToken && this.minimiseXPathIndents) {
 						totalAttributeOffset = 0;
 					} else {
-						totalAttributeOffset = attributeValueOffset > 0 ? attributeValueOffset : attributeNameOffset;
+						if (attributeValueOffset > 0) {
+							totalAttributeOffset = attributeValueOffset;
+						} else {
+							totalAttributeOffset = attributeNameOffset;
+						}
 					}
 
 					let indentExtraAsNoNameIndent = (!nameIndentRequired && !isXMLToken) && this.docType !== DocumentTypes.XPath ? 1 : 0;
