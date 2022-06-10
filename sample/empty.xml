@@ -1,4 +1,7 @@
-<element xmlns:tx="sugar" treatment="abc" later="123">  
+<element xmlns:tx="sugar" treatment="abc" 
+         later="
+            123
+            ">  
     <newer abc="new">
         this
     </newer>

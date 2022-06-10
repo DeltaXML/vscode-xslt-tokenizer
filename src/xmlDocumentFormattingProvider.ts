@@ -54,6 +54,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			this.onType = true;
 			let formatEdit = this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
 			this.onType = false;
+			this.onTypeLineEmpty = false;
 			return formatEdit;
 		} else {
 			return [];
@@ -488,7 +489,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								result.push(vscode.TextEdit.insert(editPos, replacementString));
 							} else {
 								let replacementString = indentString.repeat(requiredIndentLength);
-								result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+								if (this.onTypeLineEmpty && prevToken && prevToken.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber === XSLTokenLevelState.attributeValue) {
+									// effectively a noop - replace with same text
+									result.push(this.getReplaceLineIndentTextEdit(currentLine, currentLine.text));
+								} else {
+									result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+								}
 							}
 						} else if (actualIndentLength !== requiredIndentLength) {
 							let indentLengthDiff = requiredIndentLength - actualIndentLength;

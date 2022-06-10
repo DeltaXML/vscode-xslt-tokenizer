@@ -5,28 +5,20 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="number" as="xs:string" select="count('a')"/>
-    <xsl:variable name="two" as="xs:string" select="$inner"/>
-    <xsl:variable name="inner" as="xs:string" select="'outside'"/>
-    
-    <xsl:variable name="test" as="xs:string" 
-        select="for $number in 1 to 20 return ($number + 1, $number + 2)"/>
-    
-    <xsl:template match=".">
-        <xsl:variable name="inner" as="xs:string" select="'inside'"/>
-        <xsl:sequence select="count($inner)"/>
-    </xsl:template>
-    
-    <xsl:variable name="ab" as="xs:string" select="$number"/>
-    
-    <xsl:variable name="bc">
-        <xsl:variable name="de" select="2"/>
-        <xsl:variable name="number">
-            <xsl:variable name="de" select="2"/>
-            <xsl:sequence select="$de"/>
-        </xsl:variable>
-        <xsl:sequence select="$number"/>
-        <xsl:sequence select="$number"/>
-    </xsl:variable>
+    <xsl:variable name="number" as="xs:string" 
+        select="count((
+                    'a',
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    'c'
+                ))"/>
     
 </xsl:stylesheet>
