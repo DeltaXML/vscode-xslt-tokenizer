@@ -182,10 +182,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
-								attributeNameOffset = 0;
-								attributeValueOffset = 0;
-								xmlSpaceAttributeValue = null;
-								newNestingLevel++;
+								if (!this.onTypeLineEmpty) {
+									attributeNameOffset = 0;
+									attributeValueOffset = 0;
+									xmlSpaceAttributeValue = null;
+								}
+									newNestingLevel++;
 								if (awaitingSecondTag === HasCharacteristic.unknown) {
 									firstStartTagLineNumber = lineNumber;
 									awaitingSecondTag = HasCharacteristic.yes;
@@ -491,7 +493,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								let replacementString = indentString.repeat(requiredIndentLength);
 								if (this.onTypeLineEmpty && prevToken && prevToken.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber === XSLTokenLevelState.attributeValue) {
 									// effectively a noop - replace with same text
-									result.push(this.getReplaceLineIndentTextEdit(currentLine, currentLine.text));
+									result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+									//result.push(this.getReplaceLineIndentTextEdit(currentLine, currentLine.text));
 								} else {
 									result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
 								}
@@ -544,6 +547,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		if (currentLine.firstNonWhitespaceCharacterIndex === 0) {
 			return vscode.TextEdit.insert(startPos, indentString);
 		} else {
+			const isCurrentEmpty = currentLine.firstNonWhitespaceCharacterIndex === currentLine.text.length;
 			let endPos = new vscode.Position(currentLine.lineNumber, currentLine.firstNonWhitespaceCharacterIndex);
 			let valueRange = currentLine.range.with(startPos, endPos);
 			return vscode.TextEdit.replace(valueRange, indentString);
