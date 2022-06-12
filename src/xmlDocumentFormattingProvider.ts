@@ -491,13 +491,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								result.push(vscode.TextEdit.insert(editPos, replacementString));
 							} else {
 								let replacementString = indentString.repeat(requiredIndentLength);
-								if (this.onTypeLineEmpty && prevToken && prevToken.tokenType - XMLDocumentFormattingProvider.xsltStartTokenNumber === XSLTokenLevelState.attributeValue) {
-									// effectively a noop - replace with same text
-									result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
-									//result.push(this.getReplaceLineIndentTextEdit(currentLine, currentLine.text));
-								} else {
-									result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
-								}
+								result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
 							}
 						} else if (actualIndentLength !== requiredIndentLength) {
 							let indentLengthDiff = requiredIndentLength - actualIndentLength;
@@ -547,7 +541,6 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		if (currentLine.firstNonWhitespaceCharacterIndex === 0) {
 			return vscode.TextEdit.insert(startPos, indentString);
 		} else {
-			const isCurrentEmpty = currentLine.firstNonWhitespaceCharacterIndex === currentLine.text.length;
 			let endPos = new vscode.Position(currentLine.lineNumber, currentLine.firstNonWhitespaceCharacterIndex);
 			let valueRange = currentLine.range.with(startPos, endPos);
 			return vscode.TextEdit.replace(valueRange, indentString);
