@@ -8,4 +8,11 @@
               two
               three"/>
     
+    <xsl:variable name="new" as="xs:string*">
+        <new attr=""
+             <new>
+            <again new="abc"/>
+        </new>
+    </xsl:variable>
+    
 </xsl:stylesheet>   

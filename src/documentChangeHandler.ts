@@ -66,14 +66,12 @@ export class DocumentChangeHandler {
 				}
 			} else {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-				if (prevChar === '"' || activeChange.text.endsWith('>') || activeChange.text.endsWith('/')) {
-					skipTrigger = true;
-				}
+				skipTrigger = prevChar === '"';
 			}
 		}
 		if (!skipTrigger && activeChange.rangeOffset > 10) {
 			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-      if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
+			if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
 				triggerSuggest = true;
 			}
 		}
@@ -85,7 +83,7 @@ export class DocumentChangeHandler {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
 				isCloseTagFeature = prevChar === '<';
 			}
-			if (!isCloseTagFeature) {
+			if (!isCloseTagFeature && !skipTrigger) {
 				setTimeout(() => {
 					vscode.commands.executeCommand('editor.action.triggerSuggest');
 				}, 10);
