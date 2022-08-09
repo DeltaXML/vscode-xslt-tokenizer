@@ -5,12 +5,19 @@
     <new abc="one
               two
               three
-              two
-              three"/>
+              "/>
+    
+    <xsl:variable name="map" as="map(*)" select="
+        map {
+            'new': 5,
+            'one': 1,
+            'two': 3,
+            'two': 2
+        }"/>
     
     <xsl:variable name="new" as="xs:string*">
-        <new attr=""
-             <new>
+        <new attr="">
+            <new/>
             <again new="abc"/>
         </new>
     </xsl:variable>

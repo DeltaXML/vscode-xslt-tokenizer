@@ -157,7 +157,7 @@ export class XsltTokenDefinitions {
 			index++;
 			lineNumber = token.line;
 			let isOnRequiredLine = lineNumber === requiredLine;
-			if ((isOnRequiredToken && !keepProcessing) || resultLocation || lineNumber > requiredLine) {
+			if ((isOnRequiredToken && !keepProcessing) || resultLocation || lineNumber > (requiredLine + 20)) {
 				break;
 			}
 
