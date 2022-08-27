@@ -173,8 +173,9 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             let problemMatcher = "$saxon-xslt-js";
 
             const processExecution = new vscode.ProcessExecution(npxCommand, commandLineArgs.concat(xsltParametersCommand));
-            let newTask = new vscode.Task(xsltTask, xsltTask.label, source, processExecution, problemMatcher);
-
+            let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, processExecution, problemMatcher);
+            newTask.presentationOptions.clear = true;
+            newTask.presentationOptions.showReuseMessage = true;
             //let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
             return newTask;
         } else {
