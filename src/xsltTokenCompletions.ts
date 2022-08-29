@@ -474,8 +474,8 @@ export class XsltTokenCompletions {
 										completionStrings = completionStrings.concat(FunctionData.ixslEventName);
 									}
 									let allCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.Constant);
-									let triples: [string, string, string][] = [['default mode', '#default', '#default'], ['current mode', '#current', '#current']];
-									XsltTokenCompletions.createNonAlphanumericCompletions(triples, allCompletions);
+									let labels: string[] = tagElementName === 'xsl:apply-templates'? ['default', 'current'] : ['default', 'current', 'all'];
+									XsltTokenCompletions.createNonAlphanumericCompletions(document, position, labels, allCompletions);
 									resultCompletions = allCompletions;
 								}
 								break;
@@ -829,14 +829,18 @@ export class XsltTokenCompletions {
 		return resultCompletions;
 	};
 
-	private static createNonAlphanumericCompletions(triples: [string, string, string][], allCompletions: vscode.CompletionItem[]) {
-		triples.forEach((pair) => {
-			const label = pair[0];
-			const text = pair[1];
-			const detail = pair[2];
-			const newItem = new vscode.CompletionItem(label, vscode.CompletionItemKind.Constant);
-			newItem.detail = detail;
-			newItem.insertText = text;
+	private static createNonAlphanumericCompletions(doc: vscode.TextDocument, pos: vscode.Position, labels: string[], allCompletions: vscode.CompletionItem[]) {
+		let prevText = doc.getText(new vscode.Range(pos.with({ character: pos.character - 1 }), pos));
+		const prevTextIsHash = prevText === '#';
+		if (prevTextIsHash) {
+			allCompletions.length = 0;
+		}
+		labels.forEach((label) => {
+			const newLabel = prevTextIsHash? label : '#' + label;
+			const newItem = new vscode.CompletionItem(newLabel, vscode.CompletionItemKind.Constant);
+			//let startPos = replaceCurrentChar? pos.with({ character: pos.character - 1}) : pos;
+			//let newRange = new vscode.Range(startPos, pos);
+			//newItem.range = newRange;
 			allCompletions.push(newItem);
 		});
 	}
