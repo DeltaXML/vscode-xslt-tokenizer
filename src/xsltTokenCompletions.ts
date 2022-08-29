@@ -470,6 +470,13 @@ export class XsltTokenCompletions {
 											}
 										}
 									});
+									importedInstructionData.forEach((importItem) => {
+										if (importItem.type === GlobalInstructionType.Mode) {
+											if (completionStrings.indexOf(importItem.name) === -1 && importItem.name.charAt(0) !== '#') {
+												completionStrings.push(importItem.name);
+											}
+										}
+									});
 									if (XsltTokenCompletions.useIxslFunctions && tagElementName === 'xsl:template') {
 										completionStrings = completionStrings.concat(FunctionData.ixslEventName);
 									}
