@@ -956,6 +956,7 @@ export class XslLexer {
                             let newToken = this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');
+                                const modeNames = attValue.split(/\s+/);
                                 let newTokenCopy = Object.assign({}, newToken);
                                 let globalType = isGlobalInstructionMode? GlobalInstructionType.Mode: tagGlobalInstructionType;
                                 let targetGlobal;
@@ -965,8 +966,8 @@ export class XslLexer {
                                     targetGlobal = this.globalInstructionData;
                                     tagInstructionNameAdded = true;
                                 }
-                                const idNumber = globalType === GlobalInstructionType.Variable? result.length : 0;
-                                targetGlobal.push({type: globalType, name: attValue, token: newTokenCopy, idNumber: idNumber});
+                                const idNumber = globalType === GlobalInstructionType.Variable ? result.length : 0;
+                                modeNames.forEach((modeName) => targetGlobal.push({type: globalType, name: modeName, token: newTokenCopy, idNumber: idNumber}));
                             } else if (isGlobalParameterName) {
                                 let attValue = tokenChars.join('');
                                 if (this.globalInstructionData.length > 0) {

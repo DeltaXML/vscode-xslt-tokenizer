@@ -184,6 +184,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.escSqAvt:
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');
+                                const modeNames = attValue.split(/\s+/);
                                 let tkn: BaseToken = {
                                     line: lineNumber,
                                     length: attValue.length + 2,
@@ -199,7 +200,7 @@ export class XslLexerLight extends XslLexer {
                                     targetGlobal = this.globalInstructionData;
                                     tagInstructionNameAdded = true;
                                 }
-                                targetGlobal.push({type: globalType, name: attValue, token: tkn, idNumber: 0});
+                                modeNames.forEach((modeName) => targetGlobal.push({type: globalType, name: modeName, token: tkn, idNumber: 0}));
                                 isGlobalInstructionName = false;
                                 // fix bug where function arity was added to by following template params
                                 //tagGlobalInstructionType = GlobalInstructionType.Unknown;
