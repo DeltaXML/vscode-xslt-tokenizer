@@ -38,6 +38,10 @@ export interface SchemaData {
     docType: DocumentTypes;
 }
 
+export enum SimpleTypeNames {
+    'nametests' = 'xsl:nametests'
+}
+
 export class XSLTSchema implements SchemaData {
     docType = DocumentTypes.XSLT;
     attributeGroups: { [name: string]: any } = {

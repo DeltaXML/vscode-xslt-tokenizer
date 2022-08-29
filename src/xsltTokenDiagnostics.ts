@@ -10,6 +10,7 @@ import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
+import { SimpleTypeNames } from './xsltSchema';
 
 enum HasCharacteristic {
 	unknown,
@@ -115,6 +116,18 @@ export class XsltTokenDiagnostics {
 	private static nameStartCharRgx = new RegExp(/[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 	private static nameCharRgx = new RegExp(/-|\.|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]|[A-Z]|_|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]/);
 
+	private static findInvalidNames(nameListStr: string, docType: DocumentTypes, inheritedPrefixes: string[]) {
+		const nameList = nameListStr.split(/\s+/);
+		const invalidNames: string[] = [];
+		for (let i = 0; i < nameList.length; i++) {
+			const elName = nameList[i];
+			let validationError = XsltTokenDiagnostics.validateName(elName, ValidationType.PrefixedName, docType, inheritedPrefixes);
+			if (validationError !== NameValidationError.None) {
+				invalidNames.push(elName);
+			}
+		}
+		return invalidNames;
+	}
 	private static validateName(name: string, type: ValidationType, docType: DocumentTypes, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
 		const isSchematron = docType === DocumentTypes.SCH;
 		const isDCP = docType === DocumentTypes.DCP;
@@ -880,16 +893,27 @@ export class XsltTokenDiagnostics {
 								let isAVTbracket = token.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
 								if (!isAVTbracket && schemaQuery && tagAttributeName && variableName.indexOf('{') === -1) {
 									const expectedValues = schemaQuery.getExpected(tagElementName, tagAttributeName);
+									const expectedSimpleType = schemaQuery.lastEnumSimpleType;
 									if (expectedValues.attributeValues && expectedValues.attributeValues.length > 0) {
 										const matchingNameAndDesc = expectedValues.attributeValues.find(arr => arr[0] === variableName);
 										if (!matchingNameAndDesc) {
-											const isHashedExpected = expectedValues.attributeValues[0][0].charAt(0) === '#';
-											const isHashedValue = (variableName.charAt(0) === '#');
-											const ignoreHashNoMatch = isHashedExpected && !isHashedValue;
-											if (!ignoreHashNoMatch) {
-												token['error'] = ErrorType.XMLAttributeValueUnexpected;
-												const expectedNames = expectedValues.attributeValues.map(arr => arr[0]);
-												token.value = variableName + '!' + tagAttributeName + '!' + expectedNames.join(', ');
+											const isNameTest = SimpleTypeNames.nametests === expectedSimpleType;
+											if (isNameTest) {
+												const invalidNames = XsltTokenDiagnostics.findInvalidNames(variableName, docType, inheritedPrefixes);
+												if (invalidNames.length > 0) {
+													const quotedNames = invalidNames.map((uName) => '\'' + uName + '\'');
+													token['error'] = ErrorType.XMLNameList;
+													token.value = tagAttributeName + ' ' + quotedNames.join(',');
+												}
+											} else {
+												const isHashedExpected = expectedValues.attributeValues[0][0].charAt(0) === '#';
+												const isHashedValue = (variableName.charAt(0) === '#');
+												const ignoreHashNoMatch = isHashedExpected && !isHashedValue;
+												if (!ignoreHashNoMatch) {
+													token['error'] = ErrorType.XMLAttributeValueUnexpected;
+													const expectedNames = expectedValues.attributeValues.map(arr => arr[0]);
+													token.value = variableName + '!' + tagAttributeName + '!' + expectedNames.join(', ');
+												}
 											}
 										}
 									}
@@ -2363,6 +2387,10 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLName:
 					msg = `XML: Invalid XML name: '${tokenValue}'`;
+					break;
+				case ErrorType.XMLNameList:
+					let nameParts = tokenValue.split(' ');
+					msg = `XSLT: Exected list of valid names (with declared prefixes) in '${nameParts[0]}' but found ${nameParts[1]}`;
 					break;
 				case ErrorType.XMLRootMissing:
 					msg = `XML: Root element is missing`;

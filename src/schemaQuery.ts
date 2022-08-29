@@ -11,6 +11,7 @@ export class Expected {
 export class SchemaQuery {
 
     private schema: SchemaData;
+    private _lastEnumSimpleType: string = '';
     public soughtAttributes: string[] = [];
     public emptyElements: string[] = [];
     public docType: DocumentTypes;
@@ -34,8 +35,12 @@ export class SchemaQuery {
         }
     }
 
+    public get lastEnumSimpleType() {
+        return this._lastEnumSimpleType;
+    }
 
     public getExpected(name: string, attributeName?: string) {
+        this._lastEnumSimpleType = '';
         let result: Expected = new Expected();
         const isXsltName = name.startsWith('xsl:') || name.startsWith('ixsl');
         if (this.schema.docType === DocumentTypes.XSLT && !isXsltName) {
@@ -47,7 +52,7 @@ export class SchemaQuery {
                     if (simpleTypeName) {
                         let sType = this.schema.simpleTypes[simpleTypeName];
                         if (sType) {
-                            this.lookupSimpleType(sType, result);
+                            this.lookupSimpleType(sType, result, simpleTypeName);
                         }
                     }
                 }
@@ -65,7 +70,7 @@ export class SchemaQuery {
                         if (simpleTypeName) {
                             let sType = this.schema.simpleTypes[simpleTypeName];
                             if (sType) {
-                                this.lookupSimpleType(sType, result);
+                                this.lookupSimpleType(sType, result, simpleTypeName);
                             }
                         }
                     }
@@ -97,7 +102,7 @@ export class SchemaQuery {
                                 } else {
                                     let attrType = this.schema.simpleTypes[attrTypeName];
                                     if (attrType) {
-                                        this.lookupSimpleType(attrType, result);
+                                        this.lookupSimpleType(attrType, result, attrTypeName);
                                     }
                                 }
                             }
@@ -178,7 +183,7 @@ export class SchemaQuery {
                     } else {
                         let sType = this.schema.simpleTypes[simpleTypeName];
                         if (sType) {
-                            this.lookupSimpleType(sType, result);
+                            this.lookupSimpleType(sType, result, simpleTypeName);
                         }
                     }
                 }
@@ -213,7 +218,7 @@ export class SchemaQuery {
                     let attrType = baseType.attrs[attributeName];
                     if (attrType) {
                         let simpleType = <SimpleType>this.schema.simpleTypes[attrType];
-                        this.lookupSimpleType(simpleType, result);
+                        this.lookupSimpleType(simpleType, result, attrType);
                     }
                 }
             }
@@ -227,13 +232,14 @@ export class SchemaQuery {
         }
     }
 
-    private lookupSimpleType(sgType: SimpleType, result: Expected) {
+    private lookupSimpleType(sgType: SimpleType, result: Expected, typeName: string) {
         if (sgType && sgType.enum) {
+            this._lastEnumSimpleType = typeName;
             sgType.enum.forEach((attrValue) => {
                 let detail = '';
                 if (sgType.detail) {
-                    let lookup = sgType.detail[attrValue];
-                    detail = lookup? lookup: '';
+                    let lookup = sgType.detail;
+                    detail = lookup? lookup.type : '';
                 }
                 let existing = result.attributeValues.find(val => val[0] === attrValue);
                 if (!existing) {
