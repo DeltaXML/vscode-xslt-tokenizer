@@ -1279,7 +1279,7 @@ export class XsltTokenDiagnostics {
 									stackItem.awaitingMapKey = true;
 								}
 							} else if (tv === '}' && stackItem.awaitingMapKey) {
-								isXPathError = true;
+								isXPathError = prevToken?.value !== '{';
 							}
 						}
 						if (prevToken?.tokenType === TokenLevelState.complexExpression) {
