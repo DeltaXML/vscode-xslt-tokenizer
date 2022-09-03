@@ -2180,7 +2180,7 @@ export class XsltTokenDiagnostics {
 		}
 		switch (fullStartToken.tagType) {
 			case TagType.XSLTvar:
-				kind = vscode.SymbolKind.Enum;
+				kind = vscode.SymbolKind.Module;
 				break;
 			case TagType.XSLTstart:
 				switch (name) {
@@ -2204,7 +2204,7 @@ export class XsltTokenDiagnostics {
 						kind = vscode.SymbolKind.Key;
 						break;
 					case 'xsl:sequence':
-						kind = vscode.SymbolKind.Module;
+						kind = vscode.SymbolKind.Object;
 						break;
 					case 'xsl:value-of':
 					case 'xsl:text':
