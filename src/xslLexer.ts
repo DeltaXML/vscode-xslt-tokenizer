@@ -209,7 +209,7 @@ export class XslLexer {
     }
 
     public isExpressionAtt(name: string, parentElement: string) {
-        if (name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item') {
+        if (name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item')) {
             return false;
         } else {
             return this.languageConfiguration.expressionAtts ? this.languageConfiguration.expressionAtts.indexOf(name) > -1 : false;
