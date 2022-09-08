@@ -208,8 +208,12 @@ export class XslLexer {
         return this.languageConfiguration.avtAtts? this.languageConfiguration.avtAtts.indexOf(name) > -1: false;
     }
 
-    public isExpressionAtt(name: string) {
-        return this.languageConfiguration.expressionAtts? this.languageConfiguration.expressionAtts.indexOf(name) > -1: false;
+    public isExpressionAtt(name: string, parentElement: string) {
+        if (name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item') {
+            return false;
+        } else {
+            return this.languageConfiguration.expressionAtts ? this.languageConfiguration.expressionAtts.indexOf(name) > -1 : false;
+        }
     }
 
     protected calcNewState (isCurrentCharNewLine: boolean, char: string, nextChar: string, existing: XMLCharState): XMLCharState {
@@ -666,6 +670,7 @@ export class XslLexer {
         let xslLength = xsl.length;
         let storeToken = false;
         let isNativeElement = false;
+        let tagElementName = '';
         let tagGlobalInstructionType = GlobalInstructionType.Unknown;
         let tagInstructionNameAdded = false;
         let tagMatchToken: BaseToken|null = null;
@@ -796,6 +801,7 @@ export class XslLexer {
                             let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;
+                            tagElementName = elementProperties.nativeName;
                             tagInstructionNameAdded = false;
                             tagMatchToken = null;
                             collectParamName = false;
@@ -901,7 +907,7 @@ export class XslLexer {
                                     isGlobalUsePackageVersion = true;
                                 } else {
                                     isExpandTextAttribute = false;
-                                    isXPathAttribute = this.isExpressionAtt(attName);
+                                    isXPathAttribute = this.isExpressionAtt(attName, tagElementName);
                                 }
                             } else {
                                 if (this.nativeTvtAttributes.indexOf(attName) > -1) {
