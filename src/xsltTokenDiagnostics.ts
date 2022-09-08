@@ -1736,9 +1736,7 @@ export class XsltTokenDiagnostics {
 					} else if (xpathTokenType === TokenLevelState.variable) {
 						if (allTokens.length > index + 2) {
 							const nextToken = allTokens[index + 1];
-							if (nextToken.charType === CharLevelState.lB) {
-								isValid = true;
-							}
+							isValid = (nextToken.charType === CharLevelState.lB || (nextToken.charType === CharLevelState.dSep) && nextToken.value === '()');
 						}
 					}
 					if (!isValid) {

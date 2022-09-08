@@ -11,8 +11,8 @@
      
      <!-- Simple expressions that should report an error --> 
      <xsl:variable name="t2" select="5"/>
-     <xsl:variable name="t25" select="10 => $t2(1)"/>
-    <!-- <xsl:variable name="t21" select="22 /a"/>
+     <xsl:variable name="t25" select="() => $t2(1)"/>
+     <xsl:variable name="t21" select="22 /a"/>
     <xsl:variable name="t20" select="/a | ///"/>
     <xsl:variable name="t23" select="Q{com.examle}/new"/>
          <xsl:variable name="t24" select="/abc!/new"/>
@@ -30,5 +30,5 @@
     <xsl:variable name="t1" select="a/ 2"/>
     <xsl:variable name="t0" select="8 + /a"/>
     <xsl:variable name="t4" select="+ a"/>
-         <xsl:variable name="t5" select="- a"/> -->
+     <xsl:variable name="t5" select="- a"/>
 </xsl:stylesheet> 
