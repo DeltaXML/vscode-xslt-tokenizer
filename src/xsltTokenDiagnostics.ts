@@ -1729,6 +1729,23 @@ export class XsltTokenDiagnostics {
 
 					}
 				}
+				if (!token.error && prevToken?.charType === CharLevelState.dSep && prevToken.value === '=>') {
+					let isValid = false;
+					if (xpathCharType === CharLevelState.lB || xpathTokenType === TokenLevelState.function) {
+						isValid = true;
+					} else if (xpathTokenType === TokenLevelState.variable) {
+						if (allTokens.length > index + 2) {
+							const nextToken = allTokens[index + 1];
+							if (nextToken.charType === CharLevelState.lB) {
+								isValid = true;
+							}
+						}
+					}
+					if (!isValid) {
+						token['error'] = ErrorType.FunctionAfterArrowOp;
+						problemTokens.push(token);
+					}
+				}
 			}
 			prevToken = token.tokenType === TokenLevelState.comment ? prevToken : token;
 			if (index === lastTokenIndex) {

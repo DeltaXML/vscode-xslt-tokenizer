@@ -7,10 +7,11 @@
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="3.0">
-    
-    
-    <!-- Simple expressions that should report an error -->  
-    <xsl:variable name="t25" select="10 => /"/>
+     
+     
+     <!-- Simple expressions that should report an error --> 
+     <xsl:variable name="t2" select="5"/>
+     <xsl:variable name="t25" select="10 => $t2(1)"/>
     <!-- <xsl:variable name="t21" select="22 /a"/>
     <xsl:variable name="t20" select="/a | ///"/>
     <xsl:variable name="t23" select="Q{com.examle}/new"/>
