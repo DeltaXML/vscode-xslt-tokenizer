@@ -276,7 +276,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						if (token.length === 9 || (isXSLTStartTag && this.minimiseXPathIndents)) {
 							let valueText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							awaitingXmlSpaceAttributeValue = (valueText === 'xml:space');
-							nameIndentRequired = !(isXSLTStartTag && attributeNameOnNewLine && this.xslLexer.isExpressionAtt(valueText));
+							nameIndentRequired = !(isXSLTStartTag && attributeNameOnNewLine && this.xslLexer.isExpressionAtt(valueText, ''));
 						}
 						const attNameLine = document.lineAt(lineNumber);
 						if (!nameIndentRequired) {
