@@ -5,6 +5,8 @@
                 expand-text="yes"
                 version="3.0">
     
+    <xsl:key name="abc" use="abc/@name"/>
+    
     <xsl:template name="test">
         <xsl:context-item as="element()" use="optional"/>
         <xsl:copy-of select="current()"/>
