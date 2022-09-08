@@ -5,8 +5,8 @@
     exclude-result-prefixes="xs"
     version="2.0">
     
+    <xsl:variable name="result" select="1 for $a in 1 to 20 return $a"/>
     <xsl:variable name="newCount" select="function ($a, $b) { $a + $b}"/>
-    <xsl:variable name="result" select="10 => fn:pqr#1(a)"/>
     
     <xsl:function name="fn:pqr">
         <xsl:param name="new"/>

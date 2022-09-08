@@ -1140,15 +1140,18 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.complexExpression:
 						let valueText = token.value;
+						let testStartOfExpression = false;
 						switch (valueText) {
 							case 'if':
 								ifThenStack.push(token);
+								testStartOfExpression = true;
 								break;
 							case 'every':
 							case 'for':
 							case 'let':
 							case 'some':
 							case 'member':
+								testStartOfExpression = true;
 								if (allTokens.length > index + 2) {
 									const nextToken = allTokens[index + 1];
 									const isForMember = valueText === 'for' && nextToken.value === 'member';
@@ -1233,6 +1236,9 @@ export class XsltTokenDiagnostics {
 									}
 								}
 								break;
+						}
+						if (!token.error && testStartOfExpression && prevToken) {
+
 						}
 						break;
 					case TokenLevelState.mapKey:
