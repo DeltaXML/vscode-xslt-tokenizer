@@ -2475,6 +2475,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunctionUnexpected:
 					msg = `XPath: Unexpected function after expression: '${tokenValue}()' `;
 					break;
+				case ErrorType.FunctionAfterArrowOp:
+					msg = `XPath: Expected function after arrow operator`;
+					break;
 				case ErrorType.XPathEmpty:
 					msg = 'XSLT: Expected XPath expression';
 					break;
