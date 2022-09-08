@@ -488,6 +488,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.xslElementName:
 						// this is xslt or schematron element
+						incrementFunctionArity = false;
 						pendingTemplateParamErrors = [];
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						const isXsltElementName = tagElementName.startsWith('xsl:');
@@ -1408,6 +1409,25 @@ export class XsltTokenDiagnostics {
 								token['error'] = ErrorType.XPathUnexpected;
 								problemTokens.push(token);
 								// token is pushed onto problemTokens later
+							}
+						} else if (tv === '/' && prevToken && prevToken.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber) {
+							const pv = prevToken.value;
+							const pt = prevToken.tokenType;
+							let fwdSlashError = true;
+							switch (pt) {
+								case TokenLevelState.operator:
+									fwdSlashError = (pv === '//' || pv === '!' || pv === '::');
+									break;
+								case TokenLevelState.axisName:
+								case TokenLevelState.comment:
+								case TokenLevelState.nodeNameTest:
+								case TokenLevelState.nodeType:
+									fwdSlashError = false;
+									break;
+							}
+							if (fwdSlashError) {
+								token['error'] = ErrorType.XPathUnexpected;
+								problemTokens.push(token);
 							}
 						}
 						// end checks
