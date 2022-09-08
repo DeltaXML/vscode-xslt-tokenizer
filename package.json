@@ -623,6 +623,11 @@
 				"description": "A node test in a step expression"
 			},
 			{
+				"id": "mapNameLookup",
+				"superType": "class",
+				"description": "A map key following the '?' lookup operator"
+			},
+			{
 				"id": "uriLiteral",
 				"superType": "struct",
 				"description": "A URI literal of the form: Q{uri}"

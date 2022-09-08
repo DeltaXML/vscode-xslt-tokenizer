@@ -1427,6 +1427,7 @@ export class XsltTokenDiagnostics {
 								case TokenLevelState.axisName:
 								case TokenLevelState.comment:
 								case TokenLevelState.nodeNameTest:
+								case TokenLevelState.mapNameLookup:
 								case TokenLevelState.nodeType:
 									fwdSlashError = false;
 									break;
@@ -1619,13 +1620,14 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
+					case TokenLevelState.mapNameLookup:
 						if (token.error) {
 							problemTokens.push(token);
 						} else {
 							let tokenValue;
 							let validationType;
 							let skipValidation = false;
-							if (xpathTokenType === TokenLevelState.nodeNameTest) {
+							if (xpathTokenType !== TokenLevelState.attributeNameTest) {
 								tokenValue = token.value;
 								validationType = ValidationType.PrefixedName;
 							} else {

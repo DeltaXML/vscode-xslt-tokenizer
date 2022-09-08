@@ -78,7 +78,8 @@ export enum TokenLevelState {
     function,
     entityRef, // same name as xslLexer entity reference
     anonymousFunction,
-    mapKey
+    mapKey,
+    mapNameLookup
 }
 
 export enum ExitCondition {
@@ -982,8 +983,9 @@ export class XPathLexer {
                         }
                         break;
                     default: // current token is an lName but previous token was not
-
-                        if (XPathLexer.isTokenTypeUnset(prevToken)
+                        if (prevToken.tokenType === TokenLevelState.operator && prevToken.value === '?') {
+                            currentToken.tokenType = TokenLevelState.mapNameLookup;
+                        }  else if (XPathLexer.isTokenTypeUnset(prevToken)
                             && Data.keywords.indexOf(currentValue) > -1) {
                             currentToken.tokenType = TokenLevelState.operator;
                         } else if (XPathLexer.isCharTypeEqual(prevToken, CharLevelState.dSep)
