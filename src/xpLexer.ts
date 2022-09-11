@@ -961,7 +961,7 @@ export class XPathLexer {
                             } else if (prevToken.value === '&lt;' && (currentToken.value === '&lt;' || currentToken.value === '&gt;')) {
                                 currentToken.tokenType = TokenLevelState.operator;
                             }
-                        } else if (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.functionNameTest || XPathLexer.isTokenTypeAType(prevToken)) {
+                        } else if (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.tokenType === TokenLevelState.functionNameTest || XPathLexer.isTokenTypeAType(prevToken)) {
                             Data.setAsOperatorIfKeyword(currentToken);
                         }
                         break;
