@@ -1324,6 +1324,21 @@ export class XsltTokenDiagnostics {
 								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens, TokenLevelState.function);
 							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType !== TokenLevelState.string) {
 								// either a number of an operator so show no error
+							} else if (tv === '?') {
+								if (isXMLToken || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment) {
+									// don't check
+								} else if (prevToken.tokenType === TokenLevelState.operator) {
+									if (prevToken.charType === CharLevelState.sep) {
+										const illegalPrevOperators = ['{', ':', '?'];
+										isXPathError = illegalPrevOperators.indexOf(prevToken.value) !== -1;
+									} else if (prevToken.charType === CharLevelState.dSep) {
+										const illegalPrevOperators = ['=>', '//', '..', '*:', '::'];
+										isXPathError = illegalPrevOperators.indexOf(prevToken.value) !== -1;
+									}
+								} else {
+									isXPathError = true;
+								}
+
 							} else if (isXMLToken) {
 								switch (currCharType) {
 									case CharLevelState.rB:
