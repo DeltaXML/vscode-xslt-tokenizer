@@ -24,7 +24,7 @@
             <xsl:sequence select="($map?foo)()"/>
             <xsl:for-each select="$map">
                 <xsl:sequence select="?qta"/>
-                <xsl:sequence select="abc?abc"/>
+                <xsl:sequence select="$map?abc?def()"/>
             </xsl:for-each>
         </root>
     </xsl:template>
