@@ -1439,6 +1439,7 @@ export class XsltTokenDiagnostics {
 								case TokenLevelState.operator:
 									fwdSlashError = (pv === '//' || pv === '!' || pv === '::');
 									break;
+								case TokenLevelState.variable:
 								case TokenLevelState.axisName:
 								case TokenLevelState.comment:
 								case TokenLevelState.nodeNameTest:
