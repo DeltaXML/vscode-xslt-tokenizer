@@ -7,19 +7,21 @@
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="3.0">
-
-    <xsl:output method="xml" indent="yes"/>  
-    <xsl:mode on-no-match="shallow-copy"/>
+    
     <xsl:import href="import-globalDefintion2.xsl"/>
+    <xsl:mode name="mod1New" on-no-match="shallow-copy"/>
     
+    <xsl:variable name="import1New" as="xs:integer" select="2"/>   
     
-    <xsl:variable name="import1" as="xs:integer" select="2"/>
-    
-
-    <xsl:template match="/" mode="#all">
+    <xsl:template match="/" mode="mod1New">
         <xsl:copy>
-            <xsl:apply-templates select="" mode="#current"/>
+            <xsl:sequence select="$import1New"/>
+            <xsl:apply-templates select="node()" mode="mod1New"/>
         </xsl:copy>        
+    </xsl:template>
+    
+    <xsl:template match="*" mode="mod1New">
+        <xsl:apply-templates select="node()" mode="mod1New2"/>        
     </xsl:template>
 
     

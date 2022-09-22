@@ -162,9 +162,9 @@ export class XsltTokenDefinitions {
 			}
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
-			// if (isOnRequiredToken) {
-			// 	console.log('onRequiredToken');
-			// }
+			if (isOnRequiredToken) {
+				console.log('onRequiredToken');
+			}
 			let isXMLToken = token.tokenType >= XsltTokenDefinitions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -423,6 +423,24 @@ export class XsltTokenDefinitions {
 							case AttributeType.InstructionMode:
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
+								}
+								if (isOnRequiredToken) {
+									const topLevel = elementStack.length === 1;
+									if (topLevel) {
+										resultInputToken = { token: token, type: GlobalInstructionType.Mode };
+										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.ModeInstruction);
+										if (!instruction) {
+											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Mode);
+										}
+										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+									} else {
+										resultInputToken = { token: token, type: GlobalInstructionType.Mode };
+										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.ModeInstruction);
+										if (!instruction) {
+											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.ModeTemplate);
+										}
+										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+									}
 								}
 								break;
 							case AttributeType.UseAttributeSets:

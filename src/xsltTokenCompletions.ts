@@ -464,14 +464,14 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									let completionStrings: string[] = [];
 									globalInstructionData.forEach((item) => {
-										if (item.type === GlobalInstructionType.Mode) {
+										if (item.type === GlobalInstructionType.Mode || item.type === GlobalInstructionType.ModeInstruction || item.type === GlobalInstructionType.ModeTemplate) {
 											if (completionStrings.indexOf(item.name) === -1 && item.name.charAt(0) !== '#') {
 												completionStrings.push(item.name);
 											}
 										}
 									});
 									importedInstructionData.forEach((importItem) => {
-										if (importItem.type === GlobalInstructionType.Mode) {
+										if (importItem.type === GlobalInstructionType.Mode || importItem.type === GlobalInstructionType.ModeInstruction || importItem.type === GlobalInstructionType.ModeTemplate) {
 											if (completionStrings.indexOf(importItem.name) === -1 && importItem.name.charAt(0) !== '#') {
 												completionStrings.push(importItem.name);
 											}

@@ -21,6 +21,10 @@
         <xsl:accumulator-rule match="test2" select="count($value)"/>
     </xsl:accumulator>
     
+    <xsl:template match="another" mode="mod1New2">
+        <xsl:apply-templates select="node()" mode="mod1New2"/>        
+    </xsl:template>
+    
     <xsl:variable name="import2" as="xs:integer" select="2"/>
     
     <xsl:template name="template2">

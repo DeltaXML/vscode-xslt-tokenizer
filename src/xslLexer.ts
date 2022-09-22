@@ -893,7 +893,7 @@ export class XslLexer {
                                 } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionName = true;
-                                } else if (tagGlobalInstructionType === GlobalInstructionType.Template && attName === 'mode' || tagGlobalInstructionType === GlobalInstructionType.Mode && attName === 'name') {
+                                } else if (attName === 'mode') {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionMode = true;
                                 } else if (tagGlobalInstructionType === GlobalInstructionType.Template && attName === 'match') {
@@ -964,9 +964,10 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 const modeNames = attValue.split(/\s+/);
                                 let newTokenCopy = Object.assign({}, newToken);
-                                let globalType = isGlobalInstructionMode? GlobalInstructionType.Mode: tagGlobalInstructionType;
+                                let globalType = tagGlobalInstructionType;
                                 let targetGlobal;
                                 if (isGlobalInstructionMode) {
+                                    globalType = (xmlElementStack.length === 1) ? GlobalInstructionType.ModeTemplate : GlobalInstructionType.Mode;
                                     targetGlobal = this.globalModeData;
                                 } else {
                                     targetGlobal = this.globalInstructionData;
@@ -1274,7 +1275,7 @@ export class XslLexer {
                         instructionType = GlobalInstructionType.Accumulator;
                         break;
                     case 'mode':
-                        instructionType = GlobalInstructionType.Mode;
+                        instructionType = GlobalInstructionType.ModeInstruction;
                         break;
                     case 'attribute-set':
                         instructionType = GlobalInstructionType.AttributeSet;
@@ -1302,6 +1303,8 @@ export enum GlobalInstructionType {
     Parameter,
     Function,
     Mode,
+    ModeInstruction,
+    ModeTemplate,
     Accumulator,
     AttributeSet,
     Key,

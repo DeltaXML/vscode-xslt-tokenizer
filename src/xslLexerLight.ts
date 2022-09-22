@@ -142,7 +142,7 @@ export class XslLexerLight extends XslLexer {
                                 isGlobalInstructionName = true;
                             } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                 isGlobalInstructionName = true;
-                            } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'mode'|| tagGlobalInstructionType === GlobalInstructionType.Mode && attName === 'name') {
+                            } else if (attName === 'mode') {
                                 isGlobalInstructionMode = true; 
                             } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'match') {
                                 isGlobalInstructionMatch = true;
@@ -195,6 +195,7 @@ export class XslLexerLight extends XslLexer {
                                 let globalType = isGlobalInstructionMode? GlobalInstructionType.Mode: tagGlobalInstructionType;
                                 let targetGlobal = isGlobalInstructionMode? this.globalModeData: this.globalInstructionData;
                                 if (isGlobalInstructionMode) {
+                                    globalType = (xmlElementStack === 1) ? GlobalInstructionType.ModeTemplate : GlobalInstructionType.Mode;
                                     targetGlobal = this.globalModeData;
                                 } else {
                                     targetGlobal = this.globalInstructionData;

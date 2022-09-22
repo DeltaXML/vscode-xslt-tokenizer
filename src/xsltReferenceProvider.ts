@@ -215,6 +215,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					}
 					break;
 				case GlobalInstructionType.Mode:
+				case GlobalInstructionType.ModeInstruction:
+				case GlobalInstructionType.ModeTemplate:
 					let modes = instruction.name.split(/\s+/);
 					globalModes = globalModes.concat(modes);
 					break;
@@ -254,6 +256,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					namedTemplateTokens.set(instruction.name, instruction);
 					break;
 				case GlobalInstructionType.Mode:
+				case GlobalInstructionType.ModeInstruction:
+				case GlobalInstructionType.ModeTemplate:
 					let modes = instruction.name.split(/\s+/);
 					globalModes = globalModes.concat(modes);
 					break;
@@ -534,7 +538,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								}
 								tagIdentifierName = variableName;
 								if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
-									const {symbolName, symbolID } = elementStack[elementStack.length - 1];
+									const { symbolName, symbolID } = elementStack[elementStack.length - 1];
 									if (seekInstruction.type === GlobalInstructionType.Variable && seekInstruction.name === variableName) {
 										if (symbolName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
 											const definitions = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
@@ -547,17 +551,21 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 											}
 										} else if (symbolName === 'xsl:call-template' && seekInstruction.name === variableName) {
 											// TODO: check that template definition token is same seekInstruction token:
-                      const templateInstruction = namedTemplateTokens.get(symbolID);
+											const templateInstruction = namedTemplateTokens.get(symbolID);
 											if (templateInstruction && templateInstruction.memberNames) {
 												const paramPos = templateInstruction.memberNames.indexOf(variableName);
 												if (paramPos > -1 && templateInstruction.memberTokens) {
 													const paramToken = templateInstruction.memberTokens[paramPos];
-														if (paramToken && paramToken.line === seekInstruction.token.line && paramToken.startCharacter === seekInstruction.token.startCharacter) {
-															referenceTokens.push(token);
-														}
+													if (paramToken && paramToken.line === seekInstruction.token.line && paramToken.startCharacter === seekInstruction.token.startCharacter) {
+														referenceTokens.push(token);
+													}
 												}
 											}
 										}
+									} 
+								} else if (seekInstruction.type === GlobalInstructionType.Mode || seekInstruction.type === GlobalInstructionType.ModeTemplate) {
+									if (variableName === seekInstruction.name) {
+										referenceTokens.push(token);
 									}
 								}
 								break;
@@ -565,7 +573,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
 								}
-								if (seekInstruction.type === GlobalInstructionType.Mode && variableName === seekInstruction.name) {
+								if ((seekInstruction.type === GlobalInstructionType.Mode || seekInstruction.type === GlobalInstructionType.ModeInstruction || seekInstruction.type === GlobalInstructionType.ModeTemplate) && variableName === seekInstruction.name) {
 									referenceTokens.push(token);
 								}
 								break;
