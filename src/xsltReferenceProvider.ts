@@ -574,7 +574,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 									tagIdentifierName = variableName;
 								}
 								if ((seekInstruction.type === GlobalInstructionType.Mode || seekInstruction.type === GlobalInstructionType.ModeInstruction || seekInstruction.type === GlobalInstructionType.ModeTemplate) && variableName === seekInstruction.name) {
-									referenceTokens.push(token);
+									if (seekInstruction.type === GlobalInstructionType.ModeInstruction || !(seekInstruction.token.startCharacter === token.startCharacter && seekInstruction.token.line === token.line)) {
+										referenceTokens.push(token);
+									}
 								}
 								break;
 							case AttributeType.UseAttributeSets:

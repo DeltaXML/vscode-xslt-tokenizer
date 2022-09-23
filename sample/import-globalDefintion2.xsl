@@ -10,7 +10,7 @@
                 version="3.0">
     
     <xsl:output method="xml" indent="yes"/>  
-    <xsl:mode on-no-match="shallow-copy"/>
+    <xsl:mode name="mod1New2" on-no-match="shallow-copy"/>
     
     <xsl:key name="book-id2" match="book" use="@id"/>
     
