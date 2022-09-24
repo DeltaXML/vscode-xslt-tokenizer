@@ -578,7 +578,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 										const modeTokens = XslLexer.tokensInsideToken(token, variableName);
 										modeTokens.forEach((modeToken) => {
 											if (modeToken.value === seekInstruction.name) {
-												referenceTokens.push(modeToken);
+												if (seekInstruction.type === GlobalInstructionType.ModeInstruction || !(seekInstruction.token.startCharacter === modeToken.startCharacter && seekInstruction.token.line === modeToken.line)) {
+													referenceTokens.push(token);
+												}
 											}
 										 });
 									} else if (variableName === seekInstruction.name) {
