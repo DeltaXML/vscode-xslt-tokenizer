@@ -712,7 +712,9 @@ export class XsltTokenDefinitions {
 	public static createLocationFromTokenUri(token: BaseToken, uri: vscode.Uri) {
 		const isQuoted = XSLTReferenceProvider.isTokenQuoted(token);
 		let range: vscode.Range;
-		if (isQuoted) {
+		if (token.tokenType < 0) {
+			range = XsltTokenDefinitions.createRangeFromToken(token);
+		} else if (isQuoted) {
 			let startPos = new vscode.Position(token.line, token.startCharacter + 1);
 			let endPos = new vscode.Position(token.line, token.startCharacter + token.length - 1);
 			range = new vscode.Range(startPos, endPos);

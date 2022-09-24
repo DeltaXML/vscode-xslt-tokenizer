@@ -21,7 +21,7 @@
         </xsl:copy>        
     </xsl:template>
     
-    <xsl:template match="*" mode="mod1New">
+    <xsl:template match="*" mode="mod1New something">
         <xsl:apply-templates select="node()" mode="mod1New2"/>        
     </xsl:template>
 

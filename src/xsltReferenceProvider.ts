@@ -573,9 +573,18 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
 								}
-								if ((seekInstruction.type === GlobalInstructionType.Mode || seekInstruction.type === GlobalInstructionType.ModeInstruction || seekInstruction.type === GlobalInstructionType.ModeTemplate) && variableName === seekInstruction.name) {
-									if (seekInstruction.type === GlobalInstructionType.ModeInstruction || !(seekInstruction.token.startCharacter === token.startCharacter && seekInstruction.token.line === token.line)) {
-										referenceTokens.push(token);
+								if ((seekInstruction.type === GlobalInstructionType.Mode || seekInstruction.type === GlobalInstructionType.ModeInstruction || seekInstruction.type === GlobalInstructionType.ModeTemplate)) {
+									if (tagElementName === 'xsl:template') {
+										const modeTokens = XslLexer.tokensInsideToken(token, variableName);
+										modeTokens.forEach((modeToken) => {
+											if (modeToken.value === seekInstruction.name) {
+												referenceTokens.push(modeToken);
+											}
+										 });
+									} else if (variableName === seekInstruction.name) {
+										if (seekInstruction.type === GlobalInstructionType.ModeInstruction || !(seekInstruction.token.startCharacter === token.startCharacter && seekInstruction.token.line === token.line)) {
+											referenceTokens.push(token);
+										}
 									}
 								}
 								break;

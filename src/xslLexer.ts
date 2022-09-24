@@ -1198,7 +1198,7 @@ export class XslLexer {
             return [];
         }
         const result: BaseToken[] = [];
-        const tokenType = TokenLevelState.string + XslLexer.xpathLegendLength;
+        const tokenType = -1; // not a standard token
 
         let isWhitespace = false;
         // attValue startwith a " character so offset by one:
