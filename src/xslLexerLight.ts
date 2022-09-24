@@ -201,7 +201,12 @@ export class XslLexerLight extends XslLexer {
                                     targetGlobal = this.globalInstructionData;
                                     tagInstructionNameAdded = true;
                                 }
-                                modeNames.forEach((modeName) => targetGlobal.push({type: globalType, name: modeName, token: tkn, idNumber: 0}));
+                                if (globalType === GlobalInstructionType.ModeTemplate) {
+                                    const modeTokens = XslLexer.tokensInsideToken(tkn, attValue);
+                                    modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
+                                } else {
+                                    targetGlobal.push({type: globalType, name: attValue, token: tkn, idNumber: 0});
+                                }
                                 isGlobalInstructionName = false;
                                 // fix bug where function arity was added to by following template params
                                 //tagGlobalInstructionType = GlobalInstructionType.Unknown;

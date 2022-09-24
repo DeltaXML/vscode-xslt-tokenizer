@@ -173,6 +173,8 @@ export class XslLexer {
     private dtdNesting = 0;
     private nonNativeAvts = false;
     private docType: DocumentTypes;
+    private static splitModesregexp = /([^\s]+)|(\s+)/g;
+    private static startsWithWSRegex = new RegExp('$\s');
 
 
     constructor(languageConfiguration: LanguageConfiguration) {
@@ -961,8 +963,7 @@ export class XslLexer {
                             }
                             let newToken = this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
-                                let attValue = tokenChars.join('');
-                                const modeNames = attValue.split(/\s+/);
+                                let attValue = tokenChars.join('');                               
                                 let newTokenCopy = Object.assign({}, newToken);
                                 let globalType = tagGlobalInstructionType;
                                 let targetGlobal;
@@ -973,8 +974,13 @@ export class XslLexer {
                                     targetGlobal = this.globalInstructionData;
                                     tagInstructionNameAdded = true;
                                 }
-                                const idNumber = globalType === GlobalInstructionType.Variable ? result.length : 0;
-                                modeNames.forEach((modeName) => targetGlobal.push({type: globalType, name: modeName, token: newTokenCopy, idNumber: idNumber}));
+                                if (globalType === GlobalInstructionType.ModeTemplate) {
+                                    const modeTokens = XslLexer.tokensInsideToken(newToken, attValue);
+                                    modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
+                                } else {
+                                    const idNumber = globalType === GlobalInstructionType.Variable ? result.length : 0;
+                                    targetGlobal.push({type: globalType, name: attValue, token: newTokenCopy, idNumber: idNumber});
+                                }
                             } else if (isGlobalParameterName) {
                                 let attValue = tokenChars.join('');
                                 if (this.globalInstructionData.length > 0) {
@@ -1183,6 +1189,42 @@ export class XslLexer {
                 }
             }
         }
+    }
+
+    public static tokensInsideToken(token: BaseToken, attValue: string) {
+
+        const tokenValues = attValue.match(this.splitModesregexp);
+        if (!tokenValues) {
+            return [];
+        }
+        const result: BaseToken[] = [];
+        const tokenType = TokenLevelState.string + XslLexer.xpathLegendLength;
+
+        let isWhitespace = false;
+        // attValue startwith a " character so offset by one:
+        let partPosition = token.startCharacter + 1;
+        tokenValues.forEach((value, index) => {
+            if (index === 0) {
+                isWhitespace = this.startsWithWSRegex.test(tokenValues[index]);
+            } else {
+                // tokenValues isWhiteSpace alternates: 
+                // eg: "mode1 mode2" => ["mode1", " ", "mode2"]
+                isWhitespace = !isWhitespace;
+            }
+            const valueLength = value.length;
+            if (!isWhitespace) {
+                let tkn: BaseToken = {
+                    line: token.line,
+                    length: valueLength,
+                    startCharacter: partPosition,
+                    value: value,
+                    tokenType: tokenType
+                };
+                result.push(tkn);
+            }
+            partPosition += valueLength;
+        });
+        return result;
     }
 
     private addNewTokenToResult(tokenStartChar: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState): BaseToken {

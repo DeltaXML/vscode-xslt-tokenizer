@@ -9,14 +9,15 @@
                 version="3.0">
     
     <xsl:import href="import-globalDefintion2.xsl"/>
-    <xsl:mode name="mod1New" on-no-match="shallow-copy"/>
+    <!-- <xsl:mode name="mod1New" on-no-match="shallow-copy"/> -->
     
     <xsl:variable name="import1New" as="xs:integer" select="2"/>   
     
-    <xsl:template match="/" mode="mod1New">
+    <xsl:template match="/" mode="mod1New mode1Old">
         <xsl:copy>
-            <xsl:sequence select="$import1New"/>
+            <xsl:sequence select="$import1New, $import2"/>
             <xsl:apply-templates select="node()" mode="mod1New"/>
+            <xsl:apply-templates select="node()" mode="mode1Old"/>
         </xsl:copy>        
     </xsl:template>
     

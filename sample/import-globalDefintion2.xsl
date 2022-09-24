@@ -30,7 +30,7 @@
     <xsl:template name="template2">
         <xsl:param name="p1" as="node()"/>
         <xsl:copy>
-            <xsl:apply-templates select="@*, node()" mode="#current"/>
+            <xsl:apply-templates select="@*, node()" mode="mode1Old"/>
         </xsl:copy>
         
     </xsl:template>

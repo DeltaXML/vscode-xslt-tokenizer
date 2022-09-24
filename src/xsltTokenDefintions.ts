@@ -681,8 +681,9 @@ export class XsltTokenDefinitions {
 		if (instruction) {
 			let uri = instruction?.href ? vscode.Uri.parse(url.pathToFileURL(instruction.href).toString()) : document.uri;
 			const token = instruction.token;
-			let startPos = new vscode.Position(token.line, token.startCharacter + 1);
-			let endPos = new vscode.Position(token.line, token.startCharacter + token.length - 1);
+			const startEndOffset = instruction.type === GlobalInstructionType.ModeTemplate ? 0 : 1; 
+			let startPos = new vscode.Position(token.line, token.startCharacter + startEndOffset);
+			let endPos = new vscode.Position(token.line, token.startCharacter + token.length - startEndOffset);
 			const range = new vscode.Range(startPos, endPos);
 			const location: DefinitionLocation = new vscode.Location(uri, range);
 			location.instruction = instruction;
