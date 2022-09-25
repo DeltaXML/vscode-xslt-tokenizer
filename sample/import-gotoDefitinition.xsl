@@ -20,7 +20,7 @@
     <xsl:template match="/" mode="mod1New mode1Old2again">
         <xsl:copy>
             <xsl:sequence select="$import1New, $import2"/>
-            <xsl:apply-templates select="node()" mode="mod1New"/>
+            <xsl:apply-templates select="node()" mode="aqstuv"/>
             <xsl:apply-templates select="node()" mode="mode1Old2again"/>
         </xsl:copy>        
     </xsl:template>

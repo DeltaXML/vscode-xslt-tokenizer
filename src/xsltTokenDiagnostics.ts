@@ -361,11 +361,9 @@ export class XsltTokenDiagnostics {
 						namedTemplates.set(instruction.name, members);
 					}
 					break;
-				case GlobalInstructionType.Mode:
 				case GlobalInstructionType.ModeInstruction:
 				case GlobalInstructionType.ModeTemplate:
-					let modes = instruction.name.split(/\s+/);
-					globalModes = globalModes.concat(modes);
+					globalModes.push(instruction.name);
 					break;
 				case GlobalInstructionType.Key:
 					globalKeys.push(instruction.name);
@@ -410,11 +408,9 @@ export class XsltTokenDiagnostics {
 					let members = instruction.memberNames ? instruction.memberNames : [];
 					namedTemplates.set(instruction.name, members);
 					break;
-				case GlobalInstructionType.Mode:
 				case GlobalInstructionType.ModeInstruction:
 				case GlobalInstructionType.ModeTemplate:
-					let modes = instruction.name.split(/\s+/);
-					globalModes = globalModes.concat(modes);
+					globalModes.push(instruction.name);
 					break;
 				case GlobalInstructionType.Key:
 					globalKeys.push(instruction.name);
