@@ -426,18 +426,24 @@ export class XsltTokenDefinitions {
 								}
 								if (isOnRequiredToken) {
 									const topLevel = elementStack.length === 1;
+									const innerTokens = XslLexer.tokensInsideToken(token, variableName);
+									const matchingInner = innerTokens.find((innerToken) =>
+										position.character >= innerToken.startCharacter &&
+										position.character <= (innerToken.startCharacter + innerToken.length)
+									);
+									const seekName = matchingInner ? matchingInner.value : "";
 									if (topLevel) {
 										resultInputToken = { token: token, type: GlobalInstructionType.Mode };
-										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.ModeInstruction);
+										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeInstruction);
 										if (!instruction) {
-											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Mode);
+											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.Mode);
 										}
 										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 									} else {
 										resultInputToken = { token: token, type: GlobalInstructionType.Mode };
-										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.ModeInstruction);
+										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeInstruction);
 										if (!instruction) {
-											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.ModeTemplate);
+											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeTemplate);
 										}
 										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
 									}
