@@ -17,10 +17,10 @@
         
     </xsl:template>
     
-    <xsl:template match="/" mode="mod1New mode1Old2again">
+    <xsl:template match="/" mode="mod1New mode1Old2again m8">
         <xsl:copy>
             <xsl:sequence select="$import1New, $import2"/>
-            <xsl:apply-templates select="node()" mode="aqstuv"/>
+            <xsl:apply-templates select="node()" mode="m8"/>
             <xsl:apply-templates select="node()" mode="mode1Old2again"/>
         </xsl:copy>        
     </xsl:template>
