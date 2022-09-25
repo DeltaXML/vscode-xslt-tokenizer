@@ -17,12 +17,12 @@
         <xsl:copy>
             <xsl:sequence select="$import1New, $import2"/>
             <xsl:apply-templates select="node()" mode="mod1New"/>
-            <xsl:apply-templates select="node()" mode="mode1Old2again"/>
+            <xsl:apply-templates select="node()" mode="mnode1Old2again"/>
         </xsl:copy>        
     </xsl:template>
     
     <xsl:template match="*" mode="mod1New something">
-        <xsl:apply-templates select="node()" mode="mod1New2"/>        
+        <xsl:apply-templates select="node()" mode="something"/>        
     </xsl:template>
 
     
