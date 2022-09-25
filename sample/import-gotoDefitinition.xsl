@@ -24,7 +24,5 @@
     <xsl:template match="*" mode="mod1New something">
         <xsl:apply-templates select="node()" mode="something"/>        
     </xsl:template>
-
     
-
 </xsl:stylesheet>

@@ -579,7 +579,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 										modeTokens.forEach((modeToken) => {
 											if (modeToken.value === seekInstruction.name) {
 												if (seekInstruction.type === GlobalInstructionType.ModeInstruction || !(seekInstruction.token.startCharacter === modeToken.startCharacter && seekInstruction.token.line === modeToken.line)) {
-													referenceTokens.push(token);
+													referenceTokens.push(modeToken);
 												}
 											}
 										 });
