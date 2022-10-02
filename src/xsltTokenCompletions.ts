@@ -538,7 +538,15 @@ export class XsltTokenCompletions {
 
 						attType = AttributeType.None;
 						break;
-				}
+					case XSLTokenLevelState.dtd:
+						if (isOnRequiredToken) {
+							let labels: string[] = tagElementName === 'xsl:apply-templates'? ['default', 'current'] : ['default', 'current', 'all'];
+							resultCompletions = XsltTokenCompletions.createDtdTypeCompletions(document, position);
+						}
+						break;
+				} 
+
+
 
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
@@ -850,6 +858,28 @@ export class XsltTokenCompletions {
 			//newItem.range = newRange;
 			allCompletions.push(newItem);
 		});
+	}
+
+	private static createDtdTypeCompletions(doc: vscode.TextDocument, pos: vscode.Position) {
+		const allCompletions: vscode.CompletionItem[] = [];
+		let prevText = doc.getText(new vscode.Range(pos.with({ character: pos.character - 1 }), pos));
+		const prevTextIsBang = prevText === '!';
+		const labelData = [
+			{ snippet: '-- ${1} -->${0}', text: '<!-- -->', detail: 'XML comment' },
+			{ snippet: '[CDATA[${1}]]>${0}', text: '<![CDATA[]]>', detail: 'CDATA section' }
+			// { snippet: `DOCTYPE element-name [\n\t<!ENTITY entity-name "entity-value">\n]>`, text: '<!DOCTYPE...>' },
+		];
+
+		labelData.forEach((item) => {
+			const { snippet, text, detail } = item;
+			const adjustedSnippet = prevTextIsBang ? snippet : '!' + snippet;
+			const s = new vscode.SnippetString(adjustedSnippet);
+			const newItem = new vscode.CompletionItem(text, vscode.CompletionItemKind.Constant);
+			newItem.detail = detail;
+			newItem.insertText = s;
+			allCompletions.push(newItem);
+		});
+		return allCompletions;
 	}
 
 	private static internalFunctionCompletions(docType: DocumentTypes) {
@@ -1261,7 +1291,6 @@ export class XsltTokenCompletions {
 		expectedTags = xsltParent ? schemaQuery.getExpected(xsltParent).elements : [];
 
 		let completionItems: vscode.CompletionItem[] = [];
-		XsltTokenCompletions.addNewCompletionItem(completionItems, 'literal-xml-comment', '', '!-- $0 -->');
 		XsltTokenCompletions.addNewCompletionItem(completionItems, 'literal-xml-processing-instruction', '', '?${1:name} ${0:value} ?>');
 		if (isWithinXslIterate) {
 			const newItem = new vscode.CompletionItem('xsl:next-iteration', vscode.CompletionItemKind.Struct);
@@ -1350,8 +1379,6 @@ export class XsltTokenCompletions {
 					newItem3.documentation = "start and close tags";
 					newItem3.insertText = new vscode.SnippetString('${1:div}>\n\t$0\n</${1:div}>');
 					completionItems.push(newItem3);
-					XsltTokenCompletions.addNewCompletionItem(completionItems, 'literal-xml-CDATA', '', '![CDATA[${0:text}]]>');
-
 				} else if (tagName === 'xsl:message') {
 					useCurrent = false;
 					if (inScopeVariablesList.length > 0) {
