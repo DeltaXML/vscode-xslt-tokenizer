@@ -1388,13 +1388,13 @@ export class XsltTokenCompletions {
 					newItem.documentation = "self-closing tag";
 					newItem.insertText = new vscode.SnippetString('${1:div} ${2:class}="$3"/>$0');
 					completionItems.push(newItem);
-					const newItem2 = new vscode.CompletionItem('literal-start-element', vscode.CompletionItemKind.Struct);
-					newItem2.documentation = "start tag only";
-					newItem2.insertText = new vscode.SnippetString('${1:div}>$0');
+					const newItem2 = new vscode.CompletionItem('literal-element (inline)', vscode.CompletionItemKind.Struct);
+					newItem2.documentation = "start and close tags";
+					newItem2.insertText = new vscode.SnippetString('${1:element}>${0}</element>');
 					completionItems.push(newItem2);
-					const newItem3 = new vscode.CompletionItem('literal-element', vscode.CompletionItemKind.Struct);
+					const newItem3 = new vscode.CompletionItem('literal-element (block)', vscode.CompletionItemKind.Struct);
 					newItem3.documentation = "start and close tags";
-					newItem3.insertText = new vscode.SnippetString('${1:element}>\n\t$0\n</element>');
+					newItem3.insertText = new vscode.SnippetString('${1:element}>\n\t${0}\n</element>');
 					completionItems.push(newItem3);
 				} else if (tagName === 'xsl:message') {
 					useCurrent = false;
