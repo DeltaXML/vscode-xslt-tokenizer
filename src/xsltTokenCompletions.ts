@@ -535,19 +535,14 @@ export class XsltTokenCompletions {
 								}
 								break;
 						}
-
 						attType = AttributeType.None;
 						break;
 					case XSLTokenLevelState.dtd:
 						if (isOnRequiredToken) {
-							let labels: string[] = tagElementName === 'xsl:apply-templates'? ['default', 'current'] : ['default', 'current', 'all'];
 							resultCompletions = XsltTokenCompletions.createDtdTypeCompletions(document, position);
 						}
 						break;
 				} 
-
-
-
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
