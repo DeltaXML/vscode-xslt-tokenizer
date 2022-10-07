@@ -356,6 +356,11 @@ export class XsltTokenCompletions {
 									}
 								}
 								break;
+							case XMLCharState.lPi:
+								if (isOnRequiredToken) {
+									resultCompletions = XsltTokenCompletions.createPiTypeCompletions();
+								}
+								break;
 						}
 						break;
 
@@ -877,6 +882,24 @@ export class XsltTokenCompletions {
 		return allCompletions;
 	}
 
+	private static createPiTypeCompletions() {
+		const allCompletions: vscode.CompletionItem[] = [];
+		const labelData = [
+			{ snippet: '${1:name} ${2:value}?>${0}', text: '<?name value?>', detail: 'XML Processing Instruction' },
+			{ snippet: '${1:name}?>${0}', text: '<?name?>', detail: 'XML Processing Instruction - name-only' }
+		];
+
+		labelData.forEach((item) => {
+			const { snippet, text, detail } = item;
+			const s = new vscode.SnippetString(snippet);
+			const newItem = new vscode.CompletionItem(text, vscode.CompletionItemKind.Constant);
+			newItem.detail = detail;
+			newItem.insertText = s;
+			allCompletions.push(newItem);
+		});
+		return allCompletions;
+	}
+
 	private static internalFunctionCompletions(docType: DocumentTypes) {
 		if (docType === DocumentTypes.XSLT) {
 			return XsltTokenCompletions.useIxslFunctions? XPathFunctionDetails.dataPlusIxsl : XPathFunctionDetails.data;
@@ -1286,7 +1309,6 @@ export class XsltTokenCompletions {
 		expectedTags = xsltParent ? schemaQuery.getExpected(xsltParent).elements : [];
 
 		let completionItems: vscode.CompletionItem[] = [];
-		XsltTokenCompletions.addNewCompletionItem(completionItems, 'literal-xml-processing-instruction', '', '?${1:name} ${0:value} ?>');
 		if (isWithinXslIterate) {
 			const newItem = new vscode.CompletionItem('xsl:next-iteration', vscode.CompletionItemKind.Struct);
 			newItem.documentation = "start next iteration with provided xsl:param context";

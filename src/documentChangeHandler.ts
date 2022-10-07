@@ -73,6 +73,8 @@ export class DocumentChangeHandler {
 			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
 			if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
 				triggerSuggest = true;
+			} else if (prevChar === '<' && activeChange.text === '?') {
+				triggerSuggest = true;
 			}
 		}
 		// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
