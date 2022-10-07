@@ -1394,7 +1394,7 @@ export class XsltTokenCompletions {
 					completionItems.push(newItem2);
 					const newItem3 = new vscode.CompletionItem('literal-element', vscode.CompletionItemKind.Struct);
 					newItem3.documentation = "start and close tags";
-					newItem3.insertText = new vscode.SnippetString('${1:div}>\n\t$0\n</${1:div}>');
+					newItem3.insertText = new vscode.SnippetString('${1:element}>\n\t$0\n</element>');
 					completionItems.push(newItem3);
 				} else if (tagName === 'xsl:message') {
 					useCurrent = false;
