@@ -1442,6 +1442,7 @@ export class XsltTokenDiagnostics {
 								case TokenLevelState.variable:
 								case TokenLevelState.axisName:
 								case TokenLevelState.comment:
+								case TokenLevelState.attributeNameTest:
 								case TokenLevelState.nodeNameTest:
 								case TokenLevelState.mapNameLookup:
 								case TokenLevelState.nodeType:
