@@ -1325,7 +1325,7 @@ export class XsltTokenDiagnostics {
 							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType !== TokenLevelState.string) {
 								// either a number of an operator so show no error
 							} else if (tv === '?') {
-								if (isXMLToken || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment ||  prevToken.tokenType === TokenLevelState.mapNameLookup) {
+								if (isXMLToken || prevToken.value === '.' || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment ||  prevToken.tokenType === TokenLevelState.mapNameLookup) {
 									// don't check
 								} else if (prevToken.tokenType === TokenLevelState.operator) {
 									if (prevToken.charType === CharLevelState.sep) {
