@@ -10,7 +10,7 @@ import { SchSchema } from './schSchema';
 
 export class XSLTConfiguration {
 	// Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
-	static expressionAtts = ['array', 'context-item', 'count', 'else', 'from', 'group-adjacent', 'group-by', 'group-ending-with', 'group-starting-with', 'from', 'for-each-item', 'for-each-source', 'initial-value', 
+	static expressionAtts = ['array', 'break-when', 'context-item', 'count', 'else', 'from', 'group-adjacent', 'group-by', 'group-ending-with', 'group-starting-with', 'from', 'for-each-item', 'for-each-source', 'initial-value', 
 	'key', 'map', 'match', 'namespace-context', 'on-duplicates', 'select', 'test', 'then', 'use', 'use-when', 'value', 'with-params', 'xpath' ];
 
 	static avtAtts = ['allow-duplicate-names', 'base-uri', 'build-tree', 'byte-order-mark', 'case-order', 'cdata-section-elements', 'collation', 'data-type', 'doctype-public', 'doctype-system', 'encoding', 'error-code',
