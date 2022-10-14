@@ -342,7 +342,7 @@ export class XPathLexer {
             case CharLevelState.lVar:
             case CharLevelState.lAttr:
                 if (char === '-' || char === '.' ||
-                 (char === ':' && !(nextChar === ':' || nextChar === '*' || nextChar === ' ' || nextChar === '\n' || nextChar === '\r' || nextChar === '\t'))) {
+                 (char === ':' && !(nextChar === ':' || nextChar === '=' || nextChar === '*' || nextChar === ' ' || nextChar === '\n' || nextChar === '\r' || nextChar === '\t'))) {
                     rv = existing;
                 } else {
                     // we must switch to the new state, depending on the char/nextChar
