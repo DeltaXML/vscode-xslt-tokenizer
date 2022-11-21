@@ -1023,7 +1023,7 @@ export class XPathLexer {
                             currentToken.tokenType = TokenLevelState.simpleType;
                         } else if (prevTokenT === TokenLevelState.operator && (prevToken.value === ')') || prevToken.value === ']') {
                             // ($a) * 9 or count($a) * 8 or abc as map(*)* or $item as node()+
-                            if (poppedContext && poppedContext.tokenType === TokenLevelState.simpleType) {
+                            if (poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType)) {
                                 currentToken.charType = CharLevelState.lName;
                                 currentToken.tokenType = TokenLevelState.nodeType;
                             }
@@ -1035,6 +1035,9 @@ export class XPathLexer {
                                 currentToken.charType = CharLevelState.lName;
                                 currentToken.tokenType = TokenLevelState.nodeType;
                             }
+                        } else if (prevTokenT === TokenLevelState.nodeType && prevToken.length > 1) {
+                            currentToken.charType = CharLevelState.lName;
+                            currentToken.tokenType = TokenLevelState.nodeType;
                         }
                     }
                 }
