@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-const COMMAND = 'code-actions-sample.command';
+
 enum ElementSelectionType {
 	unknown,
 	multilineStartEnd,
@@ -36,6 +36,9 @@ interface ActionProps {
 	document: vscode.TextDocument;
 	range: vscode.Range;
 }
+enum XsltCodeActionKind {
+	extractXsltFunction = 'Extract XSLT function'
+}
 
 export class XSLTCodeActions implements vscode.CodeActionProvider {
 
@@ -51,39 +54,31 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		this.actionProps = { document, range };
 		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
 
-		let fixText = "unset";
+		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
+		const codeActions: vscode.CodeAction[] = [];
+		// debug only:
+		codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
+
 		switch (roughSelectionType) {
 			case RangeTagType.startUnclosedSingle:
-				fixText = RangeTagType[roughSelectionType];
 				break;
 			case RangeTagType.startCloseSingle:
-				fixText = RangeTagType[roughSelectionType];
-				break;
 			case RangeTagType.selfCloseSingle:
-				fixText = RangeTagType[roughSelectionType];
-				break;
 			case RangeTagType.startCloseMulti:
-				fixText = RangeTagType[roughSelectionType];
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunction, vscode.CodeActionKind.RefactorExtract));
 				break;
 			default:
 				return;
 		}
-
-		fixText = `${fixText} [${firstTagName}] [${lastTagName}]`;
-
-		const testXSLTFix = this.createStubFix(fixText);
-
 
 		// Marking a single fix as `preferred` means that users can apply it with a
 		// single keyboard shortcut using the `Auto Fix` command.
 		//replaceWithSmileyFix.isPreferred = true;
 
 		const commandAction = this.createCommand();
+		codeActions.push(commandAction);
 
-		return [
-			testXSLTFix,
-			commandAction
-		];
+		return codeActions;
 	}
 
 	resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): vscode.CodeAction {
@@ -91,7 +86,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			return codeAction;
 		}
 		const { document, range } = this.actionProps;
-        return this.addFix(codeAction, document, range, codeAction.title);
+		switch (codeAction.title) {
+			case XsltCodeActionKind.extractXsltFunction:
+				this.addEditToCodeAction(codeAction, document, range, codeAction.title);
+				break;
+		}
+        return codeAction;
 	}
 
 	private estimateSelectionType(document: vscode.TextDocument, range: vscode.Range) {
@@ -188,20 +188,26 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { lineType, endTagName };
 	}
 
-	private createStubFix(title: string): vscode.CodeAction {
-		const fix = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+	private createStubCodeAction(title: string): vscode.CodeAction {
+		const fix = new vscode.CodeAction(title, vscode.CodeActionKind.RefactorExtract);
 		return fix;
 	}
 
-	private addFix(codeAction: vscode.CodeAction, document: vscode.TextDocument, range: vscode.Range, text: string): vscode.CodeAction {
+	private addEditToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, range: vscode.Range, text: string): vscode.CodeAction {
+		const fullRange = this.extendRangeToFullLines(range);
 		codeAction.edit = new vscode.WorkspaceEdit();
-		codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
+		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
+		codeAction.edit.replace(document.uri, fullRange, text);
 		return codeAction;
+	}
+
+	private extendRangeToFullLines(range: vscode.Range) {
+		return new vscode.Range(range.start.with({character: 0}), range.end.with({line: range.end.line + 1, character: 0}));
 	}
 
 	private createCommand(): vscode.CodeAction {
 		const action = new vscode.CodeAction('Learn more...', vscode.CodeActionKind.Empty);
-		action.command = { command: COMMAND, title: 'Learn more about emojis', tooltip: 'This will open the unicode emoji page.' };
+		action.command = { command: XSLTCodeActions.COMMAND, title: 'Learn more about emojis', tooltip: 'This will open the unicode emoji page.' };
 		return action;
 	}
 }
