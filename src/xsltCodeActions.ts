@@ -6,15 +6,16 @@ enum ElementSelectionType {
 	multilineStartEnd,
 	multilineStartStart
 }
-enum LineTagEndType {
-	unknown,
-	selfClose,
-	endTag
-}
+
 enum LineTagStartType {
 	unknown,
-	startTag,
-	closeTag,
+	startTag,  // <abc
+	closeTag,  // </abc
+}
+enum LineTagEndType {
+	unknown,
+	selfClose, // abc/>
+	endTag     // abc>
 }
 enum RangeTagType {
 	unknown,
@@ -39,13 +40,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	];
 
 	public static COMMAND = 'code-actions-sample.command';
-	private static tagNameRegex = new RegExp(/^([^\s|>]+)/);
+	private static tagNameRegex = new RegExp(/^([^\s|\/|>]+)/);
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
-		const roughSelectionType = this.estimateSelectionType(document, range);
-		if (this.estimateSelectionType(document, range) === RangeTagType.unknown) {
-			return;
-		}
+		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
+
 		let fixText = "unset";
 		switch (roughSelectionType) {
 			case RangeTagType.startUnclosedSingle:
@@ -63,6 +62,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			default:
 				return;
 		}
+
+		fixText = `${fixText} [${firstTagName}] [${lastTagName}]`;
 
 		const testXSLTFix = this.createFix(document, range, fixText);
 
@@ -83,6 +84,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		];
 	}
 
+	resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): vscode.CodeAction {
+		const commandAction = this.createCommand();
+		return commandAction;
+	}
+
 	private estimateSelectionType(document: vscode.TextDocument, range: vscode.Range) {
 		/*
 		returns:
@@ -94,37 +100,45 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const start = range.start;
 		const end = range.end;
 		const isSingleLine = start.line === end.line;
-		let result = RangeTagType.unknown;
+		let rangeTagType = RangeTagType.unknown;
+		let firstTagName = '';
+		let lastTagName = '';
 
 		const startLine = document.lineAt(start.line);
 		const { lineType: startLineTagStartType, tagName } = this.testTagLineStart(startLine);
-		const { lineType: startLineTageEndType, endTagName }  = this.testTagLineEnd(startLine);
+		const { lineType: startLineTageEndType, endTagName } = this.testTagLineEnd(startLine);
+		firstTagName = tagName;
+
 		if ((startLineTagStartType !== LineTagStartType.startTag) || (isSingleLine && (startLineTageEndType === LineTagEndType.unknown))) {
-			return result;
+			return { rangeTagType, firstTagName, lastTagName };
 		}
 		if (isSingleLine) {
-			if (startLineTageEndType === LineTagEndType.selfClose) {
-				result = RangeTagType.selfCloseSingle;
+			lastTagName = endTagName;
+			if (firstTagName !== lastTagName) {
+				// unknown still
+			} else if (startLineTageEndType === LineTagEndType.selfClose) {
+				rangeTagType = RangeTagType.selfCloseSingle;
+			} else if ((startLine.text.indexOf('</') > -1) ) {
+				rangeTagType = RangeTagType.startCloseSingle;
 			} else {
-				result = (startLine.text.indexOf('</') > -1) ? RangeTagType.startCloseSingle : RangeTagType.startUnclosedSingle;
+				rangeTagType = RangeTagType.startUnclosedSingle;
 			}
 		} else {
 			const endLine = document.lineAt(end.line);
 			//const endLineTagStartType = this.testTagLineStart(endLine);
-		
-			const { lineType: endLineTageEndType, endTagName: finalEndTagName }  = this.testTagLineEnd(endLine);
+
+			const { lineType: endLineTageStartType, tagName: finalStartTagName } = this.testTagLineStart(endLine);
+			const { lineType: endLineTageEndType, endTagName: finalEndTagName } = this.testTagLineEnd(endLine);
+			lastTagName = finalEndTagName;
 
 			if (endLineTageEndType === LineTagEndType.endTag || endLineTageEndType === LineTagEndType.selfClose) {
-				result = RangeTagType.startCloseMulti;
+				rangeTagType = RangeTagType.startCloseMulti;
 			}
-
 		}
-		return result;
-
+		return { rangeTagType, firstTagName, lastTagName };
 	}
 
-
-	private testTagLineStart(anyLine: vscode.TextLine):StartLineProps {
+	private testTagLineStart(anyLine: vscode.TextLine): StartLineProps {
 		let lineType = LineTagStartType.unknown;
 		let tagName = '';
 		if (anyLine.firstNonWhitespaceCharacterIndex > anyLine.text.length - 2) {
@@ -134,11 +148,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const startLineChar = anyLine.text[anyLine.firstNonWhitespaceCharacterIndex];
 		const startLineChar2 = anyLine.text[anyLine.firstNonWhitespaceCharacterIndex + 1];
 		if (startLineChar === '<' && !(startLineChar2 === '?' || startLineChar2 === '!')) {
-			const angleEnd = anyLine.text.indexOf('>', anyLine.firstNonWhitespaceCharacterIndex);
-			const spaceEnd = anyLine.text.indexOf('>', anyLine.firstNonWhitespaceCharacterIndex);
-			const tagNameEnd = anyLine.text.indexOf('>', anyLine.firstNonWhitespaceCharacterIndex);
 			lineType = startLineChar2 === '/' ? LineTagStartType.closeTag : LineTagStartType.startTag;
-			const matches = anyLine.text.match(XSLTCodeActions.tagNameRegex);
+			const offset = lineType === LineTagStartType.closeTag ? 2 : 1;
+			const matches = anyLine.text.substring(anyLine.firstNonWhitespaceCharacterIndex + offset).match(XSLTCodeActions.tagNameRegex);
 			if (matches) {
 				tagName = matches[0];
 			}
@@ -146,7 +158,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { lineType, tagName };
 	}
 
-	private testTagLineEnd(anyLine: vscode.TextLine):EndLineProps {
+	private testTagLineEnd(anyLine: vscode.TextLine): EndLineProps {
 		const trimStartLineRight = anyLine.text.trimRight();
 		let endTagName = '';
 		let lineType = LineTagEndType.unknown;
@@ -158,6 +170,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const startLineFinalCharBar1 = trimStartLineRight[lenOfTrimStartLine - 2];
 		if (startLineFinalChar === '>' && !(startLineFinalCharBar1 === '?' || startLineFinalCharBar1 === '-')) {
 			lineType = startLineFinalCharBar1 === '/' ? LineTagEndType.selfClose : LineTagEndType.endTag;
+			const finalTagPos = anyLine.text.lastIndexOf('<');
+			if (finalTagPos > -1 && finalTagPos < anyLine.text.length - 3) {
+				const isCloseTagStart = anyLine.text.charAt(finalTagPos + 1) === '/';
+				const offset = (isCloseTagStart) ? 2 : 1;
+				const matches = anyLine.text.substring(finalTagPos + offset).match(XSLTCodeActions.tagNameRegex);
+				if (matches) {
+					endTagName = matches[0];
+				}
+			}
 		}
 		return { lineType, endTagName };
 	}
