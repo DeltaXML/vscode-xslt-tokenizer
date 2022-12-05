@@ -32,6 +32,10 @@ interface EndLineProps {
 	lineType: LineTagEndType;
 	endTagName: string;
 }
+interface ActionProps {
+	document: vscode.TextDocument;
+	range: vscode.Range;
+}
 
 export class XSLTCodeActions implements vscode.CodeActionProvider {
 
@@ -40,9 +44,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	];
 
 	public static COMMAND = 'code-actions-sample.command';
+	private actionProps: ActionProps|null = null;
 	private static tagNameRegex = new RegExp(/^([^\s|\/|>]+)/);
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
+		this.actionProps = { document, range };
 		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
 
 		let fixText = "unset";
@@ -65,28 +71,27 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		fixText = `${fixText} [${firstTagName}] [${lastTagName}]`;
 
-		const testXSLTFix = this.createFix(document, range, fixText);
+		const testXSLTFix = this.createStubFix(fixText);
 
-		const replaceWithSmileyFix = this.createFix(document, range, '😀');
+
 		// Marking a single fix as `preferred` means that users can apply it with a
 		// single keyboard shortcut using the `Auto Fix` command.
-		replaceWithSmileyFix.isPreferred = true;
-
-		const replaceWithSmileyHankyFix = this.createFix(document, range, '💩');
+		//replaceWithSmileyFix.isPreferred = true;
 
 		const commandAction = this.createCommand();
 
 		return [
 			testXSLTFix,
-			// replaceWithSmileyFix,
-			// replaceWithSmileyHankyFix,
 			commandAction
 		];
 	}
 
 	resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): vscode.CodeAction {
-		const commandAction = this.createCommand();
-		return commandAction;
+		if (!this.actionProps) {
+			return codeAction;
+		}
+		const { document, range } = this.actionProps;
+        return this.addFix(codeAction, document, range, codeAction.title);
 	}
 
 	private estimateSelectionType(document: vscode.TextDocument, range: vscode.Range) {
@@ -183,11 +188,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { lineType, endTagName };
 	}
 
-	private createFix(document: vscode.TextDocument, range: vscode.Range, text: string): vscode.CodeAction {
-		const fix = new vscode.CodeAction(`Found ${text}`, vscode.CodeActionKind.QuickFix);
-		fix.edit = new vscode.WorkspaceEdit();
-		fix.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
+	private createStubFix(title: string): vscode.CodeAction {
+		const fix = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
 		return fix;
+	}
+
+	private addFix(codeAction: vscode.CodeAction, document: vscode.TextDocument, range: vscode.Range, text: string): vscode.CodeAction {
+		codeAction.edit = new vscode.WorkspaceEdit();
+		codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
+		return codeAction;
 	}
 
 	private createCommand(): vscode.CodeAction {
