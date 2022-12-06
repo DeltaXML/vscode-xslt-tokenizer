@@ -4,7 +4,7 @@ import { CodeActionTextLine } from './codeActionTextLine';
 
 export class CodeActionDocument implements vscode.TextDocument {
     uri: vscode.Uri;
-    fileName: string = "";
+    fileName: string;
     isUntitled: boolean = true;
     languageId: string = "xslt";
     version: number = 1;
@@ -16,6 +16,8 @@ export class CodeActionDocument implements vscode.TextDocument {
     constructor(uri: vscode.Uri, text: string) {
         this.docText = text;
         this.uri = uri;
+        const filenamePos = uri.path.lastIndexOf('/');
+        this.fileName = uri.path.substring(filenamePos + 1);
     }
 
     save(): Thenable<boolean> {
