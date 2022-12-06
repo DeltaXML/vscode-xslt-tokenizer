@@ -229,9 +229,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
+		const fullRangeWithoutLeadingWS = fullRange.with({start: fullRange.start.translate(0, document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex) });
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
-		codeAction.edit.replace(document.uri, fullRange, '\n<xsl:sequence select="fn:newFunction()"/>\n');
+		
+		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, '<xsl:sequence select="fn:newFunction()"/>\n');
 		const functionHeadText = '\n\n\t<xsl:function name="fn:newFunction">\n';
 		const functionFootText = '\n\t</xsl:function>';
 		const functionBodyText = document.getText(fullRange);
