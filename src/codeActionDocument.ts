@@ -16,8 +16,7 @@ export class CodeActionDocument implements vscode.TextDocument {
     constructor(uri: vscode.Uri, text: string) {
         this.docText = text;
         this.uri = uri;
-        const filenamePos = uri.path.lastIndexOf('/');
-        this.fileName = uri.path.substring(filenamePos + 1);
+        this.fileName = uri.fsPath;
     }
 
     save(): Thenable<boolean> {
@@ -42,7 +41,7 @@ export class CodeActionDocument implements vscode.TextDocument {
         throw new Error('Method not implemented.');
     }
     getText(range?: vscode.Range | undefined): string {
-        throw new Error('Method not implemented.');
+        return this.docText;
     }
     getWordRangeAtPosition(position: vscode.Position, regex?: RegExp | undefined): vscode.Range | undefined {
         throw new Error('Method not implemented.');

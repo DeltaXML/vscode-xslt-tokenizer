@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { CodeActionDocument } from './codeActionDocument';
+import { XSLTConfiguration } from './languageConfigurations';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 
 
@@ -254,10 +256,26 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const trimmedLines = functionBodyLines.map((line) => '\t\t' + line.trim());
 		const trimmedBodyText = trimmedLines.join('\n');
 
-		let allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
+		const allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
+        this.findBrokenVariableRefs(document, targetRange, allFunctionText);
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter);
 		return codeAction;
+	}
+
+	private findBrokenVariableRefs(document: vscode.TextDocument, targetRange: vscode.Range, allFunctionText: string) {
+		const virtualTextOriginal = document.getText();
+		const virtualInseertPos = document.offsetAt(targetRange.end);
+		const virtualTextUpdated = virtualTextOriginal.substring(0, virtualInseertPos) + allFunctionText + virtualTextOriginal.substring(virtualInseertPos);
+
+		const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
+		const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
+		const caDocument = new CodeActionDocument(document.uri, virtualTextUpdated);
+		xsltSymbolProvider.getDocumentSymbols(caDocument, true);
+
+		const xdocdiagnostics = xsltDiagnosticsCollection.get(document.uri);
+		const lenx = xdocdiagnostics?.entries.length;
+		console.log(lenx);
 	}
 
 	private extendRangeToFullLines(range: vscode.Range) {
