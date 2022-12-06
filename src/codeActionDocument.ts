@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { CodeActionTextLine } from './codeActionTextLine';
 
 export class CodeActionDocument implements vscode.TextDocument {
-    uri: vscode.Uri = vscode.Uri.parse("file:/dummy.txt");
+    uri: vscode.Uri;
     fileName: string = "";
     isUntitled: boolean = true;
     languageId: string = "xslt";
@@ -13,8 +13,9 @@ export class CodeActionDocument implements vscode.TextDocument {
     private static wsRegex = new RegExp(/\s/);
     docText: string;
 
-    constructor(text: string) {
+    constructor(uri: vscode.Uri, text: string) {
         this.docText = text;
+        this.uri = uri;
     }
 
     save(): Thenable<boolean> {

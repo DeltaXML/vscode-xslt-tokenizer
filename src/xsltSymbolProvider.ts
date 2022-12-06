@@ -73,7 +73,7 @@ enum UseSource {
 export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
-	private readonly collection: vscode.DiagnosticCollection | null;
+	public readonly collection: vscode.DiagnosticCollection | null;
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
 	public static documentSymbols = new Map<vscode.Uri, vscode.DocumentSymbol[]>();
