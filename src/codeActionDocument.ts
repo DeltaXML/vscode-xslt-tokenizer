@@ -10,13 +10,15 @@ export class CodeActionDocument implements vscode.TextDocument {
     version: number = 1;
     isDirty: boolean = false;
     isClosed: boolean = false;
-    private static wsRegex = new RegExp(/\s/);
+    private static wsRegex = new RegExp(/(^\s+)/);
     docText: string;
+    private textLines: string[];
 
     constructor(uri: vscode.Uri, text: string) {
         this.docText = text;
         this.uri = uri;
         this.fileName = uri.fsPath;
+        this.textLines = text.split('\n');
     }
 
     save(): Thenable<boolean> {
@@ -41,7 +43,12 @@ export class CodeActionDocument implements vscode.TextDocument {
         throw new Error('Method not implemented.');
     }
     getText(range?: vscode.Range | undefined): string {
-        return this.docText;
+        if (range) {
+            const lineText = this.textLines[range.start.line];
+            return lineText.substring(range.start.character, range.end.character);
+        } else {
+            return this.docText;
+        }
     }
     getWordRangeAtPosition(position: vscode.Position, regex?: RegExp | undefined): vscode.Range | undefined {
         throw new Error('Method not implemented.');
@@ -54,34 +61,13 @@ export class CodeActionDocument implements vscode.TextDocument {
     }
 
     private getLineData(findLine: number) {
-        const text = this.docText;
-        const len = text.length;
-        let charNum = 0;
-        let lineNum = 0;
-        let lineStartChar = -1;
-        let lineEndChar = -1;
-        let lineText = "";
+        const lineText = this.textLines[findLine];
+        const wsLeadMatches = lineText.match(CodeActionDocument.wsRegex);
         let nonSpaceNum = 0;
-        while (charNum < len && lineEndChar < 0) {
-            const char = text.charAt(charNum);
-            if (lineStartChar < 0 && lineNum === findLine) {
-                lineStartChar = charNum;
-            } 
-            if (char === '\n') {
-                if (lineStartChar > -1) {
-                    lineEndChar = charNum;
-                }
-                lineNum++;
-            } else if (lineStartChar > -1) {
-                if (CodeActionDocument.wsRegex.test(char)) {
-                    nonSpaceNum++;
-                }
-                lineText += char;
-            }
-            charNum++;
+        if (wsLeadMatches) {
+            nonSpaceNum = wsLeadMatches[0].length;
         }
         return new CodeActionTextLine(lineText, nonSpaceNum);
-
     }
 
 }
