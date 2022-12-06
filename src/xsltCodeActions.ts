@@ -86,7 +86,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeActions;
 	}
 
-	resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): vscode.CodeAction {
+	async resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): Promise<vscode.CodeAction> {
 		if (!this.actionProps) return codeAction;
 	
 		const { document, range } = this.actionProps;
@@ -231,7 +231,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): vscode.CodeAction {
+	private async addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): Promise<vscode.CodeAction> {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
 		const fullRangeWithoutLeadingWS = fullRange.with({start: fullRange.start.translate(0, firstCharOnFirstLine)});
@@ -256,26 +256,34 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const trimmedLines = functionBodyLines.map((line) => '\t\t' + line.trim());
 		const trimmedBodyText = trimmedLines.join('\n');
 
+		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
+        await this.findBrokenVariableRefs(document, trimmedLines.length, targetRange, interimFunctionText);
 		const allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
-        this.findBrokenVariableRefs(document, targetRange, allFunctionText);
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter);
 		return codeAction;
 	}
 
-	private findBrokenVariableRefs(document: vscode.TextDocument, targetRange: vscode.Range, allFunctionText: string) {
+	private async findBrokenVariableRefs(document: vscode.TextDocument, lineCount: number, targetRange: vscode.Range, allFunctionText: string) {
 		const virtualTextOriginal = document.getText();
 		const virtualInseertPos = document.offsetAt(targetRange.end);
 		const virtualTextUpdated = virtualTextOriginal.substring(0, virtualInseertPos) + allFunctionText + virtualTextOriginal.substring(virtualInseertPos);
 
-		const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
-		const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
+		const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
 		const caDocument = new CodeActionDocument(document.uri, virtualTextUpdated);
-		xsltSymbolProvider.getDocumentSymbols(caDocument, true);
+		await xsltSymbolProvider.getDocumentSymbols(caDocument, true);
+		const brokenVariableNames: string[] = [];
 
-		const xdocdiagnostics = xsltDiagnosticsCollection.get(document.uri);
-		const lenx = xdocdiagnostics?.entries.length;
-		console.log(lenx);
+		xsltSymbolProvider.diagnosticsArray.forEach((diagnostic) => {
+			const errorLine = diagnostic.range.start.line;
+			const fnStartLine = targetRange.start.line;
+			if (errorLine >= fnStartLine + 1 && errorLine < fnStartLine + lineCount) {
+				console.log('found');
+				brokenVariableNames.push(diagnostic.message);
+			}
+		});
+		return brokenVariableNames;
+
 	}
 
 	private extendRangeToFullLines(range: vscode.Range) {

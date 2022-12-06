@@ -74,6 +74,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private readonly xslLexer: XslLexer;
 	public readonly collection: vscode.DiagnosticCollection | null;
+	private internalDiagnostics: vscode.Diagnostic[];
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
 	public static documentSymbols = new Map<vscode.Uri, vscode.DocumentSymbol[]>();
@@ -87,6 +88,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.collection = collection;
 		this.languageConfig = xsltConfiguration;
 		this.docType = xsltConfiguration.docType;
+		this.internalDiagnostics = [];
 	}
 
 	public static getSymbolsForActiveDocument(): vscode.DocumentSymbol[] {
@@ -206,12 +208,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						this.collection.clear();
 					};
 				}
+				this.internalDiagnostics = diagnostics;
 			}
 			XsltSymbolProvider.documentSymbols.set(document.uri, symbols);
 			resolve(symbols);
 		});
 
 	}
+
+	
+	public get diagnosticsArray() : vscode.Diagnostic[] {
+		return this.internalDiagnostics;
+	}
+	
 
 	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
 		const matchingParent = this.findMatchingParent(localImportedHrefs, document.fileName);
