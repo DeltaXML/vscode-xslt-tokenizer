@@ -231,7 +231,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private async addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): Promise<vscode.CodeAction> {
+	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
 		const fullRangeWithoutLeadingWS = fullRange.with({start: fullRange.start.translate(0, firstCharOnFirstLine)});
@@ -258,21 +258,21 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const trimmedBodyText = trimmedLines.join('\n');
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
-        //await this.findBrokenVariableRefs(document, trimmedLines.length, targetRange, interimFunctionText);
+        this.findBrokenVariableRefs(document, trimmedLines.length, targetRange, interimFunctionText);
 		const allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter);
 		return codeAction;
 	}
 
-	private async findBrokenVariableRefs(document: vscode.TextDocument, lineCount: number, targetRange: vscode.Range, allFunctionText: string) {
+	private findBrokenVariableRefs(document: vscode.TextDocument, lineCount: number, targetRange: vscode.Range, allFunctionText: string) {
 		const virtualTextOriginal = document.getText();
 		const virtualInseertPos = document.offsetAt(targetRange.end);
 		const virtualTextUpdated = virtualTextOriginal.substring(0, virtualInseertPos) + allFunctionText + virtualTextOriginal.substring(virtualInseertPos);
 
 		const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
 		const caDocument = new CodeActionDocument(document.uri, virtualTextUpdated);
-		await xsltSymbolProvider.getDocumentSymbols(caDocument, true);
+		xsltSymbolProvider.getDocumentSymbols(caDocument, true);
 		const brokenVariableNames: string[] = [];
 
 		xsltSymbolProvider.diagnosticsArray.forEach((diagnostic) => {
