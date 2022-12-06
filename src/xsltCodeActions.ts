@@ -47,7 +47,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		vscode.CodeActionKind.QuickFix
 	];
 
+	public static COMMAND_RENAME = 'editor.action.rename';
 	public static COMMAND = 'code-actions-sample.command';
+
 	private actionProps: ActionProps | null = null;
 	private static tagNameRegex = new RegExp(/^([^\s|\/|>]+)/);
 
@@ -76,8 +78,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		// single keyboard shortcut using the `Auto Fix` command.
 		//replaceWithSmileyFix.isPreferred = true;
 
-		const commandAction = this.createCommand();
-		codeActions.push(commandAction);
+		// const commandAction = this.createCommand();
+		// codeActions.push(commandAction);
 
 		return codeActions;
 	}
@@ -229,25 +231,43 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
-		const fullRangeWithoutLeadingWS = fullRange.with({start: fullRange.start.translate(0, document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex) });
+		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
+		const fullRangeWithoutLeadingWS = fullRange.with({start: fullRange.start.translate(0, firstCharOnFirstLine)});
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
-		
-		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, '<xsl:sequence select="fn:newFunction()"/>\n');
+		const replacementStart = '<xsl:sequence select="';
+		const replcementFnCall = 'fn:newFunction(';
+		const replacementFnArg = 'fnArg';
+		const fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
+		const replacementAll = replacementStart + replcementFnCall + replacementFnArg + ')"/>\n';
+		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
+
 		const functionHeadText = '\n\n\t<xsl:function name="fn:newFunction">\n';
+		const functionParamText = `\t\t<xsl:param name="${replacementFnArg}"/>\n`;
 		const functionFootText = '\n\t</xsl:function>';
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.split('\r?\n');
 		const trimmedLines = functionBodyLines.map((line) => '\t\t' + line.trim());
 		const trimmedBodyText = trimmedLines.join('\n');
 
-		let allFunctionText = functionHeadText + trimmedBodyText + functionFootText;
+		let allFunctionText = functionHeadText + functionParamText + trimmedBodyText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
+		this.executeRenameCommand(fullRange.start.line, fnStartCharacter);
 		return codeAction;
 	}
 
 	private extendRangeToFullLines(range: vscode.Range) {
 		return new vscode.Range(range.start.with({ character: 0 }), range.end.with({ line: range.end.line + 1, character: 0 }));
+	}
+
+	private executeRenameCommand(lineNumber: number, charNumber: number) {
+		setTimeout(() => {
+			if (vscode.window.activeTextEditor) {
+				const position = new vscode.Position(lineNumber, charNumber);
+				vscode.window.activeTextEditor.selection = new vscode.Selection(position, position);
+				vscode.commands.executeCommand(XSLTCodeActions.COMMAND_RENAME);
+			}
+		}, 250);
 	}
 
 	private createCommand(): vscode.CodeAction {
