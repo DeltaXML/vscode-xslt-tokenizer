@@ -252,7 +252,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		//const functionParamText = `\t\t<xsl:param name="${replacementFnArg}"/>\n`;
 		const functionFootText = '\n\t</xsl:function>';
 		const functionBodyText = document.getText(fullRange);
-		const functionBodyLines = functionBodyText.split('\r?\n');
+		const functionBodyLines = functionBodyText.split('\n');
 		const trimmedLines = functionBodyLines.map((line) => '\t\t' + line.trim());
 		const trimmedBodyText = trimmedLines.join('\n');
 
