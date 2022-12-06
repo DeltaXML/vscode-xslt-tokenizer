@@ -63,7 +63,7 @@ interface TokenWithUnion extends BaseToken {
 	union?: boolean;
 }
 
-type possDocumentSymbol = vscode.DocumentSymbol | null;
+export type possDocumentSymbol = vscode.DocumentSymbol | null;
 type Entry = [string, number];
 enum UseSource {
 	none = "none",
@@ -264,12 +264,20 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static selectXMLElement(selectionType: SelectionType) {
-		const selection = vscode.window.activeTextEditor?.selection;
-		if (vscode.window.activeTextEditor && selection) {
+	public static symbolForXMLElement(selectionType: SelectionType, position: vscode.Position) {
+		if (vscode.window.activeTextEditor) {
 			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
 			const path: string[] = [];
+			const selection = new vscode.Selection(position, position);
 			const result = this.getChildSymbolForSelection(selection, rootSymbol, path, selectionType, null, null, null);
+            return result;
+		}
+	}
+
+	public static selectXMLElement(selectionType: SelectionType) {
+		const selection = vscode.window.activeTextEditor?.selection;
+		if (selection) {
+			const result = XsltSymbolProvider.symbolForXMLElement(selectionType, selection.start);
 			if (result !== null) {
 				XsltSymbolProvider.selectTextWithSymbol(result);
 			}

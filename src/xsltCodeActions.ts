@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 
 
 enum ElementSelectionType {
@@ -47,7 +48,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	];
 
 	public static COMMAND = 'code-actions-sample.command';
-	private actionProps: ActionProps|null = null;
+	private actionProps: ActionProps | null = null;
 	private static tagNameRegex = new RegExp(/^([^\s|\/|>]+)/);
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
@@ -82,16 +83,41 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	}
 
 	resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): vscode.CodeAction {
-		if (!this.actionProps) {
-			return codeAction;
-		}
+		if (!this.actionProps) return codeAction;
+	
 		const { document, range } = this.actionProps;
+		const startPosition = range.start;
+		const startLine = document.lineAt(startPosition.line).text;
+		const startTagIndex = startLine.indexOf('<');
+		const startTagPosition = startPosition.with({ character: startTagIndex });
+		const currentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, startTagPosition);
+		if (!currentSymbol) return codeAction;
+
+        const ancestorOrSelfSymbol: vscode.DocumentSymbol[] = [];
+        let testSymbol: vscode.DocumentSymbol = currentSymbol;
+		// get parent symbol until we reach root element
+		while (testSymbol) {
+			ancestorOrSelfSymbol.push(testSymbol);
+			const tempSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, testSymbol.range.start);
+			if (tempSymbol) {
+				testSymbol = tempSymbol;
+			} else {
+				break;
+			}
+		}
+		const ancestorOrSelfCount = ancestorOrSelfSymbol.length;
+		if (ancestorOrSelfCount < 3 ) return codeAction;
+		const targetSymbolRange = ancestorOrSelfSymbol[ancestorOrSelfCount - 2].range;
+
+
+		console.log({ symbol: currentSymbol });
 		switch (codeAction.title) {
 			case XsltCodeActionKind.extractXsltFunction:
-				this.addEditToCodeAction(codeAction, document, range, codeAction.title);
+				//this.addEditToCodeAction(codeAction, document, range, codeAction.title);
+				this.addTwoEditsToCodeAction(codeAction, document, range, targetSymbolRange);
 				break;
 		}
-        return codeAction;
+		return codeAction;
 	}
 
 	private estimateSelectionType(document: vscode.TextDocument, range: vscode.Range) {
@@ -123,7 +149,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				// unknown still
 			} else if (startLineTageEndType === LineTagEndType.selfClose) {
 				rangeTagType = RangeTagType.selfCloseSingle;
-			} else if ((startLine.text.indexOf('</') > -1) ) {
+			} else if ((startLine.text.indexOf('</') > -1)) {
 				rangeTagType = RangeTagType.startCloseSingle;
 			} else {
 				rangeTagType = RangeTagType.startUnclosedSingle;
@@ -201,8 +227,25 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
+	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): vscode.CodeAction {
+		const fullRange = this.extendRangeToFullLines(sourceRange);
+		codeAction.edit = new vscode.WorkspaceEdit();
+		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
+		codeAction.edit.replace(document.uri, fullRange, '\n<xsl:sequence select="fn:newFunction()"/>\n');
+		const functionHeadText = '\n\n\t<xsl:function name="fn:newFunction">\n';
+		const functionFootText = '\n\t</xsl:function>';
+		const functionBodyText = document.getText(fullRange);
+		const functionBodyLines = functionBodyText.split('\r?\n');
+		const trimmedLines = functionBodyLines.map((line) => '\t\t' + line.trim());
+		const trimmedBodyText = trimmedLines.join('\n');
+
+		let allFunctionText = functionHeadText + trimmedBodyText + functionFootText;
+		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
+		return codeAction;
+	}
+
 	private extendRangeToFullLines(range: vscode.Range) {
-		return new vscode.Range(range.start.with({character: 0}), range.end.with({line: range.end.line + 1, character: 0}));
+		return new vscode.Range(range.start.with({ character: 0 }), range.end.with({ line: range.end.line + 1, character: 0 }));
 	}
 
 	private createCommand(): vscode.CodeAction {
