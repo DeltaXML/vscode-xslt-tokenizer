@@ -237,20 +237,24 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
 		const replacementStart = '<xsl:sequence select="';
 		const replcementFnCall = 'fn:newFunction(';
-		const replacementFnArg = 'fnArg';
+		const replacementFnArgs = ['fnArg1', 'fnArg2'];
+		const fnArgsString = replacementFnArgs.map((arg) => '$' + arg).join(', ');
 		const fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
-		const replacementAll = replacementStart + replcementFnCall + replacementFnArg + ')"/>\n';
+		const replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
 		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
 
 		const functionHeadText = '\n\n\t<xsl:function name="fn:newFunction">\n';
-		const functionParamText = `\t\t<xsl:param name="${replacementFnArg}"/>\n`;
+		const functionParamLines = replacementFnArgs.map((argName) => {
+			return `\t\t<xsl:param name="${argName}"/>\n`;
+		});
+		//const functionParamText = `\t\t<xsl:param name="${replacementFnArg}"/>\n`;
 		const functionFootText = '\n\t</xsl:function>';
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.split('\r?\n');
 		const trimmedLines = functionBodyLines.map((line) => '\t\t' + line.trim());
 		const trimmedBodyText = trimmedLines.join('\n');
 
-		let allFunctionText = functionHeadText + functionParamText + trimmedBodyText + functionFootText;
+		let allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter);
 		return codeAction;
