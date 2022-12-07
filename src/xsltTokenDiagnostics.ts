@@ -91,6 +91,10 @@ export enum ValidationType {
 	Name
 }
 
+export enum DiagnosticCode {
+	unresolvedVariableRef
+}
+
 export class XsltTokenDiagnostics {
 	public static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number'];
@@ -2699,20 +2703,26 @@ export class XsltTokenDiagnostics {
 
 	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken, includeOrImport: boolean): vscode.Diagnostic {
 		let line = token.line;
-		let endChar = token.startCharacter + token.length;
+		const endChar = token.startCharacter + token.length;
+        const errRange = new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar));
+		const errCode = DiagnosticCode.unresolvedVariableRef;
+		const errData = [new vscode.DiagnosticRelatedInformation(new vscode.Location(document.uri, errRange), token.value)];
 		if (includeOrImport) {
 			return {
-				code: '',
+				code: errCode,
 				message: `XPath: The variable/parameter: ${token.value} cannot be resolved here, but it may be defined in an external module.`,
-				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
-				severity: vscode.DiagnosticSeverity.Warning
+				range: errRange,
+				severity: vscode.DiagnosticSeverity.Warning,
+				relatedInformation: errData
+				
 			};
 		} else {
 			return {
-				code: '',
+				code: errCode,
 				message: `XPath: The variable/parameter ${token.value} cannot be resolved`,
-				range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
-				severity: vscode.DiagnosticSeverity.Error
+				range: errRange,
+				severity: vscode.DiagnosticSeverity.Error,
+				relatedInformation: errData
 			};
 		}
 	}

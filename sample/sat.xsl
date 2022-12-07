@@ -16,8 +16,7 @@
                 <unit-declaration/>
             </xsl:with-param>
         </xsl:call-template>
-    </xsl:template>
-    
+    </xsl:template>    
     
     <xsl:template name="get-unit-declarations" as="">
         

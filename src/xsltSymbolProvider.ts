@@ -72,6 +72,7 @@ enum UseSource {
 
 export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
+	public static instanceForXSLT: XsltSymbolProvider|null = null;
 	private readonly xslLexer: XslLexer;
 	public readonly collection: vscode.DiagnosticCollection | null;
 	private internalDiagnostics: vscode.Diagnostic[];
@@ -81,6 +82,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private importHrefs: Map<string, string[]> = new Map();
 	public static importSymbolHrefs: Map<string, string[]> = new Map();
 	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
+	private internalImportedGlobals: GlobalInstructionData[] = [];
 
 	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
@@ -89,7 +91,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.languageConfig = xsltConfiguration;
 		this.docType = xsltConfiguration.docType;
 		this.internalDiagnostics = [];
+		if (xsltConfiguration.docType === DocumentTypes.XSLT) {
+			XsltSymbolProvider.instanceForXSLT = this;
+		}
 	}
+
 
 	public static getSymbolsForActiveDocument(): vscode.DocumentSymbol[] {
 		if (vscode.window.activeTextEditor) {
@@ -190,7 +196,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					});
 				}
 			});
-
+			this.internalImportedGlobals = allImportedGlobals;
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			if (vscode.window.activeTextEditor && document.fileName !== vscode.window.activeTextEditor.document.fileName) {
 
@@ -214,6 +220,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			resolve(symbols);
 		});
 
+	}
+
+	public calculateVirtualDiagnostics(document: vscode.TextDocument) {
+		const allTokens = this.xslLexer.analyse(document.getText());
+		const symbols = XsltSymbolProvider.documentSymbols.get(document.uri)!;
+		const globalInstructionData = this.xslLexer.globalInstructionData;
+
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, this.internalImportedGlobals, symbols);
+		console.log(diagnostics.length);
+		return diagnostics;
 	}
 
 	

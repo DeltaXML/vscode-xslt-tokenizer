@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
 import { XSLTConfiguration } from './languageConfigurations';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
+import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 
 enum ElementSelectionType {
@@ -239,18 +240,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
 		const replacementStart = '<xsl:sequence select="';
 		const replcementFnCall = 'fn:newFunction(';
-		//const replacementFnArgs = ['fnArg1', 'fnArg2'];
-		const replacementFnArgs: string[] = [];
-		const fnArgsString = replacementFnArgs.map((arg) => '$' + arg).join(', ');
-		const fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
-		const replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
-		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
 
 		const functionHeadText = '\n\n\t<xsl:function name="fn:newFunction">\n';
-		const functionParamLines = replacementFnArgs.map((argName) => {
-			return `\t\t<xsl:param name="${argName}"/>\n`;
-		});
-		//const functionParamText = `\t\t<xsl:param name="${replacementFnArg}"/>\n`;
 		const functionFootText = '\n\t</xsl:function>';
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
@@ -258,7 +249,17 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const trimmedBodyText = trimmedLines.join('\n');
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
-        this.findBrokenVariableRefs(document, trimmedLines.length, targetRange, interimFunctionText);
+        const requiredParamNames = this.findBrokenVariableRefs(document, trimmedLines.length, targetRange, interimFunctionText);
+
+		const fnArgsString = requiredParamNames.map((arg) => '$' + arg).join(', ');
+		const fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
+		const replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
+		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
+
+		const functionParamLines = requiredParamNames.map((argName) => {
+			return `\t\t<xsl:param name="${argName}"/>\n`;
+		});
+
 		const allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter);
@@ -270,17 +271,18 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const virtualInseertPos = document.offsetAt(targetRange.end);
 		const virtualTextUpdated = virtualTextOriginal.substring(0, virtualInseertPos) + allFunctionText + virtualTextOriginal.substring(virtualInseertPos);
 
-		const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, null);
 		const caDocument = new CodeActionDocument(document.uri, virtualTextUpdated);
-		xsltSymbolProvider.getDocumentSymbols(caDocument, true);
+		const diagnostics = XsltSymbolProvider.instanceForXSLT!.calculateVirtualDiagnostics(caDocument);
+		const fnStartLine = targetRange.end.line + 2;
 		const brokenVariableNames: string[] = [];
 
-		xsltSymbolProvider.diagnosticsArray.forEach((diagnostic) => {
+		diagnostics.forEach((diagnostic) => {
 			const errorLine = diagnostic.range.start.line;
-			const fnStartLine = targetRange.start.line;
-			if (errorLine >= fnStartLine + 1 && errorLine < fnStartLine + lineCount) {
-				console.log('found');
-				brokenVariableNames.push(diagnostic.message);
+			if (diagnostic.code === DiagnosticCode.unresolvedVariableRef && errorLine >= fnStartLine + 1 && errorLine <= fnStartLine + lineCount) {
+				const varName = diagnostic.relatedInformation![0].message.substring(1);
+				if (brokenVariableNames.indexOf(varName) < 0) {
+					brokenVariableNames.push(varName);
+				}
 			}
 		});
 		return brokenVariableNames;
