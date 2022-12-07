@@ -246,13 +246,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 	}
 
-	private selectOrContentFromInstructionSymbol(document: vscode.TextDocument, elementSymbol: vscode.DocumentSymbol): {text: string; lines: number; isSelect: boolean} {
+	private selectOrContentFromInstructionSymbol(document: vscode.TextDocument, elementSymbol: vscode.DocumentSymbol): {text: string; lines: number; lineCountDiff:number; isSelect: boolean} {
 		const attributesSymbol = elementSymbol.children.find((item) => item.kind === vscode.SymbolKind.Array && item.name === 'attributes');
 		if (attributesSymbol) {
 			const selectAttributeSymbol = attributesSymbol.children.find((item) => item.name === 'select');
 			if (selectAttributeSymbol) {
-				const lineCount = (selectAttributeSymbol.range.end.line - selectAttributeSymbol.range.start.line) + 1;
-				return { text: document.getText(selectAttributeSymbol.range), lines: lineCount, isSelect: true};
+				const lines = (selectAttributeSymbol.range.end.line - selectAttributeSymbol.range.start.line) + 1;
+				const linesFromStart = selectAttributeSymbol.range.start.line - elementSymbol.range.start.line;
+				const linesToEnd = elementSymbol.range.end.line - selectAttributeSymbol.range.end.line;
+				const lineCountDiff = linesFromStart + linesToEnd;
+				return { text: document.getText(selectAttributeSymbol.range), lines, lineCountDiff, isSelect: true};
 			}
 		}
 		const childNodeSymbols = elementSymbol.children.filter((item) => item.kind !== vscode.SymbolKind.Array);
@@ -260,10 +263,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const firstRange = childNodeSymbols[0].range;
 			const lastRange = childNodeSymbols[childNodeSymbols.length - 1].range;
 			const allChildrenRange = firstRange.with( {end: lastRange.end});
-			const lineCount = (lastRange.end.line - firstRange.start.line) + 1;
-			return { text: document.getText(allChildrenRange), lines: lineCount, isSelect: false};
+			const lines = (lastRange.end.line - firstRange.start.line) + 1;
+			const linesFromStart = (firstRange.start.line - elementSymbol.range.start.line);
+			const linesToEnd = elementSymbol.range.end.line - lastRange.end.line;
+			const lineCountDiff = linesFromStart + linesToEnd;
+			return { text: document.getText(allChildrenRange), lines, lineCountDiff, isSelect: false};
 		}
-		return { text: '', lines: 0, isSelect: false};
+		return { text: '', lines: 0, lineCountDiff: 0, isSelect: false};
 	}
 
 	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
@@ -278,20 +284,26 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const functionHeadText = '\n\n\t<xsl:function name="fn:newFunction">\n';
 		let functionFootText = '\n\t</xsl:function>';
 		let finalSymbolVariableName: string|null = null;
+
+		let trimmedBodyText = '';
+		const functionBodyText = document.getText(fullRange);
+		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
+		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine - 1));
 		if (finalSymbol.name.startsWith('xsl:variable')) {
 			const varNamePos = finalSymbol.name.lastIndexOf(' ');
 			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
 		    replacementStart = `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="`;
-            const {text, lines, isSelect} = this.selectOrContentFromInstructionSymbol(document, finalSymbol);
-			console.log({text});
+            const {text: selectText, lines, lineCountDiff, isSelect} = this.selectOrContentFromInstructionSymbol(document, finalSymbol);
+			const preFinalBodyLines = trimmedLines.slice(0, finalSymbol.range.start.line - sourceRange.start.line);
+			const preFinalBodyText = preFinalBodyLines.join('\n');
+			const finalSequenceText = '\n\t\t<xsl:sequence';
+			trimmedBodyText = preFinalBodyText + finalSequenceText + ' ' + selectText + '/>';
+		} else {
+			trimmedBodyText = trimmedLines.join('\n');
 		}
-		const functionBodyText = document.getText(fullRange);
-		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
-		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine - 1));
-		const trimmedBodyText = trimmedLines.join('\n');
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
-        const requiredParamNames = this.findBrokenVariableRefs(document, trimmedLines.length, targetRange, interimFunctionText);
+        const requiredParamNames = this.findBrokenVariableRefs(document, functionBodyLines.length, targetRange, interimFunctionText);
 
 		const fnArgsString = requiredParamNames.map((arg) => '$' + arg).join(', ');
 		const fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
