@@ -297,7 +297,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const preFinalBodyLines = trimmedLines.slice(0, finalSymbol.range.start.line - sourceRange.start.line);
 			const preFinalBodyText = preFinalBodyLines.join('\n');
 			const finalSequenceText = '\n\t\t<xsl:sequence';
-			trimmedBodyText = preFinalBodyText + finalSequenceText + ' ' + selectText + '/>';
+			const separator = lines === 1 ? ' ' : '\n\t\t\t';
+			trimmedBodyText = preFinalBodyText + finalSequenceText + separator + selectText + '/>';
 		} else {
 			trimmedBodyText = trimmedLines.join('\n');
 		}
