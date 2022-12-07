@@ -246,30 +246,24 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 	}
 
-	private findSelectAttributeFromSymbol(elementSymbol: vscode.DocumentSymbol) {
+	private selectOrContentFromInstructionSymbol(document: vscode.TextDocument, elementSymbol: vscode.DocumentSymbol): {text: string; lines: number; isSelect: boolean} {
 		const attributesSymbol = elementSymbol.children.find((item) => item.kind === vscode.SymbolKind.Array && item.name === 'attributes');
-		let selectAttributeSymbol: vscode.DocumentSymbol|null = null;
-		let followingAttributeSymbol: vscode.DocumentSymbol|null = null;
 		if (attributesSymbol) {
-			for (let index = 0; index < attributesSymbol.children.length; index++) {
-				const element = attributesSymbol.children[index];
-				if (selectAttributeSymbol) {
-					followingAttributeSymbol = element;
-					break;
-				} else if (element.kind !== vscode.SymbolKind.Array && element.name === 'select') {
-					selectAttributeSymbol = element;
-				}
-
+			const selectAttributeSymbol = attributesSymbol.children.find((item) => item.name === 'select');
+			if (selectAttributeSymbol) {
+				const lineCount = (selectAttributeSymbol.range.end.line - selectAttributeSymbol.range.start.line) + 1;
+				return { text: document.getText(selectAttributeSymbol.range), lines: lineCount, isSelect: true};
 			}
 		}
 		const childNodeSymbols = elementSymbol.children.filter((item) => item.kind !== vscode.SymbolKind.Array);
-		const firstChildNodeSymbol = childNodeSymbols.length > 0? childNodeSymbols[0] : null;
-		const lastChildNodeSymbol = childNodeSymbols.length > 0? childNodeSymbols[childNodeSymbols.length - 1] : null;
-		if (selectAttributeSymbol) {
-			if (followingAttributeSymbol) {
-
-			}
+		if (childNodeSymbols.length > 0) {
+			const firstRange = childNodeSymbols[0].range;
+			const lastRange = childNodeSymbols[childNodeSymbols.length - 1].range;
+			const allChildrenRange = firstRange.with( {end: lastRange.end});
+			const lineCount = (lastRange.end.line - firstRange.start.line) + 1;
+			return { text: document.getText(allChildrenRange), lines: lineCount, isSelect: false};
 		}
+		return { text: '', lines: 0, isSelect: false};
 	}
 
 	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
@@ -288,12 +282,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const varNamePos = finalSymbol.name.lastIndexOf(' ');
 			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
 		    replacementStart = `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="`;
-			const attributesSymbol = finalSymbol.children.find((item) => item.kind === vscode.SymbolKind.Array && item.name === 'attributes');
-			if (attributesSymbol) {
-				const selectSymbol = finalSymbol.children.find((item) => item.kind === vscode.SymbolKind.Array && item.name === 'attributes');
-			} else {
-				const elementSymbols = finalSymbol.children.filter((item) => item.kind !== vscode.SymbolKind.Array);
-			}
+            const {text, lines, isSelect} = this.selectOrContentFromInstructionSymbol(document, finalSymbol);
+			console.log({text});
 		}
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
