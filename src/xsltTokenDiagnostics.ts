@@ -846,6 +846,10 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.attributeValue:
 						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagAttributeSymbols.length > 0) {
+							const symbolClone = {...tagAttributeSymbols[tagAttributeSymbols.length - 1]};
+							const extendedRange = symbolClone.range.with({end: new vscode.Position(token.line, token.startCharacter + token.length)});
+							symbolClone.range = extendedRange;
+							tagAttributeSymbols[tagAttributeSymbols.length - 1] = symbolClone;
 							if (fullVariableName.length !== 1) {
 								tagAttributeSymbols[tagAttributeSymbols.length - 1].detail = fullVariableName;
 							} else {

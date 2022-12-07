@@ -246,6 +246,32 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 	}
 
+	private findSelectAttributeFromSymbol(elementSymbol: vscode.DocumentSymbol) {
+		const attributesSymbol = elementSymbol.children.find((item) => item.kind === vscode.SymbolKind.Array && item.name === 'attributes');
+		let selectAttributeSymbol: vscode.DocumentSymbol|null = null;
+		let followingAttributeSymbol: vscode.DocumentSymbol|null = null;
+		if (attributesSymbol) {
+			for (let index = 0; index < attributesSymbol.children.length; index++) {
+				const element = attributesSymbol.children[index];
+				if (selectAttributeSymbol) {
+					followingAttributeSymbol = element;
+					break;
+				} else if (element.kind !== vscode.SymbolKind.Array && element.name === 'select') {
+					selectAttributeSymbol = element;
+				}
+
+			}
+		}
+		const childNodeSymbols = elementSymbol.children.filter((item) => item.kind !== vscode.SymbolKind.Array);
+		const firstChildNodeSymbol = childNodeSymbols.length > 0? childNodeSymbols[0] : null;
+		const lastChildNodeSymbol = childNodeSymbols.length > 0? childNodeSymbols[childNodeSymbols.length - 1] : null;
+		if (selectAttributeSymbol) {
+			if (followingAttributeSymbol) {
+
+			}
+		}
+	}
+
 	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
@@ -262,6 +288,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const varNamePos = finalSymbol.name.lastIndexOf(' ');
 			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
 		    replacementStart = `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="`;
+			const attributesSymbol = finalSymbol.children.find((item) => item.kind === vscode.SymbolKind.Array && item.name === 'attributes');
+			if (attributesSymbol) {
+				const selectSymbol = finalSymbol.children.find((item) => item.kind === vscode.SymbolKind.Array && item.name === 'attributes');
+			} else {
+				const elementSymbols = finalSymbol.children.filter((item) => item.kind !== vscode.SymbolKind.Array);
+			}
 		}
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
