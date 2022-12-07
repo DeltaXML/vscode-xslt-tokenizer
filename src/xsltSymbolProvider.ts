@@ -96,7 +96,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-
 	public static getSymbolsForActiveDocument(): vscode.DocumentSymbol[] {
 		if (vscode.window.activeTextEditor) {
 			const result = XsltSymbolProvider.documentSymbols.get(vscode.window.activeTextEditor.document.uri);
@@ -228,15 +227,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 
 		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, this.internalImportedGlobals, symbols);
-		console.log(diagnostics.length);
 		return diagnostics;
 	}
-
 	
 	public get diagnosticsArray() : vscode.Diagnostic[] {
 		return this.internalDiagnostics;
-	}
-	
+	}	
 
 	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
 		const matchingParent = this.findMatchingParent(localImportedHrefs, document.fileName);
@@ -320,7 +316,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return fullPath;
 		}
 	}
-
 
 	private static getChildSymbolForSelection(selection: vscode.Selection, symbol: vscode.DocumentSymbol, path: string[], selectionType: SelectionType, parentSymbol: possDocumentSymbol, precedingSymbol: possDocumentSymbol, nextSymbol: possDocumentSymbol): possDocumentSymbol {
 		const result = symbol.children.find((sym) => {
