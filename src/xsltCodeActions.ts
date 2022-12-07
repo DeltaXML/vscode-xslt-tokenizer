@@ -232,6 +232,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
+	private trimLeadingWS(text: string, charCount: number) {
+		if (text.length < charCount) {
+			return text.trimLeft();
+		} else {
+			const textPart1 = text.substring(0, charCount);
+			const textPart2 = text.substring(charCount + 1);
+			return textPart1.trimLeft() + textPart2;
+		}
+	}
+
 	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
@@ -245,7 +255,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const functionFootText = '\n\t</xsl:function>';
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
-		const trimmedLines = functionBodyLines.map((line) => '\t\t' + line.trim());
+		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine - 1));
 		const trimmedBodyText = trimmedLines.join('\n');
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;

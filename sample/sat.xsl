@@ -8,7 +8,10 @@
         
         <xsl:variable name="abc" as="xs:string" select="'a'"/>
         <xsl:variable name="abc2" as="xs:string" select="$abc || 'b'"/>
-        <xsl:variable name="abc3" as="xs:string" select="$abc || $abc2 || 'c'"/>
+        <xsl:variable name="abc3" as="xs:string" 
+            select="
+                $abc || 
+                $abc2 || $abcde"/>
         
         <xsl:sequence select="$abc3"/>
         <xsl:call-template name="get-unit-declarations">
