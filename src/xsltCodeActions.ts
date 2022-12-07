@@ -97,6 +97,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const startTagPosition = startPosition.with({ character: startTagIndex });
 		const currentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, startTagPosition);
 		if (!currentSymbol) return codeAction;
+		const endLine = document.lineAt(range.end.line);
+		const endTagPosition = endLine.text.lastIndexOf('>');
+		const finalSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({character: endTagPosition}))!;
+
 
         const ancestorOrSelfSymbol: vscode.DocumentSymbol[] = [];
         let testSymbol: vscode.DocumentSymbol = currentSymbol;
@@ -119,7 +123,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		switch (codeAction.title) {
 			case XsltCodeActionKind.extractXsltFunction:
 				//this.addEditToCodeAction(codeAction, document, range, codeAction.title);
-				this.addTwoEditsToCodeAction(codeAction, document, range, targetSymbolRange);
+				this.addTwoEditsToCodeAction(codeAction, document, range, targetSymbolRange, finalSymbol);
 				break;
 		}
 		return codeAction;
@@ -242,17 +246,23 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 	}
 
-	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range): vscode.CodeAction {
+	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
 		const fullRangeWithoutLeadingWS = fullRange.with({start: fullRange.start.translate(0, firstCharOnFirstLine)});
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
-		const replacementStart = '<xsl:sequence select="';
+		let replacementStart = '<xsl:sequence select="';
 		const replcementFnCall = 'fn:newFunction(';
 
 		const functionHeadText = '\n\n\t<xsl:function name="fn:newFunction">\n';
-		const functionFootText = '\n\t</xsl:function>';
+		let functionFootText = '\n\t</xsl:function>';
+		let finalSymbolVariableName: string|null = null;
+		if (finalSymbol.name.startsWith('xsl:variable')) {
+			const varNamePos = finalSymbol.name.lastIndexOf(' ');
+			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
+		    replacementStart = `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="`;
+		}
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
 		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine - 1));
