@@ -272,6 +272,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { text: '', lines: 0, lineCountDiff: 0, isSelect: false};
 	}
 
+	private trimLeftTextIfPoss(text: string) {
+
+	}
+
 	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
@@ -294,11 +298,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
 		    replacementStart = `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="`;
             const {text: selectText, lines, lineCountDiff, isSelect} = this.selectOrContentFromInstructionSymbol(document, finalSymbol);
+			const selectTextLines = selectText.split('\n');
+			const trimmedSelectTextLines = selectTextLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine - 1))
+			trimmedSelectTextLines[0] = trimmedSelectTextLines[0].trimLeft();
+			const trimmedSelectText = trimmedSelectTextLines.join('\n');
 			const preFinalBodyLines = trimmedLines.slice(0, finalSymbol.range.start.line - sourceRange.start.line);
 			const preFinalBodyText = preFinalBodyLines.join('\n');
 			const finalSequenceText = '\n\t\t<xsl:sequence';
 			const separator = lines === 1 ? ' ' : '\n\t\t\t';
-			trimmedBodyText = preFinalBodyText + finalSequenceText + separator + selectText + '/>';
+			trimmedBodyText = preFinalBodyText + finalSequenceText + separator + trimmedSelectText + '/>';
 		} else {
 			trimmedBodyText = trimmedLines.join('\n');
 		}
