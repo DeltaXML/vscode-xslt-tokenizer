@@ -290,14 +290,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let trimmedBodyText = '';
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
-		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine - 1));
+		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine));
 		if (finalSymbol.name.startsWith('xsl:variable')) {
 			const varNamePos = finalSymbol.name.lastIndexOf(' ');
 			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
 		    replacementStart = `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="`;
             const {text: selectText, lines, lineCountDiff, isSelect} = this.selectOrContentFromInstructionSymbol(document, finalSymbol);
 			const selectTextLines = selectText.split('\n');
-			const trimmedSelectTextLines = selectTextLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine - 1));
+			const trimmedSelectTextLines = selectTextLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine));
 			trimmedSelectTextLines[0] = trimmedSelectTextLines[0].trimLeft();
 			const trimmedSelectText = trimmedSelectTextLines.join('\n');
 			const preFinalBodyLines = trimmedLines.slice(0, finalSymbol.range.start.line - sourceRange.start.line);

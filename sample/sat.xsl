@@ -10,10 +10,12 @@
             <xsl:variable name="abc2" as="xs:string" select="$abc || 'b'"/>
             <xsl:variable name="abc3" as="xs:string" 
                 select="
-                    $abc || 
-                    $abc2 || $abcde"/>
-            <xsl:variable name="abc4" as="xs:string" select="$abcde || 'b'"/>                        
-            <xsl:sequence select="$abc3, $abc4"/>
+                    if (true()) then
+                        $abc
+                    else 
+                        $abc2 || $abcde"/>
+            <xsl:variable name="abc4" as="xs:string" select="$abcde, $abc3 || 'b'"/>                        
+            <xsl:sequence select="$abc4"/>
         </xsl:for-each>    
         <xsl:call-template name="get-unit-declarations">
             <xsl:with-param name="content-handler" tunnel="yes" as="element()">
