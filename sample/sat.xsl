@@ -12,8 +12,8 @@
                 select="
                     $abc || 
                     $abc2 || $abcde"/>
-            
-            <xsl:sequence select="$abc3"/>
+            <xsl:variable name="abc4" as="xs:string" select="$abcde || 'b'"/>                        
+            <xsl:sequence select="$abc3, $abc4"/>
         </xsl:for-each>    
         <xsl:call-template name="get-unit-declarations">
             <xsl:with-param name="content-handler" tunnel="yes" as="element()">
