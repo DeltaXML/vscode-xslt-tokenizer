@@ -118,8 +118,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (ancestorOrSelfCount < 3 ) return codeAction;
 		const targetSymbolRange = ancestorOrSelfSymbol[ancestorOrSelfCount - 2].range;
 
-
-		console.log({ symbol: currentSymbol });
 		switch (codeAction.title) {
 			case XsltCodeActionKind.extractXsltFunction:
 				//this.addEditToCodeAction(codeAction, document, range, codeAction.title);
