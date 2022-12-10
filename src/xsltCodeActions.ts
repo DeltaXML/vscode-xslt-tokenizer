@@ -373,7 +373,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		diagnostics.forEach((diagnostic) => {
 			const errorLine = diagnostic.range.start.line;
-			if (diagnostic.code === DiagnosticCode.unresolvedVariableRef && errorLine >= fnStartLine + 1 && errorLine <= fnStartLine + lineCount) {
+			if (diagnostic.code === DiagnosticCode.unresolvedVariableRef && errorLine >= fnStartLine + 1 && errorLine <= fnStartLine + lineCount + 1) {
 				const varName = diagnostic.relatedInformation![0].message.substring(1);
 				if (brokenVariableNames.indexOf(varName) < 0) {
 					brokenVariableNames.push(varName);
