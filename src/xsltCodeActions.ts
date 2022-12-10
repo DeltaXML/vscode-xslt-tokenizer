@@ -357,7 +357,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
-		this.executeRenameCommand(fullRange.start.line, fnStartCharacter);
+		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
 		return codeAction;
 	}
 
@@ -388,12 +388,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return new vscode.Range(range.start.with({ character: 0 }), range.end.with({ line: range.end.line + 1, character: 0 }));
 	}
 
-	private executeRenameCommand(lineNumber: number, charNumber: number) {
+	private executeRenameCommand(lineNumber: number, charNumber: number, uri: vscode.Uri) {
 		setTimeout(() => {
 			if (vscode.window.activeTextEditor) {
 				const position = new vscode.Position(lineNumber, charNumber);
 				vscode.window.activeTextEditor.selection = new vscode.Selection(position, position);
-				vscode.commands.executeCommand(XSLTCodeActions.COMMAND_RENAME);
+				vscode.commands.executeCommand(XSLTCodeActions.COMMAND_RENAME, [
+					uri,
+					position
+				]);
 			}
 		}, 250);
 	}
