@@ -310,9 +310,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
 		let replacementStart = '<xsl:sequence select="';
-		const replcementFnCall = 'fn:newFunction(';
+		const replcementFnCall = 'dx:extractFunction(';
 
-		const functionHeadText = '\n\n\t<xsl:function name="fn:newFunction">\n';
+		const functionHeadText = '\n\n\t<xsl:function name="dx:extractFunction">\n';
 		let functionFootText = '\n\t</xsl:function>';
 		let finalSymbolVariableName: string | null = null;
 
