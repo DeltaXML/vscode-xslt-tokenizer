@@ -23,15 +23,11 @@
             </xsl:variable>
             <xsl:sequence select="$abc4, $var8"/>
         </xsl:for-each>    
-        <xsl:call-template name="get-unit-declarations">
-            <xsl:with-param name="content-handler" tunnel="yes" as="element()">
-                <unit-declaration/>
-            </xsl:with-param>
-        </xsl:call-template>
+        <xsl:sequence select="fn:get-unit-declarations()"/>
     </xsl:template>    
     
-    <xsl:template name="get-unit-declarations" as="">
-        
-    </xsl:template>
+    <xsl:function name="fn:get-unit-declarations" as="">
+        <xsl:sequence select="'a'"/>
+    </xsl:function>
     
 </xsl:stylesheet>
