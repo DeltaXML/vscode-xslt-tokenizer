@@ -14,7 +14,13 @@
                         $abc
                     else 
                         $abc2 || $abcde"/>
-            <xsl:variable name="abc4" as="xs:string" select="$abcde, $abc3 || 'b'"/>                        
+            <xsl:variable name="abc4" as="xs:string" select="$abcde, $abc3 || 'b'"/>
+            <xsl:variable name="var8" as="node()*" expand-text="yes">
+                <row>
+                    text {$abc}
+                </row>
+                <row>something</row>
+            </xsl:variable>
             <xsl:sequence select="$abc4"/>
         </xsl:for-each>    
         <xsl:call-template name="get-unit-declarations">
