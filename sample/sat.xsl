@@ -21,7 +21,7 @@
                 </row>
                 <row>something</row>
             </xsl:variable>
-            <xsl:sequence select="$abc4"/>
+            <xsl:sequence select="$abc4, $var8"/>
         </xsl:for-each>    
         <xsl:call-template name="get-unit-declarations">
             <xsl:with-param name="content-handler" tunnel="yes" as="element()">

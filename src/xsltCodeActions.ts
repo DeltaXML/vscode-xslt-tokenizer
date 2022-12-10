@@ -279,10 +279,17 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						attributesAdjacent = false;
 					}
 				}
-				for (const attrRange of foundAttributeRanges.reverse()) {
+				foundAttributeRanges.reverse();
+				for (const attrRange of foundAttributeRanges) {
 					const beforeDelete = document.getText(elementSymbol.range.with({ end: attrRange.start })).trimRight();
 					const afterDelete = document.getText(elementSymbol.range.with({ start: attrRange.end }));
-					variableElementText = beforeDelete + afterDelete;
+					const elementStartPos = document.offsetAt(elementSymbol.range.start);
+					const deleteStartPos = document.offsetAt(attrRange.start) - elementStartPos;
+					const deleteEndPos = document.offsetAt(attrRange.end) - elementStartPos;
+					const beforeDelete2 = variableElementText.substring(0, deleteStartPos);
+					const afterDelete2 = variableElementText.substring(deleteEndPos);
+
+					variableElementText = beforeDelete2.trimRight() + afterDelete2;
 				}
 				variableElementText = '<xsl:sequence' + variableElementText.substring(13);
 				const endTagPos = variableElementText.lastIndexOf('</');
