@@ -280,10 +280,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					}
 				}
 				foundAttributeRanges.reverse();
+				const elementStartPos = document.offsetAt(elementSymbol.range.start);
 				for (const attrRange of foundAttributeRanges) {
-					const beforeDelete = document.getText(elementSymbol.range.with({ end: attrRange.start })).trimRight();
-					const afterDelete = document.getText(elementSymbol.range.with({ start: attrRange.end }));
-					const elementStartPos = document.offsetAt(elementSymbol.range.start);
 					const deleteStartPos = document.offsetAt(attrRange.start) - elementStartPos;
 					const deleteEndPos = document.offsetAt(attrRange.end) - elementStartPos;
 					const beforeDelete2 = variableElementText.substring(0, deleteStartPos);
