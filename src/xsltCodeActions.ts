@@ -327,16 +327,17 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const { text: selectText, lines, isSelect } = this.selectOrContentFromInstructionSymbol(document, finalSymbol);
 			const selectTextLines = selectText.split('\n');
 			const trimmedSelectTextLines = selectTextLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine));
+			const preFinalBodyLines = trimmedLines.slice(0, finalSymbol.range.start.line - (sourceRange.start.line));
+			const preFinalBodyText = preFinalBodyLines.join('\n');
 			if (isSelect) {
 				trimmedSelectTextLines[0] = trimmedSelectTextLines[0].trimLeft();
 				const trimmedSelectText = trimmedSelectTextLines.join('\n');
-				const preFinalBodyLines = trimmedLines.slice(0, finalSymbol.range.start.line - sourceRange.start.line);
-				const preFinalBodyText = preFinalBodyLines.join('\n');
 				const finalSequenceText = '\n\t\t<xsl:sequence';
 				const separator = lines === 1 ? ' ' : '\n\t\t\t';
 				trimmedBodyText = preFinalBodyText + finalSequenceText + separator + trimmedSelectText + '/>';
 			} else {
-				trimmedBodyText = trimmedSelectTextLines.join('\n');
+				const newLine = preFinalBodyText.length > 0? '\n' : ''; 
+				trimmedBodyText = preFinalBodyText + newLine + trimmedSelectTextLines.join('\n');
 			}
 		} else {
 			trimmedBodyText = trimmedLines.join('\n');
