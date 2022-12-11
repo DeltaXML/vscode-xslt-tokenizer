@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
-import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
+import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 
@@ -22,10 +22,9 @@ enum LineTagEndType {
 }
 enum RangeTagType {
 	unknown,
-	startUnclosedSingle,
-	startCloseSingle,
-	selfCloseSingle,
-	startCloseMulti,
+	singleElement,
+	multipleElement,
+ 	attribute
 }
 interface StartLineProps {
 	lineType: LineTagStartType;
@@ -38,6 +37,8 @@ interface EndLineProps {
 interface ActionProps {
 	document: vscode.TextDocument;
 	range: vscode.Range;
+	firstSymbol: vscode.DocumentSymbol;
+	lastSymbol: vscode.DocumentSymbol;
 }
 enum XsltCodeActionKind {
 	extractXsltFunction = 'Extract XSLT function'
@@ -56,8 +57,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private static tagNameRegex = new RegExp(/^([^\s|\/|>]+)/);
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
-		this.actionProps = { document, range };
-		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
+		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType2(document, range);
 
 		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
 		const codeActions: vscode.CodeAction[] = [];
@@ -65,11 +65,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
 
 		switch (roughSelectionType) {
-			case RangeTagType.startUnclosedSingle:
+			case RangeTagType.attribute:
 				break;
-			case RangeTagType.startCloseSingle:
-			case RangeTagType.selfCloseSingle:
-			case RangeTagType.startCloseMulti:
+			case RangeTagType.singleElement:
+			case RangeTagType.multipleElement:
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunction, vscode.CodeActionKind.RefactorExtract));
 				break;
 			default:
@@ -126,98 +125,55 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private estimateSelectionType(document: vscode.TextDocument, range: vscode.Range) {
-		/*
-		returns:
-			unknown,
-			startCloseSingle,
-			selfCloseSingle,
-			startCloseMulti,
-		*/
-		const start = range.start;
-		const end = range.end;
-		const isSingleLine = start.line === end.line;
-		let rangeTagType = RangeTagType.unknown;
-		let firstTagName = '';
-		let lastTagName = '';
+	private estimateSelectionType2(document: vscode.TextDocument, range: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string} {
+		let rangeTagType = RangeTagType.unknown,
+			firstTagName = '',
+			lastTagName = '',
+			firstSymbol: possDocumentSymbol | undefined,
+			lastSymbol: possDocumentSymbol | undefined;
 
-		const startLine = document.lineAt(start.line);
-		const { lineType: startLineTagStartType, tagName } = this.testTagLineStart(startLine);
-		const { lineType: startLineTageEndType, endTagName } = this.testTagLineEnd(startLine);
-		firstTagName = tagName;
-
-		if ((startLineTagStartType !== LineTagStartType.startTag) || (isSingleLine && (startLineTageEndType === LineTagEndType.unknown))) {
-			return { rangeTagType, firstTagName, lastTagName };
-		}
-		if (isSingleLine) {
-			lastTagName = endTagName;
-			if (firstTagName !== lastTagName) {
-				// unknown still
-			} else if (startLineTageEndType === LineTagEndType.selfClose) {
-				rangeTagType = RangeTagType.selfCloseSingle;
-			} else if ((startLine.text.indexOf('</') > -1)) {
-				rangeTagType = RangeTagType.startCloseSingle;
-			} else {
-				rangeTagType = RangeTagType.startUnclosedSingle;
+		const startPosition = range.start;
+		const startLine = document.lineAt(startPosition.line).text; 
+		const startTagIndex = startLine.indexOf('<', startPosition.character);
+		if (startTagIndex < 0) {
+			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start);
+			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
+			let symbolOk = false;
+			if (firstSymbol && lastSymbol) {
+				if (firstSymbol.range.isEqual(lastSymbol.range)) {
+					symbolOk = true;
+					firstTagName = firstSymbol.name;
+					lastSymbol = null;
+					rangeTagType = RangeTagType.attribute;
+				}
 			}
 		} else {
-			const endLine = document.lineAt(end.line);
-			//const endLineTagStartType = this.testTagLineStart(endLine);
-
-			const { lineType: endLineTageStartType, tagName: finalStartTagName } = this.testTagLineStart(endLine);
-			const { lineType: endLineTageEndType, endTagName: finalEndTagName } = this.testTagLineEnd(endLine);
-			lastTagName = finalEndTagName;
-
-			if (endLineTageEndType === LineTagEndType.endTag || endLineTageEndType === LineTagEndType.selfClose) {
-				rangeTagType = RangeTagType.startCloseMulti;
-			}
-		}
-		return { rangeTagType, firstTagName, lastTagName };
-	}
-
-	private testTagLineStart(anyLine: vscode.TextLine): StartLineProps {
-		let lineType = LineTagStartType.unknown;
-		let tagName = '';
-		if (anyLine.firstNonWhitespaceCharacterIndex > anyLine.text.length - 2) {
-			return { lineType, tagName };
-		}
-
-		const startLineChar = anyLine.text[anyLine.firstNonWhitespaceCharacterIndex];
-		const startLineChar2 = anyLine.text[anyLine.firstNonWhitespaceCharacterIndex + 1];
-		if (startLineChar === '<' && !(startLineChar2 === '?' || startLineChar2 === '!')) {
-			lineType = startLineChar2 === '/' ? LineTagStartType.closeTag : LineTagStartType.startTag;
-			const offset = lineType === LineTagStartType.closeTag ? 2 : 1;
-			const matches = anyLine.text.substring(anyLine.firstNonWhitespaceCharacterIndex + offset).match(XSLTCodeActions.tagNameRegex);
-			if (matches) {
-				tagName = matches[0];
-			}
-		}
-		return { lineType, tagName };
-	}
-
-	private testTagLineEnd(anyLine: vscode.TextLine): EndLineProps {
-		const trimStartLineRight = anyLine.text.trimRight();
-		let endTagName = '';
-		let lineType = LineTagEndType.unknown;
-		if (trimStartLineRight.length < 2) {
-			return { lineType, endTagName };
-		}
-		const lenOfTrimStartLine = trimStartLineRight.length;
-		const startLineFinalChar = trimStartLineRight[lenOfTrimStartLine - 1];
-		const startLineFinalCharBar1 = trimStartLineRight[lenOfTrimStartLine - 2];
-		if (startLineFinalChar === '>' && !(startLineFinalCharBar1 === '?' || startLineFinalCharBar1 === '-')) {
-			lineType = startLineFinalCharBar1 === '/' ? LineTagEndType.selfClose : LineTagEndType.endTag;
-			const finalTagPos = anyLine.text.lastIndexOf('<');
-			if (finalTagPos > -1 && finalTagPos < anyLine.text.length - 3) {
-				const isCloseTagStart = anyLine.text.charAt(finalTagPos + 1) === '/';
-				const offset = (isCloseTagStart) ? 2 : 1;
-				const matches = anyLine.text.substring(finalTagPos + offset).match(XSLTCodeActions.tagNameRegex);
-				if (matches) {
-					endTagName = matches[0];
+			const endPosition = range.end;
+			const endLine = document.lineAt(endPosition.line).text;
+			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
+			if (endTagIndex > -1) {
+				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }));
+				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }));
+				if (firstSymbol && lastSymbol) {
+					firstTagName = firstSymbol.name;
+					if (firstSymbol.range.isEqual(lastSymbol.range)) {
+						lastSymbol = null;
+						rangeTagType = RangeTagType.singleElement;
+					} else {
+						if (lastSymbol.range.end.isAfter(firstSymbol.range.end)) {
+							rangeTagType = RangeTagType.multipleElement;
+							lastTagName = lastSymbol.name;
+						}
+					}
 				}
 			}
 		}
-		return { lineType, endTagName };
+
+		///const lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagPosition }))!;
+		if (firstSymbol && lastSymbol) {
+			this.actionProps = { document, range, firstSymbol, lastSymbol };
+		}
+		return { rangeTagType, firstTagName, lastTagName };
 	}
 
 	private createStubCodeAction(title: string): vscode.CodeAction {
@@ -330,7 +286,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				const separator = lines === 1 ? ' ' : '\n\t\t\t';
 				trimmedBodyText = preFinalBodyText + finalSequenceText + separator + trimmedSelectText + '/>';
 			} else {
-				const newLine = preFinalBodyText.length > 0? '\n' : ''; 
+				const newLine = preFinalBodyText.length > 0 ? '\n' : '';
 				trimmedBodyText = preFinalBodyText + newLine + trimmedSelectTextLines.join('\n');
 			}
 		} else {
