@@ -24,6 +24,7 @@ enum RangeTagType {
 	unknown,
 	singleElement,
 	multipleElement,
+	xpathAttribute,
 	attribute
 }
 interface StartLineProps {
@@ -58,19 +59,20 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
 
 		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
-		const codeActions: vscode.CodeAction[] = [];
+		let codeActions: vscode.CodeAction[]|undefined = [];
 		// debug only:
 		codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
 
 		switch (roughSelectionType) {
-			case RangeTagType.attribute:
+
+			case RangeTagType.xpathAttribute:
 				break;
 			case RangeTagType.singleElement:
 			case RangeTagType.multipleElement:
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunction, vscode.CodeActionKind.RefactorExtract));
 				break;
 			default:
-				return;
+				codeActions = undefined;
 		}
 
 		// Marking a single fix as `preferred` means that users can apply it with a
@@ -106,7 +108,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		switch (codeAction.title) {
 			case XsltCodeActionKind.extractXsltFunction:
 				//this.addEditToCodeAction(codeAction, document, range, codeAction.title);
-				const usedLastSymbol = lastSymbol? lastSymbol : firstSymbol;
+				const usedLastSymbol = lastSymbol ? lastSymbol : firstSymbol;
 				this.addTwoEditsToCodeAction(codeAction, document, range, targetSymbolRange, usedLastSymbol);
 				break;
 		}
@@ -124,16 +126,24 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const startPosition = range.start;
 		const startLine = document.lineAt(startPosition.line).text;
 		const startTagIndex = startLine.indexOf('<', startPosition.character);
-		if (startTagIndex < 0) {
+		if (startTagIndex < 0 && !range.isEmpty) {
 			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start);
 			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
-			const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);			
-			if (firstSymbol && lastSymbol && firstSymbolInsideRange) {
+			const rangeInsideAttributeFirstSymbol = firstSymbol && firstSymbol.range.contains(range);
+			if (firstSymbol && lastSymbol && rangeInsideAttributeFirstSymbol) {
 				if (firstSymbol.range.isEqual(lastSymbol.range)) {
-					if ((firstSymbol.kind === vscode.SymbolKind.Event || firstSymbol.kind === vscode.SymbolKind.Field)) {
-						firstTagName = firstSymbol.name;
-						lastSymbol = null;
-						rangeTagType = RangeTagType.attribute;
+					if ((firstSymbol.kind === vscode.SymbolKind.Event)) {
+						const fullText = document.getText(firstSymbol.range);
+						const qPos = Math.min(fullText.indexOf('\''), fullText.indexOf('"'));
+						const startCharOfAttrValue = document.offsetAt(firstSymbol.range.start) + qPos + 1;
+						const startCharOfSelection = document.offsetAt(range.start);
+						if (startCharOfSelection >= startCharOfAttrValue) {
+							firstTagName = firstSymbol.name;
+							lastSymbol = null;
+							rangeTagType = RangeTagType.xpathAttribute;
+						}
+					} else if (firstSymbol.kind === vscode.SymbolKind.Field) {
+						// TODO: refactor normal attribute - why?
 					}
 				}
 			}
@@ -142,8 +152,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			if (endPosition.character === 0) {
 				const prevLineIndex = endPosition.line - 1;
 				const prevLineEndChar = document.lineAt(prevLineIndex).range.end.character;
-				endPosition = endPosition.with({line: prevLineIndex, character: prevLineEndChar});
-				range = range.with({end: endPosition});
+				endPosition = endPosition.with({ line: prevLineIndex, character: prevLineEndChar });
+				range = range.with({ end: endPosition });
 			}
 			const endLine = document.lineAt(endPosition.line).text;
 			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
