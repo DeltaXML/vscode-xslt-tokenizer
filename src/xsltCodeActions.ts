@@ -88,20 +88,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	async resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): Promise<vscode.CodeAction> {
 		if (!this.actionProps) return codeAction;
 
-		const { document, range } = this.actionProps;
-		const startPosition = range.start;
-		const startLine = document.lineAt(startPosition.line).text;
-		const startTagIndex = startLine.indexOf('<');
-		const startTagPosition = startPosition.with({ character: startTagIndex });
-		const currentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, startTagPosition);
-		if (!currentSymbol) return codeAction;
-		const endLine = document.lineAt(range.end.line);
-		const endTagPosition = endLine.text.lastIndexOf('>');
-		const finalSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagPosition }))!;
+		const { document, range, firstSymbol, lastSymbol } = this.actionProps;
 
 
 		const ancestorOrSelfSymbol: vscode.DocumentSymbol[] = [];
-		let testSymbol: vscode.DocumentSymbol = currentSymbol;
+		let testSymbol: vscode.DocumentSymbol = lastSymbol;
 		// get parent symbol until we reach root element
 		while (testSymbol) {
 			ancestorOrSelfSymbol.push(testSymbol);
@@ -119,7 +110,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		switch (codeAction.title) {
 			case XsltCodeActionKind.extractXsltFunction:
 				//this.addEditToCodeAction(codeAction, document, range, codeAction.title);
-				this.addTwoEditsToCodeAction(codeAction, document, range, targetSymbolRange, finalSymbol);
+				const usedLastSymbol = lastSymbol? lastSymbol : firstSymbol;
+				this.addTwoEditsToCodeAction(codeAction, document, range, targetSymbolRange, usedLastSymbol);
 				break;
 		}
 		return codeAction;
