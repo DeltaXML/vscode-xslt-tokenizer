@@ -24,7 +24,7 @@ enum RangeTagType {
 	unknown,
 	singleElement,
 	multipleElement,
- 	attribute
+	attribute
 }
 interface StartLineProps {
 	lineType: LineTagStartType;
@@ -125,7 +125,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private estimateSelectionType2(document: vscode.TextDocument, range: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string} {
+	private estimateSelectionType2(document: vscode.TextDocument, range: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string } {
 		let rangeTagType = RangeTagType.unknown,
 			firstTagName = '',
 			lastTagName = '',
@@ -133,22 +133,27 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			lastSymbol: possDocumentSymbol | undefined;
 
 		const startPosition = range.start;
-		const startLine = document.lineAt(startPosition.line).text; 
+		const startLine = document.lineAt(startPosition.line).text;
 		const startTagIndex = startLine.indexOf('<', startPosition.character);
 		if (startTagIndex < 0) {
 			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start);
 			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
-			let symbolOk = false;
 			if (firstSymbol && lastSymbol) {
 				if (firstSymbol.range.isEqual(lastSymbol.range)) {
-					symbolOk = true;
-					firstTagName = firstSymbol.name;
-					lastSymbol = null;
-					rangeTagType = RangeTagType.attribute;
+					if (firstSymbol.kind === vscode.SymbolKind.Event || firstSymbol.kind === vscode.SymbolKind.Field) {
+						firstTagName = firstSymbol.name;
+						lastSymbol = null;
+						rangeTagType = RangeTagType.attribute;
+					}
 				}
 			}
 		} else {
-			const endPosition = range.end;
+			let endPosition = range.end;
+			if (endPosition.character === 0) {
+				const prevLineIndex = endPosition.line - 1;
+				const prevLineEndChar = document.lineAt(prevLineIndex).range.end.character;
+				endPosition = endPosition.with({line: prevLineIndex, character: prevLineEndChar});
+			}
 			const endLine = document.lineAt(endPosition.line).text;
 			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
 			if (endTagIndex > -1) {
