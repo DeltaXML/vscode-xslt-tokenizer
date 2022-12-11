@@ -656,7 +656,7 @@ export class XsltTokenDefinitions {
 										const fnName = prevToken.value;
 										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
-										resultInputToken = { token: token, type: GlobalInstructionType.Function };
+										resultInputToken = { token: prevToken, type: GlobalInstructionType.Function };
 									}
 									awaitingRequiredArity = false;
 									incrementFunctionArity = false;
