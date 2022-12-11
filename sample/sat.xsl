@@ -24,9 +24,14 @@
             <xsl:sequence select="$abc4, $var8"/>
         </xsl:for-each>    
         <xsl:sequence select="fn:get-unit-declarations()"/>
+        <xsl:sequence select="fn:get-unit-declarations2('abc')"/>
     </xsl:template>    
     
     <xsl:function name="fn:get-unit-declarations" as="">
+        <xsl:sequence select="'a'"/>
+    </xsl:function>
+    <xsl:function name="fn:get-unit-declarations2" as="">
+        <xsl:param name="new" as="xs:string"/>
         <xsl:sequence select="'a'"/>
     </xsl:function>
     
