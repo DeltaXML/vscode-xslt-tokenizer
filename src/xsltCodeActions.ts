@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
-import { XSLTConfiguration } from './languageConfigurations';
-import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
+import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 
@@ -55,7 +54,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	private actionProps: ActionProps | null = null;
 	private static tagNameRegex = new RegExp(/^([^\s|\/|>]+)/);
-	private static wsAtEndRegex = new RegExp(/(\s+$)/);
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
 		this.actionProps = { document, range };
@@ -299,10 +297,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { text: '', lines: 0, isSelect: false };
 	}
 
-	private trimLeftTextIfPoss(text: string) {
-
-	}
-
 	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
@@ -381,7 +375,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			}
 		});
 		return brokenVariableNames;
-
 	}
 
 	private extendRangeToFullLines(range: vscode.Range) {
