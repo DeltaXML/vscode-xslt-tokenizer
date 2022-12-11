@@ -109,7 +109,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			case XsltCodeActionKind.extractXsltFunction:
 				//this.addEditToCodeAction(codeAction, document, range, codeAction.title);
 				const usedLastSymbol = lastSymbol ? lastSymbol : firstSymbol;
-				this.addTwoEditsToCodeAction(codeAction, document, range, targetSymbolRange, usedLastSymbol);
+				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol);
 				break;
 		}
 		return codeAction;
@@ -261,7 +261,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { text: '', lines: 0, isSelect: false };
 	}
 
-	private addTwoEditsToCodeAction(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
+	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
 		const fullRange = this.extendRangeToFullLines(sourceRange);
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
 		const fullRangeWithoutLeadingWS = fullRange.with({ start: fullRange.start.translate(0, firstCharOnFirstLine) });
