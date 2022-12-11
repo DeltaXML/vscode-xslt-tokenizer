@@ -52,12 +52,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	public static COMMAND_RENAME = 'editor.action.rename';
 	public static COMMAND = 'code-actions-sample.command';
-
 	private actionProps: ActionProps | null = null;
-	private static tagNameRegex = new RegExp(/^([^\s|\/|>]+)/);
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
-		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType2(document, range);
+		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
 
 		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
 		const codeActions: vscode.CodeAction[] = [];
@@ -89,8 +87,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (!this.actionProps) return codeAction;
 
 		const { document, range, firstSymbol, lastSymbol } = this.actionProps;
-
-
 		const ancestorOrSelfSymbol: vscode.DocumentSymbol[] = [];
 		let testSymbol: vscode.DocumentSymbol = lastSymbol;
 		// get parent symbol until we reach root element
@@ -117,7 +113,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private estimateSelectionType2(document: vscode.TextDocument, initRange: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string } {
+	private estimateSelectionType(document: vscode.TextDocument, initRange: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string } {
 		let rangeTagType = RangeTagType.unknown,
 			firstTagName = '',
 			lastTagName = '',
@@ -131,9 +127,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (startTagIndex < 0) {
 			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start);
 			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
-			if (firstSymbol && lastSymbol) {
+			const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);			
+			if (firstSymbol && lastSymbol && firstSymbolInsideRange) {
 				if (firstSymbol.range.isEqual(lastSymbol.range)) {
-					if (firstSymbol.kind === vscode.SymbolKind.Event || firstSymbol.kind === vscode.SymbolKind.Field) {
+					if ((firstSymbol.kind === vscode.SymbolKind.Event || firstSymbol.kind === vscode.SymbolKind.Field)) {
 						firstTagName = firstSymbol.name;
 						lastSymbol = null;
 						rangeTagType = RangeTagType.attribute;
@@ -153,7 +150,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			if (endTagIndex > -1) {
 				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }));
 				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }));
-				if (firstSymbol && lastSymbol) {
+				const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);
+				const lastSymbolInsideRange = lastSymbol && range.contains(lastSymbol.range);
+				if (firstSymbol && lastSymbol && firstSymbolInsideRange && lastSymbolInsideRange) {
 					firstTagName = firstSymbol.name;
 					if (firstSymbol.range.isEqual(lastSymbol.range)) {
 						lastSymbol = null;
