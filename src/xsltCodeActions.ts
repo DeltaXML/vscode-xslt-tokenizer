@@ -125,12 +125,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private estimateSelectionType2(document: vscode.TextDocument, range: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string } {
+	private estimateSelectionType2(document: vscode.TextDocument, initRange: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string } {
 		let rangeTagType = RangeTagType.unknown,
 			firstTagName = '',
 			lastTagName = '',
 			firstSymbol: possDocumentSymbol | undefined,
 			lastSymbol: possDocumentSymbol | undefined;
+		let range = initRange;
 
 		const startPosition = range.start;
 		const startLine = document.lineAt(startPosition.line).text;
@@ -153,6 +154,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				const prevLineIndex = endPosition.line - 1;
 				const prevLineEndChar = document.lineAt(prevLineIndex).range.end.character;
 				endPosition = endPosition.with({line: prevLineIndex, character: prevLineEndChar});
+				range = range.with({end: endPosition});
 			}
 			const endLine = document.lineAt(endPosition.line).text;
 			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
