@@ -44,8 +44,8 @@ interface ActionProps {
 type anyDocumentSymbol = vscode.DocumentSymbol|undefined|null;
 
 enum XsltCodeActionKind {
-	extractXsltFunction = 'Extract XSLT function',
-	extractXsltFunctionFmXPath = 'Extract XPath to XSLT function',
+	extractXsltFunction = 'Extract instructions to xsl:function',
+	extractXsltFunctionFmXPath = 'Extract expression to xsl:function',
 }
 
 export class XSLTCodeActions implements vscode.CodeActionProvider {
@@ -69,7 +69,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		switch (roughSelectionType) {
 
 			case RangeTagType.xpathAttribute:
-				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunction, vscode.CodeActionKind.RefactorExtract));
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunctionFmXPath, vscode.CodeActionKind.RefactorExtract));
 				break;
 			case RangeTagType.singleElement:
 			case RangeTagType.multipleElement:
@@ -283,7 +283,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
-		let replacementStart = '<xsl:sequence select="';
+		const sequenceInstructionStart =  '<xsl:sequence select="';
+		let replacementStart = sequenceInstructionStart;
 		const replcementFnCall = 'dx:extractFunction(';
 
 		const functionHeadText = '\n\n\t<xsl:function name="dx:extractFunction">\n';
@@ -292,7 +293,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		let trimmedBodyText = '';
 		const functionBodyText = document.getText(fullRange);
-		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
+		const functionBodyLines = functionBodyText.trimRight().split('\n');
 		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine));
 		if (finalSymbol && finalSymbol.name.startsWith('xsl:variable')) {
 			const varNamePos = finalSymbol.name.lastIndexOf(' ');
@@ -313,8 +314,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				const newLine = preFinalBodyText.length > 0 ? '\n' : '';
 				trimmedBodyText = preFinalBodyText + newLine + trimmedSelectTextLines.join('\n');
 			}
-		} else {
+		} else if (elementSelected) {
 			trimmedBodyText = trimmedLines.join('\n');
+		} else {
+			const trimmedLinesText = trimmedLines.join('\n');
+			trimmedBodyText = '\n\t\t' + sequenceInstructionStart + trimmedLinesText + '"/>';
 		}
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;

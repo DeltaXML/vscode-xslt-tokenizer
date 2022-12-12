@@ -7,7 +7,7 @@
     <xsl:template match="/" mode="#default">   
         <xsl:for-each select="*">
             <xsl:variable name="abc" as="xs:string" select="'a'"/>
-            <xsl:variable name="abc2" as="xs:string" select="$abc || 'b'"/>
+            <xsl:variable name="abc2" as="xs:string" select="$abc || 'b' || 'dce'"/>
             <xsl:variable name="abc3" as="xs:string" 
                 select="
                     if (true()) then
