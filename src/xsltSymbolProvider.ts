@@ -318,10 +318,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	private static getChildSymbolForSelection(selection: vscode.Selection, symbol: vscode.DocumentSymbol, path: string[], selectionType: SelectionType, parentSymbol: possDocumentSymbol, precedingSymbol: possDocumentSymbol, nextSymbol: possDocumentSymbol): possDocumentSymbol {
-		const result = symbol.children.find((sym) => {
-			const selectionPos = new vscode.Position(selection.start.line, selection.start.character + 1);
-			return sym.range.contains(selectionPos);
-		});
+		const selectionPos = new vscode.Position(selection.start.line, selection.start.character + 1);
+		const result = symbol.children.find((sym) => sym.range.contains(selectionPos));
 
 		if (result) {
 			const resultName = result.name.split(' ')[0];
@@ -348,12 +346,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					}
 				}
 			}
-			if (symbol.kind === vscode.SymbolKind.Array && symbol.name === 'attributes') {
+			const isAttributesSymbol = symbol.kind === vscode.SymbolKind.Array && symbol.name === 'attributes';
+			if (isAttributesSymbol) {
 				path.push('/@' + resultName);
 			} else if (!(result.kind === vscode.SymbolKind.Array && result.name === 'attributes')) {
 				path.push('/' + resultName + `[${precedingSymbolNames}]`);
 			}
-			return this.getChildSymbolForSelection(selection, result, path, selectionType, symbol, precedingSibling, nextSibling);
+			if (isAttributesSymbol && selectionType === SelectionType.Parent) {
+				return parentSymbol;
+			} else {
+				return this.getChildSymbolForSelection(selection, result, path, selectionType, symbol, precedingSibling, nextSibling);
+			}
 		} else if (selectionType === SelectionType.Parent) {
 			return parentSymbol;
 		} else if (selectionType === SelectionType.Previous) {

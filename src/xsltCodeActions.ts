@@ -38,11 +38,14 @@ interface EndLineProps {
 interface ActionProps {
 	document: vscode.TextDocument;
 	range: vscode.Range;
-	firstSymbol: vscode.DocumentSymbol;
-	lastSymbol: vscode.DocumentSymbol;
+	firstSymbol: anyDocumentSymbol;
+	lastSymbol: anyDocumentSymbol;
 }
+type anyDocumentSymbol = vscode.DocumentSymbol|undefined|null;
+
 enum XsltCodeActionKind {
-	extractXsltFunction = 'Extract XSLT function'
+	extractXsltFunction = 'Extract XSLT function',
+	extractXsltFunctionFmXPath = 'Extract XPath to XSLT function',
 }
 
 export class XSLTCodeActions implements vscode.CodeActionProvider {
@@ -66,6 +69,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		switch (roughSelectionType) {
 
 			case RangeTagType.xpathAttribute:
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunction, vscode.CodeActionKind.RefactorExtract));
 				break;
 			case RangeTagType.singleElement:
 			case RangeTagType.multipleElement:
@@ -89,9 +93,28 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (!this.actionProps) return codeAction;
 
 		const { document, range, firstSymbol, lastSymbol } = this.actionProps;
+		const usedLastSymbol = lastSymbol ? lastSymbol : firstSymbol;
+
+		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol);
+		const symbolKind = firstSymbol?.kind;
+		const extraDescendants = symbolKind === vscode.SymbolKind.Event ||  symbolKind === vscode.SymbolKind.Field ? 2 : 0;
+		const ancestorOrSelfCount = ancestorOrSelfSymbols.length;
+		if (ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
+		const targetSymbolRange = ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
+
+		switch (codeAction.title) {
+			case XsltCodeActionKind.extractXsltFunction:
+				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, true);
+				break;
+			case XsltCodeActionKind.extractXsltFunctionFmXPath:
+				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, false);
+				break;
+		}
+		return codeAction;
+	}
+
+	private populateAncestorArray(testSymbol: anyDocumentSymbol) {
 		const ancestorOrSelfSymbol: vscode.DocumentSymbol[] = [];
-		let testSymbol: vscode.DocumentSymbol = lastSymbol;
-		// get parent symbol until we reach root element
 		while (testSymbol) {
 			ancestorOrSelfSymbol.push(testSymbol);
 			const tempSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, testSymbol.range.start);
@@ -101,18 +124,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				break;
 			}
 		}
-		const ancestorOrSelfCount = ancestorOrSelfSymbol.length;
-		if (ancestorOrSelfCount < 3) return codeAction;
-		const targetSymbolRange = ancestorOrSelfSymbol[ancestorOrSelfCount - 2].range;
-
-		switch (codeAction.title) {
-			case XsltCodeActionKind.extractXsltFunction:
-				//this.addEditToCodeAction(codeAction, document, range, codeAction.title);
-				const usedLastSymbol = lastSymbol ? lastSymbol : firstSymbol;
-				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol);
-				break;
-		}
-		return codeAction;
+		return ancestorOrSelfSymbol;
 	}
 
 	private estimateSelectionType(document: vscode.TextDocument, initRange: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string } {
@@ -178,9 +190,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 
 		///const lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagPosition }))!;
-		if (firstSymbol && lastSymbol) {
-			this.actionProps = { document, range, firstSymbol, lastSymbol };
-		}
+		this.actionProps = { document, range, firstSymbol, lastSymbol };
+
 		return { rangeTagType, firstTagName, lastTagName };
 	}
 
@@ -261,10 +272,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { text: '', lines: 0, isSelect: false };
 	}
 
-	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: vscode.DocumentSymbol): vscode.CodeAction {
-		const fullRange = this.extendRangeToFullLines(sourceRange);
+	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: anyDocumentSymbol, elementSelected: boolean): vscode.CodeAction {
+		let fullRange = sourceRange;
+		let fullRangeWithoutLeadingWS = sourceRange;
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
-		const fullRangeWithoutLeadingWS = fullRange.with({ start: fullRange.start.translate(0, firstCharOnFirstLine) });
+		if (elementSelected) {
+			fullRange = this.extendRangeToFullLines(sourceRange);
+			fullRangeWithoutLeadingWS = fullRange.with({ start: fullRange.start.translate(0, firstCharOnFirstLine) });
+		}
+
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
 		let replacementStart = '<xsl:sequence select="';
@@ -278,7 +294,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.substring(0, functionBodyText.length - 1).split('\n');
 		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine));
-		if (finalSymbol.name.startsWith('xsl:variable')) {
+		if (finalSymbol && finalSymbol.name.startsWith('xsl:variable')) {
 			const varNamePos = finalSymbol.name.lastIndexOf(' ');
 			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
 			replacementStart = `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="`;
@@ -306,7 +322,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const fnArgsString = requiredParamNames.map((arg) => '$' + arg).join(', ');
 		const fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
-		const replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
+		const replacementAll = elementSelected ? replacementStart + replcementFnCall + fnArgsString + ')"/>\n' : replcementFnCall + fnArgsString + ')';
 		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
 
 		const functionParamLines = requiredParamNames.map((argName) => {
