@@ -317,6 +317,7 @@ export class XsltTokenDiagnostics {
 		let currentXSLTIterateParams: string[][] = [];
 		let schemaQuery: SchemaQuery | undefined;
 		let xsltSchemaQuery: SchemaQuery | undefined;
+		let insideGlobalFunction = false;
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
 		
@@ -665,12 +666,14 @@ export class XsltTokenDiagnostics {
 										}
 										if (startTagToken) {
 											// if a top-level element, use global variables instad of inScopeVariablesList;
+											if (tagElementName === 'xsl:function') insideGlobalFunction = true;
 											elementStack.push({
 												namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList,
 												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren
 											});
 										}
 									} else if (startTagToken) {
+										if (tagElementName === 'xsl:function') insideGlobalFunction = true;
 										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren });
 									}
 									inScopeVariablesList = [];
@@ -712,8 +715,11 @@ export class XsltTokenDiagnostics {
 								// end of an element close-tag:
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop();
+									if (tagElementName === 'xsl:function') insideGlobalFunction = false;
 									if (tagElementName === 'xsl:iterate' && currentXSLTIterateParams.length > 0) {
 										currentXSLTIterateParams.pop();
+									} else if (tagElementName === 'xsl:function') {
+										insideGlobalFunction = false;
 									}
 									if (poppedData) {
 										if (poppedData.symbolName !== tagElementName) {
@@ -1789,6 +1795,7 @@ export class XsltTokenDiagnostics {
 				if (elementStack.length > 0) {
 					let usedtoken = false;
 					while (elementStack.length > 0) {
+						if (tagElementName === 'xsl:function') insideGlobalFunction = false;
 						let poppedData = elementStack.pop();
 						let endToken: BaseToken;
 						if (poppedData) {
