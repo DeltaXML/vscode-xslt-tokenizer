@@ -41,7 +41,7 @@ interface ActionProps {
 	firstSymbol: anyDocumentSymbol;
 	lastSymbol: anyDocumentSymbol;
 }
-type anyDocumentSymbol = vscode.DocumentSymbol|undefined|null;
+type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 
 enum XsltCodeActionKind {
 	extractXsltFunction = 'Extract instructions to xsl:function',
@@ -62,7 +62,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
 
 		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
-		let codeActions: vscode.CodeAction[]|undefined = [];
+		let codeActions: vscode.CodeAction[] | undefined = [];
 		// debug only:
 		codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
 
@@ -97,7 +97,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol);
 		const symbolKind = firstSymbol?.kind;
-		const extraDescendants = symbolKind === vscode.SymbolKind.Event ||  symbolKind === vscode.SymbolKind.Field ? 2 : 0;
+		const extraDescendants = symbolKind === vscode.SymbolKind.Event || symbolKind === vscode.SymbolKind.Field ? 2 : 0;
 		const ancestorOrSelfCount = ancestorOrSelfSymbols.length;
 		if (ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
 		const targetSymbolRange = ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
@@ -283,7 +283,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
-		const sequenceInstructionStart =  '<xsl:sequence select="';
+		const sequenceInstructionStart = '<xsl:sequence select="';
 		let replacementStart = sequenceInstructionStart;
 		const replcementFnCall = 'dx:extractFunction(';
 
@@ -328,7 +328,19 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const requiredParamNames = this.findBrokenVariableRefs(document, functionBodyLinesCount, targetRange, interimFunctionText);
 
 		const fnArgsString = requiredParamNames.map((arg) => '$' + arg).join(', ');
-		const replacementAll = elementSelected ? replacementStart + replcementFnCall + fnArgsString + ')"/>\n' : replcementFnCall + fnArgsString + ')';
+		let replacementAll = '';
+		let fnStartCharacter = -1;
+		if (elementSelected) {
+			fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
+			replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
+		} else {
+			const expressionLine = document.lineAt(fullRange.start.line);
+			const charIndexOfNonWSonLine = expressionLine.firstNonWhitespaceCharacterIndex;
+			const wsCharsBeforeSelection = charIndexOfNonWSonLine - fullRange.start.character;
+			const prefixWS = expressionLine.text.substring(0, wsCharsBeforeSelection);
+			fnStartCharacter = prefixWS.length + fullRange.start.character + 2;
+			replacementAll = prefixWS + replcementFnCall + fnArgsString + ')';
+		}
 		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
 
 		const functionParamLines = requiredParamNames.map((argName) => {
@@ -337,7 +349,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
-		const fnStartCharacter = elementSelected ? firstCharOnFirstLine + replacementStart.length + 2: fullRange.start.character + 2;
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
 		return codeAction;
 	}
