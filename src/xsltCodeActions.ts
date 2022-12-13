@@ -294,7 +294,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let trimmedBodyText = '';
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.trimRight().split('\n');
-		const trimmedLines = functionBodyLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine));
+		let functionBodyLinesCount = functionBodyLines.length;
+		const indent = elementSelected ? '\t\t' : '\t\t\t';
+		const trimmedLines = functionBodyLines.map((line) => indent + this.trimLeadingWS(line, firstCharOnFirstLine));
 		if (finalSymbol && finalSymbol.name.startsWith('xsl:variable')) {
 			const varNamePos = finalSymbol.name.lastIndexOf(' ');
 			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
@@ -318,11 +320,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			trimmedBodyText = trimmedLines.join('\n');
 		} else {
 			const trimmedLinesText = trimmedLines.join('\n');
-			trimmedBodyText = '\n\t\t' + sequenceInstructionStart + trimmedLinesText + '"/>';
+			trimmedBodyText = '\t\t' + sequenceInstructionStart + '\n' + trimmedLinesText + '"/>';
+			functionBodyLinesCount++; // we've added an extra line
 		}
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
-		const requiredParamNames = this.findBrokenVariableRefs(document, functionBodyLines.length, targetRange, interimFunctionText);
+		const requiredParamNames = this.findBrokenVariableRefs(document, functionBodyLinesCount, targetRange, interimFunctionText);
 
 		const fnArgsString = requiredParamNames.map((arg) => '$' + arg).join(', ');
 		const fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;

@@ -7,7 +7,8 @@
     <xsl:template match="/" mode="#default">   
         <xsl:for-each select="*">
             <xsl:variable name="abc" as="xs:string" select="'a'"/>
-            <xsl:variable name="abc2" as="xs:string" select="$abc || 'b' || 'dce'"/>
+            <xsl:variable name="abc2" as="xs:string" select="
+                $abc || 'b' || 'dce'"/>
             <xsl:variable name="abc3" as="xs:string" 
                 select="
                     if (true()) then
@@ -21,7 +22,7 @@
                 </row>
                 <row>something</row>
             </xsl:variable>
-            <xsl:sequence select="$abc4, $var8"/>
+            <xsl:copy-of select="$abc4, $var8"/>
         </xsl:for-each>    
         <xsl:sequence select="fn:get-unit-declarations()"/>
         <xsl:sequence select="fn:get-unit-declarations2('abc')"/>
