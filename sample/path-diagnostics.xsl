@@ -4,10 +4,13 @@
                 xmlns:dx="com.deltaxml"
                 version="3.0">
   
+  <xsl:variable name="main" select="*[qqq]"/>
+  
   <xsl:function name="dx:test" as="item()">
-    <xsl:if test="*">
+    <xsl:for-each select="/current()">
+      <xsl:variable name="v1" as="xs:string" select="node-name()"/>
       <xsl:sequence select="text(), *, child::*, div, @class, ., .."/>
-    </xsl:if>
+    </xsl:for-each>
   </xsl:function>  
   
 </xsl:stylesheet>

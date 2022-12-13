@@ -1243,7 +1243,8 @@ export enum ErrorType {
 	XSLTKeyUnresolved,
 	XMLRootMissing,
 	DTD,
-	FunctionAfterArrowOp
+	FunctionAfterArrowOp,
+    MissingContextItem
 }
 
 export interface BaseToken {

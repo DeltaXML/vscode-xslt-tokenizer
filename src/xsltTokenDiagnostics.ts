@@ -318,6 +318,7 @@ export class XsltTokenDiagnostics {
 		let schemaQuery: SchemaQuery | undefined;
 		let xsltSchemaQuery: SchemaQuery | undefined;
 		let insideGlobalFunction = false;
+		let predicateLevel = 0;
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
 		
@@ -1519,6 +1520,7 @@ export class XsltTokenDiagnostics {
 										xpathItem.functionArity = 0;
 									}
 								}
+								predicateLevel++;
 								xpathStack.push(xpathItem);
 								preXPathVariable = false;
 								inScopeXPathVariablesList = [];
@@ -1544,6 +1546,7 @@ export class XsltTokenDiagnostics {
 								}
 
 								if (xpathStack.length > 0) {
+									if (xpathCharType === CharLevelState.rPr) predicateLevel--;
 									let poppedData = xpathStack.pop();
 									if (poppedData) {
 										if (poppedData.token.value === 'then') {
@@ -1630,6 +1633,18 @@ export class XsltTokenDiagnostics {
 										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
+									} else {
+										if (insideGlobalFunction && predicateLevel < 1 && FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
+											const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group');
+											if (!foundForEach) {
+												const prevToken2 = allTokens[index - 2];
+												if (!(prevToken2.charType === CharLevelState.sep && prevToken2.value === '/')) {
+													prevToken.error = ErrorType.MissingContextItem;
+													prevToken.value += '()';
+													problemTokens.push(prevToken);
+												}
+											}
+										}
 									}
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variable of type 'function'
@@ -2538,6 +2553,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathName:
 					msg = `XPath: Invalid name: '${tokenValue}'`;
+					break;
+				case ErrorType.MissingContextItem:
+					msg = `XPath: Context-item is missing for: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathOperatorUnexpected:
 					msg = `XPath: Operator unexpected at this position: '${tokenValue}'`;
