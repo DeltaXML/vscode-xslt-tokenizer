@@ -466,6 +466,8 @@ export class FunctionData {
 		["http://exslt.org/strings", XSLTnamespaces.ExsltStrings],
 	]);
 
+	public static readonly contextFunctions = ['base-uri','current','document-uri','generate-id','local-name','has-children','name','namespace-uri','node-name','normalize-space','root','uri-collection'];
+
 	public static readonly ixslEventName = [
 		'ixsl:onafterprint',
 		'ixsl:onbeforeprint',
