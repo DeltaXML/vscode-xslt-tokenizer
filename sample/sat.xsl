@@ -6,12 +6,15 @@
     
     <xsl:template match="/" mode="#default">   
         <xsl:for-each select="*">
-            <xsl:variable name="abc" as="xs:string" select="'a'"/>
+            <xsl:variable name="var1" as="xs:string" select="'a'"/>
+            <xsl:variable name="var2" as="xs:string" select="'a', $var1"/>
+            <xsl:variable name="var3" as="xs:string" select="'a', $var2"/>
+            <xsl:variable name="abc" as="xs:string" select="$var1, $var2, $var3"/>
             <xsl:variable name="abc2" as="xs:string" select="
                 $abc || 'b' || 'dce'"/>
             <xsl:variable name="abc2" as="xs:string" select="
                 if (2) then
-                    $abc, $abc2 || 'b' || 'dce'
+                            ($abc, $abc2 || 'b' || 'dce')
                 else 'something'"/>
             <xsl:variable name="abc3" as="xs:string" 
                 select="

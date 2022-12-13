@@ -280,6 +280,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			fullRange = this.extendRangeToFullLines(sourceRange);
 			fullRangeWithoutLeadingWS = fullRange.with({ start: fullRange.start.translate(0, firstCharOnFirstLine) });
 		}
+		const finalSymbolOnFirstLine = sourceRange.start.line === finalSymbol?.range.start.line;
 
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
@@ -309,7 +310,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			if (isSelect) {
 				trimmedSelectTextLines[0] = trimmedSelectTextLines[0].trimLeft();
 				const trimmedSelectText = trimmedSelectTextLines.join('\n');
-				const finalSequenceText = '\n\t\t<xsl:sequence';
+				let finalSequenceText = '\t\t<xsl:sequence';
+				if (!finalSymbolOnFirstLine) {
+					finalSequenceText = '\n' + finalSequenceText;
+					functionBodyLinesCount++;
+				}
 				const separator = lines === 1 ? ' ' : '\n\t\t\t';
 				trimmedBodyText = preFinalBodyText + finalSequenceText + separator + trimmedSelectText + '/>';
 			} else {
