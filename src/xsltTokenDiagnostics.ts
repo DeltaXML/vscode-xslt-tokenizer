@@ -1633,19 +1633,16 @@ export class XsltTokenDiagnostics {
 										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
-									} else {
-										if (insideGlobalFunction && predicateLevel < 1 && FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
-											const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group');
-											if (!foundForEach) {
-												const prevToken2 = allTokens[index - 2];
-												if (!(prevToken2.charType === CharLevelState.sep && prevToken2.value === '/')) {
-													prevToken.error = ErrorType.MissingContextItem;
-													prevToken.value += '()';
-													problemTokens.push(prevToken);
-												}
+									} else if (XsltTokenDiagnostics.mayHaveNoContextItem(elementStack, insideGlobalFunction, predicateLevel)) {
+										if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
+											const prevToken2 = allTokens[index - 2];
+											if (!(prevToken2.charType === CharLevelState.sep && prevToken2.value === '/')) {
+												prevToken.error = ErrorType.MissingContextItem;
+												prevToken.value += '()';
+												problemTokens.push(prevToken);
 											}
 										}
-									}
+									}									
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variable of type 'function'
 									incrementFunctionArity = false;
@@ -1666,7 +1663,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
-					case TokenLevelState.mapNameLookup:
+					case TokenLevelState.mapNameLookup:	
 						if (token.error) {
 							problemTokens.push(token);
 						} else {
@@ -1843,6 +1840,11 @@ export class XsltTokenDiagnostics {
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
 	};
+
+	private static mayHaveNoContextItem(elementStack: ElementData[], insideGlobalFunction: boolean, predicateLevel: number) {
+		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group');
+		return !foundForEach && insideGlobalFunction && predicateLevel < 1;
+	}
 
 	public static checkFinalXPathToken(prevToken: BaseToken, allTokens: BaseToken[], index: number, problemTokens: BaseToken[]) {
 		let isValid = false;
