@@ -328,7 +328,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const requiredParamNames = this.findBrokenVariableRefs(document, functionBodyLinesCount, targetRange, interimFunctionText);
 
 		const fnArgsString = requiredParamNames.map((arg) => '$' + arg).join(', ');
-		const fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
 		const replacementAll = elementSelected ? replacementStart + replcementFnCall + fnArgsString + ')"/>\n' : replcementFnCall + fnArgsString + ')';
 		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
 
@@ -338,6 +337,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
+		const fnStartCharacter = elementSelected ? firstCharOnFirstLine + replacementStart.length + 2: fullRange.start.character + 2;
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
 		return codeAction;
 	}
