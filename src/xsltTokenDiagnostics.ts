@@ -1633,9 +1633,10 @@ export class XsltTokenDiagnostics {
 										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
-									} else if (XsltTokenDiagnostics.mayHaveNoContextItem(elementStack, insideGlobalFunction, predicateLevel)) {
+									} else if (fnArity === 0 && XsltTokenDiagnostics.mayHaveNoContextItem(elementStack, insideGlobalFunction, predicateLevel)) {
 										if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 											const prevToken2 = allTokens[index - 2];
+											// TODO: consider parenthesis:
 											if (!(prevToken2.charType === CharLevelState.sep && prevToken2.value === '/')) {
 												prevToken.error = ErrorType.MissingContextItem;
 												prevToken.value += '()';
@@ -1842,7 +1843,7 @@ export class XsltTokenDiagnostics {
 	};
 
 	private static mayHaveNoContextItem(elementStack: ElementData[], insideGlobalFunction: boolean, predicateLevel: number) {
-		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group');
+		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' || item.symbolName === 'xsl:iterate');
 		return !foundForEach && insideGlobalFunction && predicateLevel < 1;
 	}
 
