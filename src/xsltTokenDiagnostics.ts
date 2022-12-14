@@ -1093,6 +1093,21 @@ export class XsltTokenDiagnostics {
 						}
 					}
 				}
+				if (insideGlobalFunction) {
+					if (prevToken && (xpathTokenType === TokenLevelState.nodeNameTest || xpathTokenType === TokenLevelState.attributeNameTest || xpathTokenType === TokenLevelState.axisName)) {
+						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+							const hasPrecedingSlash = prevToken.charType === CharLevelState.sep && prevToken.value === '/';
+							let hasContext:boolean = hasPrecedingSlash;
+							if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
+								hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
+							}
+							if (!hasContext) {
+								token.error = ErrorType.MissingContextItemGeneral;
+								problemTokens.push(token);
+							}
+						}
+					}
+				}
 
 				switch (xpathTokenType) {
 					case TokenLevelState.string:
@@ -1872,6 +1887,7 @@ export class XsltTokenDiagnostics {
 	private static isRequiredNodeTypeContext(token: BaseToken) {
 		const result =
 		(token.tokenType === TokenLevelState.nodeType) || // for case of text() - the () is a second nodeType token following the first
+		(token.tokenType === TokenLevelState.attributeNameTest && token.value === '@') ||
 		(token.charType === CharLevelState.dSep && token.value === '::') ||
 		(token.charType === CharLevelState.sep && token.value === '/');
 		return result;
