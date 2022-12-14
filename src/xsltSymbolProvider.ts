@@ -1035,7 +1035,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				const predicateString = item.substring(pos + 1, item.length - 1);
 				const predicateNum = Number(predicateString);
 				pathIndex = -1;
-				if (predicateNum !== NaN) {
+				if (!Number.isNaN(predicateNum)) {
 					pathIndex = predicateNum;
 				}
 				pathName = item.substr(0, pos);
