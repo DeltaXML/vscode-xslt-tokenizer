@@ -68,6 +68,7 @@ export interface XPathData {
 	isRangeVar?: boolean;
 	awaitingMapKey?: boolean;
 	curlyBraceType?: CurlyBraceType;
+	hasContextItem?: boolean;
 }
 
 export interface VariableData {
@@ -318,7 +319,6 @@ export class XsltTokenDiagnostics {
 		let schemaQuery: SchemaQuery | undefined;
 		let xsltSchemaQuery: SchemaQuery | undefined;
 		let insideGlobalFunction = false;
-		let predicateLevel = 0;
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
 		
@@ -1471,6 +1471,7 @@ export class XsltTokenDiagnostics {
 						}
 						// end checks
 						let functionToken: BaseToken | null = null;
+						const isBrackets = xpathCharType === CharLevelState.lB;
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
 								let curlyBraceType = CurlyBraceType.None;
@@ -1510,7 +1511,13 @@ export class XsltTokenDiagnostics {
 								}
 							// intentionally no-break;	
 							case CharLevelState.lPr:
-								let xpathItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined };
+								let hasContextItem = false;
+								if (prevToken) {
+									hasContextItem = isBrackets ?
+									prevToken.charType === CharLevelState.sep && prevToken.value === '/' :
+									XsltTokenDiagnostics.providesContext(prevToken);
+								}
+								let xpathItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, hasContextItem };
 								if (functionToken) {
 									xpathItem.function = functionToken;
 									if (incrementFunctionArity) {
@@ -1520,7 +1527,6 @@ export class XsltTokenDiagnostics {
 										xpathItem.functionArity = 0;
 									}
 								}
-								predicateLevel++;
 								xpathStack.push(xpathItem);
 								preXPathVariable = false;
 								inScopeXPathVariablesList = [];
@@ -1546,7 +1552,6 @@ export class XsltTokenDiagnostics {
 								}
 
 								if (xpathStack.length > 0) {
-									if (xpathCharType === CharLevelState.rPr) predicateLevel--;
 									let poppedData = xpathStack.pop();
 									if (poppedData) {
 										if (poppedData.token.value === 'then') {
@@ -1633,13 +1638,13 @@ export class XsltTokenDiagnostics {
 										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
-									} else if (fnArity === 0 && XsltTokenDiagnostics.mayHaveNoContextItem(elementStack, insideGlobalFunction, predicateLevel)) {
+									} else if (fnArity === 0 && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 										if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 											const prevToken2 = allTokens[index - 2];
-											// TODO: consider parenthesis:
 											if (!(prevToken2.charType === CharLevelState.sep && prevToken2.value === '/')) {
 												prevToken.error = ErrorType.MissingContextItem;
 												prevToken.value += '()';
+												prevToken.length += 2 + token.startCharacter - (prevToken.startCharacter + prevToken.length);
 												problemTokens.push(prevToken);
 											}
 										}
@@ -1842,9 +1847,21 @@ export class XsltTokenDiagnostics {
 		return allDiagnostics;
 	};
 
-	private static mayHaveNoContextItem(elementStack: ElementData[], insideGlobalFunction: boolean, predicateLevel: number) {
+	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean) {
+		if (!insideGlobalFunction) return true;
 		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' || item.symbolName === 'xsl:iterate');
-		return !foundForEach && insideGlobalFunction && predicateLevel < 1;
+		if (foundForEach) return true;
+		const foundContextBracketsOrPredicate = xpathStack.find((item) => item.hasContextItem === true);
+		return !!foundContextBracketsOrPredicate;
+	}
+
+	private static providesContext(token: BaseToken) {
+		const result =
+		token.tokenType === TokenLevelState.attributeNameTest ||
+		token.tokenType === TokenLevelState.nodeNameTest ||
+		token.tokenType === TokenLevelState.nodeType ||
+		(token.charType === CharLevelState.sep && (token.value === '.' || token.value === '..'));
+		return result;
 	}
 
 	public static checkFinalXPathToken(prevToken: BaseToken, allTokens: BaseToken[], index: number, problemTokens: BaseToken[]) {

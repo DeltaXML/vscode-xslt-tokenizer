@@ -1,1 +1,1 @@
-[{"kind":1,"language":"markdown","value":"# XPath Notebook\nDate: 2022-10-30     Time: 13:31:49"},{"kind":2,"language":"xpath","value":"(/element//div)[1]"},{"kind":2,"language":"xpath","value":"/element/*!array {position(), ., string() => normalize-space() => substring(1, 10)}"}]
+[{"kind":1,"language":"markdown","value":"# XPath Notebook\nDate: 2022-10-30     Time: 13:31:49"},{"kind":2,"language":"xpath","value":"/((element))"},{"kind":2,"language":"xpath","value":"/element/*!array {position(), ., string() => normalize-space() => substring(1, 10)}"}]
