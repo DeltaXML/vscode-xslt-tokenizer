@@ -93,7 +93,9 @@ export enum ValidationType {
 }
 
 export enum DiagnosticCode {
-	unresolvedVariableRef
+	none,
+	unresolvedVariableRef,
+	fnWithNoContextItem
 }
 
 export class XsltTokenDiagnostics {
@@ -1642,9 +1644,8 @@ export class XsltTokenDiagnostics {
 										if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 											const prevToken2 = allTokens[index - 2];
 											if (!(prevToken2.charType === CharLevelState.sep && prevToken2.value === '/')) {
-												prevToken.error = ErrorType.MissingContextItem;
+												prevToken.error = ErrorType.MissingContextItemForFn;
 												prevToken.value += '()';
-												prevToken.length += 2 + token.startCharacter - (prevToken.startCharacter + prevToken.length);
 												problemTokens.push(prevToken);
 											}
 										}
@@ -2462,6 +2463,7 @@ export class XsltTokenDiagnostics {
 			let msg: string;
 			let diagnosticMetadata: vscode.DiagnosticTag[] = [];
 			let severity = vscode.DiagnosticSeverity.Error;
+			let errCode = DiagnosticCode.none;
 			switch (token.error) {
 				case ErrorType.AxisName:
 					msg = `XPath: Invalid axis name: '${tokenValue}`;
@@ -2574,7 +2576,8 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathName:
 					msg = `XPath: Invalid name: '${tokenValue}'`;
 					break;
-				case ErrorType.MissingContextItem:
+				case ErrorType.MissingContextItemForFn:
+					errCode = DiagnosticCode.fnWithNoContextItem;
 					msg = `XPath: Context-item is missing for: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathOperatorUnexpected:
@@ -2646,7 +2649,7 @@ export class XsltTokenDiagnostics {
 			}
 			if (token.startCharacter > -1 && endChar > -1) {
 				variableRefDiagnostics.push({
-					code: '',
+					code: errCode,
 					message: msg,
 					range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 					severity: severity,

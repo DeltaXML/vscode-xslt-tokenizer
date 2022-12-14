@@ -1244,7 +1244,7 @@ export enum ErrorType {
 	XMLRootMissing,
 	DTD,
 	FunctionAfterArrowOp,
-    MissingContextItem
+    MissingContextItemForFn
 }
 
 export interface BaseToken {
