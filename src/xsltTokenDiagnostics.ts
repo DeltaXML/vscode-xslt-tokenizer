@@ -95,7 +95,8 @@ export enum ValidationType {
 export enum DiagnosticCode {
 	none,
 	unresolvedVariableRef,
-	fnWithNoContextItem
+	fnWithNoContextItem,
+	noContextItem
 }
 
 export class XsltTokenDiagnostics {
@@ -1666,6 +1667,9 @@ export class XsltTokenDiagnostics {
 								prevToken['error'] = ErrorType.XPathPrefix;
 								problemTokens.push(prevToken);
 							}
+						} else if (prevToken && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+							token.error = ErrorType.MissingContextItemGeneral;
+							problemTokens.push(token);
 						}
 						break;
 					case TokenLevelState.attributeNameTest:
@@ -1864,6 +1868,16 @@ export class XsltTokenDiagnostics {
 		(token.charType === CharLevelState.sep && (token.value === '.' || token.value === '..'));
 		return result;
 	}
+
+	private static isRequiredNodeTypeContext(token: BaseToken) {
+		const result =
+		(token.tokenType === TokenLevelState.nodeType) || // for case of text() - the () is a second nodeType token following the first
+		(token.charType === CharLevelState.dSep && token.value === '::') ||
+		(token.charType === CharLevelState.sep && token.value === '/');
+		return result;
+	}
+
+
 
 	public static checkFinalXPathToken(prevToken: BaseToken, allTokens: BaseToken[], index: number, problemTokens: BaseToken[]) {
 		let isValid = false;
@@ -2578,6 +2592,10 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.MissingContextItemForFn:
 					errCode = DiagnosticCode.fnWithNoContextItem;
+					msg = `XPath: Context-item is missing for function: '${tokenValue}'`;
+					break;
+				case ErrorType.MissingContextItemGeneral:
+					errCode = DiagnosticCode.noContextItem;
 					msg = `XPath: Context-item is missing for: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathOperatorUnexpected:

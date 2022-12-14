@@ -7,7 +7,7 @@
   <xsl:variable name="main" select="*[qqq]"/>
   
   <xsl:function name="dx:test" as="item()">
-    <xsl:for-each select="$a, base-uri()">
+    <xsl:for-each select="$a, base-uri(), child::node()">
       <xsl:variable name="v1" as="xs:string" select="node-name()"/>
       <xsl:sequence select="text(), *, child::*, div, @class, ., .."/>
     </xsl:for-each>
