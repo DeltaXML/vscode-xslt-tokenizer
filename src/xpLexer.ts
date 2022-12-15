@@ -79,7 +79,8 @@ export enum TokenLevelState {
     entityRef, // same name as xslLexer entity reference
     anonymousFunction,
     mapKey,
-    mapNameLookup
+    mapNameLookup,
+    anyPrefix
 }
 
 export enum ExitCondition {

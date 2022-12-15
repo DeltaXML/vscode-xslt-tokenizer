@@ -1103,7 +1103,9 @@ export class XsltTokenDiagnostics {
 							}
 							if (!hasContext) {
 								token.error = ErrorType.MissingContextItemGeneral;
-								problemTokens.push(token);
+								if (xpathTokenType === TokenLevelState.axisName) {
+									problemTokens.push(token);
+								}
 							}
 						}
 					}
