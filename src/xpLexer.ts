@@ -80,7 +80,6 @@ export enum TokenLevelState {
     anonymousFunction,
     mapKey,
     mapNameLookup,
-    anyPrefix
 }
 
 export enum ExitCondition {
@@ -239,6 +238,7 @@ export class XPathLexer {
     private calcNewState(isFirstChar: boolean, nesting: number, char: string, nextChar: string, existing: CharLevelState): [CharLevelState, number] {
         let rv: CharLevelState;
         let firstCharOfToken = true;
+        let resolvedEarly = false;
 
         switch (existing) {
             case CharLevelState.lNl:
@@ -339,10 +339,16 @@ export class XPathLexer {
                     ({ rv, nesting } = this.testChar(existing, firstCharOfToken, char, nextChar, nesting));
                 }
                 break;
+            case CharLevelState.lAttr:
+                if (char === '*' && nextChar === ':') {
+                    resolvedEarly = true;                
+                }
+                // no-break intentional
             case CharLevelState.lName:
             case CharLevelState.lVar:
-            case CharLevelState.lAttr:
-                if (char === '-' || char === '.' ||
+                if (resolvedEarly) {
+                    rv = existing;
+                } else if (char === '-' || char === '.' ||
                  (char === ':' && !(nextChar === ':' || nextChar === '=' || nextChar === '*' || nextChar === ' ' || nextChar === '\n' || nextChar === '\r' || nextChar === '\t'))) {
                     rv = existing;
                 } else {
@@ -1123,7 +1129,9 @@ export class XPathLexer {
                 break;
             default:
                 let doubleChar = char + nextChar;
-                if ((nextChar) && Data.doubleSeps.indexOf(doubleChar) > -1) {
+                if (doubleChar === '*:') {
+                    rv = CharLevelState.lName;
+                } else if ((nextChar) && Data.doubleSeps.indexOf(doubleChar) > -1) {
                     rv = CharLevelState.dSep;
                     break;
                 } else if (Data.separators.indexOf(char) > -1) {

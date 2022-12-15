@@ -185,7 +185,9 @@ export class XsltTokenDiagnostics {
 					} else {
 						valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
 					}
-				} else if (prefix === 'xsl' && type === ValidationType.XSLTAttribute) {
+				} else if (type === ValidationType.PrefixedName && (prefix === '*' || prefix === '@*')) {
+					nameParts = [nameParts[1]];
+				} else if (type === ValidationType.XSLTAttribute && prefix === 'xsl') {
 					// TODO: for attributes on non-xsl instructions, check that name is in the attributeGroup: xsl:literal-result-element-attributes (e.g. xsl:expand-text)
 					//valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 				} else {
@@ -1104,7 +1106,7 @@ export class XsltTokenDiagnostics {
 							if (!hasContext) {
 								token.error = ErrorType.MissingContextItemGeneral;
 								if (xpathTokenType === TokenLevelState.axisName) {
-									problemTokens.push(token);
+								problemTokens.push(token);
 								}
 							}
 						}
@@ -1702,7 +1704,7 @@ export class XsltTokenDiagnostics {
 								tokenValue = token.value;
 								validationType = ValidationType.PrefixedName;
 							} else {
-								tokenValue = token.value.substr(1);
+								tokenValue = token.value.length > 3 && token.value.startsWith('@*:') ? token.value.substring(3) : token.value.substring(1);
 								validationType = ValidationType.XMLAttribute;
 								skipValidation = token.value === '@xml';
 								if (!skipValidation && token.value === '@') {
