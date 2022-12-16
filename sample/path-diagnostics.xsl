@@ -4,13 +4,14 @@
                 xmlns:dx="com.deltaxml"
                 version="3.0">
   
-  <xsl:variable name="a" as="" select="@*:some, *:some"/>
+  <xsl:variable name="a" as="" select="/@*:some, *:some"/>
   
   <xsl:function name="dx:test" as="item()">
+    <xsl:sequence select="/*:any"/>
+    <xsl:apply-templates/>
     <xsl:copy>
       
     </xsl:copy>
-    <xsl:sequence select="/*:any"/>
     <xsl:sequence select="text(), *, child::*, div, @class, ., .., *, @*, *:something, @*:newer"/>
     <xsl:for-each select="/*:abc, /@*:def, $a, /base-uri(), /child::node(), /attribute::*:name, /*[node-name()]">
       <xsl:variable name="v1" as="xs:string" select="node-name()"/>
