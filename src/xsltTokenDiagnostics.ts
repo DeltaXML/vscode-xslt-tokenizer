@@ -1542,7 +1542,7 @@ export class XsltTokenDiagnostics {
 								let hasContextItem = false;
 								if (prevToken) {
 									hasContextItem = isBrackets ?
-									prevToken.charType === CharLevelState.sep && prevToken.value === '/' :
+									prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!') :
 									XsltTokenDiagnostics.providesContext(prevToken);
 								}
 								let xpathItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, hasContextItem };
