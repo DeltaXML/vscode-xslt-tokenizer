@@ -1098,7 +1098,7 @@ export class XsltTokenDiagnostics {
 				if (insideGlobalFunction) {
 					if (prevToken && (xpathTokenType === TokenLevelState.nodeNameTest || xpathTokenType === TokenLevelState.attributeNameTest || xpathTokenType === TokenLevelState.axisName)) {
 						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
-							const hasPrecedingSlash = prevToken.charType === CharLevelState.sep && prevToken.value === '/';
+							const hasPrecedingSlash = prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!');
 							let hasContext:boolean = hasPrecedingSlash;
 							if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
 								hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
@@ -1890,11 +1890,9 @@ export class XsltTokenDiagnostics {
 		(token.tokenType === TokenLevelState.nodeType) || // for case of text() - the () is a second nodeType token following the first
 		(token.tokenType === TokenLevelState.attributeNameTest && token.value === '@') ||
 		(token.charType === CharLevelState.dSep && token.value === '::') ||
-		(token.charType === CharLevelState.sep && token.value === '/');
+		(token.charType === CharLevelState.sep && (token.value === '/' || token.value === '!'));
 		return result;
 	}
-
-
 
 	public static checkFinalXPathToken(prevToken: BaseToken, allTokens: BaseToken[], index: number, problemTokens: BaseToken[]) {
 		let isValid = false;
