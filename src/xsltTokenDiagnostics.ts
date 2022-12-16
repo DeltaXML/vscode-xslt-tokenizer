@@ -242,31 +242,31 @@ export class XsltTokenDiagnostics {
 	}
 
 	public static validateSimpleName(name: string) {
-	  let valid = false;
+		let valid = false;
 		const nameParts = name.split(':');
 		if (nameParts.length > 2) {
 			return false;
 		}
 		nameParts.forEach(namePart => {
-				let charsOK = true;
-				let firstChar = true;
-				let charExists = false;
-				for (let s of namePart) {
-					if (firstChar) {
-						firstChar = false;
-						charExists = true;
-						charsOK = XsltTokenDiagnostics.nameStartCharRgx.test(s);
-						if (!charsOK) {
-							break;
-						}
-					} else {
-						charsOK = XsltTokenDiagnostics.nameCharRgx.test(s);
-						if (!charsOK) {
-							break;
-						}
+			let charsOK = true;
+			let firstChar = true;
+			let charExists = false;
+			for (let s of namePart) {
+				if (firstChar) {
+					firstChar = false;
+					charExists = true;
+					charsOK = XsltTokenDiagnostics.nameStartCharRgx.test(s);
+					if (!charsOK) {
+						break;
+					}
+				} else {
+					charsOK = XsltTokenDiagnostics.nameCharRgx.test(s);
+					if (!charsOK) {
+						break;
 					}
 				}
-				valid = charExists && charsOK;
+			}
+			valid = charExists && charsOK;
 		});
 		return valid;
 	}
@@ -327,14 +327,14 @@ export class XsltTokenDiagnostics {
 		let insideGlobalFunction = false;
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
-		
+
 		if (languageConfig.isVersion4) {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
 			docType = DocumentTypes.XSLT40;
 		} else if (languageConfig.schemaData) {
 			schemaQuery = new SchemaQuery(languageConfig.schemaData);
 		}
-		
+
 		if (isSchematron && XSLTConfiguration.configuration.schemaData) {
 			xsltSchemaQuery = new SchemaQuery(XSLTConfiguration.configuration.schemaData);
 		}
@@ -480,7 +480,7 @@ export class XsltTokenDiagnostics {
 					if (errorToken) {
 						errorToken['error'] = ErrorType.BracketNesting;
 						problemTokens.push(errorToken);
-					} 
+					}
 				}
 				xpathStack = [];
 				preXPathVariable = false;
@@ -562,7 +562,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
-								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40 ) && onRootStartTag) {
+								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
 										let pfx = prefixNsPair[0];
 										let namespaceURI = prefixNsPair[1];
@@ -860,8 +860,8 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.attributeValue:
 						let fullVariableName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagAttributeSymbols.length > 0) {
-							const symbolClone = {...tagAttributeSymbols[tagAttributeSymbols.length - 1]};
-							const extendedRange = symbolClone.range.with({end: new vscode.Position(token.line, token.startCharacter + token.length)});
+							const symbolClone = { ...tagAttributeSymbols[tagAttributeSymbols.length - 1] };
+							const extendedRange = symbolClone.range.with({ end: new vscode.Position(token.line, token.startCharacter + token.length) });
 							symbolClone.range = extendedRange;
 							tagAttributeSymbols[tagAttributeSymbols.length - 1] = symbolClone;
 							if (fullVariableName.length !== 1) {
@@ -1098,15 +1098,24 @@ export class XsltTokenDiagnostics {
 					}
 				}
 				if (insideGlobalFunction) {
-					if (prevToken && (xpathTokenType === TokenLevelState.nodeNameTest || xpathTokenType === TokenLevelState.attributeNameTest || xpathTokenType === TokenLevelState.axisName)) {
+					const tv = token.value;
+					const isRootSelector = tv === '/' || tv === '//';
+					if (prevToken && (isRootSelector || xpathTokenType === TokenLevelState.nodeNameTest || xpathTokenType === TokenLevelState.attributeNameTest || xpathTokenType === TokenLevelState.axisName)) {
 						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
-							const hasPrecedingSlash = prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!');
-							let hasContext:boolean = hasPrecedingSlash;
-							if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
-								hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
-							}
-							if (!hasContext) {
-								token.error = ErrorType.MissingContextItemGeneral;
+							if (isRootSelector) {
+								if (!XsltTokenDiagnostics.providesContext(prevToken)) {
+									token.error = ErrorType.MissingContextItemForRoot;
+									problemTokens.push(token);
+								}
+							} else {
+								const hasPrecedingSlash = prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!');
+								let hasContext: boolean = hasPrecedingSlash;
+								if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
+									hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
+								}
+								if (!hasContext) {
+									token.error = ErrorType.MissingContextItemGeneral;
+								}
 							}
 						}
 					}
@@ -1222,7 +1231,7 @@ export class XsltTokenDiagnostics {
 							case 'return':
 							case 'satisfies':
 							case 'else':
-								let tokenValBeforeDelete = xpathStack.length > 0? xpathStack[xpathStack.length - 1].token.value : '';
+								let tokenValBeforeDelete = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1].token.value : '';
 								if (xpathStack.length > 1) {
 									let deleteCount = 0;
 									for (let i = xpathStack.length - 1; i > -1; i--) {
@@ -1278,11 +1287,11 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.mapKey:
-						if (!(prevToken && prevToken.tokenType === TokenLevelState.operator 
-							&& (prevToken.value === ',' || prevToken.value === '{') )) {
-								token['error'] = ErrorType.XPathUnexpected;
-								problemTokens.push(token);
-							}
+						if (!(prevToken && prevToken.tokenType === TokenLevelState.operator
+							&& (prevToken.value === ',' || prevToken.value === '{'))) {
+							token['error'] = ErrorType.XPathUnexpected;
+							problemTokens.push(token);
+						}
 						break;
 					case TokenLevelState.operator:
 						let isXPathError = false;
@@ -1292,7 +1301,7 @@ export class XsltTokenDiagnostics {
 						let stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
 						const sv = stackItem?.token.value;
 						const tokenIsComma = tv === ',';
-						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies' );
+						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies');
 						if (popStackLaterForComma && xpathStack.length > 1) {
 							stackItem = xpathStack[xpathStack.length - 2];
 							if (xpathStack.length > 1) {
@@ -1334,7 +1343,7 @@ export class XsltTokenDiagnostics {
 								}
 							} else if (tokenIsComma) {
 								prevToken['error'] = ErrorType.XPathAwaiting;
-								problemTokens.push(prevToken);								
+								problemTokens.push(prevToken);
 							}
 						} else if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
 							token['error'] = ErrorType.XPathUnexpected;
@@ -1361,7 +1370,7 @@ export class XsltTokenDiagnostics {
 							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType !== TokenLevelState.string) {
 								// either a number of an operator so show no error
 							} else if (tv === '?') {
-								if (isXMLToken || prevToken.value === '.' || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment ||  prevToken.tokenType === TokenLevelState.mapNameLookup) {
+								if (isXMLToken || prevToken.value === '.' || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment || prevToken.tokenType === TokenLevelState.mapNameLookup) {
 									// don't check
 								} else if (prevToken.tokenType === TokenLevelState.operator) {
 									if (prevToken.charType === CharLevelState.sep) {
@@ -1503,7 +1512,7 @@ export class XsltTokenDiagnostics {
 										curlyBraceType = CurlyBraceType.Array;
 									}
 								}
-                const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
+								const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
 								if (curlyBraceType === CurlyBraceType.Map) {
 									stackItem.awaitingMapKey = true;
 								}
@@ -1535,8 +1544,8 @@ export class XsltTokenDiagnostics {
 								let hasContextItem = false;
 								if (prevToken) {
 									hasContextItem = isBrackets ?
-									prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!') :
-									XsltTokenDiagnostics.providesContext(prevToken);
+										prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!') :
+										XsltTokenDiagnostics.providesContext(prevToken);
 								}
 								let xpathItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, hasContextItem };
 								if (functionToken) {
@@ -1620,7 +1629,7 @@ export class XsltTokenDiagnostics {
 										for (let i = xpathStack.length - 1; i > -1; i--) {
 											const xpathItem = xpathStack[i].token;
 											const val = xpathItem.value;
-											if (!(val === 'return' || val === 'else' || val === 'satisfies' || val === 'then' )) {
+											if (!(val === 'return' || val === 'else' || val === 'satisfies' || val === 'then')) {
 												break;
 											} else if (val === 'then') {
 												nonBracketedThen = i;
@@ -1632,7 +1641,7 @@ export class XsltTokenDiagnostics {
 											problemTokens.push(token);
 										}
 										const sv = xp.token.value;
-										if (sv === 'return' || sv === 'else' || sv === 'satisfies' ) {
+										if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
 											let poppedData = xpathStack.pop();
 											if (poppedData) {
 												inScopeXPathVariablesList = poppedData.variables;
@@ -1668,7 +1677,7 @@ export class XsltTokenDiagnostics {
 												problemTokens.push(prevToken);
 											}
 										}
-									}									
+									}
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variable of type 'function'
 									incrementFunctionArity = false;
@@ -1692,7 +1701,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
-					case TokenLevelState.mapNameLookup:	
+					case TokenLevelState.mapNameLookup:
 						if (token.error) {
 							problemTokens.push(token);
 						} else {
@@ -1903,19 +1912,25 @@ export class XsltTokenDiagnostics {
 
 	private static providesContext(token: BaseToken) {
 		const result =
-		token.tokenType === TokenLevelState.attributeNameTest ||
-		token.tokenType === TokenLevelState.nodeNameTest ||
-		token.tokenType === TokenLevelState.nodeType ||
-		(token.charType === CharLevelState.sep && (token.value === '.' || token.value === '..'));
+			token.tokenType === TokenLevelState.attributeNameTest ||
+			token.tokenType === TokenLevelState.nodeNameTest ||
+			token.tokenType === TokenLevelState.nodeType ||
+			token.tokenType === TokenLevelState.variable ||
+			token.charType === CharLevelState.rB ||
+			token.charType === CharLevelState.rPr ||
+			(
+				token.charType === CharLevelState.dSep && (token.value === '()' || token.value === '//')
+			) ||
+			(token.charType === CharLevelState.sep && token.value === '/');
 		return result;
 	}
 
 	private static isRequiredNodeTypeContext(token: BaseToken) {
 		const result =
-		(token.tokenType === TokenLevelState.nodeType) || // for case of text() - the () is a second nodeType token following the first
-		(token.tokenType === TokenLevelState.attributeNameTest && token.value === '@') ||
-		(token.charType === CharLevelState.dSep && token.value === '::') ||
-		(token.charType === CharLevelState.sep && (token.value === '/' || token.value === '!'));
+			(token.tokenType === TokenLevelState.nodeType) || // for case of text() - the () is a second nodeType token following the first
+			(token.tokenType === TokenLevelState.attributeNameTest && token.value === '@') ||
+			(token.charType === CharLevelState.dSep && token.value === '::') ||
+			(token.charType === CharLevelState.sep && (token.value === '/' || token.value === '!'));
 		return result;
 	}
 
@@ -2638,6 +2653,10 @@ export class XsltTokenDiagnostics {
 					errCode = DiagnosticCode.noContextItem;
 					msg = `XPath: Context-item is missing for: '${tokenValue}'`;
 					break;
+				case ErrorType.MissingContextItemForRoot:
+					errCode = DiagnosticCode.noContextItem;
+					msg = `XPath: Context-item is missing for root: '${tokenValue}'`;
+					break;
 				case ErrorType.MissingContextItemForInstr:
 					errCode = DiagnosticCode.instrWithNoContextItem;
 					msg = `XSLT: Context-item is missing ('select' attribute needed here): '${tokenValue}'`;
@@ -2818,7 +2837,7 @@ export class XsltTokenDiagnostics {
 	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken, includeOrImport: boolean): vscode.Diagnostic {
 		let line = token.line;
 		const endChar = token.startCharacter + token.length;
-        const errRange = new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar));
+		const errRange = new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar));
 		const errCode = DiagnosticCode.unresolvedVariableRef;
 		const errData = [new vscode.DiagnosticRelatedInformation(new vscode.Location(document.uri, errRange), token.value)];
 		if (includeOrImport) {
@@ -2828,7 +2847,7 @@ export class XsltTokenDiagnostics {
 				range: errRange,
 				severity: vscode.DiagnosticSeverity.Warning,
 				relatedInformation: errData
-				
+
 			};
 		} else {
 			return {

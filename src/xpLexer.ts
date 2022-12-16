@@ -1255,7 +1255,8 @@ export enum ErrorType {
 	FunctionAfterArrowOp,
     MissingContextItemForFn,
     MissingContextItemForInstr,
-    MissingContextItemGeneral
+    MissingContextItemGeneral,
+    MissingContextItemForRoot
 }
 
 export interface BaseToken {
