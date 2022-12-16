@@ -7,6 +7,9 @@
   <xsl:variable name="a" as="" select="@*:some, *:some"/>
   
   <xsl:function name="dx:test" as="item()">
+    <xsl:copy>
+      
+    </xsl:copy>
     <xsl:sequence select="/*:any"/>
     <xsl:sequence select="text(), *, child::*, div, @class, ., .., *, @*, *:something, @*:newer"/>
     <xsl:for-each select="/*:abc, /@*:def, $a, /base-uri(), /child::node(), /attribute::*:name, /*[node-name()]">

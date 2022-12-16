@@ -96,6 +96,7 @@ export enum DiagnosticCode {
 	none,
 	unresolvedVariableRef,
 	fnWithNoContextItem,
+	instrWithNoContextItem,
 	noContextItem
 }
 
@@ -720,12 +721,20 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rCt:
 								// end of an element close-tag:
 								if (elementStack.length > 0) {
-									let poppedData = elementStack.pop();
+									let poppedData = elementStack.pop()!;
 									if (tagElementName === 'xsl:function') insideGlobalFunction = false;
-									if (tagElementName === 'xsl:iterate' && currentXSLTIterateParams.length > 0) {
+									if (tagElementName === 'xsl:iterate') {
 										currentXSLTIterateParams.pop();
 									} else if (tagElementName === 'xsl:function') {
 										insideGlobalFunction = false;
+									} else if (insideGlobalFunction && (tagElementName === 'xsl:copy' || tagElementName === 'xsl:apply-templates')) {
+										const attributes = poppedData.childSymbols.find((item) => item.kind === vscode.SymbolKind.Array && item.name === 'attributes');
+										const selectAttr = attributes ? attributes.children.find((item) => item.name === 'select') : undefined;
+										if (!selectAttr && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+											const instrToken = poppedData.identifierToken;
+											instrToken.error = ErrorType.MissingContextItemForInstr;
+											problemTokens.push(instrToken);
+										}
 									}
 									if (poppedData) {
 										if (poppedData.symbolName !== tagElementName) {
@@ -741,7 +750,7 @@ export class XsltTokenDiagnostics {
 											// not well-nested
 											if (elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === tagElementName) {
 												// recover for benefit of outline view
-												poppedData = elementStack.pop();
+												poppedData = elementStack.pop()!;
 											}
 										}
 									}
@@ -2612,6 +2621,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingContextItemGeneral:
 					errCode = DiagnosticCode.noContextItem;
 					msg = `XPath: Context-item is missing for: '${tokenValue}'`;
+					break;
+				case ErrorType.MissingContextItemForInstr:
+					errCode = DiagnosticCode.instrWithNoContextItem;
+					msg = `XSLT: Context-item is missing ('select' attribute needed here): '${tokenValue}'`;
 					break;
 				case ErrorType.XPathOperatorUnexpected:
 					msg = `XPath: Operator unexpected at this position: '${tokenValue}'`;

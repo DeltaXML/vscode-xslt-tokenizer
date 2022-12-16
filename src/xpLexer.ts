@@ -1254,6 +1254,7 @@ export enum ErrorType {
 	DTD,
 	FunctionAfterArrowOp,
     MissingContextItemForFn,
+    MissingContextItemForInstr,
     MissingContextItemGeneral
 }
 
