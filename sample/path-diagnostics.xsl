@@ -6,6 +6,7 @@
   
   
   <xsl:function name="dx:test" as="item()">
+    <xsl:variable name="is" as="" select="//name, $a instance of element()"/>
     <xsl:sequence select="/count(*:stentry), root($a)[.], $a[root()[@name]]/*:any"/>
     <xsl:apply-templates/>
     <xsl:copy>      

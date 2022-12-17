@@ -1108,8 +1108,9 @@ export class XsltTokenDiagnostics {
 									problemTokens.push(token);
 								}
 							} else {
-								const hasPrecedingSlash = prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!');
-								let hasContext: boolean = hasPrecedingSlash;
+								const hasPrecedingSlash = (prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!')) ||
+								(prevToken.charType === CharLevelState.dSep && (prevToken.value === '//'));
+								let hasContext = hasPrecedingSlash;
 								if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
 									hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
 								}
@@ -1547,7 +1548,7 @@ export class XsltTokenDiagnostics {
 										hasContextItem = prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!');
 										if (!hasContextItem && index > 2 && (prevToken.tokenType === TokenLevelState.function || prevToken.tokenType === TokenLevelState.variable)) {
 											const prevToken2 = allTokens[index - 2];
-											hasContextItem =  prevToken2.charType === CharLevelState.sep && (prevToken2.value === '/' || prevToken2.value === '!');
+											hasContextItem = prevToken2.charType === CharLevelState.sep && (prevToken2.value === '/' || prevToken2.value === '!');
 										}
 									} else {
 										hasContextItem = XsltTokenDiagnostics.providesContext(prevToken);
@@ -1700,9 +1701,12 @@ export class XsltTokenDiagnostics {
 								prevToken['error'] = ErrorType.XPathPrefix;
 								problemTokens.push(prevToken);
 							}
-						} else if (prevToken && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
-							token.error = ErrorType.MissingContextItemGeneral;
-							problemTokens.push(token);
+						} else if (prevToken && insideGlobalFunction) {
+							const prevToken2 = allTokens[index - 2];
+							if (!XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+								token.error = ErrorType.MissingContextItemGeneral;
+								problemTokens.push(token);
+							}
 						}
 						break;
 					case TokenLevelState.attributeNameTest:
@@ -1932,12 +1936,13 @@ export class XsltTokenDiagnostics {
 		return result;
 	}
 
-	private static isRequiredNodeTypeContext(token: BaseToken) {
-		const result =
+	private static isRequiredNodeTypeContext(token: BaseToken, prevToken: BaseToken) {
+		let result =
 			(token.tokenType === TokenLevelState.nodeType) || // for case of text() - the () is a second nodeType token following the first
 			(token.tokenType === TokenLevelState.attributeNameTest && token.value === '@') ||
-			(token.charType === CharLevelState.dSep && token.value === '::') ||
+			(token.charType === CharLevelState.dSep && (token.value === '::' || token.value === '//')) ||
 			(token.charType === CharLevelState.sep && (token.value === '/' || token.value === '!'));
+		if (!result) result = prevToken.tokenType === TokenLevelState.operator && prevToken.value === 'instance' && token.tokenType === TokenLevelState.operator && token.value === 'of';
 		return result;
 	}
 
