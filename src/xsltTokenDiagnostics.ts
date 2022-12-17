@@ -86,6 +86,7 @@ enum NameValidationError {
 
 export enum ValidationType {
 	XMLAttribute,
+	AttributeNameTest,
 	XMLElement,
 	XSLTAttribute,
 	PrefixedName,
@@ -137,14 +138,16 @@ export class XsltTokenDiagnostics {
 		}
 		return invalidNames;
 	}
-	private static validateName(name: string, type: ValidationType, docType: DocumentTypes, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
+	private static validateName(origNname: string, origType: ValidationType, docType: DocumentTypes, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
+		const type = origType === ValidationType.AttributeNameTest ? ValidationType.PrefixedName : origType; 
+		const name = origType === ValidationType.AttributeNameTest && origNname.startsWith('@') ? origNname.substring(1) : origNname;
 		const isSchematron = docType === DocumentTypes.SCH;
 		const isDCP = docType === DocumentTypes.DCP;
 		let valid = NameValidationError.None;
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
 		}
-		if (type === ValidationType.XMLAttribute || type === ValidationType.XSLTAttribute) {
+		if (type === ValidationType.XMLAttribute || type === ValidationType.XSLTAttribute || origType === ValidationType.AttributeNameTest) {
 			if (name === 'xml:space' || name === 'xml:lang' || name === 'xml:base' || name === 'xml:id') {
 				return NameValidationError.None;
 			}
@@ -155,6 +158,7 @@ export class XsltTokenDiagnostics {
 		} else {
 			if (nameParts.length === 2) {
 				let prefix = nameParts[0];
+				let suffix = nameParts[1];
 				if (type === ValidationType.XMLElement) {
 					// TODO: when within literal result element, iterate up stack until we get to an XSLT instruction:
 					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : ['xsl:transform', 'xsl:stylesheet', 'xsl:package'];
@@ -186,8 +190,12 @@ export class XsltTokenDiagnostics {
 					} else {
 						valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
 					}
-				} else if (type === ValidationType.PrefixedName && (prefix === '*' || prefix === '@*')) {
-					nameParts = [nameParts[1]];
+				} else if (type === ValidationType.PrefixedName) {
+					if (prefix === '*') {
+						nameParts = [suffix];
+					} else if (suffix === '*') {
+						nameParts = [prefix];
+					};
 				} else if (type === ValidationType.XSLTAttribute && prefix === 'xsl') {
 					// TODO: for attributes on non-xsl instructions, check that name is in the attributeGroup: xsl:literal-result-element-attributes (e.g. xsl:expand-text)
 					//valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
@@ -1723,12 +1731,8 @@ export class XsltTokenDiagnostics {
 								validationType = ValidationType.PrefixedName;
 							} else {
 								tokenValue = token.value.length > 3 && token.value.startsWith('@*:') ? token.value.substring(3) : token.value.substring(1);
-								validationType = ValidationType.XMLAttribute;
+								validationType = ValidationType.AttributeNameTest;
 								skipValidation = token.value === '@xml';
-								if (!skipValidation && token.value === '@') {
-									let nextToken = allTokens.length > index + 1 ? allTokens[index + 1] : null;
-									skipValidation = nextToken ? token.value === '@' && (nextToken.value === '*' || nextToken.value === '*:') : false;
-								}
 							}
 							if (!skipValidation) skipValidation = xpathTokenType === TokenLevelState.mapNameLookup && xpathCharType === CharLevelState.sep; // for '*' lookup
 							if (!skipValidation) {
