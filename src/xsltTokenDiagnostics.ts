@@ -1543,9 +1543,15 @@ export class XsltTokenDiagnostics {
 							case CharLevelState.lPr:
 								let hasContextItem = false;
 								if (prevToken) {
-									hasContextItem = isBrackets ?
-										prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!') :
-										XsltTokenDiagnostics.providesContext(prevToken);
+									if (isBrackets) {
+										hasContextItem = prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!');
+										if (!hasContextItem && index > 2 && (prevToken.tokenType === TokenLevelState.function || prevToken.tokenType === TokenLevelState.variable)) {
+											const prevToken2 = allTokens[index - 2];
+											hasContextItem =  prevToken2.charType === CharLevelState.sep && (prevToken2.value === '/' || prevToken2.value === '!');
+										}
+									} else {
+										hasContextItem = XsltTokenDiagnostics.providesContext(prevToken);
+									}
 								}
 								let xpathItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, hasContextItem };
 								if (functionToken) {
@@ -1904,7 +1910,7 @@ export class XsltTokenDiagnostics {
 
 	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean) {
 		if (!insideGlobalFunction) return true;
-		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' || item.symbolName === 'xsl:iterate');
+		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' || item.symbolName === 'xsl:iterate' || item.symbolName === 'xsl:copy');
 		if (foundForEach) return true;
 		const foundContextBracketsOrPredicate = xpathStack.find((item) => item.hasContextItem === true);
 		return !!foundContextBracketsOrPredicate;

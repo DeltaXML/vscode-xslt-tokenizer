@@ -4,10 +4,9 @@
                 xmlns:dx="com.deltaxml"
                 version="3.0">
   
-  <xsl:variable name="a" as="" select="/@*:some, *:some"/>
   
   <xsl:function name="dx:test" as="item()">
-    <xsl:sequence select="root($a)[.], $a[root()[@name]]/*:any"/>
+    <xsl:sequence select="/count(*:stentry), root($a)[.], $a[root()[@name]]/*:any"/>
     <xsl:apply-templates/>
     <xsl:copy>      
     </xsl:copy>
@@ -16,5 +15,7 @@
       <xsl:variable name="v1" as="xs:string" select="node-name()"/>
     </xsl:for-each>
   </xsl:function>  
+  
+  <xsl:variable name="a" as="" select=" /@*:some, *:some"/>
   
 </xsl:stylesheet>
