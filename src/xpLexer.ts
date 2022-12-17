@@ -240,7 +240,7 @@ export class XPathLexer {
         let firstCharOfToken = true;
         let resolvedEarly = false;
 
-        switch (existing) {
+         switch (existing) {
             case CharLevelState.lNl:
                 let charCode = char.charCodeAt(0);
                 let nextCharCode = (nextChar) ? nextChar.charCodeAt(0) : -1;
@@ -345,6 +345,13 @@ export class XPathLexer {
                 }
             // no-break intentional
             case CharLevelState.lName:
+                if (nesting > 0) {
+                    nesting = 0;
+                    resolvedEarly = true;
+                } else if (char === ':' && nextChar === '*') {
+                    resolvedEarly = true;
+                    nesting++;
+                }
             case CharLevelState.lVar:
                 if (resolvedEarly) {
                     rv = existing;
