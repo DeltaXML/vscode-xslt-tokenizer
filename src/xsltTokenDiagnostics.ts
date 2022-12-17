@@ -1726,6 +1726,7 @@ export class XsltTokenDiagnostics {
 									skipValidation = nextToken ? token.value === '@' && (nextToken.value === '*' || nextToken.value === '*:') : false;
 								}
 							}
+							if (!skipValidation) skipValidation = xpathTokenType === TokenLevelState.mapNameLookup && xpathCharType === CharLevelState.sep; // for '*' lookup
 							if (!skipValidation) {
 								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, docType, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {

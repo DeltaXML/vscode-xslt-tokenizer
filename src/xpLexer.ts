@@ -106,7 +106,7 @@ export class Data {
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%'];
 
     public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||', '!!', '??'];
-    public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!','*','+',',','-','.','?','['];
+    public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!', '*', '+', ',', '-', '.', '?', '['];
     public static triggerWords = ["and", "andAlso", "array", "as", "div",
         "else", "eq", "except",
         "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
@@ -341,15 +341,15 @@ export class XPathLexer {
                 break;
             case CharLevelState.lAttr:
                 if (char === '*' && nextChar === ':') {
-                    resolvedEarly = true;                
+                    resolvedEarly = true;
                 }
-                // no-break intentional
+            // no-break intentional
             case CharLevelState.lName:
             case CharLevelState.lVar:
                 if (resolvedEarly) {
                     rv = existing;
                 } else if (char === '-' || char === '.' ||
-                 (char === ':' && !(nextChar === ':' || nextChar === '=' || nextChar === '*' || nextChar === ' ' || nextChar === '\n' || nextChar === '\r' || nextChar === '\t'))) {
+                    (char === ':' && !(nextChar === ':' || nextChar === '=' || nextChar === '*' || nextChar === ' ' || nextChar === '\n' || nextChar === '\r' || nextChar === '\t'))) {
                     rv = existing;
                 } else {
                     // we must switch to the new state, depending on the char/nextChar
@@ -726,7 +726,7 @@ export class XPathLexer {
         if (!((lastChar === firstChar && lastToken.value.length > 1) || (lastToken.value.length > 6 &&
             (lastToken.value.startsWith('&quot;') && lastToken.value.endsWith('&quot;')) || (lastToken.value.startsWith('&apos;') && lastToken.value.endsWith('&apos;'))))) {
             lastToken['error'] = ErrorType.XPathStringLiteral;
-        }       
+        }
     }
 
     private static closeMatchesOpen(close: CharLevelState, stack: Token[]): boolean {
@@ -929,9 +929,9 @@ export class XPathLexer {
                         }
                         break;
                 }
-            } else if (currentState === CharLevelState.sep && 
+            } else if (currentState === CharLevelState.sep &&
                 prevToken.tokenType === TokenLevelState.string && currentToken.value === ':') {
-                    prevToken.tokenType = TokenLevelState.mapKey;
+                prevToken.tokenType = TokenLevelState.mapKey;
             } else if ((currentState === CharLevelState.lB || currentState === CharLevelState.lBr) && prevToken.charType === CharLevelState.dSep && prevToken.value === '->') {
                 prevToken.tokenType = TokenLevelState.anonymousFunction;
             }
@@ -995,7 +995,7 @@ export class XPathLexer {
                     default: // current token is an lName but previous token was not
                         if (prevToken.tokenType === TokenLevelState.operator && prevToken.value === '?') {
                             currentToken.tokenType = TokenLevelState.mapNameLookup;
-                        }  else if (XPathLexer.isTokenTypeUnset(prevToken)
+                        } else if (XPathLexer.isTokenTypeUnset(prevToken)
                             && Data.keywords.indexOf(currentValue) > -1) {
                             currentToken.tokenType = TokenLevelState.operator;
                         } else if (XPathLexer.isCharTypeEqual(prevToken, CharLevelState.dSep)
@@ -1013,14 +1013,15 @@ export class XPathLexer {
                 let prevTokenT = prevToken.tokenType;
                 let isStar = currentToken.value === '*';
                 if (isStar && (
-                    prevTokenT === TokenLevelState.attributeNameTest || 
-                    prevTokenT === TokenLevelState.uriLiteral || 
-                    (prevTokenT === TokenLevelState.operator && prevToken.value === '?') ||
+                    prevTokenT === TokenLevelState.attributeNameTest ||
+                    prevTokenT === TokenLevelState.uriLiteral ||
                     prevTokenT === TokenLevelState.nodeType && prevToken.value === '()')
-                    ) {
+                ) {
                     // @* or {example.com}*
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
+                } else if (isStar && prevTokenT === TokenLevelState.operator && prevToken.value === '?') {
+                    currentToken.tokenType = TokenLevelState.mapNameLookup;                   
                 } else {
                     let possOccurrentIndicator = currentToken.value === '?' || currentToken.value === '+' || isStar;
                     if (possOccurrentIndicator) {
@@ -1193,66 +1194,66 @@ export class XPathLexer {
 }
 
 export enum ErrorType {
-	None,
-	AxisName,
-	UnusedVariable,
-	UnresolvedVarReference,
-	DuplicateVarName,
-	DuplicateFnName,
-	DuplicateParameterName,
-	DuplicateTemplateName,
-	DuplicateAccumulatorName,
-	ElementNesting,
-	ElementNestingX,
-	ParentLessText,
-	ProcessingInstructionName,
-	MultiRoot,
-	XMLName,
-	XMLNameList,
-	XMLSyntax,
-	XSLTName,
-	XSLTInstrUnexpected,
-	XSLTAttrUnexpected,
-	XPathTypeName,
-	XSLTPrefix,
-	MissingTemplateParam,
-	IterateParamInvalid,
-	MissingPrefixInList,
-	TemplateNameUnresolved,
-	TemplateModeUnresolved,
-	AttributeSetUnresolved,
-	AccumulatorNameUnresolved,
-	XMLDeclaration,
-	XPathName,
-	EntityName,
-	XPathFunction,
-	XSLTFunctionNamePrefix,
-	XPathEmpty,
-	XPathFunctionNamespace,
-	XPathFunctionUnexpected,
-	XPathOperatorUnexpected,
-	XPathPrefix,
-	XPathKeyword,
-	XPathExpectedComplex,
-	XMLXMLNS,
-	XMLAttributeName,
-	XMLAttributeValueUnexpected,
-	XSLTNamesapce,
-	XMLAttributeXMLNS,
-	XMLAttNameSyntax,
-	XMLAttEqualExpected,
-	XMLDupllicateAtt,
-	XPathUnexpected,
-	XPathAwaiting,
-	XPathStringLiteral,
-	BracketNesting,
-	ExpectedElseAfterThen,
-	ExpectedDollarAfterComma,
-	PopNesting,
-	XSLTKeyUnresolved,
-	XMLRootMissing,
-	DTD,
-	FunctionAfterArrowOp,
+    None,
+    AxisName,
+    UnusedVariable,
+    UnresolvedVarReference,
+    DuplicateVarName,
+    DuplicateFnName,
+    DuplicateParameterName,
+    DuplicateTemplateName,
+    DuplicateAccumulatorName,
+    ElementNesting,
+    ElementNestingX,
+    ParentLessText,
+    ProcessingInstructionName,
+    MultiRoot,
+    XMLName,
+    XMLNameList,
+    XMLSyntax,
+    XSLTName,
+    XSLTInstrUnexpected,
+    XSLTAttrUnexpected,
+    XPathTypeName,
+    XSLTPrefix,
+    MissingTemplateParam,
+    IterateParamInvalid,
+    MissingPrefixInList,
+    TemplateNameUnresolved,
+    TemplateModeUnresolved,
+    AttributeSetUnresolved,
+    AccumulatorNameUnresolved,
+    XMLDeclaration,
+    XPathName,
+    EntityName,
+    XPathFunction,
+    XSLTFunctionNamePrefix,
+    XPathEmpty,
+    XPathFunctionNamespace,
+    XPathFunctionUnexpected,
+    XPathOperatorUnexpected,
+    XPathPrefix,
+    XPathKeyword,
+    XPathExpectedComplex,
+    XMLXMLNS,
+    XMLAttributeName,
+    XMLAttributeValueUnexpected,
+    XSLTNamesapce,
+    XMLAttributeXMLNS,
+    XMLAttNameSyntax,
+    XMLAttEqualExpected,
+    XMLDupllicateAtt,
+    XPathUnexpected,
+    XPathAwaiting,
+    XPathStringLiteral,
+    BracketNesting,
+    ExpectedElseAfterThen,
+    ExpectedDollarAfterComma,
+    PopNesting,
+    XSLTKeyUnresolved,
+    XMLRootMissing,
+    DTD,
+    FunctionAfterArrowOp,
     MissingContextItemForFn,
     MissingContextItemForInstr,
     MissingContextItemGeneral,
