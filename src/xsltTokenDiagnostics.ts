@@ -1915,7 +1915,10 @@ export class XsltTokenDiagnostics {
 
 	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean) {
 		if (!insideGlobalFunction) return true;
-		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' || item.symbolName === 'xsl:iterate' || item.symbolName === 'xsl:copy');
+
+		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' ||
+		 item.symbolName === 'xsl:source-document' || item.symbolName === 'xsl:merge-source' ||
+		 item.symbolName === 'xsl:iterate' || item.symbolName === 'xsl:copy' || item.symbolName === 'xsl:analyze-string' || item.symbolName === 'xsl:perform-sort');
 		if (foundForEach) return true;
 		const foundContextBracketsOrPredicate = xpathStack.find((item) => item.hasContextItem === true);
 		return !!foundContextBracketsOrPredicate;
