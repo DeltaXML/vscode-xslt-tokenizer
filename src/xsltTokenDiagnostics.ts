@@ -1730,9 +1730,9 @@ export class XsltTokenDiagnostics {
 								tokenValue = token.value;
 								validationType = ValidationType.PrefixedName;
 							} else {
-								tokenValue = token.value.length > 3 && token.value.startsWith('@*:') ? token.value.substring(3) : token.value.substring(1);
+								tokenValue = token.value;
 								validationType = ValidationType.AttributeNameTest;
-								skipValidation = token.value === '@xml';
+								skipValidation = token.value === '@xml' || token.value === '@*';
 							}
 							if (!skipValidation) skipValidation = xpathTokenType === TokenLevelState.mapNameLookup && xpathCharType === CharLevelState.sep; // for '*' lookup
 							if (!skipValidation) {

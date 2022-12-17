@@ -342,6 +342,9 @@ export class XPathLexer {
             case CharLevelState.lAttr:
                 if (char === '*' && nextChar === ':') {
                     resolvedEarly = true;
+                } else if (nesting < 0 && char === '*') {
+                    nesting = 0;
+                    resolvedEarly = true;
                 }
             // no-break intentional
             case CharLevelState.lName:
@@ -352,6 +355,7 @@ export class XPathLexer {
                     resolvedEarly = true;
                     nesting++;
                 }
+            // no-break intentional
             case CharLevelState.lVar:
                 if (resolvedEarly) {
                     rv = existing;
@@ -1167,6 +1171,7 @@ export class XPathLexer {
                     } else if (char === '$') {
                         rv = CharLevelState.lVar;
                     } else if (char === '@') {
+                        if (nextChar === '*') nesting = -1;
                         rv = CharLevelState.lAttr;
                     } else {
                         rv = CharLevelState.lName;

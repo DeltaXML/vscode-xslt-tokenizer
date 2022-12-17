@@ -10,9 +10,9 @@
     <xsl:apply-templates/>
     <xsl:copy>      
     </xsl:copy>
-    <xsl:sequence select="text(), *, child::*, div, @class, ., .., *, @*, *:something, @*:newer"/>
+    <xsl:sequence select="@*, text(), *, child::*, div, @class, ., .., *, @*:latest, *:something, @*:newer"/>
     <xsl:for-each select="/*:abc, /@*:def, $a, /base-uri(), /child::node(), /attribute::*:name, /*[node-name()]">
-      <xsl:sequence select="@q:*, dx:*, /count(*:stentry), root($a)[.], $a[root()[@name]]/*:any"/>     
+      <xsl:sequence select="@*, dx, /count(*:stentry), root($a)[.], $a[root()[@name]]/*:any"/>     
       <xsl:variable name="v1" as="xs:string" select="node-name()"/>
     </xsl:for-each>
   </xsl:function>  
