@@ -341,6 +341,7 @@ export class XPathLexer {
                 break;
             case CharLevelState.lAttr:
                 if (char === '*' && nextChar === ':') {
+                    nesting = 0;
                     resolvedEarly = true;
                 } else if (nesting < 0 && char === '*') {
                     nesting = 0;
