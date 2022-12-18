@@ -48,6 +48,12 @@ enum XsltCodeActionKind {
 	extractXsltFunctionFmXPath = 'Extract expression to xsl:function',
 }
 
+enum ExtractFunctionParams {
+	context = '__c',
+	position = '__p',
+	last = '__l'
+}
+
 export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	public static readonly providedCodeActionKinds = [
@@ -330,7 +336,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
-		const {requiredArgNames, requiredParamNames, functionArgDiagnostics, selectAttrDiagnostics, stepOperatorDiagnostics, requiredLastDiagnostics, requiredRootDiagnostics, requiredPositionDiagnostics} = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
+		const { requiredArgNames, requiredParamNames, quickfixDiagnostics } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
 
 		const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 		let replacementAll = '';
@@ -369,13 +375,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const requiredParamNames: string[] = [];
 		const requiredArgNames: string[] = [];
-		
-		const functionArgDiagnostics: vscode.Diagnostic[] = [];
-		const selectAttrDiagnostics: vscode.Diagnostic[] = [];
-		const stepOperatorDiagnostics: vscode.Diagnostic[] = [];
-		const requiredLastDiagnostics: vscode.Diagnostic[] = [];
-		const requiredRootDiagnostics: vscode.Diagnostic[] = [];
-		const requiredPositionDiagnostics: vscode.Diagnostic[] = [];
+
+		const quickfixDiagnostics: vscode.Diagnostic[] = [];
 
 		let hasContextParam = false;
 		let hasPosParam = false;
@@ -387,50 +388,41 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				switch (diagnostic.code) {
 					case DiagnosticCode.unresolvedVariableRef:
 						const varName = diagnostic.relatedInformation![0].message.substring(1);
-						if (requiredParamNames.indexOf(varName) < 0) {requiredParamNames.push(varName); requiredArgNames.push('$' + varName);}
+						if (requiredParamNames.indexOf(varName) < 0) { requiredParamNames.push(varName); requiredArgNames.push('$' + varName); }
 						break;
 					case DiagnosticCode.instrWithNoContextItem:
-						selectAttrDiagnostics.push(diagnostic);
-						hasContextParam = true;
-						break;
 					case DiagnosticCode.fnWithNoContextItem:
-						functionArgDiagnostics.push(diagnostic);
-						hasContextParam = true;
-						break;
 					case DiagnosticCode.noContextItem:
-						stepOperatorDiagnostics.push(diagnostic);
+					case DiagnosticCode.rootWithNoContextItem:
+						quickfixDiagnostics.push(diagnostic);
 						hasContextParam = true;
 						break;
 					case DiagnosticCode.lastWithNoContextItem:
-						requiredLastDiagnostics.push(diagnostic);
+						quickfixDiagnostics.push(diagnostic);
 						hasLastParam = true;
 						break;
 					case DiagnosticCode.positionWithNoContextItem:
+						quickfixDiagnostics.push(diagnostic);
 						hasPosParam = true;
-						requiredPositionDiagnostics.push(diagnostic);
-						break;
-					case DiagnosticCode.rootWithNoContextItem:
-						requiredRootDiagnostics.push(diagnostic);
-						hasContextParam = true;
 						break;
 				}
 			}
 		});
 		if (hasLastParam) {
 			requiredArgNames.push('last()');
-			requiredParamNames.push('__last');
+			requiredParamNames.push(ExtractFunctionParams.last);
 		}
 		if (hasPosParam) {
 			requiredArgNames.push('position()');
-			requiredParamNames.push('__position');
+			requiredParamNames.push(ExtractFunctionParams.position);
 		}
 		if (hasContextParam) {
 			requiredArgNames.push('.');
-			requiredParamNames.push('__context');
+			requiredParamNames.push(ExtractFunctionParams.context);
 		}
 		requiredArgNames.reverse();
 		requiredParamNames.reverse();
-		return {requiredArgNames, requiredParamNames, functionArgDiagnostics, selectAttrDiagnostics, stepOperatorDiagnostics, requiredLastDiagnostics, requiredRootDiagnostics, requiredPositionDiagnostics};
+		return { requiredArgNames, requiredParamNames, quickfixDiagnostics };
 	}
 
 	private extendRangeToFullLines(range: vscode.Range) {
