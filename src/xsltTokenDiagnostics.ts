@@ -193,9 +193,13 @@ export class XsltTokenDiagnostics {
 				} else if (type === ValidationType.PrefixedName) {
 					if (prefix === '*') {
 						nameParts = [suffix];
-					} else if (suffix === '*') {
-						nameParts = [prefix];
-					};
+					} else {
+						valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
+						if (suffix === '*') {
+							nameParts = [prefix];
+						};
+					}
+					
 				} else if (type === ValidationType.XSLTAttribute && prefix === 'xsl') {
 					// TODO: for attributes on non-xsl instructions, check that name is in the attributeGroup: xsl:literal-result-element-attributes (e.g. xsl:expand-text)
 					//valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
