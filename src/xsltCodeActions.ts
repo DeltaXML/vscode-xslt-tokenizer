@@ -337,6 +337,32 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
+		// let fixedTrimmedBodyTextLines: string[] = [];
+		// if (quickfixDiagnostics.length === 0) {
+		// 	fixedTrimmedBodyTextLines = trimmedLines;
+		// } else {
+		// 	let currentDiagnosticPos = 0;
+		// 	for (let i = quickfixDiagnostics.length - 1; i > -1; i--) {
+		// 		while (currentDiagnosticPos < quickfixDiagnostics.length) {
+		// 			let currentDiagnostic = quickfixDiagnostics[currentDiagnosticPos];
+		// 			const rangeStart = currentDiagnostic.range.start.character;
+		// 			const rangeEnd = currentDiagnostic.range.end.character;
+		// 			const rangeLine = currentDiagnostic.range.start.line;
+		// 			if (rangeLine > line) {
+		// 				break;
+		// 			} else {
+		// 				if (rangeLine === line) {
+		// 					console.log(tl.substring(rangeStart, rangeEnd));
+		// 				} else { 
+		// 					// rangeLine < line so keep going to next diagnostic
+		// 				}
+		// 				currentDiagnosticPos++;
+		// 				currentDiagnostic = quickfixDiagnostics[currentDiagnosticPos];
+		// 			}
+
+		// 		}
+		// 	}
+		// }
 
 		const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 		let replacementAll = '';
@@ -383,7 +409,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let hasPosParam = false;
 		let hasLastParam = false;
 
-		diagnostics.reverse().forEach((diagnostic) => {
+		diagnostics.forEach((diagnostic) => {
 			const errorLine = diagnostic.range.start.line;
 			if (errorLine >= fnStartLine + 1 && errorLine <= fnStartLine + lineCount + 1) {
 				switch (diagnostic.code) {
@@ -409,20 +435,19 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				}
 			}
 		});
+        // put special params before params needed for variables - unshift:
 		if (hasLastParam) {
-			requiredArgNames.push('last()');
-			requiredParamNames.push(ExtractFunctionParams.last);
+			requiredArgNames.unshift('last()');
+			requiredParamNames.unshift(ExtractFunctionParams.last);
 		}
 		if (hasPosParam) {
-			requiredArgNames.push('position()');
-			requiredParamNames.push(ExtractFunctionParams.position);
+			requiredArgNames.unshift('position()');
+			requiredParamNames.unshift(ExtractFunctionParams.position);
 		}
 		if (hasContextParam) {
-			requiredArgNames.push('.');
-			requiredParamNames.push(ExtractFunctionParams.context);
+			requiredArgNames.unshift('.');
+			requiredParamNames.unshift(ExtractFunctionParams.context);
 		}
-		requiredArgNames.reverse();
-		requiredParamNames.reverse();
 		return { requiredArgNames, requiredParamNames, quickfixDiagnostics };
 	}
 
