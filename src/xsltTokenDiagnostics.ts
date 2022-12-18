@@ -97,6 +97,9 @@ export enum DiagnosticCode {
 	none,
 	unresolvedVariableRef,
 	fnWithNoContextItem,
+	positionWithNoContextItem,
+	lastWithNoContextItem,
+	rootWithNoContextItem,
 	instrWithNoContextItem,
 	noContextItem
 }
@@ -139,7 +142,7 @@ export class XsltTokenDiagnostics {
 		return invalidNames;
 	}
 	private static validateName(origNname: string, origType: ValidationType, docType: DocumentTypes, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
-		const type = origType === ValidationType.AttributeNameTest ? ValidationType.PrefixedName : origType; 
+		const type = origType === ValidationType.AttributeNameTest ? ValidationType.PrefixedName : origType;
 		const name = origType === ValidationType.AttributeNameTest && origNname.startsWith('@') ? origNname.substring(1) : origNname;
 		const isSchematron = docType === DocumentTypes.SCH;
 		const isDCP = docType === DocumentTypes.DCP;
@@ -199,7 +202,7 @@ export class XsltTokenDiagnostics {
 							nameParts = [prefix];
 						};
 					}
-					
+
 				} else if (type === ValidationType.XSLTAttribute && prefix === 'xsl') {
 					// TODO: for attributes on non-xsl instructions, check that name is in the attributeGroup: xsl:literal-result-element-attributes (e.g. xsl:expand-text)
 					//valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
@@ -1121,7 +1124,7 @@ export class XsltTokenDiagnostics {
 								}
 							} else {
 								const hasPrecedingSlash = (prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!')) ||
-								(prevToken.charType === CharLevelState.dSep && (prevToken.value === '//'));
+									(prevToken.charType === CharLevelState.dSep && (prevToken.value === '//'));
 								let hasContext = hasPrecedingSlash;
 								if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
 									hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
@@ -1690,8 +1693,10 @@ export class XsltTokenDiagnostics {
 									} else if (fnArity === 0 && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 										if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 											const prevToken2 = allTokens[index - 2];
-											if (!(prevToken2.charType === CharLevelState.sep && prevToken2.value === '/')) {
-												prevToken.error = ErrorType.MissingContextItemForFn;
+											if (!(prevToken2.value === '/' || prevToken2.value === '!' || prevToken2.value === '//')) {
+												prevToken.error =
+													(prevToken.value === 'last') ? ErrorType.MissingContextItemForLast :
+														(prevToken.value === 'position') ? ErrorType.MissingContextItemForPosition : ErrorType.MissingContextItemForFn;
 												prevToken.value += '()';
 												problemTokens.push(prevToken);
 											}
@@ -1925,8 +1930,8 @@ export class XsltTokenDiagnostics {
 		if (!insideGlobalFunction) return true;
 
 		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' ||
-		 item.symbolName === 'xsl:source-document' || item.symbolName === 'xsl:merge-source' ||
-		 item.symbolName === 'xsl:iterate' || item.symbolName === 'xsl:copy' || item.symbolName === 'xsl:analyze-string' || item.symbolName === 'xsl:perform-sort');
+			item.symbolName === 'xsl:source-document' || item.symbolName === 'xsl:merge-source' ||
+			item.symbolName === 'xsl:iterate' || item.symbolName === 'xsl:copy' || item.symbolName === 'xsl:analyze-string' || item.symbolName === 'xsl:perform-sort');
 		if (foundForEach) return true;
 		const foundContextBracketsOrPredicate = xpathStack.find((item) => item.hasContextItem === true);
 		return !!foundContextBracketsOrPredicate;
@@ -2556,6 +2561,7 @@ export class XsltTokenDiagnostics {
 			let diagnosticMetadata: vscode.DiagnosticTag[] = [];
 			let severity = vscode.DiagnosticSeverity.Error;
 			let errCode = DiagnosticCode.none;
+			let isFunctionContextProblem = false;
 			switch (token.error) {
 				case ErrorType.AxisName:
 					msg = `XPath: Invalid axis name: '${tokenValue}`;
@@ -2676,8 +2682,16 @@ export class XsltTokenDiagnostics {
 					errCode = DiagnosticCode.noContextItem;
 					msg = `XPath: Context-item is missing for: '${tokenValue}'`;
 					break;
+				case ErrorType.MissingContextItemForPosition:
+					errCode = DiagnosticCode.positionWithNoContextItem;
+					msg = `XPath: Context-item is missing for: ''position()`;
+					break;
+				case ErrorType.MissingContextItemForLast:
+					errCode = DiagnosticCode.lastWithNoContextItem;
+					msg = `XPath: Context-item is missing for: 'last(')`;
+					break;
 				case ErrorType.MissingContextItemForRoot:
-					errCode = DiagnosticCode.noContextItem;
+					errCode = DiagnosticCode.rootWithNoContextItem;
 					msg = `XPath: Context-item is missing for root: '${tokenValue}'`;
 					break;
 				case ErrorType.MissingContextItemForInstr:

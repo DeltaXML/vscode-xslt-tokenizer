@@ -330,9 +330,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
-		const requiredParamNames = this.findBrokenVariableRefs(document, functionBodyLinesCount, targetRange, interimFunctionText);
+		const {requiredArgNames, requiredParamNames, functionArgDiagnostics, selectAttrDiagnostics, stepOperatorDiagnostics, requiredLastDiagnostics, requiredRootDiagnostics, requiredPositionDiagnostics} = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
 
-		const fnArgsString = requiredParamNames.map((arg) => '$' + arg).join(', ');
+		const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 		let replacementAll = '';
 		let fnStartCharacter = -1;
 		if (elementSelected) {
@@ -358,7 +358,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private findBrokenVariableRefs(document: vscode.TextDocument, lineCount: number, targetRange: vscode.Range, allFunctionText: string) {
+	private findEvalContextErrors(document: vscode.TextDocument, lineCount: number, targetRange: vscode.Range, allFunctionText: string) {
 		const virtualTextOriginal = document.getText();
 		const virtualInseertPos = document.offsetAt(targetRange.end);
 		const virtualTextUpdated = virtualTextOriginal.substring(0, virtualInseertPos) + allFunctionText + virtualTextOriginal.substring(virtualInseertPos);
@@ -366,18 +366,71 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const caDocument = new CodeActionDocument(document.uri, virtualTextUpdated);
 		const diagnostics = XsltSymbolProvider.instanceForXSLT!.calculateVirtualDiagnostics(caDocument);
 		const fnStartLine = targetRange.end.line + 2;
-		const brokenVariableNames: string[] = [];
 
-		diagnostics.forEach((diagnostic) => {
+		const requiredParamNames: string[] = [];
+		const requiredArgNames: string[] = [];
+		
+		const functionArgDiagnostics: vscode.Diagnostic[] = [];
+		const selectAttrDiagnostics: vscode.Diagnostic[] = [];
+		const stepOperatorDiagnostics: vscode.Diagnostic[] = [];
+		const requiredLastDiagnostics: vscode.Diagnostic[] = [];
+		const requiredRootDiagnostics: vscode.Diagnostic[] = [];
+		const requiredPositionDiagnostics: vscode.Diagnostic[] = [];
+
+		let hasContextParam = false;
+		let hasPosParam = false;
+		let hasLastParam = false;
+
+		diagnostics.reverse().forEach((diagnostic) => {
 			const errorLine = diagnostic.range.start.line;
-			if (diagnostic.code === DiagnosticCode.unresolvedVariableRef && errorLine >= fnStartLine + 1 && errorLine <= fnStartLine + lineCount + 1) {
-				const varName = diagnostic.relatedInformation![0].message.substring(1);
-				if (brokenVariableNames.indexOf(varName) < 0) {
-					brokenVariableNames.push(varName);
+			if (errorLine >= fnStartLine + 1 && errorLine <= fnStartLine + lineCount + 1) {
+				switch (diagnostic.code) {
+					case DiagnosticCode.unresolvedVariableRef:
+						const varName = diagnostic.relatedInformation![0].message.substring(1);
+						if (requiredParamNames.indexOf(varName) < 0) {requiredParamNames.push(varName); requiredArgNames.push('$' + varName);}
+						break;
+					case DiagnosticCode.instrWithNoContextItem:
+						selectAttrDiagnostics.push(diagnostic);
+						hasContextParam = true;
+						break;
+					case DiagnosticCode.fnWithNoContextItem:
+						functionArgDiagnostics.push(diagnostic);
+						hasContextParam = true;
+						break;
+					case DiagnosticCode.noContextItem:
+						stepOperatorDiagnostics.push(diagnostic);
+						hasContextParam = true;
+						break;
+					case DiagnosticCode.lastWithNoContextItem:
+						requiredLastDiagnostics.push(diagnostic);
+						hasLastParam = true;
+						break;
+					case DiagnosticCode.positionWithNoContextItem:
+						hasPosParam = true;
+						requiredPositionDiagnostics.push(diagnostic);
+						break;
+					case DiagnosticCode.rootWithNoContextItem:
+						requiredRootDiagnostics.push(diagnostic);
+						hasContextParam = true;
+						break;
 				}
 			}
 		});
-		return brokenVariableNames;
+		if (hasLastParam) {
+			requiredArgNames.push('last()');
+			requiredParamNames.push('__last');
+		}
+		if (hasPosParam) {
+			requiredArgNames.push('position()');
+			requiredParamNames.push('__position');
+		}
+		if (hasContextParam) {
+			requiredArgNames.push('.');
+			requiredParamNames.push('__context');
+		}
+		requiredArgNames.reverse();
+		requiredParamNames.reverse();
+		return {requiredArgNames, requiredParamNames, functionArgDiagnostics, selectAttrDiagnostics, stepOperatorDiagnostics, requiredLastDiagnostics, requiredRootDiagnostics, requiredPositionDiagnostics};
 	}
 
 	private extendRangeToFullLines(range: vscode.Range) {
