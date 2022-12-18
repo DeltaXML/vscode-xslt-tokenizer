@@ -8,7 +8,7 @@
     
     <xsl:template match="/" mode="#default">   
         <xsl:for-each select="*">
-            <xsl:variable name="var1" as="xs:string" select="@dev:new, @*, @*:dev, dev:*, dev:*, @xml:space, @dev:new"/>
+            <xsl:variable name="var1" as="xs:string" select="@dev:new"/>
             <xsl:variable name="var2" as="xs:string" select="'a', $var1"/>
             <xsl:variable name="var3" as="xs:string" select="text()"/>
             <xsl:variable name="abc" as="xs:string" select="$var1, $var2, $var3"/> 
