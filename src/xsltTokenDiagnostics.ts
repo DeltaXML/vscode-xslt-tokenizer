@@ -1690,15 +1690,25 @@ export class XsltTokenDiagnostics {
 										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
-									} else if (fnArity === 0 && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
-										if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
-											const prevToken2 = allTokens[index - 2];
-											if (!(prevToken2.value === '/' || prevToken2.value === '!' || prevToken2.value === '//')) {
-												prevToken.error =
-													(prevToken.value === 'last') ? ErrorType.MissingContextItemForLast :
-														(prevToken.value === 'position') ? ErrorType.MissingContextItemForPosition : ErrorType.MissingContextItemForFn;
-												prevToken.value += '()';
-												problemTokens.push(prevToken);
+									} else if (fnArity === 0) {
+										const isCurrentFunction = prevToken.value === 'current';
+										if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction)) {
+											if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
+												const prevToken2 = allTokens[index - 2];
+												if (!(prevToken2.value === '/' || prevToken2.value === '!' || prevToken2.value === '//')) {
+													let newTokenError = ErrorType.MissingContextItemForFn;
+													const fnName = prevToken.value;
+													if (fnName === 'current') {
+														newTokenError = ErrorType.MissingContextItemGeneral;
+													} else if (fnName === 'position') {
+														newTokenError = ErrorType.MissingContextItemForPosition;
+													} else if (fnName === 'last') {
+														newTokenError = ErrorType.MissingContextItemForLast;
+													}
+													prevToken.error = newTokenError;
+													prevToken.value += '()';
+													problemTokens.push(prevToken);
+												}
 											}
 										}
 									}
@@ -1926,15 +1936,22 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean) {
+	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean, forFunctionNamedCurrent = false) {
 		if (!insideGlobalFunction) return true;
 
 		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' ||
 			item.symbolName === 'xsl:source-document' || item.symbolName === 'xsl:merge-source' ||
 			item.symbolName === 'xsl:iterate' || item.symbolName === 'xsl:copy' || item.symbolName === 'xsl:analyze-string' || item.symbolName === 'xsl:perform-sort');
 		if (foundForEach) return true;
-		const foundContextBracketsOrPredicate = xpathStack.find((item) => item.hasContextItem === true);
-		return !!foundContextBracketsOrPredicate;
+		let foundContextBracketsOrPredicate: boolean;
+		if (forFunctionNamedCurrent) {
+			// need to ignore predicates from xpath stack
+			foundContextBracketsOrPredicate = !!xpathStack.find((item) => item.token.charType !== CharLevelState.lPr && item.hasContextItem === true);
+		} else {
+			foundContextBracketsOrPredicate = !!xpathStack.find((item) => item.hasContextItem === true);
+		}
+		//const foundContextBracketsOrPredicate = forCurrent? xpathStack.find((item) => item.hasContextItem === true) : xpathStack.find((item) => item.hasContextItem === true);
+		return foundContextBracketsOrPredicate;
 	}
 
 	private static providesContext(token: BaseToken) {

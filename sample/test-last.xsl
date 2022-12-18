@@ -10,9 +10,13 @@
     <xsl:template match="/*">
         <xsl:for-each select="//*">
             <xsl:message select="position()"/>
-            <xsl:message select="last()"/>
+            <xsl:message select=".[@class eq current()/@class]"/>
         </xsl:for-each>
     </xsl:template>
+    
+    <xsl:function name="dx:text" as="xs:boolean">
+        <xsl:message select="*/(.[@class eq current()/@class])"/>"/>
+    </xsl:function>
     
     
 </xsl:stylesheet>
