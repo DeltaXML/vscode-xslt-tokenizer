@@ -337,32 +337,72 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
-		// let fixedTrimmedBodyTextLines: string[] = [];
-		// if (quickfixDiagnostics.length === 0) {
-		// 	fixedTrimmedBodyTextLines = trimmedLines;
-		// } else {
-		// 	let currentDiagnosticPos = 0;
-		// 	for (let i = quickfixDiagnostics.length - 1; i > -1; i--) {
-		// 		while (currentDiagnosticPos < quickfixDiagnostics.length) {
-		// 			let currentDiagnostic = quickfixDiagnostics[currentDiagnosticPos];
-		// 			const rangeStart = currentDiagnostic.range.start.character;
-		// 			const rangeEnd = currentDiagnostic.range.end.character;
-		// 			const rangeLine = currentDiagnostic.range.start.line;
-		// 			if (rangeLine > line) {
-		// 				break;
-		// 			} else {
-		// 				if (rangeLine === line) {
-		// 					console.log(tl.substring(rangeStart, rangeEnd));
-		// 				} else { 
-		// 					// rangeLine < line so keep going to next diagnostic
-		// 				}
-		// 				currentDiagnosticPos++;
-		// 				currentDiagnostic = quickfixDiagnostics[currentDiagnosticPos];
-		// 			}
+		let fixedTrimmedBodyTextLines: string[] = [];
+		if (quickfixDiagnostics.length === 0) {
+			fixedTrimmedBodyTextLines = trimmedLines;
+		} else {
+			const firstInsertionLine = targetRange.end.line + 4;
+			let currentDiagnosticPos = quickfixDiagnostics.length - 1;
+			for (let line = trimmedLines.length - 1; line > -1; line--) {
+				const absLine = firstInsertionLine + line;
+				let currentLine = trimmedLines[line];
+				while (currentDiagnosticPos > -1) {
+					let currentDiagnostic = quickfixDiagnostics[currentDiagnosticPos];
+					const rangeStart = currentDiagnostic.range.start.character;
+					const rangeEnd = currentDiagnostic.range.end.character;
+					const rangeLine = currentDiagnostic.range.start.line;
+					if (rangeLine < absLine) {
+						// dont goto previous diagnostic rangeLine we need to go back to the previous line
+						break;
+					} else {
+						if (rangeLine === absLine && currentDiagnostic.code) {
+							const lineRangeText = currentLine.substring(rangeStart, rangeEnd);
+							const errCode = <DiagnosticCode>currentDiagnostic.code;
+                            let substitution: undefined|string;
+							switch (errCode) {
+								case DiagnosticCode.noContextItem:
+									substitution = '$' + ExtractFunctionParams.context + '/';
+								case DiagnosticCode.rootWithNoContextItem:
+									// insert '$__c/' before
+									substitution = substitution ? substitution : `root($${ExtractFunctionParams.context})/`;
+									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
+									break;
+								case DiagnosticCode.fnWithNoContextItem:
+									// add context argument
+									substitution = ExtractFunctionParams.context;
+									const fnEnd = currentLine.indexOf(')', rangeEnd);
+									if (fnEnd > -1) {
+										currentLine = currentLine.substring(0, fnEnd) + '$' + substitution + currentLine.substring(fnEnd + 1);
+									}
+									break;
+								case DiagnosticCode.instrWithNoContextItem:
+									// add select
+									substitution = ` select="${ExtractFunctionParams.context}"`;
+									currentLine = currentLine.substring(0, rangeEnd) + '$' + substitution + currentLine.substring(rangeEnd);
+									break;
+								case DiagnosticCode.lastWithNoContextItem:
+									substitution = substitution? substitution : ExtractFunctionParams.last;
+								case DiagnosticCode.positionWithNoContextItem:
+									// replace with $var reference
+									substitution = substitution? substitution : ExtractFunctionParams.position;
+									const pEnd = currentLine.indexOf(')', rangeEnd);
+									if (pEnd > -1) {
+										currentLine = currentLine.substring(0, rangeStart) + '$' + substitution + currentLine.substring(pEnd + 1);
+									}
+									break;
+							}
+						} else { 
+							// rangeLine > line so keep going to previous diagnostic rangeLine
+						}
+						currentDiagnosticPos--;
+					}
 
-		// 		}
-		// 	}
-		// }
+				}
+				fixedTrimmedBodyTextLines.push(currentLine);
+			}
+		}
+
+		const quickfixText = fixedTrimmedBodyTextLines.join('/n');
 
 		const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 		let replacementAll = '';

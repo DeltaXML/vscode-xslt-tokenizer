@@ -11,7 +11,10 @@
             <xsl:variable name="var0" as="xs:string" select="@dev:new"/>
             <xsl:variable name="var1" as="xs:string" select="@dev:new"/>
             <xsl:variable name="var2" as="xs:string" select="'a', $var0, $var1"/>
-            <xsl:variable name="var3" as="xs:string" select="text(), last(), position()"/>
+            <xsl:variable name="var3" as="xs:string" select="
+                text(),
+                last(), 
+                position()"/>
             <xsl:variable name="abc" as="xs:string" select="$var1, $var2, $var3"/> 
             <xsl:sequence select="$abc"/>
         </xsl:for-each>    
