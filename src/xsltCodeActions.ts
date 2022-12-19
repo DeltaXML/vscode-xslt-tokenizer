@@ -425,7 +425,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			return `\t\t<xsl:param name="${argName}" as="${argType}"/>\n`;
 		});
 
-		const allFunctionText = functionHeadText + functionParamLines + quickfixText + functionFootText;
+		const allFunctionText = functionHeadText + functionParamLines.join('') + quickfixText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
 		return codeAction;

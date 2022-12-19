@@ -11,7 +11,7 @@
             <xsl:variable name="var0" as="xs:string" select="@dev:new"/>
             <xsl:variable name="var1" as="xs:string" select="@dev:new"/>
             <xsl:variable name="var2" as="xs:string" select="'a', $var0, $var1"/>
-            <xsl:apply-templates/>
+            <xsl:apply-templates mode="a2"/>
             <xsl:variable name="var3" as="xs:string" select="
                 //*,
                 base-uri(),
@@ -21,6 +21,32 @@
             <xsl:variable name="abc" as="xs:string" select="$var1, $var2, $var3"/> 
             <xsl:sequence select="$abc"/>
         </xsl:for-each>    
-    </xsl:template>    
+    </xsl:template>
+    
+    <xsl:template match="fn:map" mode="indent" expand-text="yes">
+        <xsl:value-of>
+            <xsl:variable name="depth" select="count(ancestor::*) + 1"/>
+            <xsl:for-each select="*">
+                <xsl:if test="position() gt 1">
+                    <xsl:text>{$depth} of {last()} on {name()}</xsl:text>
+                </xsl:if>
+                <xsl:apply-templates select="snapshot(@key)" mode="key-attribute"/>
+                <xsl:apply-templates mode="#current"/>
+            </xsl:for-each>
+        </xsl:value-of>
+    </xsl:template>
+    
+    <xsl:function name="dx:extractFunction">
+        <xsl:param name="c.x" as="item()*"/>
+        ,		<xsl:param name="c.p" as="xs:integer"/>
+        ,		<xsl:param name="depth" as="item()*"/>
+        <xsl:if test="$c.p gt 1">
+            <xsl:text>, </xsl:text>
+            <xsl:value-of select="$depth"/>
+        </xsl:if>
+        <xsl:apply-templates select="snapshot($c.x/@key)" mode="key-attribute"/>
+        <xsl:text> : </xsl:text>
+        <xsl:apply-templates select="$c.x/." mode="#current"/>
+    </xsl:function>
     
 </xsl:stylesheet> 
