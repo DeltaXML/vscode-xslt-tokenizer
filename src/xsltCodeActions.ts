@@ -49,9 +49,9 @@ enum XsltCodeActionKind {
 }
 
 enum ExtractFunctionParams {
-	context = '__c',
-	position = '__p',
-	last = '__l'
+	context = 'c.x',
+	position = 'c.p',
+	last = 'c.l'
 }
 
 export class XSLTCodeActions implements vscode.CodeActionProvider {
@@ -337,15 +337,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
+		const finalTrimmedBodyTextLines = trimmedBodyText.split('\n');
 		let fixedTrimmedBodyTextLines: string[] = [];
 		if (quickfixDiagnostics.length === 0) {
-			fixedTrimmedBodyTextLines = trimmedLines;
+			fixedTrimmedBodyTextLines = finalTrimmedBodyTextLines;
 		} else {
-			const firstInsertionLine = targetRange.end.line + 4;
+			const firstInsertionLine = targetRange.end.line + 3;
 			let currentDiagnosticPos = quickfixDiagnostics.length - 1;
-			for (let line = trimmedLines.length - 1; line > -1; line--) {
+			for (let line = finalTrimmedBodyTextLines.length - 1; line > -1; line--) {
 				const absLine = firstInsertionLine + line;
-				let currentLine = trimmedLines[line];
+				let currentLine = finalTrimmedBodyTextLines[line];
 				while (currentDiagnosticPos > -1) {
 					let currentDiagnostic = quickfixDiagnostics[currentDiagnosticPos];
 					const rangeStart = currentDiagnostic.range.start.character;
@@ -364,7 +365,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 									substitution = '$' + ExtractFunctionParams.context + '/';
 								case DiagnosticCode.rootWithNoContextItem:
 									// insert '$__c/' before
-									substitution = substitution ? substitution : `root($${ExtractFunctionParams.context})/`;
+									substitution = substitution ? substitution : `root($${ExtractFunctionParams.context})`;
 									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
 									break;
 								case DiagnosticCode.fnWithNoContextItem:
@@ -372,13 +373,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 									substitution = ExtractFunctionParams.context;
 									const fnEnd = currentLine.indexOf(')', rangeEnd);
 									if (fnEnd > -1) {
-										currentLine = currentLine.substring(0, fnEnd) + '$' + substitution + currentLine.substring(fnEnd + 1);
+										currentLine = currentLine.substring(0, fnEnd) + '$' + substitution + currentLine.substring(fnEnd);
 									}
 									break;
 								case DiagnosticCode.instrWithNoContextItem:
 									// add select
-									substitution = ` select="${ExtractFunctionParams.context}"`;
-									currentLine = currentLine.substring(0, rangeEnd) + '$' + substitution + currentLine.substring(rangeEnd);
+									substitution = ` select="$${ExtractFunctionParams.context}"`;
+									currentLine = currentLine.substring(0, rangeEnd) + substitution + currentLine.substring(rangeEnd);
 									break;
 								case DiagnosticCode.lastWithNoContextItem:
 									substitution = substitution? substitution : ExtractFunctionParams.last;
@@ -396,13 +397,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						}
 						currentDiagnosticPos--;
 					}
-
 				}
 				fixedTrimmedBodyTextLines.push(currentLine);
 			}
 		}
 
-		const quickfixText = fixedTrimmedBodyTextLines.join('/n');
+		const quickfixText = fixedTrimmedBodyTextLines.reverse().join('\n');
 
 		const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 		let replacementAll = '';
@@ -425,7 +425,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			return `\t\t<xsl:param name="${argName}" as="${argType}"/>\n`;
 		});
 
-		const allFunctionText = functionHeadText + functionParamLines + trimmedBodyText + functionFootText;
+		const allFunctionText = functionHeadText + functionParamLines + quickfixText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
 		return codeAction;

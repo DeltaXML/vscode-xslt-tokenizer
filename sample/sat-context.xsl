@@ -11,7 +11,10 @@
             <xsl:variable name="var0" as="xs:string" select="@dev:new"/>
             <xsl:variable name="var1" as="xs:string" select="@dev:new"/>
             <xsl:variable name="var2" as="xs:string" select="'a', $var0, $var1"/>
+            <xsl:apply-templates/>
             <xsl:variable name="var3" as="xs:string" select="
+                //*,
+                base-uri(),
                 text(),
                 last(), 
                 position()"/>
