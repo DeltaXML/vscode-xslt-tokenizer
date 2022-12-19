@@ -36,17 +36,4 @@
         </xsl:value-of>
     </xsl:template>
     
-    <xsl:function name="dx:extractFunction">
-        <xsl:param name="c.x" as="item()*"/>
-        ,		<xsl:param name="c.p" as="xs:integer"/>
-        ,		<xsl:param name="depth" as="item()*"/>
-        <xsl:if test="$c.p gt 1">
-            <xsl:text>, </xsl:text>
-            <xsl:value-of select="$depth"/>
-        </xsl:if>
-        <xsl:apply-templates select="snapshot($c.x/@key)" mode="key-attribute"/>
-        <xsl:text> : </xsl:text>
-        <xsl:apply-templates select="$c.x/." mode="#current"/>
-    </xsl:function>
-    
 </xsl:stylesheet> 

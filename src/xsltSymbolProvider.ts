@@ -285,12 +285,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static symbolForXMLElement(selectionType: SelectionType, position: vscode.Position) {
+	public static symbolForXMLElement(selectionType: SelectionType, position: vscode.Position, expandText?: string[]) {
 		if (vscode.window.activeTextEditor) {
 			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
 			const path: string[] = [];
 			const selection = new vscode.Selection(position, position);
-			const result = this.getChildSymbolForSelection(selection, rootSymbol, path, selectionType, null, null, null);
+			const result = this.getChildSymbolForSelection(selection, rootSymbol, path, selectionType, null, null, null, expandText);
             return result;
 		}
 	}
@@ -305,19 +305,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static getXPathFromSelection() {
+	public static getXPathFromSelection(expandText?: string[]) {
 		const editor = vscode.window.activeTextEditor;
 		if (editor) {
 			const selection = editor.selection;
 			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
 			const newPath = ['/' + rootSymbol.name.split(' ')[0]];
-			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath, SelectionType.Current, null, null, null);
+			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath, SelectionType.Current, null, null, null, expandText);
 			const fullPath = newPath.join('');
 			return fullPath;
 		}
 	}
 
-	private static getChildSymbolForSelection(selection: vscode.Selection, symbol: vscode.DocumentSymbol, path: string[], selectionType: SelectionType, parentSymbol: possDocumentSymbol, precedingSymbol: possDocumentSymbol, nextSymbol: possDocumentSymbol): possDocumentSymbol {
+	private static getChildSymbolForSelection(selection: vscode.Selection, symbol: vscode.DocumentSymbol, path: string[], selectionType: SelectionType, parentSymbol: possDocumentSymbol, precedingSymbol: possDocumentSymbol, nextSymbol: possDocumentSymbol, expandText?: string[]): possDocumentSymbol {
 		const selectionPos = new vscode.Position(selection.start.line, selection.start.character + 1);
 		const result = symbol.children.find((sym) => sym.range.contains(selectionPos));
 
@@ -347,6 +347,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				}
 			}
 			const isAttributesSymbol = symbol.kind === vscode.SymbolKind.Array && symbol.name === 'attributes';
+			if (!isAttributesSymbol && expandText) {
+				const attributes = symbol.children.find((attr) => attr.kind === vscode.SymbolKind.Array);
+				if (attributes) {
+					const expandTextAttr = attributes.children.find((attr) => attr.name === 'expand-text' || attr.name === 'xsl:expand-text');
+					if (expandTextAttr && expandTextAttr.detail) {
+						expandText.push(expandTextAttr.detail);
+					}
+				}
+			}
 			if (isAttributesSymbol) {
 				path.push('/@' + resultName);
 			} else if (!(result.kind === vscode.SymbolKind.Array && result.name === 'attributes')) {
@@ -355,7 +364,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			if (isAttributesSymbol && selectionType === SelectionType.Parent) {
 				return parentSymbol;
 			} else {
-				return this.getChildSymbolForSelection(selection, result, path, selectionType, symbol, precedingSibling, nextSibling);
+				return this.getChildSymbolForSelection(selection, result, path, selectionType, symbol, precedingSibling, nextSibling, expandText);
 			}
 		} else if (selectionType === SelectionType.Parent) {
 			return parentSymbol;

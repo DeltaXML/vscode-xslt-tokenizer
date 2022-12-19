@@ -40,6 +40,7 @@ interface ActionProps {
 	range: vscode.Range;
 	firstSymbol: anyDocumentSymbol;
 	lastSymbol: anyDocumentSymbol;
+	expandTextVal: string|undefined;
 }
 type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 
@@ -98,7 +99,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	async resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): Promise<vscode.CodeAction> {
 		if (!this.actionProps) return codeAction;
 
-		const { document, range, firstSymbol, lastSymbol } = this.actionProps;
+		const { document, range, firstSymbol, lastSymbol} = this.actionProps;
 		const usedLastSymbol = lastSymbol ? lastSymbol : firstSymbol;
 
 		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol);
@@ -144,8 +145,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const startPosition = range.start;
 		const startLine = document.lineAt(startPosition.line).text;
 		const startTagIndex = startLine.indexOf('<', startPosition.character);
+		const expandText: string[] = [];
 		if (startTagIndex < 0 && !range.isEmpty) {
-			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start);
+			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, expandText);
 			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
 			const rangeInsideAttributeFirstSymbol = firstSymbol && firstSymbol.range.contains(range);
 			if (firstSymbol && lastSymbol && rangeInsideAttributeFirstSymbol) {
@@ -176,7 +178,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const endLine = document.lineAt(endPosition.line).text;
 			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
 			if (endTagIndex > -1) {
-				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }));
+				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }), expandText);
 				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }));
 				const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);
 				const lastSymbolInsideRange = lastSymbol && range.contains(lastSymbol.range);
@@ -195,8 +197,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			}
 		}
 
+		const expandTextVal: string|undefined = expandText[expandText.length - 1];
+
 		///const lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagPosition }))!;
-		this.actionProps = { document, range, firstSymbol, lastSymbol };
+		this.actionProps = { document, range, firstSymbol, lastSymbol, expandTextVal };
 
 		return { rangeTagType, firstTagName, lastTagName };
 	}
@@ -293,8 +297,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const sequenceInstructionStart = '<xsl:sequence select="';
 		let replacementStart = sequenceInstructionStart;
 		const replcementFnCall = 'dx:extractFunction(';
-
-		const functionHeadText = '\n\n\t<xsl:function name="dx:extractFunction">\n';
+        const expandTextString = this.actionProps?.expandTextVal? ' expand-text=' + this.actionProps.expandTextVal : '';
+		const functionHeadText = '\n\n\t<xsl:function name="dx:extractFunction"' + expandTextString + ' as="item()*">\n';
 		let functionFootText = '\n\t</xsl:function>';
 		let finalSymbolVariableName: string | null = null;
 
