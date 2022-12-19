@@ -58,7 +58,8 @@ enum ExtractFunctionParams {
 export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	public static readonly providedCodeActionKinds = [
-		vscode.CodeActionKind.QuickFix
+		vscode.CodeActionKind.QuickFix,
+		vscode.CodeActionKind.Refactor
 	];
 
 	public static COMMAND_RENAME = 'editor.action.rename';
