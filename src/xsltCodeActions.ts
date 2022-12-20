@@ -40,7 +40,7 @@ interface ActionProps {
 	range: vscode.Range;
 	firstSymbol: anyDocumentSymbol;
 	lastSymbol: anyDocumentSymbol;
-	expandTextVal: string|undefined;
+	expandTextVal: string | undefined;
 }
 type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 
@@ -100,7 +100,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	async resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): Promise<vscode.CodeAction> {
 		if (!this.actionProps) return codeAction;
 
-		const { document, range, firstSymbol, lastSymbol} = this.actionProps;
+		const { document, range, firstSymbol, lastSymbol } = this.actionProps;
 		const usedLastSymbol = lastSymbol ? lastSymbol : firstSymbol;
 
 		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol);
@@ -184,21 +184,37 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);
 				const lastSymbolInsideRange = lastSymbol && range.contains(lastSymbol.range);
 				if (firstSymbol && lastSymbol && firstSymbolInsideRange && lastSymbolInsideRange) {
-					firstTagName = firstSymbol.name;
-					if (firstSymbol.range.isEqual(lastSymbol.range)) {
-						lastSymbol = null;
-						rangeTagType = RangeTagType.singleElement;
-					} else {
-						if (lastSymbol.range.end.isAfter(firstSymbol.range.end)) {
-							rangeTagType = RangeTagType.multipleElement;
-							lastTagName = lastSymbol.name;
+					const isSameSymbol = firstSymbol.range.isEqual(lastSymbol.range);
+					const parentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, firstSymbol.range.start);
+					let allRangeElementsOK = true;
+					if (parentSymbol && !isSameSymbol) {
+						for (const sibling of parentSymbol.children) {
+							if (sibling.kind !== vscode.SymbolKind.Array && sibling.range.end.isAfterOrEqual(firstSymbol.range.start) && sibling.range.start.isBeforeOrEqual(lastSymbol.range.end)) {
+								if ((sibling.range.start.isAfterOrEqual(firstSymbol.range.start) && sibling.range.end.isAfter(lastSymbol.range.end)) ||
+									(sibling.range.end.isBeforeOrEqual(lastSymbol.range.end) && sibling.range.start.isBefore(firstSymbol.range.start))) {
+									allRangeElementsOK = false;
+									break;
+								}
+							}
+						}
+					}
+					if (allRangeElementsOK) {
+						firstTagName = firstSymbol.name;
+						if (firstSymbol.range.isEqual(lastSymbol.range)) {
+							lastSymbol = null;
+							rangeTagType = RangeTagType.singleElement;
+						} else {
+							if (lastSymbol.range.end.isAfter(firstSymbol.range.end)) {
+								rangeTagType = RangeTagType.multipleElement;
+								lastTagName = lastSymbol.name;
+							}
 						}
 					}
 				}
 			}
 		}
 
-		const expandTextVal: string|undefined = expandText[expandText.length - 1];
+		const expandTextVal: string | undefined = expandText[expandText.length - 1];
 
 		///const lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagPosition }))!;
 		this.actionProps = { document, range, firstSymbol, lastSymbol, expandTextVal };
@@ -298,7 +314,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const sequenceInstructionStart = '<xsl:sequence select="';
 		let replacementStart = sequenceInstructionStart;
 		const replcementFnCall = 'dx:extractFunction(';
-        const expandTextString = this.actionProps?.expandTextVal? ' expand-text=' + this.actionProps.expandTextVal : '';
+		const expandTextString = this.actionProps?.expandTextVal ? ' expand-text=' + this.actionProps.expandTextVal : '';
 		const functionHeadText = '\n\n\t<xsl:function name="dx:extractFunction"' + expandTextString + ' as="item()*">\n';
 		let functionFootText = '\n\t</xsl:function>';
 		let finalSymbolVariableName: string | null = null;
@@ -364,7 +380,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						if (rangeLine === absLine && currentDiagnostic.code) {
 							const lineRangeText = currentLine.substring(rangeStart, rangeEnd);
 							const errCode = <DiagnosticCode>currentDiagnostic.code;
-                            let substitution: undefined|string;
+							let substitution: undefined | string;
 							switch (errCode) {
 								case DiagnosticCode.noContextItem:
 									substitution = '$' + ExtractFunctionParams.context + '/';
@@ -387,17 +403,17 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 									currentLine = currentLine.substring(0, rangeEnd) + substitution + currentLine.substring(rangeEnd);
 									break;
 								case DiagnosticCode.lastWithNoContextItem:
-									substitution = substitution? substitution : ExtractFunctionParams.last;
+									substitution = substitution ? substitution : ExtractFunctionParams.last;
 								case DiagnosticCode.positionWithNoContextItem:
 									// replace with $var reference
-									substitution = substitution? substitution : ExtractFunctionParams.position;
+									substitution = substitution ? substitution : ExtractFunctionParams.position;
 									const pEnd = currentLine.indexOf(')', rangeEnd);
 									if (pEnd > -1) {
 										currentLine = currentLine.substring(0, rangeStart) + '$' + substitution + currentLine.substring(pEnd + 1);
 									}
 									break;
 							}
-						} else { 
+						} else {
 							// rangeLine > line so keep going to previous diagnostic rangeLine
 						}
 						currentDiagnosticPos--;
@@ -480,7 +496,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				}
 			}
 		});
-        // put special params before params needed for variables - unshift:
+		// put special params before params needed for variables - unshift:
 		if (hasLastParam) {
 			requiredArgNames.unshift('last()');
 			requiredParamNames.unshift(ExtractFunctionParams.last);
