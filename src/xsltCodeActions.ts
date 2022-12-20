@@ -155,7 +155,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				if (firstSymbol.range.isEqual(lastSymbol.range)) {
 					if ((firstSymbol.kind === vscode.SymbolKind.Event)) {
 						const fullText = document.getText(firstSymbol.range);
-						const qPos = Math.min(fullText.indexOf('\''), fullText.indexOf('"'));
+						const sqPos = fullText.indexOf('\'');
+						const dqPos = fullText.indexOf('"');
+						const bothSingleAndDouble = sqPos > -1 && dqPos > -1;
+						const qPos = bothSingleAndDouble ? Math.min(sqPos, dqPos) : Math.max(sqPos, dqPos);
 						const startCharOfAttrValue = document.offsetAt(firstSymbol.range.start) + qPos + 1;
 						const startCharOfSelection = document.offsetAt(range.start);
 						if (startCharOfSelection >= startCharOfAttrValue) {
