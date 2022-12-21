@@ -96,6 +96,7 @@ export enum ValidationType {
 export enum DiagnosticCode {
 	none,
 	unresolvedVariableRef,
+	unresolvedGenericRef,
 	fnWithNoContextItem,
 	positionWithNoContextItem,
 	lastWithNoContextItem,
@@ -2646,18 +2647,23 @@ export class XsltTokenDiagnostics {
 					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
 					break;
 				case ErrorType.XSLTFunctionNamePrefix:
+					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: missing namespace prefox in xsl:function name '${tokenValue}'`;
 					break;
 				case ErrorType.AttributeSetUnresolved:
+					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:attribute-set with name '${tokenValue}' not found`;
 					break;
 				case ErrorType.MissingPrefixInList:
+					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: Namespace prefix '${tokenValue}' is not declared`;
 					break;
 				case ErrorType.XSLTKeyUnresolved:
+					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;
 					break;
 				case ErrorType.AccumulatorNameUnresolved:
+					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:accumulator with name '${tokenValue}' not found`;
 					break;
 				case ErrorType.TemplateModeUnresolved:
@@ -2728,6 +2734,7 @@ export class XsltTokenDiagnostics {
 					msg = `String literal not terminated properly: ${tokenValue}`;
 					break;
 				case ErrorType.XPathFunction:
+					errCode = DiagnosticCode.unresolvedGenericRef;
 					let parts = tokenValue.split('#');
 					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
 					break;
@@ -2735,6 +2742,7 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: Invalid type: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathFunctionNamespace:
+					errCode = DiagnosticCode.unresolvedGenericRef;
 					let partsNs = tokenValue.split('#');
 					msg = `XPath: Undeclared prefix in function: '${partsNs[0]}'`;
 					break;
@@ -2743,6 +2751,7 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: '${tokenValue}' is invalid here, expected  '${expected}'`;
 					break;
 				case ErrorType.XPathPrefix:
+					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XPath: Undeclared prefix in name: '${tokenValue}'`;
 					break;
 				case ErrorType.XMLAttNameSyntax:

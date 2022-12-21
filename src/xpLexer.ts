@@ -916,11 +916,11 @@ export class XPathLexer {
                         break;
                     case CharLevelState.dSep:
                         if (currentToken.value === '::') {
-                            const prevIsLookup = prevToken.tokenType !== TokenLevelState.mapNameLookup;
-                            if (!prevIsLookup && Data.axes.indexOf(prevToken.value) < 0) {
-                                prevToken['error'] = ErrorType.AxisName;
-                            }
-                            if (prevIsLookup) {
+                            const prevIsLookup = prevToken.tokenType === TokenLevelState.mapNameLookup;
+                            if (!prevIsLookup) {
+                                if (Data.axes.indexOf(prevToken.value) < 0) {
+                                    prevToken['error'] = ErrorType.AxisName;
+                                }
                                 prevToken.tokenType = TokenLevelState.axisName;
                             }
                         } else if (currentToken.value === '()') {

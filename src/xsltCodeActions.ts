@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
+import { XPathSemanticTokensProvider } from './extension';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
@@ -65,6 +66,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	public static COMMAND_RENAME = 'editor.action.rename';
 	public static COMMAND = 'code-actions-sample.command';
 	private actionProps: ActionProps | null = null;
+	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
 		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
@@ -162,9 +164,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						const startCharOfAttrValue = document.offsetAt(firstSymbol.range.start) + qPos + 1;
 						const startCharOfSelection = document.offsetAt(range.start);
 						if (startCharOfSelection >= startCharOfAttrValue) {
-							firstTagName = firstSymbol.name;
-							lastSymbol = null;
-							rangeTagType = RangeTagType.xpathAttribute;
+							const xpathText = document.getText(range);
+							const diagnostics = this.xpathTokenProvider.provideXPathProblems(new CodeActionDocument(document.uri, xpathText));
+							const blockingIssue = diagnostics.find((item) => item.code !== DiagnosticCode.unresolvedGenericRef && item.code !== DiagnosticCode.unresolvedGenericRef);
+							if (!blockingIssue) {
+								firstTagName = firstSymbol.name;
+								lastSymbol = null;
+								rangeTagType = RangeTagType.xpathAttribute;
+							}
 						}
 					} else if (firstSymbol.kind === vscode.SymbolKind.Field) {
 						// TODO: refactor normal attribute - why?

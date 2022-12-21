@@ -280,8 +280,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 export class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 	private xpLexer = new XPathLexer();
-	private collection: vscode.DiagnosticCollection;
-	public constructor(collection: vscode.DiagnosticCollection) {
+	private collection: vscode.DiagnosticCollection|undefined;
+	public constructor(collection?: vscode.DiagnosticCollection) {
 		this.collection = collection;
 	}
 
@@ -313,6 +313,13 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 		XPathSemanticTokensProvider.globalInstructionData = data;
 	};
 
+	public provideXPathProblems(document: vscode.TextDocument) {
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		this.xpLexer.documentTokens = [];
+		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition);
+		return XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, [], [], []);
+	}
+
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		this.xpLexer.documentTokens = [];
@@ -326,12 +333,14 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 	}
 
 	private reportProblems(allTokens: Token[], document: vscode.TextDocument) {
-		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, XPathSemanticTokensProvider.globalInstructionData, []);
-		if (diagnostics.length > 0) {
-			this.collection.set(document.uri, diagnostics);
-		} else {
-			this.collection.clear();
-		};
+		if (this.collection) {
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, XPathSemanticTokensProvider.globalInstructionData, []);
+			if (diagnostics.length > 0) {
+				this.collection.set(document.uri, diagnostics);
+			} else {
+				this.collection.clear();
+			};
+		}
 	}
 }
 
