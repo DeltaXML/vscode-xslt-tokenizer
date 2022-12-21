@@ -25,7 +25,9 @@
     
     <xsl:template match="fn:map" mode="indent" expand-text="yes">
         <xsl:value-of>
-            <xsl:variable name="depth" select="count(ancestor::*) + 1"/>
+            <xsl:variable name="depth" select="
+                count(ancestor::*) + 1,
+                count(ancestor::*) + 2"/>
             <xsl:for-each select="*">
                 <xsl:if test="position() gt 1">
                     <xsl:text>{$depth} of {last()} on {name()}</xsl:text>
