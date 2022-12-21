@@ -104,6 +104,7 @@ export enum ModifierState {
 
 export class Data {
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%'];
+    public static estimatorSeparators = Data.separators.concat(['(',')','[',']','{', '}','\'', '"']);
 
     public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||', '!!', '??'];
     public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!', '*', '+', ',', '-', '.', '?', '['];

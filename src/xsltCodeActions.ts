@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
 import { XPathSemanticTokensProvider } from './extension';
+import { Data, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
@@ -166,11 +167,23 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						if (startCharOfSelection >= startCharOfAttrValue) {
 							const xpathText = document.getText(range);
 							const diagnostics = this.xpathTokenProvider.provideXPathProblems(new CodeActionDocument(document.uri, xpathText));
-							const blockingIssue = diagnostics.find((item) => item.code !== DiagnosticCode.unresolvedGenericRef && item.code !== DiagnosticCode.unresolvedGenericRef);
+							const blockingIssue = diagnostics.find((item) => item.code !== DiagnosticCode.unresolvedGenericRef && item.code !== DiagnosticCode.unresolvedVariableRef);
 							if (!blockingIssue) {
-								firstTagName = firstSymbol.name;
-								lastSymbol = null;
-								rangeTagType = RangeTagType.xpathAttribute;
+								let pass = xpathText.length > 30;
+								if (!pass) {
+									// we need an expression other than just a name or whitespace
+									for (let i = 0; i < xpathText.length; i++) {
+										if (Data.estimatorSeparators.indexOf(xpathText.charAt(i)) > -1) {
+											pass = true;
+											break;
+										}
+									}
+								}
+								if (pass) {
+									firstTagName = firstSymbol.name;
+									lastSymbol = null;
+									rangeTagType = RangeTagType.xpathAttribute;
+								}
 							}
 						}
 					} else if (firstSymbol.kind === vscode.SymbolKind.Field) {
