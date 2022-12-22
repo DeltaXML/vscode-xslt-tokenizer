@@ -381,11 +381,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
-		const finalTrimmedBodyTextLines = trimmedBodyText.split('\n');
 		let fixedTrimmedBodyTextLines: string[] = [];
+		let finalCorrectText:string;
 		if (quickfixDiagnostics.length === 0) {
-			fixedTrimmedBodyTextLines = finalTrimmedBodyTextLines;
+			finalCorrectText = trimmedBodyText;
 		} else {
+			const finalTrimmedBodyTextLines = trimmedBodyText.split('\n');
 			const firstInsertionLine = targetRange.end.line + 3;
 			let currentDiagnosticPos = quickfixDiagnostics.length - 1;
 			for (let line = finalTrimmedBodyTextLines.length - 1; line > -1; line--) {
@@ -444,9 +445,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				}
 				fixedTrimmedBodyTextLines.push(currentLine);
 			}
+			finalCorrectText = fixedTrimmedBodyTextLines.reverse().join('\n');
 		}
-
-		const quickfixText = fixedTrimmedBodyTextLines.reverse().join('\n');
 
 		const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 		let replacementAll = '';
@@ -469,7 +469,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			return `\t\t<xsl:param name="${argName}" as="${argType}"/>\n`;
 		});
 
-		const allFunctionText = functionHeadText + functionParamLines.join('') + quickfixText + functionFootText;
+		const allFunctionText = functionHeadText + functionParamLines.join('') + finalCorrectText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
 		return codeAction;

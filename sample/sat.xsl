@@ -7,7 +7,9 @@
     <xsl:template match="/" mode="#default">   
         <xsl:for-each select="*">
             <xsl:variable name="var1" as="xs:string" select="'a'"/>
-            <xsl:variable name="var2" as="xs:string" select="'a', $var1"/>
+            <xsl:variable name="var2" as="xs:string" select="
+                'a', 
+                $var1"/>
             <xsl:variable name="var3" as="xs:string" select="'a', $var2"/>
             <xsl:variable name="abc" as="xs:string" select="$var1, $var2, $var3"/>
             <xsl:variable name="abc2" as="xs:string" select="
@@ -33,7 +35,7 @@
         </xsl:for-each>    
         <xsl:sequence select="fn:get-unit-declarations()"/>
         <xsl:sequence select="fn:get-unit-declarations2('abc')"/>
-    </xsl:template>    
+    </xsl:template> 
     
     <xsl:function name="fn:get-unit-declarations" as="">
         <xsl:sequence select="'a'"/>
