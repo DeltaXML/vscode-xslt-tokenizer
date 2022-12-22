@@ -421,15 +421,20 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 										currentLine = currentLine.substring(0, fnEnd) + '$' + substitution + currentLine.substring(fnEnd);
 									}
 									break;
+								case DiagnosticCode.rootOnlyWithNoContextItem:
+									// replace
+									substitution = `root($${ExtractFunctionParams.context})`;
+									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
+									break;
 								case DiagnosticCode.instrWithNoContextItem:
-									// add select
-									substitution = ` select="$${ExtractFunctionParams.context}"`;
+									// append select="..."
+									substitution = substitution ? substitution : ` select="$${ExtractFunctionParams.context}"`;
 									currentLine = currentLine.substring(0, rangeEnd) + substitution + currentLine.substring(rangeEnd);
 									break;
 								case DiagnosticCode.lastWithNoContextItem:
 									substitution = substitution ? substitution : ExtractFunctionParams.last;
 								case DiagnosticCode.positionWithNoContextItem:
-									// replace with $var reference
+									// replace with $var reference or root($context)
 									substitution = substitution ? substitution : ExtractFunctionParams.position;
 									const pEnd = currentLine.indexOf(')', rangeEnd);
 									if (pEnd > -1) {
@@ -505,6 +510,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					case DiagnosticCode.fnWithNoContextItem:
 					case DiagnosticCode.noContextItem:
 					case DiagnosticCode.rootWithNoContextItem:
+					case DiagnosticCode.rootOnlyWithNoContextItem:
 						quickfixDiagnostics.push(diagnostic);
 						hasContextParam = true;
 						break;

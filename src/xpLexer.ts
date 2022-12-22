@@ -1273,7 +1273,8 @@ export enum ErrorType {
     MissingContextItemForLast,
     MissingContextItemForInstr,
     MissingContextItemGeneral,
-    MissingContextItemForRoot
+    MissingContextItemForRoot,
+    MissingContextItemForRootOnly,
 }
 
 export interface BaseToken {

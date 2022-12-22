@@ -101,6 +101,7 @@ export enum DiagnosticCode {
 	positionWithNoContextItem,
 	lastWithNoContextItem,
 	rootWithNoContextItem,
+	rootOnlyWithNoContextItem,
 	instrWithNoContextItem,
 	noContextItem
 }
@@ -1120,7 +1121,15 @@ export class XsltTokenDiagnostics {
 						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 							if (isRootSelector) {
 								if (!XsltTokenDiagnostics.providesContext(prevToken)) {
-									token.error = ErrorType.MissingContextItemForRoot;
+									let isRootOnly = true;
+									if (index < allTokens.length - 2) {
+										const nt = allTokens[index + 1];
+										const ntt = <TokenLevelState>nt.tokenType;
+										const ntv = nt.value;
+										isRootOnly = !(ntt === TokenLevelState.nodeNameTest || ntt === TokenLevelState.anonymousFunction || ntt === TokenLevelState.axisName ||
+											 ntt === TokenLevelState.function || ntt === TokenLevelState.variable || ntv === '*' || ntv === '()' || ntv === '(' || ntv === '=>');
+									}
+									token.error = isRootOnly? ErrorType.MissingContextItemForRootOnly : ErrorType.MissingContextItemForRoot;
 									problemTokens.push(token);
 								}
 							} else {
@@ -2716,6 +2725,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingContextItemForRoot:
 					errCode = DiagnosticCode.rootWithNoContextItem;
 					msg = `XPath: Context-item is missing for root: '${tokenValue}'`;
+					break;
+				case ErrorType.MissingContextItemForRootOnly:
+					errCode = DiagnosticCode.rootOnlyWithNoContextItem;
+					msg = `XPath: Context-item is missing for root selector: '${tokenValue}'`;
 					break;
 				case ErrorType.MissingContextItemForInstr:
 					errCode = DiagnosticCode.instrWithNoContextItem;

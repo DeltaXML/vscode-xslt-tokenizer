@@ -10,7 +10,8 @@
         <xsl:for-each select="*">
             <xsl:variable name="var0" as="xs:string" select="@dev:new"/>
             <xsl:variable name="var1" as="xs:string" select="@dev:new"/>
-            <xsl:variable name="var2" as="xs:string" select="'a', $var0, $var1"/>
+            <xsl:variable name="var2" as="xs:string" select="/, /new, 'a', $var0, $var1"/>
+            <xsl:variable name="var8" as="xs:string" select="/"/>
             <xsl:apply-templates mode="a2"/>
             <xsl:variable name="var3" as="xs:string" select="
                 //*,
@@ -22,6 +23,10 @@
             <xsl:sequence select="$abc"/>
         </xsl:for-each>    
     </xsl:template>
+    
+    <!-- <xsl:function name="fn:test" as="">
+         <xsl:sequence select="/, /next"/>
+         </xsl:function> -->
     
     <xsl:template match="fn:map" mode="indent" expand-text="yes">
         <xsl:value-of>
