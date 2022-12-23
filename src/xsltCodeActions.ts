@@ -48,7 +48,7 @@ type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 
 enum XsltCodeActionKind {
 	extractXsltFunction = 'Extract instructions to xsl:function',
-	extractXsltTeample = 'Extract instructions to xsl:template',
+	extractXsltTemplate = 'Extract instructions to xsl:template',
 	extractXsltFunctionFmXPath = 'Extract expression to xsl:function',
 }
 
@@ -86,7 +86,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			case RangeTagType.singleElement:
 			case RangeTagType.multipleElement:
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunction, vscode.CodeActionKind.RefactorExtract));
-				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltTeample, vscode.CodeActionKind.RefactorExtract));
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltTemplate, vscode.CodeActionKind.RefactorExtract));
 				break;
 			default:
 				codeActions = undefined;
@@ -117,6 +117,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		switch (codeAction.title) {
 			case XsltCodeActionKind.extractXsltFunction:
+			case XsltCodeActionKind.extractXsltTemplate:
 				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, true);
 				break;
 			case XsltCodeActionKind.extractXsltFunctionFmXPath:
@@ -325,6 +326,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	}
 
 	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: anyDocumentSymbol, elementSelected: boolean): vscode.CodeAction {
+		const forXSLTemplate = codeAction.title === XsltCodeActionKind.extractXsltTemplate;
 		let fullRange = sourceRange;
 		let fullRangeWithoutLeadingWS = sourceRange;
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
@@ -340,8 +342,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let replacementStart = sequenceInstructionStart;
 		const replcementFnCall = 'dx:extractFunction(';
 		const expandTextString = this.actionProps?.expandTextVal ? ' expand-text=' + this.actionProps.expandTextVal : '';
-		const functionHeadText = '\n\n\t<xsl:function name="dx:extractFunction"' + expandTextString + ' as="item()*">\n';
-		let functionFootText = '\n\t</xsl:function>';
+		const instrName = forXSLTemplate ? 'template' : 'function';
+		const callName = forXSLTemplate ? 'extractTemplate' : 'dx:extractFunction';
+		const functionHeadText = `\n\n\t<xsl:${instrName} name="${callName}"${expandTextString} as="item()*">\n`;
+		const functionFootText = `\n\t</xsl:${instrName}>`;
 		let finalSymbolVariableName: string | null = null;
 
 		let trimmedBodyText = '';
