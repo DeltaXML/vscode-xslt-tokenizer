@@ -49,7 +49,7 @@ type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 enum XsltCodeActionKind {
 	extractXsltFunction = 'xsl:function - from XSLT instruction(s)',
 	extractXsltTemplate = 'xsl:template - from XSLT instructions(s)',
-	extractXsltFunctionFmXPath = 'xsl:function extraction - from XPath expression',
+	extractXsltFunctionFmXPath = 'xsl:function - from XPath expression',
 }
 
 enum ExtractFunctionParams {
@@ -76,7 +76,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
 		let codeActions: vscode.CodeAction[] | undefined = [];
 		// debug only:
-		codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
+		//codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
 
 		switch (roughSelectionType) {
 
