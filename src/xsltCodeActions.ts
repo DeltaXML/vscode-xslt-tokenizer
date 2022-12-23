@@ -48,6 +48,7 @@ type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 
 enum XsltCodeActionKind {
 	extractXsltFunction = 'Extract instructions to xsl:function',
+	extractXsltTeample = 'Extract instructions to xsl:template',
 	extractXsltFunctionFmXPath = 'Extract expression to xsl:function',
 }
 
@@ -85,6 +86,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			case RangeTagType.singleElement:
 			case RangeTagType.multipleElement:
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunction, vscode.CodeActionKind.RefactorExtract));
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltTeample, vscode.CodeActionKind.RefactorExtract));
 				break;
 			default:
 				codeActions = undefined;
@@ -386,77 +388,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (quickfixDiagnostics.length === 0) {
 			finalCorrectText = trimmedBodyText;
 		} else {
-			const finalTrimmedBodyTextLines = trimmedBodyText.split('\n');
-			const firstInsertionLine = targetRange.end.line + 3;
-			let currentDiagnosticPos = quickfixDiagnostics.length - 1;
-			for (let line = finalTrimmedBodyTextLines.length - 1; line > -1; line--) {
-				const absLine = firstInsertionLine + line;
-				let currentLine = finalTrimmedBodyTextLines[line];
-				while (currentDiagnosticPos > -1) {
-					let currentDiagnostic = quickfixDiagnostics[currentDiagnosticPos];
-					const rangeStart = currentDiagnostic.range.start.character;
-					const rangeEnd = currentDiagnostic.range.end.character;
-					const rangeLine = currentDiagnostic.range.start.line;
-					if (rangeLine < absLine) {
-						// dont goto previous diagnostic rangeLine we need to go back to the previous line
-						break;
-					} else {
-						if (rangeLine === absLine && currentDiagnostic.code) {
-							const errCode = <DiagnosticCode>currentDiagnostic.code;
-							let substitution: undefined | string;
-							switch (errCode) {
-								case DiagnosticCode.noContextItem:
-									const lineRangeText = currentLine.substring(rangeStart, rangeEnd);
-									substitution = '$' + ExtractFunctionParams.context;
-									if (lineRangeText === '.') {
-										currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
-									} else {
-										substitution += '/';
-										currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
-									}
-									break;
-								case DiagnosticCode.rootWithNoContextItem:
-									// insert '$__c' before /
-									substitution = `root($${ExtractFunctionParams.context})`;
-									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
-									break;
-								case DiagnosticCode.fnWithNoContextItem:
-									// add context argument
-									substitution = ExtractFunctionParams.context;
-									const fnEnd = currentLine.indexOf(')', rangeEnd);
-									if (fnEnd > -1) {
-										currentLine = currentLine.substring(0, fnEnd) + '$' + substitution + currentLine.substring(fnEnd);
-									}
-									break;
-								case DiagnosticCode.rootOnlyWithNoContextItem:
-									// replace
-									substitution = `root($${ExtractFunctionParams.context})`;
-									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
-									break;
-								case DiagnosticCode.instrWithNoContextItem:
-									// append select="..."
-									substitution = substitution ? substitution : ` select="$${ExtractFunctionParams.context}"`;
-									currentLine = currentLine.substring(0, rangeEnd) + substitution + currentLine.substring(rangeEnd);
-									break;
-								case DiagnosticCode.lastWithNoContextItem:
-									substitution = substitution ? substitution : ExtractFunctionParams.last;
-								case DiagnosticCode.positionWithNoContextItem:
-									// replace with $var reference or root($context)
-									substitution = substitution ? substitution : ExtractFunctionParams.position;
-									const pEnd = currentLine.indexOf(')', rangeEnd);
-									if (pEnd > -1) {
-										currentLine = currentLine.substring(0, rangeStart) + '$' + substitution + currentLine.substring(pEnd + 1);
-									}
-									break;
-							}
-						} else {
-							// rangeLine > line so keep going to previous diagnostic rangeLine
-						}
-						currentDiagnosticPos--;
-					}
-				}
-				fixedTrimmedBodyTextLines.push(currentLine);
-			}
+			this.fixFunctionBodyProblems(trimmedBodyText, targetRange, quickfixDiagnostics, fixedTrimmedBodyTextLines);
 			finalCorrectText = fixedTrimmedBodyTextLines.reverse().join('\n');
 		}
 
@@ -485,6 +417,80 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
 		return codeAction;
+	}
+
+	private fixFunctionBodyProblems(trimmedBodyText: string, targetRange: vscode.Range, quickfixDiagnostics: vscode.Diagnostic[], fixedTrimmedBodyTextLines: string[]) {
+		const finalTrimmedBodyTextLines = trimmedBodyText.split('\n');
+		const firstInsertionLine = targetRange.end.line + 3;
+		let currentDiagnosticPos = quickfixDiagnostics.length - 1;
+		for (let line = finalTrimmedBodyTextLines.length - 1; line > -1; line--) {
+			const absLine = firstInsertionLine + line;
+			let currentLine = finalTrimmedBodyTextLines[line];
+			while (currentDiagnosticPos > -1) {
+				let currentDiagnostic = quickfixDiagnostics[currentDiagnosticPos];
+				const rangeStart = currentDiagnostic.range.start.character;
+				const rangeEnd = currentDiagnostic.range.end.character;
+				const rangeLine = currentDiagnostic.range.start.line;
+				if (rangeLine < absLine) {
+					// dont goto previous diagnostic rangeLine we need to go back to the previous line
+					break;
+				} else {
+					if (rangeLine === absLine && currentDiagnostic.code) {
+						const errCode = <DiagnosticCode>currentDiagnostic.code;
+						let substitution: undefined | string;
+						switch (errCode) {
+							case DiagnosticCode.noContextItem:
+								const lineRangeText = currentLine.substring(rangeStart, rangeEnd);
+								substitution = '$' + ExtractFunctionParams.context;
+								if (lineRangeText === '.') {
+									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
+								} else {
+									substitution += '/';
+									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
+								}
+								break;
+							case DiagnosticCode.rootWithNoContextItem:
+								// insert '$__c' before /
+								substitution = `root($${ExtractFunctionParams.context})`;
+								currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
+								break;
+							case DiagnosticCode.fnWithNoContextItem:
+								// add context argument
+								substitution = ExtractFunctionParams.context;
+								const fnEnd = currentLine.indexOf(')', rangeEnd);
+								if (fnEnd > -1) {
+									currentLine = currentLine.substring(0, fnEnd) + '$' + substitution + currentLine.substring(fnEnd);
+								}
+								break;
+							case DiagnosticCode.rootOnlyWithNoContextItem:
+								// replace
+								substitution = `root($${ExtractFunctionParams.context})`;
+								currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
+								break;
+							case DiagnosticCode.instrWithNoContextItem:
+								// append select="..."
+								substitution = substitution ? substitution : ` select="$${ExtractFunctionParams.context}"`;
+								currentLine = currentLine.substring(0, rangeEnd) + substitution + currentLine.substring(rangeEnd);
+								break;
+							case DiagnosticCode.lastWithNoContextItem:
+								substitution = substitution ? substitution : ExtractFunctionParams.last;
+							case DiagnosticCode.positionWithNoContextItem:
+								// replace with $var reference or root($context)
+								substitution = substitution ? substitution : ExtractFunctionParams.position;
+								const pEnd = currentLine.indexOf(')', rangeEnd);
+								if (pEnd > -1) {
+									currentLine = currentLine.substring(0, rangeStart) + '$' + substitution + currentLine.substring(pEnd + 1);
+								}
+								break;
+						}
+					} else {
+						// rangeLine > line so keep going to previous diagnostic rangeLine
+					}
+					currentDiagnosticPos--;
+				}
+			}
+			fixedTrimmedBodyTextLines.push(currentLine);
+		}
 	}
 
 	private findEvalContextErrors(document: vscode.TextDocument, lineCount: number, targetRange: vscode.Range, allFunctionText: string) {
