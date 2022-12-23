@@ -1139,9 +1139,6 @@ export class XsltTokenDiagnostics {
 								if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
 									hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
 								}
-								// if (!hasContext && tv === '*' && elementStack.length > 0) {
-
-								// }
 								if (!hasContext) {
 									token.error = ErrorType.MissingContextItemGeneral;
 								}
@@ -1295,6 +1292,8 @@ export class XsltTokenDiagnostics {
 											token['error'] = ErrorType.BracketNesting;
 											problemTokens.push(token);
 										} else {
+											const ptv = peekedStack.token.value;
+											peekedStack.hasContextItem = ptv === 'for' || ptv === 'every' || ptv === 'some';
 											peekedStack.token = token;
 										}
 									} else {

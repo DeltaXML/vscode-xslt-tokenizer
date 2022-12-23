@@ -1,10 +1,10 @@
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:fn="namespace-uri" version="3.0" xmlns:xs="http://www.w3.org/2001/XMLSchema">  
     
     <xsl:function name="fn:test">
-        <xsl:variable name="abcde" as="xs:string" select="function($a as map(*)) {}"/>   
+        <xsl:variable name="abcde" as="xs:string" select="for $a in (1) return ."/>   
     </xsl:function>
     
-    <xsl:variable name="tool" as="xs:string" select="map {$abcde: 23}"/>
+    <xsl:variable name="tool" as="xs:string" select="map {$abcde: 23}"/> 
     
     <xsl:template match="/" mode="#default">   
         <xsl:for-each select="*">
