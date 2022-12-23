@@ -1,0 +1,37 @@
+{
+	"xsl:if": {
+		"prefix": "xsl:if",
+		"body": [
+			"\t\t<xsl:if test=\"$1\">",
+			"$TM_SELECTED_TEXT",
+			"\t\t</xsl:if>",
+			"$0"
+		],
+		"description": "Surround with xsl:if"
+	},
+	"xsl:for-each": {
+		"prefix": "xsl:for-each",
+		"body": [
+			"\t\t<xsl:for-each select=\"$1\">",
+			"$TM_SELECTED_TEXT",
+			"\t\t</xsl:for-each>",
+			"$0"
+		],
+		"description": "Surround with xsl:for-each"
+	},
+	"xsl:choose": {
+		"prefix": "xsl:choose",
+		"body": [
+			"\t\t<xsl:choose>",
+			"\t\t\t<xsl:when test=\"$1\">",
+			"\t$TM_SELECTED_TEXT",
+			"\t\t\t</xsl:when>",
+			"\t\t\t<xsl:otherwise>",
+            "$2",
+			"\t\t\t</xsl:otherwise>",
+			"\t\t</xsl:choose>",
+            "$0"
+		],
+		"description": "Surround with xsl:choose"
+	}
+}

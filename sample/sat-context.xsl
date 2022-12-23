@@ -29,6 +29,7 @@
          </xsl:function> -->
     
     <xsl:template match="fn:map" mode="indent" expand-text="yes">
+        <xsl:sequence select="234"/>
         <xsl:value-of>
             <xsl:variable name="depth" select="
                 count(ancestor::*) + 1,

@@ -74,6 +74,12 @@
 				"key": "Shift+Cmd+6"
 			}
 		],
+		"snippets": [
+			{
+				"language": "xslt",
+				"path": "./xslt-public-snippets.json"
+			}
+		],
 		"commands": [
 			{
 				"command": "xslt-xpath.formatUnchecked",
