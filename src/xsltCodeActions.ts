@@ -47,9 +47,9 @@ interface ActionProps {
 type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 
 enum XsltCodeActionKind {
-	extractXsltFunction = 'Extract instructions to xsl:function',
-	extractXsltTemplate = 'Extract instructions to xsl:template',
-	extractXsltFunctionFmXPath = 'Extract expression to xsl:function',
+	extractXsltFunction = 'xsl:function extraction - from XSLT',
+	extractXsltTemplate = 'xsl:template extraction - from XSLT',
+	extractXsltFunctionFmXPath = 'xsl:function extraction - from XPath',
 }
 
 enum ExtractFunctionParams {
