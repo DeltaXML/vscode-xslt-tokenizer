@@ -32,6 +32,8 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Snippets**              | Set of snippets accessed via auto-completion
 | **Symbol Outline**        | Tree-view of XSLT instructions *- this can be shown in the 'Side Panel' or 'Side Bar'*
 | **Symbol Breadcrumbs**    | Shows location within the code hierarchy
+| **Extract xsl:function**  | Refactors selected XSLT instructions or XPath expression passing fn args as required
+| **Extract xsl:template**  | Refactors selected XSLT instructions passing xsl:params as required
 | **Rename Symbol**         | All in-scope usages of the symbol will be renamed - across all imported stylesheet modules 
 | **Goto Symbol**           | Quick access via filterable list of code symbols
 | **Goto Definition**       | For all symbol references like variables, parameters, functions, modes, accumulators etc.
@@ -80,7 +82,7 @@ For lexical analysis, this extension processes code character-by-character. This
 
 **Auto-completion** is provided for XSLT and XPath. This includes contex-aware completion items for all code symbol names. XSLT and XPATH function signatures and descriptions are shown in the description alongside function completion items. The last active non-XSLT file is used as the source to compute available node names for XPath location steps.
 
-This extension performs a comprehensive set of checks on the code, before any XSLT compilation. Thsese checks ensure that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows checking of references to symbol definitions regardless of the location of the definition.
+This extension's linter performs a comprehensive set of checks on the code. The linter ensures that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows checking of references to symbol definitions regardless of the location of the definition.
 
 # Running XSLT
 
@@ -156,6 +158,12 @@ If file paths are relative they are resolved from the first Visual Studio Code W
   }
 }
 ```
+
+## Refactoring
+A range of code refactoring features are supported, including **Rename Symbol** and **Extract Function**. 
+
+When XSLT code is refactored, instructions and expressions are revised when necessary to
+ensure the code behaviour remains unchanged. For example, the **Extract Function** refactor revises all expressions requiring the context-item so the code compiles and runs as before.
 
 ## Editor Settings for Highlighting in Color Theme Extensions
 
