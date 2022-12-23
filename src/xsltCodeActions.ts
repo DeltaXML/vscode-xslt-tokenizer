@@ -382,7 +382,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
 		let fixedTrimmedBodyTextLines: string[] = [];
-		let finalCorrectText:string;
+		let finalCorrectText: string;
 		if (quickfixDiagnostics.length === 0) {
 			finalCorrectText = trimmedBodyText;
 		} else {
@@ -402,15 +402,22 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						break;
 					} else {
 						if (rangeLine === absLine && currentDiagnostic.code) {
-							const lineRangeText = currentLine.substring(rangeStart, rangeEnd);
 							const errCode = <DiagnosticCode>currentDiagnostic.code;
 							let substitution: undefined | string;
 							switch (errCode) {
 								case DiagnosticCode.noContextItem:
-									substitution = '$' + ExtractFunctionParams.context + '/';
+									const lineRangeText = currentLine.substring(rangeStart, rangeEnd);
+									substitution = '$' + ExtractFunctionParams.context;
+									if (lineRangeText === '.') {
+										currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
+									} else {
+										substitution += '/';
+										currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
+									}
+									break;
 								case DiagnosticCode.rootWithNoContextItem:
-									// insert '$__c/' before
-									substitution = substitution ? substitution : `root($${ExtractFunctionParams.context})`;
+									// insert '$__c' before /
+									substitution = `root($${ExtractFunctionParams.context})`;
 									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
 									break;
 								case DiagnosticCode.fnWithNoContextItem:
