@@ -1139,6 +1139,9 @@ export class XsltTokenDiagnostics {
 								if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
 									hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
 								}
+								// if (!hasContext && tv === '*' && elementStack.length > 0) {
+
+								// }
 								if (!hasContext) {
 									token.error = ErrorType.MissingContextItemGeneral;
 								}
@@ -1571,6 +1574,7 @@ export class XsltTokenDiagnostics {
 								if (prevToken) {
 									if (isBrackets) {
 										hasContextItem = prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!');
+										if (!hasContextItem) hasContextItem = prevToken.tokenType === TokenLevelState.simpleType;
 										if (!hasContextItem && index > 2 && (prevToken.tokenType === TokenLevelState.function || prevToken.tokenType === TokenLevelState.variable)) {
 											const prevToken2 = allTokens[index - 2];
 											hasContextItem = prevToken2.charType === CharLevelState.sep && (prevToken2.value === '/' || prevToken2.value === '!');
@@ -1960,7 +1964,6 @@ export class XsltTokenDiagnostics {
 		} else {
 			foundContextBracketsOrPredicate = !!xpathStack.find((item) => item.hasContextItem === true);
 		}
-		//const foundContextBracketsOrPredicate = forCurrent? xpathStack.find((item) => item.hasContextItem === true) : xpathStack.find((item) => item.hasContextItem === true);
 		return foundContextBracketsOrPredicate;
 	}
 
