@@ -277,8 +277,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const selectAttributeSymbol = attributesSymbol.children.find((item) => item.name === 'select');
 			if (selectAttributeSymbol) {
 				const lines = (selectAttributeSymbol.range.end.line - selectAttributeSymbol.range.start.line) + 1;
-				const linesFromStart = selectAttributeSymbol.range.start.line - elementSymbol.range.start.line;
-				const linesToEnd = elementSymbol.range.end.line - selectAttributeSymbol.range.end.line;
 				return { text: document.getText(selectAttributeSymbol.range), lines, isSelect: true };
 			}
 		}
@@ -340,7 +338,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
 		const sequenceInstructionStart = '<xsl:sequence select="';
 		let replacementStart = sequenceInstructionStart;
-		const replcementFnCall = 'dx:extractFunction(';
 		const expandTextString = this.actionProps?.expandTextVal ? ' expand-text=' + this.actionProps.expandTextVal : '';
 		const instrName = forXSLTemplate ? 'template' : 'function';
 		const callName = forXSLTemplate ? 'extractTemplate' : 'dx:extractFunction';
@@ -399,6 +396,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 		let replacementAll = '';
 		let fnStartCharacter = -1;
+		const replcementFnCall = callName + '(';
 		if (elementSelected) {
 			fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
 			replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
