@@ -315,6 +315,7 @@ export class XsltTokenDiagnostics {
 		let tagIdentifierName: string = '';
 		let lastTokenIndex = allTokens.length - 1;
 		let tagAttributeNames: string[] = [];
+		let isGroupingAttribute = false;
 		let tagAttributeSymbols: vscode.DocumentSymbol[] = [];
 		let tagXmlnsNames: string[] = [];
 		let rootXmlnsBindings: [string, string][] = [];
@@ -578,6 +579,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSt:
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
+								isGroupingAttribute = false;
 								// start-tag ended, we're now within the new element scope:
 								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
@@ -851,6 +853,7 @@ export class XsltTokenDiagnostics {
 									problemTokens.push(token);
 								}
 								tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token, attNameText));
+								isGroupingAttribute = attNameText === 'group-by' || attNameText === 'group-adjacent' || attNameText === 'group-starting-with' || attNameText === 'group-ending-with';
 								tagAttributeNames.push(attNameText);
 							}
 						}
@@ -1114,7 +1117,7 @@ export class XsltTokenDiagnostics {
 						}
 					}
 				}
-				if (insideGlobalFunction) {
+				if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
 					if (prevToken && (isRootSelector || xpathTokenType === TokenLevelState.nodeNameTest || xpathTokenType === TokenLevelState.attributeNameTest || xpathTokenType === TokenLevelState.axisName)) {
@@ -1705,7 +1708,7 @@ export class XsltTokenDiagnostics {
 										problemTokens.push(prevToken);
 									} else if (fnArity === 0) {
 										const isCurrentFunction = prevToken.value === 'current';
-										if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction)) {
+										if (!isGroupingAttribute && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction)) {
 											if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 												const prevToken2 = allTokens[index - 2];
 												if (!(prevToken2.value === '/' || prevToken2.value === '!' || prevToken2.value === '//')) {
@@ -1741,7 +1744,7 @@ export class XsltTokenDiagnostics {
 								prevToken['error'] = ErrorType.XPathPrefix;
 								problemTokens.push(prevToken);
 							}
-						} else if (prevToken && insideGlobalFunction) {
+						} else if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
 							if (!XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 								token.error = ErrorType.MissingContextItemGeneral;
