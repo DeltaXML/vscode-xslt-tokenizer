@@ -339,7 +339,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const sequenceInstructionStart = '<xsl:sequence select="';
 		const expandTextString = this.actionProps?.expandTextVal ? ' expand-text=' + this.actionProps.expandTextVal : '';
 		const instrName = forXSLTemplate ? 'template' : 'function';
-		const callName = forXSLTemplate ? 'extractTemplate' : 'dx:extractFunction';
+		const callName = forXSLTemplate ? 'dx:extractTemplate' : 'dx:extractFunction';
 		const functionHeadText = `\n\n\t<xsl:${instrName} name="${callName}"${expandTextString} as="item()*">\n`;
 		const functionFootText = `\n\t</xsl:${instrName}>`;
 		let finalSymbolVariableName: string | null = null;
@@ -402,7 +402,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const firstCtPrefix = replacementIsVariable ? ctPrefix : '';
 			const addParams = requiredParamNames.length > 0;
 			const selfCloseChar = addParams ? '' : '/';
-			const replacementLines: string[] = [firstCtPrefix + `<xsl:call-template name="${callName}"${selfCloseChar}>`];
+			const ctReplacementStart = firstCtPrefix + '<xsl:call-template name="';
+			const replacementLines: string[] = [ctReplacementStart + callName + '"' + selfCloseChar + '>'];
+			fnStartCharacter = firstCharOnFirstLine + ctReplacementStart.length + 2;
+
 			if (addParams) {
 				requiredParamNames.forEach((paramName, index) => replacementLines.push(ctPrefix + `\t<xsl:with-param name="${paramName}" select="${requiredArgNames[index]}"/>`));
 				replacementLines.push(ctPrefix + '</xsl:call-template>');
@@ -436,7 +439,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const allFunctionText = functionHeadText + functionParamLines.join('') + finalCorrectText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
-		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
+		const fnStartLineIncrement = replacementIsVariable && forXSLTemplate ? 1 : 0;
+		this.executeRenameCommand(fullRange.start.line + fnStartLineIncrement, fnStartCharacter, document.uri);
 		return codeAction;
 	}
 

@@ -9,7 +9,7 @@
     <xsl:template match="/" mode="#default">   
         <xsl:for-each select="*">
             <xsl:variable name="var0" as="xs:string" select="@dev:new"/>
-            <xsl:variable name="var1" as="xs:string" select="@dev:new"/>
+            <xsl:variable name="var1" as="xs:string" select="$var0, @dev:new"/>
             <xsl:variable name="var2" as="xs:string" select="/, /new, ., 'a', $var0, $var1, root(), @class, last(), position()"/>
             <xsl:variable name="var8" as="xs:string" select="/"/>
             <xsl:apply-templates mode="a2"/>
