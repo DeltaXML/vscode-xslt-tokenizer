@@ -337,7 +337,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
 		const sequenceInstructionStart = '<xsl:sequence select="';
-		let replacementStart = sequenceInstructionStart;
 		const expandTextString = this.actionProps?.expandTextVal ? ' expand-text=' + this.actionProps.expandTextVal : '';
 		const instrName = forXSLTemplate ? 'template' : 'function';
 		const callName = forXSLTemplate ? 'extractTemplate' : 'dx:extractFunction';
@@ -351,10 +350,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let functionBodyLinesCount = functionBodyLines.length;
 		const indent = elementSelected ? '\t\t' : '\t\t\t';
 		const trimmedLines = functionBodyLines.map((line) => indent + this.trimLeadingWS(line, firstCharOnFirstLine));
-		if (finalSymbol && finalSymbol.name.startsWith('xsl:variable')) {
+		const replacementIsVariable = finalSymbol && finalSymbol.name.startsWith('xsl:variable');
+
+		if (replacementIsVariable) {
 			const varNamePos = finalSymbol.name.lastIndexOf(' ');
 			finalSymbolVariableName = finalSymbol.name.substring(varNamePos + 1);
-			replacementStart = `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="`;
 			const { text: selectText, lines, isSelect } = this.selectOrContentFromInstructionSymbol(document, finalSymbol);
 			const selectTextLines = selectText.split('\n');
 			const trimmedSelectTextLines = selectTextLines.map((line) => '\t\t' + this.trimLeadingWS(line, firstCharOnFirstLine));
@@ -393,20 +393,39 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			finalCorrectText = fixedTrimmedBodyTextLines.reverse().join('\n');
 		}
 
-		const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
+		// replacement-text:
 		let replacementAll = '';
+		const prefixWS = this.getWhitespaceBeforeExpression(document, fullRange);
 		let fnStartCharacter = -1;
-		const replcementFnCall = callName + '(';
-		if (elementSelected) {
-			fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
-			replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
+		if (forXSLTemplate) {
+			const ctPrefix = replacementIsVariable ? prefixWS + '\t' : prefixWS;
+			const firstCtPrefix = replacementIsVariable ? ctPrefix : '';
+			const addParams = requiredParamNames.length > 0;
+			const selfCloseChar = addParams ? '' : '/';
+			const replacementLines: string[] = [firstCtPrefix + `<xsl:call-template name="${callName}"${selfCloseChar}>`];
+			if (addParams) {
+				requiredParamNames.forEach((paramName, index) => replacementLines.push(ctPrefix + `\t<xsl:with-param name="${paramName}" select="${requiredArgNames[index]}"/>`));
+				replacementLines.push(ctPrefix + '</xsl:call-template>');
+			}
+			if (replacementIsVariable) {
+				// wrap with xsl:variable instruction
+				replacementLines.unshift(`<xsl:variable name="${finalSymbolVariableName}" as="item()*">`);
+				replacementLines.push(prefixWS + `</xsl:variable>`);
+			}
+			replacementAll = replacementLines.join('\n') + "\n";
 		} else {
-			const expressionLine = document.lineAt(fullRange.start.line);
-			const charIndexOfNonWSonLine = expressionLine.firstNonWhitespaceCharacterIndex;
-			const wsCharsBeforeSelection = charIndexOfNonWSonLine - fullRange.start.character;
-			const prefixWS = expressionLine.text.substring(0, wsCharsBeforeSelection);
-			fnStartCharacter = prefixWS.length + fullRange.start.character + 2;
-			replacementAll = prefixWS + replcementFnCall + fnArgsString + ')';
+			let replacementStart = sequenceInstructionStart;
+			replacementStart = replacementIsVariable ? `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="` : replacementStart;
+			const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
+			const replcementFnCall = callName + '(';
+			if (elementSelected) {
+				fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
+				replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
+			} else {
+				fnStartCharacter = prefixWS.length + fullRange.start.character + 2;
+				replacementAll = prefixWS + replcementFnCall + fnArgsString + ')';
+			}
+
 		}
 		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
 
@@ -419,6 +438,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		this.executeRenameCommand(fullRange.start.line, fnStartCharacter, document.uri);
 		return codeAction;
+	}
+
+	private getWhitespaceBeforeExpression(document: vscode.TextDocument, fullRange: vscode.Range) {
+		const expressionLine = document.lineAt(fullRange.start.line);
+		const charIndexOfNonWSonLine = expressionLine.firstNonWhitespaceCharacterIndex;
+		const wsCharsBeforeSelection = charIndexOfNonWSonLine - fullRange.start.character;
+		const prefixWS = expressionLine.text.substring(0, wsCharsBeforeSelection);
+		return prefixWS;
 	}
 
 	private fixFunctionBodyProblems(trimmedBodyText: string, targetRange: vscode.Range, quickfixDiagnostics: vscode.Diagnostic[], fixedTrimmedBodyTextLines: string[]) {
