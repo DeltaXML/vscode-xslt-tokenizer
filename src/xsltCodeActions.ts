@@ -110,7 +110,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol);
 		const symbolKind = firstSymbol?.kind;
-		const extraDescendants = symbolKind === vscode.SymbolKind.Event || symbolKind === vscode.SymbolKind.Field ? 2 : 0;
+		const extraDescendants = symbolKind === vscode.SymbolKind.Event || symbolKind === vscode.SymbolKind.Field ? 1 : 0;
 		const ancestorOrSelfCount = ancestorOrSelfSymbols.length;
 		if (ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
 		const targetSymbolRange = ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
@@ -157,9 +157,23 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, expandText);
 			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
 			const rangeInsideAttributeFirstSymbol = firstSymbol && firstSymbol.range.contains(range);
+			
 			if (firstSymbol && lastSymbol && rangeInsideAttributeFirstSymbol) {
 				if (firstSymbol.range.isEqual(lastSymbol.range)) {
-					if ((firstSymbol.kind === vscode.SymbolKind.Event)) {
+					let isXPathAttribute = firstSymbol.kind === vscode.SymbolKind.Event;
+					if (!isXPathAttribute && firstSymbol.kind === vscode.SymbolKind.Field) {
+						// check if AVT
+						isXPathAttribute = document.getText(firstSymbol.range).includes('{');
+					} else if (!isXPathAttribute) {
+						// not an attribute so check if TVT
+						let et = expandText[expandText.length - 1];
+						et = et.length > 3 ? et.substring(1, et.length - 1) : et;
+						const isExpanded = (et === 'yes' || et === 'true' || et === '1');
+						if (isExpanded) {
+							isXPathAttribute = document.getText(firstSymbol.range).includes('{');
+						}
+					}
+					if (isXPathAttribute) {
 						const fullText = document.getText(firstSymbol.range);
 						const sqPos = fullText.indexOf('\'');
 						const dqPos = fullText.indexOf('"');
