@@ -45,7 +45,7 @@ interface ActionProps {
 	lastSymbol: anyDocumentSymbol;
 	expandTextVal: string | undefined;
 }
-type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
+export type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 
 enum XsltCodeActionKind {
 	extractXsltFunction = 'xsl:function - from XSLT instruction(s)',
@@ -399,6 +399,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
+		const varTypeMap: Map<string, string> = new Map();
+		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap);
+
 		let fixedTrimmedBodyTextLines: string[] = [];
 		let finalCorrectText: string;
 		if (quickfixDiagnostics.length === 0) {
@@ -547,7 +550,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const virtualTextUpdated = virtualTextOriginal.substring(0, virtualInseertPos) + allFunctionText + virtualTextOriginal.substring(virtualInseertPos);
 
 		const caDocument = new CodeActionDocument(document.uri, virtualTextUpdated);
-		const { diagnostics, allTokens } = XsltSymbolProvider.instanceForXSLT!.calculateVirtualDiagnostics(caDocument);
+		const diagnostics = XsltSymbolProvider.instanceForXSLT!.calculateVirtualDiagnostics(caDocument);
 		const fnStartLine = targetRange.end.line + 2;
 
 		const requiredParamNames: string[] = [];
@@ -565,7 +568,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				switch (diagnostic.code) {
 					case DiagnosticCode.unresolvedVariableRef:
 						const varName = diagnostic.relatedInformation![0].message.substring(1);
-			            const defnData = XsltTokenDefinitions.findDefinition(true, document, allTokens, [], [], diagnostic.range.start);
 						if (requiredParamNames.indexOf(varName) < 0) { requiredParamNames.push(varName); requiredArgNames.push('$' + varName); }
 						break;
 					case DiagnosticCode.instrWithNoContextItem:

@@ -8,6 +8,7 @@ import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
 import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
+import { anyDocumentSymbol } from './xsltCodeActions';
 
 interface ImportedGlobals {
 	href: string;
@@ -227,7 +228,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 
 		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, this.internalImportedGlobals, symbols);
-		return { diagnostics, allTokens };
+		return diagnostics;
 	}
 	
 	public get diagnosticsArray() : vscode.Diagnostic[] {
@@ -314,6 +315,37 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath, SelectionType.Current, null, null, null, expandText);
 			const fullPath = newPath.join('');
 			return fullPath;
+		}
+	}
+
+	public static findVariableTypeAtSymbol(targetSymbol: anyDocumentSymbol, variableNames: string[], types: Map<string, string>) {
+		const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
+		if (targetSymbol) XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, rootSymbol, variableNames, types);
+	}
+
+
+	private static findChildVariableTypeAtSymbol(targetSymbol: vscode.DocumentSymbol, parentSymbol: vscode.DocumentSymbol, variableNames: string[], types: Map<string, string>) {
+		for (const childSymbol of parentSymbol.children) {			
+			if (childSymbol.range.contains(targetSymbol.range)) {
+				XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, childSymbol, variableNames, types);
+				break;
+			} else {
+				// preceding sibling:
+				if (childSymbol.kind === vscode.SymbolKind.Module) {
+					const attrs = childSymbol.children[0];
+					if (attrs && attrs.kind === vscode.SymbolKind.Array && attrs.name === 'attributes') {
+						const nameAttr = attrs.children.find((attr) => attr.name === 'name');
+						if (nameAttr && variableNames.includes(nameAttr.detail.substring(1, nameAttr.detail.length - 1))) {
+							const typeAttr = attrs.children.find((attr) => attr.name === 'as');
+							if (typeAttr) {
+								types.set(nameAttr.detail, typeAttr.detail.substring(1, typeAttr.detail.length - 1));
+							}
+						}
+					}
+					console.log(childSymbol);
+				}
+			}
+
 		}
 	}
 
