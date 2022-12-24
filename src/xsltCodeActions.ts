@@ -3,6 +3,7 @@ import { CodeActionDocument } from './codeActionDocument';
 import { XPathSemanticTokensProvider } from './extension';
 import { Data, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
+import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 
@@ -546,7 +547,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const virtualTextUpdated = virtualTextOriginal.substring(0, virtualInseertPos) + allFunctionText + virtualTextOriginal.substring(virtualInseertPos);
 
 		const caDocument = new CodeActionDocument(document.uri, virtualTextUpdated);
-		const diagnostics = XsltSymbolProvider.instanceForXSLT!.calculateVirtualDiagnostics(caDocument);
+		const { diagnostics, allTokens } = XsltSymbolProvider.instanceForXSLT!.calculateVirtualDiagnostics(caDocument);
 		const fnStartLine = targetRange.end.line + 2;
 
 		const requiredParamNames: string[] = [];
@@ -564,6 +565,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				switch (diagnostic.code) {
 					case DiagnosticCode.unresolvedVariableRef:
 						const varName = diagnostic.relatedInformation![0].message.substring(1);
+			            const defnData = XsltTokenDefinitions.findDefinition(true, document, allTokens, [], [], diagnostic.range.start);
 						if (requiredParamNames.indexOf(varName) < 0) { requiredParamNames.push(varName); requiredArgNames.push('$' + varName); }
 						break;
 					case DiagnosticCode.instrWithNoContextItem:

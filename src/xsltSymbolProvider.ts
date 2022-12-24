@@ -227,7 +227,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const globalInstructionData = this.xslLexer.globalInstructionData;
 
 		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, this.internalImportedGlobals, symbols);
-		return diagnostics;
+		return { diagnostics, allTokens };
 	}
 	
 	public get diagnosticsArray() : vscode.Diagnostic[] {
