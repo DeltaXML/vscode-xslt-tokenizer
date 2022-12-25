@@ -335,14 +335,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					const attrs = childSymbol.children[0];
 					if (attrs && attrs.kind === vscode.SymbolKind.Array && attrs.name === 'attributes') {
 						const nameAttr = attrs.children.find((attr) => attr.name === 'name');
-						if (nameAttr && variableNames.includes(nameAttr.detail.substring(1, nameAttr.detail.length - 1))) {
-							const typeAttr = attrs.children.find((attr) => attr.name === 'as');
-							if (typeAttr) {
-								types.set(nameAttr.detail, typeAttr.detail.substring(1, typeAttr.detail.length - 1));
+						if (nameAttr) {
+							const fixedName = nameAttr.detail.substring(1, nameAttr.detail.length - 1);
+							if (variableNames.includes(fixedName)) {
+								const typeAttr = attrs.children.find((attr) => attr.name === 'as');
+								if (typeAttr) {
+									types.set(fixedName, typeAttr.detail.substring(1, typeAttr.detail.length - 1));
+								}
 							}
 						}
 					}
-					console.log(childSymbol);
 				}
 			}
 

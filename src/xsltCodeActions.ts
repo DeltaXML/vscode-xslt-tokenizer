@@ -451,7 +451,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
 
 		const functionParamLines = requiredParamNames.map((argName) => {
-			const argType = (argName === ExtractFunctionParams.position || argName === ExtractFunctionParams.last) ? 'xs:integer' : 'item()*';
+			let argType = (argName === ExtractFunctionParams.position || argName === ExtractFunctionParams.last) ? 'xs:integer' : 'item()*';
+			const typeFromMap = varTypeMap.get(argName);
+			argType = typeFromMap ? typeFromMap : argType;
 			return `\t\t<xsl:param name="${argName}" as="${argType}"/>\n`;
 		});
 
