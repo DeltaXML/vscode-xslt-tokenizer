@@ -31,15 +31,13 @@
     <xsl:template match="fn:map" mode="indent" expand-text="yes">
         <xsl:sequence select="234"/>
         <xsl:value-of>
-            <xsl:variable name="depth" select="
-                count(ancestor::*) + 1,
-                count(ancestor::*) + 2"/>
+            <xsl:variable name="depth" select="count(ancestor::*) + 2"/>
             <xsl:for-each select="*">
                 <xsl:if test="position() gt 1">
                     <xsl:text>{$depth} of {last()} on {name()}</xsl:text>
                 </xsl:if>
-                <xsl:apply-templates select="snapshot(@key)" mode="key-attribute"/>
-                <xsl:apply-templates mode="#current"/>
+                <xsl:apply-templates select="snapshot(@key)"/>
+                <xsl:apply-templates/>
             </xsl:for-each>
         </xsl:value-of>
     </xsl:template>
