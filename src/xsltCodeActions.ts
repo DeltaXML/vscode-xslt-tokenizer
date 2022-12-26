@@ -56,7 +56,9 @@ enum XsltCodeActionKind {
 enum ExtractFunctionParams {
 	context = 'c.x',
 	position = 'c.p',
-	last = 'c.l'
+	last = 'c.l',
+	currentGroup = 'g.current',
+	currentGroupingKey = 'g.key'
 }
 
 export class XSLTCodeActions implements vscode.CodeActionProvider {
@@ -525,6 +527,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								substitution = substitution ? substitution : ` select="$${ExtractFunctionParams.context}"`;
 								currentLine = currentLine.substring(0, rangeEnd) + substitution + currentLine.substring(rangeEnd);
 								break;
+							case DiagnosticCode.groupOutsideForEachGroup:
+								const groupRangeText = currentLine.substring(rangeStart, rangeEnd);
+								substitution = groupRangeText === 'current-group' ? ExtractFunctionParams.currentGroup : ExtractFunctionParams.currentGroupingKey;
 							case DiagnosticCode.lastWithNoContextItem:
 								substitution = substitution ? substitution : ExtractFunctionParams.last;
 							case DiagnosticCode.positionWithNoContextItem:
@@ -563,6 +568,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let hasContextParam = false;
 		let hasPosParam = false;
 		let hasLastParam = false;
+		let hasCurrentGroupParam = false;
+		let hasCurrentGroupingKeyParam = false;
 
 		diagnostics.forEach((diagnostic) => {
 			const errorLine = diagnostic.range.start.line;
@@ -588,10 +595,27 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						quickfixDiagnostics.push(diagnostic);
 						hasPosParam = true;
 						break;
+					case DiagnosticCode.groupOutsideForEachGroup:
+						quickfixDiagnostics.push(diagnostic);
+						const text = caDocument.getText(diagnostic.range);
+						if (text === 'current-group') {
+							hasCurrentGroupParam = true;
+						} else {
+							hasCurrentGroupingKeyParam = true;
+						 }
+						break;
 				}
 			}
 		});
 		// put special params before params needed for variables - unshift:
+		if (hasCurrentGroupingKeyParam) {
+			requiredArgNames.unshift('current-grouping-key()');
+			requiredParamNames.unshift(ExtractFunctionParams.currentGroupingKey);
+		}
+		if (hasCurrentGroupParam) {
+			requiredArgNames.unshift('current-group()');
+			requiredParamNames.unshift(ExtractFunctionParams.currentGroup);
+		}
 		if (hasLastParam) {
 			requiredArgNames.unshift('last()');
 			requiredParamNames.unshift(ExtractFunctionParams.last);

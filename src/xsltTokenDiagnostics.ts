@@ -98,6 +98,7 @@ export enum DiagnosticCode {
 	unresolvedVariableRef,
 	unresolvedGenericRef,
 	fnWithNoContextItem,
+	groupOutsideForEachGroup,
 	positionWithNoContextItem,
 	lastWithNoContextItem,
 	rootWithNoContextItem,
@@ -1725,6 +1726,10 @@ export class XsltTokenDiagnostics {
 													prevToken.value += '()';
 													problemTokens.push(prevToken);
 												}
+											} else if (FunctionData.contextGroupingFunctions.indexOf(prevToken.value) > -1) {
+												prevToken.error = ErrorType.MissingContextItemForGrouping;
+												prevToken.value += '()';
+												problemTokens.push(prevToken);
 											}
 										}
 									}
@@ -1746,7 +1751,7 @@ export class XsltTokenDiagnostics {
 							}
 						} else if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
-							if (!XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+							if (!isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 								token.error = ErrorType.MissingContextItemGeneral;
 								problemTokens.push(token);
 							}
@@ -2722,6 +2727,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingContextItemForPosition:
 					errCode = DiagnosticCode.positionWithNoContextItem;
 					msg = `XPath: Context-item is missing for: ''position()`;
+					break;
+				case ErrorType.MissingContextItemForGrouping:
+					errCode = DiagnosticCode.groupOutsideForEachGroup;
+					msg = `XSLT: Outside a 'xsl:for-each-group' - will always return an empty sequence: ${tokenValue}`;
 					break;
 				case ErrorType.MissingContextItemForLast:
 					errCode = DiagnosticCode.lastWithNoContextItem;

@@ -1275,6 +1275,7 @@ export enum ErrorType {
     MissingContextItemGeneral,
     MissingContextItemForRoot,
     MissingContextItemForRootOnly,
+    MissingContextItemForGrouping,
 }
 
 export interface BaseToken {
