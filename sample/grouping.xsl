@@ -16,8 +16,7 @@
     </xsl:template>
     
     <xsl:function name="fn:newName">
-        <xsl:sequence select="current-group()"/>
-        <xsl:sequence select="current-grouping-key()"/>
+        <xsl:sequence select="'a' instance of element()*"/>
     </xsl:function>
     
 </xsl:stylesheet>

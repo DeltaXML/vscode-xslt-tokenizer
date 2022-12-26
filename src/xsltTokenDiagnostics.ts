@@ -1752,8 +1752,10 @@ export class XsltTokenDiagnostics {
 						} else if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
 							if (!isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
-								token.error = ErrorType.MissingContextItemGeneral;
-								problemTokens.push(token);
+								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()'))) {
+									token.error = ErrorType.MissingContextItemGeneral;
+									problemTokens.push(token);
+								}
 							}
 						}
 						break;
