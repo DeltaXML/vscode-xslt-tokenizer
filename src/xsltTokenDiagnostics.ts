@@ -2731,6 +2731,7 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingContextItemForGrouping:
 					errCode = DiagnosticCode.groupOutsideForEachGroup;
 					msg = `XSLT: Outside a 'xsl:for-each-group' - will always return an empty sequence: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.MissingContextItemForLast:
 					errCode = DiagnosticCode.lastWithNoContextItem;
