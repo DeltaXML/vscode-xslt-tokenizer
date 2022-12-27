@@ -23,17 +23,18 @@
 			"detail": "eslint -c .eslintrc.js --ext .ts src"
 		},
 		{
-			"type": "xslt-js",
-			"label": "xslt-js: Saxon-JS Transform (New)",
+			"type": "xslt",
+			"label": "regex-out",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
 			"xsltFile": "${file}",
 			"xmlSource": "${file}",
-			"export": "",
-			"resultPath": "${workspaceFolder}/xslt-out/result1.xml",
+			"resultPath": "${workspaceFolder}/xslt-out/regex-out.xml",
+			"allowSyntaxExtensions40": "off",
 			"group": {
 				"kind": "build"
 			},
 			"problemMatcher": [
-				"$saxon-xslt-js"
+				"$saxon-xslt"
 			]
 		}
 	]

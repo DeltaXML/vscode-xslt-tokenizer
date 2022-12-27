@@ -58,7 +58,8 @@ enum ExtractFunctionParams {
 	position = 'c.p',
 	last = 'c.l',
 	currentGroup = 'g.current',
-	currentGroupingKey = 'g.key'
+	currentGroupingKey = 'g.key',
+	regexGroup = 'c.regex-group'
 }
 
 export class XSLTCodeActions implements vscode.CodeActionProvider {
@@ -453,7 +454,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
 
 		const functionParamLines = requiredParamNames.map((argName) => {
-			let argType = (argName === ExtractFunctionParams.position || argName === ExtractFunctionParams.last) ? 'xs:integer' : 'item()*';
+			let argType = (argName === ExtractFunctionParams.position || argName === ExtractFunctionParams.last) ? 'xs:integer' : argName === ExtractFunctionParams.regexGroup ? 'map(xs:integer, xs:string)' : 'item()*';
 			const typeFromMap = varTypeMap.get(argName);
 			argType = typeFromMap ? typeFromMap : argType;
 			return `\t\t<xsl:param name="${argName}" as="${argType}"/>\n`;
@@ -540,6 +541,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 									currentLine = currentLine.substring(0, rangeStart) + '$' + substitution + currentLine.substring(pEnd + 1);
 								}
 								break;
+							case DiagnosticCode.regexNoContextItem:
+								substitution = '$c.'; // $c.regex-group()
+								currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
+								break;
 						}
 					} else {
 						// rangeLine > line so keep going to previous diagnostic rangeLine
@@ -570,6 +575,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let hasLastParam = false;
 		let hasCurrentGroupParam = false;
 		let hasCurrentGroupingKeyParam = false;
+		let hasRegexGroupParam = false;;
 
 		diagnostics.forEach((diagnostic) => {
 			const errorLine = diagnostic.range.start.line;
@@ -604,10 +610,18 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 							hasCurrentGroupingKeyParam = true;
 						 }
 						break;
+					case DiagnosticCode.regexNoContextItem:
+						hasRegexGroupParam = true;
+						quickfixDiagnostics.push(diagnostic);
+						break;
 				}
 			}
 		});
 		// put special params before params needed for variables - unshift:
+		if (hasRegexGroupParam) {
+			requiredArgNames.unshift('$regex-group');
+			requiredParamNames.unshift(ExtractFunctionParams.regexGroup);
+		}
 		if (hasCurrentGroupingKeyParam) {
 			requiredArgNames.unshift('current-grouping-key()');
 			requiredParamNames.unshift(ExtractFunctionParams.currentGroupingKey);
