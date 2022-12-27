@@ -104,7 +104,8 @@ export enum DiagnosticCode {
 	rootWithNoContextItem,
 	rootOnlyWithNoContextItem,
 	instrWithNoContextItem,
-	noContextItem
+	noContextItem,
+	regexNoContextItem
 }
 
 export class XsltTokenDiagnostics {
@@ -1627,6 +1628,7 @@ export class XsltTokenDiagnostics {
 											poppedData.token['error'] = ErrorType.BracketNesting;
 											problemTokens.push(poppedData.token);
 										}
+										let regexSpecial = false;
 										inScopeXPathVariablesList = poppedData.variables;
 										preXPathVariable = poppedData.preXPathVariable;
 										xpathVariableCurrentlyBeingDefined = poppedData.xpathVariableCurrentlyBeingDefined;
@@ -1634,13 +1636,34 @@ export class XsltTokenDiagnostics {
 											if (prevToken?.charType !== CharLevelState.lB) {
 												if (poppedData.functionArity !== undefined) {
 													poppedData.functionArity++;
+													if (poppedData.function.value === 'regex-group' && poppedData.functionArity === 1) {
+														const elementContextOK = elementStack.find((item) => item.symbolName === 'xsl:matching-substring');
+														if (!elementContextOK) {
+															poppedData.function.error = ErrorType.MissingContextItemForRegex;
+															if (prevToken?.tokenType) {
+																const prevToken2 = allTokens[index - 2];
+																if (prevToken2.charType === CharLevelState.lB) {
+																	poppedData.function.value = `regex-group(${prevToken?.value})`;
+																} else {
+																	const startPos = new vscode.Position(poppedData.function.line, poppedData.function.startCharacter + poppedData.function.length);
+																	const endPos = new vscode.Position(token.line, token.startCharacter);
+																	const argString = document.getText(new vscode.Range(startPos, endPos));
+																	poppedData.function.value = `regex-group(${argString})`;
+																}
+															}
+															regexSpecial = true;
+															problemTokens.push(poppedData.function);
+														}
+													}
 												}
 											}
-											let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
-											if (!isValid) {
-												poppedData.function['error'] = fErrorType;
-												poppedData.function['value'] = qFunctionName;
-												problemTokens.push(poppedData.function);
+											if (!regexSpecial) {
+												let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
+												if (!isValid) {
+													poppedData.function['error'] = fErrorType;
+													poppedData.function['value'] = qFunctionName;
+													problemTokens.push(poppedData.function);
+												}
 											}
 										}
 									} else {
@@ -2750,6 +2773,11 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingContextItemForInstr:
 					errCode = DiagnosticCode.instrWithNoContextItem;
 					msg = `XSLT: Context-item is missing ('select' attribute needed here): '${tokenValue}'`;
+					break;
+				case ErrorType.MissingContextItemForRegex:
+					errCode = DiagnosticCode.regexNoContextItem;
+					msg = `XSLT: Outside <xsl:matching-substring> will always be empty: '${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.XPathOperatorUnexpected:
 					msg = `XPath: Operator unexpected at this position: '${tokenValue}'`;

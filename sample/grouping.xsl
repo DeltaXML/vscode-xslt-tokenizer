@@ -5,18 +5,15 @@
     exclude-result-prefixes="xs"
     version="2.0">
     
-    <xsl:key name="abc" match="book" use="@id"/>
-    
-    <xsl:variable name="test" select="key('abc', @id)"/>
-    
-    <xsl:template match="book">
-        <xsl:for-each-group select="data" group-by="@id">
-          <xsl:sequence select="fn:newName()"/>
-        </xsl:for-each-group>
+    <xsl:template match="/*">
+        <xsl:analyze-string select="'the [quick] brown'" regex="\[(.*?)\]">
+            <xsl:matching-substring>
+                <cite><xsl:value-of select="regex-group(1)"/></cite>
+            </xsl:matching-substring>
+            <xsl:non-matching-substring>
+                <xsl:value-of select="."/>
+            </xsl:non-matching-substring>
+        </xsl:analyze-string>
     </xsl:template>
-    
-    <xsl:function name="fn:newName">
-        <xsl:sequence select="'a' instance of element()*"/>
-    </xsl:function>
     
 </xsl:stylesheet>
