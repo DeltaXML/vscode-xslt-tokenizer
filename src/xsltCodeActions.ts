@@ -412,7 +412,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (quickfixDiagnostics.length === 0) {
 			finalCorrectText = trimmedBodyText;
 		} else {
-			this.fixFunctionBodyProblems(trimmedBodyText, targetRange, quickfixDiagnostics, fixedTrimmedBodyTextLines);
+			this.fixFunctionBodyProblems(trimmedBodyText, targetRange, quickfixDiagnostics, fixedTrimmedBodyTextLines, addRegexMapInstruction);
 			finalCorrectText = fixedTrimmedBodyTextLines.reverse().join('\n');
 		}
 
@@ -448,7 +448,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
 				let instrText = '';
 				if (addRegexMapInstruction) {
-					instrText = '<xsl:variable name="regex-group" select="map:merge(for $k in 0 to 10 return map:entry($k, regex-group($k)))"/>\n' + prefixWS;
+					instrText = '<xsl:variable name="regex-group" select="map:merge(for $k in 0 to 99 return map:entry($k, regex-group($k)))"/>\n' + prefixWS;
 				}
 				replacementAll = instrText + replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
 			} else {
@@ -487,7 +487,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return prefixWS;
 	}
 
-	private fixFunctionBodyProblems(trimmedBodyText: string, targetRange: vscode.Range, quickfixDiagnostics: vscode.Diagnostic[], fixedTrimmedBodyTextLines: string[]) {
+	private fixFunctionBodyProblems(trimmedBodyText: string, targetRange: vscode.Range, quickfixDiagnostics: vscode.Diagnostic[], fixedTrimmedBodyTextLines: string[], addRegexMapInstruction: boolean) {
 		const finalTrimmedBodyTextLines = trimmedBodyText.split('\n');
 		const firstInsertionLine = targetRange.end.line + 3;
 		let currentDiagnosticPos = quickfixDiagnostics.length - 1;
@@ -554,7 +554,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								}
 								break;
 							case DiagnosticCode.regexNoContextItem:
-								if (currentDiagnostic.relatedInformation) {
+								if (currentDiagnostic.relatedInformation && !addRegexMapInstruction) {
 									const groupNum = currentDiagnostic.relatedInformation[0].message;
 									substitution = '$' + ExtractFunctionParams.regexGroup + '.' + groupNum;
 									const fnEnd2 = currentLine.indexOf(')', rangeEnd);
@@ -636,6 +636,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						if (regexGroupNum && regexGroupNum.length === 2) {
 							const groupNum = regexGroupNum[1];
 							if (!numberedRegexGroupParams.includes(groupNum)) numberedRegexGroupParams.push(groupNum);
+							if (numberedRegexGroupParams.length > 2) addRegexMapInstruction = true;
 							const errData = [new vscode.DiagnosticRelatedInformation(new vscode.Location(document.uri, diagnostic.range), groupNum)];
 							diagnostic.relatedInformation = errData;
 						} else {
@@ -647,10 +648,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			}
 		});
 		// put special params before params needed for variables - unshift:
-		numberedRegexGroupParams.reverse().forEach((gp) => {
-			requiredArgNames.unshift('regex-group(' + gp + ')');
-			requiredParamNames.unshift(ExtractFunctionParams.regexGroup + '.' + gp);
-		});
+		if (!addRegexMapInstruction) {
+			numberedRegexGroupParams.reverse().forEach((gp) => {
+				requiredArgNames.unshift('regex-group(' + gp + ')');
+				requiredParamNames.unshift(ExtractFunctionParams.regexGroup + '.' + gp);
+			});
+		}
 		if (addRegexMapInstruction) {
 			requiredArgNames.unshift('$regex-group');
 			requiredParamNames.unshift(ExtractFunctionParams.regexGroup);
