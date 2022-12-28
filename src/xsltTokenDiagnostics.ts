@@ -1636,7 +1636,7 @@ export class XsltTokenDiagnostics {
 											if (prevToken?.charType !== CharLevelState.lB) {
 												if (poppedData.functionArity !== undefined) {
 													poppedData.functionArity++;
-													if (poppedData.function.value === 'regex-group' && poppedData.functionArity === 1) {
+													if (insideGlobalFunction && poppedData.function.value === 'regex-group' && poppedData.functionArity === 1) {
 														const elementContextOK = elementStack.find((item) => item.symbolName === 'xsl:matching-substring');
 														if (!elementContextOK) {
 															poppedData.function.error = ErrorType.MissingContextItemForRegex;
