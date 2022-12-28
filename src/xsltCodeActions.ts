@@ -446,7 +446,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const replcementFnCall = callName + '(';
 			if (elementSelected) {
 				fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
-				replacementAll = replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
+				let instrText = '';
+				if (addRegexMapInstruction) {
+					instrText = '<xsl:variable name="regex-group" select="map:merge(for $k in 0 to 10 return map:entry($k, regex-group($k)))"/>\n' + prefixWS;
+				}
+				replacementAll = instrText + replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
 			} else {
 				fnStartCharacter = prefixWS.length + fullRange.start.character + 2;
 				replacementAll = prefixWS + replcementFnCall + fnArgsString + ')';
@@ -470,7 +474,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const allFunctionText = functionHeadText + functionParamLines.join('') + finalCorrectText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
-		const fnStartLineIncrement = replacementIsVariable && forXSLTemplate ? 1 : 0;
+		const fnStartLineIncrement = (replacementIsVariable && forXSLTemplate) || addRegexMapInstruction ? 1 : 0;
 		this.executeRenameCommand(fullRange.start.line + fnStartLineIncrement, fnStartCharacter, document.uri);
 		return codeAction;
 	}
