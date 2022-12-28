@@ -71,6 +71,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	public static COMMAND_RENAME = 'editor.action.rename';
 	public static COMMAND = 'code-actions-sample.command';
+	private static regexForRegexGroup = new RegExp(/'regex-group\(\s*(\d+)\s*\)'$/);
+
 	private actionProps: ActionProps | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
@@ -161,7 +163,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, expandText);
 			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
 			const rangeInsideAttributeFirstSymbol = firstSymbol && firstSymbol.range.contains(range);
-			
+
 			if (firstSymbol && lastSymbol && rangeInsideAttributeFirstSymbol) {
 				if (firstSymbol.range.isEqual(lastSymbol.range)) {
 					let isXPathAttribute = firstSymbol.kind === vscode.SymbolKind.Event;
@@ -401,7 +403,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
-		const { requiredArgNames, requiredParamNames, quickfixDiagnostics } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
+		const { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
 		const varTypeMap: Map<string, string> = new Map();
 		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap);
 
@@ -542,8 +544,17 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								}
 								break;
 							case DiagnosticCode.regexNoContextItem:
-								substitution = '$c.'; // $c.regex-group()
-								currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeStart);
+								if (currentDiagnostic.relatedInformation) {
+									const groupNum = currentDiagnostic.relatedInformation[0].message;
+									substitution = '$' + ExtractFunctionParams.regexGroup + '.' + groupNum;
+									const fnEnd2 = currentLine.indexOf(')', rangeEnd);
+									if (fnEnd2 > -1) {
+										currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(fnEnd2 + 1);
+									}
+								} else {
+									substitution = '$' + ExtractFunctionParams.regexGroup; // $c.regex-group()
+									currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
+								}
 								break;
 						}
 					} else {
@@ -567,7 +578,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const requiredParamNames: string[] = [];
 		const requiredArgNames: string[] = [];
-
 		const quickfixDiagnostics: vscode.Diagnostic[] = [];
 
 		let hasContextParam = false;
@@ -575,7 +585,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let hasLastParam = false;
 		let hasCurrentGroupParam = false;
 		let hasCurrentGroupingKeyParam = false;
-		let hasRegexGroupParam = false;;
+		let addRegexMapInstruction = false;
+		let numberedRegexGroupParams: string[] = [];
 
 		diagnostics.forEach((diagnostic) => {
 			const errorLine = diagnostic.range.start.line;
@@ -608,17 +619,29 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 							hasCurrentGroupParam = true;
 						} else {
 							hasCurrentGroupingKeyParam = true;
-						 }
+						}
 						break;
 					case DiagnosticCode.regexNoContextItem:
-						hasRegexGroupParam = true;
+						const regexGroupNum = diagnostic.message.match(XSLTCodeActions.regexForRegexGroup);
+						if (regexGroupNum && regexGroupNum.length === 2) {
+							const groupNum = regexGroupNum[1];
+							if (!numberedRegexGroupParams.includes(groupNum)) numberedRegexGroupParams.push(groupNum);
+							const errData = [new vscode.DiagnosticRelatedInformation(new vscode.Location(document.uri, diagnostic.range), groupNum)];
+							diagnostic.relatedInformation = errData;
+						} else {
+							addRegexMapInstruction = true;
+						}
 						quickfixDiagnostics.push(diagnostic);
 						break;
 				}
 			}
 		});
 		// put special params before params needed for variables - unshift:
-		if (hasRegexGroupParam) {
+		numberedRegexGroupParams.reverse().forEach((gp) => {
+			requiredArgNames.unshift('regex-group(' + gp + ')');
+			requiredParamNames.unshift(ExtractFunctionParams.regexGroup + '.' + gp);
+		});
+		if (addRegexMapInstruction) {
 			requiredArgNames.unshift('$regex-group');
 			requiredParamNames.unshift(ExtractFunctionParams.regexGroup);
 		}
@@ -642,7 +665,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			requiredArgNames.unshift('.');
 			requiredParamNames.unshift(ExtractFunctionParams.context);
 		}
-		return { requiredArgNames, requiredParamNames, quickfixDiagnostics };
+		return { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction };
 	}
 
 	private extendRangeToFullLines(range: vscode.Range) {
