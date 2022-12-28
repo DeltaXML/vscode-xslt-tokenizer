@@ -1276,6 +1276,7 @@ export enum ErrorType {
     MissingContextItemForRoot,
     MissingContextItemForRootOnly,
     MissingContextItemForGrouping,
+    MissingContextItemForMerge,
     MissingContextItemForRegex,
 }
 

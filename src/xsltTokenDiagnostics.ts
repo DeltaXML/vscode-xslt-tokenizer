@@ -1753,6 +1753,14 @@ export class XsltTokenDiagnostics {
 												prevToken.error = ErrorType.MissingContextItemForGrouping;
 												prevToken.value += '()';
 												problemTokens.push(prevToken);
+											} else if (insideGlobalFunction) {
+												if (prevToken.value === 'current-merge-key' || prevToken.value === 'current-merge-group') {
+													if (!elementStack.find((es) => es.symbolName === 'xsl:merge-action')) {
+														prevToken.error = ErrorType.MissingContextItemForMerge;
+														prevToken.value += '()';
+														problemTokens.push(prevToken);
+													}
+												}
 											}
 										}
 									}
@@ -2756,6 +2764,11 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingContextItemForGrouping:
 					errCode = DiagnosticCode.groupOutsideForEachGroup;
 					msg = `XSLT: Outside a 'xsl:for-each-group' - will always return an empty sequence: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.MissingContextItemForMerge:
+					errCode = DiagnosticCode.groupOutsideForEachGroup;
+					msg = `XSLT: Outside a 'xsl:merge-action' - will always return an empty sequence: ${tokenValue}`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.MissingContextItemForLast:

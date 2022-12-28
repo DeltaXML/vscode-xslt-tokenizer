@@ -59,6 +59,8 @@ enum ExtractFunctionParams {
 	last = 'c.l',
 	currentGroup = 'g.current',
 	currentGroupingKey = 'g.key',
+	currentMergeGroup = 'm.current',
+	currentMergeKey = 'm.key',
 	regexGroup = 'c.regex-group'
 }
 
@@ -542,7 +544,20 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								break;
 							case DiagnosticCode.groupOutsideForEachGroup:
 								const groupRangeText = currentLine.substring(rangeStart, rangeEnd);
-								substitution = groupRangeText === 'current-group' ? ExtractFunctionParams.currentGroup : ExtractFunctionParams.currentGroupingKey;
+								switch (groupRangeText) {
+									case 'current-group':
+										substitution = ExtractFunctionParams.currentGroup;
+										break;
+									case 'current-grouping-key':
+										substitution = ExtractFunctionParams.currentGroupingKey;
+										break;
+									case 'current-merge-group':
+										substitution = ExtractFunctionParams.currentMergeGroup;
+										break;
+									case 'current-merge-key':
+										substitution = ExtractFunctionParams.currentMergeKey;
+										break;
+								}
 							case DiagnosticCode.lastWithNoContextItem:
 								substitution = substitution ? substitution : ExtractFunctionParams.last;
 							case DiagnosticCode.positionWithNoContextItem:
@@ -595,6 +610,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let hasLastParam = false;
 		let hasCurrentGroupParam = false;
 		let hasCurrentGroupingKeyParam = false;
+		let hasCurrentMergeParam = false;
+		let hasCurrentMergeKeyParam = false;
 		let addRegexMapInstruction = false;
 		let numberedRegexGroupParams: string[] = [];
 
@@ -627,8 +644,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						const text = caDocument.getText(diagnostic.range);
 						if (text === 'current-group') {
 							hasCurrentGroupParam = true;
-						} else {
+						} else if (text === 'current-grouping-key') {
 							hasCurrentGroupingKeyParam = true;
+						} else if (text === 'current-merge-group') {
+							hasCurrentMergeParam = true;
+						} else if (text === 'current-merge-key') {
+							hasCurrentMergeKeyParam = true;
 						}
 						break;
 					case DiagnosticCode.regexNoContextItem:
@@ -648,6 +669,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			}
 		});
 		// put special params before params needed for variables - unshift:
+		if (hasCurrentMergeKeyParam) {
+			requiredArgNames.unshift('current-merge-key()');
+			requiredParamNames.unshift(ExtractFunctionParams.currentMergeKey);
+		}
+		if (hasCurrentMergeParam) {
+			requiredArgNames.unshift('current-merge-group()');
+			requiredParamNames.unshift(ExtractFunctionParams.currentMergeGroup);
+		}
 		if (!addRegexMapInstruction) {
 			numberedRegexGroupParams.reverse().forEach((gp) => {
 				requiredArgNames.unshift('regex-group(' + gp + ')');
