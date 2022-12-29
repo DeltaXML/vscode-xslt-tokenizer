@@ -411,7 +411,7 @@ export class XSLTSchema implements SchemaData {
                         'select': 'xsl:expression',
                         '_select': 'xs:string'
                     },
-                    elementNames: ['xsl:param', 'xsl:on-completion', 'xsl:instruction']
+                    elementNames: ['xsl:param', 'xsl:next-iteration', 'xsl:on-completion', 'xsl:instruction']
                 },
                 "xsl:map": { type: 'xsl:sequence-constructor' },
                 "xsl:map-entry": {
@@ -453,10 +453,6 @@ export class XSLTSchema implements SchemaData {
                         '_terminate': 'xs:string',
                         '_error-code': 'xs:string'
                     }
-                },
-                "xsl:next-iteration": {
-                    base: 'xsl:element-only-versioned-element-type',
-                    elementNames: ['xsl:with-param']
                 },
                 "xsl:namespace": {
                     base: 'xsl:sequence-constructor-or-select',
@@ -795,6 +791,10 @@ export class XSLTSchema implements SchemaData {
                         '_stylesheet-prefix': 'xs:string',
                         '_result-prefix': 'xs:string'
                     }
+                },
+                "xsl:next-iteration": {
+                    base: 'xsl:element-only-versioned-element-type',
+                    elementNames: ['xsl:with-param']
                 },
                 "xsl:output": {
                     base: 'xsl:generic-element-type',
