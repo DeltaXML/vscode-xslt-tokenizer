@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
 import { XPathSemanticTokensProvider } from './extension';
+import { XSLTConfiguration } from './languageConfigurations';
+import { SchemaQuery } from './schemaQuery';
 import { Data, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
@@ -74,6 +76,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	public static COMMAND_RENAME = 'editor.action.rename';
 	public static COMMAND = 'code-actions-sample.command';
 	private static regexForRegexGroup = new RegExp(/'regex-group\(\s*(\d+)\s*\)'$/);
+	private schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
+	private expectedElementData = this.schemaQuery.getExpected('xsl:function').elements;
+	private expectedElementNames = this.expectedElementData.map((item) => item[0]);
 
 	private actionProps: ActionProps | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
@@ -211,8 +216,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								}
 							}
 						}
-					} else if (firstSymbol.kind === vscode.SymbolKind.Field) {
-						// TODO: refactor normal attribute - why?
 					}
 				}
 			}
@@ -234,14 +237,34 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				if (firstSymbol && lastSymbol && firstSymbolInsideRange && lastSymbolInsideRange) {
 					const isSameSymbol = firstSymbol.range.isEqual(lastSymbol.range);
 					const parentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, firstSymbol.range.start);
+
 					let allRangeElementsOK = true;
-					if (parentSymbol && !isSameSymbol) {
-						for (const sibling of parentSymbol.children) {
-							if (sibling.kind !== vscode.SymbolKind.Array && sibling.range.end.isAfterOrEqual(firstSymbol.range.start) && sibling.range.start.isBeforeOrEqual(lastSymbol.range.end)) {
-								if ((sibling.range.start.isAfterOrEqual(firstSymbol.range.start) && sibling.range.end.isAfter(lastSymbol.range.end)) ||
-									(sibling.range.end.isBeforeOrEqual(lastSymbol.range.end) && sibling.range.start.isBefore(firstSymbol.range.start))) {
-									allRangeElementsOK = false;
-									break;
+					if (parentSymbol) {                        
+						if (isSameSymbol) {
+							if (firstSymbol.name.startsWith('xsl:')) {
+								const spacePos = firstSymbol.name.indexOf(' ');
+								const realName = spacePos > -1 ? firstSymbol.name.substring(0, spacePos) : firstSymbol.name;
+								allRangeElementsOK = this.expectedElementNames.includes(realName);
+							}
+						} else {
+							const parentSymbolLast = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, lastSymbol.range.start);
+							allRangeElementsOK = !!parentSymbolLast && parentSymbol.range.isEqual(parentSymbolLast.range);
+							if (allRangeElementsOK) {
+								for (const sibling of parentSymbol.children) {
+									if (sibling.kind !== vscode.SymbolKind.Array && sibling.range.end.isAfterOrEqual(firstSymbol.range.start) && sibling.range.start.isBeforeOrEqual(lastSymbol.range.end)) {
+										if ((sibling.range.start.isAfterOrEqual(firstSymbol.range.start) && sibling.range.end.isAfter(lastSymbol.range.end)) ||
+											(sibling.range.end.isBeforeOrEqual(lastSymbol.range.end) && sibling.range.start.isBefore(firstSymbol.range.start))) {
+											allRangeElementsOK = false;
+											break;
+										} else if (sibling.name.startsWith('xsl:')) {
+											const spacePos = sibling.name.indexOf(' ');
+											const realName = spacePos > -1 ? sibling.name.substring(0, spacePos) : sibling.name;
+											if (!this.expectedElementNames.includes(realName)) {
+												allRangeElementsOK = false;
+												break;
+											}
+										}
+									}
 								}
 							}
 						}
