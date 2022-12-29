@@ -404,7 +404,7 @@ export class XSLTSchema4 implements SchemaData {
                         '_map': 'xsl:expression',
                         '_select': 'xs:string'
                     },
-                    elementNames: ['xsl:param', 'xsl:on-completion', 'xsl:instruction']
+                    elementNames: ['xsl:param', 'xsl:next-iteration', 'xsl:on-completion', 'xsl:instruction']
                 },
                 "xsl:map": {
                     base: 'xsl:sequence-constructor',
@@ -461,10 +461,6 @@ export class XSLTSchema4 implements SchemaData {
                         '_terminate': 'xs:string',
                         '_error-code': 'xs:string'
                     }
-                },
-                "xsl:next-iteration": {
-                    base: 'xsl:element-only-versioned-element-type',
-                    elementNames: ['xsl:with-param']
                 },
                 "xsl:namespace": {
                     base: 'xsl:sequence-constructor-or-select',
@@ -1022,6 +1018,10 @@ export class XSLTSchema4 implements SchemaData {
             elementNames: ['xsl:merge-key']
         },
         "xsl:non-matching-substring": { type: 'xsl:sequence-constructor' },
+        "xsl:next-iteration": {
+            base: 'xsl:element-only-versioned-element-type',
+            elementNames: ['xsl:with-param']
+        },
         "xsl:on-completion": { type: 'xsl:sequence-constructor-or-select' },
         "xsl:otherwise": { type: 'xsl:sequence-constructor' },
         "xsl:output-character": {
