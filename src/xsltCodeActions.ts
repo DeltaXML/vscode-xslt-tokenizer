@@ -244,7 +244,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 							if (firstSymbol.name.startsWith('xsl:')) {
 								const spacePos = firstSymbol.name.indexOf(' ');
 								const realName = spacePos > -1 ? firstSymbol.name.substring(0, spacePos) : firstSymbol.name;
-								allRangeElementsOK = this.expectedElementNames.includes(realName);
+								allRangeElementsOK = realName !== 'xsl:param' && realName !== 'xsl:next-iteration' && this.expectedElementNames.includes(realName);
 							}
 						} else {
 							const parentSymbolLast = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, lastSymbol.range.start);
@@ -259,7 +259,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 										} else if (sibling.name.startsWith('xsl:')) {
 											const spacePos = sibling.name.indexOf(' ');
 											const realName = spacePos > -1 ? sibling.name.substring(0, spacePos) : sibling.name;
-											if (!this.expectedElementNames.includes(realName)) {
+											if (realName === 'xsl:param' || realName === 'xsl:next-iteration' || !this.expectedElementNames.includes(realName)) {
 												allRangeElementsOK = false;
 												break;
 											}
