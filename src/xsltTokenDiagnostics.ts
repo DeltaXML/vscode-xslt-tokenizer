@@ -1263,6 +1263,10 @@ export class XsltTokenDiagnostics {
 							case 'satisfies':
 							case 'else':
 								let tokenValBeforeDelete = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1].token.value : '';
+								if (xpathStack.length === 0) {
+									token['error'] = ErrorType.BracketNesting;
+									problemTokens.push(token);
+								}
 								if (xpathStack.length > 1) {
 									let deleteCount = 0;
 									for (let i = xpathStack.length - 1; i > -1; i--) {
