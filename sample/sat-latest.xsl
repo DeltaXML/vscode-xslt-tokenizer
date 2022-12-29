@@ -3,7 +3,7 @@
                 version="3.0" 
                 xmlns:xs="http://www.w3.org/2001/XMLSchema">  
     
-    <xsl:variable name="max" as="xs:string" select="2 else 2"/>
+    <xsl:variable name="max" as="xs:string" select="2"/>
     
     <xsl:template match="book" mode="indent" expand-text="yes">
         <xsl:value-of>

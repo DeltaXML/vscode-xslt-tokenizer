@@ -562,7 +562,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								break;
 							case DiagnosticCode.instrWithNoContextItem:
 								// append select="..."
-								substitution = substitution ? substitution : ` select="$${ExtractFunctionParams.context}"`;
+								substitution = substitution ? substitution : ` select="$${ExtractFunctionParams.context}/node()"`;
 								currentLine = currentLine.substring(0, rangeEnd) + substitution + currentLine.substring(rangeEnd);
 								break;
 							case DiagnosticCode.groupOutsideForEachGroup:
