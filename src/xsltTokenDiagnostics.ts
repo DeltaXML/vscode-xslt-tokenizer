@@ -99,6 +99,7 @@ export enum DiagnosticCode {
 	unresolvedGenericRef,
 	fnWithNoContextItem,
 	groupOutsideForEachGroup,
+	groupOutsideMerge,
 	positionWithNoContextItem,
 	lastWithNoContextItem,
 	rootWithNoContextItem,
@@ -2793,7 +2794,7 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.MissingContextItemForMerge:
-					errCode = DiagnosticCode.groupOutsideForEachGroup;
+					errCode = tokenValue.includes('()') ? DiagnosticCode.groupOutsideForEachGroup : DiagnosticCode.groupOutsideMerge;
 					msg = `XSLT: Outside a 'xsl:merge-action' - will always return an empty sequence: ${tokenValue}`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;

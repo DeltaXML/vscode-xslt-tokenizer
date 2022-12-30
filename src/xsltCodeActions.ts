@@ -64,6 +64,7 @@ enum ExtractFunctionParams {
 	currentGroup = 'g.current',
 	currentGroupingKey = 'g.key',
 	currentMergeGroup = 'm.current',
+	currentMergeGroupMap = 'm.groups',
 	currentMergeKey = 'm.key',
 	regexGroup = 'c.regex-group'
 }
@@ -436,7 +437,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
-		const { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
+		const { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction, addMergeGroupMapInstruction } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
 		const varTypeMap: Map<string, string> = new Map();
 		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap);
 
@@ -495,11 +496,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const functionParamLines = requiredParamNames.map((argName) => {
 			let argType = (argName === ExtractFunctionParams.position || argName === ExtractFunctionParams.last) ?
 				'xs:integer' :
-				argName === ExtractFunctionParams.regexGroup ?
-					'map(xs:integer, xs:string)' :
-					argName.startsWith(ExtractFunctionParams.regexGroup) ?
-						'xs:string' :
-						'item()*';
+				argName === ExtractFunctionParams.currentMergeGroupMap ?
+					'map(xs:string, item()*)' :
+					argName === ExtractFunctionParams.regexGroup ?
+						'map(xs:integer, xs:string)' :
+						argName.startsWith(ExtractFunctionParams.regexGroup) ?
+							'xs:string' :
+							'item()*';
 			const typeFromMap = varTypeMap.get(argName);
 			argType = typeFromMap ? typeFromMap : argType;
 			return `\t\t<xsl:param name="${argName}" as="${argType}"/>\n`;
@@ -563,9 +566,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 									currentLine = currentLine.substring(0, fnEnd) + '$' + substitution + currentLine.substring(fnEnd);
 								}
 								break;
+							case DiagnosticCode.groupOutsideMerge:
+								substitution = '$' + ExtractFunctionParams.currentMergeGroupMap;
 							case DiagnosticCode.rootOnlyWithNoContextItem:
 								// replace
-								substitution = `root($${ExtractFunctionParams.context})`;
+								substitution = substitution ? substitution : `root($${ExtractFunctionParams.context})`;
 								currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
 								break;
 							case DiagnosticCode.instrWithNoContextItem:
@@ -645,6 +650,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let hasCurrentMergeParam = false;
 		let hasCurrentMergeKeyParam = false;
 		let addRegexMapInstruction = false;
+		let addMergeGroupMapInstruction = false;
 		let numberedRegexGroupParams: string[] = [];
 
 		diagnostics.forEach((diagnostic) => {
@@ -657,6 +663,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 							const varName = varNameMatch[0].substring(1);
 							if (requiredParamNames.indexOf(varName) < 0) { requiredParamNames.push(varName); requiredArgNames.push('$' + varName); }
 						}
+						break;
+					case DiagnosticCode.groupOutsideMerge:
+						addMergeGroupMapInstruction = true;
+						quickfixDiagnostics.push(diagnostic);
 						break;
 					case DiagnosticCode.instrWithNoContextItem:
 					case DiagnosticCode.fnWithNoContextItem:
@@ -718,6 +728,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				requiredParamNames.unshift(ExtractFunctionParams.regexGroup + '.' + gp);
 			});
 		}
+		if (addMergeGroupMapInstruction) {
+			requiredArgNames.unshift('$merge-groups');
+			requiredParamNames.unshift(ExtractFunctionParams.currentMergeGroupMap);
+		}
 		if (addRegexMapInstruction) {
 			requiredArgNames.unshift('$regex-group');
 			requiredParamNames.unshift(ExtractFunctionParams.regexGroup);
@@ -742,7 +756,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			requiredArgNames.unshift('.');
 			requiredParamNames.unshift(ExtractFunctionParams.context);
 		}
-		return { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction };
+		return { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction, addMergeGroupMapInstruction };
 	}
 
 	private extendRangeToFullLines(range: vscode.Range) {
