@@ -1647,19 +1647,22 @@ export class XsltTokenDiagnostics {
 											if (prevToken?.charType !== CharLevelState.lB) {
 												if (poppedData.functionArity !== undefined) {
 													poppedData.functionArity++;
-													if (insideGlobalFunction && poppedData.function.value === 'regex-group' && poppedData.functionArity === 1) {
-														const elementContextOK = elementStack.find((item) => item.symbolName === 'xsl:matching-substring');
+													const functionName = poppedData.function.value;
+													const isRegexGroup = functionName === 'regex-group';
+													if (insideGlobalFunction && (isRegexGroup || functionName === 'current-merge-group') && poppedData.functionArity === 1) {
+														const contextInstruction = isRegexGroup ? 'xsl:matching-substring' : 'xsl:merge-action';
+														const elementContextOK = elementStack.find((item) => item.symbolName === contextInstruction);
 														if (!elementContextOK) {
-															poppedData.function.error = ErrorType.MissingContextItemForRegex;
+															poppedData.function.error = isRegexGroup ? ErrorType.MissingContextItemForRegex : ErrorType.MissingContextItemForMerge;
 															if (prevToken?.tokenType) {
 																const prevToken2 = allTokens[index - 2];
 																if (prevToken2.charType === CharLevelState.lB) {
-																	poppedData.function.value = `regex-group(${prevToken?.value})`;
+																	poppedData.function.value = functionName + `(${prevToken.value})`;
 																} else {
 																	const startPos = new vscode.Position(poppedData.function.line, poppedData.function.startCharacter + poppedData.function.length);
 																	const endPos = new vscode.Position(token.line, token.startCharacter);
 																	const argString = document.getText(new vscode.Range(startPos, endPos));
-																	poppedData.function.value = `regex-group(${argString})`;
+																	poppedData.function.value = functionName + `(${argString})`;
 																}
 															}
 															regexSpecial = true;
