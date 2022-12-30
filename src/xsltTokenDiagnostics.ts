@@ -2977,14 +2977,12 @@ export class XsltTokenDiagnostics {
 		const endChar = token.startCharacter + token.length;
 		const errRange = new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar));
 		const errCode = DiagnosticCode.unresolvedVariableRef;
-		const errData = [new vscode.DiagnosticRelatedInformation(new vscode.Location(document.uri, errRange), token.value)];
 		if (includeOrImport) {
 			return {
 				code: errCode,
 				message: `XPath: The variable/parameter: ${token.value} cannot be resolved here, but it may be defined in an external module.`,
 				range: errRange,
 				severity: vscode.DiagnosticSeverity.Warning,
-				relatedInformation: errData
 
 			};
 		} else {
@@ -2993,7 +2991,6 @@ export class XsltTokenDiagnostics {
 				message: `XPath: The variable/parameter ${token.value} cannot be resolved`,
 				range: errRange,
 				severity: vscode.DiagnosticSeverity.Error,
-				relatedInformation: errData
 			};
 		}
 	}

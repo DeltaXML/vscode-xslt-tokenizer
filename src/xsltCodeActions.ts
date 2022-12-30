@@ -76,6 +76,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	public static COMMAND_RENAME = 'editor.action.rename';
 	public static COMMAND = 'code-actions-sample.command';
 	private static regexForRegexGroup = new RegExp(/'regex-group\(\s*(\d+)\s*\)'$/);
+	private static regexForVariable = new RegExp(/\$[^\s]+/);
 	private schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
 	private expectedElementData = this.schemaQuery.getExpected('xsl:function').elements;
 	private expectedElementNames = this.expectedElementData.map((item) => item[0]);
@@ -643,8 +644,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			if (errorLine >= fnStartLine + 1 && errorLine <= fnStartLine + lineCount + 1) {
 				switch (diagnostic.code) {
 					case DiagnosticCode.unresolvedVariableRef:
-						const varName = diagnostic.relatedInformation![0].message.substring(1);
-						if (requiredParamNames.indexOf(varName) < 0) { requiredParamNames.push(varName); requiredArgNames.push('$' + varName); }
+						const varNameMatch = diagnostic.message.match(XSLTCodeActions.regexForVariable);
+						if (varNameMatch && varNameMatch.length === 1) {
+							const varName = varNameMatch[0].substring(1);
+							if (requiredParamNames.indexOf(varName) < 0) { requiredParamNames.push(varName); requiredArgNames.push('$' + varName); }
+						}
 						break;
 					case DiagnosticCode.instrWithNoContextItem:
 					case DiagnosticCode.fnWithNoContextItem:
