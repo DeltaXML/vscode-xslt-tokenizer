@@ -730,7 +730,10 @@ export class XsltTokenDiagnostics {
 											const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
 											symbol.children = childSymbols;
 											if (elementStack.length > 0) {
-												if (insideGlobalFunction) XsltTokenDiagnostics.addProblemIfMissingContextSC(true, tagElementName, tagAttributeSymbols, elementStack, xpathStack, startTagToken, problemTokens);
+												if (insideGlobalFunction) {
+													XsltTokenDiagnostics.addProblemIfMissingContextSC(true, tagElementName, tagAttributeSymbols, elementStack, xpathStack, startTagToken, problemTokens);
+													XsltTokenDiagnostics.addCallTemplateProbIfMissingContext(true, startTagToken, tagElementName, elementStack, xpathStack, problemTokens);
+												}
 												elementStack[elementStack.length - 1].childSymbols.push(symbol);
 											} else {
 												topLevelSymbols.push(symbol);
@@ -749,7 +752,11 @@ export class XsltTokenDiagnostics {
 										currentXSLTIterateParams.pop();
 									} else if (tagElementName === 'xsl:function') {
 										insideGlobalFunction = false;
-									} else if (insideGlobalFunction) XsltTokenDiagnostics.addProblemIfMissingContext(true, tagElementName, poppedData, elementStack, xpathStack, problemTokens);
+									} else if (insideGlobalFunction) {
+										XsltTokenDiagnostics.addProblemIfMissingContext(true, tagElementName, poppedData, elementStack, xpathStack, problemTokens);
+										XsltTokenDiagnostics.addCallTemplateProbIfMissingContext(true, poppedData.identifierToken, tagElementName, elementStack, xpathStack, problemTokens);
+
+									}
 									if (poppedData) {
 										if (poppedData.symbolName !== tagElementName) {
 											let errorToken = Object.assign({}, poppedData.identifierToken);
@@ -1976,6 +1983,7 @@ export class XsltTokenDiagnostics {
 			const selectAttr = tagAttributeSymbols.find((item) => item.name === 'select');
 			if (!selectAttr && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 				const instrToken = startTagToken;
+				instrToken.value = tagElementName;
 				instrToken.error = ErrorType.MissingContextItemForInstr;
 				problemTokens.push(instrToken);
 			}
@@ -1988,7 +1996,18 @@ export class XsltTokenDiagnostics {
 			const selectAttr = attributes ? attributes.children.find((item) => item.name === 'select') : undefined;
 			if (!selectAttr && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 				const instrToken = poppedData.identifierToken;
+				instrToken.value = tagElementName;
 				instrToken.error = ErrorType.MissingContextItemForInstr;
+				problemTokens.push(instrToken);
+			}
+		}
+	}
+
+	private static addCallTemplateProbIfMissingContext(insideGlobalFunction: boolean, instrToken: XSLTToken, tagElementName: string, elementStack: ElementData[], xpathStack: XPathData[], problemTokens: BaseToken[]) {
+		if (insideGlobalFunction && tagElementName === 'xsl:call-template') {
+			if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+				instrToken.value = tagElementName;
+				instrToken.error = ErrorType.MissingContextItemForCallTemplate;
 				problemTokens.push(instrToken);
 			}
 		}
@@ -2790,6 +2809,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingContextItemForInstr:
 					errCode = DiagnosticCode.instrWithNoContextItem;
 					msg = `XSLT: Context-item is missing ('select' attribute needed here): '${tokenValue}'`;
+					break;
+				case ErrorType.MissingContextItemForCallTemplate:
+					msg = `XSLT: No context-item present for 'xsl:call-template' instruction`;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.MissingContextItemForRegex:
 					errCode = DiagnosticCode.regexNoContextItem;

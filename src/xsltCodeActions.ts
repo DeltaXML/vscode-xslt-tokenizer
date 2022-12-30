@@ -562,8 +562,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								currentLine = currentLine.substring(0, rangeStart) + substitution + currentLine.substring(rangeEnd);
 								break;
 							case DiagnosticCode.instrWithNoContextItem:
+								const isXslCopy = currentDiagnostic.message.endsWith('\'xsl:copy\'');
 								// append select="..."
-								substitution = substitution ? substitution : ` select="$${ExtractFunctionParams.context}/node()"`;
+								substitution = isXslCopy ? ` select="$${ExtractFunctionParams.context}"` : ` select="$${ExtractFunctionParams.context}/node()"`;
 								currentLine = currentLine.substring(0, rangeEnd) + substitution + currentLine.substring(rangeEnd);
 								break;
 							case DiagnosticCode.groupOutsideForEachGroup:
