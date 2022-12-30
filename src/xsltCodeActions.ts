@@ -198,7 +198,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						if (startCharOfSelection >= startCharOfAttrValue) {
 							const xpathText = document.getText(range);
 							const diagnostics = this.xpathTokenProvider.provideXPathProblems(new CodeActionDocument(document.uri, xpathText));
-							const blockingIssue = diagnostics.find((item) => item.code !== DiagnosticCode.unresolvedGenericRef && item.code !== DiagnosticCode.unresolvedVariableRef);
+							const blockingIssue = diagnostics.find((item) => item.severity !== vscode.DiagnosticSeverity.Hint && item.code !== DiagnosticCode.unresolvedGenericRef && item.code !== DiagnosticCode.unresolvedVariableRef);
 							if (!blockingIssue) {
 								let pass = xpathText.length > 30;
 								if (!pass) {
