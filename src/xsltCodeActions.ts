@@ -50,9 +50,11 @@ interface ActionProps {
 export type anyDocumentSymbol = vscode.DocumentSymbol | undefined | null;
 
 enum XsltCodeActionKind {
-	extractXsltFunction = 'xsl:function - from XSLT instruction(s)',
-	extractXsltTemplate = 'xsl:template - from XSLT instructions(s)',
-	extractXsltFunctionFmXPath = 'xsl:function - from XPath expression',
+	extractXsltFunction = 'xsl:function - full refactor',
+	extractXsltFunctionPartial = 'xsl:function - partial refactor',
+	extractXsltTemplate = 'xsl:template',
+	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
+	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
 }
 
 enum ExtractFunctionParams {
@@ -96,10 +98,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 			case RangeTagType.xpathAttribute:
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunctionFmXPath, vscode.CodeActionKind.RefactorExtract));
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunctionFmXPathPartial, vscode.CodeActionKind.RefactorExtract));
 				break;
 			case RangeTagType.singleElement:
 			case RangeTagType.multipleElement:
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunction, vscode.CodeActionKind.RefactorExtract));
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunctionPartial, vscode.CodeActionKind.RefactorExtract));
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltTemplate, vscode.CodeActionKind.RefactorExtract));
 				break;
 			default:
@@ -131,10 +135,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		switch (codeAction.title) {
 			case XsltCodeActionKind.extractXsltFunction:
+			case XsltCodeActionKind.extractXsltFunctionPartial:
 			case XsltCodeActionKind.extractXsltTemplate:
 				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, true);
 				break;
 			case XsltCodeActionKind.extractXsltFunctionFmXPath:
+			case XsltCodeActionKind.extractXsltFunctionFmXPathPartial:
 				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, false);
 				break;
 		}
@@ -371,6 +377,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: anyDocumentSymbol, elementSelected: boolean): vscode.CodeAction {
 		const forXSLTemplate = codeAction.title === XsltCodeActionKind.extractXsltTemplate;
+		const partialRefactor = codeAction.title === XsltCodeActionKind.extractXsltFunctionPartial || codeAction.title === XsltCodeActionKind.extractXsltFunctionFmXPathPartial;
 		let fullRange = sourceRange;
 		let fullRangeWithoutLeadingWS = sourceRange;
 		const firstCharOnFirstLine = document.lineAt(fullRange.start.line).firstNonWhitespaceCharacterIndex;
@@ -435,7 +442,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		let fixedTrimmedBodyTextLines: string[] = [];
 		let finalCorrectText: string;
-		if (quickfixDiagnostics.length === 0) {
+		if (quickfixDiagnostics.length === 0 || partialRefactor) {
 			finalCorrectText = trimmedBodyText;
 		} else {
 			this.fixFunctionBodyProblems(trimmedBodyText, targetRange, quickfixDiagnostics, fixedTrimmedBodyTextLines, addRegexMapInstruction);
