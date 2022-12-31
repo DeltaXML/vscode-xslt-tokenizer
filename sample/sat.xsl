@@ -8,6 +8,13 @@
     
     <xsl:template match="/" mode="#default">   
         <xsl:for-each select="*">
+            <xsl:if test="2">
+                <xsl:if test="3">
+                    <xsl:if test="4">
+                        <xsl:sequence select="5555555 + 8888888"/>
+                    </xsl:if>
+                </xsl:if>
+            </xsl:if>
             <xsl:variable name="var1" as="xs:string" select="'a'"/>
             <xsl:variable name="var2" as="xs:string" select="
                 'a', 

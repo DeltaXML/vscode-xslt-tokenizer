@@ -139,11 +139,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			case XsltCodeActionKind.extractXsltFunction:
 			case XsltCodeActionKind.extractXsltFunctionPartial:
 			case XsltCodeActionKind.extractXsltTemplate:
-				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, true);
+				const nullAttrParentRange = null;
+				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, nullAttrParentRange);
 				break;
 			case XsltCodeActionKind.extractXsltFunctionFmXPath:
 			case XsltCodeActionKind.extractXsltFunctionFmXPathPartial:
-				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, false);
+				let validAttrParent = ancestorOrSelfSymbols[1];
+				if (validAttrParent.name === 'xsl:when') validAttrParent = ancestorOrSelfSymbols[2];
+				const attrParentRange = validAttrParent.range;
+				this.addExtractFunctionEdits(codeAction, document, range, targetSymbolRange, usedLastSymbol, attrParentRange);
 				break;
 		}
 		return codeAction;
@@ -403,7 +407,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { text: '', lines: 0, isSelect: false };
 	}
 
-	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: anyDocumentSymbol, elementSelected: boolean): vscode.CodeAction {
+	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: anyDocumentSymbol, attrParentRange: vscode.Range|null): vscode.CodeAction {
+		const elementSelected = !attrParentRange;
 		const forXSLTemplate = codeAction.title === XsltCodeActionKind.extractXsltTemplate;
 		const partialRefactor = codeAction.title === XsltCodeActionKind.extractXsltFunctionPartial || codeAction.title === XsltCodeActionKind.extractXsltFunctionFmXPathPartial;
 		let fullRange = sourceRange;
@@ -506,19 +511,26 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			replacementStart = replacementIsVariable ? `<xsl:variable name="${finalSymbolVariableName}" as="item()*" select="` : replacementStart;
 			const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 			const replcementFnCall = callName + '(';
+			let instrText = '';
+			if (addRegexMapInstruction) {
+				instrText = '<xsl:variable name="regex-group" select="map:merge(for $k in 0 to 99 return map:entry($k, regex-group($k)))"/>\n';
+				if (elementSelected) instrText += prefixWS;
+			}
+			if (addMergeGroupMapInstruction) {
+				instrText += `<xsl:variable name="merge-groups" select="map:merge(for $k in (${mergeNames.join(',')}) return map:entry($k, current-merge-group($k)))"/>\n`; 
+				if (elementSelected) instrText += prefixWS;
+			}
 			if (elementSelected) {
 				fnStartCharacter = firstCharOnFirstLine + replacementStart.length + 2;
-				let instrText = '';
-				if (addRegexMapInstruction) {
-					instrText = '<xsl:variable name="regex-group" select="map:merge(for $k in 0 to 99 return map:entry($k, regex-group($k)))"/>\n' + prefixWS;
-				}
-				if (addMergeGroupMapInstruction) {
-					instrText = `<xsl:variable name="merge-groups" select="map:merge(for $k in (${mergeNames.join(',')}) return map:entry($k, current-merge-group($k)))"/>\n` + prefixWS; 
-				}
 				replacementAll = instrText + replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
 			} else {
 				fnStartCharacter = prefixWS.length + fullRange.start.character + 2;
 				replacementAll = prefixWS + replcementFnCall + fnArgsString + ')';
+				const parentStartLine = document.lineAt(attrParentRange.start.line);
+				const firstCharOnFirstLine = parentStartLine.firstNonWhitespaceCharacterIndex;
+				const wsBeforeFirstChar = parentStartLine.text.substring(0, firstCharOnFirstLine);
+				instrText += wsBeforeFirstChar;
+				codeAction.edit.insert(document.uri, attrParentRange.start, instrText);
 			}
 
 		}
