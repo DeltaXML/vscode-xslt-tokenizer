@@ -8,7 +8,7 @@ import { DocumentChangeHandler } from './documentChangeHandler';
 import * as url from 'url';
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
 import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
-import { anyDocumentSymbol } from './xsltCodeActions';
+import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
 
 interface ImportedGlobals {
 	href: string;
@@ -348,10 +348,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				} else if (childSymbol.kind === vscode.SymbolKind.Object) {
 					const symbolName = childSymbol.name;
 					if (symbolName.startsWith('xsl:merge-source')) {
-						const lastSpacePos = childSymbol.name.lastIndexOf(' ');
-						if (lastSpacePos > -1) {
-							const mergeNameExpression = '\'' + childSymbol.name.substring(lastSpacePos + 1) + '\'';
-							mergeNames.push(mergeNameExpression);
+						const doc = vscode.window.activeTextEditor!.document;
+					const attrs = childSymbol.children[0];
+						if (attrs && attrs.kind === vscode.SymbolKind.Array && attrs.name === 'attributes') {
+							const nameAttr = attrs.children.find((attr) => attr.name === 'name');
+							if (nameAttr) {
+								const attrValueFull = XSLTCodeActions.getAttrValueFromSymbol(doc, nameAttr);
+								mergeNames.push(attrValueFull);
+							}
 						}
 					} else if (symbolName === 'xsl:merge') {
 						mergeNames.length = 0;

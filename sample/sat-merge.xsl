@@ -11,10 +11,16 @@
   <xsl:output method="xml" indent="yes"/>
   <xsl:mode on-no-match="shallow-copy"/>
   <xsl:variable name="master" as="xs:string" select="'master'"/>
+  <xsl:variable name="totla" as="xs:string" select="'totla'"/>
   
   <xsl:template match="/*" mode="#all">
     <xsl:merge>
-      <xsl:merge-source name="p{$master}q" 
+      <xsl:merge-source name="{$totla}"
+        for-each-source="'master.xml'"
+        select="/events/event">
+        <xsl:merge-key select="@key"/>
+      </xsl:merge-source>
+      <xsl:merge-source name="{$master}" 
         for-each-source="'master.xml'"
         select="/events/event">
         <xsl:merge-key select="@key"/>

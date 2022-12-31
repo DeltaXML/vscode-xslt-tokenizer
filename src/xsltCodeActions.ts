@@ -83,6 +83,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
 	private expectedElementData = this.schemaQuery.getExpected('xsl:function').elements;
 	private expectedElementNames = this.expectedElementData.map((item) => item[0]);
+	private static regexForAVT = new RegExp(/([^{}]+)|(\{[^\}]+})/g);
 
 	private actionProps: ActionProps | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
@@ -195,7 +196,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						}
 					}
 					if (isXPathAttribute) {
-						const startCharOfAttrValue = this.getAttrStartFromSymbol(document, firstSymbol);
+						const startCharOfAttrValue = XSLTCodeActions.getAttrStartFromSymbol(document, firstSymbol);
 						const startCharOfSelection = document.offsetAt(range.start);
 						if (startCharOfSelection >= startCharOfAttrValue) {
 							const xpathText = document.getText(range);
@@ -296,7 +297,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { rangeTagType, firstTagName, lastTagName };
 	}
 
-	public getAttrStartFromSymbol(document: vscode.TextDocument, docSymbol: vscode.DocumentSymbol) {
+	public static getAttrStartFromSymbol(document: vscode.TextDocument, docSymbol: vscode.DocumentSymbol) {
 		const fullText = document.getText(docSymbol.range);
 		const sqPos = fullText.indexOf('\'');
 		const dqPos = fullText.indexOf('"');
@@ -304,6 +305,27 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const qPos = bothSingleAndDouble ? Math.min(sqPos, dqPos) : Math.max(sqPos, dqPos);
 		const startCharOfAttrValue = document.offsetAt(docSymbol.range.start) + qPos + 1;
 		return startCharOfAttrValue;
+	}
+
+	public static getAttrValueFromSymbol(document: vscode.TextDocument, docSymbol: vscode.DocumentSymbol) {
+		const fullText = document.getText(docSymbol.range);
+		const sqPos = fullText.indexOf('\'');
+		const dqPos = fullText.indexOf('"');
+		const bothSingleAndDouble = sqPos > -1 && dqPos > -1;
+		const qPos = bothSingleAndDouble ? Math.min(sqPos, dqPos) : Math.max(sqPos, dqPos);
+		const attrValue = fullText.substring(qPos + 1, fullText.length - 1);
+		const avtMatches = attrValue.match(XSLTCodeActions.regexForAVT);
+		if (avtMatches) {
+			const parts: string[] = [];
+			avtMatches.forEach((avt) => {
+				if (avt.charAt(0) === '{') {
+					parts.push(avt.substring(1, avt.length - 1));
+				} else {
+					parts.push('\'' + avt + '\'');
+				}
+			});
+			return parts.join('||');
+		} else return '';
 	}
 
 	private createStubCodeAction(title: string): vscode.CodeAction {
