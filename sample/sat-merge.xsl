@@ -15,13 +15,11 @@
     <xsl:merge>
       <xsl:merge-source name="master" 
         for-each-source="'master.xml'"
-        streamable="yes"
         select="/events/event">
         <xsl:merge-key select="@key"/>
       </xsl:merge-source>
       <xsl:merge-source name="updates" 
         for-each-source="uri-collection('updates')"
-        streamable="yes"
         select="/events/event-change">
         <xsl:merge-key select="@affected-key"/>
       </xsl:merge-source>

@@ -318,16 +318,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static findVariableTypeAtSymbol(targetSymbol: anyDocumentSymbol, variableNames: string[], types: Map<string, string>) {
+	public static findVariableTypeAtSymbol(targetSymbol: anyDocumentSymbol, variableNames: string[], types: Map<string, string>, mergeNames: string[]) {
 		const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
-		if (targetSymbol) XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, rootSymbol, variableNames, types);
+		if (targetSymbol) XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, rootSymbol, variableNames, types, mergeNames);
 	}
 
 
-	private static findChildVariableTypeAtSymbol(targetSymbol: vscode.DocumentSymbol, parentSymbol: vscode.DocumentSymbol, variableNames: string[], types: Map<string, string>) {
+	private static findChildVariableTypeAtSymbol(targetSymbol: vscode.DocumentSymbol, parentSymbol: vscode.DocumentSymbol, variableNames: string[], types: Map<string, string>, mergeNames: string[]) {
 		for (const childSymbol of parentSymbol.children) {			
 			if (childSymbol.range.contains(targetSymbol.range)) {
-				XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, childSymbol, variableNames, types);
+				XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, childSymbol, variableNames, types, mergeNames);
 				break;
 			} else {
 				// preceding sibling:
@@ -344,6 +344,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 								}
 							}
 						}
+					}
+				} else if (childSymbol.kind === vscode.SymbolKind.Object) {
+					const symbolName = childSymbol.name;
+					if (symbolName.startsWith('xsl:merge-source')) {
+						const lastSpacePos = childSymbol.name.lastIndexOf(' ');
+						if (lastSpacePos > -1) {
+							const mergeNameExpression = '\'' + childSymbol.name.substring(lastSpacePos + 1) + '\'';
+							mergeNames.push(mergeNameExpression);
+						}
+					} else if (symbolName === 'xsl:merge') {
+						mergeNames.length = 0;
 					}
 				}
 			}

@@ -439,7 +439,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const interimFunctionText = functionHeadText + trimmedBodyText + functionFootText;
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction, addMergeGroupMapInstruction } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
 		const varTypeMap: Map<string, string> = new Map();
-		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap);
+		const mergeNames: string[] = [];
+		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap, mergeNames);
 
 		let fixedTrimmedBodyTextLines: string[] = [];
 		let finalCorrectText: string;
@@ -484,6 +485,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				if (addRegexMapInstruction) {
 					instrText = '<xsl:variable name="regex-group" select="map:merge(for $k in 0 to 99 return map:entry($k, regex-group($k)))"/>\n' + prefixWS;
 				}
+				if (addMergeGroupMapInstruction) {
+					instrText = `<xsl:variable name="merge-groups" select="map:merge(for $k in (${mergeNames.join(',')}) return map:entry($k, current-merge-group($k)))"/>\n` + prefixWS; 
+				}
 				replacementAll = instrText + replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
 			} else {
 				fnStartCharacter = prefixWS.length + fullRange.start.character + 2;
@@ -510,7 +514,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const allFunctionText = functionHeadText + functionParamLines.join('') + finalCorrectText + functionFootText;
 		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
-		const fnStartLineIncrement = (replacementIsVariable && forXSLTemplate) || addRegexMapInstruction ? 1 : 0;
+		let fnStartLineIncrement = (replacementIsVariable && forXSLTemplate) || addRegexMapInstruction ? 1 : 0;
+		if (addMergeGroupMapInstruction) fnStartLineIncrement++;
 		this.executeRenameCommand(fullRange.start.line + fnStartLineIncrement, fnStartCharacter, document.uri);
 		return codeAction;
 	}
