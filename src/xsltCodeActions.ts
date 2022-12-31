@@ -195,12 +195,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						}
 					}
 					if (isXPathAttribute) {
-						const fullText = document.getText(firstSymbol.range);
-						const sqPos = fullText.indexOf('\'');
-						const dqPos = fullText.indexOf('"');
-						const bothSingleAndDouble = sqPos > -1 && dqPos > -1;
-						const qPos = bothSingleAndDouble ? Math.min(sqPos, dqPos) : Math.max(sqPos, dqPos);
-						const startCharOfAttrValue = document.offsetAt(firstSymbol.range.start) + qPos + 1;
+						const startCharOfAttrValue = this.getAttrStartFromSymbol(document, firstSymbol);
 						const startCharOfSelection = document.offsetAt(range.start);
 						if (startCharOfSelection >= startCharOfAttrValue) {
 							const xpathText = document.getText(range);
@@ -299,6 +294,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		this.actionProps = { document, range, firstSymbol, lastSymbol, expandTextVal };
 
 		return { rangeTagType, firstTagName, lastTagName };
+	}
+
+	public getAttrStartFromSymbol(document: vscode.TextDocument, docSymbol: vscode.DocumentSymbol) {
+		const fullText = document.getText(docSymbol.range);
+		const sqPos = fullText.indexOf('\'');
+		const dqPos = fullText.indexOf('"');
+		const bothSingleAndDouble = sqPos > -1 && dqPos > -1;
+		const qPos = bothSingleAndDouble ? Math.min(sqPos, dqPos) : Math.max(sqPos, dqPos);
+		const startCharOfAttrValue = document.offsetAt(docSymbol.range.start) + qPos + 1;
+		return startCharOfAttrValue;
 	}
 
 	private createStubCodeAction(title: string): vscode.CodeAction {

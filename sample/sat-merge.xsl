@@ -10,10 +10,11 @@
   
   <xsl:output method="xml" indent="yes"/>
   <xsl:mode on-no-match="shallow-copy"/>
+  <xsl:variable name="master" as="xs:string" select="'master'"/>
   
   <xsl:template match="/*" mode="#all">
     <xsl:merge>
-      <xsl:merge-source name="master" 
+      <xsl:merge-source name="p{$master}q" 
         for-each-source="'master.xml'"
         select="/events/event">
         <xsl:merge-key select="@key"/>
@@ -31,7 +32,7 @@
             </xsl:message>
           </xsl:when>
           <xsl:when test="empty(current-merge-group('updates'))">
-            <xsl:copy-of select="current-merge-group('master')"/>
+            <xsl:copy-of select="current-merge-group($master)"/>
           </xsl:when>
           <xsl:when test="count(current-merge-group('updates')) = 1">
             <xsl:copy-of select="current-merge-group('updates')"/>
