@@ -1274,6 +1274,7 @@ export enum ErrorType {
     MissingContextItemForInstr,
     MissingContextItemForCallTemplate,
     MissingContextItemGeneral,
+    MissingContextItemForCurrent,
     MissingContextItemForRoot,
     MissingContextItemForRootOnly,
     MissingContextItemForGrouping,

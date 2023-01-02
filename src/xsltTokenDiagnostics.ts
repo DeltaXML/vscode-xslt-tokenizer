@@ -98,6 +98,7 @@ export enum DiagnosticCode {
 	unresolvedVariableRef,
 	unresolvedGenericRef,
 	fnWithNoContextItem,
+	currentWithNoContextItem,
 	groupOutsideForEachGroup,
 	groupOutsideMerge,
 	positionWithNoContextItem,
@@ -1750,12 +1751,14 @@ export class XsltTokenDiagnostics {
 										if (!isGroupingAttribute && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction)) {
 											if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 												const prevToken2 = allTokens[index - 2];
-												if (!(prevToken2.value === '/' || prevToken2.value === '!' || prevToken2.value === '//')) {
+												if (isCurrentFunction) {
+													prevToken.error = ErrorType.MissingContextItemForCurrent;
+													prevToken.value += '()';
+													problemTokens.push(prevToken);
+												} else if (!(prevToken2.value === '/' || prevToken2.value === '!' || prevToken2.value === '//')) {
 													let newTokenError = ErrorType.MissingContextItemForFn;
 													const fnName = prevToken.value;
-													if (fnName === 'current') {
-														newTokenError = ErrorType.MissingContextItemGeneral;
-													} else if (fnName === 'position') {
+	                                                if (fnName === 'position') {
 														newTokenError = ErrorType.MissingContextItemForPosition;
 													} else if (fnName === 'last') {
 														newTokenError = ErrorType.MissingContextItemForLast;
@@ -2779,6 +2782,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.MissingContextItemForFn:
 					errCode = DiagnosticCode.fnWithNoContextItem;
 					msg = `XPath: Context-item is missing for function: '${tokenValue}'`;
+					break;
+				case ErrorType.MissingContextItemForCurrent:
+					errCode = DiagnosticCode.currentWithNoContextItem;
+					msg = `XPath: Context-item is missing for: '${tokenValue}'`;
 					break;
 				case ErrorType.MissingContextItemGeneral:
 					errCode = DiagnosticCode.noContextItem;
