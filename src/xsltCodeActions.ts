@@ -66,7 +66,7 @@ enum ExtractFunctionParams {
 	currentMergeGroup = 'm.current',
 	currentMergeGroupMap = 'm.groups',
 	currentMergeKey = 'm.key',
-	regexGroup = 'c.regex-group'
+	regexGroup = 'r.group'
 }
 
 export class XSLTCodeActions implements vscode.CodeActionProvider {
