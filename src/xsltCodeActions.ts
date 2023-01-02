@@ -611,7 +611,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								}
 								break;
 							case DiagnosticCode.groupOutsideMerge:
-								substitution = '$' + ExtractFunctionParams.currentMergeGroupMap;
+								substitution = substitution ? substitution : '$' + ExtractFunctionParams.currentMergeGroupMap;
 							case DiagnosticCode.rootOnlyWithNoContextItem:
 								// replace
 								substitution = substitution ? substitution : `root($${ExtractFunctionParams.context})`;
@@ -639,6 +639,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 										substitution = ExtractFunctionParams.currentMergeKey;
 										break;
 								}
+							case DiagnosticCode.currentWithNoContextItem:
+								substitution = substitution ? substitution : ExtractFunctionParams.context;
 							case DiagnosticCode.lastWithNoContextItem:
 								substitution = substitution ? substitution : ExtractFunctionParams.last;
 							case DiagnosticCode.positionWithNoContextItem:
@@ -717,6 +719,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					case DiagnosticCode.noContextItem:
 					case DiagnosticCode.rootWithNoContextItem:
 					case DiagnosticCode.rootOnlyWithNoContextItem:
+					case DiagnosticCode.currentWithNoContextItem:
 						quickfixDiagnostics.push(diagnostic);
 						hasContextParam = true;
 						break;

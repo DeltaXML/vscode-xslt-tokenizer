@@ -6,7 +6,7 @@
     version="2.0">
     
     <xsl:template match="/*">
-        <xsl:sequence select="current()/name()"/>
+        <xsl:sequence select="node(), current()/name(), last(), position(), ."/>
     </xsl:template>
     
     <xsl:function name="fn:test">
