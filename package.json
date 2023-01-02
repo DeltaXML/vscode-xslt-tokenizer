@@ -418,7 +418,7 @@
 						"description": "Export filename: If set, exports the compiled stylesheet, in a form suitable for subsequent execution"
 					},
 					"execute": {
-            "type": "boolean",
+						"type": "boolean",
 						"description": "Default: 'true'. If set 'false' any -export output is generated but XSLT is not executed"
 					},
 					"resultPath": {
