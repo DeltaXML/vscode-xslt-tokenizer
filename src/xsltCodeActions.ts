@@ -528,8 +528,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				replacementAll = prefixWS + replcementFnCall + fnArgsString + ')';
 				const parentStartLine = document.lineAt(attrParentRange.start.line);
 				const firstCharOnFirstLine = parentStartLine.firstNonWhitespaceCharacterIndex;
-				const wsBeforeFirstChar = parentStartLine.text.substring(0, firstCharOnFirstLine);
-				instrText += wsBeforeFirstChar;
+				if (instrText.length > 0) {
+					const wsBeforeFirstChar = parentStartLine.text.substring(0, firstCharOnFirstLine);
+					instrText += wsBeforeFirstChar;
+				}
 				codeAction.edit.insert(document.uri, attrParentRange.start, instrText);
 			}
 
