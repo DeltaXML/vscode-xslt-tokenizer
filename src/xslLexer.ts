@@ -1057,7 +1057,11 @@ export class XslLexer {
                                 } else if (exit = attName.startsWith('_')) {
                                     exit = ExitCondition.CurlyBrace;
                                 } else {
-                                    exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
+                                    if (tagElementName === 'merge-source') {
+                                        exit = ExitCondition.None;
+                                    } else {
+                                        exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
+                                    }
                                 }
                             } else if (this.nonNativeAvts) {
                                 exit = ExitCondition.CurlyBrace;
