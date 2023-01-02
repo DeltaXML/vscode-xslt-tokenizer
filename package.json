@@ -21,7 +21,7 @@
 		"formatter"
 	],
 	"engines": {
-		"vscode": "^1.73.0"
+		"vscode": "^1.72.0"
 	},
 	"categories": [
 		"Programming Languages"
@@ -881,7 +881,7 @@
 	"devDependencies": {
 		"@types/jest": "^24.9.1",
 		"@types/node": "^10.17.17",
-		"@types/vscode": "^1.73.0",
+		"@types/vscode": "^1.72.0",
 		"@typescript-eslint/eslint-plugin": "^5.4.0",
 		"@typescript-eslint/parser": "^5.4.0",
 		"eslint": "^8.2.0",
