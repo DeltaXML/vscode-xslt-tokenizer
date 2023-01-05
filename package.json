@@ -21,7 +21,7 @@
 		"formatter"
 	],
 	"engines": {
-		"vscode": "^1.66.0"
+		"vscode": "^1.72.0"
 	},
 	"categories": [
 		"Programming Languages"
@@ -418,7 +418,7 @@
 						"description": "Export filename: If set, exports the compiled stylesheet, in a form suitable for subsequent execution"
 					},
 					"execute": {
-            "type": "boolean",
+						"type": "boolean",
 						"description": "Default: 'true'. If set 'false' any -export output is generated but XSLT is not executed"
 					},
 					"resultPath": {
@@ -881,7 +881,7 @@
 	"devDependencies": {
 		"@types/jest": "^24.9.1",
 		"@types/node": "^10.17.17",
-		"@types/vscode": "^1.73.0",
+		"@types/vscode": "^1.72.0",
 		"@typescript-eslint/eslint-plugin": "^5.4.0",
 		"@typescript-eslint/parser": "^5.4.0",
 		"eslint": "^8.2.0",
@@ -890,7 +890,7 @@
 		"prettier": "^2.4.1",
 		"ts-jest": "^26.5.6",
 		"tslint": "^5.20.1",
-		"typescript": "^3.8.3",
+		"typescript": "^4.9.4",
 		"xslt3": "^2.0.3"
 	},
 	"dependencies": {
