@@ -9,7 +9,7 @@ export class FileSelection {
       extensionFilters[filterLabel] = extensions;
     }
     const APP_FILE = await vscode.window.showOpenDialog({
-          
+          title: label,
           filters: extensionFilters,
           canSelectFolders: false,
           canSelectFiles: true,
