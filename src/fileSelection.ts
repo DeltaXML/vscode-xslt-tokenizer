@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 
 export class FileSelection {
-  private static fileList: string[] = ["one.xml", "two.xml"];
+  private fileList: string[] = ["one.xml", "two.xml"];
   private static commandist: string[] = ["Pick File"];
-  public static async pickFile(obj: { label: string; extensions?: string[] }) {
+  public async pickFile(obj: { label: string; extensions?: string[] }) {
 
     const { label, extensions } = obj;
-    const fileItems = FileSelection.fileList.map(label => ({ label }));
+    const fileItems = this.fileList.map(label => ({ label }));
     const commandItems = FileSelection.commandist.map(label => ({ label }));
     const OtherSeparator = {
       label: 'command',
