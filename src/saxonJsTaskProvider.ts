@@ -38,6 +38,22 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     static SaxonBuildScriptType: string = 'xslt-js';
     templateTaskLabel = 'Saxon-JS Transform (New)';
     templateTaskFound = false;
+    static inputString = `"inputs": [
+\t\t{
+\t\t\t// $\{input:xmlFile}
+\t\t\t"id": "xmlFile",
+\t\t\t"type": "command",
+\t\t\t"command": "xslt-xpath.pickFile",
+\t\t\t"args": {"label": "Select XML File", "extensions": ["xml", "docbook"] }
+\t\t},
+\t\t{
+\t\t\t// $\{input:xsltFile}
+\t\t\t"id": "xsltFile",
+\t\t\t"type": "command",
+\t\t\t"command": "xslt-xpath.pickFile",
+\t\t\t"args": {"label": "Select XSLT Stylesheet", "extensions": ["xsl"] }
+\t\t}
+\t]`;
 
 
     constructor(private workspaceRoot: string) { }
@@ -78,15 +94,13 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                 if (arrayEndPos > 0) {
                     let pos = doc.positionAt(arrayEndPos);
                     let wse = new vscode.WorkspaceEdit();
-                    wse.insert(workspaceTaskUri, pos, `,\n\tinputs: []`);
+                    wse.insert(workspaceTaskUri, pos, `,\n\t${this.inputString}`);
                     vscode.workspace.applyEdit(wse);
                 }
 
             }
         } catch (e) {
-            tasksObject = { tasks: [] };
         }
-        return tasksObject;
     }
 
 
