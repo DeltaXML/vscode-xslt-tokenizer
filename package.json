@@ -74,7 +74,12 @@
 				"key": "Shift+Cmd+6"
 			}
 		],
-		"commands": [
+		"commands": [			
+			{
+				"command": "xslt-xpath.addTaskInputs",
+				"title": "Add XSLT Inputs to Tasks File",
+				"category": "XSLT"
+			},
 			{
 				"command": "xslt-xpath.formatUnchecked",
 				"title": "Format XML with newlines inside mixed-content",

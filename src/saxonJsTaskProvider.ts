@@ -53,12 +53,36 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 
     public static async getTasksObject() {
         let workspaceUri = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri : vscode.Uri.file('/');
-        let workspaceTaskUri = workspaceUri.with({ path: workspaceUri.path + '/.vscode/tasks.json' }) ;
+        let workspaceTaskUri = workspaceUri.with({ path: workspaceUri.path + '/.vscode/tasks.json' });
         let tasksObject = undefined;
 
         try {
             const doc = await vscode.workspace.openTextDocument(workspaceTaskUri);
             tasksObject = jsc.parse(doc.getText());
+        } catch (e) {
+            tasksObject = { tasks: [] };
+        }
+        return tasksObject;
+    }
+
+    public static async addInputsToTasks() {
+        let workspaceUri = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri : vscode.Uri.file('/');
+        let workspaceTaskUri = workspaceUri.with({ path: workspaceUri.path + '/.vscode/tasks.json' });
+        let tasksObject = undefined;
+
+        try {
+            const doc = await vscode.workspace.openTextDocument(workspaceTaskUri);
+            tasksObject = jsc.parse(doc.getText());
+            if (!tasksObject.inputs) {
+                const arrayEndPos = doc.getText().lastIndexOf(']') + 1;
+                if (arrayEndPos > 0) {
+                    let pos = doc.positionAt(arrayEndPos);
+                    let wse = new vscode.WorkspaceEdit();
+                    wse.insert(workspaceTaskUri, pos, `,\n\tinputs: []`);
+                    vscode.workspace.applyEdit(wse);
+                }
+
+            }
         } catch (e) {
             tasksObject = { tasks: [] };
         }
@@ -90,8 +114,8 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     }
 
     private addTemplateTask() {
-		let xmlSourceValue = '${file}';
-		let xsltFilePath = '${file}';
+        let xmlSourceValue = '${file}';
+        let xsltFilePath = '${file}';
         let resultPathValue = '${workspaceFolder}/xslt-out/result1.xml';
 
         let xsltTask: XSLTJSTask = {
@@ -108,36 +132,36 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
         return this.getTask(xsltTask);
     }
 
-    private getTask(genericTask: vscode.TaskDefinition): vscode.Task|undefined {
+    private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt-js';
 
         if (genericTask.type === 'xslt-js') {
-            let xsltTask: XSLTJSTask = <XSLTJSTask> genericTask;
+            let xsltTask: XSLTJSTask = <XSLTJSTask>genericTask;
             if (xsltTask.label === 'xslt-js: ' + this.templateTaskLabel) {
                 this.templateTaskFound = true;
             }
 
-            let npxCommand = DocumentChangeHandler.isWindowsOS? 'npx.cmd' : 'npx';
+            let npxCommand = DocumentChangeHandler.isWindowsOS ? 'npx.cmd' : 'npx';
             let commandLineArgs: string[] = ['xslt3'];
 
-            let xsltParameters: XSLTParameter[] = xsltTask.parameters? xsltTask.parameters: [];
+            let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
             let xsltParametersCommand: string[] = [];
             let useJSON = !!xsltTask.useJsonSource;
             let nogo = xsltTask.execute !== undefined && xsltTask.execute === false;
             for (const param of xsltParameters) {
                 xsltParametersCommand.push(param.name + '=' + param.value);
             }
-            
+
             for (const propName in xsltTask) {
                 let propValue = this.getProp(xsltTask, propName);
                 let propNameValue = '';
                 switch (propName) {
-                    case 'xsltFile': 
+                    case 'xsltFile':
                         propNameValue = '-xsl:' + propValue;
                         break;
                     case 'xmlSource':
-                        const prefix = useJSON? '-json:' : '-s:';
+                        const prefix = useJSON ? '-json:' : '-s:';
                         if (propValue !== "") {
                             propNameValue = prefix + propValue;
                         }
@@ -145,13 +169,13 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                     case 'jsonSource':
                         propNameValue = '-json:' + propValue;
                         break;
-                    case 'resultPath': 
+                    case 'resultPath':
                         propNameValue = '-o:' + propValue;
                         break;
                     case 'initialTemplate':
                         propNameValue = propValue.length === 0 ? '-it' : '-it:' + propValue;
                         break;
-                    case 'initialMode': 
+                    case 'initialMode':
                         propNameValue = '-im:' + propValue;
                         break;
                     case 'export':
@@ -181,6 +205,6 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
         } else {
             return undefined;
         }
-        
+
     }
 }

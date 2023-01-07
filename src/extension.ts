@@ -29,6 +29,7 @@ import * as os from 'os';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTReferenceProvider } from './xsltReferenceProvider';
 import { XSLTCodeActions } from './xsltCodeActions';
+import { FileSelection } from './fileSelection';
 
 
 
@@ -191,6 +192,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider()));
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', async () => SaxonJsTaskProvider.addInputsToTasks()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickFile', async (...args) => await FileSelection.pickFile(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setVariableNames', (...args) => XPathSemanticTokensProvider.setVariableNames(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));

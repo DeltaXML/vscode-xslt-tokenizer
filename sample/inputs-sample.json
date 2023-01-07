@@ -1,0 +1,16 @@
+{
+"inputs": [
+    {
+        "id": "xmlFile",
+        "type": "command",
+        "command": "xslt-xpath.pickFile",
+        "args": {"label": "Select XML File", "extensions": ["xml", "docbook"] }
+    },
+    {
+        "id": "xsltFile",
+        "type": "command",
+        "command": "xslt-xpath.pickFile",
+        "args": {"label": "Select XSLT Stylesheet", "extensions": ["xsl"] }
+    }
+]
+}
