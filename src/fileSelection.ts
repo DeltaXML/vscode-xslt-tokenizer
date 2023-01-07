@@ -1,12 +1,18 @@
 import * as vscode from 'vscode';
 
 export class FileSelection {
-  private fileList: string[] = ["one.xml", "two.xml"];
-  private static commandist: string[] = ["Pick File"];
+  private fileList = new Map<string, string[]>();
+  private static readonly PICK_FILE = "Pick File";
+  private static commandist: string[] = [FileSelection.PICK_FILE];
   public async pickFile(obj: { label: string; extensions?: string[] }) {
 
     const { label, extensions } = obj;
-    const fileItems = this.fileList.map(label => ({ label }));
+    let fileListForLabel = this.fileList.get(label);
+    if (!fileListForLabel) {
+      fileListForLabel = [];
+      this.fileList.set(label, fileListForLabel);
+    }
+    const fileItems = fileListForLabel.map(label => ({ label }));
     const commandItems = FileSelection.commandist.map(label => ({ label }));
     const OtherSeparator = {
       label: 'command',
@@ -17,7 +23,6 @@ export class FileSelection {
       kind: vscode.QuickPickItemKind.Separator
     };
 
-    const quickPick = vscode.window.createQuickPick();
     let listItems: { label: string; kind?: vscode.QuickPickItemKind }[] = [];
 
     listItems.push(fileSeparator);
@@ -27,10 +32,20 @@ export class FileSelection {
     const qpOptions: vscode.QuickPickOptions = {
       placeHolder: label
     };
-    const picked = await vscode.window.showQuickPick(listItems, qpOptions);
-
-    quickPick.onDidHide(() => quickPick.dispose());
-    quickPick.show();
+    if (fileItems.length > 0) {
+      // give option to select from recent files
+      const picked = await vscode.window.showQuickPick(listItems, qpOptions);
+      let exit = true;
+      if (picked) {
+        if (picked.kind === vscode.QuickPickItemKind.Separator) {
+        } else if (picked.label === FileSelection.PICK_FILE) {
+          exit = false;
+        }
+      }
+      if (exit) {
+        return;
+      }
+    }
     let extensionFilters: { [key: string]: string[] } = {};
     if (extensions) {
       const filterLabel = `Extensions ${extensions.join(', ')}`;
@@ -48,7 +63,9 @@ export class FileSelection {
     if (!APP_FILE || APP_FILE.length < 1) {
       return;
     } else {
-      return APP_FILE[0].fsPath;
+      const newFilePath = APP_FILE[0].fsPath;
+      fileListForLabel.unshift(newFilePath);
+      return newFilePath;
     }
   }
 }
