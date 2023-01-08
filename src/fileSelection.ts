@@ -20,24 +20,35 @@ export class FileSelection {
       commandItems.push({ label: FileSelection.CLEAR_RECENTS });
     }
     const OtherSeparator = {
-      label: 'command',
+      label: 'file explorer',
       kind: vscode.QuickPickItemKind.Separator
     };
     const fileSeparator = {
       label: 'recently used',
       kind: vscode.QuickPickItemKind.Separator
     };
+    const currentSeparator = {
+      label: 'current file',
+      kind: vscode.QuickPickItemKind.Separator
+    };
 
     let listItems: { label: string; kind?: vscode.QuickPickItemKind; description?: string }[] = [];
+    let currentFilePath = vscode.window.activeTextEditor?.document.uri.fsPath;
 
-    listItems.push(fileSeparator);
-    listItems = listItems.concat(fileItems);
+    if (currentFilePath) {
+      listItems.push(currentSeparator);
+      listItems.push({ label: path.basename(currentFilePath), description: path.dirname(currentFilePath)});
+    }
+    if (fileItems.length > 0) {
+      listItems.push(fileSeparator);
+      listItems = listItems.concat(fileItems);
+    }
     listItems.push(OtherSeparator);
     listItems = listItems.concat(commandItems);
     const qpOptions: vscode.QuickPickOptions = {
       placeHolder: label
     };
-    if (fileItems.length > 0) {
+    if (fileItems.length > 0 || currentFilePath) {
       // give option to select from recent files
       const picked = await vscode.window.showQuickPick(listItems, qpOptions);
       let exit = true;
@@ -49,7 +60,13 @@ export class FileSelection {
           fileListForLabel.length = 0;
           exit = false;
         } else {
-          return picked.description + path.sep + picked.label;
+          const pickedFsPath = picked.description + path.sep + picked.label;
+          if (pickedFsPath === currentFilePath) {
+            if (!fileListForLabel.includes(pickedFsPath)) {
+              fileListForLabel.push(pickedFsPath);
+            }
+          }
+          return pickedFsPath;
         }
       }
       if (exit) {
