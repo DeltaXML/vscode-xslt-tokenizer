@@ -191,7 +191,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         propNameValue = '-json:' + propValue;
                         break;
                     case 'resultPath':
-                        propNameValue = '-o: ' + propValue;
+                        propNameValue = '-o:' + propValue;
                         break;
                     case 'initialTemplate':
                         propNameValue = propValue.length === 0 ? '-it' : '-it:' + propValue;
