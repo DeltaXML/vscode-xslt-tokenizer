@@ -8,8 +8,8 @@ export class FileSelection {
   private static readonly CLEAR_RECENTS = "Pick File (fresh recently used list)";
   private static commandList: string[] = [FileSelection.PICK_FILE];
   public pickedValues = new Map<string, string>();
-  public async pickFile(obj: { id: string; label: string; extensions?: string[] }) {
-    const { id, label, extensions } = obj;
+  public async pickFile(obj: { label: string; extensions?: string[] }) {
+    const { label, extensions } = obj;
     let fileListForLabel = this.fileList.get(label);
     if (!fileListForLabel) {
       fileListForLabel = [];
@@ -71,7 +71,7 @@ export class FileSelection {
               fileListForLabel.push(pickedFsPath);
             }
           }
-          this.pickedValues.set(id, pickedFsPath);
+          this.pickedValues.set(label, pickedFsPath);
           return pickedFsPath;
         }
       }
@@ -102,7 +102,7 @@ export class FileSelection {
       if (fileListForLabel.length > 10) {
         fileListForLabel.pop();
       }
-      this.pickedValues.set(id, newFilePath);
+      this.pickedValues.set(label, newFilePath);
       return newFilePath;
     }
   }

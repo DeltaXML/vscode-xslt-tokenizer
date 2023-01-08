@@ -48,7 +48,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 \t\t\t"id": "xmlFile",
 \t\t\t"type": "command",
 \t\t\t"command": "xslt-xpath.pickFile",
-\t\t\t"args": {"id": "xml-source", "label": "Select XML File", "extensions": ["xml", "xhtml", "svg"] }
+\t\t\t"args": {"label": "Select XML File", "extensions": ["xml", "xhtml", "svg"] }
 \t\t},
 \t\t{
 \t\t\t/* --- Usage: ---
@@ -57,7 +57,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 \t\t\t"id": "xsltFile",
 \t\t\t"type": "command",
 \t\t\t"command": "xslt-xpath.pickFile",
-\t\t\t"args": {"id": "xslt", "label": "Select XSLT Stylesheet", "extensions": ["xsl", "xslt"] }
+\t\t\t"args": {"label": "Select XSLT Stylesheet", "extensions": ["xsl", "xslt"] }
 \t\t}
 \t]`;
 
