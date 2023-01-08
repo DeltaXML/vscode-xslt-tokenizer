@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 export class FileSelection {
   private fileList = new Map<string, string[]>();
@@ -12,7 +13,7 @@ export class FileSelection {
       fileListForLabel = [];
       this.fileList.set(label, fileListForLabel);
     }
-    const fileItems = fileListForLabel.map(fsPath => ({ label: fsPath }));
+    const fileItems = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
     const commandItems = FileSelection.commandist.map(label => ({ label }));
     const OtherSeparator = {
       label: 'command',
@@ -23,7 +24,7 @@ export class FileSelection {
       kind: vscode.QuickPickItemKind.Separator
     };
 
-    let listItems: { label: string; kind?: vscode.QuickPickItemKind }[] = [];
+    let listItems: { label: string; kind?: vscode.QuickPickItemKind; description?: string }[] = [];
 
     listItems.push(fileSeparator);
     listItems = listItems.concat(fileItems);
@@ -41,7 +42,7 @@ export class FileSelection {
         } else if (picked.label === FileSelection.PICK_FILE) {
           exit = false;
         } else {
-          return picked.label;
+          return picked.description + path.sep + picked.label;
         }
       }
       if (exit) {
