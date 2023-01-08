@@ -36,8 +36,10 @@ export class FileSelection {
     let currentFilePath = vscode.window.activeTextEditor?.document.uri.fsPath;
 
     if (currentFilePath) {
-      listItems.push(currentSeparator);
-      listItems.push({ label: path.basename(currentFilePath), description: path.dirname(currentFilePath)});
+      if (!extensions || extensions.includes('*') || extensions.includes(path.extname(currentFilePath).substring(1))) {
+        listItems.push(currentSeparator);
+        listItems.push({ label: path.basename(currentFilePath), description: path.dirname(currentFilePath) });
+      }
     }
     if (fileItems.length > 0) {
       listItems.push(fileSeparator);
