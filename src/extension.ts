@@ -174,7 +174,22 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
+	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
+		const t = event.execution.task;
+		if (t.definition.type === 'xslt') {
+			vscode.window.showInformationMessage(`Completed task: '${t.definition.label}'`);
+		}
+	}));
+
 	const fileSelector = new FileSelection();
+
+	context.subscriptions.push(vscode.tasks.onDidStartTask((event) => {
+		const t = event.execution.task;
+		if (t.definition.type === 'xslt') {
+			vscode.window.showInformationMessage(
+`Started task: '${t.definition.label}', xsltFile: ${t.definition.xsltFile}, xmlSource: ${t.definition.xmlSource}, resultPath: ${t.definition.resultPath}`);
+		}
+	}));
 
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt' }, xsltSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp' }, dcpSymbolProvider));
