@@ -40,14 +40,18 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     templateTaskFound = false;
     static inputString = `"inputs": [
 \t\t{
-\t\t\t// $\{input:xmlFile}
+\t\t\t/* --- Usage: ---
+\t\t\t"xmlSource": "$\{input:xmlFile}",
+\t\t\t*/
 \t\t\t"id": "xmlFile",
 \t\t\t"type": "command",
 \t\t\t"command": "xslt-xpath.pickFile",
 \t\t\t"args": {"label": "Select XML File", "extensions": ["xml", "docbook"] }
 \t\t},
 \t\t{
-\t\t\t// $\{input:xsltFile}
+\t\t\t/* --- Usage: ---
+\t\t\t"xsltFile": "$\{input:xsltFile}",
+\t\t\t*/
 \t\t\t"id": "xsltFile",
 \t\t\t"type": "command",
 \t\t\t"command": "xslt-xpath.pickFile",
