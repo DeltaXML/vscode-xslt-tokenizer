@@ -191,7 +191,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         propNameValue = '-json:' + propValue;
                         break;
                     case 'resultPath':
-                        propNameValue = '-o:' + propValue;
+                        propNameValue = '-o: ' + propValue;
                         break;
                     case 'initialTemplate':
                         propNameValue = propValue.length === 0 ? '-it' : '-it:' + propValue;
@@ -219,8 +219,9 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 
             const processExecution = new vscode.ProcessExecution(npxCommand, commandLineArgs.concat(xsltParametersCommand));
             let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, processExecution, problemMatcher);
-            newTask.presentationOptions.clear = true;
-            newTask.presentationOptions.showReuseMessage = true;
+            newTask.presentationOptions.clear = false;
+            newTask.presentationOptions.showReuseMessage = false;
+            newTask.presentationOptions.echo = true;
             //let newTask = new vscode.Task(xsltTask, xsltTask.label, source, new vscode.ShellExecution(commandline), problemMatcher);
             return newTask;
         } else {

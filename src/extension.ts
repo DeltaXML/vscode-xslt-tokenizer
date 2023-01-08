@@ -178,14 +178,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
 		const t = event.execution.task;
-		if (t.definition.type === 'xslt') {
+		if (t.definition.type === 'xslt' || t.definition.type === 'xslt-js') {
 			vscode.window.showInformationMessage(`Completed task: '${t.definition.label}'`);
 			fileSelector.pickedValues.clear();
 		}
 	}));
 	context.subscriptions.push(vscode.tasks.onDidStartTask((event) => {
 		const t = event.execution.task;
-		if (t.definition.type === 'xslt') {
+		if (t.definition.type === 'xslt' || t.definition.type === 'xslt-js') {
 			vscode.window.showInformationMessage(
 `Started task: '${t.definition.label}', xsltFile: ${t.definition.xsltFile}, xmlSource: ${t.definition.xmlSource}, resultPath: ${t.definition.resultPath}`);
 		}

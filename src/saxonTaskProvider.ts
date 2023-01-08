@@ -142,7 +142,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         }
                         break;
                     case 'resultPath':
-                        commandLineArgs.push('-o:' + propValue);
+                        commandLineArgs.push('-o: ' + propValue);
                         break;
                     case 'initialTemplate':
                         if (propValue !== "") {
@@ -196,8 +196,9 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             const javaArgs = ['-cp', rawClassPathString, 'net.sf.saxon.Transform'];
             const processExecution = new vscode.ProcessExecution('java', javaArgs.concat(commandLineArgs).concat(saxonFeaturesCommand).concat(xsltParametersCommand));
             let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, processExecution, problemMatcher);
-            newTask.presentationOptions.clear = true;
-            newTask.presentationOptions.showReuseMessage = true;
+            newTask.presentationOptions.clear = false;
+            newTask.presentationOptions.showReuseMessage = false;
+            newTask.presentationOptions.echo = true;
             return newTask;
         } else {
             return undefined;
