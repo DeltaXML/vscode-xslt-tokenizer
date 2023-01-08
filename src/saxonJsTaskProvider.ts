@@ -39,6 +39,8 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     templateTaskLabel = 'Saxon-JS Transform (New)';
     templateTaskFound = false;
     static inputString = `"inputs": [
+\t\t // Add user-prompt to Tasks for file selection. Pick list includes: 
+\t\t // current file, recently-used files and file explorer
 \t\t{
 \t\t\t/* --- Usage: ---
 \t\t\t"xmlSource": "$\{input:xmlFile}",
