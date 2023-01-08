@@ -95,9 +95,9 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                     let pos = doc.positionAt(arrayEndPos);
                     let wse = new vscode.WorkspaceEdit();
                     wse.insert(workspaceTaskUri, pos, `,\n\t${this.inputString}`);
-                    vscode.workspace.applyEdit(wse);
+                    await vscode.workspace.applyEdit(wse);
+                    doc.save();
                 }
-
             }
         } catch (e) {
         }

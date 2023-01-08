@@ -40,6 +40,8 @@ export class FileSelection {
         if (picked.kind === vscode.QuickPickItemKind.Separator) {
         } else if (picked.label === FileSelection.PICK_FILE) {
           exit = false;
+        } else {
+          return picked.label;
         }
       }
       if (exit) {
