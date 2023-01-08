@@ -4,7 +4,8 @@ import * as path from 'path';
 export class FileSelection {
   private fileList = new Map<string, string[]>();
   private static readonly PICK_FILE = "Pick File";
-  private static commandist: string[] = [FileSelection.PICK_FILE];
+  private static readonly CLEAR_RECENTS = "Pick File (fresh recently used list)";
+  private static commandList: string[] = [FileSelection.PICK_FILE];
   public async pickFile(obj: { label: string; extensions?: string[] }) {
 
     const { label, extensions } = obj;
@@ -14,7 +15,10 @@ export class FileSelection {
       this.fileList.set(label, fileListForLabel);
     }
     const fileItems = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
-    const commandItems = FileSelection.commandist.map(label => ({ label }));
+    const commandItems = FileSelection.commandList.map(label => ({ label }));
+    if (fileListForLabel.length > 0) {
+      commandItems.push({ label: FileSelection.CLEAR_RECENTS });
+    }
     const OtherSeparator = {
       label: 'command',
       kind: vscode.QuickPickItemKind.Separator
@@ -41,6 +45,9 @@ export class FileSelection {
         if (picked.kind === vscode.QuickPickItemKind.Separator) {
         } else if (picked.label === FileSelection.PICK_FILE) {
           exit = false;
+        } else if (picked.label === FileSelection.CLEAR_RECENTS) {
+          fileListForLabel.length = 0;
+          exit = false;
         } else {
           return picked.description + path.sep + picked.label;
         }
@@ -51,8 +58,9 @@ export class FileSelection {
     }
     let extensionFilters: { [key: string]: string[] } = {};
     if (extensions) {
-      const filterLabel = `Extensions ${extensions.join(', ')}`;
+      const filterLabel = extensions.map(ext => '*.' + ext).join(', ');
       extensionFilters[filterLabel] = extensions;
+      extensionFilters['*.*'] = ['*'];
     }
     const APP_FILE = await vscode.window.showOpenDialog({
       title: label,
