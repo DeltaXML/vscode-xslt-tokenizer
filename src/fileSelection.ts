@@ -68,6 +68,9 @@ export class FileSelection {
     } else {
       const newFilePath = APP_FILE[0].fsPath;
       fileListForLabel.unshift(newFilePath);
+      if (fileListForLabel.length > 10) {
+        fileListForLabel.pop();
+      }
       return newFilePath;
     }
   }
