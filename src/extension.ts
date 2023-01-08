@@ -174,15 +174,15 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
+	const fileSelector = new FileSelection();
+
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
 		const t = event.execution.task;
 		if (t.definition.type === 'xslt') {
 			vscode.window.showInformationMessage(`Completed task: '${t.definition.label}'`);
+			fileSelector.pickedValues.clear();
 		}
 	}));
-
-	const fileSelector = new FileSelection();
-
 	context.subscriptions.push(vscode.tasks.onDidStartTask((event) => {
 		const t = event.execution.task;
 		if (t.definition.type === 'xslt') {

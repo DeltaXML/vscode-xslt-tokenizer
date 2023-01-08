@@ -1,14 +1,15 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 
+
 export class FileSelection {
   private fileList = new Map<string, string[]>();
   private static readonly PICK_FILE = "Pick File";
   private static readonly CLEAR_RECENTS = "Pick File (fresh recently used list)";
   private static commandList: string[] = [FileSelection.PICK_FILE];
-  public async pickFile(obj: { label: string; extensions?: string[] }) {
-
-    const { label, extensions } = obj;
+  public pickedValues = new Map<string, string>();
+  public async pickFile(obj: { id: string; label: string; extensions?: string[] }) {
+    const { id, label, extensions } = obj;
     let fileListForLabel = this.fileList.get(label);
     if (!fileListForLabel) {
       fileListForLabel = [];
@@ -70,6 +71,7 @@ export class FileSelection {
               fileListForLabel.push(pickedFsPath);
             }
           }
+          this.pickedValues.set(id, pickedFsPath);
           return pickedFsPath;
         }
       }
@@ -100,6 +102,7 @@ export class FileSelection {
       if (fileListForLabel.length > 10) {
         fileListForLabel.pop();
       }
+      this.pickedValues.set(id, newFilePath);
       return newFilePath;
     }
   }
