@@ -8,6 +8,14 @@ export class FileSelection {
   private static readonly CLEAR_RECENTS = "Pick File (fresh recently used list)";
   private static commandList: string[] = [FileSelection.PICK_FILE];
   public pickedValues = new Map<string, string>();
+
+  public async pickXsltFile() {
+    return await this.pickFile({ label: "Select XSLT File", extensions: ["xsl", "xslt"] });
+  }
+  public async pickXmlSourceFile() {
+    return await this.pickFile({ label: "Select XML Source File", extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
+  }
+
   public async pickFile(obj: { label: string; extensions?: string[] }) {
     const { label, extensions } = obj;
     let fileListForLabel = this.fileList.get(label);
