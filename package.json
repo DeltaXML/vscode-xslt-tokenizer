@@ -33,7 +33,8 @@
 		"onLanguage:sch",
 		"onLanguage:xml",
 		"onLanguage:bpmn",
-		"onCommand:workbench.action.tasks.runTask"
+		"onCommand:workbench.action.tasks.runTask",
+		"onCommand:xslt-xpath.addTaskInputs"
 	],
 	"license": "MIT",
 	"main": "./out/extension.js",
