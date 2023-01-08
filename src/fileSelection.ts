@@ -12,7 +12,7 @@ export class FileSelection {
       fileListForLabel = [];
       this.fileList.set(label, fileListForLabel);
     }
-    const fileItems = fileListForLabel.map(label => ({ label }));
+    const fileItems = fileListForLabel.map(fsPath => ({ label: fsPath }));
     const commandItems = FileSelection.commandist.map(label => ({ label }));
     const OtherSeparator = {
       label: 'command',
