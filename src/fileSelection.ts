@@ -39,6 +39,8 @@ export class FileSelection {
       if (!extensions || extensions.includes('*') || extensions.includes(path.extname(currentFilePath).substring(1))) {
         listItems.push(currentSeparator);
         listItems.push({ label: path.basename(currentFilePath), description: path.dirname(currentFilePath) });
+      } else {
+        currentFilePath = undefined;
       }
     }
     if (fileItems.length > 0) {
