@@ -184,12 +184,6 @@ export function activate(context: vscode.ExtensionContext) {
 			fileSelector.pickedValues.clear();
 		}
 	}));
-	context.subscriptions.push(vscode.tasks.onDidStartTask((event) => {
-		const t = event.execution.task;
-		if (t.definition.type === 'xslt' || t.definition.type === 'xslt-js') {
-			vscode.window.showInformationMessage(`Started task: '${t.definition.label}'`);
-		}
-	}));
 
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt' }, xsltSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp' }, dcpSymbolProvider));
