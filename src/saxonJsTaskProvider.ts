@@ -39,8 +39,14 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     templateTaskLabel = 'Saxon-JS Transform (New)';
     templateTaskFound = false;
     static inputString = `"inputs": [
-\t\t // Add user-prompt to Tasks for file selection. Pick list includes: 
-\t\t // current file, recently-used files and file explorer
+\t\t/*
+\t\t1. the specialist 'pickFile' command equivalents for the inputs defined here are:
+\t\t\t"xsltFile": "$\{command:xslt-xpath.pickXsltFile}",
+\t\t\t"xmlSource": "$\{command:xslt-xpath.pickXmlSourceFile}",
+\t\t\t"resultPath": "$\{command:xslt-xpath.pickResultFile}",
+
+\t\t2. these inputs invoke the 'pickFile' command with args for custom behaviour:
+\t\t*/
 \t\t{
 \t\t\t/* --- Usage: ---
 \t\t\t"xmlSource": "$\{input:xmlFile}",
@@ -58,6 +64,15 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 \t\t\t"type": "command",
 \t\t\t"command": "xslt-xpath.pickFile",
 \t\t\t"args": {"label": "Select XSLT Stylesheet", "extensions": ["xsl", "xslt"] }
+\t\t},
+\t\t{
+\t\t\t/* --- Usage: ---
+\t\t\t"resultPath": "$\{input:resultFile}",
+\t\t\t*/
+\t\t\t"id": "refultFile",
+\t\t\t"type": "command",
+\t\t\t"command": "xslt-xpath.pickFile",
+\t\t\t"args": {"label": "Select Result File", "extensions": [], "isResult": true }
 \t\t}
 \t]`;
 

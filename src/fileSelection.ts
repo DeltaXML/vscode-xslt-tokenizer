@@ -17,7 +17,7 @@ export class FileSelection {
   }
 
   public async pickResultFile() {
-    return await this.pickFile({ label: "Set Result File", extensions: ["xml", "html"], isResult: true });
+    return await this.pickFile({ label: "Set Result File", extensions: [], isResult: true });
   }
 
   public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean }) {
