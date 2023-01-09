@@ -5,7 +5,7 @@ import * as path from 'path';
 export class FileSelection {
   private fileList = new Map<string, string[]>();
   private static readonly PICK_FILE = "Pick File";
-  private static readonly CLEAR_RECENTS = "Pick File (fresh recently used list)";
+  private static readonly CLEAR_RECENTS = "Pick File - Refresh";
   private static commandList: string[] = [FileSelection.PICK_FILE];
   public pickedValues = new Map<string, string>();
 
@@ -16,17 +16,21 @@ export class FileSelection {
     return await this.pickFile({ label: "Select XML Source File", extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
   }
 
-  public async pickFile(obj: { label: string; extensions?: string[] }) {
-    const { label, extensions } = obj;
+  public async pickResultFile() {
+    return await this.pickFile({ label: "Set Result File", extensions: ["xml", "html"], isResult: true });
+  }
+
+  public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean }) {
+    const { label, extensions, isResult } = obj;
     let fileListForLabel = this.fileList.get(label);
     if (!fileListForLabel) {
       fileListForLabel = [];
       this.fileList.set(label, fileListForLabel);
     }
     const fileItems = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
-    const commandItems = FileSelection.commandList.map(label => ({ label }));
+    const commandItems: { label: string; description?: string}[] = FileSelection.commandList.map(label => ({ label }));
     if (fileListForLabel.length > 0) {
-      commandItems.push({ label: FileSelection.CLEAR_RECENTS });
+      commandItems.push({ label: FileSelection.CLEAR_RECENTS, description: 'refresh recently used list' });
     }
     const OtherSeparator = {
       label: 'file explorer',
@@ -44,7 +48,9 @@ export class FileSelection {
     let listItems: { label: string; kind?: vscode.QuickPickItemKind; description?: string }[] = [];
     let currentFilePath = vscode.window.activeTextEditor?.document.uri.fsPath;
 
-    if (currentFilePath) {
+    if (isResult) {
+      currentFilePath = undefined;
+    } else if (currentFilePath) {
       if (!extensions || extensions.includes('*') || extensions.includes(path.extname(currentFilePath).substring(1))) {
         listItems.push(currentSeparator);
         listItems.push({ label: path.basename(currentFilePath), description: path.dirname(currentFilePath) });
@@ -87,31 +93,46 @@ export class FileSelection {
         return;
       }
     }
-    let extensionFilters: { [key: string]: string[] } = {};
-    if (extensions) {
-      const filterLabel = extensions.map(ext => '*.' + ext).join(', ');
-      extensionFilters[filterLabel] = extensions;
-      extensionFilters['*.*'] = ['*'];
-    }
-    const APP_FILE = await vscode.window.showOpenDialog({
-      title: label,
-      filters: extensionFilters,
-      canSelectFolders: false,
-      canSelectFiles: true,
-      canSelectMany: false,
-      openLabel: label,
-    });
-
-    if (!APP_FILE || APP_FILE.length < 1) {
-      return;
-    } else {
-      const newFilePath = APP_FILE[0].fsPath;
-      fileListForLabel.unshift(newFilePath);
-      if (fileListForLabel.length > 10) {
-        fileListForLabel.pop();
+    if (isResult) {
+      const RESULT_FILE = await vscode.window.showSaveDialog({
+        title: label
+      });
+      if (RESULT_FILE) {
+        const newFilePath = RESULT_FILE.fsPath;
+        fileListForLabel.unshift(newFilePath);
+        if (fileListForLabel.length > 10) {
+          fileListForLabel.pop();
+        }
+        this.pickedValues.set(label, newFilePath);
+        return newFilePath;
       }
-      this.pickedValues.set(label, newFilePath);
-      return newFilePath;
+    } else {
+      let extensionFilters: { [key: string]: string[] } = {};
+      if (extensions) {
+        const filterLabel = extensions.map(ext => '*.' + ext).join(', ');
+        extensionFilters[filterLabel] = extensions;
+        extensionFilters['*.*'] = ['*'];
+      }
+      const APP_FILE = await vscode.window.showOpenDialog({
+        title: label,
+        filters: extensionFilters,
+        canSelectFolders: false,
+        canSelectFiles: true,
+        canSelectMany: false,
+        openLabel: label,
+      });
+  
+      if (!APP_FILE || APP_FILE.length < 1) {
+        return;
+      } else {
+        const newFilePath = APP_FILE[0].fsPath;
+        fileListForLabel.unshift(newFilePath);
+        if (fileListForLabel.length > 10) {
+          fileListForLabel.pop();
+        }
+        this.pickedValues.set(label, newFilePath);
+        return newFilePath;
+      }
     }
   }
 }
