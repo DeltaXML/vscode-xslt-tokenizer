@@ -17,7 +17,7 @@ export class FileSelection {
   }
 
   public async pickResultFile() {
-    return await this.pickFile({ label: "Set Result File", extensions: [], isResult: true });
+    return await this.pickFile({ label: "Set Result File", isResult: true });
   }
 
   public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean }) {
@@ -108,7 +108,7 @@ export class FileSelection {
       }
     } else {
       let extensionFilters: { [key: string]: string[] } = {};
-      if (extensions) {
+      if (extensions && extensions.length > 0) {
         const filterLabel = extensions.map(ext => '*.' + ext).join(', ');
         extensionFilters[filterLabel] = extensions;
         extensionFilters['*.*'] = ['*'];
