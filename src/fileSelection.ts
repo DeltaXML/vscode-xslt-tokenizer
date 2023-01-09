@@ -5,7 +5,9 @@ import * as path from 'path';
 export class FileSelection {
   private fileList = new Map<string, string[]>();
   private static readonly PICK_FILE = "Pick File";
-  private static readonly CLEAR_RECENTS = "Pick File - Refresh";
+  private static readonly CLEAR_RECENTS = "Pick File + refresh list";
+  private static readonly XML_SOURCE_LABEL = "Select XML Source File";
+  private static readonly RESULT_LABEL = "Set Result File";
   private static commandList: string[] = [FileSelection.PICK_FILE];
   public pickedValues = new Map<string, string>();
 
@@ -13,27 +15,44 @@ export class FileSelection {
     return await this.pickFile({ label: "Select XSLT File", extensions: ["xsl", "xslt"] });
   }
   public async pickXmlSourceFile() {
-    return await this.pickFile({ label: "Select XML Source File", extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
+    return await this.pickFile({ label: FileSelection.XML_SOURCE_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
+  }
+  public async pickStage2XmlSourceFile() {
+    return await this.pickFile({
+      label: "Select Stage2 XML Source File",
+      prevStageLabel: FileSelection.RESULT_LABEL,
+      prevStageGroup: 'recent files from previous stage',
+      extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"]
+    });
   }
 
   public async pickResultFile() {
-    return await this.pickFile({ label: "Set Result File", isResult: true });
+    return await this.pickFile({ label: FileSelection.RESULT_LABEL, isResult: true });
+  }
+  public async pickStage2ResultFile() {
+    return await this.pickFile({ label: "Set Stage2 Result File", isResult: true });
   }
 
-  public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean }) {
-    const { label, extensions, isResult } = obj;
+  public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string }) {
+    const { label, extensions, isResult, prevStageLabel, prevStageGroup } = obj;
     let fileListForLabel = this.fileList.get(label);
     if (!fileListForLabel) {
       fileListForLabel = [];
       this.fileList.set(label, fileListForLabel);
     }
     const fileItems = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
+    let prevStageFilePaths = prevStageLabel ? this.fileList.get(prevStageLabel) : undefined;
     const commandItems: { label: string; description?: string}[] = FileSelection.commandList.map(label => ({ label }));
     if (fileListForLabel.length > 0) {
       commandItems.push({ label: FileSelection.CLEAR_RECENTS, description: 'refresh recently used list' });
     }
-    const OtherSeparator = {
+    const explorerSeparator = {
       label: 'file explorer',
+      kind: vscode.QuickPickItemKind.Separator
+    };
+    const prevStageSeparatorName = prevStageGroup ? prevStageGroup : 'recent filesfrom previous stage';
+    const prevStageSeparator = {
+      label: prevStageSeparatorName,
       kind: vscode.QuickPickItemKind.Separator
     };
     const fileSeparator = {
@@ -62,12 +81,17 @@ export class FileSelection {
       listItems.push(fileSeparator);
       listItems = listItems.concat(fileItems);
     }
-    listItems.push(OtherSeparator);
+    if (prevStageFilePaths && prevStageFilePaths.length > 0) {
+      const prevStageFileItems = prevStageFilePaths.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
+      listItems.push(prevStageSeparator);
+      listItems = listItems.concat(prevStageFileItems);
+    }
+    listItems.push(explorerSeparator);
     listItems = listItems.concat(commandItems);
     const qpOptions: vscode.QuickPickOptions = {
       placeHolder: label
     };
-    if (fileItems.length > 0 || currentFilePath) {
+    if (fileItems.length > 0 || (prevStageFilePaths && prevStageFilePaths?.length > 0) || currentFilePath) {
       // give option to select from recent files
       const picked = await vscode.window.showQuickPick(listItems, qpOptions);
       let exit = true;
