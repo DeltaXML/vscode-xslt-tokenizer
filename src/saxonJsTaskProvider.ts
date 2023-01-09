@@ -41,7 +41,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     static inputString = `"inputs": [
 \t\t/*
 \t\t1. the specialist 'pickFile' command equivalents for the inputs defined here are:
-\t\t\t"xsltFile": "$\{command:xslt-xpath.pickXsltFile}",              // can select from current file - if xslt or recently used xslt files
+\t\t\t"xsltFile": "$\{command:xslt-xpath.pickXsltFile}",              // can select from current file - if xslt - or recently used xslt files
 \t\t\t"xmlSource": "$\{command:xslt-xpath.pickXmlSourceFile}",        // can select from current file or recently used stage1 source files
 \t\t\t"xmlSource": "$\{command:xslt-xpath.pickStage2XmlSourceFile}",  // can select from recently used stage2 source files or stage1 result files
 \t\t\t"resultPath": "$\{command:xslt-xpath.pickResultFile}",          // can save to recently used stage1 result files
