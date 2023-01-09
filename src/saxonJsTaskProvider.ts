@@ -69,7 +69,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 \t\t\t/* --- Usage: ---
 \t\t\t"resultPath": "$\{input:resultFile}",
 \t\t\t*/
-\t\t\t"id": "refultFile",
+\t\t\t"id": "resultFile",
 \t\t\t"type": "command",
 \t\t\t"command": "xslt-xpath.pickFile",
 \t\t\t"args": {"label": "Select Result File", "extensions": [], "isResult": true }
