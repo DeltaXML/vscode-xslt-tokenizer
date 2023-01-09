@@ -41,9 +41,11 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     static inputString = `"inputs": [
 \t\t/*
 \t\t1. the specialist 'pickFile' command equivalents for the inputs defined here are:
-\t\t\t"xsltFile": "$\{command:xslt-xpath.pickXsltFile}",
-\t\t\t"xmlSource": "$\{command:xslt-xpath.pickXmlSourceFile}",
-\t\t\t"resultPath": "$\{command:xslt-xpath.pickResultFile}",
+\t\t\t"xsltFile": "$\{command:xslt-xpath.pickXsltFile}",              // can select from current file - if xslt or recently used xslt files
+\t\t\t"xmlSource": "$\{command:xslt-xpath.pickXmlSourceFile}",        // can select from current file or recently used stage1 source files
+\t\t\t"xmlSource": "$\{command:xslt-xpath.pickStage2XmlSourceFile}",  // can select from recently used stage2 source files or stage1 result files
+\t\t\t"resultPath": "$\{command:xslt-xpath.pickResultFile}",          // can save to recently used stage1 result files
+\t\t\t"resultPath": "$\{command:xslt-xpath.pickStage2ResultFile}",    // can save to recently used stage2 result files
 
 \t\t2. these inputs invoke the 'pickFile' command with args for custom behaviour:
 \t\t*/
@@ -55,6 +57,15 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 \t\t\t"type": "command",
 \t\t\t"command": "xslt-xpath.pickFile",
 \t\t\t"args": {"label": "Select XML File", "extensions": ["xml", "xhtml", "svg"] }
+\t\t},
+\t\t{
+\t\t\t/* --- Usage: ---
+\t\t\t"xmlSource": "$\{input:xmlFile2}",
+\t\t\t*/
+\t\t\t"id": "xmlFile2",
+\t\t\t"type": "command",
+\t\t\t"command": "xslt-xpath.pickFile",
+\t\t\t"args": {"label": "Select Stage1 XML File", "extensions": ["xml", "xhtml", "svg"], "prevStageLabel": "Select Result File", "prevStageGroup": "recent files from previous stage" }
 \t\t},
 \t\t{
 \t\t\t/* --- Usage: ---
