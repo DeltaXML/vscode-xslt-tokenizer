@@ -174,7 +174,7 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
-	const fileSelector = new FileSelection();
+	const fileSelector = new FileSelection(context);
 
 
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {

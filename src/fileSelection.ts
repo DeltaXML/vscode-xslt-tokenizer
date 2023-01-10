@@ -3,12 +3,17 @@ import * as path from 'path';
 
 
 export class FileSelection {
-  private fileList = new Map<string, string[]>();
   private static readonly PICK_FILE = "Pick File";
   private static readonly CLEAR_RECENTS = "Pick File + refresh list";
   private static readonly XML_SOURCE_LABEL = "Select XML Source File";
   private static readonly RESULT_LABEL = "Set Result File";
   private static commandList: string[] = [FileSelection.PICK_FILE];
+  private static readonly MMO_PREFIX = 'qfs:';
+  private context: vscode.ExtensionContext;
+
+  constructor(context: vscode.ExtensionContext) {
+    this.context = context;
+  }
   public pickedValues = new Map<string, string>();
 
   public async pickXsltFile() {
@@ -35,13 +40,13 @@ export class FileSelection {
 
   public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string }) {
     const { label, extensions, isResult, prevStageLabel, prevStageGroup } = obj;
-    let fileListForLabel = this.fileList.get(label);
+    const workspaceLabel = FileSelection.MMO_PREFIX + label;
+    let fileListForLabel:string[]|undefined = this.context.workspaceState.get(workspaceLabel);
     if (!fileListForLabel) {
       fileListForLabel = [];
-      this.fileList.set(label, fileListForLabel);
     }
     const fileItems = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
-    let prevStageFilePaths = prevStageLabel ? this.fileList.get(prevStageLabel) : undefined;
+    let prevStageFilePaths:string[]|undefined = prevStageLabel ? this.context.workspaceState.get(FileSelection.MMO_PREFIX + prevStageLabel) : undefined;
     const commandItems: { label: string; description?: string}[] = FileSelection.commandList.map(label => ({ label }));
     if (fileListForLabel.length > 0) {
       commandItems.push({ label: FileSelection.CLEAR_RECENTS, description: 'refresh recently used list' });
@@ -106,10 +111,11 @@ export class FileSelection {
           const pickedFsPath = picked.description + path.sep + picked.label;
           if (pickedFsPath === currentFilePath) {
             if (!fileListForLabel.includes(pickedFsPath)) {
-              fileListForLabel.push(pickedFsPath);
+              fileListForLabel.unshift(pickedFsPath);
             }
           }
           this.pickedValues.set(label, pickedFsPath);
+          this.context.workspaceState.update(workspaceLabel, fileListForLabel);
           return pickedFsPath;
         }
       }
@@ -128,6 +134,7 @@ export class FileSelection {
           fileListForLabel.pop();
         }
         this.pickedValues.set(label, newFilePath);
+        this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         return newFilePath;
       }
     } else {
@@ -155,6 +162,7 @@ export class FileSelection {
           fileListForLabel.pop();
         }
         this.pickedValues.set(label, newFilePath);
+        this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         return newFilePath;
       }
     }
