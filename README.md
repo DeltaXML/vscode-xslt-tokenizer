@@ -40,7 +40,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Peek Definition**       | View symbol declarations inline with corresponding references
 | **Goto (Peek) References**  | Inline view of references for variables, functions etc. *(includes references from imported modules)*
 | **Find All References**       | View and navigate between all references for a selected symbol in the References Pane
-| **VS Code Tasks**         | Configurable task templates for Saxon and Saxon-JS Prcoessors
+| **VS Code Tasks**         | Configurable XSLT tasks for Saxon and Saxon-JS Prcoessors - with user-input options
 | **Bracket Matching**      | For `()`, `{}`, and `[]`
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
@@ -88,7 +88,13 @@ This extension's linter performs a comprehensive set of checks on the code. The 
 
 ![xslt-tasks](xslt-tasks.png)
 
-XSLT transforms are configured and run as special VSCode Tasks. For more detail, see [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html)
+XSLT transforms for SaxonJava and SaxonJS are configured and run as special VSCode Tasks. 
+
+XSLT task JSON properties can reference special commands. The special commands allow file-selection via a File Explorer or 'Recent Files' list, an example using: `"xsltFile": "${command:xslt-xpath:pickXsltFile}"`. A sample screenshot is shown below:
+
+![xslt-tasks](xslt-tasks-file.png)
+
+For more a full description on using VSCode tasks to run XSLT, see [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html).
 
 # Release Notes
 
@@ -104,13 +110,6 @@ To use the task-provider for the _Java_ Saxon XSLT Processor, the following sett
 
 ```
   "XSLT.tasks.saxonJar": "/path/to/folder/SaxonHE10-0J/saxon-he-10.0.jar"
-```
-
-The Saxon XSLT-Java and XSLT-JS TaskProviders are enabled by default. These can be enabled/disable using the following settings properties:
-
-```
-"XSLT.tasks.java.enabled": true
-"XSLT.tasks.js.enabled": true
 ```
 
 ## XSLT Packages
@@ -160,7 +159,7 @@ If file paths are relative they are resolved from the first Visual Studio Code W
 ```
 
 ## Refactoring
-A range of code refactoring features are supported, including **Rename Symbol** and **Extract Function**. 
+A range of [code refactoring](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html#refactoring) features are supported, including **Rename Symbol** and **Extract Function**. 
 
 When XSLT code is refactored, instructions and expressions are revised when necessary to
 ensure the code behaviour remains unchanged. For example, the **Extract Function** refactor revises all expressions requiring the context-item so the code compiles and runs as before.
