@@ -108,6 +108,7 @@ export class FileSelection {
           exit = false;
         } else if (picked.label === FileSelection.CLEAR_RECENTS) {
           fileListForLabel.length = 0;
+          this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         } else {
           const pickedFsPath = picked.description + path.sep + picked.label;
           if (pickedFsPath === currentFilePath) {
@@ -131,12 +132,14 @@ export class FileSelection {
       });
       if (RESULT_FILE) {
         const newFilePath = RESULT_FILE.fsPath;
-        fileListForLabel.unshift(newFilePath);
-        if (fileListForLabel.length > 10) {
-          fileListForLabel.pop();
+        if (!fileListForLabel.includes(newFilePath)) {
+          fileListForLabel.unshift(newFilePath);
+          if (fileListForLabel.length > 10) {
+            fileListForLabel.pop();
+          }
+          this.pickedValues.set(label, newFilePath);
+          this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         }
-        this.pickedValues.set(label, newFilePath);
-        this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         return newFilePath;
       }
     } else {
@@ -160,12 +163,14 @@ export class FileSelection {
         return;
       } else {
         const newFilePath = APP_FILE[0].fsPath;
-        fileListForLabel.unshift(newFilePath);
-        if (fileListForLabel.length > 10) {
-          fileListForLabel.pop();
+        if (!fileListForLabel.includes(newFilePath)) {
+          fileListForLabel.unshift(newFilePath);
+          if (fileListForLabel.length > 10) {
+            fileListForLabel.pop();
+          }
+          this.pickedValues.set(label, newFilePath);
+          this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         }
-        this.pickedValues.set(label, newFilePath);
-        this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         return newFilePath;
       }
     }
