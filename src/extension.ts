@@ -179,10 +179,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
 		const t = event.execution.task;
-		if (t.definition.type === 'xslt' || t.definition.type === 'xslt-js') {
+		if (fileSelector.completedPick === true && (t.definition.type === 'xslt' || t.definition.type === 'xslt-js')) {
 			vscode.window.showInformationMessage(`Completed task: '${t.definition.label}'`);
 			fileSelector.pickedValues.clear();
 		}
+		fileSelector.completedPick = true; // as fileselector may not be used for next task
 	}));
 
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt' }, xsltSymbolProvider));

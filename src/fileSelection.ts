@@ -3,8 +3,8 @@ import * as path from 'path';
 
 
 export class FileSelection {
-  private static readonly PICK_FILE = "Pick File";
-  private static readonly CLEAR_RECENTS = "Pick File + refresh list";
+  private static readonly PICK_FILE = "$(explorer-view-icon) Pick File";
+  private static readonly CLEAR_RECENTS = "$(root-folder) Clear Recently Used";
   private static readonly XML_SOURCE_LABEL = "Select XML Source File";
   private static readonly RESULT_LABEL = "Set Result File";
   private static commandList: string[] = [FileSelection.PICK_FILE];
@@ -15,6 +15,7 @@ export class FileSelection {
     this.context = context;
   }
   public pickedValues = new Map<string, string>();
+  public completedPick = true;
 
   public async pickXsltFile() {
     return await this.pickFile({ label: "Select XSLT File", extensions: ["xsl", "xslt"] });
@@ -39,6 +40,7 @@ export class FileSelection {
   }
 
   public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string }) {
+    this.completedPick = true;
     const { label, extensions, isResult, prevStageLabel, prevStageGroup } = obj;
     const workspaceLabel = FileSelection.MMO_PREFIX + label;
     let fileListForLabel:string[]|undefined = this.context.workspaceState.get(workspaceLabel);
@@ -47,12 +49,12 @@ export class FileSelection {
     }
     const fileItems = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
     let prevStageFilePaths:string[]|undefined = prevStageLabel ? this.context.workspaceState.get(FileSelection.MMO_PREFIX + prevStageLabel) : undefined;
-    const commandItems: { label: string; description?: string}[] = FileSelection.commandList.map(label => ({ label }));
+    const commandItems: { label: string; description?: string}[] = FileSelection.commandList.map(label => ({ label, description: '- file explorer' }));
     if (fileListForLabel.length > 0) {
-      commandItems.push({ label: FileSelection.CLEAR_RECENTS, description: 'refresh recently used list' });
+      commandItems.push({ label: FileSelection.CLEAR_RECENTS});
     }
     const explorerSeparator = {
-      label: 'file explorer',
+      label: '',
       kind: vscode.QuickPickItemKind.Separator
     };
     const prevStageSeparatorName = prevStageGroup ? prevStageGroup : 'recent filesfrom previous stage';
@@ -106,7 +108,6 @@ export class FileSelection {
           exit = false;
         } else if (picked.label === FileSelection.CLEAR_RECENTS) {
           fileListForLabel.length = 0;
-          exit = false;
         } else {
           const pickedFsPath = picked.description + path.sep + picked.label;
           if (pickedFsPath === currentFilePath) {
@@ -120,6 +121,7 @@ export class FileSelection {
         }
       }
       if (exit) {
+        this.completedPick = false;
         return;
       }
     }
@@ -154,6 +156,7 @@ export class FileSelection {
       });
   
       if (!APP_FILE || APP_FILE.length < 1) {
+        this.completedPick = false;
         return;
       } else {
         const newFilePath = APP_FILE[0].fsPath;
