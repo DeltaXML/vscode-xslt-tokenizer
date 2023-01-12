@@ -1293,6 +1293,7 @@ export interface BaseToken {
     error?: ErrorType;
     nesting?: number;
     referenced?: boolean;
+    tagElementId?: number;
 }
 
 export interface Token extends BaseToken {

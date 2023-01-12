@@ -304,6 +304,7 @@ export class XsltTokenDiagnostics {
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
+		let tagElementId: number = -1;
 		let tagElementAttributes: string[] = [];
 		let tagElementChildren: string[] = [];
 		let startTagToken: XSLTToken | null = null;
@@ -525,6 +526,7 @@ export class XsltTokenDiagnostics {
 						incrementFunctionArity = false;
 						pendingTemplateParamErrors = [];
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						tagElementId++;
 						const isXsltElementName = tagElementName.startsWith('xsl:');
 						const isSchElementName = tagElementName.startsWith('sch:');
 						const lookupElementName = isSchematron && !isXsltElementName && !isSchElementName ? 'sch:' + tagElementName : tagElementName;
@@ -553,6 +555,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.elementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						tagElementId++;
 						if (isSchematron || tagElementName.startsWith('ixsl:')) {
 							// this must be an xsl element
 							[tagElementChildren, tagElementAttributes] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, xsltSchemaQuery, elementStack);
@@ -843,6 +846,8 @@ export class XsltTokenDiagnostics {
 								if (attNameText.length > 6) {
 									let prefix = attNameText.substring(6);
 									if (inheritedPrefixes.indexOf(prefix) < 0) {
+										// in case xmlns comes after xpath expression in same element - remove problem tokens caused by this
+										problemTokens = problemTokens.filter(p => !(p.error === ErrorType.XPathPrefix && (p.value.startsWith(prefix + ':') || p.value.startsWith('@' + prefix + ':')) && p.tagElementId === tagElementId));
 										inheritedPrefixes.push(prefix);
 									}
 									if (prefix === 'ixsl') {
@@ -1831,6 +1836,7 @@ export class XsltTokenDiagnostics {
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XPathName : ErrorType.XPathPrefix;
 									token['value'] = token.value;
+									token['tagElementId'] = tagElementId;
 									problemTokens.push(token);
 								}
 							}
