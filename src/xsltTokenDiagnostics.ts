@@ -847,7 +847,7 @@ export class XsltTokenDiagnostics {
 									let prefix = attNameText.substring(6);
 									if (inheritedPrefixes.indexOf(prefix) < 0) {
 										// in case xmlns comes after xpath expression in same element - remove problem tokens caused by this
-										problemTokens = problemTokens.filter(p => !(p.error === ErrorType.XPathPrefix && (p.value.startsWith(prefix + ':') || p.value.startsWith('@' + prefix + ':')) && p.tagElementId === tagElementId));
+										problemTokens = problemTokens.filter(p => !((p.error === ErrorType.XPathPrefix || p.error === ErrorType.XSLTPrefix) && (p.value.startsWith(prefix + ':') || p.value.startsWith('@' + prefix + ':')) && p.tagElementId === tagElementId));
 										inheritedPrefixes.push(prefix);
 									}
 									if (prefix === 'ixsl') {
@@ -1045,7 +1045,8 @@ export class XsltTokenDiagnostics {
 								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, docType, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
-									token['value'] = fullVariableName;
+									token['value'] = variableName;
+									token.tagElementId = tagElementId;
 									problemTokens.push(token);
 								}
 							}
