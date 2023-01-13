@@ -74,6 +74,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | XML: Select child element | ⇧⌘8 | Includes start/end tags |
 | XML: Select following element | ⇧⌘7 | Includes start/end tags |
 | XML: Select preceding element | ⇧⌘6 | Includes start/end tags |
+| XSLT: Add XSLT Inputs to Tasks File ||For file-selection prompt when running XSLT|
 | New XPath Notebook | - | DeltaXML's [XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook) is required
 
  # Introduction
