@@ -325,6 +325,7 @@ export class XsltTokenDiagnostics {
 		let tagXmlnsNames: string[] = [];
 		let rootXmlnsBindings: [string, string][] = [];
 		let inheritedPrefixes: string[] = [];
+		let inheritedPrefixesCopy: string[] = [];
 		let globalVariableData: VariableData[] = [];
 		let checkedGlobalVarNames: string[] = [];
 		let checkedGlobalFnNames: string[] = [];
@@ -527,6 +528,7 @@ export class XsltTokenDiagnostics {
 						pendingTemplateParamErrors = [];
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						tagElementId++;
+						inheritedPrefixesCopy = inheritedPrefixes.slice();
 						const isXsltElementName = tagElementName.startsWith('xsl:');
 						const isSchElementName = tagElementName.startsWith('sch:');
 						const lookupElementName = isSchematron && !isXsltElementName && !isSchElementName ? 'sch:' + tagElementName : tagElementName;
@@ -556,6 +558,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.elementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						tagElementId++;
+						inheritedPrefixesCopy = inheritedPrefixes.slice();
 						if (isSchematron || tagElementName.startsWith('ixsl:')) {
 							// this must be an xsl element
 							[tagElementChildren, tagElementAttributes] = XsltTokenDiagnostics.getExpectedElementNames(tagElementName, xsltSchemaQuery, elementStack);
@@ -605,7 +608,6 @@ export class XsltTokenDiagnostics {
 									}
 								}
 								onRootStartTag = false;
-								let orginalPrefixes = inheritedPrefixes.slice();
 								let problem = false;
 								if (tagExcludeResultPrefixes) {
 									let missingPrefix;
@@ -681,7 +683,6 @@ export class XsltTokenDiagnostics {
 											inScopeVariablesList.push({ token: token, name: catchVar });
 										});
 									}
-									let inheritedPrefixesCopy = inheritedPrefixes.slice();
 									// if top-level element add global variables - these include following variables also:
 									let newVariablesList = elementStack.length === 0 ? globalVariableData : inScopeVariablesList;
 									const stackElementChildren = isSchematron || docType === DocumentTypes.DCP ?
@@ -715,7 +716,7 @@ export class XsltTokenDiagnostics {
 
 								} else {
 									// self-closed tag: xmlns declarations on this are no longer in scope
-									inheritedPrefixes = orginalPrefixes;
+									inheritedPrefixes = inheritedPrefixesCopy;
 									if (variableData !== null) {
 										if (elementStack.length > 1) {
 											if (docType === DocumentTypes.DCP) {
@@ -752,6 +753,7 @@ export class XsltTokenDiagnostics {
 								// end of an element close-tag:
 								if (elementStack.length > 0) {
 									let poppedData = elementStack.pop()!;
+									inheritedPrefixes = poppedData.namespacePrefixes;
 									if (tagElementName === 'xsl:function') insideGlobalFunction = false;
 									if (tagElementName === 'xsl:iterate') {
 										currentXSLTIterateParams.pop();
@@ -777,6 +779,7 @@ export class XsltTokenDiagnostics {
 											if (elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === tagElementName) {
 												// recover for benefit of outline view
 												poppedData = elementStack.pop()!;
+												inheritedPrefixes = poppedData.namespacePrefixes;
 											}
 										}
 									}
@@ -1147,9 +1150,9 @@ export class XsltTokenDiagnostics {
 										const ntt = <TokenLevelState>nt.tokenType;
 										const ntv = nt.value;
 										isRootOnly = !(ntt === TokenLevelState.nodeNameTest || ntt === TokenLevelState.anonymousFunction || ntt === TokenLevelState.axisName ||
-											 ntt === TokenLevelState.function || ntt === TokenLevelState.variable || ntv === '*' || ntv === '()' || ntv === '(' || ntv === '=>');
+											ntt === TokenLevelState.function || ntt === TokenLevelState.variable || ntv === '*' || ntv === '()' || ntv === '(' || ntv === '=>');
 									}
-									token.error = isRootOnly? ErrorType.MissingContextItemForRootOnly : ErrorType.MissingContextItemForRoot;
+									token.error = isRootOnly ? ErrorType.MissingContextItemForRootOnly : ErrorType.MissingContextItemForRoot;
 									problemTokens.push(token);
 								}
 							} else {
@@ -1764,7 +1767,7 @@ export class XsltTokenDiagnostics {
 												} else if (!(prevToken2.value === '/' || prevToken2.value === '!' || prevToken2.value === '//')) {
 													let newTokenError = ErrorType.MissingContextItemForFn;
 													const fnName = prevToken.value;
-	                                                if (fnName === 'position') {
+													if (fnName === 'position') {
 														newTokenError = ErrorType.MissingContextItemForPosition;
 													} else if (fnName === 'last') {
 														newTokenError = ErrorType.MissingContextItemForLast;
@@ -1959,7 +1962,8 @@ export class XsltTokenDiagnostics {
 					let usedtoken = false;
 					while (elementStack.length > 0) {
 						if (tagElementName === 'xsl:function') insideGlobalFunction = false;
-						let poppedData = elementStack.pop();
+						let poppedData = elementStack.pop()!;
+						inheritedPrefixes = poppedData.namespacePrefixes;
 						let endToken: BaseToken;
 						if (poppedData) {
 							if (usedtoken) {
