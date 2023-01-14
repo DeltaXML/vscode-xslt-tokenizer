@@ -38,7 +38,7 @@ export class XSLTSchema4 implements SchemaData {
         "xsl:modes": { base: ['xs:token'], enum: ['#default', '#unnamed', '#all'] },
         "xsl:nametests": { base: ['xs:token'], enum: ['*'] },
         "xsl:on-multiple-match-type": { base: ['xs:token'], enum: ['use-last', 'fail'] },
-        "xsl:on-no-match-type": { base: ['xs:token'], enum: ['deep-copy', 'shallow-copy', 'deep-skip', 'shallow-skip', 'text-only-copy', 'fail'] },
+        "xsl:on-no-match-type": { base: ['xs:token'], enum: ['deep-copy', 'shallow-copy', 'shallow-copy-all', 'deep-skip', 'shallow-skip', 'shallow-skip-all', 'text-only-copy', 'fail'] },
         "xsl:prefixes": { list: 'xs:NCName' },
         "xsl:prefix-list-or-all": { base: ['xs:token'], enum: ['#all'] },
         "xsl:prefix-list": { list: 'xsl:prefix-or-default' },
@@ -342,8 +342,6 @@ export class XSLTSchema4 implements SchemaData {
                 "xsl:for-each": {
                     base: 'xsl:versioned-element-type',
                     attrs: {
-                        'array': 'xsl:expression',
-                        'map': 'xsl:expression',
                         'select': 'xsl:expression',
                         'separator': 'xsl:avt',
                         '_array': 'xsl:expression',
@@ -356,9 +354,7 @@ export class XSLTSchema4 implements SchemaData {
                 "xsl:for-each-group": {
                     base: 'xsl:versioned-element-type',
                     attrs: {
-                        'array': 'xsl:expression',
                         'break-when': 'xsl:expression',
-                        'map': 'xsl:expression',
                         'select': 'xsl:expression',
                         'group-by': 'xsl:expression',
                         'group-adjacent': 'xsl:expression',
@@ -418,15 +414,6 @@ export class XSLTSchema4 implements SchemaData {
                     attrs: {
                         'key': 'xsl:expression',
                         '_key': 'xs:string'
-                    }
-                },
-                "xsl:match": {
-                    base: 'xsl:element-only-versioned-element-type',
-                    attrs: {
-                        'pattern': 'xsl:expression',
-                        'select': 'xsl:expression',
-                        '_pattern': 'xsl:string',
-                        '_select': 'xsl:string'
                     }
                 },
                 "xsl:merge": {
