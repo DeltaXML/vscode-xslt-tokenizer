@@ -42,7 +42,7 @@
             </xsl:variable>
             <xsl:copy-of select="$abc4, $var8"/>
         </xsl:for-each>    
-        <xsl:sequence select="fn:get-unit-declarations()"/>
+        <xsl:sequence select="count(aa)"/>
         <xsl:sequence select="fn:get-unit-declarations2('abc')"/>
     </xsl:template> 
     

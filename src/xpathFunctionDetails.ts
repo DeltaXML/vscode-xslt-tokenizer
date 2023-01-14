@@ -95,9 +95,44 @@ export class XPathFunctionDetails {
 			description: "Returns true if every item in sequence satisfies the predicate."
 		},
 		{
+			name: "all-different",
+			signature: "all-different(values as xs:anyAtomicType*, collation as xs:string) as xs:boolean) as xs:integer*",
+			description: "Returns true if no two items in a supplied sequence are equal.\n\nOptional argument: collation"
+		},
+		{
+			name: "all-equal",
+			signature: "all-equal(values as xs:anyAtomicType*, collation as xs:string) as xs:boolean) as xs:integer*",
+			description: "Returns true if all items in a supplied sequence (after atomization) are equal.\n\nOptional argument: collation"
+		},
+		{
 			name: "characters",
 			signature: "characters(string as xs:string?) as xs:string*",
 			description: "Splits a string into a sequence of single-character strings."
+		},
+		{
+			name: "contains-sequence",
+			signature: "contains-sequence(input as xs:item()*, subsequence as item()*, compare as function(item(), item(), item()) as xs:boolean) as xs:boolean",
+			description: "Returns true if one sequence contains another as a contiguous subsequence, using a supplied callback function to compare items.\n\nOptional argument: compare"
+		},
+		{
+			name: "ends-with-sequence",
+			signature: "ends-with-sequence(input as xs:item()*, subsequence as item()*, compare as function(item(), item(), item()) as xs:boolean) as xs:boolean",
+			description: "Returns true if one sequence ends with another, using a supplied callback function to compare items.\n\nOptional argument: compare"
+		},
+		{
+			name: "expanded-QName",
+			signature: "expanded-QName(qname as xs:QName) as xs:string",
+			description: "Returns a string representation of an xs:QName in the format Q{uri}local."
+		},
+		{
+			name: "foot",
+			signature: "foot(input as item()*) as item()?",
+			description: "Returns the last item in a sequence."
+		},
+		{
+			name: "index-where",
+			signature: "index-where(input as item()*, predicate	as function(item()) as xs:integer*",
+			description: "Returns the position in an input sequence of items that match a supplied predicate."
 		},
 		{
 			name: "highest",
@@ -118,6 +153,26 @@ export class XPathFunctionDetails {
 			name: "identity",
 			signature: "identity(input as item()*) as item()*",
 			description: "Returns the value of the argument, unchanged. Useful in situations where a function must be supplied, but the desired action is to do nothing."
+		},
+		{
+			name: "intersperse",
+			signature: "intersperse(input as item()*, separator as item()*) as item()*",
+			description: "Inserts a separator between adjacent items in a sequence."
+		},
+		{
+			name: "items-at",
+			signature: "items-at(input as item()*, at as xs:integer()) as item()*",
+			description: "Returns a sequence containing the items from 'input' at positions defined by 'at', in the order specified."
+		},
+		{
+			name: "items-ending-where",
+			signature: "items-ending-where(input as item()*, predicate as function(item()) as xs:boolean) as xs:item()*",
+			description: "Returns the items from the input sequence ending with the first item to match a supplied predicate.",
+		},
+		{
+			name: "items-starting-where",
+			signature: "items-starting-where(input as item()*, predicate as function(item()) as xs:boolean) as xs:item()*",
+			description: "Returns the items from the input sequence starting from the first item to match a supplied predicate."
 		},
 		{
 			name: "in-scope-namespaces",
@@ -155,6 +210,11 @@ export class XPathFunctionDetails {
 			description: "Returns the items in the input $sequence up to and including the first one that satisfies the supplied $predicate."
 		},
 		{
+			name: "iterate-while",
+			signature: "iterate-while(input as item()*, predicate as function(item()) as xs:boolean, action	as function(item()*) as item()*) as xs:item()*",
+			description: "Processes a supplied value repeatedly, continuing while some condition remains true, and returning the first value that does not satisfy the condition."
+		},
+		{
 			name: "lowest",
 			signature: "lowest(sequence as item()*) as item()*",
 			description: "Equivalent to fn:lowest(sequence, default-collation())."
@@ -170,9 +230,24 @@ export class XPathFunctionDetails {
 			description: "Returns those items from the input sequence having the lowest value for the supplied function, strings being compared using the supplied collation (which defaults to the default collation)."
 		},
 		{
+			name: "op",
+			signature: "op(operator as xs:string) as function(item()*, item()*) as item()* ",
+			description: "Returns a function whose effect is to apply a supplied binary operator to two arguments."
+		},
+		{
 			name: "parcel",
 			signature: "parcel(sequence as item()*) as record(value)",
 			description: "Wraps an arbitrary sequence of items as a parcel: a parcel is a map with a single entry, whose key is the string 'value' and whose value is the wrapped sequence. Parcels are useful because they enable an array to be treated as a sequence of items, by wrapping each member of the array as a parcel."
+		},
+		{
+			name: "parse-html",
+			signature: "parse-html(input as xs:string) as document-node()",
+			description: "Parses an HTML5 document (supplied as a string) using the HTML5 parsing algorithm, returning the result as an XDM document."
+		},
+		{
+			name: "parse-QName",
+			signature: "parse-QName( eqname as xs:string ) as xs:QName",
+			description: "Returns an xs:QName value formed by parsing an EQName."
 		},
 		{
 			name: "parts",
@@ -180,9 +255,9 @@ export class XPathFunctionDetails {
 			description: "Decomposes a composite 'atomic' value into its parts, in the form of a map. For example, an xs:dateTime value is decomposed into year, month, day, hour, minute, second, and timezone."
 		},
 		{
-			name: "range",
-			signature: "range()",
-			description: "specification is likely to change"
+			name: "replicate",
+			signature: "replicate(input as item()* count as xs:nonNegativeInteger) as item()*",
+			description: "Produces multiple copies of a sequence."
 		},
 		{
 			name: "slice",
@@ -192,7 +267,17 @@ export class XPathFunctionDetails {
 		{
 			name: "some",
 			signature: "some(sequence as item()*, predicate as function(item()) as xs:boolean) as xs:boolean",
-			description: "Returns true if at least one item in $sequence satisfies the predicate."
+			description: "Returns true if at least one item in $sequence satisfies the predicate. Default predicate is fn:identity#1\n\nOptional argument: predicate"
+		},
+		{
+			name: "starts-with-sequence",
+			signature: "starts-with-sequence(input as xs:item()*, subsequence as item()*, compare as function(item(), item(), item()) as xs:boolean) as xs:boolean",
+			description: "Returns true if one sequence starts with another, using a supplied callback function to compare items.\n\nOptional argument: compare"
+		},
+		{
+			name: "trunk",
+			signature: "trunk(input as item()*) as item()*",
+			description: "Returns all but the last item in a sequence."
 		},
 		{
 			name: "unparcel",
@@ -200,18 +285,58 @@ export class XPathFunctionDetails {
 			description: "Reverses the effect of the fn:parcel() function. (Equivalent to $parcel?value.)"
 		},
 		{
+			name: "array:empty",
+			signature: "array:empty(array(*)) as xs:boolean",
+			description: "Returns true if the supplied array contains no members."
+		},
+		{
+			name: "array:exists",
+			signature: "array:exists(array(*)) as xs:boolean",
+			description: "Returns true if the supplied array contains one or more members."
+		},
+		{
+			name: "array:foot",
+			signature: "array:foot(array(*)) as item()*",
+			description: "Returns the last member of an array."
+		},
+		{
+			name: "array:index-where",
+			signature: "array:index-where(array as array(*), predicate as function(item()) as xs:integer*",
+			description: "Returns the position in an input sequence of items that match a supplied predicate."
+		},
+		{
 			name: "array:members",
-			signature: "array:members(array(*)) as record(value)*",
+			signature: "array:members(array as array(*)) as record(value)*",
 			description: "Accepts an array as input, and turns it into a sequence of parcels: the inverse of the array:of() function."
 		},
 		{
 			name: "array:of",
-			signature: "array:of(record(value, *)*) as array(*)",
+			signature: "array:of(input as record(value, *)*) as array(*)",
 			description: "Accepts a sequence of parcels (as produced by the fn:parcel() function), and returns an array whose members are the sequences obtained by applying fn:unparcel() to each parcel in turn."
 		},
 		{
+			name: "array:trunk",
+			signature: "array:trunk(array as array(*)) as item()*",
+			description: "Returns the last member of an array."
+		},
+		{
+			name: "map:build",
+			signature: "map:build(input as item()*, key as function(item()) as xs:anyAtomicType?, value as function(item()) as item()*, combine as function(item()*, item()*) as item()*",
+			description: "Returns a map that typically contains one entry for each item in a supplied input sequence.\n\nOptional arguments: key, value, combine"
+		},
+		{
 			name: "map:entries",
-			signature: "entries(map(*)) as record(key as xs:anyAtomicType, value as item()*)*",
+			signature: "map:entries(map as map(*)) as map(*)",
+			description: "Accepts a map as input, and turns it into a sequence of maps representing the key-value pairs contained in the map. Equivalent to map:for-each($map, ->($k, $v){map{'key':$k, 'value':$v}})."
+		},
+		{
+			name: "map:filter",
+			signature: "map:filter(map as map(*), predicate as function(xs:anyAtomicType, item()*) as xs:boolean) as map(*)",
+			description: "Selects entries from a map, returning a new map."
+		},
+		{
+			name: "map:key-value-pairs",
+			signature: "map:key-value-pairs(map as map(*)) as record(key as xs:anyAtomicType, value as item()*)*",
 			description: "Accepts a map as input, and turns it into a sequence of maps representing the key-value pairs contained in the map. Equivalent to map:for-each($map, ->($k, $v){map{'key':$k, 'value':$v}})."
 		}
 	];
@@ -751,13 +876,11 @@ export class XPathFunctionDetails {
 			description: "Parses a string containing the date and time in IETF format, returning the corresponding `xs:dateTime` value."
 		},
 		{
-
 			name: "resolve-QName",
 			signature: "resolve-QName( qname as xs:string?, element as element() ) as xs:QName?",
 			description: "Returns an `xs:QName` value (that is, an expanded-QName) by taking an `xs:string` that has the lexical form of an `xs:QName` (a string in the form \"prefix:local-name\" or \"local-name\") and resolving it using the in-scope namespaces for a given element."
 		},
 		{
-
 			name: "QName",
 			signature: "QName( paramURI as xs:string?, paramQName as xs:string ) as xs:QName",
 			description: "Returns an `xs:QName` value formed using a supplied namespace URI and lexical QName."
