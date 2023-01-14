@@ -17,7 +17,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | Feature  | Details |
 | ------- | ------- |
 | **XSLT 3.0**    | Full language support for [XSLT 3.0](https://www.w3.org/TR/xslt-30/) and [XPath 3.1](https://www.w3.org/TR/xpath-31/)
-| **XSLT 4.0 (proposed)**    | Basic language support (work in progress) for [Saxon Experimental 4.0 extensions](https://www.saxonica.com/documentation11/index.html#!v4extensions)
+| **XSLT 4.0 (proposed)**    | Basic language support for [Saxon 12 Experimental 4.0 extensions](https://www.saxonica.com/html/documentation12/v4extensions/)
 | **XPath 3.1**            | [Companion XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook) tests XPaths against current XML file
 | **SaxonJS 2 Interactive (IXSL)** | Language support for [Saxon interactive extensions](https://www.saxonica.com/saxon-js/documentation/index.html#!ixsl-extension)
 | **Syntax Highlighting**   | Fast and precise - using [Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
