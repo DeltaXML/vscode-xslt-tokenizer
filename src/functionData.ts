@@ -293,7 +293,9 @@ export class FunctionData {
 		"all-equal#1",
 		"all-equal#2",
 		"characters#1",
+		"contains-sequence#2",
 		"contains-sequence#3",
+		"ends-with-sequence#2",
 		"ends-with-sequence#3",
 		"expanded-QName#1",
 		"foot#1",
@@ -324,6 +326,7 @@ export class FunctionData {
 		"range#0",
 		"slice#4",
 		"some#2",
+		"starts-with-sequence#2",
 		"starts-with-sequence#3",
 		"trunk#1",
 		"unparcel#1"
@@ -379,6 +382,9 @@ export class FunctionData {
 
 	public static readonly map40 = [
 		"entries#1",
+		"build#1",
+		"build#2",
+		"build#3",
 		"build#4",
 		"filter#2"
 	].concat(FunctionData.map);
