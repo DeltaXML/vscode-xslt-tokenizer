@@ -318,6 +318,14 @@
 						],
 						"description": "Display version and timing information to the standard error output"
 					},
+					"TPfilename": {
+						"type": "string",
+						"description": "Filename target for trace profile information to be sent"
+					},
+					"TPxslFilename": {
+						"type": "string",
+						"description": "Stylesheet filename to be used to format the result with the -TP option set"
+					},
 					"parameters": {
 						"description": "The xsl:param values for the XSLT",
 						"type": "array",

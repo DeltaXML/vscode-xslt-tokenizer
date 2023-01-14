@@ -183,6 +183,17 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                             commandLineArgs.push('-t');
                         }
                         break;
+                    case 'timing':
+                        if (propValue !== "off") {
+                            commandLineArgs.push('-TP');
+                        }
+                        break;
+                    case 'TPfilename':
+                        commandLineArgs.push('-TP:' + propValue);
+                        break;
+                    case 'TPxslFilename':
+                        commandLineArgs.push('-TPxsl:' + propValue);
+                        break;
                     case 'allowSyntaxExtensions40':
                         commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
                         break;
