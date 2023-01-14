@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 
+type removeTokenVotes = { otherMatchCount: number }[];
 
 export class FileSelection {
   private static readonly PICK_FILE = "$(explorer-view-icon) Pick File";
@@ -43,15 +44,15 @@ export class FileSelection {
     this.completedPick = true;
     const { label, extensions, isResult, prevStageLabel, prevStageGroup } = obj;
     const workspaceLabel = FileSelection.MMO_PREFIX + label;
-    let fileListForLabel:string[]|undefined = this.context.workspaceState.get(workspaceLabel);
+    let fileListForLabel: string[] | undefined = this.context.workspaceState.get(workspaceLabel);
     if (!fileListForLabel) {
       fileListForLabel = [];
     }
-    const fileItems = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
-    let prevStageFilePaths:string[]|undefined = prevStageLabel ? this.context.workspaceState.get(FileSelection.MMO_PREFIX + prevStageLabel) : undefined;
-    const commandItems: { label: string; description?: string}[] = FileSelection.commandList.map(label => ({ label, description: '- file explorer' }));
+    const fileItems = this.createFileItems(fileListForLabel);
+    let prevStageFilePaths: string[] | undefined = prevStageLabel ? this.context.workspaceState.get(FileSelection.MMO_PREFIX + prevStageLabel) : undefined;
+    const commandItems: { label: string; description?: string }[] = FileSelection.commandList.map(label => ({ label, description: '- file explorer' }));
     if (fileListForLabel.length > 0) {
-      commandItems.push({ label: FileSelection.CLEAR_RECENTS});
+      commandItems.push({ label: FileSelection.CLEAR_RECENTS });
     }
     const explorerSeparator = {
       label: '',
@@ -157,7 +158,7 @@ export class FileSelection {
         canSelectMany: false,
         openLabel: label,
       });
-  
+
       if (!APP_FILE || APP_FILE.length < 1) {
         this.completedPick = false;
         return;
@@ -174,5 +175,44 @@ export class FileSelection {
         return newFilePath;
       }
     }
+  }
+
+  private createFileItems(fileListForLabel: string[]) {
+    const filenames = fileListForLabel.map((file) => path.basename(file));
+    const filepathLengths = fileListForLabel.map((file) => file.length);
+    const maxFilepathLenth = Math.max(...filepathLengths);
+    const hasDupeFilenames = filenames.length !== new Set(filenames).size;
+    let fileData: { label: string; description: string }[] = [];
+    if (fileListForLabel.length > 1 && hasDupeFilenames && maxFilepathLenth > 10) {
+      const dirNames = fileListForLabel.map((file) => path.dirname(file));
+      const dirNameTokens = dirNames.map(dirname => dirname.split(/\\|\//));
+      const dirnameRemoveTokenVotes: removeTokenVotes[] = [];
+      for (let i = 0; i < dirNameTokens.length; i++) {
+        const tokensForPath = dirNameTokens[i];
+        dirnameRemoveTokenVotes.push([]);
+        // check if tokens for this path exist in other paths
+        for (let ix = 0; ix < dirNameTokens.length; ix++) {
+          dirnameRemoveTokenVotes[i].push( {otherMatchCount: 0});
+          if (ix !== i) {
+            const tokensForOtherPath = dirNameTokens[ix];
+            for (let ixy = 0; ixy < tokensForPath.length; ixy++) {
+              if (ixy < tokensForOtherPath.length) {
+                const pathToken = tokensForPath[ixy];
+                const otherPathToken = tokensForPath[ixy];
+                if (pathToken === otherPathToken) {
+                  dirnameRemoveTokenVotes[i][ixy].otherMatchCount ++;
+                  // mark pathToken with a remove vote;
+                  // the vote must be unanimously remove to remove it
+                }
+              }
+            }
+          }
+        }
+      }
+
+    } else {
+      fileData = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
+    }
+    return fileData;
   }
 }
