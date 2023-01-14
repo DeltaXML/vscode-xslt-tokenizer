@@ -144,7 +144,7 @@ export class Data {
     public static secondParts = ["as", "of"];
 
     public static nonFunctionConditional = ["if", "then", "else"];
-    public static nonFunctionTypes = ["map", "array", "function", "enum", "union", "record"];
+    public static nonFunctionTypes = ["atomic", "type", "map", "array", "function", "enum", "union", "record"];
     public static nonFunctionTypesBrackets = Data.nonFunctionTypes.map(t => t + '(*)');
 
     public static setAsOperatorIfKeyword(token: Token) {
@@ -890,7 +890,7 @@ export class XPathLexer {
                 prevToken.tokenType = TokenLevelState.complexExpression;
             } else if (prevToken.value === 'function') {
                 prevToken.tokenType = TokenLevelState.anonymousFunction;
-            } else if (prevToken.value === 'map' || prevToken.value === 'array') {
+            } else if (Data.nonFunctionTypes.includes(prevToken.value)) {
                 prevToken.tokenType = TokenLevelState.simpleType;
             } else {
                 prevToken.tokenType = TokenLevelState.function;
