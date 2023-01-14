@@ -287,27 +287,45 @@ export class FunctionData {
 	];
 
 	public static readonly xpath40 = [
-    "all#2",
+		"all#2",
+		"all-different#1",
+		"all-different#2",
+		"all-equal#1",
+		"all-equal#2",
 		"characters#1",
+		"contains-sequence#3",
+		"ends-with-sequence#3",
+		"expanded-QName#1",
+		"foot#1",
 		"highest#1",
 		"highest#2",
 		"highest#3",
 		"identity#1",
-		"in-scope-namespace#1",
 		"index-where#2",
+		"intersperse#2",
+		"in-scope-namespace#1",
 		"is-NAN#1",
 		"items-after#2",
+		"items-at#2",
 		"items-before#2",
-		"items-from#2",
+		"items-ending-where#2",
+		"items-starting-where#2",
 		"items-until#2",
+		"iterate-while#3",
 		"lowest#1",
 		"lowest#2",
 		"lowest#3",
+		"op#1",
 		"parcel#1",
+		"parse-html#1",
+		"parse-QName#1",
 		"parts#1",
+		"replicate#2",
 		"range#0",
 		"slice#4",
 		"some#2",
+		"starts-with-sequence#3",
+		"trunk#1",
 		"unparcel#1"
 	].concat(FunctionData.xpath);
 
@@ -336,8 +354,13 @@ export class FunctionData {
 	];
 
 	public static readonly array40 = [
+		"empty#1",
+		"exists#1",
+		"foot#1",
+		"index-where#2",
 		"members#1",
-		"of#1"
+		"of#1",
+		"trunk#1"
 	].concat(FunctionData.array);
 
 	public static readonly map = [
@@ -355,7 +378,9 @@ export class FunctionData {
 	];
 
 	public static readonly map40 = [
-		"entries#1"
+		"entries#1",
+		"build#4",
+		"filter#2"
 	].concat(FunctionData.map);
 
 	public static readonly ixsl = [
