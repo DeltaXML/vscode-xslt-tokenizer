@@ -202,6 +202,7 @@ export class XSLTSchema4 implements SchemaData {
                     base: 'xsl:element-only-versioned-element-type',
                     attrs: {
                         'select': 'xsl:expression',
+                        'separator': 'xsl:avt',
                         'mode': 'xsl:mode',
                         '_select': 'xs:string',
                         '_mode': 'xs:string'
