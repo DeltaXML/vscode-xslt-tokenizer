@@ -1560,16 +1560,21 @@ export class XsltTokenDiagnostics {
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
 								let curlyBraceType = CurlyBraceType.None;
+								let setContextItemProp = false;
 								if (prevToken && prevToken.tokenType === TokenLevelState.operator) {
 									if (prevToken.value === 'map') {
 										curlyBraceType = CurlyBraceType.Map;
 									} else if (prevToken.value === 'array') {
 										curlyBraceType = CurlyBraceType.Array;
 									}
+								} else if (prevToken && prevToken.tokenType === TokenLevelState.anonymousFunction) {
+									setContextItemProp = prevToken.value === '->';
 								}
 								const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
 								if (curlyBraceType === CurlyBraceType.Map) {
 									stackItem.awaitingMapKey = true;
+								} else if (setContextItemProp) {
+									stackItem.hasContextItem = true;
 								}
 								xpathStack.push(stackItem);
 								if (anonymousFunctionParams) {
