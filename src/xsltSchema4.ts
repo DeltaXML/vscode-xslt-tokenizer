@@ -1010,7 +1010,7 @@ export class XSLTSchema4 implements SchemaData {
             elementNames: ['xsl:with-param']
         },
         "xsl:on-completion": { type: 'xsl:sequence-constructor-or-select' },
-        "xsl:otherwise": { type: 'xsl:sequence-constructor' },
+        "xsl:otherwise": { type: 'xsl:sequence-constructor-or-select' },
         "xsl:output-character": {
             base: 'xsl:element-only-versioned-element-type',
             attrs: {
