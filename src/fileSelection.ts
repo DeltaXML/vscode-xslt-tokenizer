@@ -178,6 +178,7 @@ export class FileSelection {
   }
 
   private createFileItems(fileListForLabel: string[]) {
+    const pathCount = fileListForLabel.length;
     const filenames = fileListForLabel.map((file) => path.basename(file));
     const filepathLengths = fileListForLabel.map((file) => file.length);
     const maxFilepathLenth = Math.max(...filepathLengths);
@@ -198,18 +199,39 @@ export class FileSelection {
             for (let ixy = 0; ixy < tokensForPath.length; ixy++) {
               if (ixy < tokensForOtherPath.length) {
                 const pathToken = tokensForPath[ixy];
-                const otherPathToken = tokensForPath[ixy];
+                const otherPathToken = tokensForOtherPath[ixy];
                 if (pathToken === otherPathToken) {
-                  dirnameRemoveTokenVotes[i][ixy].otherMatchCount ++;
+                  dirnameRemoveTokenVotes[i][ix].otherMatchCount ++;
                   // mark pathToken with a remove vote;
                   // the vote must be unanimously remove to remove it
+                } else {
+                  break;
                 }
               }
             }
           }
         }
+      } // end of outer for
+      // ------------- now remove tokens at start with unanimous vote --------
+      const dirnameTokensToRemove: number[] = [];
+      for (let z = 0; z < dirnameRemoveTokenVotes.length; z++) {
+        const removeTokenVotes = dirnameRemoveTokenVotes[z];
+        let tokensToRemove = 0;
+        for (let c = 0; c < removeTokenVotes.length; c++ ) {
+          const tokenVote = removeTokenVotes[c];
+          if (tokenVote.otherMatchCount && (tokenVote.otherMatchCount + 1 === pathCount)) {
+            tokensToRemove++;
+          } else {
+            break;
+          }
+        }
+        dirnameTokensToRemove.push(tokensToRemove);
       }
-
+      const minTokensToRemove = Math.min(...dirnameTokensToRemove);
+      const shortenedPaths = dirNameTokens.map(
+        (tokens) => tokens.slice(minTokensToRemove).join(path.sep)
+        );
+      fileData = fileListForLabel.map((fsPath, i) => ({ label: path.basename(fsPath), description: shortenedPaths[i] }));
     } else {
       fileData = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
     }
