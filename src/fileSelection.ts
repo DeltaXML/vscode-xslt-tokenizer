@@ -82,7 +82,7 @@ export class FileSelection {
       kind: vscode.QuickPickItemKind.Separator
     };
     const xmlStylePISeparator = {
-      label: '<xml-stylesheet>',
+      label: 'xml-stylesheet',
       kind: vscode.QuickPickItemKind.Separator
     };
 
