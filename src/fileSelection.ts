@@ -224,8 +224,6 @@ export class FileSelection {
           tokensToRemove++;
         }
       }
-      // keep one 'like' token:
-      tokensToRemove = tokensToRemove > 1 ? tokensToRemove - 1 : 0;
       const prefix = tokensToRemove > 0 ? '\u2026' + path.sep : '';
 
       const shortenedPaths = dirNameTokens.map(
