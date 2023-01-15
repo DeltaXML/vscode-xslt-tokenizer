@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 
 type removeTokenVotes = { otherMatchCount: number }[];
+type pickedFileItem = { label: string; description: string; fullDirname: string };
 
 export class FileSelection {
   private static readonly PICK_FILE = "$(explorer-view-icon) Pick File";
@@ -10,6 +11,7 @@ export class FileSelection {
   private static readonly RESULT_LABEL = "Set Result File";
   private static commandList: string[] = [FileSelection.PICK_FILE];
   private static readonly MMO_PREFIX = 'qfs:';
+  private static readonly PATH_LENGTH_LIMIT = 50;
   private context: vscode.ExtensionContext;
 
   constructor(context: vscode.ExtensionContext) {
@@ -111,7 +113,8 @@ export class FileSelection {
           fileListForLabel.length = 0;
           this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         } else {
-          const pickedFsPath = picked.description + path.sep + picked.label;
+          const typedPick = <pickedFileItem> picked;
+          const pickedFsPath = typedPick.fullDirname + path.sep + picked.label;
           if (pickedFsPath === currentFilePath) {
             if (!fileListForLabel.includes(pickedFsPath)) {
               fileListForLabel.unshift(pickedFsPath);
@@ -181,11 +184,11 @@ export class FileSelection {
     const pathCount = fileListForLabel.length;
     const filenames = fileListForLabel.map((file) => path.basename(file));
     const filepathLengths = fileListForLabel.map((file) => file.length);
-    const maxFilepathLenth = Math.max(...filepathLengths);
+    const maxFoundFilepathLength = Math.max(...filepathLengths);
     const hasDupeFilenames = filenames.length !== new Set(filenames).size;
 
-    let fileData: { label: string; description: string }[] = [];
-    if (fileListForLabel.length > 1 && hasDupeFilenames && maxFilepathLenth > 10) {
+    let fileData: pickedFileItem[] = [];
+    if (fileListForLabel.length > 1 && hasDupeFilenames && maxFoundFilepathLength > FileSelection.PATH_LENGTH_LIMIT) {
       const dirNames = fileListForLabel.map((file) => path.dirname(file));
       const dirNameTokens = dirNames.map(dirname => dirname.split(/\\|\//));
       const tokensForFirstPath = dirNameTokens[0];
@@ -228,9 +231,9 @@ export class FileSelection {
       const shortenedPaths = dirNameTokens.map(
         (tokens) => prefix + tokens.slice(tokensToRemove).join(path.sep)
       );
-      fileData = fileListForLabel.map((fsPath, i) => ({ label: path.basename(fsPath), description: shortenedPaths[i] }));
+      fileData = fileListForLabel.map((fsPath, i) => ({ label: path.basename(fsPath), description: shortenedPaths[i], fullDirname: path.dirname(fsPath)}));
     } else {
-      fileData = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
+      fileData = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath), fullDirname: path.dirname(fsPath) }));
     }
     return fileData;
   }
