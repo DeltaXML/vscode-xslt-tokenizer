@@ -242,6 +242,7 @@ export class FileSelection {
               const hrefValue = piAttrValue.substring(1, piAttrValue.length - 1);
               const basePathPos = docUri.path.lastIndexOf('/');
               const baseUri = docUri.with({ path: docUri.path.substring(0, basePathPos) });
+              // don't resolve if appears to be an absolute path:
               const resolvedPath = hrefValue.startsWith(path.sep) || hrefValue.charAt(1) === ':' ? hrefValue : vscode.Uri.joinPath(baseUri, hrefValue).fsPath;
               resolvedXslPath = resolvedPath;
             } else if (piTokenType === XSLTokenLevelState.attributeValue && (foundType)) {
@@ -254,7 +255,9 @@ export class FileSelection {
         i++;
       }); // ends outer for-each
       if (foundXslType && resolvedXslPath) {
-        const lastSlashPosInPath = resolvedXslPath.lastIndexOf(path.sep);
+        // path SHOULD be an IRI - but just in case its a windows path like c:\path-to-file
+        const separator = resolvedXslPath.indexOf('\\') > -1 ? '\\' : '/';
+        const lastSlashPosInPath = resolvedXslPath.lastIndexOf(separator);
         const fullDir = resolvedXslPath.substring(0, lastSlashPosInPath); 
         result.push({
           label: resolvedXslPath.substring(lastSlashPosInPath + 1),
