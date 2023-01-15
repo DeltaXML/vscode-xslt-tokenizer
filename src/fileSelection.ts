@@ -183,54 +183,51 @@ export class FileSelection {
     const filepathLengths = fileListForLabel.map((file) => file.length);
     const maxFilepathLenth = Math.max(...filepathLengths);
     const hasDupeFilenames = filenames.length !== new Set(filenames).size;
+
     let fileData: { label: string; description: string }[] = [];
     if (fileListForLabel.length > 1 && hasDupeFilenames && maxFilepathLenth > 10) {
       const dirNames = fileListForLabel.map((file) => path.dirname(file));
       const dirNameTokens = dirNames.map(dirname => dirname.split(/\\|\//));
-      const dirnameRemoveTokenVotes: removeTokenVotes[] = [];
-      for (let i = 0; i < dirNameTokens.length; i++) {
-        const tokensForPath = dirNameTokens[i];
-        dirnameRemoveTokenVotes.push([]);
-        // check if tokens for this path exist in other paths
-        for (let ix = 0; ix < dirNameTokens.length; ix++) {
-          dirnameRemoveTokenVotes[i].push( {otherMatchCount: 0});
-          if (ix !== i) {
-            const tokensForOtherPath = dirNameTokens[ix];
-            for (let ixy = 0; ixy < tokensForPath.length; ixy++) {
-              if (ixy < tokensForOtherPath.length) {
-                const pathToken = tokensForPath[ixy];
-                const otherPathToken = tokensForOtherPath[ixy];
-                if (pathToken === otherPathToken) {
-                  dirnameRemoveTokenVotes[i][ix].otherMatchCount ++;
-                  // mark pathToken with a remove vote;
-                  // the vote must be unanimously remove to remove it
-                } else {
-                  break;
-                }
-              }
+      const tokensForFirstPath = dirNameTokens[0];
+      const dirnameRemoveTokenVotes: removeTokenVotes = tokensForFirstPath.map(() => {
+        return { otherMatchCount: 1 };
+      });
+      // check other tokens exist in other paths
+      const nextPathStartIndex = 1;
+      for (let pathIndex = nextPathStartIndex; pathIndex < dirNameTokens.length; pathIndex++) {
+        const tokensForNextPath = dirNameTokens[pathIndex];
+        for (let tknIndex = 0; tknIndex < tokensForFirstPath.length; tknIndex++) {
+          if (tknIndex < tokensForNextPath.length) {
+            const pathToken = tokensForFirstPath[tknIndex];
+            const otherPathToken = tokensForNextPath[tknIndex];
+            if (pathToken === otherPathToken) {
+              // mark pathToken with a remove vote;
+              // the vote must be unanimously remove to remove it
+              dirnameRemoveTokenVotes[tknIndex].otherMatchCount++;
+            } else {
+              break;
             }
-          }
-        }
-      } // end of outer for
-      // ------------- now remove tokens at start with unanimous vote --------
-      const dirnameTokensToRemove: number[] = [];
-      for (let z = 0; z < dirnameRemoveTokenVotes.length; z++) {
-        const removeTokenVotes = dirnameRemoveTokenVotes[z];
-        let tokensToRemove = 0;
-        for (let c = 0; c < removeTokenVotes.length; c++ ) {
-          const tokenVote = removeTokenVotes[c];
-          if (tokenVote.otherMatchCount && (tokenVote.otherMatchCount + 1 === pathCount)) {
-            tokensToRemove++;
           } else {
             break;
           }
         }
-        dirnameTokensToRemove.push(tokensToRemove);
       }
-      const minTokensToRemove = Math.min(...dirnameTokensToRemove);
+
+      // ------------- now remove tokens at start with unanimous vote --------
+      let tokensToRemove = 0;
+      for (let z = 0; z < dirnameRemoveTokenVotes.length; z++) {
+        const tokenVotes = dirnameRemoveTokenVotes[z];
+        if (tokenVotes.otherMatchCount === pathCount) {
+          tokensToRemove++;
+        }
+      }
+      // keep one 'like' token:
+      tokensToRemove = tokensToRemove > 1 ? tokensToRemove - 1 : 0;
+      const prefix = tokensToRemove > 0 ? '\u2026' + path.sep : '';
+
       const shortenedPaths = dirNameTokens.map(
-        (tokens) => tokens.slice(minTokensToRemove).join(path.sep)
-        );
+        (tokens) => prefix + tokens.slice(tokensToRemove).join(path.sep)
+      );
       fileData = fileListForLabel.map((fsPath, i) => ({ label: path.basename(fsPath), description: shortenedPaths[i] }));
     } else {
       fileData = fileListForLabel.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
