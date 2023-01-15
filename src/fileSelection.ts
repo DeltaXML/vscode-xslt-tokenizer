@@ -139,10 +139,8 @@ export class FileSelection {
         } else {
           const typedPick = <pickedFileItem>picked;
           const pickedFsPath = typedPick.fullDirname + path.sep + picked.label;
-          if (pickedFsPath === currentFilePath) {
-            if (!fileListForLabel.includes(pickedFsPath)) {
-              fileListForLabel.unshift(pickedFsPath);
-            }
+          if (!fileListForLabel.includes(pickedFsPath)) {
+            fileListForLabel.unshift(pickedFsPath);
           }
           this.pickedValues.set(label, pickedFsPath);
           this.context.workspaceState.update(workspaceLabel, fileListForLabel);
