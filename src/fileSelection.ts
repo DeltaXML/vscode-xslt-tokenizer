@@ -86,7 +86,7 @@ export class FileSelection {
       kind: vscode.QuickPickItemKind.Separator
     };
 
-    let listItems: { label: string; kind?: vscode.QuickPickItemKind; description?: string }[] = [];
+    let listItems: { label: string; kind?: vscode.QuickPickItemKind; description?: string; fullDirname?: string }[] = [];
     let currentFilePath = vscode.window.activeTextEditor?.document.uri.fsPath;
 
     let xmlStylesheetFileItems: { label: string; kind?: vscode.QuickPickItemKind; description?: string }[] = [];
@@ -99,7 +99,8 @@ export class FileSelection {
     } else if (currentFilePath) {
       if (!extensions || extensions.includes('*') || extensions.includes(path.extname(currentFilePath).substring(1))) {
         listItems.push(currentSeparator);
-        listItems.push({ label: path.basename(currentFilePath), description: path.dirname(currentFilePath) });
+        const dirPath = path.dirname(currentFilePath);
+        listItems.push({ label: path.basename(currentFilePath), description: dirPath, fullDirname: dirPath });
       } else {
         currentFilePath = undefined;
       }
@@ -113,7 +114,9 @@ export class FileSelection {
       listItems = listItems.concat(fileItems);
     }
     if (prevStageFilePaths && prevStageFilePaths.length > 0) {
-      const prevStageFileItems = prevStageFilePaths.map(fsPath => ({ label: path.basename(fsPath), description: path.dirname(fsPath) }));
+      const prevStageFileItems = prevStageFilePaths.map(fsPath => ({
+        label: path.basename(fsPath), description: path.dirname(fsPath), fullDirname: path.dirname(fsPath)
+      }));
       listItems.push(prevStageSeparator);
       listItems = listItems.concat(prevStageFileItems);
     }
@@ -202,7 +205,7 @@ export class FileSelection {
   }
 
   private createXmlStylesheetItems() {
-    const result: { label: string; kind?: vscode.QuickPickItemKind; description?: string }[] = [];
+    const result: { label: string; kind?: vscode.QuickPickItemKind; description?: string; fullDirname: string }[] = [];
     const doc = vscode.window.activeTextEditor?.document;
     if (doc) {
       const docUri = doc.uri;
@@ -214,6 +217,8 @@ export class FileSelection {
       const tokens = FileSelection.xmlLexer.analyse(docText, false);
       let i = 0;
       let foundStylesheetPi = false;
+      let foundXslType = false;
+      let resolvedXslPath: string | undefined;
       tokens.forEach((token) => {
         let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
         if (xmlTokenType === XSLTokenLevelState.processingInstrName) {
@@ -226,28 +231,39 @@ export class FileSelection {
           const fakedDoc = new CodeActionDocument(docUri, fakedXml);
           const piTokens = FileSelection.xmlLexer.analyse(fakedXml, false);
           let foundHref = false;
+          let foundType = false;
           piTokens.forEach((piToken) => {
             let piTokenType = <XSLTokenLevelState>(piToken.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
             if (piTokenType === XSLTokenLevelState.attributeName) {
               const piAttrName = this.getTokenValueFromDoc(piToken, fakedDoc);
               foundHref = (piAttrName === 'href');
+              foundType = (piAttrName === 'type');
             }
-            if (foundHref && piTokenType === XSLTokenLevelState.attributeValue) {
+            if (piTokenType === XSLTokenLevelState.attributeValue && (foundHref)) {
               const piAttrValue = this.getTokenValueFromDoc(piToken, fakedDoc);
               const hrefValue = piAttrValue.substring(1, piAttrValue.length - 1);
               const basePathPos = docUri.path.lastIndexOf('/');
               const baseUri = docUri.with({ path: docUri.path.substring(0, basePathPos) });
-              const resolvedPath = vscode.Uri.joinPath(baseUri, hrefValue).fsPath;
-              const lastSlashPosInPath = resolvedPath.lastIndexOf(path.sep);
-              
-              result.push({ label: resolvedPath.substring(lastSlashPosInPath + 1), description: resolvedPath.substring(0, lastSlashPosInPath) });
-              console.log(piAttrValue);
+              const resolvedPath = hrefValue.startsWith(path.sep) || hrefValue.charAt(1) === ':' ? hrefValue : vscode.Uri.joinPath(baseUri, hrefValue).fsPath;
+              resolvedXslPath = resolvedPath;
+            } else if (piTokenType === XSLTokenLevelState.attributeValue && (foundType)) {
+              const piAttrValue = this.getTokenValueFromDoc(piToken, fakedDoc);
+              const typeValue = piAttrValue.substring(1, piAttrValue.length - 1);
+              foundXslType = typeValue === 'text/xsl' || typeValue === 'text/xslt';
             }
           });
-
         }
         i++;
-      });
+      }); // ends outer for-each
+      if (foundXslType && resolvedXslPath) {
+        const lastSlashPosInPath = resolvedXslPath.lastIndexOf(path.sep);
+        const fullDir = resolvedXslPath.substring(0, lastSlashPosInPath); 
+        result.push({
+          label: resolvedXslPath.substring(lastSlashPosInPath + 1),
+          description: fullDir,
+          fullDirname: fullDir
+        });
+      }
     }
     return result;
   }
