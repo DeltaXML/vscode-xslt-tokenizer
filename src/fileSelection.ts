@@ -139,8 +139,15 @@ export class FileSelection {
         } else {
           const typedPick = <pickedFileItem>picked;
           const pickedFsPath = typedPick.fullDirname + path.sep + picked.label;
-          if (!fileListForLabel.includes(pickedFsPath)) {
+          if (fileListForLabel.includes(pickedFsPath)) {
+            // promote - remove and insert at top:
+            fileListForLabel = fileListForLabel.filter(item => item !== pickedFsPath);
             fileListForLabel.unshift(pickedFsPath);
+          } else {
+            fileListForLabel.unshift(pickedFsPath);
+            if (fileListForLabel.length > 10) {
+              fileListForLabel.pop();
+            }
           }
           this.pickedValues.set(label, pickedFsPath);
           this.context.workspaceState.update(workspaceLabel, fileListForLabel);
@@ -158,14 +165,20 @@ export class FileSelection {
       });
       if (RESULT_FILE) {
         const newFilePath = RESULT_FILE.fsPath;
-        if (!fileListForLabel.includes(newFilePath)) {
+
+        if (fileListForLabel.includes(newFilePath)) {
+          // promote - remove and insert at top:
+          fileListForLabel = fileListForLabel.filter(item => item !== newFilePath);
           fileListForLabel.unshift(newFilePath);
+        } else {
+          fileListForLabel.unshift(newFilePath);
+          // add:
           if (fileListForLabel.length > 10) {
             fileListForLabel.pop();
           }
           this.pickedValues.set(label, newFilePath);
-          this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         }
+        this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         return newFilePath;
       }
     } else {
