@@ -532,7 +532,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				replacementAll = instrText + replacementStart + replcementFnCall + fnArgsString + ')"/>\n';
 			} else {
 				fnStartCharacter = prefixWS.length + fullRange.start.character + 2;
-				replacementAll = prefixWS + replcementFnCall + fnArgsString + ')';
+				if (!forXSLTVariable) replacementAll = prefixWS + replcementFnCall + fnArgsString + ')';
 				const parentStartLine = document.lineAt(attrParentRange.start.line);
 				const firstCharOnFirstLine = parentStartLine.firstNonWhitespaceCharacterIndex;
 				if (instrText.length > 0) {
