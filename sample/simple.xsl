@@ -4,9 +4,8 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="test" as="xs:string" select="if (0) then 'b' else 'c'"/>    
-
-        
+    <xsl:template match="*" mode="#default">
+        <xsl:variable name="test" as="xs:string" select="if (0) then 'b' else 'c'"/>    
+    </xsl:template>
     
-
 </xsl:stylesheet>

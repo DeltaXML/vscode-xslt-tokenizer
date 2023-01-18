@@ -53,6 +53,7 @@ enum XsltCodeActionKind {
 	extractXsltFunction = 'xsl:function - full refactor',
 	extractXsltFunctionPartial = 'xsl:function - partial refactor',
 	extractXsltTemplate = 'xsl:template',
+	extractXsltVariable = 'xsl:variable',
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
 }
@@ -99,6 +100,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		switch (roughSelectionType) {
 
 			case RangeTagType.xpathAttribute:
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltVariable, vscode.CodeActionKind.RefactorExtract));
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunctionFmXPath, vscode.CodeActionKind.RefactorExtract));
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunctionFmXPathPartial, vscode.CodeActionKind.RefactorExtract));
 				break;
@@ -144,6 +146,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				break;
 			case XsltCodeActionKind.extractXsltFunctionFmXPath:
 			case XsltCodeActionKind.extractXsltFunctionFmXPathPartial:
+			case XsltCodeActionKind.extractXsltVariable:
 				let validAttrParent = ancestorOrSelfSymbols[1];
 				if (validAttrParent.name === 'xsl:when') validAttrParent = ancestorOrSelfSymbols[2];
 				const attrParentRange = validAttrParent.range;
@@ -409,6 +412,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: anyDocumentSymbol, attrParentRange: vscode.Range|null): vscode.CodeAction {
 		const elementSelected = !attrParentRange;
+		const forXSLTVariable = codeAction.title === XsltCodeActionKind.extractXsltVariable;
 		const forXSLTemplate = codeAction.title === XsltCodeActionKind.extractXsltTemplate;
 		const partialRefactor = codeAction.title === XsltCodeActionKind.extractXsltFunctionPartial || codeAction.title === XsltCodeActionKind.extractXsltFunctionFmXPathPartial;
 		let fullRange = sourceRange;
@@ -424,8 +428,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
 		const sequenceInstructionStart = '<xsl:sequence select="';
 		const expandTextString = this.actionProps?.expandTextVal ? ' expand-text=' + this.actionProps.expandTextVal : '';
-		const instrName = forXSLTemplate ? 'template' : 'function';
-		const callName = forXSLTemplate ? 'dx:extractTemplate' : 'dx:extractFunction';
+		const instrName = forXSLTemplate ? 'template' : forXSLTVariable ? 'variable' : 'function';
+		const callName = forXSLTemplate ? 'dx:extractTemplate' : forXSLTVariable ? 'dx:extractVariable' : 'dx:extractFunction';
 		const functionHeadText = `\n\n\t<xsl:${instrName} name="${callName}"${expandTextString} as="item()*">\n`;
 		const functionFootText = `\n\t</xsl:${instrName}>`;
 		let finalSymbolVariableName: string | null = null;
@@ -434,7 +438,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const functionBodyText = document.getText(fullRange);
 		const functionBodyLines = functionBodyText.trimRight().split('\n');
 		let functionBodyLinesCount = functionBodyLines.length;
-		const indent = elementSelected ? '\t\t' : '\t\t\t';
+		const indent = elementSelected ? '\t\t' : forXSLTVariable ? '' : '\t\t\t';
 		const trimmedLines = functionBodyLines.map((line) => indent + this.trimLeadingWS(line, firstCharOnFirstLine));
 		const replacementIsVariable = finalSymbol && finalSymbol.name.startsWith('xsl:variable');
 
@@ -460,7 +464,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				const newLine = preFinalBodyText.length > 0 ? '\n' : '';
 				trimmedBodyText = preFinalBodyText + newLine + trimmedSelectTextLines.join('\n');
 			}
-		} else if (elementSelected) {
+		} else if (elementSelected || forXSLTVariable) {
 			trimmedBodyText = trimmedLines.join('\n');
 		} else {
 			const trimmedLinesText = trimmedLines.join('\n');
@@ -512,7 +516,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const fnArgsString = requiredArgNames.map((arg) => arg).join(', ');
 			const replcementFnCall = callName + '(';
 			let instrText = '';
-			if (addRegexMapInstruction) {
+			if (forXSLTVariable) {
+				replacementAll = '$' + callName;
+				instrText = `<xsl:variable name="${callName}" as="item()*" select="${trimmedBodyText}"/>\n`;
+			} else if (addRegexMapInstruction) {
 				instrText = '<xsl:variable name="regex-group" select="map:merge(for $k in 0 to 99 return map:entry($k, regex-group($k)))"/>\n';
 				if (elementSelected) instrText += prefixWS;
 			}
@@ -554,7 +561,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		});
 
 		const allFunctionText = functionHeadText + functionParamLines.join('') + finalCorrectText + functionFootText;
-		codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
+		if (!forXSLTVariable) {
+			codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
+		}
 		let fnStartLineIncrement = (replacementIsVariable && forXSLTemplate) || addRegexMapInstruction ? 1 : 0;
 		if (addMergeGroupMapInstruction) fnStartLineIncrement++;
 		this.executeRenameCommand(fullRange.start.line + fnStartLineIncrement, fnStartCharacter, document.uri);
