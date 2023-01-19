@@ -566,7 +566,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (!forXSLTVariable) {
 			codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
 		}
-		let fnStartLineIncrement = (replacementIsVariable && forXSLTemplate) || addRegexMapInstruction ? 1 : 0;
+		let fnStartLineIncrement = (replacementIsVariable && forXSLTemplate) || addRegexMapInstruction || forXSLTVariable ? 1 : 0;
 		if (addMergeGroupMapInstruction) fnStartLineIncrement++;
 		this.executeRenameCommand(fullRange.start.line + fnStartLineIncrement, fnStartCharacter, document.uri);
 		return codeAction;
