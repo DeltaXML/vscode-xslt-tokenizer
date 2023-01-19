@@ -207,7 +207,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 const htmlParserJar = classPaths.find((item) => item.includes('nu.validator') || item.includes('htmlparser'));
 
                 if (!htmlParserJar) {
-                    const htmlparserPath: string | undefined = <string>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
+                    const htmlparserPath = <string|undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
                     if (htmlparserPath) {
                         classPaths.push(htmlparserPath);
                     }

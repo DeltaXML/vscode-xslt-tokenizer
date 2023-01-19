@@ -97,6 +97,7 @@ export enum DiagnosticCode {
 	none,
 	unresolvedVariableRef,
 	unresolvedGenericRef,
+	parseHtmlRef,
 	fnWithNoContextItem,
 	currentWithNoContextItem,
 	groupOutsideForEachGroup,
@@ -127,6 +128,7 @@ export class XsltTokenDiagnostics {
 	public static readonly excludePrefixes = 'exclude-result-prefixes';
 	public static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 	public static readonly brackets = [CharLevelState.lB, CharLevelState.lBr, CharLevelState.lPr, CharLevelState.rB, CharLevelState.rBr, CharLevelState.rPr];
+	private static isHtmlParserJarSet = false;
 
 	public static isBracket(charState: CharLevelState) {
 		return XsltTokenDiagnostics.brackets.indexOf(charState) !== -1;
@@ -351,6 +353,8 @@ export class XsltTokenDiagnostics {
 		let insideGlobalFunction = false;
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
+		const htmlParserString = <string|undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
+		XsltTokenDiagnostics.isHtmlParserJarSet = !!htmlParserString && htmlParserString.trim().length > 0;
 
 		if (languageConfig.isVersion4) {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
@@ -2312,6 +2316,7 @@ export class XsltTokenDiagnostics {
 
 	public static isValidFunctionName(docType: DocumentTypes, xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number) {
 		const useXPath40 = docType === DocumentTypes.XSLT40;
+		let isParseHTMLFnWarning = false;
 		let tokenValue;
 		if (arity === undefined) {
 			let parts = token.value.split('#');
@@ -2329,6 +2334,9 @@ export class XsltTokenDiagnostics {
 				isValid = arity > 0;
 			} else if (useXPath40) {
 				isValid = FunctionData.xpath40.indexOf(fNameParts[0]) > -1;
+				if (isValid) {
+					isParseHTMLFnWarning = tokenValue === 'parse-html';
+				}
 			} else {
 				isValid = FunctionData.xpath.indexOf(fNameParts[0]) > -1;
 			}
@@ -2347,6 +2355,9 @@ export class XsltTokenDiagnostics {
 							isValid = arity > 0;
 						} else {
 							isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
+						}
+						if (isValid) {
+							isParseHTMLFnWarning = tokenValue.endsWith(':parse-html');
 						}
 						break;
 					case XSLTnamespaces.Array:
@@ -2418,7 +2429,11 @@ export class XsltTokenDiagnostics {
 				}
 			}
 		}
-		fErrorType = isValid ? ErrorType.None : fErrorType;
+		if (isParseHTMLFnWarning) {
+			isParseHTMLFnWarning = !XsltTokenDiagnostics.isHtmlParserJarSet;
+			isValid = !isParseHTMLFnWarning;
+		}
+		fErrorType = isParseHTMLFnWarning ? ErrorType.XPathFunctionParseHtml : isValid ? ErrorType.None : fErrorType;
 		return { isValid, qFunctionName, fErrorType };
 	}
 
@@ -2862,6 +2877,11 @@ export class XsltTokenDiagnostics {
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					let parts = tokenValue.split('#');
 					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
+					break;
+				case ErrorType.XPathFunctionParseHtml:
+					errCode = DiagnosticCode.parseHtmlRef;
+					severity = vscode.DiagnosticSeverity.Warning;
+					msg = `XPath: The 'parse-html' function requires the 'htmlParserJar' setting when invoked from VS Code`;
 					break;
 				case ErrorType.XPathTypeName:
 					msg = `XPath: Invalid type: '${tokenValue}'`;
