@@ -259,11 +259,11 @@ export class XPathFunctionDetails {
 			signature: "replicate(input as item()* count as xs:nonNegativeInteger) as item()*",
 			description: "Produces multiple copies of a sequence."
 		},
-		{
-			name: "slice",
-			signature: "slice(input as item()*, start as xs:integer?, end as xs:integer?, step as xs:integer?) as item()*",
-			description: "Selects items from an input sequence, starting at $start (default 1), ending at $end (defaulting to the length of the sequence), and stepping by $step (defaulting to 1). If $start or $end is negative, counting is from the end of the sequence. If $step is negative, the sequence runs backwards."
-		},
+		// {
+		// 	name: "slice",
+		// 	signature: "slice(input as item()*, start as xs:integer?, end as xs:integer?, step as xs:integer?) as item()*",
+		// 	description: "Selects items from an input sequence, starting at $start (default 1), ending at $end (defaulting to the length of the sequence), and stepping by $step (defaulting to 1). If $start or $end is negative, counting is from the end of the sequence. If $step is negative, the sequence runs backwards."
+		// },
 		{
 			name: "some",
 			signature: "some(sequence as item()*, predicate as function(item()) as xs:boolean) as xs:boolean",
