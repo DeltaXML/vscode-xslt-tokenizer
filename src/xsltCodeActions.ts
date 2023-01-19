@@ -78,6 +78,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	];
 
 	public static COMMAND_RENAME = 'editor.action.rename';
+	public static COMMAND_SETTINGS = 'workbench.action.openSettings';
 	public static COMMAND = 'code-actions-sample.command';
 	private static regexForRegexGroup = new RegExp(/'regex-group\(\s*(\d+)\s*\)'$/);
 	private static regexForVariable = new RegExp(/\$[^\s]+/);
@@ -89,13 +90,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private actionProps: ActionProps | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
-	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
+	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
 		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
 
 		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
 		let codeActions: vscode.CodeAction[] | undefined = [];
 		// debug only:
 		//codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
+		codeActions = context.diagnostics
+			.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef)
+			.map(diagnostic => this.createCommandCodeAction(diagnostic));
 
 		switch (roughSelectionType) {
 
@@ -110,8 +114,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltFunctionPartial, vscode.CodeActionKind.RefactorExtract));
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractXsltTemplate, vscode.CodeActionKind.RefactorExtract));
 				break;
-			default:
-				codeActions = undefined;
 		}
 
 		// Marking a single fix as `preferred` means that users can apply it with a
@@ -250,7 +252,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					const parentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, firstSymbol.range.start);
 
 					let allRangeElementsOK = true;
-					if (parentSymbol) {                        
+					if (parentSymbol) {
 						if (isSameSymbol) {
 							if (firstSymbol.name.startsWith('xsl:')) {
 								const spacePos = firstSymbol.name.indexOf(' ');
@@ -410,7 +412,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return { text: '', lines: 0, isSelect: false };
 	}
 
-	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: anyDocumentSymbol, attrParentRange: vscode.Range|null): vscode.CodeAction {
+	private addExtractFunctionEdits(codeAction: vscode.CodeAction, document: vscode.TextDocument, sourceRange: vscode.Range, targetRange: vscode.Range, finalSymbol: anyDocumentSymbol, attrParentRange: vscode.Range | null): vscode.CodeAction {
 		const elementSelected = !attrParentRange;
 		const forXSLTVariable = codeAction.title === XsltCodeActionKind.extractXsltVariable;
 		const forXSLTemplate = codeAction.title === XsltCodeActionKind.extractXsltTemplate;
@@ -524,7 +526,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				if (elementSelected) instrText += prefixWS;
 			}
 			if (addMergeGroupMapInstruction) {
-				instrText += `<xsl:variable name="merge-groups" select="map:merge(for $k in (${mergeNames.join(',')}) return map:entry($k, current-merge-group($k)))"/>\n`; 
+				instrText += `<xsl:variable name="merge-groups" select="map:merge(for $k in (${mergeNames.join(',')}) return map:entry($k, current-merge-group($k)))"/>\n`;
 				if (elementSelected) instrText += prefixWS;
 			}
 			if (elementSelected) {
@@ -834,9 +836,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}, 250);
 	}
 
-	private createCommand(): vscode.CodeAction {
-		const action = new vscode.CodeAction('Learn more...', vscode.CodeActionKind.Empty);
-		action.command = { command: XSLTCodeActions.COMMAND, title: 'Learn more about emojis', tooltip: 'This will open the unicode emoji page.' };
+	private createCommandCodeAction(diagnostic: vscode.Diagnostic): vscode.CodeAction {
+		const action = new vscode.CodeAction(`Set 'htmlParserJar' in User Settings...`, vscode.CodeActionKind.QuickFix);
+		action.command = { command: XSLTCodeActions.COMMAND_SETTINGS, title: `Add 'htmlParserJar' setting`, tooltip: 'Open user settings' };
 		return action;
 	}
 }
