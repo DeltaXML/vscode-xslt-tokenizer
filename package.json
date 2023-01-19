@@ -164,6 +164,10 @@
 					"type": "string",
 					"description": "Path of the installed Saxon jar file"
 				},
+				"XSLT.tasks.htmlParserJar": {
+					"type": "string",
+					"description": "(XSLT 4.0) Path of installed nu.validator or htmlparser jar file (download maven 'bundle' file at: https://mvnrepository.com/artifact/nu.validator.htmlparser/htmlparser/1.4 )"
+				},
 				"XSLT.tasks.java.enabled": {
 					"type": "boolean",
 					"default": true,

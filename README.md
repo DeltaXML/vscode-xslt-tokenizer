@@ -113,6 +113,14 @@ To use the task-provider for the _Java_ Saxon XSLT Processor, the following sett
   "XSLT.tasks.saxonJar": "/path/to/folder/SaxonHE10-0J/saxon-he-10.0.jar"
 ```
 
+## XSLT 4.0 Tasks
+
+To use the task-provider with XSLT 4.0, the following setting is needed when the `parse-html()` function is used e.g.:
+
+```
+  "XSLT.tasks.htmlParserJar": "/path/to/folder/htmlparser-1.4.jar" // or: nu.validator.jar
+```
+
 ## XSLT Packages
 
 If your XSLT contains xsl:use-package instructions, XSLT package names are resolved to lookup symbols to support the following features:

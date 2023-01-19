@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import * as  os from 'os';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
+import { XsltPackage } from './xsltSymbolProvider';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -129,6 +130,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             if (xsltTask.classPathEntries) {
                 classPaths = classPaths.concat(xsltTask.classPathEntries);
             }
+            let isXSLT40 = false;
 
             for (const propName in xsltTask) {
                 let propValue = this.getProp(xsltTask, propName);
@@ -136,8 +138,8 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                     case 'xsltFile':
                         commandLineArgs.push('-xsl:' + propValue);
                         break;
-                    case 'xmlSource':                        
-                    if (propValue !== "") {
+                    case 'xmlSource':
+                        if (propValue !== "") {
                             commandLineArgs.push('-s:' + propValue);
                         }
                         break;
@@ -195,8 +197,20 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('-TPxsl:' + propValue);
                         break;
                     case 'allowSyntaxExtensions40':
+                        isXSLT40 = true;
                         commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
                         break;
+                }
+            }
+
+            if (isXSLT40) {
+                const htmlParserJar = classPaths.find((item) => item.includes('nu.validator') || item.includes('htmlparser'));
+
+                if (!htmlParserJar) {
+                    const htmlparserPath: string | undefined = <string>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
+                    if (htmlparserPath) {
+                        classPaths.push(htmlparserPath);
+                    }
                 }
             }
 
