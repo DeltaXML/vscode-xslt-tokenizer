@@ -221,6 +221,9 @@ export class FileSelection {
     if (doc) {
       const docUri = doc.uri;
       const symbols = XsltSymbolProvider.getSymbolsForActiveDocument();
+      if (symbols.length < 1) {
+        return [];
+      }
       const rootElementStartPos = symbols[0].range.start;
       const startPos = new vscode.Position(0, 0);
       const precedingRange = new vscode.Range(startPos, rootElementStartPos);

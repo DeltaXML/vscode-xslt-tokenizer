@@ -100,7 +100,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static getSymbolsForActiveDocument(): vscode.DocumentSymbol[] {
 		if (vscode.window.activeTextEditor) {
 			const result = XsltSymbolProvider.documentSymbols.get(vscode.window.activeTextEditor.document.uri);
-			return result ? result : [];
+			return !!result ? result : [];
 		} else {
 			return [];
 		}

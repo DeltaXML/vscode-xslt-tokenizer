@@ -76,6 +76,21 @@
 			"problemMatcher": [
 				"$saxon-xslt"
 			]
+		},
+		{
+			"type": "xslt",
+			"label": "xslt: Saxon Transform (New)",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${command:xslt-xpath.pickXsltFile}",
+			"xmlSource": "${file}",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"allowSyntaxExtensions40": "off",
+			"group": {
+				"kind": "build"
+			},
+			"problemMatcher": [
+				"$saxon-xslt"
+			]
 		}
 	]
 }
