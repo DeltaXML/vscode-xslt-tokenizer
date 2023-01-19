@@ -120,12 +120,14 @@ export class FileSelection {
       listItems.push(prevStageSeparator);
       listItems = listItems.concat(prevStageFileItems);
     }
-    listItems.push(explorerSeparator);
-    listItems = listItems.concat(commandItems);
+    if (listItems.length > 0) {
+      listItems.push(explorerSeparator);
+      listItems = listItems.concat(commandItems);
+    }
     const qpOptions: vscode.QuickPickOptions = {
       placeHolder: label
     };
-    if (fileItems.length > 0 || (prevStageFilePaths && prevStageFilePaths?.length > 0) || currentFilePath) {
+    if (listItems.length > 0) {
       // give option to select from recent files
       const picked = await vscode.window.showQuickPick(listItems, qpOptions);
       let exit = true;
@@ -274,7 +276,7 @@ export class FileSelection {
         // path SHOULD be an IRI - but just in case its a windows path like c:\path-to-file
         const separator = resolvedXslPath.indexOf('\\') > -1 ? '\\' : '/';
         const lastSlashPosInPath = resolvedXslPath.lastIndexOf(separator);
-        const fullDir = resolvedXslPath.substring(0, lastSlashPosInPath); 
+        const fullDir = resolvedXslPath.substring(0, lastSlashPosInPath);
         result.push({
           label: resolvedXslPath.substring(lastSlashPosInPath + 1),
           description: fullDir,
