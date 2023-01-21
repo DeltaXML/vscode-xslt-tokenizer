@@ -520,7 +520,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const replcementFnCall = callName + '(';
 			let instrText = '';
 			if (forXSLTVariable) {
-				replacementAll = '$' + callName;
+				replacementAll = prefixWS + '$' + callName;
 				instrText = `<xsl:variable name="${callName}" as="item()*" select="${trimmedBodyText}"/>\n`;
 			} else if (addRegexMapInstruction) {
 				instrText = '<xsl:variable name="regex-group" select="map:merge(for $k in 0 to 99 return map:entry($k, regex-group($k)))"/>\n';
