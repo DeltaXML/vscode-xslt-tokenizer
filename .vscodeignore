@@ -1,5 +1,6 @@
 .vscode/**
 .vscode-test/**
+xslt-out/**
 out/test/**
 out/**/*.map
 out/**/*.spec.js
