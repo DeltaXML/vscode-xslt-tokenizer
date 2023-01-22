@@ -521,11 +521,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			let instrText = '';
 			if (forXSLTVariable) {
 				replacementAll = prefixWS + '$' + callName;
-				if (trimmedLines.length > 0) {
+				if (trimmedLines.length > 1) {
 					// TODO: adjust indentedLine tabs according to nesting level:
-					const indentedLine = '\n' + '\t\t\t';
+					const indentedLine = '\n' + prefixWS + '\t';
 					const indentedBodyText = indentedLine + trimmedLines.join(indentedLine);
-					instrText = `<xsl:variable name="${callName}" as="item()*" select="${indentedBodyText}"/>\n`;
+					instrText = `<xsl:variable name="${callName}" as="item()*"\n${prefixWS}select="${indentedBodyText}"/>\n`;
 				} else {
 					instrText = `<xsl:variable name="${callName}" as="item()*" select="${trimmedBodyText}"/>\n`;
 				}
@@ -578,7 +578,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (addMergeGroupMapInstruction) {
 			fnStartLineIncrement++;
 		} else if (forXSLTVariable) {
-			fnStartLineIncrement = functionBodyLinesCount > 1 ? functionBodyLinesCount + 1 : 1;
+			fnStartLineIncrement = functionBodyLinesCount > 1 ? functionBodyLinesCount + 2 : 1;
 		}
 		this.executeRenameCommand(fullRange.start.line + fnStartLineIncrement, fnStartCharacter, document.uri);
 		return codeAction;
