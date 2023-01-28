@@ -33,6 +33,9 @@ export class FileSelection {
   public async pickXmlSourceFile() {
     return await this.pickFile({ label: FileSelection.XML_SOURCE_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
   }
+  public async pickXPathContextFile() {
+    return await this.pickFile({ label: 'Select XPath context file', extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
+  }
   public async pickStage2XmlSourceFile() {
     return await this.pickFile({
       label: "Select Stage2 XML Source File",

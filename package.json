@@ -322,6 +322,18 @@
 						],
 						"description": "Display version and timing information to the standard error output"
 					},
+					"messageEscaping": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Set to 'off' to disable escaping of XML characters in xsl:message output (not available in Saxon 11.1+ versions)"
+					},
+					"execute": {
+						"type": "boolean",
+						"description": "Default: 'true'. If set 'false' any -export output is generated but XSLT is not executed"
+					},
 					"TPfilename": {
 						"type": "string",
 						"description": "Filename target for trace profile information to be sent"

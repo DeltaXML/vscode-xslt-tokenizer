@@ -208,6 +208,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickFile', async (...args) => await fileSelector.pickFile(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXsltFile', async () => await fileSelector.pickXsltFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXmlSourceFile', async () => await fileSelector.pickXmlSourceFile()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXPathContextFile', async () => await fileSelector.pickXPathContextFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickStage2XmlSourceFile', async () => await fileSelector.pickStage2XmlSourceFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickResultFile', async () => await fileSelector.pickResultFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickStage2ResultFile', async () => await fileSelector.pickStage2ResultFile()));
@@ -284,6 +285,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	let xsltTaskEnabled = vscode.workspace.getConfiguration('XSLT.tasks.java').get('enabled');
 	if (xsltTaskEnabled) {
+		SaxonTaskProvider.extensionURI = context.extensionUri;
 		let xsltTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
 		context.subscriptions.push(xsltTaskProvider);
 	}

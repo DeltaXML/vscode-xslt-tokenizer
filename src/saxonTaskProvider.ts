@@ -23,6 +23,7 @@ interface XSLTTask extends vscode.TaskDefinition {
     xsltFile: string;
     xmlSource: string;
     resultPath: string;
+    execute?: boolean;
     allowSyntaxExtensions40?: string;
     parameters?: XSLTParameter[];
     features?: XSLTParameter[];
@@ -30,6 +31,7 @@ interface XSLTTask extends vscode.TaskDefinition {
     initialMode?: string;
     classPathEntries?: string[];
     useWorkspace?: boolean;
+    messageEscaping?: string;
     group?: TaskGroup;
 }
 
@@ -46,7 +48,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     static SaxonBuildScriptType: string = 'xslt';
     templateTaskLabel = 'Saxon Transform (New)';
     templateTaskFound = false;
-
+    public static extensionURI: vscode.Uri | undefined;
 
     constructor(private workspaceRoot: string) { }
 
@@ -62,6 +64,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     private getProp(obj: any, prop: string): string {
         return obj[prop];
     }
+
+    private static getEvalXSLTPath() {
+		const sefURI = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xpath-eval-to-json.xsl');
+		return sefURI.fsPath;
+	}
 
     private getTasks(tasks: XSLTTask[]) {
         let result: vscode.Task[] = [];
@@ -104,6 +111,28 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return this.getTask(xsltTask);
     }
 
+    private addXPathEvalTemplateTask() {
+        let saxonJarDefault = '${config:XSLT.tasks.saxonJar}';
+        let xmlSourceValue = '${command:xslt-xpath.pickXPathContextFile}';
+        let xsltFilePath = SaxonTaskProvider.getEvalXSLTPath();
+        let resultPathValue = '${command:xslt-xpath.pickResultFile}';
+
+        let xsltTask: XSLTTask = {
+            type: 'xslt',
+            saxonJar: saxonJarDefault,
+            label: 'XPath Evaluation',
+            xsltFile: xsltFilePath,
+            xmlSource: xmlSourceValue,
+            resultPath: resultPathValue,
+            allowSyntaxExtensions40: 'on',
+            group: {
+                kind: "build"
+            }
+        };
+
+        return this.getTask(xsltTask);
+    }
+
     private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt';
@@ -113,7 +142,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             if (xsltTask.label === 'xslt: ' + this.templateTaskLabel) {
                 this.templateTaskFound = true;
             }
-
+            let nogo = xsltTask.execute !== undefined && xsltTask.execute === false;
             let commandLineArgs: string[] = [];
 
             let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
@@ -200,7 +229,16 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         isXSLT40 = true;
                         commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
                         break;
+                    case 'messageEscaping':
+                        if (propValue === "on") {
+                            commandLineArgs.push('-m:net.sf.saxon.serialize.TEXTEmitter');
+                        }
+                        break;
                 }
+            }
+
+            if (nogo) {
+                commandLineArgs.push('-nogo');
             }
 
             if (isXSLT40) {
