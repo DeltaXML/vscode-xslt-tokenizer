@@ -125,6 +125,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             xmlSource: xmlSourceValue,
             resultPath: resultPathValue,
             allowSyntaxExtensions40: 'on',
+            messageEscaping: 'on',
             group: {
                 kind: "build"
             }
@@ -230,7 +231,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
                         break;
                     case 'messageEscaping':
-                        if (propValue === "on") {
+                        if (propValue === "off") {
                             commandLineArgs.push('-m:net.sf.saxon.serialize.TEXTEmitter');
                         }
                         break;
