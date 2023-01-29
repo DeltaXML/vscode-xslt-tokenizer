@@ -15,6 +15,7 @@ import { XSLTSnippets, Snippet } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XSLTConfiguration } from './languageConfigurations';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 
 enum TagType {
 	XSLTstart,
@@ -1419,6 +1420,10 @@ export class XsltTokenCompletions {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('ixsl:schedule-action>\n\t<xsl:call-template name="$1">\n\t\t$0\n\t</xsl:call-template>\n</ixsl:schedule-action>');
+					completionItems.push(newItem);
+				} else if (tagName === 'xsl:include' || tagName === 'xsl:import') {
+					const newItem = new vscode.CompletionItem(tagName + ' xpath-result-serializer', vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString(`${tagName} href="${SaxonTaskProvider.getResultSerializerPath()}"/>`);
 					completionItems.push(newItem);
 				}
 			} else if (docType === DocumentTypes.DCP) {
