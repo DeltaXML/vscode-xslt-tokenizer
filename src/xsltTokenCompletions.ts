@@ -233,7 +233,7 @@ export class XsltTokenCompletions {
 									if (elementStack.length === 0) {
 										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
 									} else {
-										resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList);
+										resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(document, docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList);
 									}
 								}
 								tagAttributeNames = [];
@@ -1278,7 +1278,7 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getXSLTTagCompletions(docType: DocumentTypes, languageConfig: LanguageConfiguration, schemaQuery: SchemaQuery | undefined, pos: vscode.Position, elementStack: ElementData[], inScopeVariablesList: VariableData[]) {
+	private static getXSLTTagCompletions(document: vscode.TextDocument, docType: DocumentTypes, languageConfig: LanguageConfiguration, schemaQuery: SchemaQuery | undefined, pos: vscode.Position, elementStack: ElementData[], inScopeVariablesList: VariableData[]) {
 		if (!schemaQuery) {
 			return XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.elementSnippets);
 		}
@@ -1422,8 +1422,9 @@ export class XsltTokenCompletions {
 					newItem.insertText = new vscode.SnippetString('ixsl:schedule-action>\n\t<xsl:call-template name="$1">\n\t\t$0\n\t</xsl:call-template>\n</ixsl:schedule-action>');
 					completionItems.push(newItem);
 				} else if (tagName === 'xsl:include' || tagName === 'xsl:import') {
-					const newItem = new vscode.CompletionItem(tagName + ' xpath-result-serializer', vscode.CompletionItemKind.Struct);
-					newItem.insertText = new vscode.SnippetString(`${tagName} href="${SaxonTaskProvider.getResultSerializerPath()}"/>`);
+					const newItem = new vscode.CompletionItem(tagName + ' for ext:print', vscode.CompletionItemKind.Struct);
+					const relativePath = SaxonTaskProvider.getResultSerializerPath();  // wont work: relative(document.uri.fsPath, SaxonTaskProvider.getResultSerializerPath());
+					newItem.insertText = new vscode.SnippetString(`${tagName} href="${relativePath}"/>`);
 					completionItems.push(newItem);
 				}
 			} else if (docType === DocumentTypes.DCP) {
