@@ -103,6 +103,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             xsltFile: xsltFilePath,
             xmlSource: xmlSourceValue,
             resultPath: resultPathValue,
+            messageEscaping: 'adaptive',
             allowSyntaxExtensions40: 'off',
             group: {
                 kind: "build"
@@ -112,28 +113,28 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return this.getTask(xsltTask);
     }
 
-    private addXPathEvalTemplateTask() {
-        let saxonJarDefault = '${config:XSLT.tasks.saxonJar}';
-        let xmlSourceValue = '${command:xslt-xpath.pickXPathContextFile}';
-        let xsltFilePath = SaxonTaskProvider.getEvalXSLTPath();
-        let resultPathValue = '${command:xslt-xpath.pickResultFile}';
+    // private addXPathEvalTemplateTask() {
+    //     let saxonJarDefault = '${config:XSLT.tasks.saxonJar}';
+    //     let xmlSourceValue = '${command:xslt-xpath.pickXPathContextFile}';
+    //     let xsltFilePath = SaxonTaskProvider.getEvalXSLTPath();
+    //     let resultPathValue = '${command:xslt-xpath.pickResultFile}';
 
-        let xsltTask: XSLTTask = {
-            type: 'xslt',
-            saxonJar: saxonJarDefault,
-            label: 'XPath Evaluation',
-            xsltFile: xsltFilePath,
-            xmlSource: xmlSourceValue,
-            resultPath: resultPathValue,
-            allowSyntaxExtensions40: 'on',
-            messageEscaping: 'on',
-            group: {
-                kind: "build"
-            }
-        };
+    //     let xsltTask: XSLTTask = {
+    //         type: 'xslt',
+    //         saxonJar: saxonJarDefault,
+    //         label: 'XPath Evaluation',
+    //         xsltFile: xsltFilePath,
+    //         xmlSource: xmlSourceValue,
+    //         resultPath: resultPathValue,
+    //         allowSyntaxExtensions40: 'on',
+    //         messageEscaping: 'on',
+    //         group: {
+    //             kind: "build"
+    //         }
+    //     };
 
-        return this.getTask(xsltTask);
-    }
+    //     return this.getTask(xsltTask);
+    // }
 
     private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
