@@ -325,10 +325,11 @@
 					"messageEscaping": {
 						"type": "string",
 						"enum": [
+							"adaptive",
 							"on",
 							"off"
 						],
-						"description": "Set to 'off' to disable escaping of XML characters in xsl:message output (not available in Saxon 11.1+ versions)"
+						"description": "Set to 'adaptive' to disable escaping of XML characters in xsl:message output when Saxon Jar version permits "
 					},
 					"execute": {
 						"type": "boolean",

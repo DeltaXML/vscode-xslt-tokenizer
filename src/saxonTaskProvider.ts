@@ -49,6 +49,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     templateTaskLabel = 'Saxon Transform (New)';
     templateTaskFound = false;
     public static extensionURI: vscode.Uri | undefined;
+    private static saxonVersionRgx = new RegExp(/saxon.e(\d+)-(\d+)-(\d+)-(\d+)/i);
 
     constructor(private workspaceRoot: string) { }
 
@@ -65,8 +66,8 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return obj[prop];
     }
 
-    private static getEvalXSLTPath() {
-		const sefURI = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xpath-eval-to-json.xsl');
+    public static getResultSerializerPath() {
+		const sefURI = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xpath-result-serializer/xpath-result-serializer.xsl');
 		return sefURI.fsPath;
 	}
 
@@ -137,6 +138,17 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt';
+        const saxonJarPath: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
+        let isPriorToSaxon9902 = false;
+        if (saxonJarPath) {
+            const matches = saxonJarPath.match(SaxonTaskProvider.saxonVersionRgx);
+            if (matches && matches.length === 5) {
+                matches.shift(); // remove entire match
+                const v = matches.map(item => Number.parseInt(item));
+                isPriorToSaxon9902 = (v[0] === 9 && v[1] === 9 && v[2] === 0 && v[3] === 1) ||
+                (v[0] < 9) || (v[0] === 9 && v[1] < 9);
+            }
+        }
 
         if (genericTask.type === 'xslt') {
             let xsltTask: XSLTTask = <XSLTTask>genericTask;
@@ -231,7 +243,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
                         break;
                     case 'messageEscaping':
-                        if (propValue === "off") {
+                        if (propValue === "off" || propValue === "adaptive" && isPriorToSaxon9902) {
                             commandLineArgs.push('-m:net.sf.saxon.serialize.TEXTEmitter');
                         }
                         break;
