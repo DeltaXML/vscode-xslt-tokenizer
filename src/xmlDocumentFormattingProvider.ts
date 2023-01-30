@@ -26,6 +26,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	private onType = false;
 	private onTypeLineEmpty = false;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	public static currentIndentString: string = '';
 	private isCloseTag = false;
 	private closeTagLine: vscode.TextLine | null = null;
 	private closeTagPos: vscode.Position | null = null;
@@ -79,6 +80,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			indentString = ' ';
 		}
 		let indentCharLength = useTabs ? 1 : options.tabSize;
+		XMLDocumentFormattingProvider.currentIndentString = indentString.repeat(indentCharLength);
 
 		let currentLine = document.lineAt(range.start.line);
 		if (range.start.character > currentLine.firstNonWhitespaceCharacterIndex) {

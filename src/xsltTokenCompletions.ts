@@ -16,6 +16,7 @@ import { XMLSnippets } from './xmlSnippets';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
+import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 
 enum TagType {
 	XSLTstart,
@@ -1405,12 +1406,20 @@ export class XsltTokenCompletions {
 						newItem.documentation = "xsl:message simple in-scope variable types";
 						newItem2.documentation = "xsl:message complex in-scope variable types";
 						const scopeVarNames = inScopeVariablesList.map((item) => item.name);
-						const maxScopeVarLength = scopeVarNames.reduce((a, b) => a.length > b.length ? a : b).length + 5;
+						let maxScopeVarLength = scopeVarNames.reduce((a, b) => a.length > b.length ? a : b).length + 3;
+						let currentIndentLength = XMLDocumentFormattingProvider.currentIndentString.length;
+						if (currentIndentLength === 0) currentIndentLength = 2;
+						const maxScopeLengthRemainder = maxScopeVarLength % currentIndentLength;
+						maxScopeVarLength = maxScopeLengthRemainder === 0 ? maxScopeVarLength : maxScopeVarLength + (currentIndentLength - (maxScopeVarLength % currentIndentLength));
+						const computedElementIndent = currentIndentLength * (elementStack.length);
+						const fullIndent = computedElementIndent + maxScopeVarLength;
+						const fullIndentLevel = Math.floor(fullIndent / currentIndentLength);
 						const scopeVariables = scopeVarNames.map((name) => {
 							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) + '{\\$' + name + '}';
 						});
 						const scopeVariables2 = scopeVarNames.map((name) => {
-							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) + '{ext:print(\\$' + name + ')}';
+							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) +
+								'{ext:print(\\$' + name + ', ' + (fullIndentLevel) + ", '" + XMLDocumentFormattingProvider.currentIndentString + "'" + ')}';
 						});
 						const header = '==== ${1:Watch Variables} ====\n';
 						const scopeVariablesString = header + scopeVariables.join('\n');
