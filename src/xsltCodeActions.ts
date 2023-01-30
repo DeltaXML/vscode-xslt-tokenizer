@@ -161,7 +161,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${SaxonTaskProvider.getResultSerializerPath()}"/>` + '\n\t');
 					}
 				}
-				console.log(targetSymbolRange);
 				break;
 			case XsltCodeActionKind.extractXsltFunction:
 			case XsltCodeActionKind.extractXsltFunctionPartial:
