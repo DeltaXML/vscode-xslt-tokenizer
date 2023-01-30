@@ -98,6 +98,7 @@ export enum DiagnosticCode {
 	unresolvedVariableRef,
 	unresolvedGenericRef,
 	parseHtmlRef,
+	externalPrintRef,
 	fnWithNoContextItem,
 	currentWithNoContextItem,
 	groupOutsideForEachGroup,
@@ -2434,6 +2435,9 @@ export class XsltTokenDiagnostics {
 			isValid = !isParseHTMLFnWarning;
 		}
 		fErrorType = isParseHTMLFnWarning ? ErrorType.XPathFunctionParseHtml : isValid ? ErrorType.None : fErrorType;
+		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && tokenValue.startsWith('ext:print')) {
+			fErrorType = ErrorType.XPathFunctionExternalPrint;
+		}
 		return { isValid, qFunctionName, fErrorType };
 	}
 
@@ -2882,6 +2886,11 @@ export class XsltTokenDiagnostics {
 					errCode = DiagnosticCode.parseHtmlRef;
 					severity = vscode.DiagnosticSeverity.Warning;
 					msg = `XPath: The 'parse-html' function requires the 'htmlParserJar' setting when invoked from VS Code`;
+					break;
+				case ErrorType.XPathFunctionExternalPrint:
+					errCode = DiagnosticCode.externalPrintRef;
+					severity = vscode.DiagnosticSeverity.Warning;
+					msg = `XPath: 'ext:print/println' function not defined - use QuickFix`;
 					break;
 				case ErrorType.XPathTypeName:
 					msg = `XPath: Invalid type: '${tokenValue}'`;

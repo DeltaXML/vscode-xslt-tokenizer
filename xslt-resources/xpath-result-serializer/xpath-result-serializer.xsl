@@ -3,7 +3,7 @@
                 xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 xmlns:array="http://www.w3.org/2005/xpath-functions/array"
                 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
-                xmlns:ext="xpath.result.to.json"
+                xmlns:ext="com.deltaxml.xpath.result.print"
                 exclude-result-prefixes="#all"
                 version="3.0">
   

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
 import { XPathSemanticTokensProvider } from './extension';
 import { XSLTConfiguration } from './languageConfigurations';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SchemaQuery } from './schemaQuery';
 import { Data, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
@@ -54,6 +55,7 @@ enum XsltCodeActionKind {
 	extractXsltFunctionPartial = 'xsl:function - partial refactor',
 	extractXsltTemplate = 'xsl:template',
 	extractXsltVariable = 'xsl:variable',
+	fixExternalPrintRef = 'include XSLT module for ext:print',
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
 }
@@ -98,8 +100,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		// debug only:
 		//codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
 		codeActions = context.diagnostics
-			.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef)
-			.map(diagnostic => this.createCommandCodeAction(diagnostic));
+			.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef || diagnotic.code === DiagnosticCode.externalPrintRef)
+			.map(diagnostic => diagnostic.code === DiagnosticCode.parseHtmlRef ?
+				this.createCommandCodeAction(diagnostic) :
+				new vscode.CodeAction(XsltCodeActionKind.fixExternalPrintRef, vscode.CodeActionKind.QuickFix));
+		if (codeActions.length > 0) {
+			codeActions[0].isPreferred = true;
+		}
 
 		switch (roughSelectionType) {
 
@@ -141,6 +148,21 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const targetSymbolRange = ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
 
 		switch (codeAction.title) {
+			case XsltCodeActionKind.fixExternalPrintRef:
+				const rootElementSymbol = ancestorOrSelfSymbols[ancestorOrSelfSymbols.length - 1];
+				const rootElementAttributes = rootElementSymbol.children.find(item => item.kind === vscode.SymbolKind.Array)?.children;
+				if (rootElementAttributes) {
+					const newXmlnsRange = rootElementAttributes[0].range;
+					const firstChildElement = rootElementSymbol.children[1];
+					if (firstChildElement && codeAction) {
+						codeAction.edit = new vscode.WorkspaceEdit();
+						const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
+						codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:ext="${'com.deltaxml.xpath.result.print'}"` + '\n' + prefixWS);
+						codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${SaxonTaskProvider.getResultSerializerPath()}"/>` + '\n\t');
+					}
+				}
+				console.log(targetSymbolRange);
+				break;
 			case XsltCodeActionKind.extractXsltFunction:
 			case XsltCodeActionKind.extractXsltFunctionPartial:
 			case XsltCodeActionKind.extractXsltTemplate:
@@ -211,7 +233,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						if (startCharOfSelection >= startCharOfAttrValue) {
 							const xpathText = document.getText(range);
 							const diagnostics = this.xpathTokenProvider.provideXPathProblems(new CodeActionDocument(document.uri, xpathText));
-							const blockingIssue = diagnostics.find((item) => item.severity !== vscode.DiagnosticSeverity.Hint && item.code !== DiagnosticCode.unresolvedGenericRef && item.code !== DiagnosticCode.unresolvedVariableRef && item.code !== DiagnosticCode.parseHtmlRef);
+							const blockingIssue = diagnostics.find((item) => item.severity !== vscode.DiagnosticSeverity.Hint &&
+								item.code !== DiagnosticCode.unresolvedGenericRef &&
+								item.code !== DiagnosticCode.unresolvedVariableRef &&
+								item.code !== DiagnosticCode.externalPrintRef &&
+								item.code !== DiagnosticCode.parseHtmlRef);
 							if (!blockingIssue) {
 								let pass = xpathText.length > 30;
 								if (!pass) {
@@ -582,6 +608,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 		this.executeRenameCommand(fullRange.start.line + fnStartLineIncrement, fnStartCharacter, document.uri);
 		return codeAction;
+	}
+
+	private getWhitespaceBeforeRangeLine(document: vscode.TextDocument, fullRange: vscode.Range) {
+		const expressionLine = document.lineAt(fullRange.start.line);
+		const charIndexOfNonWSonLine = expressionLine.firstNonWhitespaceCharacterIndex;
+		const prefixWS = expressionLine.text.substring(0, charIndexOfNonWSonLine);
+		return prefixWS;
 	}
 
 	private getWhitespaceBeforeExpression(document: vscode.TextDocument, fullRange: vscode.Range) {
