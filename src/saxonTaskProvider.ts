@@ -139,23 +139,16 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt';
-        const saxonJarPath: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
+        const saxonJarConfig: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
         let isPriorToSaxon9902 = false;
-        if (saxonJarPath) {
-            const matches = saxonJarPath.match(SaxonTaskProvider.saxonVersionRgx);
-            if (matches && matches.length === 5) {
-                matches.shift(); // remove entire match
-                const v = matches.map(item => Number.parseInt(item));
-                isPriorToSaxon9902 = (v[0] === 9 && v[1] === 9 && v[2] === 0 && v[3] === 1) ||
-                (v[0] < 9) || (v[0] === 9 && v[1] < 9);
-            }
-        }
 
         if (genericTask.type === 'xslt') {
             let xsltTask: XSLTTask = <XSLTTask>genericTask;
             if (xsltTask.label === 'xslt: ' + this.templateTaskLabel) {
                 this.templateTaskFound = true;
             }
+            const taskSaxonJarPath = xsltTask.saxonJar === '${config:XSLT.tasks.saxonJar}' ? saxonJarConfig : xsltTask.saxonJar;
+            isPriorToSaxon9902 = this.testSaxon9902(taskSaxonJarPath);
             let nogo = xsltTask.execute !== undefined && xsltTask.execute === false;
             let commandLineArgs: string[] = [];
 
@@ -280,5 +273,19 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         } else {
             return undefined;
         }
+    }
+
+    private testSaxon9902(saxonJarPath: string | undefined) {
+        let result = false;
+        if (saxonJarPath) {
+            const matches = saxonJarPath.match(SaxonTaskProvider.saxonVersionRgx);
+            if (matches && matches.length === 5) {
+                matches.shift(); // remove entire match
+                const v = matches.map(item => Number.parseInt(item));
+                result = (v[0] === 9 && v[1] === 9 && v[2] === 0 && v[3] === 1) ||
+                    (v[0] < 9) || (v[0] === 9 && v[1] < 9);
+            }
+        }
+        return result;
     }
 }
