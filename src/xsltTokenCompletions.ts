@@ -234,7 +234,8 @@ export class XsltTokenCompletions {
 									if (elementStack.length === 0) {
 										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
 									} else {
-										resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(document, docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList);
+										const symbolId = elementStack[elementStack.length - 1].symbolID;
+										resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(document, docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList, symbolId);
 									}
 								}
 								tagAttributeNames = [];
@@ -1279,7 +1280,7 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
-	private static getXSLTTagCompletions(document: vscode.TextDocument, docType: DocumentTypes, languageConfig: LanguageConfiguration, schemaQuery: SchemaQuery | undefined, pos: vscode.Position, elementStack: ElementData[], inScopeVariablesList: VariableData[]) {
+	private static getXSLTTagCompletions(document: vscode.TextDocument, docType: DocumentTypes, languageConfig: LanguageConfiguration, schemaQuery: SchemaQuery | undefined, pos: vscode.Position, elementStack: ElementData[], inScopeVariablesList: VariableData[], symbolId: string) {
 		if (!schemaQuery) {
 			return XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.elementSnippets);
 		}
@@ -1421,7 +1422,8 @@ export class XsltTokenCompletions {
 							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) +
 								'{ext:print(\\$' + name + ', ' + (fullIndentLevel) + ", '" + XMLDocumentFormattingProvider.currentIndentString + "'" + ')}';
 						});
-						const header = '==== ${1:Watch Variables} ====\n';
+						const title = (symbolId && symbolId.length > 0) ? "Watch: " + symbolId : "Watch Variables";
+						const header = '==== ${1:' + title + '} ====\n';
 						const scopeVariablesString = header + scopeVariables.join('\n');
 						const scopeVariablesString2 = header + scopeVariables2.join('\n');
 						newItem.insertText = new vscode.SnippetString(`xsl:message expand-text="yes">\n${scopeVariablesString}\n</xsl:message>$0`);
