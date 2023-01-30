@@ -1400,17 +1400,25 @@ export class XsltTokenCompletions {
 				} else if (tagName === 'xsl:message') {
 					useCurrent = false;
 					if (inScopeVariablesList.length > 0) {
-						const newItem = new vscode.CompletionItem(tagName + ' (add watch-variables)', vscode.CompletionItemKind.Struct);
-						newItem.documentation = "xsl:message to output in-scope variable values";
+						const newItem = new vscode.CompletionItem(tagName + ' - simple-variables', vscode.CompletionItemKind.Struct);
+						const newItem2 = new vscode.CompletionItem(tagName + ' - complex variales', vscode.CompletionItemKind.Struct);
+						newItem.documentation = "xsl:message simple in-scope variable types";
+						newItem2.documentation = "xsl:message complex in-scope variable types";
 						const scopeVarNames = inScopeVariablesList.map((item) => item.name);
 						const maxScopeVarLength = scopeVarNames.reduce((a, b) => a.length > b.length ? a : b).length + 5;
 						const scopeVariables = scopeVarNames.map((name) => {
 							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) + '{\\$' + name + '}';
 						});
+						const scopeVariables2 = scopeVarNames.map((name) => {
+							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) + '{ext:print(\\$' + name + ')}';
+						});
 						const header = '==== ${1:Watch Variables} ====\n';
 						const scopeVariablesString = header + scopeVariables.join('\n');
+						const scopeVariablesString2 = header + scopeVariables2.join('\n');
 						newItem.insertText = new vscode.SnippetString(`xsl:message expand-text="yes">\n${scopeVariablesString}\n</xsl:message>$0`);
+						newItem2.insertText = new vscode.SnippetString(`xsl:message expand-text="yes">\n${scopeVariablesString2}\n</xsl:message>$0`);
 						completionItems.push(newItem);
+						completionItems.push(newItem2);
 					}
 					const newItem = new vscode.CompletionItem(tagName + ' (blank)', vscode.CompletionItemKind.Struct);
 					newItem.documentation = "xsl:message";
