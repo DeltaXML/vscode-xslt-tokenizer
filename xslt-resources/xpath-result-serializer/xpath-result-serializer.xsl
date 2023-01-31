@@ -138,18 +138,16 @@
   
   <xsl:template name="encloseItem">
     <xsl:param name="key" as="xs:string?"/>
+    <xsl:variable name="nodeType" as="xs:string?" select="ext:nodeType(.)"/>
     
     <xsl:choose>     
-      <xsl:when test=". instance of node() 
-        or . instance of text()
-        or . instance of attribute()
-        or . instance of processing-instruction()
-        or . instance of comment()">        
+      <xsl:when test="exists($nodeType)">        
         <path>
           <xsl:if test="$key">
             <xsl:attribute name="key" select="$key"/>
           </xsl:if>
           <xsl:attribute name="text" select="ext:formatValue(., 18)"/>
+          <xsl:attribute name="type" select="$nodeType"/>
           <xsl:sequence select="ext:tidyXPath(.)"/>
         </path>
       </xsl:when>
@@ -235,7 +233,7 @@
             <xsl:sequence select="$key || '{' || ext:recurseForChildren(., $level, $spaceChars) || '}'"/>
           </xsl:when>
           <xsl:when test="self::path">
-            <xsl:value-of select="$key || $BLUE || @text || $YELLOW || node() || $RESET"/>
+            <xsl:value-of select="$key || ext:nodeColor(@type) || @text || $YELLOW || node() || $RESET"/>
           </xsl:when>
           <xsl:when test="self::atomicValue">
             <xsl:variable name="color" as="xs:string" 
@@ -249,6 +247,57 @@
       </xsl:for-each>
     </xsl:variable>
     <xsl:sequence select="$parts"/>    
+  </xsl:function>
+  
+  <xsl:function name="ext:nodeType" as="xs:string?">
+    <xsl:param name="node" as="item()"/>
+    <xsl:choose>
+      <xsl:when test="$node instance of element()">
+        <xsl:sequence select="'element'"/>
+      </xsl:when>
+      <xsl:when test="$node instance of text()">
+        <xsl:sequence select="'text'"/>
+      </xsl:when>
+      <xsl:when test="$node instance of attribute()">
+        <xsl:sequence select="'attribute'"/>
+      </xsl:when>
+      <xsl:when test="$node instance of processing-instruction()">
+        <xsl:sequence select="'processing-instruction'"/>
+      </xsl:when>
+      <xsl:when test="$node instance of namespace-node()">
+        <xsl:sequence select="'namespace-node'"/>
+      </xsl:when>
+      <xsl:when test="$node instance of comment()">
+        <xsl:sequence select="'comment'"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:sequence select="()"/>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:function>
+  
+  <xsl:function name="ext:nodeColor" as="xs:string?">
+    <xsl:param name="type" as="xs:string"/>
+    <xsl:choose>
+      <xsl:when test="$type eq 'element'">
+        <xsl:sequence select="$BLUE"/>
+      </xsl:when>
+      <xsl:when test="$type eq 'text'">
+        <xsl:sequence select="$CYAN"/>
+      </xsl:when>
+      <xsl:when test="$type eq 'attribute'">
+        <xsl:sequence select="$GREEN"/>
+      </xsl:when>
+      <xsl:when test="$type eq 'processing-instruction'">
+        <xsl:sequence select="$MAGENTA"/>
+      </xsl:when>
+      <xsl:when test="$type eq 'namespace-node'">
+        <xsl:sequence select="$MAGENTA"/>
+      </xsl:when>
+      <xsl:when test="$type eq 'comment'">
+        <xsl:sequence select="$MAGENTA"/>
+      </xsl:when>
+    </xsl:choose>
   </xsl:function>
   
   <xsl:function name="ext:recurseForChildren" as="item()*">
