@@ -1412,6 +1412,7 @@ export class XsltTokenCompletions {
 						if (currentIndentLength === 0) currentIndentLength = 2;
 						const maxScopeLengthRemainder = maxScopeVarLength % currentIndentLength;
 						maxScopeVarLength = maxScopeLengthRemainder === 0 ? maxScopeVarLength : maxScopeVarLength + (currentIndentLength - (maxScopeVarLength % currentIndentLength));
+						maxScopeVarLength--;
 						const computedElementIndent = currentIndentLength * (elementStack.length);
 						const fullIndent = computedElementIndent + maxScopeVarLength;
 						const fullIndentLevel = Math.floor(fullIndent / currentIndentLength);
@@ -1420,7 +1421,7 @@ export class XsltTokenCompletions {
 						});
 						const scopeVariables2 = scopeVarNames.map((name) => {
 							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) +
-								'{ext:print(\\$' + name + ', ' + (fullIndentLevel) + ", '" + XMLDocumentFormattingProvider.currentIndentString + "'" + ')}';
+								'{ext:print(\\$' + name + ',' + (fullIndentLevel) + ",'" + XMLDocumentFormattingProvider.currentIndentString + "'" + ')}';
 						});
 						const title = (symbolId && symbolId.length > 0) ? "Watch: " + symbolId : "Watch Variables";
 						const header = '==== ${1:' + title + '} ====\n';
