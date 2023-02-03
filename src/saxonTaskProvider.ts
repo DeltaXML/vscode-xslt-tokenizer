@@ -169,6 +169,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 classPaths = classPaths.concat(xsltTask.classPathEntries);
             }
             let isXSLT40 = false;
+            let useSaxonTextEmitter = isPriorToSaxon9902;
 
             for (const propName in xsltTask) {
                 let propValue = this.getProp(xsltTask, propName);
@@ -239,15 +240,16 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
                         break;
                     case 'messageEscaping':
-                        if (propValue === "off" || propValue === "adaptive" && isPriorToSaxon9902) {
-                            commandLineArgs.push('-m:net.sf.saxon.serialize.TEXTEmitter');
-                        }
+                        useSaxonTextEmitter = propValue === "off" || (propValue === "adaptive" && isPriorToSaxon9902);
                         break;
                 }
             }
 
             if (nogo) {
                 commandLineArgs.push('-nogo');
+            }
+            if (useSaxonTextEmitter) {
+                commandLineArgs.push('-m:net.sf.saxon.serialize.TEXTEmitter');
             }
 
             if (isXSLT40) {
