@@ -1441,11 +1441,6 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('ixsl:schedule-action>\n\t<xsl:call-template name="$1">\n\t\t$0\n\t</xsl:call-template>\n</ixsl:schedule-action>');
 					completionItems.push(newItem);
-				} else if (tagName === 'xsl:include' || tagName === 'xsl:import') {
-					const newItem = new vscode.CompletionItem(tagName + ' for ext:print', vscode.CompletionItemKind.Struct);
-					const relativePath = SaxonTaskProvider.getResultSerializerPath();  // wont work: relative(document.uri.fsPath, SaxonTaskProvider.getResultSerializerPath());
-					newItem.insertText = new vscode.SnippetString(`${tagName} href="${relativePath}"/>`);
-					completionItems.push(newItem);
 				}
 			} else if (docType === DocumentTypes.DCP) {
 				if (snippetAttrs.length === 1 && snippetAttrs.indexOf('literalValue') !== -1) {

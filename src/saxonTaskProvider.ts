@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import * as  os from 'os';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
-import { XsltPackage } from './xsltSymbolProvider';
+import * as path from 'path';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -66,9 +66,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return obj[prop];
     }
 
-    public static getResultSerializerPath() {
-        const serializer = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xpath-result-serializer/xpath-result-serializer.xsl');
-		return serializer.fsPath;
+    public static async getResultSerializerPath(document: vscode.TextDocument) {
+        let serializerFiles = await vscode.workspace.findFiles('**/xpath-result-serializer.xsl');
+        const serializer = serializerFiles.length > 0 ? serializerFiles[0] : vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xpath-result-serializer/xpath-result-serializer.xsl');
+        const docBaseURI = path.dirname(document.uri.fsPath);
+        return path.relative(docBaseURI, serializer.fsPath);
 	}
 
     private getTasks(tasks: XSLTTask[]) {

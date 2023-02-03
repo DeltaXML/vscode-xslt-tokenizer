@@ -158,7 +158,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						codeAction.edit = new vscode.WorkspaceEdit();
 						const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
 						codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:ext="${'com.deltaxml.xpath.result.print'}"` + '\n' + prefixWS);
-						codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${SaxonTaskProvider.getResultSerializerPath()}"/>` + '\n\t');
+						const serializerPath = await SaxonTaskProvider.getResultSerializerPath(document);
+						codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${serializerPath}"/>` + '\n\t');
 					}
 				}
 				break;
