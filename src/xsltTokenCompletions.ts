@@ -1403,7 +1403,7 @@ export class XsltTokenCompletions {
 					useCurrent = false;
 					if (inScopeVariablesList.length > 0) {
 						const newItem = new vscode.CompletionItem(tagName + ' - simple-variables', vscode.CompletionItemKind.Struct);
-						const newItem2 = new vscode.CompletionItem(tagName + ' - complex variales', vscode.CompletionItemKind.Struct);
+						const newItem2 = new vscode.CompletionItem(tagName + ' - complex variables', vscode.CompletionItemKind.Struct);
 						newItem.documentation = "xsl:message simple in-scope variable types";
 						newItem2.documentation = "xsl:message complex in-scope variable types";
 						const scopeVarNames = inScopeVariablesList.map((item) => item.name);

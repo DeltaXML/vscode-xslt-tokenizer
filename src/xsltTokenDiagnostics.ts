@@ -2735,7 +2735,7 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLNameList:
 					let nameParts = tokenValue.split(' ');
-					msg = `XSLT: Exected list of valid names (with declared prefixes) in '${nameParts[0]}' but found ${nameParts[1]}`;
+					msg = `XSLT: Expected list of valid names (with declared prefixes) in '${nameParts[0]}' but found ${nameParts[1]}`;
 					break;
 				case ErrorType.XMLRootMissing:
 					msg = `XML: Root element is missing`;
