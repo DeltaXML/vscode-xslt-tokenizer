@@ -33,8 +33,6 @@
   
   <xsl:include _href="{$colorDataName}"/>
   
-  <xsl:variable name="xmlnsMap" as="map(*)" select="ext:getURItoPrefixMap(/*)"/>
-  
   <xsl:function name="ext:println" as="xs:string">
     <xsl:param name="xdmValue" as="item()*"/>
     <xsl:sequence select="ext:print($xdmValue) || $LF"/>
@@ -50,7 +48,14 @@
     <xsl:param name="level" as="xs:integer"/>
     <xsl:param name="spaceChars" as="xs:string"/>
     <xsl:variable name="enclosedItems" as="element()" select="ext:buildResultTree($xdmValue)"/>
-    <xsl:sequence select="ext:xml-to-xdm($enclosedItems, $level, $spaceChars)"/>
+    <xsl:sequence select="ext:xml-to-xdm($enclosedItems, $level, $spaceChars) || $RESET"/>
+  </xsl:function>
+  
+  <xsl:function name="ext:bracketColor" as="xs:string">
+    <xsl:param name="index" as="xs:integer"/>
+    <xsl:variable name="resolved" as="xs:integer" 
+      select="let $c := count($BRACKET_COLORS) return let $mod := $index mod $c return if ($mod eq 0) then $c else $mod"/>
+    <xsl:sequence select="$BRACKET_COLORS[position() eq $resolved]"/>
   </xsl:function>
   
   <xsl:function name="ext:getURItoPrefixMap" as="map(xs:anyURI, xs:string)">
@@ -69,11 +74,13 @@
   
   <xsl:function name="ext:tidyXPath" as="xs:string*">
     <xsl:param name="node" as="node()"/>
+    <xsl:variable name="xmlns" as="map(*)" select="let $e:= $node/ancestor-or-self::*[1] return if ($e) then ext:getURItoPrefixMap($e) else map{}"/>
+
     <xsl:variable name="parts" as="xs:string*">
       <xsl:analyze-string select="path($node)" regex="{$regex}">
         <xsl:matching-substring>
           <xsl:variable name="uri" as="xs:string" select="substring(., 3, string-length(.) - 3)"/>
-          <xsl:variable name="pfx" select="map:get($xmlnsMap, $uri)"/>
+          <xsl:variable name="pfx" select="map:get($xmlns, $uri)"/>
           <xsl:sequence select="if (string-length($pfx) eq 0) then '' else $pfx || ':'"/>
         </xsl:matching-substring>
         <xsl:non-matching-substring>
@@ -84,7 +91,7 @@
     <xsl:sequence select="string-join($parts)"/>
   </xsl:function>
   
-  <xsl:function name="ext:convertMapEntry">
+  <xsl:function name="ext:convertMapEntry"> 
     <xsl:param name="k" as="xs:anyAtomicType?"/>
     <xsl:param name="value" as="item()*"/>
     
@@ -146,9 +153,29 @@
           <xsl:if test="$key">
             <xsl:attribute name="key" select="$key"/>
           </xsl:if>
-          <xsl:attribute name="text" select="ext:formatValue(., 18)"/>
+          <xsl:attribute name="text" select="ext:getText(., $nodeType)"/>
           <xsl:attribute name="type" select="$nodeType"/>
-          <xsl:sequence select="ext:tidyXPath(.)"/>
+          <xsl:attribute name="location" select="ext:tidyXPath(.)"/>
+          <xsl:choose>
+            <xsl:when test="$nodeType eq 'element'">
+              <xsl:copy copy-namespaces="false">
+                <xsl:copy-of select="@*"/>
+              </xsl:copy>
+            </xsl:when>
+            <xsl:when test="$nodeType eq 'attribute'">
+              <ext:attribute>
+                <xsl:copy-of select="."/>
+              </ext:attribute>
+            </xsl:when>
+            <xsl:when test="$nodeType eq 'namespace-node'">
+              <ext:namespace>
+                <xsl:copy-of select="."/>
+              </ext:namespace>
+            </xsl:when>
+            <xsl:otherwise>
+              <xsl:copy-of select="."/>
+            </xsl:otherwise>
+          </xsl:choose>
         </path>
       </xsl:when>
       
@@ -188,6 +215,56 @@
     </xsl:choose>
   </xsl:template>
   
+  <xsl:function name="ext:getText" as="item()*">
+    <xsl:param name="c.x" as="item()*"/>
+    <xsl:param name="nodeType" as="xs:string?"/>
+    <xsl:variable name="maxLength" as="xs:integer" select="25"/>
+    <xsl:sequence select="
+      if ($nodeType eq 'element') then 
+        (if (normalize-space($c.x) ne '') then ext:formatValue($c.x, $maxLength) else let $a := $c.x/(@name,@id,@class,@*)[1] return 
+              if ($a) then ext:formatValue('@' || name($a) || '=' || xs:string($a), $maxLength) else ext:formatValue('[empty-element]', $maxLength))
+      else ext:formatValue($c.x, $maxLength)"/>
+  </xsl:function>
+  
+  
+  <xsl:function name="ext:explainNode" as="item()*">
+    <xsl:param name="c.x" as="node()?"/>
+    <xsl:param name="location" as="xs:string"/>
+    <xsl:choose>
+      <xsl:when test="$location eq 'root()'">
+        <xsl:choose>
+          <xsl:when test="$c.x[self::ext:attribute]">
+            <xsl:sequence select="name($c.x/@*) || '=&quot;' || $c.x/@* || '&quot;'"/>
+          </xsl:when>
+          <xsl:when test="$c.x[self::ext:namespace]">
+            <xsl:variable name="prefix" as="xs:string?" select="in-scope-prefixes($c.x)[not(. = ('xml','ext'))][1]"/>
+            <xsl:variable name="namespace-uri" as="xs:anyURI" select="namespace-uri-for-prefix($prefix, $c.x)"/>
+            <xsl:variable name="p" as="xs:string" select="if ($prefix) then ':' || $prefix else ''"/>
+            <xsl:sequence select="'xmlns' || $p || '=&quot;' || $namespace-uri  || '&quot;'"/>
+          </xsl:when>
+          <xsl:when test="$c.x instance of element()">
+            <xsl:variable name="selfClose" as="xs:string" select="if (has-children($c.x)) then '' else '/'"/>
+            <xsl:variable name="startTag" select="'&lt;' || name($c.x) || ' ' || string-join(for $a in $c.x/@* return name($a) || '=&quot;' || $a || '&quot;', ' ') || $selfClose || '&gt;'"/>
+            <xsl:variable name="endTag" select="'/&lt;' || name($c.x) || '&gt;'"/>
+            <xsl:sequence select="if (has-children($c.x)) then $startTag || '...' || $endTag else $startTag"/>
+          </xsl:when>
+          <xsl:when test="$c.x instance of text()">
+            <xsl:sequence select="'&quot;' || $c.x || '&quot;'"/>
+          </xsl:when>
+          <xsl:when test="$c.x instance of comment()">
+            <xsl:sequence select="'&lt;!-- ' || $c.x || ' --&gt;'"/>
+          </xsl:when>
+          <xsl:when test="$c.x instance of processing-instruction()">
+            <xsl:sequence select="'&lt;?' || name($c.x) || ' ' || $c.x || ' ?&gt;'"/>            
+          </xsl:when>
+        </xsl:choose>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:sequence select="$location"/>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:function>
+  
   <xsl:function name="ext:formatValue" as="item()*">
     <xsl:param name="c.x" as="item()*"/>
     <xsl:param name="maxLength" as="xs:integer"/>
@@ -206,15 +283,17 @@
     <xsl:param name="top" as="element()"/>
     <xsl:param name="level" as="xs:integer"/>
     <xsl:param name="spaceChars" as="xs:string"/>
-    <xsl:sequence select="ext:writeEnclosedItem($top, $level + 1, $spaceChars) => string-join('')"/>
+    <xsl:sequence select="ext:writeEnclosedItem($top, $level + 1, $spaceChars, 1) => string-join('')"/>
   </xsl:function>
   
   <xsl:function name="ext:writeEnclosedItem" as="xs:string*">
     <xsl:param name="c.x" as="item()*"/>
     <xsl:param name="level" as="xs:integer"/>
     <xsl:param name="spaceChars" as="xs:string"/>
+    <xsl:param name="colorIndex" as="xs:integer"/>
     
     <xsl:variable name="indent" as="xs:string" select="string-join(for $n in 1 to $level return $spaceChars, '')"/>
+    <xsl:variable name="BC" as="xs:string" select="ext:bracketColor($colorIndex)"/>
     
     <xsl:variable name="hasNonAtomicSiblings" as="item()*" select="$c.x/..[array, sequence, map, path]"/>
     <xsl:variable name="nl" as="xs:string" select="if ($hasNonAtomicSiblings) then ('&#10;' || $indent) else ''"/>
@@ -224,16 +303,17 @@
         <xsl:variable name="key" as="xs:string" select="$nl || (if (@key) then $RED || @key || $RESET || ':' else '')"/>        
         <xsl:choose>
           <xsl:when test="self::sequence">
-            <xsl:sequence select="$key || '(' || ext:recurseForChildren(., $level, $spaceChars) || ')'"/>
+            <xsl:sequence select="$key || $BC || '(' || ext:recurseForChildren(., $level, $spaceChars, $colorIndex) || $BC || ')'"/>
           </xsl:when>
           <xsl:when test="self::array">
-            <xsl:sequence select="$key || '[' || ext:recurseForChildren(., $level, $spaceChars) || ']'"/>
+            <xsl:sequence select="$key || $BC ||  '[' || ext:recurseForChildren(., $level, $spaceChars, $colorIndex) || $BC || ']'"/>
           </xsl:when>
           <xsl:when test="self::map">
-            <xsl:sequence select="$key || '{' || ext:recurseForChildren(., $level, $spaceChars) || '}'"/>
+            <xsl:sequence select="$key || $BC || '{' || ext:recurseForChildren(., $level, $spaceChars, $colorIndex) || $BC || '}'"/>
           </xsl:when>
           <xsl:when test="self::path">
-            <xsl:value-of select="$key || ext:nodeColor(@type) || @text || $YELLOW || node() || $RESET"/>
+            <xsl:variable name="text" as="xs:string" select="if (matches(@text, '^@[^\s]+=')) then $BLACK || substring-before(@text,'=') || '=' || $GREEN || substring-after(@text,'=') else @text"/>
+            <xsl:value-of select="$key || ext:nodeColor(@type) || $text || $YELLOW || ext:explainNode(node(), @location) || $RESET"/>
           </xsl:when>
           <xsl:when test="self::atomicValue">
             <xsl:variable name="color" as="xs:string" 
@@ -304,10 +384,10 @@
     <xsl:param name="c.x" as="item()*"/>
     <xsl:param name="level" as="xs:integer"/>
     <xsl:param name="spaceChars" as="xs:string"/>
-    
+    <xsl:param name="colorIndex" as="xs:integer"/>
     
     <xsl:sequence select="
-      ext:writeEnclosedItem($c.x/node(), $level + 1, $spaceChars) => string-join(',')"/>
+      ext:writeEnclosedItem($c.x/node(), $level + 1, $spaceChars, $colorIndex + 1) => string-join(',')"/>
   </xsl:function>
   
 </xsl:stylesheet>

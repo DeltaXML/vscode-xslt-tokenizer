@@ -75,4 +75,12 @@
     <xsl:variable name="CYAN_BACKGROUND_BRIGHT" as="xs:string" select="''"/>
     <xsl:variable name="WHITE_BACKGROUND_BRIGHT" as="xs:string" select="''"/>
     
+    <xsl:variable name="BRACKET_COLORS" as="xs:string*" select="
+        $RED_BOLD_BRIGHT,
+        $GREEN_BOLD_BRIGHT,
+        $YELLOW_BOLD_BRIGHT,
+        $MAGENTA_BOLD_BRIGHT,
+        $CYAN_BOLD_BRIGHT
+                    "/>
+    
 </xsl:stylesheet>
