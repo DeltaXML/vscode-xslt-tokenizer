@@ -49,7 +49,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     templateTaskLabel = 'Saxon Transform (New)';
     templateTaskFound = false;
     public static extensionURI: vscode.Uri | undefined;
-    private static saxonVersionRgx = new RegExp(/saxon.e(\d+)-(\d+)-(\d+)-(\d+)/i);
+    private static saxonVersionRgx = new RegExp(/saxon.e(\d+)-(\d+)(?:-(\d+))?(?:-(\d+))?/i);
 
     constructor(private workspaceRoot: string) { }
 
@@ -71,7 +71,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         const serializer = serializerFiles.length > 0 ? serializerFiles[0] : vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xpath-result-serializer/xpath-result-serializer.xsl');
         const docBaseURI = path.dirname(document.uri.fsPath);
         return path.relative(docBaseURI, serializer.fsPath);
-	}
+    }
 
     private getTasks(tasks: XSLTTask[]) {
         let result: vscode.Task[] = [];
@@ -151,6 +151,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             }
             const taskSaxonJarPath = xsltTask.saxonJar === '${config:XSLT.tasks.saxonJar}' ? saxonJarConfig : xsltTask.saxonJar;
             isPriorToSaxon9902 = this.testSaxon9902(taskSaxonJarPath);
+            const altSaxonJarPath = xsltTask.messageEscaping === "on" ? undefined : this.getAltSaxonPath(taskSaxonJarPath);
             let nogo = xsltTask.execute !== undefined && xsltTask.execute === false;
             let commandLineArgs: string[] = [];
 
@@ -164,12 +165,12 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             for (const feature of saxonFeatures) {
                 saxonFeaturesCommand.push('--' + feature.name + ':' + feature.value);
             }
-            let classPaths: string[] = [xsltTask.saxonJar];
+            let classPaths: string[] = altSaxonJarPath ? [altSaxonJarPath, xsltTask.saxonJar] : [xsltTask.saxonJar];
             if (xsltTask.classPathEntries) {
                 classPaths = classPaths.concat(xsltTask.classPathEntries);
             }
             let isXSLT40 = false;
-            let useSaxonTextEmitter = isPriorToSaxon9902;
+            let useSaxonTextEmitter = isPriorToSaxon9902 && !altSaxonJarPath;
 
             for (const propName in xsltTask) {
                 let propValue = this.getProp(xsltTask, propName);
@@ -256,18 +257,20 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 const htmlParserJar = classPaths.find((item) => item.includes('nu.validator') || item.includes('htmlparser'));
 
                 if (!htmlParserJar) {
-                    const htmlparserPath = <string|undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
+                    const htmlparserPath = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
                     if (htmlparserPath) {
                         classPaths.push(htmlparserPath);
                     }
                 }
             }
 
+            const saxonClassName = altSaxonJarPath ? 'com.deltaxml.saxon.perf.AltTransform' : 'net.sf.saxon.Transform';
+
 
             let rawClassPathString = classPaths.join(pathSeparator());
             // this is overriden if problemMatcher is set in the tasks.json file      
             let problemMatcher = "$saxon-xslt";
-            const javaArgs = ['-cp', rawClassPathString, 'net.sf.saxon.Transform'];
+            const javaArgs = ['-cp', rawClassPathString, saxonClassName];
             const processExecution = new vscode.ProcessExecution('java', javaArgs.concat(commandLineArgs).concat(saxonFeaturesCommand).concat(xsltParametersCommand));
             let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, processExecution, problemMatcher);
             newTask.presentationOptions.clear = false;
@@ -283,7 +286,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         let result = false;
         if (saxonJarPath) {
             const matches = saxonJarPath.match(SaxonTaskProvider.saxonVersionRgx);
-            if (matches && matches.length === 5) {
+            if (matches && matches.length > 2) {
                 matches.shift(); // remove entire match
                 const v = matches.map(item => Number.parseInt(item));
                 result = (v[0] === 9 && v[1] === 9 && v[2] === 0 && v[3] === 1) ||
@@ -292,4 +295,36 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         }
         return result;
     }
+
+    private getAltSaxonPath(saxonJarPath: string | undefined) {
+        let jarName: string | undefined = "deltaxml-saxon-perf-1.0-SAXON";
+        if (saxonJarPath) {
+            const matches = saxonJarPath.match(SaxonTaskProvider.saxonVersionRgx);
+            if (matches && matches.length > 2) {
+                matches.shift(); // remove entire match
+                const v = matches.map(item => Number.parseInt(item));
+                const [major, minor, patch1, patch2] = v;
+                switch (major) {
+                    case 9:
+                        jarName = minor === 9 ? jarName + '99' : undefined;
+                        break;
+                    case 10:
+                    case 11:
+                    case 12:
+                        jarName = jarName + major;
+                        break;
+                    default:
+                        jarName = undefined;
+                }
+                if (jarName) {
+                    jarName += ".jar";
+                    jarName = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', jarName).fsPath;
+                }
+            } else {
+                jarName = undefined;
+            }
+        }
+        return jarName;
+    }
+
 }
