@@ -45,6 +45,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
 | **Variable watcher**      | Auto-complete for `xsl:message` for local XSLT/XPath variables - output shown in terminal at runtime
+| **Colorised xsl:message**      | use `ext:print()` function to format and colorise XPath 3.1 types like maps and arrays
 |||
 
    \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
