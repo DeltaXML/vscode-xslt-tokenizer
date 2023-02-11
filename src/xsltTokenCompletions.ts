@@ -575,6 +575,9 @@ export class XsltTokenCompletions {
 						if (isOnRequiredToken) {
 							awaitingRequiredArity = true;
 							keepProcessing = true;
+							let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType));
+							let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
+							resultCompletions = fnCompletions.concat(userFnCompletions);
 						}
 						break;
 					case TokenLevelState.attributeNameTest:
