@@ -1173,23 +1173,23 @@ export class XsltTokenCompletions {
 	private static getFnCompletions(pos: vscode.Position, dataItems: FunctionCompletionData[], token?: BaseToken) {
 		let completionItems: vscode.CompletionItem[] = [];
 		let range: vscode.Range;
-		if (token) {
+		let useRange = false;
+		const posImmediatelyBeforeToken = !!(token) && token.length > 1 && pos.line === token.line && pos.character - 1 === token.startCharacter;
+		if (token && !(posImmediatelyBeforeToken)) {
 			const startPos = new vscode.Position(token.line, token.startCharacter);
 			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
 			range = new vscode.Range(startPos, endPos);
-		} else {
-			const startPos = new vscode.Position(pos.line, pos.character);
-			range = new vscode.Range(startPos, startPos);
+			useRange = true;
 		}
 
 		dataItems.forEach((item) => {
 			const noArgs = item.signature.startsWith(item.name + '()');
-			const suffixBrackets = noArgs ? '()${0}' : '(${0})';
+			const suffixBrackets = noArgs ? '()${0}' : posImmediatelyBeforeToken ? '(${0}' : '(${0})';
 			const newItem = new vscode.CompletionItem(item.name, vscode.CompletionItemKind.Function);
 			newItem.documentation = new vscode.MarkdownString(item.description);
 			newItem.detail = item.signature;
 			newItem.insertText = new vscode.SnippetString(item.name + suffixBrackets);
-			newItem.range = range;
+			if (useRange) newItem.range = range;
 			//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 			completionItems.push(newItem);
 		});
