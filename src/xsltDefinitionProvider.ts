@@ -92,7 +92,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let isXSLT = this.docType === DocumentTypes.XSLT;
 
 			if (matchingGlobal) {
-				location = XsltTokenDefinitions.createLocationFromInstrcution(matchingGlobal, document);
+				location = XsltTokenDefinitions.createLocationFromInstruction(matchingGlobal, document);
 				defnData = { definitionLocation: location };
 			} else {
 				defnData = XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position);

@@ -387,7 +387,7 @@ export class XsltTokenDefinitions {
 									let instruction: GlobalInstructionData | undefined = undefined;
 									if (tagElementName === 'xsl:call-template') {
 										instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
-										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 										if (resultLocation) {
 											resultLocation.instruction = instruction;
 										}
@@ -438,21 +438,21 @@ export class XsltTokenDefinitions {
 										if (!instruction) {
 											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.Mode);
 										}
-										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 									} else {
 										resultInputToken = { token: token, type: GlobalInstructionType.Mode };
 										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeInstruction);
 										if (!instruction) {
 											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeTemplate);
 										}
-										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 									}
 								}
 								break;
 							case AttributeType.UseAttributeSets:
 								if (isOnRequiredToken) {
 									let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.AttributeSet);
-									resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+									resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 									resultInputToken = { token: token, type: GlobalInstructionType.AttributeSet };
 								}
 								break;
@@ -482,7 +482,7 @@ export class XsltTokenDefinitions {
 								let keyVal = token.value.substring(1, token.value.length - 1);
 								let instrType = xp.function.value === 'key' ? GlobalInstructionType.Key : GlobalInstructionType.Accumulator;
 								let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, keyVal, instrType);
-								resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+								resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 								resultInputToken = { token: token, type: instrType };
 							}
 							preXPathVariable = xp.preXPathVariable;
@@ -624,7 +624,7 @@ export class XsltTokenDefinitions {
 												const fnArity = poppedData.functionArity;
 												const fnName = poppedData.function.value;
 												let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
-												resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+												resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 												resultInputToken = { token: poppedData.function, type: GlobalInstructionType.Function };
 											}
 										}
@@ -655,7 +655,7 @@ export class XsltTokenDefinitions {
 										const fnArity = incrementFunctionArity ? 1 : 0;
 										const fnName = prevToken.value;
 										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
-										resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 										resultInputToken = { token: prevToken, type: GlobalInstructionType.Function };
 									}
 									awaitingRequiredArity = false;
@@ -671,7 +671,7 @@ export class XsltTokenDefinitions {
 						if (isOnRequiredToken) {
 							let { name, arity } = XsltTokenDefinitions.resolveFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token);
 							let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, name, GlobalInstructionType.Function, arity);
-							resultLocation = XsltTokenDefinitions.createLocationFromInstrcution(instruction, document);
+							resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 							resultInputToken = { token: token, type: GlobalInstructionType.Function };
 						}
 						break;
@@ -683,7 +683,7 @@ export class XsltTokenDefinitions {
 		return { definitionLocation: resultLocation, inputSymbol: resultInputToken };
 	};
 
-	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
+	public static createLocationFromInstruction(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
 		if (instruction) {
 			let uri = instruction?.href ? vscode.Uri.parse(url.pathToFileURL(instruction.href).toString()) : document.uri;
 			const token = instruction.token;

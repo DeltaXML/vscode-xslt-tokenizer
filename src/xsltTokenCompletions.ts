@@ -964,15 +964,6 @@ export class XsltTokenCompletions {
 		return xpathCompletions;
 	}
 
-	public static createLocationFromInstrcution(instruction: GlobalInstructionData | undefined, document: vscode.TextDocument) {
-		if (instruction) {
-			let uri = instruction?.href ? vscode.Uri.parse(instruction.href) : document.uri;
-			let startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
-			let endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
-			return new vscode.Location(uri, new vscode.Range(startPos, endPos));
-		}
-	}
-
 	public static resolveFunctionName(xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken) {
 
 		let parts = token.value.split('#');
