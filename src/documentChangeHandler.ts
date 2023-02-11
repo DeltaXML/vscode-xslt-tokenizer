@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { XMLConfiguration, XSLTLightConfiguration } from './languageConfigurations';
 import { XPathDocumentChangeHandler } from './xpathDocumentChangeHandler';
+import { Data } from './xpLexer';
 import { GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
@@ -71,7 +72,16 @@ export class DocumentChangeHandler {
 		}
 		if (!skipTrigger && activeChange.rangeOffset > 10) {
 			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-			if ((prevChar === '"' || prevChar === '(') && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
+			if (prevChar === ' ') {
+				prevChar = e.document.getText().charAt(activeChange.rangeOffset - 2);
+				let prevWordRange = e.document.getWordRangeAtPosition(activeChange.range.start.with({ character: activeChange.rangeOffset - 2 }));
+				if (prevWordRange) {
+					const prevWord = e.document.getText(prevWordRange);
+					console.log(prevWord);
+				}
+			} 
+
+			if ((Data.completionTriggers.indexOf(prevChar)) > -1 && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
 				triggerSuggest = true;
 			} else if (prevChar === '<' && activeChange.text === '?') {
 				triggerSuggest = true;
