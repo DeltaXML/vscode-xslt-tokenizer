@@ -1227,15 +1227,14 @@ export class XsltTokenCompletions {
 	private static getUserFnCompletions(pos: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], token?: BaseToken) {
 		let completionItems: vscode.CompletionItem[] = [];
 		let range: vscode.Range;
-		if (token) {
+		let useRange = false;
+		const posImmediatelyBeforeToken = !!(token) && token.length > 1 && pos.line === token.line && pos.character - 1 === token.startCharacter;
+		if (token && !(posImmediatelyBeforeToken)) {
 			const startPos = new vscode.Position(token.line, token.startCharacter);
 			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
 			range = new vscode.Range(startPos, endPos);
-		} else {
-			const startPos = new vscode.Position(pos.line, pos.character);
-			range = new vscode.Range(startPos, startPos);
+			useRange = true;
 		}
-
 
 		let filteredFunctions: GlobalInstructionData[] = [];
 		this.pushFunctionsOnMaxArity(filteredFunctions, globalInstructionData);
@@ -1249,7 +1248,9 @@ export class XsltTokenCompletions {
 				//newItem.documentation = new vscode.MarkdownString(item.description);
 				newItem.detail = item.idNumber === 0 ? item.name + '()' : item.name + '( ' + item.memberNames?.join(', ') + ' )';
 				newItem.insertText = new vscode.SnippetString(item.name + suffixBrackets);
-				newItem.range = range;
+				if (useRange) {
+					newItem.range = range;
+				}
 				//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 				completionItems.push(newItem);
 			}
