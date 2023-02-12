@@ -185,11 +185,6 @@ export class XsltTokenCompletions {
 							case XSLTokenLevelState.attributeName:
 								resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 								break;
-							case XSLTokenLevelState.xmlText:
-								const prevToken2 = allTokens[index - 2];
-								let prevTokenValue2 = XsltTokenDiagnostics.getTextForToken(lineNumber, prevToken2, document);
-								console.log({ prevTokenValue2 });
-								break;
 						}
 					} else {
 						console.log('sun2.2');

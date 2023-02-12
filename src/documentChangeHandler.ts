@@ -86,6 +86,14 @@ export class DocumentChangeHandler {
 				triggerSuggest = true;
 			} else if (prevChar === '<' && activeChange.text === '?') {
 				triggerSuggest = true;
+			} else if (prevChar === 'f' || prevChar === 's') {
+				const prevWordRange = e.document.getWordRangeAtPosition(activeChange.range.start.translate(0, -2));
+				if (prevWordRange) {
+					const prevWord = e.document.getText(prevWordRange);
+					if (prevWord === 'of' || prevWord === 'as' || prevWord === 'is') {
+						triggerSuggest = true;
+					}
+				}
 			}
 		}
 		// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
