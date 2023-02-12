@@ -5,6 +5,7 @@ import { Data } from './xpLexer';
 import { GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 export interface TagRenameEdit {
 	range: vscode.Range;
@@ -81,7 +82,7 @@ export class DocumentChangeHandler {
 				}
 			} 
 
-			if ((Data.completionTriggers.indexOf(prevChar)) > -1 && activeChange.text.length === 1 && ['[', '(', '{', '?', '"', '\''].indexOf(activeChange.text) === -1) {
+			if ((Data.completionTriggers.indexOf(prevChar)) > -1 && activeChange.text.length === 1 && (activeChange.text === ' ' || XsltTokenDiagnostics.nameStartCharRgx.test(activeChange.text))) {
 				triggerSuggest = true;
 			} else if (prevChar === '<' && activeChange.text === '?') {
 				triggerSuggest = true;
@@ -95,8 +96,10 @@ export class DocumentChangeHandler {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
 				isCloseTagFeature = prevChar === '<';
 			}
+
 			if (!isCloseTagFeature && !skipTrigger) {
 				setTimeout(() => {
+					console.log('triggered on changeText' + activeChange.text);
 					vscode.commands.executeCommand('editor.action.triggerSuggest');
 				}, 10);
 			}

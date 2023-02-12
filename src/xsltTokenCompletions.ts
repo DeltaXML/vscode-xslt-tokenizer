@@ -143,8 +143,8 @@ export class XsltTokenCompletions {
 		} else if (languageConfig.schemaData) {
 			schemaQuery = new SchemaQuery(languageConfig.schemaData);
 		}
-
 		let index = -1;
+		console.log('.getCompletions');
 		for (let token of allTokens) {
 			index++;
 			lineNumber = token.line;
@@ -154,12 +154,15 @@ export class XsltTokenCompletions {
 			}
 			let overranPos = !keepProcessing && (lineNumber > requiredLine || (lineNumber === requiredLine && token.startCharacter > requiredChar));
 			if (docType === DocumentTypes.XPath && index === lastTokenIndex && requiredChar > token.startCharacter + token.length) {
-				const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList,  index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-				resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+				console.log('sun1');
+				const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
+				const varCompletions = XsltTokenCompletions.getVariableCompletions(null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);				
+				resultCompletions = varCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
 				return resultCompletions;
 			}
 			if (prevToken) {
 				if (overranPos) {
+					console.log('.overranPos sun2');
 					let prevIsXML = prevToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 					if (prevIsXML) {
 						let prevXmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
@@ -179,8 +182,9 @@ export class XsltTokenCompletions {
 						}
 					} else {
 						let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
-						const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList,  index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-						resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+						const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
+				        const varCompletions = XsltTokenCompletions.getVariableCompletions(null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);										
+						resultCompletions = varCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
 					}
 				}
 			}
@@ -190,10 +194,11 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+				console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -521,8 +526,9 @@ export class XsltTokenCompletions {
 											resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
 										} else if (languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1 && !(attName === 'use' && (tagElementName === 'xsl:context-item' || tagElementName === 'xsl:global-context-item'))) {
 											let prev2Token = allTokens[index - 2];
-											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList,  index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-											resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+				                            const varCompletions = XsltTokenCompletions.getVariableCompletions(null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);											
+											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
+											resultCompletions = varCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
 										} else if (variableName === '}' && token.startCharacter + 1 === requiredChar) {
 											// for avt
 											let prev2Token = allTokens[index - 2];
