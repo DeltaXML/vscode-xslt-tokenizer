@@ -549,14 +549,13 @@ export class XsltTokenCompletions {
 											const varCompletions = XsltTokenCompletions.getVariableCompletions(null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 											resultCompletions = varCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
-										} else if (variableName === '}' && token.startCharacter + 1 === requiredChar) {
+										} else if (fullVariableName.startsWith('}') && (prevToken?.value.endsWith('{') || (prevToken && prevToken?.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber))) {
 											// for avt
 											let prev2Token = allTokens[index - 2];
 											let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
-											if (!prev2IsXML) {
-												const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-												resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
-											}
+											const varCompletions = XsltTokenCompletions.getVariableCompletions(null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
+											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
+											resultCompletions = varCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
 										} else {
 											if (attName === 'as') {
 												let completionStrings = XsltTokenCompletions.sequenceTypes;
