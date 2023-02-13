@@ -221,10 +221,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					} else if (!isXPathAttribute) {
 						// not an attribute so check if TVT
 						let et = expandText[expandText.length - 1];
-						et = et.length > 3 ? et.substring(1, et.length - 1) : et;
-						const isExpanded = (et === 'yes' || et === 'true' || et === '1');
-						if (isExpanded) {
-							isXPathAttribute = document.getText(firstSymbol.range).includes('{');
+						if (et) {
+							et = et.length > 3 ? et.substring(1, et.length - 1) : et;
+							const isExpanded = (et === 'yes' || et === 'true' || et === '1');
+							if (isExpanded) {
+								isXPathAttribute = document.getText(firstSymbol.range).includes('{');
+							}
 						}
 					}
 					if (isXPathAttribute) {
