@@ -78,7 +78,6 @@ export class DocumentChangeHandler {
 				let prevWordRange = e.document.getWordRangeAtPosition(activeChange.range.start.with({ character: activeChange.rangeOffset - 2 }));
 				if (prevWordRange) {
 					const prevWord = e.document.getText(prevWordRange);
-					console.log(prevWord);
 				}
 			} 
 
@@ -98,7 +97,6 @@ export class DocumentChangeHandler {
 		}
 		// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/')  ||  activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
-			// console.log('triggering...');
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
@@ -107,7 +105,6 @@ export class DocumentChangeHandler {
 
 			if (!isCloseTagFeature && !skipTrigger) {
 				setTimeout(() => {
-					console.log('triggered on changeText' + activeChange.text);
 					vscode.commands.executeCommand('editor.action.triggerSuggest');
 				}, 10);
 			}

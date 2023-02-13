@@ -144,7 +144,6 @@ export class XsltTokenCompletions {
 			schemaQuery = new SchemaQuery(languageConfig.schemaData);
 		}
 		let index = -1;
-		console.log('.getCompletions');
 		for (let token of allTokens) {
 			index++;
 			lineNumber = token.line;
@@ -154,7 +153,6 @@ export class XsltTokenCompletions {
 			}
 			let overranPos = !keepProcessing && (lineNumber > requiredLine || (lineNumber === requiredLine && token.startCharacter > requiredChar));
 			if (docType === DocumentTypes.XPath && index === lastTokenIndex && requiredChar > token.startCharacter + token.length) {
-				console.log('sun1');
 				const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 				const varCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 				resultCompletions = varCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
@@ -162,15 +160,8 @@ export class XsltTokenCompletions {
 			}
 			if (prevToken) {
 				if (overranPos) {
-					console.log('.overranPos sun2');
-					let tokenValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-					let prevTokenValue = XsltTokenDiagnostics.getTextForToken(lineNumber, prevToken, document);
-					console.log({ tokenValue });
-					console.log({ prevTokenValue });
-
 					let treatAsXML = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber && prevToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 					if (treatAsXML) {
-						console.log('sun2.1');
 						let prevXmlTokenType = <XSLTokenLevelState>(prevToken.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
 						switch (prevXmlTokenType) {
 							case XSLTokenLevelState.attributeValue:
@@ -187,7 +178,6 @@ export class XsltTokenCompletions {
 								break;
 						}
 					} else {
-						console.log('sun2.2');
 						let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 						const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 						const varCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
@@ -201,11 +191,11 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			if (isOnRequiredToken) {
-				console.log('--------- on required token ---------');
-				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-				console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
-			}
+			// if (isOnRequiredToken) {
+			// 	console.log('--------- on required token ---------');
+			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			// 	console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -240,11 +230,9 @@ export class XsltTokenCompletions {
 						}
 						break;
 					case XSLTokenLevelState.xmlText:
-						console.log('.xmlText');
 						if (isOnRequiredToken) {
 							const isTVT = !!prevToken && prevToken?.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber;
 							if (isTVT) {
-								console.log('isTVT');
 								let prev2Token = prevToken?.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 								const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 								const varCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
@@ -1229,8 +1217,6 @@ export class XsltTokenCompletions {
 			range = new vscode.Range(startPos, endPos);
 			useRange = true;
 		}
-		console.log({ posImmediatelyBeforeToken });
-		console.log({ useRange });
 
 		dataItems.forEach((item) => {
 			const noArgs = item.signature.startsWith(item.name + '()');
