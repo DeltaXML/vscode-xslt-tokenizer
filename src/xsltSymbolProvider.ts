@@ -594,14 +594,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						if (xpv) {
 							const lastTokenIndex = XsltSymbolProvider.fetchXPathVariableTokens(tokens, xpv);
 							// recursive call:
-							const result: Cleaned = XsltSymbolProvider.filterPathTokens(tokens, globalInstructionData, xsltVariables, xpathVariables, lastTokenIndex, xpathStack );
-							// console.log('xpv', xpv);
-							// console.log('lastTokenIndex', lastTokenIndex, tokens[lastTokenIndex]);
-							// console.log('filteredVarTokens', result.cleanedTokens);
-							if (!hasParentAxis) {
-								hasParentAxis = result.hasParentAxis;
+							if (position === lastTokenIndex) {
+								foundVariableToken = false;
+								exitLoop = true;
+							} else {
+								const result: Cleaned = XsltSymbolProvider.filterPathTokens(tokens, globalInstructionData, xsltVariables, xpathVariables, lastTokenIndex, xpathStack );
+								// console.log('xpv', xpv);
+								// console.log('lastTokenIndex', lastTokenIndex, tokens[lastTokenIndex]);
+								// console.log('filteredVarTokens', result.cleanedTokens);
+								if (!hasParentAxis) {
+									hasParentAxis = result.hasParentAxis;
+								}
+								cleanedTokens = cleanedTokens.concat(result.cleanedTokens);
 							}
-							cleanedTokens = cleanedTokens.concat(result.cleanedTokens);
 						} else {
 							// add the $dev token
 							const varFromExtXPath = XsltTokenCompletions.extXPathVariables.get(token.value.substring(1));
