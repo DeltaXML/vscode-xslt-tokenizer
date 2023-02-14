@@ -84,7 +84,7 @@ export class DocumentChangeHandler {
 			} else if (prevChar === '<' && activeChange.text === '?') {
 				triggerSuggest = true;
 			} else {
-				const prevWordRange = e.document.getWordRangeAtPosition(activeChange.range.start.translate(0, -2));
+				const prevWordRange = activeChange.range.start.character > 1 ? e.document.getWordRangeAtPosition(activeChange.range.start.translate(0, -2)) : undefined;
 				if (prevWordRange) {
 					const prevWord = e.document.getText(prevWordRange);
 					if (Data.triggerWords.indexOf(prevWord) !== -1) {
