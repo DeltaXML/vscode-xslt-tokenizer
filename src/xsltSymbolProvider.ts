@@ -793,21 +793,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					if (isDocumentNode) {
 						isDocumentNode = false;
 						// starting point: assume root element
-						if (currentSymbols[0].name === token.value) {
+						if (xpathNameMatchesSymbol(token.value, currentSymbols[0].name)) {
 							nextSymbols = currentSymbols;
 						}
 					} else if (token.union) {
 						unionElementNames.push(token.value);
 						nextSymbols = currentSymbols;
 					} else if (currentAxis !== AxisType.Child && currentAxis !== AxisType.Parent ) {
-						nextSymbols = currentSymbols.filter(current => current.name === token.value);
+						nextSymbols = currentSymbols.filter(current => xpathNameMatchesSymbol(token.value, current.name));
 					} else {
 						unionElementNames.push(token.value);
 						for (let i = 0; i < currentSymbols.length; i++) {
 							const symbol = currentSymbols[i];
 							if (hasParentAxis) {
 								symbol.children.forEach((child: SymbolWithParent) => {
-									if (child.kind !== vscode.SymbolKind.Array && unionElementNames.indexOf(child.name) !== -1) {
+									if (child.kind !== vscode.SymbolKind.Array && xpathNamesMatcheSymbol(unionElementNames, child.name)) {
 										if (!child.parent) {
 											child.parent = symbol;
 										}
@@ -815,7 +815,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 									}
 								});
 							} else {
-								const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && unionElementNames.indexOf(child.name) !== -1);
+								const next = symbol.children.filter(child => child.kind !== vscode.SymbolKind.Array && xpathNamesMatcheSymbol(unionElementNames, child.name));
 								nextSymbols = nextSymbols.concat(next);
 							}
 						}
@@ -1014,6 +1014,23 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 
 		return [[], []];
+
+		function xpathNameMatchesSymbol(xpathName: string, symbolName: string) {
+			let matches: boolean;
+			if (xpathName.startsWith('*:')) {
+				let symName = symbolName;
+				const colonPos = symName.indexOf(':');
+				symName = (colonPos > -1) ? symName.substring(colonPos + 1) : symName;
+				matches = symName === xpathName.substring(2);
+			} else {
+				matches = symbolName === xpathName;
+			}
+			return matches;
+		}
+
+		function xpathNamesMatcheSymbol(xpathNames: string[], symbolName: string) {
+			return !!xpathNames.find(v => xpathNameMatchesSymbol(v, symbolName));
+		}
 	}
 
 
