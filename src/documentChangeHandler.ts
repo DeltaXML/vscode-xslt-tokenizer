@@ -66,9 +66,7 @@ export class DocumentChangeHandler {
 						}
 					}
 				}
-			} else {
-				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-				skipTrigger = prevChar === '"';
+				skipTrigger = true;
 			}
 		}
 		if (!skipTrigger && activeChange.rangeOffset > 10) {
