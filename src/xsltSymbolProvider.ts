@@ -596,6 +596,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							// recursive call:
 							if (position === lastTokenIndex) {
 								foundVariableToken = false;
+								cleanedTokens.push(token);
 								exitLoop = true;
 							} else {
 								const result: Cleaned = XsltSymbolProvider.filterPathTokens(tokens, globalInstructionData, xsltVariables, xpathVariables, lastTokenIndex, xpathStack );
@@ -973,6 +974,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					nextSymbols = outSymbols;
 					descendantAttrNames = attrNameArray;
 					nextAxis = AxisType.DescendantOrSelf;
+					isDocumentNode = false;
 					break;
 				case TokenLevelState.operator:
 					break;
