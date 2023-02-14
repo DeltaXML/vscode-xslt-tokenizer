@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { XMLConfiguration, XSLTLightConfiguration } from './languageConfigurations';
 import { XPathDocumentChangeHandler } from './xpathDocumentChangeHandler';
-import { Data } from './xpLexer';
+import { Data, XPathLexer } from './xpLexer';
 import { GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
@@ -85,11 +85,11 @@ export class DocumentChangeHandler {
 				triggerSuggest = true;
 			} else if (prevChar === '<' && activeChange.text === '?') {
 				triggerSuggest = true;
-			} else if (prevChar === 'f' || prevChar === 's') {
+			} else {
 				const prevWordRange = e.document.getWordRangeAtPosition(activeChange.range.start.translate(0, -2));
 				if (prevWordRange) {
 					const prevWord = e.document.getText(prevWordRange);
-					if (prevWord === 'of' || prevWord === 'as' || prevWord === 'is') {
+					if (Data.triggerWords.indexOf(prevWord) !== -1) {
 						triggerSuggest = true;
 					}
 				}

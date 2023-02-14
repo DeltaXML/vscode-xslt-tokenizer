@@ -69,7 +69,7 @@ export enum TokenLevelState {
     Whitespace, // not used
     string,
     uriLiteral, // constant
-    nodeType,   // parameter
+    nodeType,   // parameter      
     simpleType, // parameterType
     axisName,       // label
     nodeNameTest,        // (xsl) class
