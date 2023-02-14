@@ -191,11 +191,11 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// 	console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+				console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -532,18 +532,15 @@ export class XsltTokenCompletions {
 												}
 											});
 											resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
-										} else if (languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1 && !(attName === 'use' && (tagElementName === 'xsl:context-item' || tagElementName === 'xsl:global-context-item'))) {
+										} else if (
+											(languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1 && !(attName === 'use' && (tagElementName === 'xsl:context-item' || tagElementName === 'xsl:global-context-item'))) ||
+											(fullVariableName.startsWith('}') && (prevToken?.value.endsWith('{') || (prevToken && prevToken?.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber)))) {
 											let prev2Token = allTokens[index - 2];
-											const varCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-											resultCompletions = varCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
-										} else if (fullVariableName.startsWith('}') && (prevToken?.value.endsWith('{') || (prevToken && prevToken?.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber))) {
-											// for avt
-											let prev2Token = allTokens[index - 2];
-											let prev2IsXML = prev2Token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
-											const varCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
-											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-											resultCompletions = varCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
+											resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+											if (resultCompletions[0].kind !== vscode.CompletionItemKind.TypeParameter) {
+												resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
+											}
 										} else {
 											if (attName === 'as') {
 												let completionStrings = XsltTokenCompletions.sequenceTypes;
