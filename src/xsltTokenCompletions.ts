@@ -155,7 +155,7 @@ export class XsltTokenCompletions {
 			if (docType === DocumentTypes.XPath && index === lastTokenIndex && requiredChar > token.startCharacter + token.length) {
 				const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 				resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
-				if (resultCompletions[0].kind !== vscode.CompletionItemKind.TypeParameter) {
+				if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 					resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 				}
 				return resultCompletions;
@@ -183,7 +183,7 @@ export class XsltTokenCompletions {
 						let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 						const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 						resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
-						if (resultCompletions[0].kind !== vscode.CompletionItemKind.TypeParameter) {
+						if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 							resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 						}
 					}
@@ -240,7 +240,7 @@ export class XsltTokenCompletions {
 								let prev2Token = prevToken?.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 								const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 								resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
-								if (resultCompletions[0].kind !== vscode.CompletionItemKind.TypeParameter) {
+								if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 									resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 								}
 							}
@@ -544,7 +544,7 @@ export class XsltTokenCompletions {
 											let prev2Token = allTokens[index - 2];
 											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 											resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
-											if (resultCompletions[0].kind !== vscode.CompletionItemKind.TypeParameter) {
+											if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 												resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 											}
 										} else {
@@ -714,7 +714,7 @@ export class XsltTokenCompletions {
 										const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 										resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
 									}
-									if (resultCompletions[0].kind !== vscode.CompletionItemKind.TypeParameter) {
+									if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 										resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 									}
 
@@ -877,6 +877,15 @@ export class XsltTokenCompletions {
 
 		return resultCompletions;
 	};
+
+	private static isKindType(resultCompletions: vscode.CompletionItem[]) {
+		if (resultCompletions && resultCompletions.length > 0) {
+			resultCompletions[0].kind !== vscode.CompletionItemKind.TypeParameter;
+		}
+		else {
+			return false;
+		}
+	}
 
 	private static createNonAlphanumericCompletions(doc: vscode.TextDocument, pos: vscode.Position, labels: string[], allCompletions: vscode.CompletionItem[]) {
 		let prevText = doc.getText(new vscode.Range(pos.with({ character: pos.character - 1 }), pos));
