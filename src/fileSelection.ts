@@ -16,7 +16,7 @@ export class FileSelection {
   private static readonly CLEAR_RECENTS = "$(root-folder) Clear Recently Used";
   private static readonly XML_SOURCE_LABEL = "Select XML Source File";
   private static readonly XSLT_CONTEXT_LABEL = "Select XSLT context file";
-  public static readonly XSLT_CONTEXT_PREVIOIUS_LABEL = "Recent XML files";
+  public static readonly XSLT_CONTEXT_PREVIOIUS_LABEL = "recent XML files";
   private static readonly RESULT_LABEL = "Set Result File";
   private static commandList: string[] = [FileSelection.PICK_FILE];
   public static readonly MMO_PREFIX = 'qfs:';
@@ -95,7 +95,8 @@ export class FileSelection {
     // <?xml-stylesheet type="text/xsl" href="02list11.xsl"?>
     this.completedPick = true;
     const { label, extensions, isResult, prevStageLabel, prevStageGroup, xmlStylesheetPI } = obj;
-    const workspaceLabel = FileSelection.MMO_PREFIX + label;
+    const workspaceLabel = label === FileSelection.XSLT_CONTEXT_LABEL ? FileSelection.MMO_PREFIX + '{' + DocumentChangeHandler.lastActiveXMLEditor?.document.uri + '}' + label :
+      FileSelection.MMO_PREFIX + label;
     let fileListForLabel: string[] | undefined = this.context.workspaceState.get(workspaceLabel);
     if (!fileListForLabel) {
       fileListForLabel = [];
