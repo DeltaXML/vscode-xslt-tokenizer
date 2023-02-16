@@ -48,9 +48,8 @@ const legend = (function () {
 })();
 
 export function activate(context: vscode.ExtensionContext) {
+	const fileSelector = new FileSelection(context);
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
-	context.subscriptions.push(DocumentChangeHandler.newStatusBarItem());
-
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
 
@@ -171,7 +170,6 @@ export function activate(context: vscode.ExtensionContext) {
 			editor.revealRange(symbol.range);
 		}
 	}
-	const fileSelector = new FileSelection(context);
 
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
 		docChangeHandler.registerXMLEditor(editor);
@@ -186,6 +184,7 @@ export function activate(context: vscode.ExtensionContext) {
 		fileSelector.completedPick = true; // as fileselector may not be used for next task
 	}));
 
+	context.subscriptions.push(DocumentChangeHandler.contextStatusBarItem);
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt' }, xsltSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp' }, dcpSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'sch' }, schSymbolProvider));

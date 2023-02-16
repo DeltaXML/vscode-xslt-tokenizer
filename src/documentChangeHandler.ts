@@ -15,9 +15,9 @@ export interface TagRenameEdit {
 	fullTagName: string;
 }
 export class DocumentChangeHandler {
-	public static lastActiveXMLEditor: vscode.TextEditor|null = null;
-	public static lastActiveXMLNonXSLEditor: vscode.TextEditor|null = null;
-	public static lastActiveXMLNonXSLUri: vscode.Uri|null = null;
+	public static lastActiveXMLEditor: vscode.TextEditor | null = null;
+	public static lastActiveXMLNonXSLEditor: vscode.TextEditor | null = null;
+	public static lastActiveXMLNonXSLUri: vscode.Uri | null = null;
 
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 	public static isWindowsOS: boolean | undefined;
@@ -27,9 +27,9 @@ export class DocumentChangeHandler {
 	private lastChangePerformed: TagRenameEdit | null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
 	private cachedFailedEdit: TagRenameEdit | null = null;
-	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler|null = null;
+	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler | null = null;
 	private static lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
-	private static contextStatusBarItem: vscode.StatusBarItem;
+	public static contextStatusBarItem: vscode.StatusBarItem = DocumentChangeHandler.newStatusBarItem();
 
 	public static newStatusBarItem() {
 		const contextStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -88,7 +88,7 @@ export class DocumentChangeHandler {
 				if (prevWordRange) {
 					const prevWord = e.document.getText(prevWordRange);
 				}
-			} 
+			}
 
 			if ((Data.completionTriggers.indexOf(prevChar)) > -1 && activeChange.text.length === 1 && (activeChange.text === ' ' || XsltTokenDiagnostics.nameStartCharRgx.test(activeChange.text))) {
 				triggerSuggest = true;
@@ -105,7 +105,7 @@ export class DocumentChangeHandler {
 			}
 		}
 		// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
-		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/')  ||  activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
+		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {
 				let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
@@ -203,7 +203,7 @@ export class DocumentChangeHandler {
 		if (this.xmlDocumentRegistered && (!isXMLDocument || !isXPathDocument) && this.onDidChangeRegistration) {
 			this.onDidChangeRegistration.dispose();
 			this.xmlDocumentRegistered = false;
-		} 
+		}
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLEditor = editor;
 			if (document.languageId !== 'xslt') {
@@ -229,11 +229,10 @@ export class DocumentChangeHandler {
 	public static updateStatusBarItem(isXSLTOrXPath: boolean): void {
 		if (isXSLTOrXPath) {
 			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
-			if (docUri) {
-				const filename = path.basename(docUri.path);
-				DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
-				DocumentChangeHandler.contextStatusBarItem.show();
-			}
+			const filename = docUri ? path.basename(docUri.path) : '[auto-completion context]';
+			DocumentChangeHandler.contextStatusBarItem.tooltip = 'set XML context file to use for xpath auto-completion';
+			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
+			DocumentChangeHandler.contextStatusBarItem.show();
 		} else {
 			DocumentChangeHandler.contextStatusBarItem.hide();
 		}
