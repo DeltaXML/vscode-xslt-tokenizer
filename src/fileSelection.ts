@@ -6,6 +6,7 @@ import { XMLConfiguration } from './languageConfigurations';
 import { BaseToken, TokenLevelState } from './xpLexer';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { CodeActionDocument } from './codeActionDocument';
+import { DocumentChangeHandler } from './documentChangeHandler';
 
 type removeTokenVotes = { otherMatchCount: number }[];
 type pickedFileItem = { label: string; description: string; fullDirname: string };
@@ -35,7 +36,22 @@ export class FileSelection {
     return await this.pickFile({ label: "Select XSLT File", extensions: ["xsl", "xslt"], xmlStylesheetPI: true });
   }
   public async pickXsltContextFile() {
-    return await this.pickFile({ label: FileSelection.XSLT_CONTEXT_LABEL, prevStageLabel: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, prevStageGroup: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
+    const pickedFsPath = await this.pickFile({ label: FileSelection.XSLT_CONTEXT_LABEL, prevStageLabel: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, prevStageGroup: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
+    if (pickedFsPath) {
+      try {
+        const pickedUri = vscode.Uri.file(pickedFsPath);
+        const doc = await vscode.workspace.openTextDocument(pickedUri);
+        const sp = new XsltSymbolProvider(XMLConfiguration.configuration, null);
+        const newSymbols = await sp.getDocumentSymbols(doc, false);
+        if (newSymbols) {
+          XsltSymbolProvider.documentSymbols.set(pickedUri, newSymbols);
+          DocumentChangeHandler.lastActiveXMLNonXSLUri = pickedUri;
+          DocumentChangeHandler.updateStatusBarItem(true);
+        }
+      } catch {
+        vscode.window.showInformationMessage("File does not exist: " + pickedFsPath);
+      }
+    }
   }
   public async pickXmlSourceFile() {
     return await this.pickFile({ label: FileSelection.XML_SOURCE_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
@@ -61,7 +77,7 @@ export class FileSelection {
 
   public addToRecentlyUsedPickFile(workspaceLabel: string, pickedFsPath: string) {
     let fileListForLabel: string[] | undefined = this.context.workspaceState.get(workspaceLabel);
-    if (!fileListForLabel) {fileListForLabel = [];}
+    if (!fileListForLabel) { fileListForLabel = []; }
     if (fileListForLabel.includes(pickedFsPath)) {
       // promote - remove and insert at top:
       fileListForLabel = fileListForLabel.filter(item => item !== pickedFsPath);

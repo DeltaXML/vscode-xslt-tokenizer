@@ -198,7 +198,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		} else {
 			if (this.docType === DocumentTypes.XSLT) {
-				uri = DocumentChangeHandler.lastActiveXMLNonXSLEditor?.document.uri;
+				if ( DocumentChangeHandler.lastActiveXMLNonXSLUri) {
+					uri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+				}
 			} else {
 				uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
 			}

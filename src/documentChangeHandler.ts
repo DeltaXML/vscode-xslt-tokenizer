@@ -17,6 +17,7 @@ export interface TagRenameEdit {
 export class DocumentChangeHandler {
 	public static lastActiveXMLEditor: vscode.TextEditor|null = null;
 	public static lastActiveXMLNonXSLEditor: vscode.TextEditor|null = null;
+	public static lastActiveXMLNonXSLUri: vscode.Uri|null = null;
 
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 	public static isWindowsOS: boolean | undefined;
@@ -208,6 +209,9 @@ export class DocumentChangeHandler {
 			if (document.languageId !== 'xslt') {
 				FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
 				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
+				if (!DocumentChangeHandler.lastActiveXMLNonXSLUri) {
+					DocumentChangeHandler.lastActiveXMLNonXSLUri = editor.document.uri;
+				}
 			}
 			DocumentChangeHandler.getLastDocXmlnsPrefixes();
 		}
@@ -222,9 +226,9 @@ export class DocumentChangeHandler {
 
 	};
 
-	private static updateStatusBarItem(isXSLTOrXPath: boolean): void {
+	public static updateStatusBarItem(isXSLTOrXPath: boolean): void {
 		if (isXSLTOrXPath) {
-			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLEditor?.document.uri;
+			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 			if (docUri) {
 				const filename = path.basename(docUri.path);
 				DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;

@@ -171,12 +171,11 @@ export function activate(context: vscode.ExtensionContext) {
 			editor.revealRange(symbol.range);
 		}
 	}
+	const fileSelector = new FileSelection(context);
 
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
-
-	const fileSelector = new FileSelection(context);
 
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
 		const t = event.execution.task;
