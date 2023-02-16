@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { XMLConfiguration, XSLTLightConfiguration } from './languageConfigurations';
 import { XPathDocumentChangeHandler } from './xpathDocumentChangeHandler';
 import { Data, XPathLexer } from './xpLexer';
@@ -6,6 +7,7 @@ import { GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { XslLexerLight } from './xslLexerLight';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { FileSelection } from './fileSelection';
 
 export interface TagRenameEdit {
 	range: vscode.Range;
@@ -26,6 +28,14 @@ export class DocumentChangeHandler {
 	private cachedFailedEdit: TagRenameEdit | null = null;
 	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler|null = null;
 	private static lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
+	private static contextStatusBarItem: vscode.StatusBarItem;
+
+	public static newStatusBarItem() {
+		const contextStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+		contextStatusBarItem.command = 'xslt-xpath.pickXsltContextFile';
+		this.contextStatusBarItem = contextStatusBarItem;
+		return contextStatusBarItem;
+	}
 
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent, isXML: boolean) {
 		if (!isXML) {
@@ -187,6 +197,7 @@ export class DocumentChangeHandler {
 		const document = editor.document;
 		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp' || document.languageId === 'sch';
 		let isXPathDocument = document.languageId === 'xpath';
+		let isXSLTDocument = document.languageId === 'xslt';
 
 		if (this.xmlDocumentRegistered && (!isXMLDocument || !isXPathDocument) && this.onDidChangeRegistration) {
 			this.onDidChangeRegistration.dispose();
@@ -195,6 +206,7 @@ export class DocumentChangeHandler {
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLEditor = editor;
 			if (document.languageId !== 'xslt') {
+				FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
 				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
 			}
 			DocumentChangeHandler.getLastDocXmlnsPrefixes();
@@ -206,7 +218,22 @@ export class DocumentChangeHandler {
 			this.xmlDocumentRegistered = true;
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
 		}
+		DocumentChangeHandler.updateStatusBarItem(isXPathDocument || isXSLTDocument);
+
 	};
+
+	private static updateStatusBarItem(isXSLTOrXPath: boolean): void {
+		if (isXSLTOrXPath) {
+			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLEditor?.document.uri;
+			if (docUri) {
+				const filename = path.basename(docUri.path);
+				DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
+				DocumentChangeHandler.contextStatusBarItem.show();
+			}
+		} else {
+			DocumentChangeHandler.contextStatusBarItem.hide();
+		}
+	}
 
 	public async performRename(document: vscode.TextDocument, edit: TagRenameEdit) {
 		let wse = new vscode.WorkspaceEdit();

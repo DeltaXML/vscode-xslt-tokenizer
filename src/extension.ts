@@ -49,6 +49,8 @@ const legend = (function () {
 
 export function activate(context: vscode.ExtensionContext) {
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
+	context.subscriptions.push(DocumentChangeHandler.newStatusBarItem());
+
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
 
@@ -176,7 +178,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const fileSelector = new FileSelection(context);
 
-
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
 		const t = event.execution.task;
 		if (fileSelector.completedPick === true && (t.definition.type === 'xslt' || t.definition.type === 'xslt-js')) {
@@ -207,6 +208,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickFile', async (...args) => await fileSelector.pickFile(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXsltFile', async () => await fileSelector.pickXsltFile()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXsltContextFile', async () => await fileSelector.pickXsltContextFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXmlSourceFile', async () => await fileSelector.pickXmlSourceFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXPathContextFile', async () => await fileSelector.pickXPathContextFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickStage2XmlSourceFile', async () => await fileSelector.pickStage2XmlSourceFile()));

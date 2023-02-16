@@ -14,21 +14,28 @@ export class FileSelection {
   private static readonly PICK_FILE = "$(explorer-view-icon) Pick File";
   private static readonly CLEAR_RECENTS = "$(root-folder) Clear Recently Used";
   private static readonly XML_SOURCE_LABEL = "Select XML Source File";
+  private static readonly XSLT_CONTEXT_LABEL = "Select XSLT context file";
+  public static readonly XSLT_CONTEXT_PREVIOIUS_LABEL = "Recent XML files";
   private static readonly RESULT_LABEL = "Set Result File";
   private static commandList: string[] = [FileSelection.PICK_FILE];
-  private static readonly MMO_PREFIX = 'qfs:';
+  public static readonly MMO_PREFIX = 'qfs:';
   private static readonly PATH_LENGTH_LIMIT = 50;
   private context: vscode.ExtensionContext;
   private static xmlLexer = new XslLexer(XMLConfiguration.configuration);
+  public static instance: FileSelection;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
+    FileSelection.instance = this;
   }
   public pickedValues = new Map<string, string>();
   public completedPick = true;
 
   public async pickXsltFile() {
     return await this.pickFile({ label: "Select XSLT File", extensions: ["xsl", "xslt"], xmlStylesheetPI: true });
+  }
+  public async pickXsltContextFile() {
+    return await this.pickFile({ label: FileSelection.XSLT_CONTEXT_LABEL, prevStageLabel: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, prevStageGroup: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
   }
   public async pickXmlSourceFile() {
     return await this.pickFile({ label: FileSelection.XML_SOURCE_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
@@ -50,6 +57,22 @@ export class FileSelection {
   }
   public async pickStage2ResultFile() {
     return await this.pickFile({ label: "Set Stage2 Result File", isResult: true });
+  }
+
+  public addToRecentlyUsedPickFile(workspaceLabel: string, pickedFsPath: string) {
+    let fileListForLabel: string[] | undefined = this.context.workspaceState.get(workspaceLabel);
+    if (!fileListForLabel) {fileListForLabel = [];}
+    if (fileListForLabel.includes(pickedFsPath)) {
+      // promote - remove and insert at top:
+      fileListForLabel = fileListForLabel.filter(item => item !== pickedFsPath);
+      fileListForLabel.unshift(pickedFsPath);
+    } else {
+      fileListForLabel.unshift(pickedFsPath);
+      if (fileListForLabel.length > 10) {
+        fileListForLabel.pop();
+      }
+    }
+    this.context.workspaceState.update(workspaceLabel, fileListForLabel);
   }
 
   public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string; xmlStylesheetPI?: boolean }) {
@@ -144,18 +167,8 @@ export class FileSelection {
         } else {
           const typedPick = <pickedFileItem>picked;
           const pickedFsPath = typedPick.fullDirname + path.sep + picked.label;
-          if (fileListForLabel.includes(pickedFsPath)) {
-            // promote - remove and insert at top:
-            fileListForLabel = fileListForLabel.filter(item => item !== pickedFsPath);
-            fileListForLabel.unshift(pickedFsPath);
-          } else {
-            fileListForLabel.unshift(pickedFsPath);
-            if (fileListForLabel.length > 10) {
-              fileListForLabel.pop();
-            }
-          }
+          this.addToRecentlyUsedPickFile(workspaceLabel, pickedFsPath);
           this.pickedValues.set(label, pickedFsPath);
-          this.context.workspaceState.update(workspaceLabel, fileListForLabel);
           return pickedFsPath;
         }
       }
