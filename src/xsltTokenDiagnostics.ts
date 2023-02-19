@@ -1408,6 +1408,28 @@ export class XsltTokenDiagnostics {
 						} else if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
+						} else if (prevToken && prevToken.value === '/' && !prevToken.error) {
+							let fwdSlashAtEndError = false;
+							const preSlashtoken = allTokens[index - 2];
+							let slashHasContext = preSlashtoken && XsltTokenDiagnostics.providesContext(preSlashtoken);
+							if (slashHasContext) {
+								switch (<CharLevelState>token.charType) {
+									case CharLevelState.rB:
+									case CharLevelState.rBr:
+									case CharLevelState.rPr:
+									case CharLevelState.sep:
+										fwdSlashAtEndError = true;
+										break;
+									case CharLevelState.dSep:
+										if (tv !== '()' && tv !== '[]') {
+											fwdSlashAtEndError = true;
+										}
+										break;
+								}
+							}
+							if (fwdSlashAtEndError) {
+								token['error'] = ErrorType.XPathUnexpected;
+							}
 						} else if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 							let currCharType = <CharLevelState>token.charType;
