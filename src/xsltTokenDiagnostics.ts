@@ -1429,6 +1429,8 @@ export class XsltTokenDiagnostics {
 							}
 							if (fwdSlashAtEndError) {
 								token['error'] = ErrorType.XPathUnexpected;
+								problemTokens.push(token);
+								isXPathError = true;
 							}
 						} else if (prevToken && tv !== '/' && prevToken.value !== '/' && !prevToken.error) {
 							let isXMLToken = prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
