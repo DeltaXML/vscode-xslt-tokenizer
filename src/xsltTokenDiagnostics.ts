@@ -1324,8 +1324,8 @@ export class XsltTokenDiagnostics {
 											token['error'] = ErrorType.BracketNesting;
 											problemTokens.push(token);
 										} else {
-											const ptv = peekedStack.token.value;
-											peekedStack.hasContextItem = ptv === 'for' || ptv === 'every' || ptv === 'some';
+											//const ptv = peekedStack.token.value;
+											//peekedStack.hasContextItem = ptv === 'for' || ptv === 'every' || ptv === 'some';
 											peekedStack.token = token;
 										}
 									} else {
