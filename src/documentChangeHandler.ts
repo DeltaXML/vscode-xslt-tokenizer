@@ -44,7 +44,7 @@ export class DocumentChangeHandler {
 		}
 		let activeChange = e.contentChanges[0];
 		let skipTrigger = false;
-		if (!activeChange) {
+		if (!activeChange || (activeChange.text.length > 2 && !activeChange.text.endsWith('::'))) {
 			return;
 		}
 		let triggerSuggest = false;
@@ -84,10 +84,6 @@ export class DocumentChangeHandler {
 			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
 			if (prevChar === ' ') {
 				prevChar = e.document.getText().charAt(activeChange.rangeOffset - 2);
-				let prevWordRange = e.document.getWordRangeAtPosition(activeChange.range.start.with({ character: activeChange.rangeOffset - 2 }));
-				if (prevWordRange) {
-					const prevWord = e.document.getText(prevWordRange);
-				}
 			}
 
 			if ((Data.completionTriggers.indexOf(prevChar)) > -1 && activeChange.text.length === 1 && (activeChange.text === ' ' || XsltTokenDiagnostics.nameStartCharRgx.test(activeChange.text))) {
