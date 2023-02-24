@@ -17,6 +17,7 @@ interface XSLTJSTask {
     useJsonSource?: boolean;
     execute?: boolean;
     resultPath: string;
+    unprefixedElementNames?: string;
     parameters?: XSLTParameter[];
     initialTemplate?: string;
     initialMode?: string;
@@ -228,6 +229,9 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                     case 'export':
                         propNameValue = '-export:' + propValue;
                         // TODO: add '-nogo' to prevent attempted execution?
+                        break;
+                    case 'unprefixedElementNames':
+                        propNameValue = '-ns:' + propValue;
                         break;
                 }
                 if (propNameValue !== '') {
