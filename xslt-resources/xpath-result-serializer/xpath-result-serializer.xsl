@@ -197,8 +197,9 @@
           <xsl:if test="$key">
             <xsl:attribute name="key" select="$key"/>
           </xsl:if>
-          <xsl:for-each select="array:flatten(.)">
-            <xsl:sequence select="ext:buildResultTree(.)"/>
+          <xsl:variable name="array" as="array(*)" select="."/>
+          <xsl:for-each select="1 to array:size($array)">
+            <xsl:sequence select="ext:buildResultTree($array?(.))"/>
           </xsl:for-each>
         </array>
       </xsl:when>
