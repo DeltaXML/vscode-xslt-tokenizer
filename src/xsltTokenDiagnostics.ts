@@ -1047,10 +1047,11 @@ export class XsltTokenDiagnostics {
 							}
 						}
 
-						if (!hasProblem && attType === AttributeType.Variable || attType === AttributeType.InstructionName) {
+						if (!hasProblem && (attType === AttributeType.Variable || attType === AttributeType.InstructionName)) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;
-								let validateResult = XsltTokenDiagnostics.validateName(variableName, vType, docType, inheritedPrefixes);
+								const nameToTest = tagElementName === "xsl:namespace" && variableName === '' ? 'empty' : variableName;
+								let validateResult = XsltTokenDiagnostics.validateName(nameToTest, vType, docType, inheritedPrefixes);
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
 									token['value'] = variableName;
