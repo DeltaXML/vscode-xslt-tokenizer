@@ -256,13 +256,13 @@
             <xsl:sequence select="if (has-children($c.x)) then $startTag || '...' || $endTag else $startTag"/>
           </xsl:when>
           <xsl:when test="$c.x instance of text()">
-            <xsl:sequence select="'&quot;' || $c.x || '&quot;'"/>
+            <xsl:sequence select="'&quot;' || normalize-space($c.x) || '&quot;'"/>
           </xsl:when>
           <xsl:when test="$c.x instance of comment()">
-            <xsl:sequence select="'&lt;!-- ' || $c.x || ' --&gt;'"/>
+            <xsl:sequence select="'&lt;!-- ' || normalize-space($c.x) || ' --&gt;'"/>
           </xsl:when>
           <xsl:when test="$c.x instance of processing-instruction()">
-            <xsl:sequence select="'&lt;?' || name($c.x) || ' ' || $c.x || ' ?&gt;'"/>            
+            <xsl:sequence select="'&lt;?' || name($c.x) || ' ' || normalize-space($c.x) || ' ?&gt;'"/>            
           </xsl:when>
         </xsl:choose>
       </xsl:when>
@@ -319,7 +319,7 @@
             <xsl:sequence select="$key || $BC || '{' || ext:recurseForChildren(., $level, $spaceChars, $colorIndex) || $BC || '}'"/>
           </xsl:when>
           <xsl:when test="self::path">
-            <xsl:variable name="text" as="xs:string" select="if (matches(@text, '^@[^\s]+=')) then $BLACK || substring-before(@text,'=') || '=' || $GREEN || substring-after(@text,'=') else @text"/>
+            <xsl:variable name="text" as="xs:string" select="ext:processPathText(.)"/>
             <xsl:value-of select="$key || ext:nodeColor(@type) || $text || $YELLOW || ext:explainNode(node(), @location) || $RESET"/>
           </xsl:when>
           <xsl:when test="self::atomicValue">
@@ -334,6 +334,14 @@
       </xsl:for-each>
     </xsl:variable>
     <xsl:sequence select="$parts"/>    
+  </xsl:function>
+  
+  <xsl:function name="ext:processPathText" as="item()*">
+    <xsl:param name="c.x" as="item()*"/>
+    <xsl:sequence select="
+      if (matches($c.x/@text, '^@[^\s]+=')) then
+        $BLACK || substring-before($c.x/@text,'=') || '=' || $GREEN || substring-after($c.x/@text,'=') 
+      else $c.x/@text"/>
   </xsl:function>
   
   <xsl:function name="ext:nodeType" as="xs:string?">
