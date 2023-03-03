@@ -459,9 +459,25 @@
 						"type": "boolean",
 						"description": "Default: 'true'. If set 'false' any -export output is generated but XSLT is not executed"
 					},
+					"relocate": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "When set 'on' and 'export', operations like doc() will be relative to the the SEF file location when it was loaded"
+					},
 					"resultPath": {
 						"type": "string",
 						"description": "The destination path for the XSLT result"
+					},
+					"timing": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Display version and timing information to the standard error output"
 					},
 					"parameters": {
 						"description": "The xsl:param values for the XSLT",

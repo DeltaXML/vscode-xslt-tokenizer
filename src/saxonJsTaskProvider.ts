@@ -17,6 +17,8 @@ interface XSLTJSTask {
     useJsonSource?: boolean;
     execute?: boolean;
     resultPath: string;
+    relocate?: string;
+    timing?: string;
     unprefixedElementNames?: string;
     parameters?: XSLTParameter[];
     initialTemplate?: string;
@@ -219,6 +221,12 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
                         break;
                     case 'resultPath':
                         propNameValue = '-o:' + propValue;
+                        break;
+                    case 'relocate':
+                        propNameValue = '-relocate:' + propValue;
+                        break;
+                    case 'timing':
+                        if (propValue !== 'off') propNameValue = '-t';
                         break;
                     case 'initialTemplate':
                         propNameValue = propValue.length === 0 ? '-it' : '-it:' + propValue;
