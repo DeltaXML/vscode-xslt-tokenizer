@@ -1587,6 +1587,7 @@ export class XsltTokenDiagnostics {
 						// end checks
 						let functionToken: BaseToken | null = null;
 						const isBrackets = xpathCharType === CharLevelState.lB;
+						const isSquareBr = xpathCharType === CharLevelState.lPr;
 						switch (xpathCharType) {
 							case CharLevelState.lBr:
 								let curlyBraceType = CurlyBraceType.None;
@@ -1633,14 +1634,16 @@ export class XsltTokenDiagnostics {
 							case CharLevelState.lPr:
 								let hasContextItem = false;
 								if (prevToken) {
-									if (isBrackets) {
+									if (isBrackets || isSquareBr) {
+										// e.g. brackets /div/(@class) or predicate (array constructor) /div![@class]
 										hasContextItem = prevToken.charType === CharLevelState.sep && (prevToken.value === '/' || prevToken.value === '!');
 										if (!hasContextItem) hasContextItem = prevToken.tokenType === TokenLevelState.simpleType;
 										if (!hasContextItem && index > 2 && (prevToken.tokenType === TokenLevelState.function || prevToken.tokenType === TokenLevelState.variable)) {
 											const prevToken2 = allTokens[index - 2];
 											hasContextItem = prevToken2.charType === CharLevelState.sep && (prevToken2.value === '/' || prevToken2.value === '!');
 										}
-									} else {
+									} 
+									if (!isBrackets && !hasContextItem) {
 										hasContextItem = XsltTokenDiagnostics.providesContext(prevToken);
 									}
 								}
