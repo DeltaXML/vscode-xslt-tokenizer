@@ -1234,6 +1234,7 @@ export enum ErrorType {
     MissingTemplateParam,
     IterateParamInvalid,
     MissingPrefixInList,
+    AnonymousFunctionSyntax,
     TemplateNameUnresolved,
     TemplateModeUnresolved,
     AttributeSetUnresolved,

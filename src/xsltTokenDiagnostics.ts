@@ -1692,7 +1692,21 @@ export class XsltTokenDiagnostics {
 										if (poppedData.token.value === 'then') {
 											poppedData.token['error'] = ErrorType.BracketNesting;
 											problemTokens.push(poppedData.token);
+										} else if (xpathCharType === CharLevelState.rB && poppedData.token.context?.value === 'function') {
+											let hasProblem = false;
+											if (index === allTokens.length - 1) {
+												hasProblem = true;
+											} else {
+												const nextToken = allTokens[index + 1].value;
+												hasProblem = !(nextToken === '{' || nextToken === '{}');
+											}
+											if (hasProblem) {
+												const t = poppedData.token.context!;
+												t.error = ErrorType.AnonymousFunctionSyntax;
+												problemTokens.push(t);
+											}
 										}
+
 										let regexSpecial = false;
 										inScopeXPathVariablesList = poppedData.variables;
 										preXPathVariable = poppedData.preXPathVariable;
@@ -2955,6 +2969,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XMLAttributeName:
 					msg = `XML: Invalid attribute names on element '${tokenValue}'`;
+					break;
+				case ErrorType.AnonymousFunctionSyntax:
+					msg = `XPath: Expected syntax: 'function($v) {expression}'`;
 					break;
 				case ErrorType.XMLAttributeXMLNS:
 					msg = `XML: Invalid prefix for attribute on element '${tokenValue}'`;
