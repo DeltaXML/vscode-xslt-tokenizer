@@ -1598,13 +1598,18 @@ export class XsltTokenDiagnostics {
 									} else if (prevToken.value === 'array') {
 										curlyBraceType = CurlyBraceType.Array;
 									}
+									if (curlyBraceType === CurlyBraceType.Map || curlyBraceType === CurlyBraceType.Array) {
+										const prevToken2Val = index > 2? allTokens[index - 2].value : '';
+										setContextItemProp = prevToken2Val === '!' || prevToken2Val === '/';
+									}
 								} else if (prevToken && prevToken.tokenType === TokenLevelState.anonymousFunction) {
 									setContextItemProp = prevToken.value === '->';
 								}
 								const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
 								if (curlyBraceType === CurlyBraceType.Map) {
 									stackItem.awaitingMapKey = true;
-								} else if (setContextItemProp) {
+								} 
+								if (setContextItemProp) {
 									stackItem.hasContextItem = true;
 								}
 								xpathStack.push(stackItem);
