@@ -22,7 +22,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **SaxonJS 2 Interactive (IXSL)** | Language support for [Saxon interactive extensions](https://www.saxonica.com/saxon-js/documentation/index.html#!ixsl-extension)
 | **Syntax Highlighting**   | Fast and precise - using [Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
 | **Code Formatting**       | XSLT instruction elements, attributes and multi-line XPath expressions
-| **Code Diagnostics\***      | For XPath Syntax, XSLT Instructions, variable/param references, all XPath symbols
+| **XSLT/XPath Linter\***   | For XPath Syntax, XSLT Instructions, cross-moodule variable/param references, all XPath symbols
 | **XSLT/XPath Processing** | VS Code Task Support for [Saxon](https://www.saxonica.com/documentation10/index.html) ([Java](https://adoptopenjdk.net/installation.html)) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html) ([NodeJS](https://nodejs.org/en/))
 | **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names *(uses last XML opened in VS Code)*
 | **XPath Tester**          | Support for companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension for XML Analysis or XPath Testing
@@ -34,6 +34,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Symbol Breadcrumbs**    | Shows location within the code hierarchy
 | **Extract xsl:function**  | Refactors selected XSLT instructions or XPath expression passing fn args as required
 | **Extract xsl:template**  | Refactors selected XSLT instructions passing xsl:params as required
+| **Extract xsl:variable**  | Refactors selected XPath expression as an XSLT variable
 | **Rename Symbol**         | All in-scope usages of the symbol will be renamed - across all imported stylesheet modules 
 | **Goto Symbol**           | Quick access via filterable list of code symbols
 | **Goto Definition**       | For all symbol references like variables, parameters, functions, modes, accumulators etc.
@@ -41,11 +42,12 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Goto (Peek) References**  | Inline view of references for variables, functions etc. *(includes references from imported modules)*
 | **Find All References**       | View and navigate between all references for a selected symbol in the References Pane
 | **VS Code Tasks**         | Configurable XSLT tasks for Saxon and Saxon-JS Prcoessors - with user-input options
-| **Bracket Matching**      | For `()`, `{}`, and `[]`
+| **XSLT/XPath Linter**     | Checks syntax and integrity of symbol references across all imported modules
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
 | **Variable watcher**      | Auto-complete for `xsl:message` for local XSLT/XPath variables - output shown in terminal at runtime
-| **Colorised xsl:message**      | use `ext:print()` function to format and colorise XPath 3.1 types like maps and arrays
+| **Colorised xsl:message** | use `ext:print()` function to format and colorise XPath 3.1 types like maps and arrays
+| **Documentation**         | Features are documented in the: [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) 
 |||
 
    \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
