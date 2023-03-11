@@ -2111,6 +2111,7 @@ export class XsltTokenDiagnostics {
 			token.tokenType === TokenLevelState.nodeNameTest ||
 			token.tokenType === TokenLevelState.nodeType ||
 			token.tokenType === TokenLevelState.variable ||
+			token.tokenType === TokenLevelState.mapNameLookup ||
 			token.charType === CharLevelState.rB ||
 			token.charType === CharLevelState.rPr ||
 			(
