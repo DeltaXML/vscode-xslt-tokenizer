@@ -238,7 +238,7 @@
     <xsl:param name="c.x" as="node()?"/>
     <xsl:param name="location" as="xs:string"/>
     <xsl:choose>
-      <xsl:when test="$location eq 'root()'">
+      <xsl:when test="starts-with($location,'root()')">
         <xsl:choose>
           <xsl:when test="$c.x[self::ext:attribute]">
             <xsl:sequence select="name($c.x/@*) || '=&quot;' || $c.x/@* || '&quot;'"/>
