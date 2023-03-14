@@ -1692,7 +1692,7 @@ export class XsltTokenDiagnostics {
 										if (poppedData.token.value === 'then') {
 											poppedData.token['error'] = ErrorType.BracketNesting;
 											problemTokens.push(poppedData.token);
-										} else if (xpathCharType === CharLevelState.rB && poppedData.token.context?.value === 'function') {
+										} else if (xpathCharType === CharLevelState.rB && poppedData.token.context?.tokenType !== TokenLevelState.simpleType && poppedData.token.context?.value === 'function') {
 											let hasProblem = false;
 											if (index === allTokens.length - 1) {
 												hasProblem = true;
