@@ -90,6 +90,8 @@ export class DocumentChangeHandler {
 				triggerSuggest = true;
 			} else if (prevChar === '<' && activeChange.text === '?') {
 				triggerSuggest = true;
+			} else if (XsltTokenDiagnostics.nameCharRgx.test(activeChange.text) && XsltTokenDiagnostics.nameCharRgx.test(prevChar)) {
+				triggerSuggest = false;
 			} else {
 				const prevWordRange = activeChange.range.start.character > 1 ? e.document.getWordRangeAtPosition(activeChange.range.start.translate(0, -2)) : undefined;
 				if (prevWordRange) {
@@ -100,7 +102,6 @@ export class DocumentChangeHandler {
 				}
 			}
 		}
-		// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {
@@ -109,6 +110,7 @@ export class DocumentChangeHandler {
 			}
 
 			if (!isCloseTagFeature && !skipTrigger) {
+				// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
 				setTimeout(() => {
 					vscode.commands.executeCommand('editor.action.triggerSuggest');
 				}, 10);
