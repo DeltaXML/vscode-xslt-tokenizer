@@ -228,7 +228,7 @@
     <xsl:variable name="maxLength" as="xs:integer" select="25"/>
     <xsl:sequence select="
       if ($nodeType eq 'element') then 
-        (if (normalize-space($c.x) ne '') then ext:formatValue($c.x, $maxLength) else let $a := $c.x/(@name,@id,@class,@*)[1] return 
+        (if (normalize-space($c.x) ne '') then ext:formatValue(string-join($c.x//text(),' '), $maxLength) else let $a := $c.x/(@name,@id,@class,@*)[1] return 
               if ($a) then ext:formatValue('@' || name($a) || '=' || xs:string($a), $maxLength) else ext:formatValue('[empty-element]', $maxLength))
       else ext:formatValue($c.x, $maxLength)"/>
   </xsl:function>
@@ -276,11 +276,13 @@
     <xsl:param name="c.x" as="item()*"/>
     <xsl:param name="maxLength" as="xs:integer"/>
     <xsl:variable name="ellipsis" as="xs:string" select="'...'"/>
-    <xsl:variable name="max" as="xs:integer" select="$maxLength - string-length($ellipsis)"/>
+    <xsl:variable name="maxWithEllipsis" as="xs:integer" select="$maxLength - string-length($ellipsis)"/>
+
     <xsl:sequence select="
       let $nt := normalize-space($c.x),
-        $t := substring($nt, 1, $max),
-        $addDots := string-length($nt) gt $max,
+        $addDots := string-length($nt) gt $maxLength,
+                    $len := if ($addDots) then $maxWithEllipsis else $maxLength,
+                    $t := substring($nt, 1, $len),
         $tdiff := $maxLength - string-length($t),
         $append := if ($addDots) then '...' else string-join(for $x in 1 to $tdiff return ' ', '')
       return $t || $append"/>
