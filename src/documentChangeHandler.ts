@@ -47,7 +47,6 @@ export class DocumentChangeHandler {
 		if (!activeChange || (activeChange.text.length > 2 && !activeChange.text.endsWith('::'))) {
 			return;
 		}
-		let triggerSuggest = false;
 		if (activeChange.text === '/' && activeChange.rangeLength === 0) {
 			let nextChar = e.document.getText().charAt(activeChange.rangeOffset + 1);
 			if (nextChar === '>') {
@@ -80,28 +79,7 @@ export class DocumentChangeHandler {
 				skipTrigger = true;
 			}
 		}
-		if (!skipTrigger && activeChange.rangeOffset > 10) {
-			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
-			if (prevChar === ' ') {
-				prevChar = e.document.getText().charAt(activeChange.rangeOffset - 2);
-			}
-
-			if ((Data.completionTriggers.indexOf(prevChar)) > -1 && activeChange.text.length === 1 && (activeChange.text === ' ' || XsltTokenDiagnostics.nameStartCharRgx.test(activeChange.text))) {
-				triggerSuggest = true;
-			} else if (prevChar === '<' && activeChange.text === '?') {
-				triggerSuggest = true;
-			} else if (XsltTokenDiagnostics.nameCharRgx.test(activeChange.text) && XsltTokenDiagnostics.nameCharRgx.test(prevChar)) {
-				triggerSuggest = false;
-			} else {
-				const prevWordRange = activeChange.range.start.character > 1 ? e.document.getWordRangeAtPosition(activeChange.range.start.translate(0, -2)) : undefined;
-				if (prevWordRange) {
-					const prevWord = e.document.getText(prevWordRange);
-					if (Data.triggerWords.indexOf(prevWord) !== -1) {
-						triggerSuggest = true;
-					}
-				}
-			}
-		}
+		const triggerSuggest = DocumentChangeHandler.setTriggerSuggestP1(skipTrigger, activeChange, e);
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<') {
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {
@@ -158,6 +136,33 @@ export class DocumentChangeHandler {
 		} else {
 			this.lastChangePerformed = null;
 		}
+	}
+
+	public static setTriggerSuggestP1(skipTrigger: boolean, activeChange: vscode.TextDocumentContentChangeEvent, e: vscode.TextDocumentChangeEvent) {
+		let triggerSuggest = false;
+		if (!skipTrigger && activeChange.rangeOffset > 10) {
+			let prevChar = e.document.getText().charAt(activeChange.rangeOffset - 1);
+			if (prevChar === ' ') {
+				prevChar = e.document.getText().charAt(activeChange.rangeOffset - 2);
+			}
+
+			if ((Data.completionTriggers.indexOf(prevChar)) > -1 && activeChange.text.length === 1 && (activeChange.text === ' ' || XsltTokenDiagnostics.nameStartCharRgx.test(activeChange.text))) {
+				triggerSuggest = true;
+			} else if (prevChar === '<' && activeChange.text === '?') {
+				triggerSuggest = true;
+			} else if (XsltTokenDiagnostics.nameCharRgx.test(activeChange.text) && XsltTokenDiagnostics.nameCharRgx.test(prevChar)) {
+				triggerSuggest = false;
+			} else {
+				const prevWordRange = activeChange.range.start.character > 1 ? e.document.getWordRangeAtPosition(activeChange.range.start.translate(0, -2)) : undefined;
+				if (prevWordRange) {
+					const prevWord = e.document.getText(prevWordRange);
+					if (Data.triggerWords.indexOf(prevWord) !== -1) {
+						triggerSuggest = true;
+					}
+				}
+			}
+		}
+		return triggerSuggest;
 	}
 
 	private checkEndTag(endTagData: TagRenamePosition, startTagPos: number, startTagChange: vscode.TextDocumentContentChangeEvent): boolean {
