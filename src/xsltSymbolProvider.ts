@@ -1224,6 +1224,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return href;
 		} else if (href.startsWith('file:///')) {
 			return href.substring(7);
+		} else if (href.startsWith('file:/')) {
+			return href.substring(5);
 		} else {
 			href = href.startsWith('file:') ? href.substring(5) : href;
 			let basePath = path.dirname(documentPath);
