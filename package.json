@@ -312,6 +312,10 @@
 					},
 					"traceOutFilename": {
 						"type": "string",
+						"description": "Display stylesheet tracing information using the class name supplied. An empty-string causes a system-supplied traceListener to be used."
+					},
+					"traceListener": {
+						"type": "string",
 						"description": "Indicates that the output of the trace() function should be directed to a specified file"
 					},
 					"timing": {
