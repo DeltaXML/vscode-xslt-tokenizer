@@ -1865,6 +1865,9 @@ export class XsltTokenDiagnostics {
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variable of type 'function'
 									incrementFunctionArity = false;
+								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.complexExpression && prevToken.value === 'if') {
+									token.error = ErrorType.XPathConditionExpected;
+									problemTokens.push(token);
 								} else if (token.value === '=>') {
 									incrementFunctionArity = true;
 								}
@@ -2948,6 +2951,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathAwaiting:
 					msg = `XPath: Expected expression following: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathConditionExpected:
+					msg = `XPath: Expected '($expression)' but found: '()'`;
 					break;
 				case ErrorType.DTD:
 					msg = `XML: DTD position error: '${tokenValue}'`;
