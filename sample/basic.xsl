@@ -5,5 +5,5 @@
     xmlns:j="http://www.w3.org/2013/XSLT/xml-to-json"
     exclude-result-prefixes="xs fn j" version="3.0">
     
-    <xsl:variable name="test" as="xs:string" select="if (1 eq 1) eq (1) then 1 else 2"/>
+    <xsl:variable name="test" as="xs:string" select="if (1 eq 1) a then 1 else 2"/>
 </xsl:stylesheet>

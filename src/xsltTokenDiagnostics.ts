@@ -1676,8 +1676,8 @@ export class XsltTokenDiagnostics {
 									if (ctx) {
 										const isIfExpr = ctx.tokenType === TokenLevelState.complexExpression && ctx.value === 'if';
 										if (isIfExpr) {
-											const tokenAfterIf = allTokens[index + 1];
-											if (tokenAfterIf.value !== 'then') {
+											const tokenAfterIf = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index);
+											if (tokenAfterIf && tokenAfterIf.value !== 'then') {
 												tokenAfterIf['error'] = ErrorType.XPathIfAwaitingThen;
 												problemTokens.push(tokenAfterIf);
 											}
@@ -1891,7 +1891,7 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
 					case TokenLevelState.mapNameLookup:
-						if (token.error) {
+						if (token.error && token.error !== ErrorType.XPathIfAwaitingThen) {
 							problemTokens.push(token);
 						} else {
 							let tokenValue;
@@ -2749,6 +2749,18 @@ export class XsltTokenDiagnostics {
 		return result;
 	}
 
+	private static nextNonCommentToken(allTokens: BaseToken[], index: number) {
+		let item: BaseToken|undefined;
+		for (let i = index + 1; i < allTokens.length; i++) {
+			const newItem = allTokens[i];
+			if (newItem.tokenType !== TokenLevelState.comment) {
+				item = newItem;
+				break;
+			}
+		}
+		return item;
+	}
+
 	private static appendDiagnosticsFromProblemTokens(variableRefDiagnostics: vscode.Diagnostic[], tokens: BaseToken[]): vscode.Diagnostic[] {
 		tokens.forEach(token => {
 			let line = token.line;
@@ -3027,8 +3039,6 @@ export class XsltTokenDiagnostics {
 		});
 		return variableRefDiagnostics;
 	}
-
-
 
 	private static getMatchingSymbol(text: string) {
 		let r = '';
