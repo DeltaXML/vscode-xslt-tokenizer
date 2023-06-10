@@ -1868,6 +1868,12 @@ export class XsltTokenDiagnostics {
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.complexExpression && prevToken.value === 'if') {
 									token.error = ErrorType.XPathConditionExpected;
 									problemTokens.push(token);
+								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.anonymousFunction) {
+									const nexttoken = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index);
+									if (nexttoken && nexttoken.value.charAt(0) !== '{') {
+										prevToken.error = ErrorType.AnonymousFunctionSyntax;
+										problemTokens.push(prevToken);
+									}
 								} else if (isEmptyBracketsToken && prevToken?.charType === CharLevelState.dSep && prevToken.value === '()') {
 									const prevToken2 = XsltTokenDiagnostics.prevNonCommentToken(allTokens, index - 1);
 									let isError = false;
