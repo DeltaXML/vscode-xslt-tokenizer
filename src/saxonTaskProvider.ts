@@ -220,6 +220,13 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                     case 'traceOutFilename':
                         commandLineArgs.push('-traceOut:' + propValue);
                         break;
+                    case 'traceListener':
+                        if (propValue.length > 0) {
+                        commandLineArgs.push('-T:' + propValue);
+                        } else {
+                            commandLineArgs.push('-T');
+                        }
+                        break;
                     case 'timing':
                         if (propValue !== "off") {
                             commandLineArgs.push('-t');
