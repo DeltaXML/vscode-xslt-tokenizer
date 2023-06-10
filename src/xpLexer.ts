@@ -1264,6 +1264,7 @@ export enum ErrorType {
     XMLAttEqualExpected,
     XMLDupllicateAtt,
     XPathUnexpected,
+    XPathIfAwaitingThen,
     XPathAwaiting,
     XPathStringLiteral,
     BracketNesting,

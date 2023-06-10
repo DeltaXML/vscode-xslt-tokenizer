@@ -1670,6 +1670,20 @@ export class XsltTokenDiagnostics {
 							case CharLevelState.rB:
 							case CharLevelState.rPr:
 							case CharLevelState.rBr:
+								if (xpathCharType === CharLevelState.rB && xpathStack.length > 0) {
+									const lastStackToken = xpathStack[xpathStack.length - 1];
+									const ctx = lastStackToken.token.context;
+									if (ctx) {
+										const isIfExpr = ctx.tokenType === TokenLevelState.complexExpression && ctx.value === 'if';
+										if (isIfExpr) {
+											const tokenAfterIf = allTokens[index + 1];
+											if (tokenAfterIf.value !== 'then') {
+												tokenAfterIf['error'] = ErrorType.XPathIfAwaitingThen;
+												problemTokens.push(tokenAfterIf);
+											}
+										}
+									}
+								}
 
 								if (xpathStack.length > 1) {
 									let deleteCount = 0;
@@ -2915,6 +2929,10 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathOperatorUnexpected:
 					msg = `XPath: Operator unexpected at this position: '${tokenValue}'`;
+					break;
+					break;
+				case ErrorType.XPathIfAwaitingThen:
+					msg = `XPath: 'then' expected after 'if ($condition)' but found: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathAwaiting:
 					msg = `XPath: Expected expression following: '${tokenValue}'`;
