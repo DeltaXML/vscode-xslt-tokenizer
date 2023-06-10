@@ -740,6 +740,8 @@ export class XPathLexer {
         if (!((lastChar === firstChar && lastToken.value.length > 1) || (lastToken.value.length > 6 &&
             (lastToken.value.startsWith('&quot;') && lastToken.value.endsWith('&quot;')) || (lastToken.value.startsWith('&apos;') && lastToken.value.endsWith('&apos;'))))) {
             lastToken['error'] = ErrorType.XPathStringLiteral;
+        } else if (lastToken.value.match(`[^'](('')|(''''))$`)) {
+            lastToken['error'] = ErrorType.XPathStringLiteral;
         }
     }
 
