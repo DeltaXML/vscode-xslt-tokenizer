@@ -1868,6 +1868,20 @@ export class XsltTokenDiagnostics {
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.complexExpression && prevToken.value === 'if') {
 									token.error = ErrorType.XPathConditionExpected;
 									problemTokens.push(token);
+								} else if (isEmptyBracketsToken && prevToken?.charType === CharLevelState.dSep && prevToken.value === '()') {
+									const prevToken2 = XsltTokenDiagnostics.prevNonCommentToken(allTokens, index - 1);
+									let isError = false;
+									if (prevToken2) {
+										if (prevToken2.tokenType === TokenLevelState.function) {
+											const v2 = prevToken2.value;
+											 // current() is only built-in fn that may return a function:
+											isError = !v2.includes(':') && v2 !== 'current';
+										}
+									}
+									if (isError) {
+										token.error = ErrorType.XPathUnexpected;
+										problemTokens.push(token);
+									}
 								} else if (token.value === '=>') {
 									incrementFunctionArity = true;
 								}
@@ -2755,6 +2769,18 @@ export class XsltTokenDiagnostics {
 	private static nextNonCommentToken(allTokens: BaseToken[], index: number) {
 		let item: BaseToken|undefined;
 		for (let i = index + 1; i < allTokens.length; i++) {
+			const newItem = allTokens[i];
+			if (newItem.tokenType !== TokenLevelState.comment) {
+				item = newItem;
+				break;
+			}
+		}
+		return item;
+	}
+
+	private static prevNonCommentToken(allTokens: BaseToken[], index: number) {
+		let item: BaseToken|undefined;
+		for (let i = index - 1; i > 0; i--) {
 			const newItem = allTokens[i];
 			if (newItem.tokenType !== TokenLevelState.comment) {
 				item = newItem;
