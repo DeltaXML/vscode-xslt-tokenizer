@@ -94,9 +94,9 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 
     private addTemplateTask() {
         let saxonJarDefault = '${config:XSLT.tasks.saxonJar}';
-        let xmlSourceValue = '${file}';
+        let xmlSourceValue = '${command:xslt-xpath.pickXmlSourceFile}';
         let xsltFilePath = '${command:xslt-xpath.pickXsltFile}';
-        let resultPathValue = '${command:xslt-xpath.pickResultFile}';
+        let resultPathValue = '${workspaceFolder}/xsl-out/result1.xml';
 
         let xsltTask: XSLTTask = {
             type: 'xslt',
