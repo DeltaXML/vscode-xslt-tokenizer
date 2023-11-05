@@ -516,6 +516,46 @@ export class XPathFunctionDetails {
 			description: "Returns the angle in radians subtended at the origin by the point on a plane with coordinates (x, y) and the positive x-axis."
 		},
 		{
+			name: "sql:connect",
+			signature: "connect( options as map(*) ) as javatype:java.sql.Connection",
+			description: "Returns an external object representing a connection to a SQL database"
+		},
+		{
+			name: "sql:delete",
+			signature: "delete( connection as javatype:java.sql.Connection, table as xs:string, predicate as xs:string) as item()?",
+			description: "Executes a SQL DELETE statement, returning no result"
+		},
+		{
+			name: "sql:execute",
+			signature: "execute( connection as javatype:java.sql.Connection, statement as xs:string ) as item()?",
+			description: "Executes a SQL statement, returning no result."
+		},
+		{
+			name: "sql:insert",
+			signature: "insert( connection as javatype:java.sql.Connection,  table as xs:string,  values as map(*)) as item()?",
+			description: "Executes a SQL INSERT statement (adding a new row to a table), returning no result"
+		},
+		{
+			name: "sql:prepared-query",
+			signature: "prepared-query( connection as javatype:java.sql.Connection, query as xs:string ) as function(*)",
+			description: "Prepares a SQL query for execution, returning a function which can be called with parameters to execute the query."
+		},
+		{
+			name: "sql:prepared-statement",
+			signature: "prepared-statement( connection as javatype:java.sql.Connection, statement as xs:string ) as function(*)",
+			description: "Prepares a SQL statement for execution, returning a function which can be called with parameters to execute the statement, returning no result"
+		},
+		{
+			name: "sql:query",
+			signature: "query( connection as javatype:java.sql.Connection, table as xs:string, columns as xs:string* ) as map(*)*",
+			description: "Executes a SQL query, returning the result as a map."
+		},
+		{
+			name: "sql:update",
+			signature: "update( connection as javatype:java.sql.Connection, table as xs:string, predicate as xs:string, changes as map(*) ) as item()?",
+			description: "Executes a SQL UPDATE statement, returning no result."
+		},
+		{
 
 			name: "codepoints-to-string",
 			signature: "codepoints-to-string( arg as xs:integer* ) as xs:string",
