@@ -277,11 +277,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			xsltPrefixesToURIs.set('array', XSLTnamespaces.Array);
 			xsltPrefixesToURIs.set('map', XSLTnamespaces.Map);
 			xsltPrefixesToURIs.set('math', XSLTnamespaces.Map);
+			xsltPrefixesToURIs.set('sql', XSLTnamespaces.SQL);
 			xsltPrefixesToURIs.set('xs', XSLTnamespaces.XMLSchema);
 			xsltPrefixesToURIs.set('fn', XSLTnamespaces.XPath);
 			xsltPrefixesToURIs.set('xsl', XSLTnamespaces.XSLT);
 			xsltPrefixesToURIs.set('ixsl', XSLTnamespaces.IXSL);
-			inheritedPrefixes = inheritedPrefixes.concat(['array', 'map', 'math', 'xs', 'fn', 'xsl', 'ixsl']);
+			inheritedPrefixes = inheritedPrefixes.concat(['array', 'map', 'math', 'sql', 'xs', 'fn', 'xsl', 'ixsl']);
 		}
 
 		allTokens.forEach((token, index) => {
