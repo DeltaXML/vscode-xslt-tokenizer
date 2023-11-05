@@ -354,7 +354,7 @@ export class XsltTokenDiagnostics {
 		let insideGlobalFunction = false;
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
-		const htmlParserString = <string|undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
+		const htmlParserString = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
 		XsltTokenDiagnostics.isHtmlParserJarSet = !!htmlParserString && htmlParserString.trim().length > 0;
 
 		if (languageConfig.isVersion4) {
@@ -1599,7 +1599,7 @@ export class XsltTokenDiagnostics {
 										curlyBraceType = CurlyBraceType.Array;
 									}
 									if (curlyBraceType === CurlyBraceType.Map || curlyBraceType === CurlyBraceType.Array) {
-										const prevToken2Val = index > 2? allTokens[index - 2].value : '';
+										const prevToken2Val = index > 2 ? allTokens[index - 2].value : '';
 										setContextItemProp = prevToken2Val === '!' || prevToken2Val === '/';
 									}
 								} else if (prevToken && prevToken.tokenType === TokenLevelState.anonymousFunction) {
@@ -1608,7 +1608,7 @@ export class XsltTokenDiagnostics {
 								const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
 								if (curlyBraceType === CurlyBraceType.Map) {
 									stackItem.awaitingMapKey = true;
-								} 
+								}
 								if (setContextItemProp) {
 									stackItem.hasContextItem = true;
 								}
@@ -1647,7 +1647,7 @@ export class XsltTokenDiagnostics {
 											const prevToken2 = allTokens[index - 2];
 											hasContextItem = prevToken2.charType === CharLevelState.sep && (prevToken2.value === '/' || prevToken2.value === '!');
 										}
-									} 
+									}
 									if (!isBrackets && !hasContextItem) {
 										hasContextItem = XsltTokenDiagnostics.providesContext(prevToken);
 									}
@@ -1880,7 +1880,7 @@ export class XsltTokenDiagnostics {
 									if (prevToken2) {
 										if (prevToken2.tokenType === TokenLevelState.function) {
 											const v2 = prevToken2.value;
-											 // current() is only built-in fn that may return a function:
+											// current() is only built-in fn that may return a function:
 											isError = !v2.includes(':') && v2 !== 'current';
 										}
 									}
@@ -2459,6 +2459,9 @@ export class XsltTokenDiagnostics {
 					case XSLTnamespaces.Math:
 						isValid = FunctionData.math.indexOf(fNameParts[1]) > -1;
 						break;
+					case XSLTnamespaces.SQL:
+						isValid = FunctionData.sql.indexOf(fNameParts[1]) > -1;
+						break;
 					case XSLTnamespaces.XMLSchema:
 						isValid = FunctionData.schema.indexOf(fNameParts[1]) > -1;
 						break;
@@ -2494,6 +2497,9 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTnamespaces.Math:
 						isValid = FunctionData.math.indexOf(fNameParts[1]) > -1;
+						break;
+					case XSLTnamespaces.SQL:
+						isValid = FunctionData.sql.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.XMLSchema:
 						isValid = FunctionData.schema.indexOf(fNameParts[1]) > -1;
@@ -2773,7 +2779,7 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static nextNonCommentToken(allTokens: BaseToken[], index: number) {
-		let item: BaseToken|undefined;
+		let item: BaseToken | undefined;
 		for (let i = index + 1; i < allTokens.length; i++) {
 			const newItem = allTokens[i];
 			if (newItem.tokenType !== TokenLevelState.comment) {
@@ -2785,7 +2791,7 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static prevNonCommentToken(allTokens: BaseToken[], index: number) {
-		let item: BaseToken|undefined;
+		let item: BaseToken | undefined;
 		for (let i = index - 1; i > 0; i--) {
 			const newItem = allTokens[i];
 			if (newItem.tokenType !== TokenLevelState.comment) {

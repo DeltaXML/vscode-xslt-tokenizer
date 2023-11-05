@@ -421,6 +421,18 @@ export class FunctionData {
 		"tan#1"
 	];
 
+	public static readonly sql = [
+		"connect#1",
+		"delete#3",
+		"execute#2",
+		"insert#3",
+		"prepared-query#2",
+		"prepared-statement#2",
+		"query#3",
+		"query#4",
+		"update#4"
+	];
+
 	public static readonly schema = [
 		"string#1",
 		"boolean#1",
