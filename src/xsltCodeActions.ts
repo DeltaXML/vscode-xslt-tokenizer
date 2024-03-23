@@ -93,7 +93,17 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
-		const { rangeTagType: roughSelectionType, firstTagName, lastTagName } = this.estimateSelectionType(document, range);
+		let roughSelectionType : RangeTagType = RangeTagType.unknown;
+		let firstTagName: string = '';
+		let lastTagName: string = '';
+		try {
+			const result = this.estimateSelectionType(document, range);
+			roughSelectionType = result.rangeTagType;
+			firstTagName = result.firstTagName;
+			lastTagName = result.lastTagName;
+		} catch (e: any) {
+			console.error("Error on estimateSelectionType: " + e);
+		}
 
 		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
 		let codeActions: vscode.CodeAction[] | undefined = [];
@@ -144,8 +154,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const symbolKind = firstSymbol?.kind;
 		const extraDescendants = symbolKind === vscode.SymbolKind.Event || symbolKind === vscode.SymbolKind.Field ? 1 : 0;
 		const ancestorOrSelfCount = ancestorOrSelfSymbols.length;
-		if (ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
-		const targetSymbolRange = ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
+		const isPrintRefFix = codeAction.title == XsltCodeActionKind.fixExternalPrintRef;
+		if (!isPrintRefFix && ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
+		const targetSymbolRange = isPrintRefFix ? range : ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
 
 		switch (codeAction.title) {
 			case XsltCodeActionKind.fixExternalPrintRef:
@@ -271,7 +282,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			}
 			const endLine = document.lineAt(endPosition.line).text;
 			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
-			if (endTagIndex > -1) {
+			if (startTagIndex > -1 && endTagIndex > -1) {
 				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }), expandText);
 				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }));
 				const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);
