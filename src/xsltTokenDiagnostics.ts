@@ -996,9 +996,9 @@ export class XsltTokenDiagnostics {
 							hasProblem = true;
 						}
 						if (!hasProblem && attType === AttributeType.UseAttributeSets) {
-							if (globalAttributeSetNames.indexOf(variableName) < 0 && variableName !== 'xsl:original') {
+							if (variableName.split(/ +/).some((name) => globalAttributeSetNames.indexOf(name) < 0 && name !== 'xsl:original')) {
 								token['error'] = ErrorType.AttributeSetUnresolved;
-								token.value = variableName;
+								token.value = variableName.split(/ +/).filter((name) => globalAttributeSetNames.indexOf(name) < 0);
 								problemTokens.push(token);
 								hasProblem = true;
 							}
