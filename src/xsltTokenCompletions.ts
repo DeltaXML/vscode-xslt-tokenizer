@@ -848,7 +848,7 @@ export class XsltTokenCompletions {
 												break;
 											default:
 												resultCompletions = XsltTokenCompletions.getNormalCompletions(position, elementNames, vscode.CompletionItemKind.Unit);
-												let nodeTypes = Data.cNodeTypes.map(axis => axis + '()');
+												let nodeTypes = Data.cNodeTypes.map(nType => nType + '()');
 												let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
 
 												resultCompletions = resultCompletions.concat(nodeCompletions);
