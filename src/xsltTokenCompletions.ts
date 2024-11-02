@@ -1122,7 +1122,7 @@ export class XsltTokenCompletions {
 		let attnamecompletions = XsltTokenCompletions.getNormalCompletions(position, attNameTests, vscode.CompletionItemKind.Unit);
 		let axes = Data.cAxes.map(axis => axis + '::');
 		let axisCompletions = XsltTokenCompletions.getCommandCompletions(position, axes, vscode.CompletionItemKind.Function);
-		let nodeTypes = Data.nodeTypes.map(axis => axis + '()');
+		let nodeTypes = Data.nodeTypes.map(nType => nType + '()');
 		let nodeCompletions = XsltTokenCompletions.getNormalCompletions(position, nodeTypes, vscode.CompletionItemKind.Property);
 		let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType));
 		let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
