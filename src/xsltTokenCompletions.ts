@@ -670,7 +670,7 @@ export class XsltTokenCompletions {
 					case TokenLevelState.nodeNameTest:
 						if (isOnRequiredToken && requiredChar === token.startCharacter + 1) {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/', '//', '::'].indexOf(prevToken.value) !== -1)) {
+							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/', '//', '::', '['].indexOf(prevToken.value) !== -1)) {
 								resultCompletions = XsltTokenCompletions.getTokenPathCompletions(token, elementNames, attrNames, globalInstructionData, importedInstructionData);
 								let axes = Data.cAxes.map(axis => axis + '::');
 								let axisCompletions = XsltTokenCompletions.getTokenCommandCompletions(token, true, axes, vscode.CompletionItemKind.Function);
@@ -1134,7 +1134,9 @@ export class XsltTokenCompletions {
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let elementCompletions = XsltTokenCompletions.getNormalCompletions(position, elementNameTests, vscode.CompletionItemKind.Unit);
 		let attnamecompletions = XsltTokenCompletions.getNormalCompletions(position, attNameTests, vscode.CompletionItemKind.Unit);
-		resultCompletions = elementCompletions.concat(attnamecompletions);
+		let axes = Data.cAxes.map(axis => axis + '::');
+		let axisCompletions = XsltTokenCompletions.getNormalCompletions(position, axes, vscode.CompletionItemKind.Function);
+		resultCompletions = elementCompletions.concat(attnamecompletions, axisCompletions);
 		return resultCompletions;
 	}
 	private static getTokenPathCompletions(token: BaseToken, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
