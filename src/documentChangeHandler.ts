@@ -44,7 +44,7 @@ export class DocumentChangeHandler {
 		}
 		let activeChange = e.contentChanges[0];
 		let skipTrigger = false;
-		if (!activeChange || (activeChange.text.length > 20 && !activeChange.text.endsWith('::'))) {
+		if (!activeChange || activeChange.text.length > 20) {
 			return;
 		}
 		if (activeChange.text === '/' && activeChange.rangeLength === 0) {
