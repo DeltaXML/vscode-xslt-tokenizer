@@ -8,6 +8,7 @@ import { Data, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { Console } from 'console';
 
 
 enum ElementSelectionType {
@@ -93,6 +94,25 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
+		let codeActions: vscode.CodeAction[] | undefined = [];
+
+		if (context.triggerKind === vscode.CodeActionTriggerKind.Automatic) {
+			const matchingRanges = context.diagnostics.filter(diagnostic => diagnostic.code === DiagnosticCode.externalPrintRef && diagnostic.range.start.line == range.start.line);
+			if (matchingRanges.length > 0) {
+				const quickFixAction = new vscode.CodeAction(XsltCodeActionKind.fixExternalPrintRef, vscode.CodeActionKind.QuickFix);
+				codeActions = [quickFixAction];
+			}
+		} else if (this.actionProps?.firstSymbol || this.actionProps?.lastSymbol) {
+			codeActions = context.diagnostics
+				.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef || diagnotic.code === DiagnosticCode.externalPrintRef)
+				.map(diagnostic => diagnostic.code === DiagnosticCode.parseHtmlRef ?
+					this.createCommandCodeAction(diagnostic) :
+					new vscode.CodeAction(XsltCodeActionKind.fixExternalPrintRef, vscode.CodeActionKind.QuickFix));
+		}
+		if (codeActions.length > 0) {
+			codeActions[0].isPreferred = true;
+		}
+
 		let roughSelectionType : RangeTagType = RangeTagType.unknown;
 		let firstTagName: string = '';
 		let lastTagName: string = '';
@@ -103,19 +123,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			lastTagName = result.lastTagName;
 		} catch (e: any) {
 			console.error("Error on estimateSelectionType: " + e);
-		}
-
-		const testTitle = `${RangeTagType[roughSelectionType]} [${firstTagName}] [${lastTagName}]`;
-		let codeActions: vscode.CodeAction[] | undefined = [];
-		// debug only:
-		//codeActions.push(new vscode.CodeAction(testTitle, vscode.CodeActionKind.Empty));
-		codeActions = context.diagnostics
-			.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef || diagnotic.code === DiagnosticCode.externalPrintRef)
-			.map(diagnostic => diagnostic.code === DiagnosticCode.parseHtmlRef ?
-				this.createCommandCodeAction(diagnostic) :
-				new vscode.CodeAction(XsltCodeActionKind.fixExternalPrintRef, vscode.CodeActionKind.QuickFix));
-		if (codeActions.length > 0) {
-			codeActions[0].isPreferred = true;
+			return codeActions;
 		}
 
 		switch (roughSelectionType) {
@@ -282,7 +290,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			}
 			const endLine = document.lineAt(endPosition.line).text;
 			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
-			if (startTagIndex > -1 && endTagIndex > -1) {
+			const bothTagsOK = startTagIndex > - 1 && endTagIndex > -1;
+			if (!bothTagsOK) {
+				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, range.start, expandText);
+			} else {
 				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }), expandText);
 				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }));
 				const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);
@@ -340,7 +351,6 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const expandTextVal: string | undefined = expandText[expandText.length - 1];
 
-		///const lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagPosition }))!;
 		this.actionProps = { document, range, firstSymbol, lastSymbol, expandTextVal };
 
 		return { rangeTagType, firstTagName, lastTagName };
