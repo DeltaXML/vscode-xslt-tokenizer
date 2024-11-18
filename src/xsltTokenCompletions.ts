@@ -1424,6 +1424,21 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('xsl:copy>\n\t$0\n</xsl:copy>');
 					completionItems.push(newItem);
+				} else if (tagName === 'xsl:accumulator-rule') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:accumulator-rule match="${1:pattern}" select="${2:xpath}"/>$0');
+					completionItems.push(newItem);
+				} else if (tagName === 'xsl:accumulator') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:accumulator name="${1:name}" initial-value="${2:value}">\n\t<xsl:accumulator-rule match="${3:pattern}" select="${4:xpath}"/>$0\n</xsl:accumulator>');
+					completionItems.push(newItem);
+				} else if (tagName === 'xsl:function') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:function name="${1:prefix:name}" as="${2:item()*}">\n\t<xsl:param name="${3:name}" as="${4:item()*}"/>\n\t$0\n</xsl:function>');
+					completionItems.push(newItem);
 				} else if (docType === DocumentTypes.XSLT40 && tagName === 'xsl:if') {
 					useCurrent = true;
 					const newItem = new vscode.CompletionItem(tagName + ' then else', vscode.CompletionItemKind.Struct);
