@@ -1146,7 +1146,7 @@ export class XsltTokenDiagnostics {
 				if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
-					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.charType === CharLevelState.rBr || prevToken.charType === CharLevelState.rPr))) {
+					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr))) {
 						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 							token.error = ErrorType.MissingContextItemGeneral;
 							problemTokens.push(token);
