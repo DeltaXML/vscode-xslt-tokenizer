@@ -1459,8 +1459,8 @@ export class XsltTokenDiagnostics {
 									// don't check
 								} else if (prevToken.tokenType === TokenLevelState.operator) {
 									if (prevToken.charType === CharLevelState.sep) {
-										const illegalPrevOperators = ['{', ':', '?'];
-										isXPathError = illegalPrevOperators.indexOf(prevToken.value) !== -1;
+										const invalidPrevOperators = ['{', '?'];
+										isXPathError = invalidPrevOperators.indexOf(prevToken.value) !== -1;
 									} else if (prevToken.charType === CharLevelState.dSep) {
 										const illegalPrevOperators = ['=>', '//', '..', '*:', '::'];
 										isXPathError = illegalPrevOperators.indexOf(prevToken.value) !== -1;
