@@ -195,11 +195,11 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// 	console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+				console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -1635,7 +1635,7 @@ export class XsltTokenCompletions {
 			let attrName = attrValueData[0];
 			let attrDocs = attrValueData[1];
 			const newItem = new vscode.CompletionItem(attrName, vscode.CompletionItemKind.Reference);
-			if (attrDocs.length > 0) {
+			if (attrDocs && attrDocs.length > 0) {
 				newItem.documentation = attrDocs;
 			}
 			newItem.insertText = new vscode.SnippetString(attrName);
