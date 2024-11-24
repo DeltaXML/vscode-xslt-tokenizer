@@ -1515,6 +1515,11 @@ export class XsltTokenCompletions {
 					newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
 					newItem.insertText = new vscode.SnippetString(tagName + ' $0/>');
 					completionItems.push(newItem);
+				} else if (tagName === 'subtreeProcessingMode') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('subtreeProcessingMode defaultMode="${1:text}">\n\t<subtrees>\n\t\t<subtree elemXpath="${3:/container}" mode="${4:data}"/>$0\n\t</subtrees>\n</subtreeProcessingMode>');
+					completionItems.push(newItem);
 				}
 			}
 			if (useCurrent) {
