@@ -50,7 +50,7 @@ export class XPathConfiguration {
 export class DCPConfiguration {
 	// initial configuration is for basic XProc support only
 	public static configuration: LanguageConfiguration = {
-		expressionAtts: ['xpath', 'when'],
+		expressionAtts: ['classXpath', 'elemXpath', 'when', 'xpath'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
 		linkElementAttrNames: ['file', 'path'],
 		nativePrefix: '',

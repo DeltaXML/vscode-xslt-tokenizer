@@ -73,6 +73,31 @@ export class DCPSchema implements SchemaData {
                 'inline': `Reports the differences inline within the MathML without duplicating A and B. If the differences are too complex to easily render inline, the 'detailed-adjacent' view is used.`
             }
         },
+        "moveDetectionTypes": {
+            base: ['xs:string'],
+            enum: ['restricted', 'unrestricted'],
+            detail: {
+                'restricted': `This mode only detects moves at the roots of added or deleted subtrees. This may offer a performance benefit in some cases.`,
+                'unrestricted': `This mode is used to detect moves anywhere in the tree.`
+            }
+        },
+        "subtreeType": {
+            base: ['xs:string'],
+            enum: ['text', 'data'],
+            detail: {
+                'text': `This mode sets the subtree mode to text.`,
+                'data': `This mode sets the subtree mode to data.`
+            }
+        },
+        "svgGranularityType": {
+            base: ['xs:string'],
+            enum: ['adjacent', 'detailed-adjacent', 'animate-inline'],
+            detail: {
+                'adjacent': `Reports the differences by repeating A and B SVG adjacent to each other.`,
+                'detailed-adjacent': `Reports the differences by repeating the A and B SVG adjacent to each other. Content within the adjacent A and B views is highlighted at the specific parts where it is different.`,
+                'animate-inline': `Reports SVG differences by animating them by changing the opacity from 1 to 0 for delete and 0 to 1 for add. This setting will override any other SVG configuration.`
+            }
+        },
         "invalidBehaviourType": {
             base: ['xs:string'],
             enum: ['compareAsXml', 'fail', 'propagateUp'],
@@ -192,12 +217,20 @@ export class DCPSchema implements SchemaData {
                 'processingInstructions': `Reports warning using processing instructions with the format <?dxml_warn warning content ?>.`
             }
         },
-        "columnKeyingModeType": {
+        "calsColumnKeyingModeType": {
             base: ['xs:string'],
             enum: ['auto', 'colname', 'position'],
             detail: {
                 'auto': `Automatically handles table column keying.`,
                 'colname': `Uses @colname attribute values as keys.`,
+                'position': `Uses table column positions as keys.`
+            }
+        },
+        "htmlColumnKeyingModeType": {
+            base: ['xs:string'],
+            enum: ['auto', 'position'],
+            detail: {
+                'auto': `Automatically handles table column keying.`,
                 'position': `Uses table column positions as keys.`
             }
         },
@@ -433,7 +466,7 @@ export class DCPSchema implements SchemaData {
             detail: `Extension points for modifying output filter chains, after element
  flattening.`},
         "standardConfig": {
-            elementNames: ['lexicalPreservation', 'outputFormatConfiguration', 'resultReadabilityOptions', 'tableConfiguration', 'calsTableConfiguration', 'htmlTableConfiguration', 'mathmlConfiguration'],
+            elementNames: ['lexicalPreservation', 'outputFormatConfiguration', 'resultReadabilityOptions', 'calsTableConfiguration', 'htmlTableConfiguration', 'mathmlConfiguration', 'svgConfiguration', 'comparisonReport', 'moveDetectionConfig', 'subtreeProcessingMode'],
             detail: `Genaral configuration options for the DocumentComparator - see
  'advancedConfig' for further options.`},
         "outputFormatConfiguration": {
@@ -501,7 +534,7 @@ export class DCPSchema implements SchemaData {
             detail: `Specifies how the child elements of 'orderless' elements should be output.`
         },
         "resultReadabilityOptions": {
-            elementNames: ['changeGatheringEnabled', 'detectMoves', 'elementSplittingEnabled', 'elementSplittingThreshold', 'modifiedWhitespaceBehaviour', 'moveAttributeXpath', 'orphanedWordDetectionEnabled', 'orphanedWordLengthLimit', 'orphanedWordMaxPercentage', 'mixedContentDetectionScope'],
+            elementNames: ['changeGatheringEnabled', 'detectMoves', 'removeMoveSource', 'elementSplittingEnabled', 'elementSplittingThreshold', 'modifiedWhitespaceBehaviour', 'moveAttributeXpath', 'orphanedWordDetectionEnabled', 'orphanedWordLengthLimit', 'orphanedWordMaxPercentage', 'mixedContentDetectionScope', 'characterByCharacterEnabled'],
             detail: `Sets options to change the granularity and ordering of changes in the result
  in order to improve readability.`},
         "changeGatheringEnabled": {
@@ -518,6 +551,12 @@ export class DCPSchema implements SchemaData {
             },
             detail: `Sets the moves detection feature on or off. The move detection feature uses unique ids to identify moves.
  These unique ids can be set using the option 'moveAttributeXpath'.`},
+        "removeMoveSource": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Removes move source.`
+        },
         "elementSplittingEnabled": {
             attrs: {
                 'literalValue': 'xs:boolean'
@@ -574,18 +613,19 @@ export class DCPSchema implements SchemaData {
  orphaned section is less than or equal to this value, then it is classified as orphaned
  (unless there are more words than the length limit allows). The percentage value for a
  possibly orphaned section is calculated as follows:`},
-        "tableConfiguration": {
-            elementNames: ['warningReportMode', 'processHtmlTables', 'processCalsTables', 'calsValidationLevel', 'invalidCalsTableBehaviour'],
-            detail: `Specifies configuration options for table comparison. These configuration
- options can be specified on a DocumentComparator to configure its behaviour when comparing
- tables.`},
+        "characterByCharacterEnabled": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Sets whether to enable character by character comparison`
+        },
         "calsTableConfiguration": {
-            elementNames: ['warningReportMode', 'processCalsTables', 'calsValidationLevel', 'invalidCalsTableBehaviour', 'ignoreColumnOrder', 'columnKeyingMode'],
+            elementNames: ['warningReportMode', 'processCalsTables', 'calsValidationLevel', 'invalidCalsTableBehaviour', 'ignoreColumnOrder', 'calsColumnKeyingMode'],
             detail: `Specifies configuration options for CALS table comparison. These configuration
  options can be specified on a DocumentComparator to configure its behaviour when comparing
  tables.`},
         "htmlTableConfiguration": {
-            elementNames: ['warningReportMode', 'processHtmlTables', 'htmlValidationLevel', 'invalidHtmlTableBehaviour', 'normalizeHtmlTables'],
+            elementNames: ['warningReportMode', 'processHtmlTables', 'htmlValidationLevel', 'invalidHtmlTableBehaviour', 'normalizeHtmlTables', 'ignoreColumnOrder', 'htmlColumnKeyingMode'],
             detail: `Specifies configuration options for HTML table comparison. These configuration
  options can be specified on a DocumentComparator to configure its behaviour when comparing
  tables.`},
@@ -656,22 +696,31 @@ export class DCPSchema implements SchemaData {
             detail: `Sets whether the Document Comparator should normalize the specification of columns in HTML tables. 
  This setting is recommended when there is a difference between inputs of specifying columns, e.g. if one uses just
  * <colgroup> and another uses <col> without <colgroup>.`},
- "ignoreColumnOrder": {
-    attrs: {
-        'literalValue': 'xs:boolean'
-    },
-    detail: `Sets whether the DocumentComparator should ignore CALS table column order.`
-},
-"columnKeyingMode": {
-    attrs: {
-        'literalValue': 'columnKeyingModeType'
-    },
-    detail: `Sets the column keying mode used to align CALS table columns when the table
-processing is enabled. In AUTO mode, the comparator will automatically handle the entire keying process.
-Only AUTO mode allows for user-defined keys in the input files. This is not possible in other modes.
-In COLNAME mode, comparator will use column names (defined by @colname) as keys. In POSITION mode,
-comparator will use column positions as keys. Indexing starts from 1 and the maximum position
-is defined by the number of columns described by @cols attribute.`},
+        "ignoreColumnOrder": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Sets whether the DocumentComparator should ignore table column order.`
+        },
+        "calsColumnKeyingMode": {
+            attrs: {
+                'literalValue': 'calsColumnKeyingModeType'
+            },
+            detail: `Sets the column keying mode used to align table columns when the table
+ processing is enabled. In AUTO mode, the comparator will automatically handle the entire keying process.
+ Only AUTO mode allows for user-defined keys in the input files. This is not possible in other modes.
+ In COLNAME mode, comparator will use column names (defined by @colname) as keys. In POSITION mode,
+ comparator will use column positions as keys. Indexing starts from 1 and the maximum position
+ is defined by the number of columns described by @cols attribute.`},
+        "htmlColumnKeyingMode": {
+            attrs: {
+                'literalValue': 'htmlColumnKeyingModeType'
+            },
+            detail: `Sets the column keying mode used to align table columns when the table
+ processing is enabled. In AUTO mode, the comparator will automatically handle the entire keying process.
+ Only AUTO mode allows for user-defined keys in the input files. This is not possible in other modes.
+ In POSITION mode,comparator will use column positions as keys. Indexing starts from 1 and the maximum position
+ is defined by the number of columns described by @col attribute.`},
         "mathmlConfiguration": {
             elementNames: ['enableMathml', 'mathmlGranularity'],
             detail: `Specifies configuration options for MathML processing. These configuration options can be specified on a
@@ -688,6 +737,146 @@ is defined by the number of columns described by @cols attribute.`},
                 'literalValue': 'mathMlGranularityType'
             },
             detail: `Sets the granularity at which the differences between two MathML expressions will be represented.`
+        },
+        "moveDetectionConfig": {
+            elementNames: ['isEnabled', 'showMoveSource', 'moveDetectionType', 'moveCandidates', 'defaultNamespace', 'userNamespaces'],
+            detail: `Specifies configuration options for moves. These configuration options can be specified on a
+ DocumentComparator to configure its behaviour.`},
+        "isEnabled": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Sets whether the DocumentComparator should implement moves or not.`
+        },
+        "showMoveSource": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Sets whether the DocumentComparator should show move source or not.`
+        },
+        "moveDetectionType": {
+            attrs: {
+                'literalValue': 'moveDetectionTypes'
+            },
+            detail: `Sets the type of move detection, determining how move processing should be executed.`
+        },
+        "moveCandidates": {
+            elementNames: ['moveCandidate'],
+            detail: `This class is used to represent move candidates.`
+        },
+        "moveCandidate": {
+            attrs: {
+                'elemXpath': 'xpathExpressionType',
+                'classXpath': 'xpathExpressionType'
+            },
+            detail: `This is used to represent move candidate element XPath and class XPath pairs.`
+        },
+        "defaultNamespace": {
+            attrs: {
+                'url': 'xs:string'
+            },
+            detail: `This element is used to define default namespace.`
+        },
+        "userNamespaces": {
+            elementNames: ['userNamespace'],
+            detail: `This element is used to define user namespaces.`
+        },
+        "userNamespace": {
+            attrs: {
+                'prefix': 'xs:string',
+                'url': 'xs:string'
+            },
+            detail: `This element is used to define user namespace.`
+        },
+        "subtreeProcessingMode": {
+            attrs: {
+                'defaultMode': 'subtreeType'
+            },
+            elementNames: ['subtrees'],
+            detail: `Specifies configuration options for subtree processing. These options can be specified on a
+ DocumentComparator to configure its behaviour.
+`},
+        "subtrees": {
+            elementNames: ['subtree'],
+            detail: `This class is used to represent subtrees.`
+        },
+        "subtree": {
+            attrs: {
+                'elemXpath': 'xs:string',
+                'mode': 'subtreeType'
+            },
+            detail: `This is used to represent subtree XPath and type.`
+        },
+        "svgConfiguration": {
+            elementNames: ['enableSVG', 'svgGranularity', 'svgInputAMarkupStyle', 'svgInputBMarkupStyle', 'svgZIndexMarkupStyle', 'enableZIndex', 'enableNumericTolerance', 'numericToleranceValue', 'fallback', 'fallbackChangePercentage', 'xPathToReferencedSVG'],
+            detail: `Specifies configuration options for SVG Comparison. These configuration options can be specified on a
+ DocumentComparator to configure its behaviour when comparing SVG.`},
+        "enableSVG": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Sets whether the DocumentComparator should do SVG comparison. SVG
+ comparison is recommended as it will use SVG-aware features when comparing
+ two SVG images to ensure that the result can be rendered.`},
+        "svgGranularity": {
+            attrs: {
+                'literalValue': 'svgGranularityType'
+            },
+            detail: `Sets the granularity at which the differences between two SVG images will be represented.`
+        },
+        "svgInputAMarkupStyle": {
+            attrs: {
+                'literalValue': 'xs:string'
+            },
+            detail: `Sets the Input A SVG markup style setting for SVG comparison results. The default is "red" and an SVG color can be provided as color names, RGB or RGBA values, HEX values, HSL or HSLA values.`
+        },
+        "svgInputBMarkupStyle": {
+            attrs: {
+                'literalValue': 'xs:string'
+            },
+            detail: `Sets the Input A SVG markup style setting for SVG comparison results. The default is "green" and an SVG color can be provided as color names, RGB or RGBA values, HEX values, HSL or HSLA values.`
+        },
+        "svgZIndexMarkupStyle": {
+            attrs: {
+                'literalValue': 'xs:string'
+            },
+            detail: `Sets the Input Z SVG markup style setting for SVG comparison results. The default is "purple" and an SVG color can be provided as color names, RGB or RGBA values, HEX values, HSL or HSLA values.`
+        },
+        "enableZIndex": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Sets whether to use move handling within SVG Comparisons to markup Z-index changes.`
+        },
+        "enableNumericTolerance": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Sets whether to use a numeric tolerance. SVG comparison will check co-ordinate values are within
+ specified tolerance and therefore can be considered having negligible change.`},
+        "numericToleranceValue": {
+            attrs: {
+                'literalValue': 'xs:string'
+            },
+            detail: `Sets the numeric tolerance value for SVG comparison results. The default is 1%, 
+ but can be given as a fixed value. Adding '%' will switch value to percentage.`},
+        "fallback": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Determines whether to fallback to {@link SVGComparisonGranularity.ADJACENT}. SVG comparison granularity will fallback to
+ SVGComparisonGranularity.ADJACENT if SVG exceeds the number changed elements defined by FallbackChangePercentage.`},
+        "fallbackChangePercentage": {
+            attrs: {
+                'literalValue': 'xs:double'
+            },
+            detail: `Sets Fallback Change Percentage setting for SVG comparison results. The default value is 30.00%.`
+        },
+        "xPathToReferencedSVG": {
+            attrs: {
+                'literalValue': 'xs:string'
+            },
+            detail: `Sets XPath to the referenced SVG.`
         },
         "advancedConfig": {
             elementNames: ['outputProperties', 'parserFeatures', 'parserProperties', 'transformerConfigurationProperties'],
@@ -768,6 +957,22 @@ is defined by the number of columns described by @cols attribute.`},
         "booleanProperty": {
             type: 'simpleBooleanParameterType',
             detail: `A named boolean property`
+        },
+        "comparisonReport": {
+            elementNames: ['generateReport', 'reportDirectory'],
+            detail: `Specifies whether and where to generate comparison report which contains comparison analysis and recommendations to improve comparison result.`
+        },
+        "generateReport": {
+            attrs: {
+                'literalValue': 'xs:boolean'
+            },
+            detail: `Specifies whether to generate comparison report.`
+        },
+        "reportDirectory": {
+            attrs: {
+                'literalValue': 'xs:string'
+            },
+            detail: `Specifies where to generate comparison report.`
         },
         "preAttributePoint": {
             type: 'filterChainType',
