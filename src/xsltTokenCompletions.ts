@@ -413,7 +413,7 @@ export class XsltTokenCompletions {
 						if (xmlTokenType === XSLTokenLevelState.attributeName) {
 							if (tagType === TagType.XSLTvar) {
 								attType = attNameText === XsltTokenCompletions.xslNameAtt ? AttributeType.Variable : AttributeType.None;
-							} else if (tagType === TagType.XSLTstart) {
+							} else if (tagType === TagType.XSLTstart && isXSLT) {
 								if (attNameText === XsltTokenCompletions.xslNameAtt) {
 									attType = AttributeType.InstructionName;
 								} else if (attNameText === XsltTokenCompletions.xslModeAtt) {
