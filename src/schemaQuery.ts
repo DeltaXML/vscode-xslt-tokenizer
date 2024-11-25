@@ -1,4 +1,4 @@
-import { XSLTSchema, SimpleType, ComplexType, AttributeItem, SchemaData} from './xsltschema';
+import { XSLTSchema, SimpleType, ComplexType, AttributeItem, SchemaData} from './xsltSchema';
 import { DocumentTypes } from './xslLexer';
 
 export class Expected {
@@ -240,6 +240,11 @@ export class SchemaQuery {
                 if (sgType.detail) {
                     let lookup = sgType.detail;
                     detail = lookup? lookup.type : '';
+                    if (!detail) {
+                         //@ts-ignore 
+                        const enumDetail = lookup[attrValue];
+                        detail = enumDetail? enumDetail : '';
+                    }
                 }
                 let existing = result.attributeValues.find(val => val[0] === attrValue);
                 if (!existing) {
