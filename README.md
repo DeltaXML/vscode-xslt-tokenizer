@@ -45,8 +45,8 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **XSLT/XPath Linter**     | Checks syntax and integrity of symbol references across all imported modules
 | **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
 | **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
-| **Variable watcher**      | Auto-complete for `xsl:message` for local XSLT/XPath variables - output shown in terminal at runtime
-| **Colorised xsl:message** | use `ext:print()` function to format and colorise XPath 3.1 types like maps and arrays
+| **Variable watcher**      | Auto-complete for 'print-debugging' with `xsl:message` for local XSLT/XPath variables - output shown in terminal at runtime
+| **Colorised `xsl:message`** | use `ext:print()` function to format and colorise XPath 3.1 types like maps and arrays
 | **Documentation**         | Features are documented in the: [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) 
 |||
 
@@ -106,7 +106,10 @@ The project changelog is maintained on the project wiki. See [Release Notes](htt
 
 # Extension Settings
 
-See: [VSCode Settings](https://code.visualstudio.com/docs/getstarted/settings)
+To benefit from this extension, it's essential to make a few updates to VS Code's User or Workspace settings to your specific needs and environment.
+This section outlines the main settings associated with XSLT features.
+
+For more details on how these settings are managed within VS Code see: [VSCode Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
 ## XSLT Tasks
 
@@ -152,21 +155,33 @@ If file paths are relative they are resolved from the first Visual Studio Code W
 
 ## Formatting
 
+This extension supports special XSLT code formatting. This can be invoked with a VS Code command and/or as you type, depending on your settings.
+
 ### VSCode Formatting Command Keyboard Shortcuts
 1. *On Windows* - ```Shift + Alt + F```.
 2. *On Mac* - ```Shift + Option + F```.
 3. *On Ubuntu* - ```Ctrl + Shift + I```.
 
-### Editor Settings For Formatting
+### Recommended Editor Settings For Formatting etc.
+
+You should start with something like the following in the `settings.json` file: 
 ```json
 {
+  ...
   "[xslt]": {
-    "editor.defaultFormatter": "deltaxml.xslt-xpath",
-    "editor.formatOnSaveMode": "modifications",
-    "editor.formatOnSave": true,
-    "editor.formatOnPaste": true,
-    "editor.formatOnType": true
+        "editor.formatOnPaste": true,
+        "editor.formatOnSave": false,
+        "editor.formatOnSaveMode": "modifications",
+        "editor.formatOnType": true,
+        "editor.defaultFormatter": "deltaxml.xslt-xpath",
+        "editor.detectIndentation": true,
+        "editor.tabSize": 2,
+        "editor.wordSeparators": "`~!@#$%^&*()=+[{]}\\|;:'\",.<>/?",
+        "outline.showArrays": true,
+        "breadcrumbs.showArrays": true,
+        "editor.semanticHighlighting.enabled": true
   }
+  ...
 }
 ```
 
@@ -229,7 +244,9 @@ ___
 
 # XSLT/XPath User Guide
 
-The [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) provides an introduction to features supported by this extension for XSLT and XPath developers:
+The [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) provides an introduction to features supported by this extension for XSLT and XPath developers.
+
+The main documentation pages are linked below:
 
 - [Overview](https://deltaxml.github.io/vscode-xslt-xpath/index.html)
 - [Editing XML](https://deltaxml.github.io/vscode-xslt-xpath/editing.html)
