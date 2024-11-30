@@ -9,6 +9,7 @@
     <xsl:variable name="test" as="xs:string" select="function('a')"/>
     
     <xsl:function name="xx:test" as="xs:string">
+        <new>test</new>
     </xsl:function>
 
 </xsl:stylesheet>

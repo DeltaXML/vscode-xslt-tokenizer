@@ -1718,6 +1718,23 @@ export class XsltTokenDiagnostics {
 											} else {
 												const nextToken = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index)?.value;
 												hasProblem = !(nextToken === '{' || nextToken === '{}');
+												if (hasProblem && nextToken === 'as') {
+													// crude test to get '{' in next 20 tokens
+													// allows for fairly complex types like map{map(xs:string, xs:string)}
+													// without texting the type properly
+													for (let i = 1; i < 20; i++) {
+														const s = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index + i)?.value;
+														if (s?.length === 0) {
+														} else if (s) {
+															hasProblem = !(s === '{' || s === '{}');
+															if (!hasProblem) {
+																break;
+															}
+														} else {
+															break;
+														}
+													}
+												}
 											}
 											if (hasProblem) {
 												const t = poppedData.token.context!;
