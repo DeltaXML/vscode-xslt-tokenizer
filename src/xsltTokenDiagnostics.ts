@@ -1724,8 +1724,7 @@ export class XsltTokenDiagnostics {
 													// without texting the type properly
 													for (let i = 1; i < 20; i++) {
 														const s = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index + i)?.value;
-														if (s?.length === 0) {
-														} else if (s) {
+                                                        if (s) {
 															hasProblem = !(s === '{' || s === '{}');
 															if (!hasProblem) {
 																break;
