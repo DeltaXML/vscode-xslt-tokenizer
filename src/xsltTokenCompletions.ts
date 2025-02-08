@@ -1164,26 +1164,11 @@ export class XsltTokenCompletions {
 	private static createVariableCompletions(pos: vscode.Position, char: string, completionStrings: string[], token: BaseToken, kind: vscode.CompletionItemKind, excludeChar?: string) {
 		let completionItems: vscode.CompletionItem[] = [];
 
-		let useRange = false;
-		let range: vscode.Range;
-		const posImmediatelyBeforeToken = !!(token) && token.length > 1 && pos.line === token.line && pos.character - 1 === token.startCharacter;
-		if (token && !(posImmediatelyBeforeToken)) {
-			const startPos = new vscode.Position(token.line, token.startCharacter);
-			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
-			range = new vscode.Range(startPos, endPos);
-			useRange = true;
-		}
-
 		completionStrings.forEach((name) => {
 			if (!excludeChar || name !== excludeChar) {
 				const varName = char + name;
 				const newItem = new vscode.CompletionItem(varName, kind);
-				newItem.insertText = varName;
-				if (useRange) {
-					newItem.range = range;
-				}
 				completionItems.push(newItem);
-
 			}
 		});
 		return completionItems;
