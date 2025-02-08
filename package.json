@@ -355,11 +355,11 @@
 							"properties": {
 								"name": {
 									"type": "string",
-									"description": "The xsl:param name. Namespaced params can be written as {uri}localname"
+									"description": "The xsl:param name.\nNamespaced params are written as {uri}localname.\nSpecial prefix characters are:\n'?' (XPath)\n'!' (xsl:output)\n'+' (filename):\nSee: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
 								},
 								"value": {
 									"type": "string",
-									"description": "The xsl:param value. Special leading characters are: '?' (XPath), '!' (xsl:output), '+' (filename): See: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+									"description": "The xsl:param value. "
 								}
 							},
 							"required": [
