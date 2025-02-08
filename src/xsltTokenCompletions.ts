@@ -195,11 +195,11 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			if (isOnRequiredToken) {
-				console.log('--------- on required token ---------');
-				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-				console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
-			}
+			// if (isOnRequiredToken) {
+			// 	console.log('--------- on required token ---------');
+			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+			// 	console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
+			// }
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -1166,13 +1166,13 @@ export class XsltTokenCompletions {
 
 		let useRange = false;
 		let range: vscode.Range;
-		// const posImmediatelyBeforeToken = !!(token) && token.length > 1 && pos.line === token.line && pos.character - 1 === token.startCharacter;
-		// if (token && !(posImmediatelyBeforeToken)) {
-		// 	const startPos = new vscode.Position(token.line, token.startCharacter);
-		// 	const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
-		// 	range = new vscode.Range(startPos, endPos);
-		// 	useRange = true;
-		// }
+		const posImmediatelyBeforeToken = !!(token) && token.length > 1 && pos.line === token.line && pos.character - 1 === token.startCharacter;
+		if (token && !(posImmediatelyBeforeToken)) {
+			const startPos = new vscode.Position(token.line, token.startCharacter);
+			const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+			range = new vscode.Range(startPos, endPos);
+			useRange = true;
+		}
 
 		completionStrings.forEach((name) => {
 			if (!excludeChar || name !== excludeChar) {
