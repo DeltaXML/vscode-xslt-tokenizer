@@ -1,5 +1,5 @@
 /**
- *  Copyright (c) 2020 DeltaXML Ltd. and others.
+ *  Copyright (c) 2025 DeltaXignia Ltd. and others.
  *
  *  Contributors:
  *  DeltaXML Ltd. - xmlDocumentFormattingProvider

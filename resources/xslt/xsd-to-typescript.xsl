@@ -138,7 +138,7 @@
   <xsl:template name="typeScriptHeader" as="xs:string">
     <xsl:text expand-text="no">
 /**
- *  Copyright (c) 2020 DeltaXML Ltd. and others.
+ *  Copyright (c) 2025 DeltaXignia Ltd. and others.
  *  All rights reserved. This program and the accompanying materials
  *  are made available under the terms of the MIT license
  *  which accompanies this distribution.
