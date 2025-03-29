@@ -11,7 +11,7 @@
 	
 	<xsl:variable name="qq" select="let $a := 2 return, 2"/>
 	
-	<!-- <xsl:variable name="a" select="
+	<xsl:variable name="a" select="
 		if (22) then 
 			let $m := 5 return 5			
 		else $m"/>
@@ -41,6 +41,6 @@
 				'a' : if (7) then 1 else 2,
 				'b' : 2
 			}	
-		"/>  -->
+		"/> 
 	
 				</xsl:stylesheet>

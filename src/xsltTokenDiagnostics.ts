@@ -1285,6 +1285,14 @@ export class XsltTokenDiagnostics {
 								break;
 							case 'then':
 								if (ifThenStack.length > 0) {
+									if (xpathStack.length > 0) {
+										let if1 = ifThenStack[ifThenStack.length - 1];
+										let if2 = xpathStack[xpathStack.length - 1].token.context;
+										if (if1.startCharacter === if2?.startCharacter && if1.line === if2.line) {
+											token.error = ErrorType.XPathUnexpected;
+											problemTokens.push(token);
+										}
+									}
 									ifThenStack.pop();
 								} else {
 									token.error = ErrorType.XPathUnexpected;
