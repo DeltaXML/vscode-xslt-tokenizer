@@ -40,7 +40,17 @@
 	"main": "./out/extension.js",
 	"configurationDefaults": {
 		"[xslt]": {
-			"editor.semanticHighlighting.enabled": true
+			"editor.defaultFormatter": "deltaxml.xslt-xpath",
+			"editor.formatOnSaveMode": "file",
+			"editor.formatOnSave": false,
+			"editor.formatOnPaste": true,
+			"editor.formatOnType": true,
+			"editor.semanticHighlighting.enabled": true,
+			"editor.detectIndentation": true,
+			"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+			"editor.insertSpaces": true,
+			"editor.tabSize": 2,
+			"outline.showArrays": false
 		},
 		"[xsl]": {
 			"editor.semanticHighlighting.enabled": true
