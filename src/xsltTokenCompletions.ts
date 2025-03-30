@@ -195,11 +195,11 @@ export class XsltTokenCompletions {
 
 			isOnRequiredToken = isOnRequiredLine && requiredChar >= token.startCharacter && requiredChar <= (token.startCharacter + token.length);
 			isOnStartOfRequiredToken = isOnRequiredToken && requiredChar === token.startCharacter;
-			// if (isOnRequiredToken) {
-			// 	console.log('--------- on required token ---------');
-			// 	console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
-			// 	console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
-			// }
+			if (isOnRequiredToken) {
+				console.log('--------- on required token ---------');
+				console.log('column:' + (position.character + 1) + ' text: ' + token.value + ' prev: ' + prevToken?.value);
+				console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
+			}
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
@@ -670,7 +670,7 @@ export class XsltTokenCompletions {
 					case TokenLevelState.nodeNameTest:
 						if (isOnRequiredToken && requiredChar === token.startCharacter + 1) {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/', '//', '::', '['].indexOf(prevToken.value) !== -1)) {
+							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/', '//', '::'].indexOf(prevToken.value) !== -1)) {
 								resultCompletions = XsltTokenCompletions.getTokenPathCompletions(token, elementNames, attrNames, globalInstructionData, importedInstructionData);
 								let axes = Data.cAxes.map(axis => axis + '::');
 								let axisCompletions = XsltTokenCompletions.getTokenCommandCompletions(token, true, axes, vscode.CompletionItemKind.Function);
