@@ -925,7 +925,7 @@ export class XslLexer {
                             if (!attributeNameTokenAdded) {
                                 this.addNewTokenToResult(tokenStartChar, attributeNameToken, result, nextState);
                             } else if (isXMLNSattribute) {
-                                result[result.length - 1].tokenType = attributeNameToken;
+                                result[result.length - 1].tokenType = XslLexer.xpathLegendLength + attributeNameToken;
                             }
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeEquals, result, nextState);
                             tokenChars = [];
