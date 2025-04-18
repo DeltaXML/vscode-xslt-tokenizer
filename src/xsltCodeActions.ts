@@ -116,14 +116,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let roughSelectionType : RangeTagType = RangeTagType.unknown;
 		let firstTagName: string = '';
 		let lastTagName: string = '';
-		try {
-			const result = this.estimateSelectionType(document, range);
-			roughSelectionType = result.rangeTagType;
-			firstTagName = result.firstTagName;
-			lastTagName = result.lastTagName;
-		} catch (e: any) {
-			console.error("Error on estimateSelectionType: " + e);
-			return codeActions;
+		if (!range.isEmpty) {
+			try {
+				const result = this.estimateSelectionType(document, range);
+				roughSelectionType = result.rangeTagType;
+				firstTagName = result.firstTagName;
+				lastTagName = result.lastTagName;
+			} catch (e: any) {
+				console.error("Error on estimateSelectionType: " + e);
+				return codeActions;
+			}
 		}
 
 		switch (roughSelectionType) {
@@ -226,7 +228,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const startLine = document.lineAt(startPosition.line).text;
 		const startTagIndex = startLine.indexOf('<', startPosition.character);
 		const expandText: string[] = [];
-		if (startTagIndex < 0 && !range.isEmpty) {
+		if (startTagIndex < 0) {
 			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, expandText);
 			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
 			const rangeInsideAttributeFirstSymbol = firstSymbol && firstSymbol.range.contains(range);
