@@ -10,6 +10,7 @@
 
 import { Debug } from "./diagnostics";
 import { timeStamp } from "console";
+import { FunctionData } from "./functionData";
 
 export enum CharLevelState {
     init,// 0 initial state
@@ -829,6 +830,8 @@ export class XPathLexer {
                 this.wsCharNumber = 0;
             }
 
+            const actualLastToken = result.length > 0 ? result[result.length - 1] : null;
+
             if (!isWhitespace) {
                 result.push(newToken);
             }
@@ -836,6 +839,13 @@ export class XPathLexer {
             let prevToken = this.latestRealToken;
             this.setLabelForLastTokenOnly(prevToken, newToken);
             this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken);
+            if (newToken.tokenType === TokenLevelState.nodeNameTest && 
+                (actualLastToken?.charType === CharLevelState.lB || actualLastToken?.value === ',')) {
+                const isValidType = newToken.value.length > 3 && newTokenValue.startsWith('xs:') && FunctionData.schema.indexOf(newToken.value.substring(3) + '#1') > -1;
+                if (isValidType) {
+                    newToken.tokenType = TokenLevelState.simpleType;
+                }
+            }
 
             if (prevToken && !isWhitespace && this.elementNameTests && this.attributeNameTests) {
                 if (prevToken.tokenType === TokenLevelState.nodeNameTest) {

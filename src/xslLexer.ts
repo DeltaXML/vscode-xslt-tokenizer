@@ -909,6 +909,7 @@ export class XslLexer {
                                     isGlobalUsePackageVersion = true;
                                 } else {
                                     isExpandTextAttribute = false;
+                                    // todo: 'as'
                                     isXPathAttribute = this.isExpressionAtt(attName, tagElementName);
                                 }
                             } else {
