@@ -152,12 +152,16 @@ export class DocumentChangeHandler {
 				triggerSuggest = true;
 			} else if (XsltTokenDiagnostics.nameCharRgx.test(activeChange.text) && XsltTokenDiagnostics.nameCharRgx.test(prevChar)) {
 				triggerSuggest = false;
-			} else {
-				const prevWordRange = activeChange.range.start.character > 1 ? e.document.getWordRangeAtPosition(activeChange.range.start.translate(0, -2)) : undefined;
+			} else if (activeChange.range.start.character > 1) {
+				const backTwoPosition = activeChange.range.start.translate(0, -2);
+				const prevWordRange = e.document.getWordRangeAtPosition(backTwoPosition);
 				if (prevWordRange) {
 					const prevWord = e.document.getText(prevWordRange);
 					if (Data.triggerWords.indexOf(prevWord) !== -1) {
-						triggerSuggest = true;
+						const rangeBackTwoText = e.document.getText(activeChange.range.with(backTwoPosition));
+						if (!(prevWord === 'as' && rangeBackTwoText.startsWith('="'))) {
+							triggerSuggest = true;
+						}
 					}
 				}
 			}
