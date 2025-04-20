@@ -23,7 +23,7 @@ export class SchemaQuery {
         switch (schemaData.docType) {
             case DocumentTypes.XSLT:
             case DocumentTypes.XSLT40:
-                this.soughtAttributes =  ['name', 'as', 'select', 'test', 'href'];
+                this.soughtAttributes =  ['name', 'as', 'select', 'test', 'href', 'key', 'regex', 'component', 'names'];
                 this.emptyElements = ['xsl:variable', 'xsl:value-of', 'xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param'];
                 break;
             case DocumentTypes.DCP:
