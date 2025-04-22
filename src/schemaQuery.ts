@@ -24,7 +24,7 @@ export class SchemaQuery {
             case DocumentTypes.XSLT:
             case DocumentTypes.XSLT40:
                 this.soughtAttributes =  ['name', 'as', 'select', 'test', 'href', 'key', 'regex', 'component', 'names'];
-                this.emptyElements = ['xsl:variable', 'xsl:value-of', 'xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param'];
+                this.emptyElements = ['xsl:variable', 'xsl:value-of', 'xsl:param','xsl:sequence','xsl:attribute','xsl:output','xsl:apply-templates','xsl:with-param', 'xsl:map-entry'];
                 break;
             case DocumentTypes.DCP:
                 this.soughtAttributes =  ['name', 'defaultValue', 'literalValue','version','id','description', 'path'];
