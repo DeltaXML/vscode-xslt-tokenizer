@@ -6,6 +6,7 @@
   <?pi height < 4: width > 28 ?>
   
   <xsl:variable name="cities" as="map(*)" select="
+    (: xpath comment:)
     map {
       'us': ['New York', 'Washington'],
       'uk': 'london',
