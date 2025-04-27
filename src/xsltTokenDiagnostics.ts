@@ -324,6 +324,7 @@ export class XsltTokenDiagnostics {
 		let lastTokenIndex = allTokens.length - 1;
 		let tagAttributeNames: string[] = [];
 		let isGroupingAttribute = false;
+		let isWithinCDATA = false;
 		let tagAttributeSymbols: vscode.DocumentSymbol[] = [];
 		let tagXmlnsNames: string[] = [];
 		let rootXmlnsBindings: [string, string][] = [];
@@ -821,6 +822,12 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rPi:
 								isXMLDeclaration = false;
 								break;
+							case XMLCharState.lCdataEnd:
+								isWithinCDATA = true;
+								break;
+							case XMLCharState.rCdataEnd:
+								isWithinCDATA = false;
+								break;
 						}
 						break;
 
@@ -1129,6 +1136,20 @@ export class XsltTokenDiagnostics {
 				}
 
 			} else {
+				if (isWithinCDATA && !!prevToken) {
+					// reset prevToken if this token is preceded by a '{' char that is not in a token
+					try {
+						const startPos = new vscode.Position(prevToken.line, prevToken.startCharacter + prevToken.length);
+						const endPos = new vscode.Position(token.line, token.startCharacter);
+						const beteenRange = new vscode.Range(startPos, endPos);
+						const betweenText = document.getText(beteenRange).trimRight();
+						if (betweenText.endsWith('{')) {
+							prevToken = null;
+						}
+					} catch (e) {
+						console.error("betweenText calculation error");
+					}
+				}
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 				if (xpathStack.length > 0) {
