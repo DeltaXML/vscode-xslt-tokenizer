@@ -1152,7 +1152,15 @@ export class XsltTokenDiagnostics {
 							let prevToken2 = allTokens[index - 2];
 							isNoArgFunctionCall = prevToken2.tokenType === TokenLevelState.function;
 						}
-						if (!isNoArgFunctionCall && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+						const parentXPath = xpathStack.length === 0 ? undefined : xpathStack[xpathStack.length - 1];
+						let isPartialFunctionArg = !!parentXPath && (
+							!!parentXPath.function || 
+							(!!parentXPath.token.context && parentXPath.token.context.tokenType === TokenLevelState.variable));
+						if (isPartialFunctionArg && allTokens.length > index) {
+							const nextToken = allTokens[index + 1];
+							isPartialFunctionArg = (nextToken.charType === CharLevelState.rB  || nextToken.value === ',');
+						}
+						if (!isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 							token.error = ErrorType.MissingContextItemGeneral;
 							problemTokens.push(token);
 						}
