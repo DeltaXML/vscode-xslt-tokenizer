@@ -23,6 +23,8 @@
   
   <xsl:template match="TITLE[@id eq 'king'] | SUBTITLE">
     <xsl:variable name="result" as="" select="for $a in 1 to 20 return 'a' || descendant::NAME[@id eq 'tqs'] || $a"/>
+    <xsl:variable name="tvt" as="xs:string" select="'ok'"/>
+    <xsl:variable name="q" as="xs:integer" select="22"/>
     <h1>{$result}</h1>
     <para>text value templates {count($result)} need special attention {$cities?uk}</para>
     <para>
@@ -37,3 +39,4 @@
   </xsl:template>
   
 </xsl:stylesheet>
+
