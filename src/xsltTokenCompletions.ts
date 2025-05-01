@@ -273,6 +273,7 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 								}
+								tagAttributeNames = [];
 								if (isXSLT && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
 										let pfx = prefixNsPair[0];
@@ -567,6 +568,9 @@ export class XsltTokenCompletions {
 						}
 						break;
 				}
+			} else if (isOnRequiredToken && tagAttributeNames.length > 0 && tagAttributeNames[tagAttributeNames.length - 1] === 'as') {
+				let completionStrings = XsltTokenCompletions.sequenceTypes;
+				resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.TypeParameter);
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;

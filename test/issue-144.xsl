@@ -11,7 +11,6 @@
     <xsl:variable name="test1" as="xs:integer" select="1"/>
     <xsl:variable name="test2" as="element('books')" select="/*"/>
     <xsl:variable name="test3" as="map(xs:integer, map(xs:string, array(*)))" select="/*"/>
-    
     <xsl:template match="/*">
         <xsl:copy select="$test1">
             <xsl:attribute name="int" select="$test2"/>
