@@ -11,6 +11,7 @@
 import { Debug } from "./diagnostics";
 import { timeStamp } from "console";
 import { FunctionData } from "./functionData";
+import { isMainThread } from "worker_threads";
 
 export enum CharLevelState {
     init,// 0 initial state
@@ -465,7 +466,7 @@ export class XPathLexer {
 
 
 
-    public analyse(xpathArg: string, exitCondition: ExitCondition | null, position: LexPosition): Token[] {
+    public analyse(xpathArg: string, exitCondition: ExitCondition | null, position: LexPosition, isTypeDeclaration = false): Token[] {
 
         if (this.timerOn) {
             console.time('xplexer.analyse');
@@ -535,7 +536,7 @@ export class XPathLexer {
                         break;
                 }
                 if (exitAnalysis) {
-                    this.update(poppedContext, result, tokenChars, currentLabelState);
+                    this.update(poppedContext, result, tokenChars, currentLabelState, isTypeDeclaration);
                     if (result.length > 0) {
                         let lastToken = result[result.length - 1];
                         if (lastToken.tokenType === TokenLevelState.string) {
@@ -608,7 +609,7 @@ export class XPathLexer {
                             break;
                         case CharLevelState.sep:
                         case CharLevelState.dot:
-                            this.update(poppedContext, result, tokenChars, currentLabelState);
+                            this.update(poppedContext, result, tokenChars, currentLabelState, isTypeDeclaration);
                             this.updateResult(poppedContext, result, new BasicToken(currentChar, nextLabelState));
                             break;
                         case CharLevelState.escSq:
@@ -635,9 +636,9 @@ export class XPathLexer {
                         case CharLevelState.rBr:
                         case CharLevelState.rPr:
                             if (currentLabelState !== CharLevelState.rC) {
-                                let prevToken: Token = new BasicToken(tokenChars.join(''), currentLabelState);
+                                let prevToken: Token = new BasicToken(tokenChars.join(''), currentLabelState, isTypeDeclaration);
                                 this.updateResult(poppedContext, result, prevToken);
-                                let newToken: Token = new BasicToken(currentChar, nextLabelState);
+                                let newToken: Token = new BasicToken(currentChar, nextLabelState, isTypeDeclaration);
                                 this.updateResult(poppedContext, result, newToken);
                                 if (nestedTokenStack.length > 0) {
                                     // remove from nesting level
@@ -762,9 +763,9 @@ export class XPathLexer {
         return result;
     }
 
-    private update(poppedContext: Token | null | undefined, result: Token[], tokenChars: string[], charState: CharLevelState) {
+    private update(poppedContext: Token | null | undefined, result: Token[], tokenChars: string[], charState: CharLevelState, isTypeDeclaration = false) {
         if (tokenChars.length > 0) {
-            this.updateResult(poppedContext, result, new BasicToken(tokenChars.join(''), charState));
+            this.updateResult(poppedContext, result, new BasicToken(tokenChars.join(''), charState, isTypeDeclaration));
         }
         tokenChars.length = 0;
     }
@@ -1366,7 +1367,7 @@ class BasicToken implements Token {
     charType: CharLevelState;
     tokenType: TokenLevelState;
 
-    constructor(value: string, type: CharLevelState) {
+    constructor(value: string, type: CharLevelState, isTypeDeclaration = false) {
         this.value = value;
         this.charType = type;
         switch (type) {
@@ -1374,7 +1375,11 @@ class BasicToken implements Token {
                 this.tokenType = TokenLevelState.Whitespace;
                 break;
             case CharLevelState.lName:
-                this.tokenType = TokenLevelState.nodeNameTest;
+                if (isTypeDeclaration) {
+                    this.tokenType = TokenLevelState.simpleType;
+                } else {
+                    this.tokenType = TokenLevelState.nodeNameTest;
+                }
                 break;
             case CharLevelState.dSep:
                 this.tokenType = value === ':=' ? TokenLevelState.complexExpression : TokenLevelState.operator;
