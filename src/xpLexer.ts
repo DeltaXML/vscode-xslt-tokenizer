@@ -838,6 +838,19 @@ export class XPathLexer {
             }
 
             let prevToken = this.latestRealToken;
+            // try to ensure 'function' token type is set to nodeType (not anonymousFunction) if within type declaration
+            if (!isTypeDeclaration && prevToken?.tokenType === TokenLevelState.nodeNameTest && prevToken.value === 'function' && result.length > 4) {
+                const lastToken = result[result.length - 3];
+                const lastToken2 = result[result.length - 4];
+                // best endevour without a tree to detect if this is within a type declaration
+                if (lastToken.charType === CharLevelState.lB) {
+                    isTypeDeclaration = lastToken2.value === 'of' || lastToken2.value === 'as' || lastToken2.value === 'array' || lastToken2.value === 'map';
+                } else  if (lastToken.value === 'of' || lastToken.value === 'as') {
+                    isTypeDeclaration = true;
+                } else if (lastToken.value === ',') {
+                    isTypeDeclaration = lastToken2.tokenType === TokenLevelState.simpleType || lastToken2.tokenType === TokenLevelState.nodeType;
+                }
+            }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
             this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken);
             if (newToken.tokenType === TokenLevelState.nodeNameTest && 
