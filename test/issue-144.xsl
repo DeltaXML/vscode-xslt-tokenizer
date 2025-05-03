@@ -10,6 +10,7 @@
      <xsl:variable name="test4" as="element('books')" select="/*"/>
      <xsl:variable name="test5" as="(function(element()) as xs:string)?" 
           select="function($a as element()) as xs:string {local-name($a)}"/>
+     <xsl:variable name="test6" as="xs:boolean" select="2 instance of array(function())"/>
      
      <!-- all tokens in the following type declarations should be marked as errors -->
      <xsl:variable name="test1-error" as="xs:intege" select="count(22)"/>
