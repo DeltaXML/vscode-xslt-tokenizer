@@ -2023,7 +2023,7 @@ export class XsltTokenDiagnostics {
 						let tValue = token.value;
 						let tParts = tValue.split(':');
 						let isValidType = false;
-						if (tValue === '*' || tValue === '?' || tValue === '+') {
+						if (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~')) {
 							// e.g. xs:integer* don't check name
 							isValidType = true;
 						} else if (tParts.length === 1) {
@@ -2039,7 +2039,8 @@ export class XsltTokenDiagnostics {
 							let nsType = xsltPrefixesToURIs.get(tParts[0]);
 							if (nsType !== undefined) {
 								if (nsType === XSLTnamespaces.XMLSchema) {
-									if (tParts[1] === 'numeric') {
+									const part2 = tParts[1];
+									if (part2 === 'numeric' || part2 === 'anyAtomicType') {
 										isValidType = true;
 									} else {
 										isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
