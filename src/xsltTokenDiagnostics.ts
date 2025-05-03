@@ -596,6 +596,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								isGroupingAttribute = false;
+								tagAttributeNames = [];
 								// start-tag ended, we're now within the new element scope:
 								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
@@ -1966,7 +1967,8 @@ export class XsltTokenDiagnostics {
 							}
 						} else if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
-							if (!isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+							const withinTypeDeclarationAttr = tagAttributeNames.length > 0 && tagAttributeNames[tagAttributeNames.length - 1] === 'as';
+							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()' || prevToken.value === 'as'))) {
 									token.error = ErrorType.MissingContextItemGeneral;
 									problemTokens.push(token);
