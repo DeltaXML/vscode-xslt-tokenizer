@@ -702,12 +702,12 @@
 			},
 			{
 				"id": "nodeType",
-				"superType": "parameter",
+				"superType": "string",
 				"description": "type of node, e.g. element()"
 			},
 			{
 				"id": "simpleType",
-				"superType": "parameter",
+				"superType": "string",
 				"description": "type of value, e.g. xs:integer"
 			},
 			{
