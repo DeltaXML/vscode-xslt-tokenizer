@@ -1168,7 +1168,7 @@ export class XsltTokenDiagnostics {
 				if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
-					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr))) {
+					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr))) {
 						let isNoArgFunctionCall = false;
 						if (prevToken.charType == CharLevelState.dSep && prevToken.value == '()' && index > 2) {
 							let prevToken2 = allTokens[index - 2];
