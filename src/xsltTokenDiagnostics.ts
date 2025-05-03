@@ -1182,7 +1182,8 @@ export class XsltTokenDiagnostics {
 							const nextToken = allTokens[index + 1];
 							isPartialFunctionArg = (nextToken.charType === CharLevelState.rB  || nextToken.value === ',');
 						}
-						if (!isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+						const withinTypeDeclarationAttr = tagAttributeNames.length > 0 && tagAttributeNames[tagAttributeNames.length - 1] === 'as';
+						if (!withinTypeDeclarationAttr && !isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 							token.error = ErrorType.MissingContextItemGeneral;
 							problemTokens.push(token);
 						}
