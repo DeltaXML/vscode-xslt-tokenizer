@@ -569,8 +569,14 @@ export class XsltTokenCompletions {
 						break;
 				}
 			} else if (isOnRequiredToken && tagAttributeNames.length > 0 && tagAttributeNames[tagAttributeNames.length - 1] === 'as') {
+				let tokenRange: vscode.Range|undefined;
+				if (token.tokenType === TokenLevelState.simpleType || token.tokenType === TokenLevelState.nodeType) {
+					const tokenStart = new vscode.Position(token.line, token.startCharacter);
+					const tokenEnd = new vscode.Position(token.line, token.startCharacter + token.length);
+					tokenRange = new vscode.Range(tokenStart, tokenEnd);
+				}
 				let completionStrings = XsltTokenCompletions.sequenceTypes;
-				resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.TypeParameter);
+				resultCompletions = XsltTokenCompletions.getRangeInsertCompletions(completionStrings, tokenRange, vscode.CompletionItemKind.TypeParameter);
 			} else {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
@@ -1307,6 +1313,21 @@ export class XsltTokenCompletions {
 			if (!excludeChar || name !== excludeChar) {
 				const varName = name;
 				const newItem = new vscode.CompletionItem(varName, kind);
+				completionItems.push(newItem);
+			}
+		});
+		return completionItems;
+	}
+
+	private static getRangeInsertCompletions(completionStrings: string[], range: vscode.Range|undefined, kind: vscode.CompletionItemKind, excludeChar?: string) {
+		let completionItems: vscode.CompletionItem[] = [];
+		completionStrings.forEach((name) => {
+			if (!excludeChar || name !== excludeChar) {
+				const varName = name;
+				const newItem = new vscode.CompletionItem(varName, kind);
+				if (range) {
+					newItem.range = range;
+				}
 				completionItems.push(newItem);
 			}
 		});
