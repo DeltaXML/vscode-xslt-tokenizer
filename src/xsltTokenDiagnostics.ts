@@ -2045,10 +2045,10 @@ export class XsltTokenDiagnostics {
 									} else {
 										isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
 									}
-								} else {
-									// assume this is an imported XML Schema type
-									isValidType = true;
-								}
+								} 
+							} else if (inheritedPrefixes.indexOf(tParts[0]) !== -1) {
+								// this namespace prefix is declared, assume this is an imported XML Schema type
+								isValidType = true;
 							}
 						}
 						if (!isValidType) {
