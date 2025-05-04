@@ -2045,6 +2045,9 @@ export class XsltTokenDiagnostics {
 									} else {
 										isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
 									}
+								} else {
+									// assume this is an imported XML Schema type
+									isValidType = true;
 								}
 							}
 						}
