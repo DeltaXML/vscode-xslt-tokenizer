@@ -323,6 +323,7 @@ export class XsltTokenDiagnostics {
 		let tagIdentifierName: string = '';
 		let lastTokenIndex = allTokens.length - 1;
 		let tagAttributeNames: string[] = [];
+		let withinTypeDeclarationAttr = false;
 		let isGroupingAttribute = false;
 		let isWithinCDATA = false;
 		let tagAttributeSymbols: vscode.DocumentSymbol[] = [];
@@ -583,6 +584,7 @@ export class XsltTokenDiagnostics {
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
 								tagAttributeNames = [];
+								withinTypeDeclarationAttr = false;
 								tagAttributeSymbols = [];
 								tagXmlnsNames = [];
 								tagIdentifierName = '';
@@ -597,6 +599,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCtNoAtt:
 								isGroupingAttribute = false;
 								tagAttributeNames = [];
+								withinTypeDeclarationAttr = false;
 								// start-tag ended, we're now within the new element scope:
 								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
@@ -836,6 +839,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						withinTypeDeclarationAttr = attNameText === 'as';
 						let problemReported = false;
 						if (prevToken) {
 							if (token.line === prevToken.line && token.startCharacter - (prevToken.startCharacter + prevToken.length) === 0) {
@@ -1165,6 +1169,17 @@ export class XsltTokenDiagnostics {
 						}
 					}
 				}
+				if (withinTypeDeclarationAttr) {
+					const tType = token.tokenType;
+					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType || tType === TokenLevelState.string)) {
+						if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
+							token['error'] = ErrorType.XPathUnexpected;
+							if (tType == TokenLevelState.number || tType === TokenLevelState.uriLiteral) {
+								problemTokens.push(token);
+							}
+						}
+					}
+				}
 				if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
@@ -1182,7 +1197,6 @@ export class XsltTokenDiagnostics {
 							const nextToken = allTokens[index + 1];
 							isPartialFunctionArg = (nextToken.charType === CharLevelState.rB  || nextToken.value === ',');
 						}
-						const withinTypeDeclarationAttr = tagAttributeNames.length > 0 && tagAttributeNames[tagAttributeNames.length - 1] === 'as';
 						if (!withinTypeDeclarationAttr && !isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 							token.error = ErrorType.MissingContextItemGeneral;
 							problemTokens.push(token);
@@ -1968,7 +1982,6 @@ export class XsltTokenDiagnostics {
 							}
 						} else if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
-							const withinTypeDeclarationAttr = tagAttributeNames.length > 0 && tagAttributeNames[tagAttributeNames.length - 1] === 'as';
 							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()' || prevToken.value === 'as'))) {
 									token.error = ErrorType.MissingContextItemGeneral;
