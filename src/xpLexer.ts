@@ -1381,9 +1381,6 @@ class BasicToken implements Token {
     tokenType: TokenLevelState;
 
     constructor(value: string, type: CharLevelState, isTypeDeclaration = false) {
-        if (value === '?') {
-            console.log('qqq');
-        }
         this.value = value;
         this.charType = type;
         switch (type) {
@@ -1404,7 +1401,12 @@ class BasicToken implements Token {
                 this.tokenType = TokenLevelState.nodeType;
                 break;
             case CharLevelState.sep:
-                this.tokenType = isTypeDeclaration ? TokenLevelState.nodeType : TokenLevelState.operator;
+                // occurrence indicators
+                if (isTypeDeclaration && (value === '?' || value === '*' || value === '+' )) {
+                    this.tokenType = TokenLevelState.nodeType;
+                } else {
+                    this.tokenType = TokenLevelState.operator;
+                }
                 break;
             case CharLevelState.lB:
             case CharLevelState.lBr:
