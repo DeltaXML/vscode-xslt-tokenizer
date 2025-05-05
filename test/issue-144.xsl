@@ -6,7 +6,7 @@
      
      <?START type declarations with NO ERRORS?>
      <xsl:variable name="test1" as="xs:integer" select="count(22)"/>
-     <xsl:variable name="test2" as="map(xs:integer, map(xs:string, array(*)))" select="/*"/>
+     <xsl:variable name="test2" as="map(xs:integer, map(xs:string, array(xs:integer*)))?" select="/*"/>
      <xsl:variable name="test3" as="xs:integer" select="1"/>
      <xsl:variable name="test4" as="element('books')" select="/*"/>
      <xsl:variable name="test5" as="(function(element()) as xs:string)?" 
@@ -25,7 +25,7 @@
      <xsl:variable name="test2-error" as="xs:map(xs:integeer, mapp(xs:sstring, aarray(*)))" select="/*"/>
      <xsl:variable name="test3-error" as="string" select="1"/>
      <xsl:variable name="test4-error" as="elejment('book')" select="/*"/>
-     <xsl:variable name="test5-error" as="map(element() xs:integer)*" select="/*"/>
+     <xsl:variable name="test5-error" as="map(element() xs:integer*)*" select="/*"/>
      <xsl:variable name="test6-error" as="" select="'the `as` attribute is empty'"/>
      <xsl:variable name="test7-error" as="@name, =, 22 Q{abcd} /child::like" select="2"/>
      <?END type declarations WITH ERRORS?>

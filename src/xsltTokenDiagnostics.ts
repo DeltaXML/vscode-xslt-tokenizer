@@ -1178,6 +1178,12 @@ export class XsltTokenDiagnostics {
 								problemTokens.push(token);
 							}
 						}
+					} else {
+						const prevType = prevToken?.tokenType;
+						if (token.value.length !== 1 && token.value !== '()' && (prevType === TokenLevelState.nodeType || prevType === TokenLevelState.simpleType || prevType === TokenLevelState.string)) {
+							token['error'] = ErrorType.XPathUnexpected;
+							problemTokens.push(token);
+						}
 					}
 				}
 				if (insideGlobalFunction && !isGroupingAttribute) {
