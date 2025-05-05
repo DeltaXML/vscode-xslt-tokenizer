@@ -26,6 +26,7 @@
      <xsl:variable name="test3-error" as="string" select="1"/>
      <xsl:variable name="test4-error" as="elejment('book')" select="/*"/>
      <xsl:variable name="test5-error" as="" select="'the `as` attribute is empty'"/>
+     <xsl:variable name="testA" as="@name, =, 22 Q{abcd} /child::like" select="2"/>
      <?END type declarations WITH ERRORS?>
      
      <?START auto-complete test?>
