@@ -16,6 +16,7 @@
      <xsl:variable name="test7" as="document-node(element(abc))" select="/* instance of element(books)"/>
      <xsl:variable name="test8" as="xs:anyAtomicType" select="1"/>
      <xsl:variable name="test9" as="xs:numeric" select="1"/>
+     <xsl:variable name="test10" as="element(ct:book)" select="/*"/>
 
      
      <xsl:function name="fn:main" as="item()*">
@@ -34,8 +35,10 @@
      <xsl:variable name="test6-error" as="" select="'the `as` attribute is empty'"/>
      <xsl:variable name="test7-error" as="@name, =, 22 Q{abcd} /child::like" select="2"/>
      <xsl:variable name="test8-error" as="element(q:book)" select="/*"/>
-     <xsl:variable name="test9-error" as="element(book)" select="/*"/>
+     <xsl:variable name="test9-error" as="element('book')" select="/*"/>
      <xsl:variable name="test10-error" as="element(book" select="/*"/>
+     <xsl:variable name="test12-error" as="map()" select="/*"/>
+     <xsl:variable name="test13-error" as="map( )" select="/*"/>
 
      <?END type declarations WITH ERRORS?>
      
