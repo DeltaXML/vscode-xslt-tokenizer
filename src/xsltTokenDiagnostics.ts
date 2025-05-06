@@ -1183,8 +1183,6 @@ export class XsltTokenDiagnostics {
 						if (token.value.length !== 1 && token.value !== '()' && (prevType === TokenLevelState.nodeType || prevType === TokenLevelState.simpleType)) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
-						} else if (tType === TokenLevelState.simpleType) {
-								// TODO: check name-test is within element() or attribute() by checking previous tokens
 						}
 					}
 				}
