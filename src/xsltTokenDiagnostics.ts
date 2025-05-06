@@ -1171,7 +1171,7 @@ export class XsltTokenDiagnostics {
 				}
 				if (withinTypeDeclarationAttr) {
 					const tType = token.tokenType;
-					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType || tType === TokenLevelState.string)) {
+					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType)) {
 						if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
 							token['error'] = ErrorType.XPathUnexpected;
 							if (tType == TokenLevelState.number || tType === TokenLevelState.uriLiteral) {
@@ -1180,9 +1180,11 @@ export class XsltTokenDiagnostics {
 						}
 					} else {
 						const prevType = prevToken?.tokenType;
-						if (token.value.length !== 1 && token.value !== '()' && (prevType === TokenLevelState.nodeType || prevType === TokenLevelState.simpleType || prevType === TokenLevelState.string)) {
+						if (token.value.length !== 1 && token.value !== '()' && (prevType === TokenLevelState.nodeType || prevType === TokenLevelState.simpleType)) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
+						} else if (tType === TokenLevelState.simpleType) {
+								// TODO: check name-test is within element() or attribute() by checking previous tokens
 						}
 					}
 				}
@@ -2042,7 +2044,20 @@ export class XsltTokenDiagnostics {
 						let tValue = token.value;
 						let tParts = tValue.split(':');
 						let isValidType = false;
-						if (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~')) {
+						let isNodeName = false;
+						if (withinTypeDeclarationAttr && prevToken?.charType === CharLevelState.lB && index > 2) {
+							const prevToken2 = allTokens[index - 2];
+							isNodeName = prevToken2.tokenType === TokenLevelState.nodeType && (prevToken2.value === 'element' || prevToken2.value === 'attribute');
+						}
+						if (isNodeName) {
+							isValidType = true;
+							let validationError = XsltTokenDiagnostics.validateName(tValue, ValidationType.Name, docType, inheritedPrefixes, undefined);
+							if (validationError !== NameValidationError.None) {
+								token['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
+								token['value'] = tValue;
+								problemTokens.push(token);
+							}
+						} else if (withinTypeDeclarationAttr && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
 							// e.g. xs:integer* don't check name
 							isValidType = true;
 						} else if (tParts.length === 1) {

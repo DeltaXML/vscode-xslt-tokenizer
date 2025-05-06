@@ -2,20 +2,25 @@
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 xmlns:fn="namespace-uri"
+                xmlns:ct="com.test"
                 version="3.0">
      
      <?START type declarations with NO ERRORS?>
      <xsl:variable name="test1" as="xs:integer" select="count(22)"/>
      <xsl:variable name="test2" as="map(xs:integer, map(xs:string, array(xs:integer*)))?" select="/*"/>
-     <xsl:variable name="test3" as="xs:integer" select="1"/>
-     <xsl:variable name="test4" as="element('books')" select="/*"/>
+     <xsl:variable name="test3" as="xs:integer+" select="1"/>
+     <xsl:variable name="test4" as="element(books)" select="/*"/>
      <xsl:variable name="test5" as="(function(element()) as xs:string)?" 
           select="function($a as element()) as xs:string {local-name($a)}"/>
      <xsl:variable name="test6" as="xs:boolean" select="2 instance of array(function())"/>
+     <xsl:variable name="test7" as="document-node(element(abc))" select="/* instance of element(books)"/>
+     <xsl:variable name="test8" as="xs:anyAtomicType" select="1"/>
+     <xsl:variable name="test9" as="xs:numeric" select="1"/>
+
      
      <xsl:function name="fn:main" as="item()*">
-          <xsl:param name="test7" as="xs:integer?"/>
-          <xsl:sequence select="$test7"/>
+          <xsl:param name="test70" as="xs:integer?"/>
+          <xsl:sequence select="$test70"/>
      </xsl:function>
      <?END type declarations with NO ERRORS?>
      
@@ -28,6 +33,10 @@
      <xsl:variable name="test5-error" as="map(element() xs:integer*)*" select="/*"/>
      <xsl:variable name="test6-error" as="" select="'the `as` attribute is empty'"/>
      <xsl:variable name="test7-error" as="@name, =, 22 Q{abcd} /child::like" select="2"/>
+     <xsl:variable name="test8-error" as="element(q:book)" select="/*"/>
+     <xsl:variable name="test9-error" as="element(book)" select="/*"/>
+     <xsl:variable name="test10-error" as="element(book" select="/*"/>
+
      <?END type declarations WITH ERRORS?>
      
      <?START auto-complete test?>
