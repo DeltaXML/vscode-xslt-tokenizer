@@ -1172,11 +1172,26 @@ export class XsltTokenDiagnostics {
 				if (withinTypeDeclarationAttr) {
 					const tType = token.tokenType;
 					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType)) {
+						// in 'as' attribute only other tokens permitted are: 'as' ',' '(' and ')'
 						if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
 							token['error'] = ErrorType.XPathUnexpected;
 							if (tType == TokenLevelState.number || tType === TokenLevelState.uriLiteral) {
 								problemTokens.push(token);
 							}
+						}
+						if (token.charType === CharLevelState.rB && xpathStack.length > 0) {
+							// check arity is true for type: map(xs:integer, xs:integer)
+							const lastStackEntry = xpathStack[xpathStack.length - 1];
+							if (lastStackEntry.function && lastStackEntry.functionArity !== undefined) {
+								const actualArity = (prevToken?.charType !== CharLevelState.lB)? lastStackEntry.functionArity + 1 : 0;
+								if (actualArity > 2 || actualArity === 0 ) {
+									const errToken = lastStackEntry.function;
+									errToken.error = ErrorType.XPathFunction;
+									errToken.value = errToken.value + '#' + actualArity;
+									problemTokens.push(errToken);
+								}
+							}
+							// must be within a map()
 						}
 					} else {
 						const prevType = prevToken?.tokenType;
@@ -1698,7 +1713,7 @@ export class XsltTokenDiagnostics {
 								if (!anonymousFunctionParams && prevToken?.tokenType !== TokenLevelState.nodeType) {
 									anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
 								}
-								if (prevToken?.tokenType === TokenLevelState.function) {
+								if (prevToken?.tokenType === TokenLevelState.function || (withinTypeDeclarationAttr && prevToken?.tokenType && prevToken.value === 'map')) {
 									functionToken = prevToken;
 								} else if (prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variables of type 'function'
@@ -1838,7 +1853,7 @@ export class XsltTokenDiagnostics {
 													}
 												}
 											}
-											if (!regexSpecial) {
+											if (!(regexSpecial || withinTypeDeclarationAttr)) {
 												let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
 												if (!isValid) {
 													poppedData.function['error'] = fErrorType;

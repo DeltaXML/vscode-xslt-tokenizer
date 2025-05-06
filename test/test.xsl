@@ -9,7 +9,11 @@
                 expand-text="yes"
                 version="3.0">
 
-    <xsl:variable name="test" as="element(x:book)" y:select=""/>
+    <xsl:variable name="test" as="map()" select="count(22)"/>
+    <xsl:variable name="test" as="map( )" select="count(22)"/>
+    <xsl:variable name="test" as="map(xs:integer, xs:integer, xs:integer)" select="count(22)"/>
+    <xsl:variable name="test" as="map(xs:integer, xs:integer)" select="count(22)"/>
+    <xsl:variable name="test" as="map(*)" select="count(22)"/>
     <q:new>
         
     </q:new>
