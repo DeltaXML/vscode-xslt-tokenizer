@@ -19,6 +19,8 @@
      <xsl:variable name="test10" as="array(*)?" select="[]"/>
      <xsl:variable name="test11" as="array(map(xs:string, xs:integer))?" select="()"/>
      <xsl:variable name="test12" as="element(ct:book)" select="/*"/>
+     <xsl:variable name="test13" as="attribute(book)" select="/*"/>
+     <xsl:variable name="test14" as="attribute()" select="/*"/>
 
      
      <xsl:function name="fn:main" as="item()*">
