@@ -1169,15 +1169,15 @@ export class XsltTokenDiagnostics {
 						}
 					}
 				}
+				let isTypeError = false;
 				if (withinTypeDeclarationAttr) {
 					const tType = token.tokenType;
 					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType)) {
 						// in 'as' attribute only other tokens permitted are: 'as' ',' '(' and ')'
 						if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
 							token['error'] = ErrorType.XPathUnexpected;
-							if (tType == TokenLevelState.number || tType === TokenLevelState.uriLiteral) {
-								problemTokens.push(token);
-							}
+							problemTokens.push(token);
+							isTypeError = true;
 						}
 						if (token.charType === CharLevelState.rB && xpathStack.length > 0) {
 							// check arity is true for type: map(xs:integer, xs:integer)
@@ -1201,7 +1201,8 @@ export class XsltTokenDiagnostics {
 						}
 					}
 				}
-				if (insideGlobalFunction && !isGroupingAttribute) {
+				if (isTypeError) {
+				} else if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
 					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr))) {
@@ -1254,11 +1255,11 @@ export class XsltTokenDiagnostics {
 
 				switch (xpathTokenType) {
 					case TokenLevelState.string:
-						if (token.error) {
+						if (token.error && !isTypeError) {
 							problemTokens.push(token);
 						}
 						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
-						if (xpathStack.length > 0) {
+						if (xpathStack.length > 0 && !isTypeError) {
 							let xp = xpathStack[xpathStack.length - 1];
 							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
 								let keyVal = token.value.substring(1, token.value.length - 1);
@@ -1275,13 +1276,14 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.axisName:
-						if (token.error) {
+						if (token.error && !withinTypeDeclarationAttr) {
 							problemTokens.push(token);
 						}
 						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						break;
 					case TokenLevelState.variable:
-						if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
+						if (withinTypeDeclarationAttr) {
+						} else if ((preXPathVariable && !xpathVariableCurrentlyBeingDefined) || anonymousFunctionParams) {
 							let fullVariableName = token.value;
 							let currentVariable = { token: token, name: fullVariableName.substring(1) };
 							if (anonymousFunctionParams) {
@@ -1315,9 +1317,11 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.complexExpression:
-						let valueText = token.value;
+						let valueText = withinTypeDeclarationAttr? '' : token.value;
 						let testStartOfExpression = false;
 						switch (valueText) {
+							case '':
+								break;
 							case 'if':
 								ifThenStack.push(token);
 								testStartOfExpression = true;
@@ -1640,7 +1644,7 @@ export class XsltTokenDiagnostics {
 								}
 
 							}
-							if (isXPathError) {
+							if (isXPathError && !isTypeError) {
 								token['error'] = ErrorType.XPathUnexpected;
 								problemTokens.push(token);
 								// token is pushed onto problemTokens later
@@ -1918,7 +1922,10 @@ export class XsltTokenDiagnostics {
 								break;
 							case CharLevelState.dSep:
 								const isEmptyBracketsToken = token.value === '()';
-								if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
+								if (withinTypeDeclarationAttr && isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.simpleType) {
+									prevToken['error'] = ErrorType.XPathTypeEmptyArity;
+									problemTokens.push(prevToken);
+								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity ? 1 : 0;
 									incrementFunctionArity = false;
 									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
@@ -2943,6 +2950,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ExpectedElseAfterThen:
 					msg = `XML: Expected 'else' but found '${tokenValue}'`;
+					break;
+				case ErrorType.XPathTypeEmptyArity:
+					msg = `XPath Type: Expected type specifier within '${tokenValue}'`;
 					break;
 				case ErrorType.ExpectedDollarAfterComma:
 					msg = `XML: Expected '$' but found '${tokenValue}'`;

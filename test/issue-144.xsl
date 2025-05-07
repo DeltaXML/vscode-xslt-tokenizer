@@ -38,7 +38,11 @@
      <xsl:variable name="test9-error" as="element('book')" select="/*"/>
      <xsl:variable name="test10-error" as="element(book" select="/*"/>
      <xsl:variable name="test12-error" as="map()" select="/*"/>
-     <xsl:variable name="test13-error" as="map( )" select="/*"/>
+     <xsl:variable name="test13-error" as="xs:map(*)" select="/*"/>
+     <xsl:variable name="test15-error" as="array( )" select="array{}"/>
+     <xsl:variable name="test16-error" as="array()" select="array{}"/>
+     <xsl:variable name="test17-error" as="map( )" select="map{}"/>
+     <xsl:variable name="test18-error" as="map(xs:integer, xs:integer, xs:integer)" select="map{}"/>
 
      <?END type declarations WITH ERRORS?>
      
