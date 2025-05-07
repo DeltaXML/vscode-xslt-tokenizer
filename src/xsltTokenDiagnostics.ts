@@ -1182,11 +1182,12 @@ export class XsltTokenDiagnostics {
 						if (token.charType === CharLevelState.rB && xpathStack.length > 0) {
 							// check arity is true for type: map(xs:integer, xs:integer)
 							const lastStackEntry = xpathStack[xpathStack.length - 1];
-							if (lastStackEntry.function && lastStackEntry.functionArity !== undefined) {
+							if (lastStackEntry.function && lastStackEntry.functionArity !== undefined && lastStackEntry.function.tokenType === TokenLevelState.simpleType) {
+								const isMap = lastStackEntry.function.value === 'map';
 								const actualArity = (prevToken?.charType !== CharLevelState.lB)? lastStackEntry.functionArity + 1 : 0;
-								if (actualArity > 2 || actualArity === 0 ) {
+								if (((isMap && actualArity > 2) || (!isMap && actualArity > 1))  || actualArity === 0 ) {
 									const errToken = lastStackEntry.function;
-									errToken.error = ErrorType.XPathFunction;
+									errToken.error = ErrorType.XPathTypeFullArity;
 									errToken.value = errToken.value + '#' + actualArity;
 									problemTokens.push(errToken);
 								}
@@ -3130,6 +3131,11 @@ export class XsltTokenDiagnostics {
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					let parts = tokenValue.split('#');
 					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
+					break;
+				case ErrorType.XPathTypeFullArity:
+					const arityMsg = tokenValue === 'map'? '1 or 2' : '1';
+					let parts2 = tokenValue.split('#');
+					msg = `XPath Type: Expected number of itemType arguments for '${parts2[0]}()' is ${arityMsg} but found: ${parts2[1]}`;
 					break;
 				case ErrorType.XPathFunctionParseHtml:
 					errCode = DiagnosticCode.parseHtmlRef;

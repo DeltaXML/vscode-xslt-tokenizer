@@ -9,7 +9,7 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="test12-error" as="map()" select="/*"/>
+    <xsl:variable name="test2" as="map(xs:integer, map(xs:string, array(xs:integer*)))?" select="/*"/>
 
     <!-- <xsl:variable name="test" as="map()" select="count(22)"/>
     <xsl:variable name="test" as="map( )" select="count(22)"/>
