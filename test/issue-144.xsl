@@ -21,6 +21,7 @@
      <xsl:variable name="test12" as="element(ct:book)" select="/*"/>
      <xsl:variable name="test13" as="attribute(book)" select="/*"/>
      <xsl:variable name="test14" as="attribute()" select="/*"/>
+     <xsl:variable name="test15" as="attribute(*, xs:date)" select="/*"/>
 
      
      <xsl:function name="fn:main" as="item()*">
@@ -49,6 +50,8 @@
      <xsl:variable name="test17-error" as="map( )" select="map{}"/>
      <xsl:variable name="test18-error" as="map(xs:integer, xs:integer, xs:integer)" select="map{}"/>
      <xsl:variable name="test19-error" as="array(xs:integer, xs:integer)" select="array{}"/>
+     <xsl:variable name="test20-error" as="attribute(*, xs:date, xs:integer)" select="/*"/>
+
 
      <?END type declarations WITH ERRORS?>
      
