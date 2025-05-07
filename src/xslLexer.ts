@@ -877,6 +877,7 @@ export class XslLexer {
                             if (isNativeElement) {
                                 if (attName === 'as') {
                                     isXPathAttribute = true;
+                                    isExpandTextAttribute = false;
                                     isTypeDeclarationAttribute = true;
                                 } else if (attName === 'saxon:options') {
                                     isXPathAttribute = true;

@@ -30,6 +30,7 @@
      
      <?START type declarations WITH ERRORS?>
      <xsl:variable name="test1-error" as="xs:intege" select="count(22)"/>
+     <xsl:variable name="test1tvt-error" expand-text="yes" as="xs:intege" select="count(22)"/>
      <xsl:variable name="test2-error" as="xs:map(xs:integeer, mapp(xs:sstring, aarray(*)))" select="/*"/>
      <xsl:variable name="test3-error" as="string" select="1"/>
      <xsl:variable name="test4-error" as="elejment('book')" select="/*"/>
