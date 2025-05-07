@@ -16,7 +16,9 @@
      <xsl:variable name="test7" as="document-node(element(abc))" select="/* instance of element(books)"/>
      <xsl:variable name="test8" as="xs:anyAtomicType" select="1"/>
      <xsl:variable name="test9" as="xs:numeric" select="1"/>
-     <xsl:variable name="test10" as="element(ct:book)" select="/*"/>
+     <xsl:variable name="test10" as="array(*)?" select="[]"/>
+     <xsl:variable name="test11" as="array(map(xs:string, xs:integer))?" select="()"/>
+     <xsl:variable name="test12" as="element(ct:book)" select="/*"/>
 
      
      <xsl:function name="fn:main" as="item()*">
@@ -43,6 +45,7 @@
      <xsl:variable name="test16-error" as="array()" select="array{}"/>
      <xsl:variable name="test17-error" as="map( )" select="map{}"/>
      <xsl:variable name="test18-error" as="map(xs:integer, xs:integer, xs:integer)" select="map{}"/>
+     <xsl:variable name="test19-error" as="array(xs:integer, xs:integer)" select="array{}"/>
 
      <?END type declarations WITH ERRORS?>
      

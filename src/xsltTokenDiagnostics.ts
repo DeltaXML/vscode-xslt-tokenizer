@@ -1717,7 +1717,7 @@ export class XsltTokenDiagnostics {
 								if (!anonymousFunctionParams && prevToken?.tokenType !== TokenLevelState.nodeType) {
 									anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
 								}
-								if (prevToken?.tokenType === TokenLevelState.function || (withinTypeDeclarationAttr && prevToken?.tokenType && prevToken.value === 'map')) {
+								if (prevToken?.tokenType === TokenLevelState.function || (withinTypeDeclarationAttr && prevToken?.tokenType && (prevToken.value === 'map' || prevToken.value === 'array'))) {
 									functionToken = prevToken;
 								} else if (prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variables of type 'function'
