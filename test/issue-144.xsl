@@ -24,12 +24,18 @@
      <xsl:variable name="test15" as="attribute()" select="/*"/>
      <xsl:variable name="test16" as="attribute(*, xs:date)" select="//@*"/>
      <xsl:variable name="test17" as="element(*, xs:integer)" select="//*"/>
-
-     
+    
      <xsl:function name="fn:main" as="item()*">
+          <!-- no missing context-item error: -->
           <xsl:param name="test70" as="xs:integer?"/>
           <xsl:sequence select="$test70"/>
      </xsl:function>
+     
+     <!-- XPath 4.0 proposed types supported in Saxon 12: -->
+     <xsl:variable name="XP4test1" as="record(ssn as xs:string, emp as element(employee))" select="/*"/>
+     <xsl:variable name="XP4test2" as="union(xs:dateTime, xs:date, xs:time, xs:string)" select="/*"/>
+     <xsl:variable name="XP4test3" as="enum('NFC', 'NFD', 'NFKC', 'NFKD')" select="/*"/>
+     <xsl:variable name="XP4test4" as="type(ct:complex)" select="/*"/>
      <?END type declarations with NO ERRORS?>
      
      
