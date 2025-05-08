@@ -202,7 +202,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 			} else {
 				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
-				if (this.collection && this.docType !== DocumentTypes.SCH) {
+				if (this.collection) {
 					let importDiagnostics: vscode.Diagnostic[] = [];
 					importErrors.forEach((importError) => {
 						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
