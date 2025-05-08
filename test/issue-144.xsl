@@ -10,8 +10,7 @@
      <xsl:variable name="test2" as="map(xs:integer, map(xs:string, array(xs:integer*)))?" select="/*"/>
      <xsl:variable name="test3" as="xs:integer+" select="1"/>
      <xsl:variable name="test4" as="element(books)" select="/*"/>
-     <xsl:variable name="test5" as="(function(element()) as xs:string)?" 
-          select="function($a as element()) as xs:string {local-name($a)}"/>
+     <xsl:variable name="test5" as="(function(element()) as xs:string)?" select="function($a as element()) as xs:string {local-name($a)}"/>
      <xsl:variable name="test6" as="xs:boolean" select="2 instance of array(function())"/>
      <xsl:variable name="test7" as="document-node(element(abc))" select="/* instance of element(books)"/>
      <xsl:variable name="test8" as="xs:anyAtomicType" select="1"/>
