@@ -118,6 +118,9 @@ export class XsltTokenDiagnostics {
 	public static readonly xslInclude = 'xsl:include';
 	public static readonly xslImport = 'xsl:import';
 	public static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
+	public static readonly typesWithMaxArity2 = ['map', 'attribute', 'element'];
+	public static readonly typesWithMinArity0 = ['element', 'attribute'];
+	public static readonly typesWithArity1 = ['array'];
 
 
 	public static readonly xslFunction = 'xsl:function';
@@ -1182,13 +1185,19 @@ export class XsltTokenDiagnostics {
 						if (token.charType === CharLevelState.rB && xpathStack.length > 0) {
 							// check arity is true for type: map(xs:integer, xs:integer)
 							const lastStackEntry = xpathStack[xpathStack.length - 1];
-							if (lastStackEntry.function && lastStackEntry.functionArity !== undefined && lastStackEntry.function.tokenType === TokenLevelState.simpleType) {
-								const isMap = lastStackEntry.function.value === 'map';
+							if (lastStackEntry.function && lastStackEntry.functionArity !== undefined && lastStackEntry.function.tokenType !== TokenLevelState.function) {
+								const typeName = lastStackEntry.function.value;
+								const maxArityNumber = this.typesWithMaxArity2.includes(typeName) ? 2 : 1;
+								const minArityNumber = this.typesWithArity1.includes(typeName) ? 1 : 0;
 								const actualArity = (prevToken?.charType !== CharLevelState.lB)? lastStackEntry.functionArity + 1 : 0;
-								if (((isMap && actualArity > 2) || (!isMap && actualArity > 1))  || actualArity === 0 ) {
+								if ((actualArity > maxArityNumber) || actualArity < minArityNumber ) {
+									const arityText = 
+										minArityNumber === 0 && maxArityNumber === 1 ? '0 or 1' :
+										minArityNumber === 1 && maxArityNumber === 1 ? '1' :
+										minArityNumber === 1 && maxArityNumber === 2 ? '1 or 2' : '0 or 1 (or 2 if schema-aware)'; 
 									const errToken = lastStackEntry.function;
 									errToken.error = ErrorType.XPathTypeFullArity;
-									errToken.value = errToken.value + '#' + actualArity;
+									errToken.value = errToken.value + '#' + actualArity + '#' + arityText;
 									problemTokens.push(errToken);
 								}
 							}
@@ -1718,7 +1727,7 @@ export class XsltTokenDiagnostics {
 								if (!anonymousFunctionParams && prevToken?.tokenType !== TokenLevelState.nodeType) {
 									anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
 								}
-								if (prevToken?.tokenType === TokenLevelState.function || (withinTypeDeclarationAttr && prevToken?.tokenType && (prevToken.value === 'map' || prevToken.value === 'array'))) {
+								if (prevToken?.tokenType === TokenLevelState.function || (withinTypeDeclarationAttr && prevToken && (this.typesWithMaxArity2.includes(prevToken.value) || this.typesWithArity1.includes(prevToken.value)))) {
 									functionToken = prevToken;
 								} else if (prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variables of type 'function'
@@ -3133,9 +3142,11 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
 					break;
 				case ErrorType.XPathTypeFullArity:
-					const arityMsg = tokenValue === 'map'? '1 or 2' : '1';
 					let parts2 = tokenValue.split('#');
-					msg = `XPath Type: Expected number of itemType arguments for '${parts2[0]}()' is ${arityMsg} but found: ${parts2[1]}`;
+					const arityMsg = parts2[2];
+					const arityNum = parts2[1];
+					const typeName = parts2[0];
+					msg = `XPath Type: Expected number of itemType arguments for '${typeName}()' is ${arityMsg} but found: ${arityNum}`;
 					break;
 				case ErrorType.XPathFunctionParseHtml:
 					errCode = DiagnosticCode.parseHtmlRef;

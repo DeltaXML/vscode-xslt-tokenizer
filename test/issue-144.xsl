@@ -17,11 +17,13 @@
      <xsl:variable name="test8" as="xs:anyAtomicType" select="1"/>
      <xsl:variable name="test9" as="xs:numeric" select="1"/>
      <xsl:variable name="test10" as="array(*)?" select="[]"/>
-     <xsl:variable name="test11" as="array(map(xs:string, xs:integer))?" select="()"/>
-     <xsl:variable name="test12" as="element(ct:book)" select="/*"/>
-     <xsl:variable name="test13" as="attribute(book)" select="/*"/>
-     <xsl:variable name="test14" as="attribute()" select="/*"/>
-     <xsl:variable name="test15" as="attribute(*, xs:date)" select="/*"/>
+     <xsl:variable name="test11" as="map(*)" select="[]"/>
+     <xsl:variable name="test12" as="array(map(xs:string, xs:integer))?" select="()"/>
+     <xsl:variable name="test13" as="element(ct:book)" select="/*"/>
+     <xsl:variable name="test14" as="attribute(book)" select="/*"/>
+     <xsl:variable name="test15" as="attribute()" select="/*"/>
+     <xsl:variable name="test16" as="attribute(*, xs:date)" select="//@*"/>
+     <xsl:variable name="test17" as="element(*, xs:integer)" select="//*"/>
 
      
      <xsl:function name="fn:main" as="item()*">
@@ -50,7 +52,9 @@
      <xsl:variable name="test17-error" as="map( )" select="map{}"/>
      <xsl:variable name="test18-error" as="map(xs:integer, xs:integer, xs:integer)" select="map{}"/>
      <xsl:variable name="test19-error" as="array(xs:integer, xs:integer)" select="array{}"/>
-     <xsl:variable name="test20-error" as="attribute(*, xs:date, xs:integer)" select="/*"/>
+     <xsl:variable name="test20-error" as="attribute(*, xs:date, xs:integer)" select="/@*"/>
+     <xsl:variable name="test21-error" as="element(*, xs:date, xs:integer)" select="/@*"/>
+     <xsl:variable name="test22-error" as="array()" select="/*"/>
 
 
      <?END type declarations WITH ERRORS?>
