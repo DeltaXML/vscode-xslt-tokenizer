@@ -121,6 +121,7 @@ export class XsltTokenDiagnostics {
 	public static readonly typesWithMaxArity2 = ['map', 'attribute', 'element'];
 	public static readonly typesWithMinArity0 = ['element', 'attribute'];
 	public static readonly typesWithArity1 = ['array'];
+	public static readonly typesInXPath4_specialArgs = ['record', 'enum'];
 
 
 	public static readonly xslFunction = 'xsl:function';
@@ -1178,30 +1179,36 @@ export class XsltTokenDiagnostics {
 					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType)) {
 						// in 'as' attribute only other tokens permitted are: 'as' ',' '(' and ')'
 						if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
-							token['error'] = ErrorType.XPathUnexpected;
-							problemTokens.push(token);
-							isTypeError = true;
+							const lastStackEntry = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+							const typeName = !lastStackEntry ? undefined : lastStackEntry.function ? lastStackEntry.function.value : undefined;
+ 							const isValidXPath4SpecialArg = (typeName === 'enum' && tType === TokenLevelState.string) || (typeName === 'record' && tType === TokenLevelState.nodeNameTest);
+							if (!isValidXPath4SpecialArg) {
+								token['error'] = ErrorType.XPathUnexpected;
+								problemTokens.push(token);
+								isTypeError = true;
+							}
 						}
 						if (token.charType === CharLevelState.rB && xpathStack.length > 0) {
 							// check arity is true for type: map(xs:integer, xs:integer)
 							const lastStackEntry = xpathStack[xpathStack.length - 1];
 							if (lastStackEntry.function && lastStackEntry.functionArity !== undefined && lastStackEntry.function.tokenType !== TokenLevelState.function) {
 								const typeName = lastStackEntry.function.value;
-								const maxArityNumber = this.typesWithMaxArity2.includes(typeName) ? 2 : 1;
-								const minArityNumber = this.typesWithArity1.includes(typeName) ? 1 : 0;
-								const actualArity = (prevToken?.charType !== CharLevelState.lB)? lastStackEntry.functionArity + 1 : 0;
-								if ((actualArity > maxArityNumber) || actualArity < minArityNumber ) {
-									const arityText = 
-										minArityNumber === 0 && maxArityNumber === 1 ? '0 or 1' :
-										minArityNumber === 1 && maxArityNumber === 1 ? '1' :
-										minArityNumber === 1 && maxArityNumber === 2 ? '1 or 2' : '0 or 1 (or 2 if schema-aware)'; 
-									const errToken = lastStackEntry.function;
-									errToken.error = ErrorType.XPathTypeFullArity;
-									errToken.value = errToken.value + '#' + actualArity + '#' + arityText;
-									problemTokens.push(errToken);
+								if (!this.typesInXPath4_specialArgs.includes(lastStackEntry.function.value)) {
+									const maxArityNumber = this.typesWithMaxArity2.includes(typeName) ? 2 : 1;
+									const minArityNumber = this.typesWithArity1.includes(typeName) ? 1 : 0;
+									const actualArity = (prevToken?.charType !== CharLevelState.lB)? lastStackEntry.functionArity + 1 : 0;
+									if ((actualArity > maxArityNumber) || actualArity < minArityNumber ) {
+										const arityText = 
+											minArityNumber === 0 && maxArityNumber === 1 ? '0 or 1' :
+											minArityNumber === 1 && maxArityNumber === 1 ? '1' :
+											minArityNumber === 1 && maxArityNumber === 2 ? '1 or 2' : '0 or 1 (or 2 if schema-aware)'; 
+										const errToken = lastStackEntry.function;
+										errToken.error = ErrorType.XPathTypeFullArity;
+										errToken.value = errToken.value + '#' + actualArity + '#' + arityText;
+										problemTokens.push(errToken);
+									}
 								}
 							}
-							// must be within a map()
 						}
 					} else {
 						const prevType = prevToken?.tokenType;
@@ -1727,7 +1734,8 @@ export class XsltTokenDiagnostics {
 								if (!anonymousFunctionParams && prevToken?.tokenType !== TokenLevelState.nodeType) {
 									anonymousFunctionParams = prevToken?.tokenType === TokenLevelState.anonymousFunction;
 								}
-								if (prevToken?.tokenType === TokenLevelState.function || (withinTypeDeclarationAttr && prevToken && (this.typesWithMaxArity2.includes(prevToken.value) || this.typesWithArity1.includes(prevToken.value)))) {
+								if (prevToken?.tokenType === TokenLevelState.function || (withinTypeDeclarationAttr && prevToken && 
+									(this.typesWithMaxArity2.includes(prevToken.value) || this.typesWithArity1.includes(prevToken.value) || this.typesInXPath4_specialArgs.includes(prevToken.value)))) {
 									functionToken = prevToken;
 								} else if (prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variables of type 'function'

@@ -9,17 +9,10 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="test20-error" as="attribute(*, xs:date, xs:integer)" select="/*"/>
-
-
-    <!-- <xsl:variable name="test" as="map()" select="count(22)"/>
-    <xsl:variable name="test" as="map( )" select="count(22)"/>
-    <xsl:variable name="test" as="map(xs:integer, xs:integer, xs:integer)" select="count(22)"/>
-    <xsl:variable name="test" as="map(xs:integer, xs:integer)" select="count(22)"/>
-    <xsl:variable name="test" as="map(*)" select="count(22)"/> -->
-    <q:new>
-        
-    </q:new>
+    <xsl:variable name="test1" as="record(ssn as xs:string, emp as element(employee))" select="/*"/>
+    <xsl:variable name="test2" as="union(xs:dateTime, xs:date, xs:time, xs:string)" select="/*"/>
+    <xsl:variable name="test3" as="enum('NFC', 'NFD', 'NFKC', 'NFKD')" select="/*"/>
+    <xsl:variable name="test4" as="type(my:complex)" select="/*"/>
 
     
 
