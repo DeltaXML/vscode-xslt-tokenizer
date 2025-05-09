@@ -9,11 +9,6 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="test1" as="record(ssn as xs:string, emp as element(employee))" select="/*"/>
-    <xsl:variable name="test2" as="union(xs:dateTime, xs:date, xs:time, xs:string)" select="/*"/>
-    <xsl:variable name="test3" as="enum('NFC', 'NFD', 'NFKC', 'NFKD')" select="/*"/>
-    <xsl:variable name="test4" as="type(my:complex)" select="/*"/>
-
-    
+    <xsl:variable name="test17-error" as="map( )" select="map{}"/>    
 
 </xsl:stylesheet>

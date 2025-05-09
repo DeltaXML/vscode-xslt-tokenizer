@@ -120,7 +120,7 @@ export class XsltTokenDiagnostics {
 	public static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
 	public static readonly typesWithMaxArity2 = ['map', 'attribute', 'element'];
 	public static readonly typesWithMinArity0 = ['element', 'attribute'];
-	public static readonly typesWithArity1 = ['array'];
+	public static readonly typesWithArity1 = ['array', 'map'];
 	public static readonly typesInXPath4_specialArgs = ['record', 'enum'];
 
 

@@ -59,6 +59,12 @@
      <xsl:variable name="test19-error" as="array(xs:integer, xs:integer)" select="array{}"/>
      <xsl:variable name="test20-error" as="attribute(*, xs:date, xs:integer)" select="/@*"/>
      <xsl:variable name="test21-error" as="element(*, xs:date, xs:integer)" select="/@*"/>
+     
+     <xsl:variable name="test22-error" as="as xs:integer" select="1"/>
+     <xsl:variable name="test23-error" as="array(as)" select="1"/>
+     <xsl:variable name="test24-error" as="array(*) as" select="1"/>
+     <xsl:variable name="test25-error" as="as array(*)" select="1"/>
+     
 
      <?END type declarations WITH ERRORS?>
      
