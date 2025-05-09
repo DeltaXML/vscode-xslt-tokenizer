@@ -48,7 +48,7 @@ export class XPathConfiguration {
 }
 
 export class DCPConfiguration {
-	// initial configuration is for basic XProc support only
+	// initial configuration is for basic DCP support only
 	public static configuration: LanguageConfiguration = {
 		expressionAtts: ['classXpath', 'elemXpath', 'when', 'xpath'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
@@ -84,7 +84,7 @@ export class DCPConfiguration {
 }
 
 export class SchConfiguration {
-	// initial configuration is for basic XProc support only
+	// initial configuration is for basic Schematron support only
 	public static configuration: LanguageConfiguration = {
 		expressionAtts: ['context', 'test', 'subject', 'path', 'select', 'value'],
 		variableElementNames: ['stringParameter', 'booleanParameter'],
