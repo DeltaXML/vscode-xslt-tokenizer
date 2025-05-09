@@ -486,6 +486,7 @@ export class FunctionData {
 	private static unionSimpleTypes() {
 		const baseSimpleTypes = FunctionData.schema.map(t => 'xs:' + t.substring(0, t.length - 2));
 		baseSimpleTypes.push('xs:numeric');
+		baseSimpleTypes.push('xs:anyAtomicType');
 		return baseSimpleTypes;
 	}
 
