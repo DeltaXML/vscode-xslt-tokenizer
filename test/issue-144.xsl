@@ -23,6 +23,7 @@
      <xsl:variable name="test15" as="attribute()" select="/*"/>
      <xsl:variable name="test16" as="attribute(*, xs:date)" select="//@*"/>
      <xsl:variable name="test17" as="element(*, xs:integer)" select="//*"/>
+     <xsl:variable name="test18" as="element(as)" select="/*"/>
     
      <xsl:function name="fn:main" as="item()*">
           <!-- no missing context-item error: -->

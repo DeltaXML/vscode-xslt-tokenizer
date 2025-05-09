@@ -9,6 +9,6 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="test17-error" as="map( )" select="map{}"/>    
+    <xsl:variable name="test17-error" as="as map( )" select="map{}"/>    
 
 </xsl:stylesheet>

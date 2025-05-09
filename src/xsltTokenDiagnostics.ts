@@ -1177,8 +1177,10 @@ export class XsltTokenDiagnostics {
 				if (withinTypeDeclarationAttr) {
 					const tType = token.tokenType;
 					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType)) {
-						// in 'as' attribute only other tokens permitted are: 'as' ',' '(' and ')'
-						if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
+						if (token.tokenType === TokenLevelState.nodeNameTest && token.value === 'as') {
+								token.error = ErrorType.XPathUnexpected;
+								isTypeError = true;
+						} else if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
 							const lastStackEntry = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
 							const typeName = !lastStackEntry ? undefined : lastStackEntry.function ? lastStackEntry.function.value : undefined;
  							const isValidXPath4SpecialArg = (typeName === 'enum' && tType === TokenLevelState.string) || (typeName === 'record' && tType === TokenLevelState.nodeNameTest);
