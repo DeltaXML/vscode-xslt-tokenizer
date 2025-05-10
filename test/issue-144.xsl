@@ -67,7 +67,6 @@
      <xsl:variable name="test24-error" as="array(*) as" select="1"/>
      <xsl:variable name="test25-error" as="as array(*)" select="1"/>
      
-     <xsl:variable name="test26-error" as="attribute(xs:string)" select="."/>
      <xsl:variable name="test27-error" as="function(book, library)" select="."/>
      <xsl:variable name="test29-error" as="element(?)" select="."/>     
      <xsl:variable name="test30-error" as="element(..)?" select="."/>
