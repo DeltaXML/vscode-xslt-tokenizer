@@ -9,7 +9,8 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="test30-error" as="element(..)" select="2"/>     
-    
+    <xsl:variable name="test6" as="(array(*))?" select="."/>
+    <xsl:variable name="test5" as="(function(element()) as xs:string)?" select="."/>
+       
 
 </xsl:stylesheet>

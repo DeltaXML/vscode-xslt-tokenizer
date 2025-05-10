@@ -68,8 +68,8 @@
      
      <xsl:variable name="test26-error" as="attribute(xs:string)" select="."/>
      <xsl:variable name="test27-error" as="function(book, library)" select="."/>
-     <xsl:variable name="test29-error" as="element(?)" select="a instance of element(?)"/>     
-     <xsl:variable name="test30-error" as="element(..)?" select="2"/>     
+     <xsl:variable name="test29-error" as="element(?)" select="."/>     
+     <xsl:variable name="test30-error" as="element(..)?" select="."/>     
 
      <?END type declarations WITH ERRORS?>
      

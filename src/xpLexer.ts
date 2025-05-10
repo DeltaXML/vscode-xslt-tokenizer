@@ -852,7 +852,7 @@ export class XPathLexer {
                 }
             }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
-            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken);
+            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration);
             if (newToken.tokenType === TokenLevelState.nodeNameTest && 
                 (actualLastToken?.charType === CharLevelState.lB || actualLastToken?.value === ',')) {
                 const isValidType = newToken.value.length > 3 && newTokenValue.startsWith('xs:') && FunctionData.schema.indexOf(newToken.value.substring(3) + '#1') > -1;
@@ -978,7 +978,7 @@ export class XPathLexer {
         }
     }
 
-    private setLabelsUsingCurrentToken(poppedContext: Token | null | undefined, prevToken: Token | null, currentToken: Token) {
+    private setLabelsUsingCurrentToken(poppedContext: Token | null | undefined, prevToken: Token | null, currentToken: Token, isTypeDeclaration: boolean) {
         if (!(prevToken)) {
             prevToken = new BasicToken(',', CharLevelState.sep);
             prevToken.tokenType = TokenLevelState.operator;
@@ -1071,7 +1071,8 @@ export class XPathLexer {
                             currentToken.tokenType = TokenLevelState.simpleType;
                         } else if (prevTokenT === TokenLevelState.operator && (prevToken.value === ')') || prevToken.value === ']') {
                             // ($a) * 9 or count($a) * 8 or abc as map(*)* or $item as node()+
-                            if (poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType)) {
+                            if (isTypeDeclaration && prevToken.value === ')' || (
+                                poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType))) {
                                 currentToken.charType = CharLevelState.lName;
                                 currentToken.tokenType = TokenLevelState.nodeType;
                             }
