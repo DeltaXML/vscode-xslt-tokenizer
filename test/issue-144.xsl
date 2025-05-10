@@ -24,6 +24,7 @@
      <xsl:variable name="test16" as="attribute(*, xs:date)" select="//@*"/>
      <xsl:variable name="test17" as="element(*, xs:integer)" select="//*"/>
      <xsl:variable name="test18" as="element(as)" select="/*"/>
+     <xsl:variable name="new" as="function(*)" select="function() {}"/>
     
      <xsl:function name="fn:main" as="item()*">
           <!-- no missing context-item error: -->
@@ -69,7 +70,10 @@
      <xsl:variable name="test26-error" as="attribute(xs:string)" select="."/>
      <xsl:variable name="test27-error" as="function(book, library)" select="."/>
      <xsl:variable name="test29-error" as="element(?)" select="."/>     
-     <xsl:variable name="test30-error" as="element(..)?" select="."/>     
+     <xsl:variable name="test30-error" as="element(..)?" select="."/>
+     <xsl:variable name="test31-error" as="function()" select="function() {}"/>
+     <xsl:variable name="test32-error" as="element()()" select="function() {}"/>
+     
 
      <?END type declarations WITH ERRORS?>
      
