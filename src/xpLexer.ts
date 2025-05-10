@@ -108,6 +108,7 @@ export class Data {
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%'];
     public static completionTriggers = ['"', '!', '*', '+', ',', '/', '=', '|', '(', '[', '{'];
     public static estimatorSeparators = Data.separators.concat(['(',')','[',']','{', '}','\'', '"']);
+    public static readonly fnTypes = ['map', 'array', 'function', 'record'];
 
     public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||', '!!', '??'];
     public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!', '*', '+', ',', '-', '.', '?', '['];
@@ -1095,7 +1096,7 @@ export class XPathLexer {
                 if (currentToken.value === ':*' || currentToken.value === '..') {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
-                } else if (currentToken.value === '()' && prevToken.tokenType === TokenLevelState.nodeType) {
+                } else if (currentToken.value === '()' && prevToken.tokenType === TokenLevelState.nodeType && !Data.fnTypes.includes(prevToken.value)) {
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
                 }
