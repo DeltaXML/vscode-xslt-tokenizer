@@ -1403,13 +1403,6 @@ class BasicToken implements Token {
                 this.tokenType = TokenLevelState.nodeType;
                 break;
             case CharLevelState.sep:
-                // occurrence indicators
-                if (isTypeDeclaration && (value === '?' || value === '*' || value === '+' )) {
-                    this.tokenType = TokenLevelState.nodeType;
-                } else {
-                    this.tokenType = TokenLevelState.operator;
-                }
-                break;
             case CharLevelState.lB:
             case CharLevelState.lBr:
             case CharLevelState.lPr:

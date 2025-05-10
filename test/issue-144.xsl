@@ -42,12 +42,12 @@
      <?START type declarations WITH ERRORS?>
      <xsl:variable name="test1-error" as="xs:intege" select="count(22)"/>
      <xsl:variable name="test1tvt-error" expand-text="yes" as="xs:intege" select="count(22)"/>
-     <xsl:variable name="test2-error" as="xs:map(xs:integeer, mapp(xs:sstring, aarray(*)))" select="/*"/>
+     <xsl:variable name="test2-error" as="arrayx(xs:string)" select="/*"/>
      <xsl:variable name="test3-error" as="string" select="1"/>
-     <xsl:variable name="test4-error" as="elejment('book')" select="/*"/>
+     <xsl:variable name="test4-error" as="element('book')" select="/*"/>
      <xsl:variable name="test5-error" as="map(element() xs:integer*)*" select="/*"/>
      <xsl:variable name="test6-error" as="" select="'the `as` attribute is empty'"/>
-     <xsl:variable name="test7-error" as="@name, =, 22 Q{abcd} /child::like" select="2"/>
+     <xsl:variable name="test7-error" as="@name" select="2"/>
      <xsl:variable name="test8-error" as="element(q:book)" select="/*"/>
      <xsl:variable name="test9-error" as="element('book')" select="/*"/>
      <xsl:variable name="test10-error" as="element(book" select="/*"/>
@@ -59,13 +59,17 @@
      <xsl:variable name="test18-error" as="map(xs:integer, xs:integer, xs:integer)" select="map{}"/>
      <xsl:variable name="test19-error" as="array(xs:integer, xs:integer)" select="array{}"/>
      <xsl:variable name="test20-error" as="attribute(*, xs:date, xs:integer)" select="/@*"/>
-     <xsl:variable name="test21-error" as="element(*, xs:date, xs:integer)" select="/@*"/>
+     <xsl:variable name="test21-error" as="element(*, xs:date, xs:integer)" select="*"/>
      
      <xsl:variable name="test22-error" as="as xs:integer" select="1"/>
      <xsl:variable name="test23-error" as="array(as)" select="1"/>
      <xsl:variable name="test24-error" as="array(*) as" select="1"/>
      <xsl:variable name="test25-error" as="as array(*)" select="1"/>
      
+     <xsl:variable name="test26-error" as="attribute(xs:string)" select="."/>
+     <xsl:variable name="test27-error" as="function(book, library)" select="."/>
+     <xsl:variable name="test29-error" as="element(?)" select="a instance of element(?)"/>     
+     <xsl:variable name="test30-error" as="element(..)?" select="2"/>     
 
      <?END type declarations WITH ERRORS?>
      
