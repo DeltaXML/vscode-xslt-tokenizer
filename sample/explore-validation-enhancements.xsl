@@ -21,7 +21,7 @@
     <xsl:mode on-no-match="shallow-copy"/>
     
     <xsl:template match="/*" mode="#all">
-        <xsl:variable/>
+        <xsl:variable as="xs:integer"/>
         <xsl:copy>
             <xsl:apply-templates select="@*, node()" mode="#current"/>
         </xsl:copy>
@@ -38,7 +38,7 @@
             <xsl:on-completion select="22"/>
             <xsl:on-completion select="23"/>
             <xsl:next-iteration>
-                <xsl:with-param name="" select=""/>
+                <xsl:with-param name="new" select="1"/>
             </xsl:next-iteration>
         </xsl:iterate>
     </xsl:function>
