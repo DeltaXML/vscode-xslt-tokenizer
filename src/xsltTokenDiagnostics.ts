@@ -1214,7 +1214,8 @@ export class XsltTokenDiagnostics {
 						}
 					} else {
 						const prevType = prevToken?.tokenType;
-						if (token.value.length !== 1 && token.value !== '()' && (prevType === TokenLevelState.nodeType || prevType === TokenLevelState.simpleType)) {
+						if (token.value === '..' || 
+							(token.value.length !== 1 && token.value !== '()' && (prevType === TokenLevelState.nodeType || prevType === TokenLevelState.simpleType))) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
 						}

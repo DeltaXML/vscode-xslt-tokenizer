@@ -9,7 +9,7 @@
                 expand-text="yes"
                 version="3.0">
     
-    <xsl:variable name="test29-error" as="element(?)?" select="."/>     
+    <xsl:variable name="test30-error" as="element(..)" select="2"/>     
     
 
 </xsl:stylesheet>
