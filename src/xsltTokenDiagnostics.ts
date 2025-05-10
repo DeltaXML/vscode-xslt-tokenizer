@@ -1214,7 +1214,7 @@ export class XsltTokenDiagnostics {
 						}
 					} else {
 						const prevType = prevToken?.tokenType;
-						if (token.value === '..' || 
+						if (token.value === '..' || (token.value == '()' && prevToken?.value === '()') ||
 							(token.value.length !== 1 && token.value !== '()' && (prevType === TokenLevelState.nodeType || prevType === TokenLevelState.simpleType))) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
@@ -1943,7 +1943,7 @@ export class XsltTokenDiagnostics {
 								break;
 							case CharLevelState.dSep:
 								const isEmptyBracketsToken = token.value === '()';
-								if (withinTypeDeclarationAttr && isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.simpleType) {
+								if (withinTypeDeclarationAttr && isEmptyBracketsToken && (prevToken?.value === 'function' || prevToken?.tokenType === TokenLevelState.simpleType)) {
 									prevToken['error'] = ErrorType.XPathTypeEmptyArity;
 									problemTokens.push(prevToken);
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
