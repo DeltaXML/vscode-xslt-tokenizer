@@ -10,6 +10,10 @@
                 version="3.0">
     
     <xsl:variable name="test5" as="(function(element()) as xs:string)?" select="function($a as element()) as xs:string {local-name($a)}"/>
+    <xsl:template match="22" mode="#default">
+    
+    </xsl:template>
+
        
 
 </xsl:stylesheet>
