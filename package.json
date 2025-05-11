@@ -52,6 +52,18 @@
 			"editor.tabSize": 2,
 			"outline.showArrays": false
 		},
+		"[xml]": {
+			"editor.defaultFormatter": "deltaxml.xslt-xpath",
+			"editor.formatOnSaveMode": "file",
+			"editor.formatOnSave": false,
+			"editor.formatOnPaste": true,
+			"editor.formatOnType": true,
+			"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+			"editor.detectIndentation": true,
+			"editor.insertSpaces": true,
+			"editor.tabSize": 4,
+			"outline.showArrays": false
+    },
 		"[xsl]": {
 			"editor.semanticHighlighting.enabled": true
 		},
