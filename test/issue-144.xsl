@@ -5,7 +5,14 @@
                 xmlns:ct="com.test"
                 version="3.0">
      
-     <?START type declarations with NO ERRORS?>
+     <!-- Issues Tested:
+          1. #144 https://github.com/DeltaXML/vscode-xslt-tokenizer/issues/144 (2 'regions')
+          2. #146 https://github.com/DeltaXML/vscode-xslt-tokenizer/issues/146
+          3. #147 https://github.com/DeltaXML/vscode-xslt-tokenizer/issues/147
+          4  #148 https://github.com/DeltaXML/vscode-xslt-tokenizer/issues/148
+     -->
+     
+     <?region 'as' attribute item types with NO ERRORS - ISSUE #144 (1/2) ?>
      <xsl:variable name="test1" as="xs:integer" select="count(22)"/>
      <xsl:variable name="test2" as="map(xs:integer, map(xs:string, array(xs:integer*)))?" select="/*"/>
      <xsl:variable name="test3" as="xs:integer+" select="1"/>
@@ -25,7 +32,7 @@
      <xsl:variable name="test17" as="element(*, xs:integer)" select="//*"/>
      <xsl:variable name="test18" as="element(as)" select="/*"/>
      <xsl:variable name="new" as="function(*)" select="function() {}"/>
-    
+     
      <xsl:function name="fn:main" as="item()*">
           <!-- no missing context-item error: -->
           <xsl:param name="test70" as="xs:integer?"/>
@@ -37,10 +44,10 @@
      <xsl:variable name="XP4test2" as="union(xs:dateTime, xs:date, xs:time, xs:string)" select="/*"/>
      <xsl:variable name="XP4test3" as="enum('NFC', 'NFD', 'NFKC', 'NFKD')" select="/*"/>
      <xsl:variable name="XP4test4" as="type(ct:complex)" select="/*"/>
-     <?END type declarations with NO ERRORS?>
+     <?endregion 'as' attribute item types with NO ERRORS?>
      
      
-     <?START type declarations WITH ERRORS?>
+     <?region 'as' attribute item types WITH ERRORS - ISSUE #144 (2/2) ?>
      <xsl:variable name="test1-error" as="xs:intege" select="count(22)"/>
      <xsl:variable name="test1tvt-error" expand-text="yes" as="xs:intege" select="count(22)"/>
      <xsl:variable name="test2-error" as="arrayx(xs:string)" select="/*"/>
@@ -71,18 +78,31 @@
      <xsl:variable name="test29-error" as="element(?)" select="."/>     
      <xsl:variable name="test30-error" as="element(..)?" select="."/>
      <xsl:variable name="test31-error" as="function()" select="function() {}"/>
-     <xsl:variable name="test32-error" as="element()()" select="function() {}"/>
+     <xsl:variable name="test32-error" as="element()()" select="function() {}"/>  
+     <?endregion 'as' attribute item types WITH ERRORS?>
      
-
-     <?END type declarations WITH ERRORS?>
-     
-     <?START auto-complete test?>
-
+     <?region chained map-lookup: NO ERRORS - ISSUE #146?>    
+     <!-- there should be no linter error reported in the expression: $a?books?book -->
+     <xsl:variable name="test1-spuriouserror" as="xs:integer" 
+          select="let $a := map { 'books': map { 'book': 1}} return $a?books?book"/>
+     <?endregion chained map-lookup: NO ERRORS?>
+          
+     <?region auto-complete list includes 'xs:anyAtomicType' - ISSUE #147?>    
      <!-- 
-          1. the 'as' attribute below should be marked with an error
+          1. the 'xs:' in the 'as' attribute should be marked as an error
+          2. place the cursor inside the attribute, after 'xs:'
+          3. type the character 'a' - the auto-complete list should popup and include 'xs:anyAtomicType'
+          4. pressing <enter> should result in the type being updated and no error should be shown for the token    
+     -->
+     <xsl:variable name="test1-aclistincludes" as="xs:" select="1"/>
+     <?endregion auto-complete list includes 'xs:anyAtomicType'?>
+     
+     <?region auto-complete test - ISSUE #148?>    
+     <!-- 
+          1. the 'as' attribute below should be marked with an error because it is empty
           2. type within the 'as' attribute, the auto-complete list should be triggered and populated properly
      -->
      <xsl:variable name="test1-autocomplate" as="" select="'a string'"/>
-     <?END auto-complete test?>
+     <?endregion auto-complete test?>
      
 </xsl:stylesheet>
