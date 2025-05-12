@@ -27,3 +27,9 @@ Rename Symbol from <xsl:mode name>
 # What doesn't work
 Goto Definition from anywhere
 Rename Symbol for anywhere other than <xsl:mode name>
+
+Open VS Code with no user-settings
+
+```
+vscode-xslt-tokenizer % code --user-data-dir $(mktemp -d)
+```

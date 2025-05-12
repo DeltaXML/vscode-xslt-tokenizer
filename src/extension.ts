@@ -50,7 +50,6 @@ const legend = (function () {
 export function activate(context: vscode.ExtensionContext) {
 	const fileSelector = new FileSelection(context);
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
-	vscode.workspace.getConfiguration('editor.semanticHighlighting', { languageId: 'xslt' }).update('enabled', true, vscode.ConfigurationTarget.Global, true);
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
 

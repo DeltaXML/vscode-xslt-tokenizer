@@ -9,6 +9,7 @@ out/xslLexerRun.js
 src/**
 resources/**
 sample/**
+test/**
 .gitignore
 tsconfig.json
 jest.config.js
