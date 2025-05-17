@@ -1,7 +1,7 @@
 import { Console } from 'console';
 import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../src/xpLexer';
-const fs = require('fs');
-const path = require('path');
+import fs = require('fs');
+import path = require('path');
 
 const generator = () => {
 	// Each test case: [label, asAttributeValue]
