@@ -1,0 +1,488 @@
+{
+  "suite": "xpInAsAttribute",
+  "description": "Verify tokens for XPath within 'as' attribute",
+  "tests": [
+    {
+      "label": "test1",
+      "xpath": "xs:integer",
+      "tokens": [
+        [
+          "xs:integer",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test2",
+      "xpath": "map(xs:integer, map(xs:string, array(xs:integer*)))?",
+      "tokens": [
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "xs:string",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "array",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "*",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "?",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "test3",
+      "xpath": "xs:integer+",
+      "tokens": [
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "+",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "test4",
+      "xpath": "element(books)",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "books",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test5",
+      "xpath": "(function(element()) as xs:string)?",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "function",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "xs:string",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "?",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "test6",
+      "xpath": "xs:boolean",
+      "tokens": [
+        [
+          "xs:boolean",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test7",
+      "xpath": "document-node(element(abc))",
+      "tokens": [
+        [
+          "document-node",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "abc",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test8",
+      "xpath": "xs:anyAtomicType",
+      "tokens": [
+        [
+          "xs:anyAtomicType",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test9",
+      "xpath": "xs:numeric",
+      "tokens": [
+        [
+          "xs:numeric",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test10",
+      "xpath": "array(*)?",
+      "tokens": [
+        [
+          "array",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "?",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "test11",
+      "xpath": "map(*)",
+      "tokens": [
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test12",
+      "xpath": "array(map(xs:string, xs:integer))?",
+      "tokens": [
+        [
+          "array",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "xs:string",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "?",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "test13",
+      "xpath": "element(ct:book)",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "ct:book",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test14",
+      "xpath": "attribute(book)",
+      "tokens": [
+        [
+          "attribute",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "book",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test15",
+      "xpath": "attribute()",
+      "tokens": [
+        [
+          "attribute",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "test16",
+      "xpath": "attribute(*, xs:date)",
+      "tokens": [
+        [
+          "attribute",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:date",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test17",
+      "xpath": "element(*, xs:integer)",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test18",
+      "xpath": "element(as)",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "as",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test19",
+      "xpath": "function(*)",
+      "tokens": [
+        [
+          "function",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    }
+  ]
+}

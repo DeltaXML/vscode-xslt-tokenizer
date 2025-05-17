@@ -34,6 +34,20 @@
 		{
             "type": "node",
             "request": "launch",
+            "name": "Run XPath Test Generator",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/out/__tests__/xpLexerTestGen.js",
+            "preLaunchTask": "tsc: build - tsconfig.json",
+			"console": "integratedTerminal",
+            "outFiles": [
+                "${workspaceFolder}/out/test/**/*.js"
+            ]
+		},
+		{
+            "type": "node",
+            "request": "launch",
             "name": "Run XPath Diagnostics",
             "skipFiles": [
                 "<node_internals>/**"
