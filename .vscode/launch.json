@@ -38,12 +38,13 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}/out/__tests__/xpLexerTestGen.js",
+            "program": "${workspaceFolder}/out/__tests__/utils/xpLexerTestGen.js",
             "preLaunchTask": "tsc: build - tsconfig.json",
 			"console": "integratedTerminal",
             "outFiles": [
                 "${workspaceFolder}/out/test/**/*.js"
-            ]
+            ],
+			"args": ["--file", "${workspaceFolder}/__tests__/data/xpInAsAttribute.json"]
 		},
 		{
             "type": "node",

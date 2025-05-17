@@ -1,6 +1,10 @@
 {
   "suite": "xpInAsAttribute",
-  "description": "Verify tokens for XPath within 'as' attribute",
+  "description": "XPath Lexer: tokens created within the XSLT 'as' attribute",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
   "tests": [
     {
       "label": "test1",
