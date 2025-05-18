@@ -1,4 +1,4 @@
-# XML Testing Process
+# Testing Process for the XSLT/XPath extension
 
 ## Overview
 This process involves testing XML/XSLT functionality through a series of automated steps.
@@ -53,6 +53,12 @@ when running XSLT tasks. If there's a problem with XPath generated tokens, all t
 
 Syntax-highlighting proves to be a very effective way for manually testing the lexer behaviour. If tokens are highlighted
 badly then we know we have a problem that will affect other features like the linter or code-formatting provider.
+
+> The maintainer of this project is primarily an XSLT developer. This extension is therefore used, and thus tested, almost daily
+
+
+
+The automated test setup described here should be a useful supplement to this test strategy.
 
 
 ## Conclusion
