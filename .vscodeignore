@@ -1,5 +1,6 @@
 .vscode/**
 .vscode-test/**
+__tests__/**
 xslt-out/**
 out/test/**
 out/**/*.map
