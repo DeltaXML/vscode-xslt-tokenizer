@@ -75,6 +75,138 @@
       [
          "test19",
          "function(*)"
+      ],
+      [
+         "XP4test1",
+         "record(ssn as xs:string, emp as element(employee))"
+      ],
+      [
+         "XP4test2",
+         "union(xs:dateTime, xs:date, xs:time, xs:string)"
+      ],
+      [
+         "XP4test3",
+         "enum('NFC', 'NFD', 'NFKC', 'NFKD')"
+      ],
+      [
+         "XP4test4",
+         "type(ct:complex)"
+      ],
+      [
+         "test1-error",
+         "xs:intege"
+      ],
+      [
+         "test1tvt-error",
+         "xs:intege"
+      ],
+      [
+         "test2-error",
+         "arrayx(xs:string)"
+      ],
+      [
+         "test3-error",
+         "string"
+      ],
+      [
+         "test4-error",
+         "element('book')"
+      ],
+      [
+         "test5-error",
+         "map(element() xs:integer*)*"
+      ],
+      [
+         "test6-error",
+         ""
+      ],
+      [
+         "test7-error",
+         "@name"
+      ],
+      [
+         "test8-error",
+         "element(q:book)"
+      ],
+      [
+         "test9-error",
+         "element('book')"
+      ],
+      [
+         "test10-error",
+         "element(book"
+      ],
+      [
+         "test12-error",
+         "map()"
+      ],
+      [
+         "test13-error",
+         "xs:map(*)"
+      ],
+      [
+         "test15-error",
+         "array( )"
+      ],
+      [
+         "test16-error",
+         "array()"
+      ],
+      [
+         "test17-error",
+         "map( )"
+      ],
+      [
+         "test18-error",
+         "map(xs:integer, xs:integer, xs:integer)"
+      ],
+      [
+         "test19-error",
+         "array(xs:integer, xs:integer)"
+      ],
+      [
+         "test20-error",
+         "attribute(*, xs:date, xs:integer)"
+      ],
+      [
+         "test21-error",
+         "element(*, xs:date, xs:integer)"
+      ],
+      [
+         "test22-error",
+         "as xs:integer"
+      ],
+      [
+         "test23-error",
+         "array(as)"
+      ],
+      [
+         "test24-error",
+         "array(*) as"
+      ],
+      [
+         "test25-error",
+         "as array(*)"
+      ],
+      [
+         "test27-error",
+         "function(book, library)"
+      ],
+      [
+         "test29-error",
+         "element(?)"
+      ],
+      [
+         "test30-error",
+         "element(..)?"
+      ],
+      [
+         "test31-error",
+         "function()"
+      ],
+      [
+         "test32-error",
+         "element()()"
       ]
    ],
    "descriptor": "XPath Lexer: tokens created within the XSLT 'as' attribute",

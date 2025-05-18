@@ -15,7 +15,7 @@ describe(`describe: ${testData.suite}`, () => {
         // console.log(test);
         it(`${label} : ${xpath}`, () => {
             const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, true);
-            expect(tokensOut.length).toBeGreaterThan(0);
+            expect(tokensOut.length).toBe(tokens.length);
             const errorTokens = tokensOut.filter(t => t.error);
             expect(errorTokens.length).toBe(0);
 

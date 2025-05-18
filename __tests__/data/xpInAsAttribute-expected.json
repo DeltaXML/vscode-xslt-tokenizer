@@ -487,6 +487,795 @@
           "operator"
         ]
       ]
+    },
+    {
+      "label": "XP4test1",
+      "xpath": "record(ssn as xs:string, emp as element(employee))",
+      "tokens": [
+        [
+          "record",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "ssn",
+          "nodeNameTest"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "xs:string",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "emp",
+          "nodeNameTest"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "employee",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "XP4test2",
+      "xpath": "union(xs:dateTime, xs:date, xs:time, xs:string)",
+      "tokens": [
+        [
+          "union",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "xs:dateTime",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:date",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:time",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:string",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "XP4test3",
+      "xpath": "enum('NFC', 'NFD', 'NFKC', 'NFKD')",
+      "tokens": [
+        [
+          "enum",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "'NFC'",
+          "string"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "'NFD'",
+          "string"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "'NFKC'",
+          "string"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "'NFKD'",
+          "string"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "XP4test4",
+      "xpath": "type(ct:complex)",
+      "tokens": [
+        [
+          "type",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "ct:complex",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test1-error",
+      "xpath": "xs:intege",
+      "tokens": [
+        [
+          "xs:intege",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test1tvt-error",
+      "xpath": "xs:intege",
+      "tokens": [
+        [
+          "xs:intege",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test2-error",
+      "xpath": "arrayx(xs:string)",
+      "tokens": [
+        [
+          "arrayx",
+          "function"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "xs:string",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test3-error",
+      "xpath": "string",
+      "tokens": [
+        [
+          "string",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test4-error",
+      "xpath": "element('book')",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test5-error",
+      "xpath": "map(element() xs:integer*)*",
+      "tokens": [
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "*",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "test6-error",
+      "xpath": "",
+      "tokens": []
+    },
+    {
+      "label": "test7-error",
+      "xpath": "@name",
+      "tokens": [
+        [
+          "@name",
+          "attributeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test8-error",
+      "xpath": "element(q:book)",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "q:book",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test9-error",
+      "xpath": "element('book')",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test10-error",
+      "xpath": "element(book",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "book",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test12-error",
+      "xpath": "map()",
+      "tokens": [
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "()",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test13-error",
+      "xpath": "xs:map(*)",
+      "tokens": [
+        [
+          "xs:map",
+          "function"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test15-error",
+      "xpath": "array( )",
+      "tokens": [
+        [
+          "array",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test16-error",
+      "xpath": "array()",
+      "tokens": [
+        [
+          "array",
+          "simpleType"
+        ],
+        [
+          "()",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test17-error",
+      "xpath": "map( )",
+      "tokens": [
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test18-error",
+      "xpath": "map(xs:integer, xs:integer, xs:integer)",
+      "tokens": [
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test19-error",
+      "xpath": "array(xs:integer, xs:integer)",
+      "tokens": [
+        [
+          "array",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test20-error",
+      "xpath": "attribute(*, xs:date, xs:integer)",
+      "tokens": [
+        [
+          "attribute",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:date",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test21-error",
+      "xpath": "element(*, xs:date, xs:integer)",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:date",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test22-error",
+      "xpath": "as xs:integer",
+      "tokens": [
+        [
+          "as",
+          "nodeNameTest"
+        ],
+        [
+          "xs:integer",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "test23-error",
+      "xpath": "array(as)",
+      "tokens": [
+        [
+          "array",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "as",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test24-error",
+      "xpath": "array(*) as",
+      "tokens": [
+        [
+          "array",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test25-error",
+      "xpath": "as array(*)",
+      "tokens": [
+        [
+          "as",
+          "nodeNameTest"
+        ],
+        [
+          "array",
+          "operator"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test27-error",
+      "xpath": "function(book, library)",
+      "tokens": [
+        [
+          "function",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "book",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "library",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test29-error",
+      "xpath": "element(?)",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "?",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test30-error",
+      "xpath": "element(..)?",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "..",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "?",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "test31-error",
+      "xpath": "function()",
+      "tokens": [
+        [
+          "function",
+          "nodeType"
+        ],
+        [
+          "()",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "test32-error",
+      "xpath": "element()()",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
     }
   ]
 }
