@@ -34,7 +34,7 @@
 		{
             "type": "node",
             "request": "launch",
-            "name": "Run XPath Test Generator",
+            "name": "Add expected tokens to XP Lexer Test",
             "skipFiles": [
                 "<node_internals>/**"
             ],
@@ -44,7 +44,9 @@
             "outFiles": [
                 "${workspaceFolder}/out/test/**/*.js"
             ],
-			"args": ["--file", "${workspaceFolder}/__tests__/data/xpInAsAttribute.json"]
+			"args": [
+				"--file", "${workspaceFolder}/__tests__/data/as-attributes-to-json-out.json"
+			]
 		},
 		{
             "type": "node",
