@@ -12,10 +12,7 @@
  * 4. Each token's type matches the expected token type
  * 
  * @file xpLexerAsAttribute.spec.ts
- * @requires XPathLexer
- * @requires ExitCondition
- * @requires LexPosition
- * @requires TokenLevelState
+ * @requires XPathLexer - the target of the test
  * 
  * Origin of the data file: @file xpInAsAttribute-expected.json
  * 1. @file xpInAsAttribute.xsl - the original XSLT source
@@ -34,6 +31,7 @@ const testData: TestDataType = getDataFromFile();
 
 describe(`describe: ${testData.suite}`, () => {
     const lexer = new XPathLexer();
+    // position info for tokens is computed from this start:
     const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 
     testData.tests.forEach((test) => {
