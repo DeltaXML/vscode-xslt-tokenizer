@@ -12,7 +12,7 @@
       "tokens": [
         [
           "xs:integer",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
@@ -174,7 +174,7 @@
       "tokens": [
         [
           "xs:boolean",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
@@ -218,7 +218,7 @@
       "tokens": [
         [
           "xs:anyAtomicType",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
@@ -228,7 +228,7 @@
       "tokens": [
         [
           "xs:numeric",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
@@ -666,7 +666,7 @@
       "tokens": [
         [
           "xs:intege",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
@@ -676,7 +676,7 @@
       "tokens": [
         [
           "xs:intege",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
@@ -708,7 +708,7 @@
       "tokens": [
         [
           "string",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
@@ -845,7 +845,7 @@
         ],
         [
           "book",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
@@ -1089,7 +1089,7 @@
         ],
         [
           "xs:integer",
-          "nodeNameTest"
+          "simpleType"
         ]
       ]
     },
