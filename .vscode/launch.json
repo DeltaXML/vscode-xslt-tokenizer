@@ -29,8 +29,12 @@
 				"${file}"
 			],
 			"console": "integratedTerminal",
-			"internalConsoleOptions": "neverOpen"
-			},
+			"internalConsoleOptions": "neverOpen",
+			"preLaunchTask": "tsc: build - tsconfig.json",
+			"outFiles": [
+				"${workspaceFolder}/out/**/*.js"
+			]
+		},
 		{
 			"name": "Run Extension Tests",
 			"type": "extensionHost",
