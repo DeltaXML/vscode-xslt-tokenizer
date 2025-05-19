@@ -29,7 +29,7 @@ import { TestDataType } from './types';
 const testDataFile = 'xpInAsAttribute-expected.json';
 const testData: TestDataType = getDataFromFile();
 
-describe(`describe: ${testData.suite}`, () => {
+describe(`describe: ${testData.description}`, () => {
     const lexer = new XPathLexer();
     // position info for tokens is computed from this start:
     const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
