@@ -679,6 +679,7 @@ export class XslLexer {
         let contextGlobalInstructionType = GlobalInstructionType.Unknown;
         let isGlobalVersion = false;
         let isXPathAttribute = false;
+        let isTypeDeclarationAttribute = false;
         let isExpandTextAttribute = false;
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
@@ -864,6 +865,7 @@ export class XslLexer {
                             break;
                         case XMLCharState.lStEq:
                             let isXMLNSattribute = false;
+                            isTypeDeclarationAttribute = false;
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
@@ -873,10 +875,11 @@ export class XslLexer {
                             attName = tokenChars.join('');
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
-                                // if (attName === 'as') {
-                                //     isXPathAttribute = true;
-                                // } 
-                                if (attName === 'saxon:options') {
+                                if (attName === 'as') {
+                                    isXPathAttribute = true;
+                                    isExpandTextAttribute = false;
+                                    isTypeDeclarationAttribute = true;
+                                } else if (attName === 'saxon:options') {
                                     isXPathAttribute = true;
                                 } else if (this.genericTvtAttributes.indexOf(attName) > -1) {
                                     isXPathAttribute = false;
@@ -1035,7 +1038,7 @@ export class XslLexer {
                                     exit = ExitCondition.DoubleQuote;
                                 }
 
-                                xpLexer.analyse('', exit, p);
+                                xpLexer.analyse('', exit, p, isTypeDeclarationAttribute);
                                 this.updateNames(result);
                                 // need to process right double-quote/single-quote
                                 this.lineNumber = p.line;
