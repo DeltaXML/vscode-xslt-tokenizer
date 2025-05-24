@@ -7,6 +7,6 @@
 		"rootDir": ".",
 		"strict": true
 	},
-	"include": ["src", "__tests__"],
+	"include": ["src", "__tests__", "test/xpLexerAsAttribute.spec.ts"],
 	"exclude": ["node_modules", ".vscode-test"]
 }

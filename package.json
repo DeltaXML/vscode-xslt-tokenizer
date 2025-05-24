@@ -34,52 +34,52 @@
 	"license": "MIT",
 	"main": "./out/extension.js",
 	"contributes": {
-			"configurationDefaults": {
-				"[xslt]": {
-					"editor.defaultFormatter": "deltaxml.xslt-xpath",
-					"editor.formatOnSaveMode": "file",
-					"editor.formatOnSave": false,
-					"editor.formatOnPaste": true,
-					"editor.formatOnType": true,
-					"editor.semanticHighlighting.enabled": true,
-					"editor.detectIndentation": true,
-					"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
-					"editor.insertSpaces": true,
-					"editor.tabSize": 2,
-					"outline.showArrays": false
-				},
-				"[xml]": {
-					"editor.defaultFormatter": "deltaxml.xslt-xpath",
-					"editor.formatOnSaveMode": "file",
-					"editor.formatOnSave": false,
-					"editor.formatOnPaste": true,
-					"editor.formatOnType": true,
-					"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
-					"editor.detectIndentation": true,
-					"editor.insertSpaces": true,
-					"editor.tabSize": 4,
-					"outline.showArrays": false
+		"configurationDefaults": {
+			"[xslt]": {
+				"editor.defaultFormatter": "deltaxml.xslt-xpath",
+				"editor.formatOnSaveMode": "file",
+				"editor.formatOnSave": false,
+				"editor.formatOnPaste": true,
+				"editor.formatOnType": true,
+				"editor.semanticHighlighting.enabled": true,
+				"editor.detectIndentation": true,
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.insertSpaces": true,
+				"editor.tabSize": 2,
+				"outline.showArrays": false
 			},
-				"[xsl]": {
-					"editor.semanticHighlighting.enabled": true
-				},
-				"[xpath]": {
-					"editor.defaultFormatter": "deltaxml.xslt-xpath",
-					"editor.formatOnSaveMode": "file",
-					"editor.formatOnSave": false,
-					"editor.formatOnPaste": true,
-					"editor.formatOnType": true,
-					"editor.semanticHighlighting.enabled": true,
-					"editor.detectIndentation": true,
-					"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
-					"editor.insertSpaces": true,
-					"editor.tabSize": 2,
-					"outline.showArrays": false
-				},
-				"[bpmn]": {
-					"editor.semanticHighlighting.enabled": true
-				}
+			"[xml]": {
+				"editor.defaultFormatter": "deltaxml.xslt-xpath",
+				"editor.formatOnSaveMode": "file",
+				"editor.formatOnSave": false,
+				"editor.formatOnPaste": true,
+				"editor.formatOnType": true,
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.detectIndentation": true,
+				"editor.insertSpaces": true,
+				"editor.tabSize": 4,
+				"outline.showArrays": false
 			},
+			"[xsl]": {
+				"editor.semanticHighlighting.enabled": true
+			},
+			"[xpath]": {
+				"editor.defaultFormatter": "deltaxml.xslt-xpath",
+				"editor.formatOnSaveMode": "file",
+				"editor.formatOnSave": false,
+				"editor.formatOnPaste": true,
+				"editor.formatOnType": true,
+				"editor.semanticHighlighting.enabled": true,
+				"editor.detectIndentation": true,
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.insertSpaces": true,
+				"editor.tabSize": 2,
+				"outline.showArrays": false
+			},
+			"[bpmn]": {
+				"editor.semanticHighlighting.enabled": true
+			}
+		},
 		"keybindings": [
 			{
 				"command": "xslt-xpath.selectCurrentElement",
@@ -102,7 +102,7 @@
 				"key": "Shift+Cmd+6"
 			}
 		],
-		"commands": [			
+		"commands": [
 			{
 				"command": "xslt-xpath.addTaskInputs",
 				"title": "Add XSLT Inputs to Tasks File",
@@ -468,7 +468,7 @@
 						"description": "To supply a JSON file in the 'xmlSource' property"
 					},
 					"unprefixedElementNames": {
-                        "type": "string",
+						"type": "string",
 						"enum": [
 							"##html5"
 						],
@@ -961,20 +961,21 @@
 		"lint": "eslint -c .eslintrc.js --ext .ts src",
 		"lint-fix": "eslint -c .eslintrc.js --fix --ext .ts src",
 		"watch": "tsc -watch -p ./",
-		"test": "jest"
+		"test": "mocha --require ts-node/register test/**/*.ts"
 	},
 	"devDependencies": {
-		"@types/jest": "^29.5.14",
+		"@types/chai": "^5.2.2",
+		"@types/mocha": "^10.0.1",
 		"@types/node": "^10.17.17",
 		"@types/vscode": "^1.72.0",
 		"@typescript-eslint/eslint-plugin": "^5.4.0",
 		"@typescript-eslint/parser": "^5.4.0",
+		"chai": "^5.2.0",
 		"eslint": "^8.2.0",
 		"eslint-config-prettier": "^8.3.0",
-		"jest": "^29.7.0",
+		"mocha": "^11.5.0",
 		"prettier": "^2.4.1",
-		"ts-jest": "^29.3.2",
-		"tslint": "^5.20.1",
+		"ts-node": "^10.9.2",
 		"typescript": "^4.9.4",
 		"xslt3": "^2.0.3"
 	},

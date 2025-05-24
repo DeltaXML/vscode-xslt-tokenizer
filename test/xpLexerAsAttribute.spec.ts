@@ -23,8 +23,9 @@
 import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../src/xpLexer';
 import * as fs from 'fs';
 import * as path from 'path';
-import { TestPaths } from './utils/testPaths';
-import { TestDataType } from './types';
+import { TestPaths } from '../__tests__/utils/testPaths';
+import { TestDataType } from '../__tests__/types';
+import { expect } from 'chai';
 
 const testDataFile = 'xpInAsAttribute-expected.json';
 const testData: TestDataType = getDataFromFile();
@@ -39,14 +40,14 @@ describe(`describe: ${testData.description}`, () => {
         it(`${label} : ${xpath}`, () => {
             // the call to the xpLexer.analyse function - the subject of the tests:
             const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, true);
-            expect(tokensOut.length).toBe(tokens.length);
+            expect(tokensOut.length).to.equal(tokens.length);
             const errorTokens = tokensOut.filter(t => t.error);
-            expect(errorTokens.length).toBe(0);
+            expect(errorTokens.length).to.equal(0);
 
             tokensOut.forEach((token, idx) => {
                 const [expectedValue, expectedType] = tokens[idx];
-                expect(token.value).toBe(expectedValue);
-                expect(TokenLevelState[token.tokenType]).toBe(expectedType);
+                expect(token.value).to.equal(expectedValue);
+                expect(TokenLevelState[token.tokenType]).to.equal(expectedType);
             });
         });
     });
