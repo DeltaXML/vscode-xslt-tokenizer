@@ -701,7 +701,7 @@ export class XPathLexer {
                     }
                 }
                 if (!nextChar && tokenChars.length > 0) {
-                    this.update(poppedContext, result, tokenChars, nextLabelState);
+                    this.update(poppedContext, result, tokenChars, nextLabelState, isTypeDeclaration);
                 }
                 currentState = nextState;
             } // end if(currentChar)

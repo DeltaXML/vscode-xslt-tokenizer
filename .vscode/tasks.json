@@ -23,18 +23,16 @@
 			"detail": "eslint -c .eslintrc.js --ext .ts src"
 		},
 		{
-			"type": "xslt",
-			"label": "regex-out",
-			"saxonJar": "${config:XSLT.tasks.saxonJar}",
-			"xsltFile": "${file}",
-			"xmlSource": "${file}",
-			"resultPath": "${workspaceFolder}/xslt-out/regex-out.xml",
-			"allowSyntaxExtensions40": "off",
+			"type": "xslt-js",
+			"label": "xslt: as-attributes-to-json",
+			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslAsAttributesToJson.xsl",
+			"xmlSource": "${workspaceFolder}/__tests__/data/xsl-test-files/xpInAsAttribute.xsl",
+			"resultPath": "${workspaceFolder}/__tests__/data/as-attributes-to-json-out.json",
 			"group": {
-				"kind": "build"
+				"kind": "build",
 			},
 			"problemMatcher": [
-				"$saxon-xslt"
+				"$saxon-xslt-js"
 			]
 		}
 	]

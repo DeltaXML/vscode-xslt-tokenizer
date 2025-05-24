@@ -18,6 +18,24 @@
 			"preLaunchTask": "npm: watch"
 		},
 		{
+			"type": "node",
+			"request": "launch",
+			"name": "Jest: Current File",
+			"program": "${workspaceFolder}/node_modules/.bin/jest",
+			"args": [
+				"--runInBand",
+				"--config",
+				"jest.config.js",
+				"${file}"
+			],
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen",
+			"preLaunchTask": "tsc: build - tsconfig.json",
+			"outFiles": [
+				"${workspaceFolder}/out/**/*.js"
+			]
+		},
+		{
 			"name": "Run Extension Tests",
 			"type": "extensionHost",
 			"request": "launch",
@@ -30,6 +48,23 @@
 				"${workspaceFolder}/out/test/**/*.js"
 			],
 			"preLaunchTask": "npm: watch"
+		},
+		{
+            "type": "node",
+            "request": "launch",
+            "name": "Add expected tokens to XP Lexer Test",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/out/__tests__/utils/xpLexerTestGen.js",
+            "preLaunchTask": "tsc: build - tsconfig.json",
+			"console": "integratedTerminal",
+            "outFiles": [
+                "${workspaceFolder}/out/test/**/*.js"
+            ],
+			"args": [
+				"--file", "${workspaceFolder}/__tests__/data/as-attributes-to-json-out.json"
+			]
 		},
 		{
             "type": "node",

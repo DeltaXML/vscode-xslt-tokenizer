@@ -1,0 +1,215 @@
+{
+   "testCases": [
+      [
+         "test1",
+         "xs:integer"
+      ],
+      [
+         "test2",
+         "map(xs:integer, map(xs:string, array(xs:integer*)))?"
+      ],
+      [
+         "test3",
+         "xs:integer+"
+      ],
+      [
+         "test4",
+         "element(books)"
+      ],
+      [
+         "test5",
+         "(function(element()) as xs:string)?"
+      ],
+      [
+         "test6",
+         "xs:boolean"
+      ],
+      [
+         "test7",
+         "document-node(element(abc))"
+      ],
+      [
+         "test8",
+         "xs:anyAtomicType"
+      ],
+      [
+         "test9",
+         "xs:numeric"
+      ],
+      [
+         "test10",
+         "array(*)?"
+      ],
+      [
+         "test11",
+         "map(*)"
+      ],
+      [
+         "test12",
+         "array(map(xs:string, xs:integer))?"
+      ],
+      [
+         "test13",
+         "element(ct:book)"
+      ],
+      [
+         "test14",
+         "attribute(book)"
+      ],
+      [
+         "test15",
+         "attribute()"
+      ],
+      [
+         "test16",
+         "attribute(*, xs:date)"
+      ],
+      [
+         "test17",
+         "element(*, xs:integer)"
+      ],
+      [
+         "test18",
+         "element(as)"
+      ],
+      [
+         "test19",
+         "function(*)"
+      ],
+      [
+         "XP4test1",
+         "record(ssn as xs:string, emp as element(employee))"
+      ],
+      [
+         "XP4test2",
+         "union(xs:dateTime, xs:date, xs:time, xs:string)"
+      ],
+      [
+         "XP4test3",
+         "enum('NFC', 'NFD', 'NFKC', 'NFKD')"
+      ],
+      [
+         "XP4test4",
+         "type(ct:complex)"
+      ],
+      [
+         "test1-error",
+         "xs:intege"
+      ],
+      [
+         "test1tvt-error",
+         "xs:intege"
+      ],
+      [
+         "test2-error",
+         "arrayx(xs:string)"
+      ],
+      [
+         "test3-error",
+         "string"
+      ],
+      [
+         "test4-error",
+         "element('book')"
+      ],
+      [
+         "test5-error",
+         "map(element() xs:integer*)*"
+      ],
+      [
+         "test6-error",
+         ""
+      ],
+      [
+         "test7-error",
+         "@name"
+      ],
+      [
+         "test8-error",
+         "element(q:book)"
+      ],
+      [
+         "test9-error",
+         "element('book')"
+      ],
+      [
+         "test10-error",
+         "element(book"
+      ],
+      [
+         "test12-error",
+         "map()"
+      ],
+      [
+         "test13-error",
+         "xs:map(*)"
+      ],
+      [
+         "test15-error",
+         "array( )"
+      ],
+      [
+         "test16-error",
+         "array()"
+      ],
+      [
+         "test17-error",
+         "map( )"
+      ],
+      [
+         "test18-error",
+         "map(xs:integer, xs:integer, xs:integer)"
+      ],
+      [
+         "test19-error",
+         "array(xs:integer, xs:integer)"
+      ],
+      [
+         "test20-error",
+         "attribute(*, xs:date, xs:integer)"
+      ],
+      [
+         "test21-error",
+         "element(*, xs:date, xs:integer)"
+      ],
+      [
+         "test22-error",
+         "as xs:integer"
+      ],
+      [
+         "test23-error",
+         "array(as)"
+      ],
+      [
+         "test24-error",
+         "array(*) as"
+      ],
+      [
+         "test25-error",
+         "as array(*)"
+      ],
+      [
+         "test27-error",
+         "function(book, library)"
+      ],
+      [
+         "test29-error",
+         "element(?)"
+      ],
+      [
+         "test30-error",
+         "element(..)?"
+      ],
+      [
+         "test31-error",
+         "function()"
+      ],
+      [
+         "test32-error",
+         "element()()"
+      ]
+   ],
+   "descriptor": "XPath Lexer: tokens created within the XSLT 'as' attribute",
+   "suite": "xpInAsAttribute",
+   "notes": "from: file:\/\/\/Users\/phil.fearon\/Documents\/github\/vscode-xslt-tokenizer\/__tests__\/scripts\/xslAsAttributesToJson.xsl"
+}
