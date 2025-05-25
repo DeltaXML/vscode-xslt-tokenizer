@@ -20,11 +20,11 @@
  * 3. the data file with expected tokens added by @module xpLexerTestGen.ts
  * 
  */
-import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../src/xpLexer';
+import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../../src/xpLexer';
 import * as fs from 'fs';
 import * as path from 'path';
-import { TestPaths } from '../__tests__/utils/testPaths';
-import { TestDataType } from '../__tests__/types';
+import { TestPaths } from '../../__tests__/utils/testPaths';
+import { TestDataType } from '../../__tests__/types';
 import { expect } from 'chai';
 
 const testDataFile = 'xpInAsAttribute-expected.json';
