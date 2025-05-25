@@ -962,7 +962,7 @@
 		"lint-fix": "eslint -c .eslintrc.js --fix --ext .ts src",
 		"watch": "tsc -watch -p ./",
 		"test": "vscode-test",
-		"unit-test": "mocha --require ts-node/register test/**/*.ts"
+		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts"
 	},
 	"devDependencies": {
 		"@types/chai": "^5.2.2",
