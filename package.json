@@ -957,11 +957,12 @@
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
-		"compile": "tsc -p ./",
+		"clean": "rm -rf out",
+		"compile": "npm run clean && tsc -p ./",
 		"lint": "eslint -c .eslintrc.js --ext .ts src",
 		"lint-fix": "eslint -c .eslintrc.js --fix --ext .ts src",
 		"watch": "tsc -watch -p ./",
-		"test": "vscode-test",
+		"test": "npm run compile && vscode-test",
 		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts"
 	},
 	"devDependencies": {
