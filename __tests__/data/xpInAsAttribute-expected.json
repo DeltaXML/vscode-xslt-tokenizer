@@ -1,5 +1,6 @@
 {
   "suite": "xpInAsAttribute",
+  "source": "xpInAsAttribute.xsl",
   "description": "XPath Lexer: expected tokens for each XSLT as attribute",
   "attributeName": "as",
   "metadata": {

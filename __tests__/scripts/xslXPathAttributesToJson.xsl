@@ -17,8 +17,10 @@
   <xsl:template match="/" mode="#all">
     <xsl:variable name="result" as="map(*)">
       <xsl:map>
-        <xsl:map-entry select="'xpInAsAttribute'" key="'suite'"/>
-        <xsl:map-entry select="'XPath Lexer: expected tokens for each XSLT ' || $nameOfAttribute || ' attribute'" key="'descriptor'"/>
+        <xsl:variable name="sourceFileName" as="item()*" select="tokenize(base-uri(), '/')[last()]"/>
+        <xsl:map-entry select="substring($sourceFileName, 1, string-length($sourceFileName) - 4)" key="'suite'"/>
+        <xsl:map-entry select="'XPath Lexer: expected tokens for each XSLT ' || $nameOfAttribute || ' attribute'" key="'description'"/>
+        <xsl:map-entry select="$sourceFileName" key="'source'"/>
         <xsl:map-entry select="$nameOfAttribute" key="'attributeName'"/>
         <xsl:map-entry select="'from: ' || static-base-uri()" key="'notes'"/>
         <xsl:map-entry key="'testCases'">
