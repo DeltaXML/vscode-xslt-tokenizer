@@ -33,8 +33,8 @@ import { RawLexerTestData } from '../types';
 function generator() {
 	const args = process.argv.slice(2);
 	let testDataFile = "";
-	if (args.length !== 2) {
-		console.log("Usage: xpLexerTestGen --file <filename>");
+	if (args.length !== 4) {
+		console.log("Usage: xpLexerTestGen --file <filename> --out <filename>");
 		return;
 	} else {
 		testDataFile = args[1];
@@ -55,7 +55,7 @@ function generator() {
 		const tokens = tokensOut.map(token => [token.value, TokenLevelState[token.tokenType]]);
 		entries.push({ label, xpath, tokens });
 	});
-	const outputPath = path.join(TestPaths.testDataDir, suite + "-expected.json");
+	const outputPath = args[3];
 	fs.writeFileSync(outputPath, JSON.stringify({ suite, description: descriptor, metadata, tests: entries }, null, 2));
 	console.log("Generated expected test data saved to: " + outputPath);
 };
