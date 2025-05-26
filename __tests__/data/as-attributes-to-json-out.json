@@ -211,5 +211,5 @@
    ],
    "descriptor": "XPath Lexer: expected tokens for each XSLT 'as' attribute",
    "suite": "xpInAsAttribute",
-   "notes": "from: file:\/\/\/Users\/phil.fearon\/Documents\/github\/vscode-xslt-tokenizer\/__tests__\/scripts\/xslAsAttributesToJson.xsl"
+   "notes": "from: file:\/\/\/Users\/phil.fearon\/Documents\/github\/vscode-xslt-tokenizer\/__tests__\/scripts\/xslXPathAttributesToJson.xsl"
 }

@@ -24,8 +24,8 @@
 		},
 		{
 			"type": "xslt-js",
-			"label": "xslt: as-attributes-to-json",
-			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslAsAttributesToJson.xsl",
+			"label": "xslt: xpath-attributes-to-json",
+			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslXPathAttributesToJson.xsl",
 			"xmlSource": "${workspaceFolder}/__tests__/data/xsl-test-files/xpInAsAttribute.xsl",
 			"resultPath": "${workspaceFolder}/__tests__/data/as-attributes-to-json-out.json",
 			"group": {
@@ -41,8 +41,8 @@
 			// 2. uses hard-coded temp file as output
 			"type": "xslt-js",
 			"label": "gen: json from xsl - PICK - CHAIN (1/2)",
-			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslAsAttributesToJson.xsl",
-			"xmlSource": "${input:sourceOfAsAttribute}",
+			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslXPathAttributesToJson.xsl",
+			"xmlSource": "${input:sourceOfXPathAttribute}",
 			"resultPath": "${workspaceFolder}/temp/json-from-xml-out.json",
 			"group": {
 				"kind": "hidden",
@@ -90,9 +90,9 @@
 		*/
 		{
 			/* --- Usage: ---
-			"source": "${input:sourceOfAsAttribute}",
+			"source": "${input:sourceOfXPathAttribute}",
 			*/
-			"id": "sourceOfAsAttribute",
+			"id": "sourceOfXPathAttribute",
 			"type": "command",
 			"command": "xslt-xpath.pickFile",
 			"args": {

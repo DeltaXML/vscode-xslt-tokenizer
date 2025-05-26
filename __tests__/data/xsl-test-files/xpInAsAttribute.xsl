@@ -4,6 +4,10 @@
                 xmlns:fn="namespace-uri"
                 xmlns:ct="com.test"
                 version="3.0">
+  
+  <!-- inform script that generates unit-test data to use 'as' attribute -->
+  <?test-attribute as?>
+
   <!-- tests with valid types specific by the 'as' attribute -->
   <xsl:variable name="test1" as="xs:integer" select="count(22)"/>
   <xsl:variable name="test2" as="map(xs:integer, map(xs:string, array(xs:integer*)))?" select="/*"/>

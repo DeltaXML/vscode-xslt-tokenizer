@@ -12,6 +12,8 @@
   <xsl:include href="../../xslt-resources/xpath-result-serializer/xpath-result-serializer-color.xsl"/>
 	<xsl:output method="json" indent="yes"/>
   
+  <xsl:variable name="nameOfAttribute" as="xs:string" select="/*/processing-instruction(test-attribute)"/>
+  
   <xsl:template match="/" mode="#all">
     <xsl:map>
       <xsl:map-entry select="'xpInAsAttribute'" key="'suite'"/>
@@ -32,7 +34,7 @@
     </xsl:map>
   </xsl:template>
   
-  <xsl:template match="xsl:variable" mode="#default">
+  <xsl:template match="xsl:variable[@*/name() = $nameOfAttribute]" mode="#default">
     <xsl:sequence select="[string(@name), string(@as)]"/>
   </xsl:template>
   
