@@ -29,11 +29,28 @@
 			"xmlSource": "${workspaceFolder}/__tests__/data/xsl-test-files/xpInAsAttribute.xsl",
 			"resultPath": "${workspaceFolder}/__tests__/data/as-attributes-to-json-out.json",
 			"group": {
-				"kind": "build",
+				"kind": "test",
 			},
 			"problemMatcher": [
 				"$saxon-xslt-js"
 			]
-		}
+		},
+		{
+			"label": "run: xpLexerTestGen.js",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"${workspaceFolder}/out/__tests__/utils/xpLexerTestGen.js",
+				"--file",
+				"${workspaceFolder}/__tests__/data/as-attributes-to-json-out.json"
+			],
+			"dependsOn": ["tsc: build - tsconfig.json"],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			},
+			"group": "test",
+			"problemMatcher": []
+		},
 	]
 }
