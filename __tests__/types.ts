@@ -1,6 +1,7 @@
 export interface ExpectedTokenData {
     suite: string;
     description: string;
+    attributeName: string;
     tests: Array<{
         label: string;
         xpath: string;
@@ -10,6 +11,7 @@ export interface ExpectedTokenData {
 
 export interface RawLexerTestData {
   suite: string;
+  attributeName: string;
   descriptor: string;
   testCases: [string, string][];
 }

@@ -34,12 +34,13 @@ describe(`${testData.description}`, () => {
     const lexer = new XPathLexer();
     // position info for tokens is computed from this start:
     const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+    const isTestingAsAttribute = testData.attributeName === 'as';
 
     testData.tests.forEach((test) => {
         const { label, xpath, tokens } = test;
         it(`${label} : ${xpath}`, () => {
             // the call to the xpLexer.analyse function - the subject of the tests:
-            const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, true);
+            const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
             expect(tokensOut.length).to.equal(tokens.length);
             const errorTokens = tokensOut.filter(t => t.error);
             expect(errorTokens.length).to.equal(0);

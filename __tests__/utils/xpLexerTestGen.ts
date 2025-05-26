@@ -27,7 +27,6 @@
 import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../../src/xpLexer';
 import fs = require('fs');
 import path = require('path');
-import { TestPaths } from './testPaths';
 import { RawLexerTestData } from '../types';
 
 function generator() {
@@ -41,7 +40,7 @@ function generator() {
 	}
 	console.log("Test Data File: " + testDataFile);
 	const rawTestData: RawLexerTestData = JSON.parse(fs.readFileSync(testDataFile, 'utf8'));
-	const { suite, descriptor, testCases } = rawTestData;
+	const { suite, descriptor, attributeName, testCases } = rawTestData;
 
 	const metadata = getMetadata();
 
@@ -56,7 +55,8 @@ function generator() {
 		entries.push({ label, xpath, tokens });
 	});
 	const outputPath = args[3];
-	fs.writeFileSync(outputPath, JSON.stringify({ suite, description: descriptor, metadata, tests: entries }, null, 2));
+	fs.writeFileSync(outputPath, JSON.stringify({ suite, description: descriptor, attributeName, metadata, tests: entries }, null, 2));
+	console.log('debug', attributeName);
 	console.log("Generated expected test data saved to: " + outputPath);
 };
 generator();
