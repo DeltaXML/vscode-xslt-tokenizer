@@ -1,6 +1,6 @@
 {
   "suite": "xpInAsAttribute",
-  "description": "XPath Lexer: tokens created within the XSLT 'as' attribute",
+  "description": "XPath Lexer: expected tokens for each XSLT 'as' attribute",
   "metadata": {
     "moduleName": "xpLexerTestGen.js",
     "version": "1.7.0"

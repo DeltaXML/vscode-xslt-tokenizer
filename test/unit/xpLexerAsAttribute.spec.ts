@@ -30,7 +30,7 @@ import { expect } from 'chai';
 const testDataFile = 'xpInAsAttribute-expected.json';
 const testData: ExpectedTokenData = getDataFromFile();
 
-describe(`describe: ${testData.description}`, () => {
+describe(`${testData.description}`, () => {
     const lexer = new XPathLexer();
     // position info for tokens is computed from this start:
     const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };

@@ -15,7 +15,7 @@
   <xsl:template match="/" mode="#all">
     <xsl:map>
       <xsl:map-entry select="'xpInAsAttribute'" key="'suite'"/>
-      <xsl:map-entry select="'XPath Lexer: tokens created within the XSLT ''as'' attribute'" key="'descriptor'"/>
+      <xsl:map-entry select="'XPath Lexer: expected tokens for each XSLT ''as'' attribute'" key="'descriptor'"/>
       <xsl:map-entry select="'from: ' || static-base-uri()" key="'notes'"/>
       <xsl:map-entry key="'testCases'">
         <xsl:variable name="tests" as="array(*)*">
