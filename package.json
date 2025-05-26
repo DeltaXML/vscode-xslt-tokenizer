@@ -32,7 +32,7 @@
 		"onCommand:workbench.action.tasks.runTask"
 	],
 	"license": "MIT",
-	"main": "./out/extension.js",
+	"main": "./out/src/extension.js",
 	"contributes": {
 		"configurationDefaults": {
 			"[xslt]": {
