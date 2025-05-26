@@ -1,4 +1,4 @@
-export interface TestDataType {
+export interface ExpectedTokenData {
     suite: string;
     description: string;
     tests: Array<{

@@ -30,14 +30,15 @@ import { expect } from 'chai';
 const testDataFile = 'xpInAsAttribute-expected.json';
 const testData: ExpectedTokenData = getDataFromFile();
 
-describe(`describe: ${testData.description}`, () => {
+suite(`suite: ${testData.description}`, () => {
     const lexer = new XPathLexer();
     // position info for tokens is computed from this start:
     const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 
-    testData.tests.forEach((test) => {
-        const { label, xpath, tokens } = test;
-        it(`${label} : ${xpath}`, () => {
+    testData.tests.forEach((testData) => {
+        const { label, xpath, tokens } = testData;
+        
+        test(`${label} : ${xpath}`, () => {
             // the call to the xpLexer.analyse function - the subject of the tests:
             const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, true);
             expect(tokensOut.length).to.equal(tokens.length);
