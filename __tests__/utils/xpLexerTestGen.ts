@@ -56,7 +56,6 @@ function generator() {
 	});
 	const outputPath = args[3];
 	fs.writeFileSync(outputPath, JSON.stringify({ suite, description: descriptor, attributeName, metadata, tests: entries }, null, 2));
-	console.log('debug', attributeName);
 	console.log("Generated expected test data saved to: " + outputPath);
 };
 generator();

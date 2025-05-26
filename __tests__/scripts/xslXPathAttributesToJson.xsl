@@ -10,29 +10,33 @@
                 version="3.0">
   
   <xsl:include href="../../xslt-resources/xpath-result-serializer/xpath-result-serializer-color.xsl"/>
-	<xsl:output method="json" indent="yes"/>
+  <xsl:output method="json" indent="yes"/>
   
   <xsl:variable name="nameOfAttribute" as="xs:string" select="/*/processing-instruction(test-attribute)"/>
   
   <xsl:template match="/" mode="#all">
-    <xsl:map>
-      <xsl:map-entry select="'xpInAsAttribute'" key="'suite'"/>
-      <xsl:map-entry select="'XPath Lexer: expected tokens for each XSLT ''as'' attribute'" key="'descriptor'"/>
-      <xsl:map-entry select="$nameOfAttribute" key="'attributeName'"/>
-      <xsl:map-entry select="'from: ' || static-base-uri()" key="'notes'"/>
-      <xsl:map-entry key="'testCases'">
-        <xsl:variable name="tests" as="array(*)*">
-          <xsl:apply-templates select="*/xsl:variable"/>
-        </xsl:variable>
-        <xsl:variable name="result" select="array {$tests}"/>
-        <xsl:message expand-text="yes">
-        ==== Watch Variables ====
-          tests:    {ext:print($tests,8,'  ')}
-          result:   {ext:print($result,8,'  ')}
-        </xsl:message>
-        <xsl:sequence select="$result"/>
-      </xsl:map-entry>
-    </xsl:map>
+    <xsl:variable name="result" as="map(*)">
+      <xsl:map>
+        <xsl:map-entry select="'xpInAsAttribute'" key="'suite'"/>
+        <xsl:map-entry select="'XPath Lexer: expected tokens for each XSLT ' || $nameOfAttribute || ' attribute'" key="'descriptor'"/>
+        <xsl:map-entry select="$nameOfAttribute" key="'attributeName'"/>
+        <xsl:map-entry select="'from: ' || static-base-uri()" key="'notes'"/>
+        <xsl:map-entry key="'testCases'">
+          <xsl:variable name="tests" as="array(*)*">
+            <xsl:apply-templates select="*/xsl:variable"/>
+          </xsl:variable>
+          <xsl:variable name="result" select="array {$tests}"/>
+          <xsl:sequence select="$result"/>
+        </xsl:map-entry>
+      </xsl:map>
+    </xsl:variable>
+    <xsl:message expand-text="yes">
+      ==== XSLT: {tokenize(static-base-uri(), '/')[last()]} ====
+      xslt in:   {ext:print(tokenize(base-uri(), '/')[last()])}
+      xslt attr: {ext:print($nameOfAttribute)}
+      json out:  {ext:print($result,6,'  ')}
+    </xsl:message>
+    <xsl:sequence select="$result"/>
   </xsl:template>
   
   <xsl:template match="xsl:variable[@*/name() = $nameOfAttribute]" mode="#default">
