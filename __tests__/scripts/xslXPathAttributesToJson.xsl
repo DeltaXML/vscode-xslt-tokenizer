@@ -42,7 +42,7 @@
   </xsl:template>
   
   <xsl:template match="xsl:variable[@*/name() = $nameOfAttribute]" mode="#default">
-    <xsl:sequence select="[string(@name), string(@as)]"/>
+    <xsl:sequence select="[string(@name), string(@*[name() = $nameOfAttribute])]"/>
   </xsl:template>
   
 </xsl:stylesheet>

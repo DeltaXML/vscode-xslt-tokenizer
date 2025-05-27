@@ -44,6 +44,13 @@
 			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslXPathAttributesToJson.xsl",
 			"xmlSource": "${input:sourceOfXPathAttribute}",
 			"resultPath": "${workspaceFolder}/temp/json-from-xml-out.json",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"clear": false
+			},
 			"group": {
 				"kind": "hidden",
 			},
@@ -53,17 +60,16 @@
 		},
 		{
 			// CHAIN (2/2)
-			// 1. uses hard-coded temp file as input
-			// 2. prompts for output path
-			"label": "gen: expected test json from xsl - PICK in / out",
+			// invokes: xpLexerTestGen.js"
+			// 1. uses hard-coded temp out file from CHAIN as input
+			// 2. derives output path from input
+			"label": "gen: expected test json from xsl - PICK input",
 			"type": "shell",
 			"command": "node",
 			"args": [
 				"${workspaceFolder}/out/__tests__/utils/xpLexerTestGen.js",
 				"--file",
 				"${workspaceFolder}/temp/json-from-xml-out.json",
-				"--out",
-				"${input:outExpectedJSONofAsAttribute}"
 			],
 			"dependsOn": [
 				"gen: json from xsl - PICK - CHAIN (1/2)",

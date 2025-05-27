@@ -1,4 +1,5 @@
 {
+   "description": "XPath Lexer: expected tokens for each XSLT as attribute",
    "attributeName": "as",
    "testCases": [
       [
@@ -210,7 +211,7 @@
          "element()()"
       ]
    ],
-   "descriptor": "XPath Lexer: expected tokens for each XSLT 'as' attribute",
    "suite": "xpInAsAttribute",
+   "source": "xpInAsAttribute.xsl",
    "notes": "from: file:\/\/\/Users\/phil.fearon\/Documents\/github\/vscode-xslt-tokenizer\/__tests__\/scripts\/xslXPathAttributesToJson.xsl"
 }

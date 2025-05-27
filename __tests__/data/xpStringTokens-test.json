@@ -1,0 +1,30 @@
+{
+  "suite": "xpStringTokens",
+  "source": "xpStringTokens.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "test1",
+      "xpath": "'one' || 'two'",
+      "tokens": [
+        [
+          "'one'",
+          "string"
+        ],
+        [
+          "||",
+          "operator"
+        ],
+        [
+          "'two'",
+          "string"
+        ]
+      ]
+    }
+  ]
+}

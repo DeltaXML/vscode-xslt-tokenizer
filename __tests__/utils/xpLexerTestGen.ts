@@ -28,12 +28,13 @@ import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../../s
 import fs = require('fs');
 import path = require('path');
 import { RawLexerTestData } from '../types';
+import { TestPaths } from './testPaths';
 
 function generator() {
 	const args = process.argv.slice(2);
 	let testDataFile = "";
-	if (args.length !== 4) {
-		console.log("Usage: xpLexerTestGen --file <filename> --out <filename>");
+	if (args.length !== 2) {
+		console.log("Usage: xpLexerTestGen --file <filename>");
 		return;
 	} else {
 		testDataFile = args[1];
@@ -54,7 +55,7 @@ function generator() {
 		const tokens = tokensOut.map(token => [token.value, TokenLevelState[token.tokenType]]);
 		entries.push({ label, xpath, tokens });
 	});
-	const outputPath = args[3];
+	const outputPath = resolvePath(suite);
 	fs.writeFileSync(outputPath, JSON.stringify({
 		suite,
 		source,
@@ -74,4 +75,8 @@ function getMetadata() {
 	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 	const version = packageJson.version;
 	return { moduleName: generator, version };
+}
+
+function resolvePath(suite: string) {
+	return path.join(__dirname, '../../../', TestPaths.testDataDir, suite + '-test.json');
 }
