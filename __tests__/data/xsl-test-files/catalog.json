@@ -1,6 +1,6 @@
 [
     {
-        "group": "basic",
+        "group": "XPath Lexer",
         "files": [
             "xpInAsAttribute",
             "xpStringTokens"

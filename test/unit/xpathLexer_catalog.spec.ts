@@ -35,7 +35,7 @@ catalogGroup.files.forEach(file => {
 });
 
 function describeTest(testData: ExpectedTokenData) {
-    describe(`${testData.description}`, () => {
+    describe(`${testData.description} (${testData.suite})`, () => {
         const lexer = new XPathLexer();
         // position info for tokens is computed from this start:
         const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
@@ -63,7 +63,6 @@ function describeTest(testData: ExpectedTokenData) {
 function getFirstCatalogGroup() {
     const catalogPath = path.join(__dirname, '../../', TestPaths.testXslDataDir, 'catalog.json');
     const groupArray: Array<CatalogGroup> = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-    console.log('obj', groupArray);
     return groupArray[0];
 }
 
