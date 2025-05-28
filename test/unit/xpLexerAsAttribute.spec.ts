@@ -24,38 +24,51 @@ import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../../s
 import * as fs from 'fs';
 import * as path from 'path';
 import { TestPaths } from '../../__tests__/utils/testPaths';
-import { ExpectedTokenData } from '../../__tests__/types';
+import { CatalogGroup, ExpectedTokenData } from '../../__tests__/types';
 import { expect } from 'chai';
 
-const testDataFile = 'xpInAsAttribute-expected.json';
-const testData: ExpectedTokenData = getDataFromFile();
+const catalogGroup = getFirstCatalogGroup();
 
-describe(`${testData.description}`, () => {
-    const lexer = new XPathLexer();
-    // position info for tokens is computed from this start:
-    const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-    const isTestingAsAttribute = testData.attributeName === 'as';
+catalogGroup.files.forEach(file => {
+    const locadeFileData: ExpectedTokenData = getDataFromFile(file);
+    describeTest(locadeFileData);
+});
 
-    testData.tests.forEach((test) => {
-        const { label, xpath, tokens } = test;
-        it(`${label} : ${xpath}`, () => {
-            // the call to the xpLexer.analyse function - the subject of the tests:
-            const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
-            expect(tokensOut.length).to.equal(tokens.length);
-            const errorTokens = tokensOut.filter(t => t.error);
-            expect(errorTokens.length).to.equal(0);
+function describeTest(testData: ExpectedTokenData) {
+    describe(`${testData.description}`, () => {
+        const lexer = new XPathLexer();
+        // position info for tokens is computed from this start:
+        const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+        const isTestingAsAttribute = testData.attributeName === 'as';
 
-            tokensOut.forEach((token, idx) => {
-                const [expectedValue, expectedType] = tokens[idx];
-                expect(token.value).to.equal(expectedValue);
-                expect(TokenLevelState[token.tokenType]).to.equal(expectedType);
+        testData.tests.forEach((test) => {
+            const { label, xpath, tokens } = test;
+            it(`${label} : ${xpath}`, () => {
+                // the call to the xpLexer.analyse function - the subject of the tests:
+                const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
+                expect(tokensOut.length).to.equal(tokens.length);
+                const errorTokens = tokensOut.filter(t => t.error);
+                expect(errorTokens.length).to.equal(0);
+
+                tokensOut.forEach((token, idx) => {
+                    const [expectedValue, expectedType] = tokens[idx];
+                    expect(token.value).to.equal(expectedValue);
+                    expect(TokenLevelState[token.tokenType]).to.equal(expectedType);
+                });
             });
         });
     });
-});
+}
 
-function getDataFromFile() {
-    const testDataFilePath = path.join(TestPaths.testDataDir, testDataFile);
+function getFirstCatalogGroup() {
+    const catalogPath = path.join(__dirname, '../../', TestPaths.testXslDataDir, 'catalog.json');
+    const groupArray: Array<CatalogGroup> = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+    console.log('obj', groupArray);
+    return groupArray[0];
+}
+
+function getDataFromFile(name: string) {
+    const testDataFilePath = path.join(__dirname, '../../', TestPaths.testDataDir, name + "-test.json");
     const testData: ExpectedTokenData = JSON.parse(fs.readFileSync(testDataFilePath, 'utf8'));
     return testData;
 }

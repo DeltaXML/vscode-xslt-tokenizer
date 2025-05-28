@@ -1,0 +1,9 @@
+[
+    {
+        "group": "basic",
+        "files": [
+            "xpInAsAttribute",
+            "xpStringTokens"
+        ]
+    }
+]

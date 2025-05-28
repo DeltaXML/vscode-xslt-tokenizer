@@ -17,3 +17,8 @@ export interface RawLexerTestData {
   description: string;
   testCases: [string, string][];
 }
+
+export interface CatalogGroup {
+    group: string;
+    files: string[];
+}
