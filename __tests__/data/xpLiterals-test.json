@@ -152,10 +152,14 @@
     },
     {
       "label": "string13",
-      "xpath": "     'one      &amp;&amp; two'",
+      "xpath": "\n      'one \n      &amp;&amp; two'",
       "tokens": [
         [
-          "'one      ",
+          "'one ",
+          "string"
+        ],
+        [
+          "      ",
           "string"
         ],
         [
@@ -174,17 +178,33 @@
     },
     {
       "label": "string14",
-      "xpath": "'     one     two     three     four'",
+      "xpath": "'\n    one\n    two\n    three\n    four'",
       "tokens": [
         [
-          "'     one     two     three     four'",
+          "'",
+          "string"
+        ],
+        [
+          "    one",
+          "string"
+        ],
+        [
+          "    two",
+          "string"
+        ],
+        [
+          "    three",
+          "string"
+        ],
+        [
+          "    four'",
           "string"
         ]
       ]
     },
     {
       "label": "string15-error",
-      "xpath": "     'one &amp;   '",
+      "xpath": "\n    'one &amp;\n      two'",
       "tokens": [
         [
           "'one ",
@@ -195,7 +215,7 @@
           "entityRef"
         ],
         [
-          "   '",
+          "\n      two'",
           "string"
         ]
       ]

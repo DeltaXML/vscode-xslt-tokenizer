@@ -52,6 +52,12 @@
     <xsl:sequence select="[string(@name), $withEscapedAmps]"/>
   </xsl:template>
   
+  <xsl:template match="xsl:variable[select]" mode="#default">
+    <xsl:variable name="rawXPath" as="xs:string" select="substring(select/text(), 2, string-length(select/text()) - 2)"/>
+    <xsl:variable name="withEscapedAmps" as="xs:string" select="fn:escapeAmp($rawXPath)"/>
+    <xsl:sequence select="[string(@name), $withEscapedAmps]"/>
+  </xsl:template>
+  
   <xsl:function name="fn:escapeAmp" as="item()*">
     <xsl:param name="test" as="xs:string"/>
     <xsl:message expand-text="yes">
