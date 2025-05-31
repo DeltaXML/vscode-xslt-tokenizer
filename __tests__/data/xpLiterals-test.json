@@ -152,6 +152,70 @@
     },
     {
       "label": "string12",
+      "xpath": "'one&#32;two'",
+      "tokens": [
+        [
+          "'one",
+          "string"
+        ],
+        [
+          "&#32;",
+          "entityRef"
+        ],
+        [
+          "two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string13",
+      "xpath": "'one&#xa0;two'",
+      "tokens": [
+        [
+          "'one",
+          "string"
+        ],
+        [
+          "&#xa0;",
+          "entityRef"
+        ],
+        [
+          "two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string14",
+      "xpath": "'one(:this:)two'",
+      "tokens": [
+        [
+          "'one(:this:)two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string15",
+      "xpath": "'\n      one\n      '",
+      "tokens": [
+        [
+          "'",
+          "string"
+        ],
+        [
+          "      one",
+          "string"
+        ],
+        [
+          "      '",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string16",
       "xpath": "\n      'one \n      &amp;&amp; two'",
       "tokens": [
         [
@@ -177,33 +241,33 @@
       ]
     },
     {
-      "label": "string13",
-      "xpath": "'\n    one\n    two\n    three\n    four'",
+      "label": "string17",
+      "xpath": "'\n      one\n      two\n      three\n      four'",
       "tokens": [
         [
           "'",
           "string"
         ],
         [
-          "    one",
+          "      one",
           "string"
         ],
         [
-          "    two",
+          "      two",
           "string"
         ],
         [
-          "    three",
+          "      three",
           "string"
         ],
         [
-          "    four'",
+          "      four'",
           "string"
         ]
       ]
     },
     {
-      "label": "string14",
+      "label": "string18",
       "xpath": "\n      'one &amp; \n      two'",
       "tokens": [
         [
@@ -225,8 +289,8 @@
       ]
     },
     {
-      "label": "string15",
-      "xpath": "\n    'one &amp;\n      two'",
+      "label": "string19",
+      "xpath": "\n      'one &amp;\n  two'",
       "tokens": [
         [
           "'one ",
@@ -237,7 +301,25 @@
           "entityRef"
         ],
         [
-          "      two'",
+          "  two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string20",
+      "xpath": "\n  \"one &amp;\n  two\"",
+      "tokens": [
+        [
+          "\"one ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          "  two\"",
           "string"
         ]
       ]

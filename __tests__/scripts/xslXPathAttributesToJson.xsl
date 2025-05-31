@@ -15,6 +15,7 @@
   
   <xsl:variable name="nameOfAttribute" as="xs:string" select="/*/processing-instruction(test-attribute)"/>
   <xsl:variable name="unicodeAmp" as="xs:integer" select="string-to-codepoints('&amp;')[1]"/>
+  <xsl:variable name="unicodePound" as="xs:integer" select="string-to-codepoints('£')[1]"/>
   <xsl:variable name="unicodeEscapedAmp" as="xs:integer+" select="$unicodeAmp, string-to-codepoints('amp;')"/>
   
   <xsl:template match="/" mode="#all">
@@ -48,6 +49,11 @@
   
   <xsl:template match="xsl:variable[@*/name() = $nameOfAttribute]" mode="#default">
     <xsl:variable name="rawXPath" as="xs:string" select="string(@*[name() = $nameOfAttribute])"/>
+    <xsl:message expand-text="yes">
+    ==== xsl:variable ====
+      .           {ext:print(.)}
+      rawXPath:   {ext:print($rawXPath,7,'  ')}
+    </xsl:message>
     <xsl:variable name="withEscapedAmps" as="xs:string" select="fn:escapeAmp($rawXPath)"/>
     <xsl:sequence select="[string(@name), $withEscapedAmps]"/>
   </xsl:template>
@@ -60,12 +66,23 @@
   
   <xsl:function name="fn:escapeAmp" as="item()*">
     <xsl:param name="test" as="xs:string"/>
+    <xsl:message expand-text="yes">
+    ==== Watch: fn:escapeAmp ====
+      test:   {ext:print($test,5,'  ')}
+    </xsl:message>
     <xsl:variable name="escapedCodePoints" as="xs:integer*">
       <xsl:for-each select="string-to-codepoints($test)">
         <xsl:variable name="char" as="xs:integer" select="."/>
+        <xsl:message expand-text="yes">
+        ==== Watch Variables ====
+          char:   {ext:print($char,7,'  ')}
+        </xsl:message>
         <xsl:choose>
           <xsl:when test="$char eq $unicodeAmp">
             <xsl:sequence select="$unicodeEscapedAmp"/>  
+          </xsl:when>
+          <xsl:when test="$char eq $unicodePound">
+            <xsl:sequence select="$unicodeAmp"/>  
           </xsl:when>
           <xsl:otherwise>
             <xsl:sequence select="$char"/>

@@ -5,6 +5,12 @@
                 xmlns:ct="com.test"
                 expand-text="true"
                 version="3.0">
+  <!-- 
+       This XSLT is used just as data to extract XPath strings
+       The '&amp;' string is parsed as '&' but converted back to '&amp;' to generate the test
+       The '£' character is replaced by a '&' character in a test
+       The <select> element with a TVT is used where we need to preserve whitespace
+  -->
   
   <!-- inform script that generates unit-test data to use 'as' attribute -->
   <?test-attribute select?>
@@ -22,30 +28,46 @@
   <xsl:variable name="string10" select="'one &amp;amp;&amp;amp; two'"/>
   <xsl:variable name="string11" select="'one &amp;amp;amp; two'"/>
   
-  <xsl:variable name="string12">
+  <xsl:variable name="string12" select="'one£#32;two'"/>
+  <xsl:variable name="string13" select="'one£#xa0;two'"/>
+  <xsl:variable name="string14" select="'one(:this:)two'"/>
+  
+  <xsl:variable name="string15">
+    <select>{'
+      one
+      '}</select>
+  </xsl:variable>
+  
+  <xsl:variable name="string16">
     <select>{
       'one 
       &amp;&amp; two'}</select>
   </xsl:variable>
-  <xsl:variable name="string13">
+  <xsl:variable name="string17">
     <select>{'
-    one
-    two
-    three
-    four'}</select>
+      one
+      two
+      three
+      four'}</select>
   </xsl:variable>
   
   <!-- no error when space char follows '&amp;' and occurs before newline -->
-  <xsl:variable name="string14">
+  <xsl:variable name="string18">
     <select>{
       'one &amp; 
       two'}</select>
   </xsl:variable>
   <!-- issue #153 error when newline immediately follows '&amp;' -->
-  <xsl:variable name="string15">
+  <xsl:variable name="string19">
     <select>{
-    'one &amp;
-      two'}</select>
+      'one &amp;
+  two'}</select>
   </xsl:variable>
+  
+    <xsl:variable name="string20">
+      <select>{
+  "one &amp;
+  two"}</select>
+</xsl:variable>
 
 </xsl:stylesheet>
