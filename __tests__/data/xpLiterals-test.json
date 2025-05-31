@@ -151,7 +151,7 @@
       ]
     },
     {
-      "label": "string13",
+      "label": "string12",
       "xpath": "\n      'one \n      &amp;&amp; two'",
       "tokens": [
         [
@@ -177,7 +177,7 @@
       ]
     },
     {
-      "label": "string14",
+      "label": "string13",
       "xpath": "'\n    one\n    two\n    three\n    four'",
       "tokens": [
         [
@@ -203,7 +203,7 @@
       ]
     },
     {
-      "label": "string15.1",
+      "label": "string14",
       "xpath": "\n      'one &amp; \n      two'",
       "tokens": [
         [
@@ -225,7 +225,7 @@
       ]
     },
     {
-      "label": "string15.2-error",
+      "label": "string15",
       "xpath": "\n    'one &amp;\n      two'",
       "tokens": [
         [

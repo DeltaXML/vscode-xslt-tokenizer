@@ -22,15 +22,12 @@
   <xsl:variable name="string10" select="'one &amp;amp;&amp;amp; two'"/>
   <xsl:variable name="string11" select="'one &amp;amp;amp; two'"/>
   
-  <!-- <xsl:variable name="string12" select="'one 
-       &amp; 
-       two'"/> -->
-  <xsl:variable name="string13">
+  <xsl:variable name="string12">
     <select>{
       'one 
       &amp;&amp; two'}</select>
   </xsl:variable>
-  <xsl:variable name="string14">
+  <xsl:variable name="string13">
     <select>{'
     one
     two
@@ -39,13 +36,13 @@
   </xsl:variable>
   
   <!-- no error when space char follows '&amp;' and occurs before newline -->
-  <xsl:variable name="string15.1">
+  <xsl:variable name="string14">
     <select>{
       'one &amp; 
       two'}</select>
   </xsl:variable>
-  <!-- error when newline immediately follows '&amp;' -->
-  <xsl:variable name="string15.2-error">
+  <!-- issue #153 error when newline immediately follows '&amp;' -->
+  <xsl:variable name="string15">
     <select>{
     'one &amp;
       two'}</select>
