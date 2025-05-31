@@ -3,7 +3,8 @@
         "group": "XPath Lexer",
         "files": [
             "xpInAsAttribute",
-            "xpLiterals"
+            "xpLiterals",
+            "xpNumericLiterals"
         ]
     }
 ]
