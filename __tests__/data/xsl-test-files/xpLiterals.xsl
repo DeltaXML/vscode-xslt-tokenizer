@@ -37,8 +37,15 @@
     three
     four'}</select>
   </xsl:variable>
+  
+  <!-- no error when space char follows '&amp;' and occurs before newline -->
+  <xsl:variable name="string15.1">
+    <select>{
+      'one &amp; 
+      two'}</select>
+  </xsl:variable>
   <!-- error when newline immediately follows '&amp;' -->
-  <xsl:variable name="string15-error">
+  <xsl:variable name="string15.2-error">
     <select>{
     'one &amp;
       two'}</select>

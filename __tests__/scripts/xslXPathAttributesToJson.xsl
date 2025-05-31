@@ -60,10 +60,6 @@
   
   <xsl:function name="fn:escapeAmp" as="item()*">
     <xsl:param name="test" as="xs:string"/>
-    <xsl:message expand-text="yes">
-    ==== Watch: fn:escapeAmp ====
-      test:   {ext:print($test,5,'  ')}
-    </xsl:message>
     <xsl:variable name="escapedCodePoints" as="xs:integer*">
       <xsl:for-each select="string-to-codepoints($test)">
         <xsl:variable name="char" as="xs:integer" select="."/>

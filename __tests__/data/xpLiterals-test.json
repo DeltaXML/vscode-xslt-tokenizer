@@ -203,7 +203,29 @@
       ]
     },
     {
-      "label": "string15-error",
+      "label": "string15.1",
+      "xpath": "\n      'one &amp; \n      two'",
+      "tokens": [
+        [
+          "'one ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          " ",
+          "string"
+        ],
+        [
+          "      two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string15.2-error",
       "xpath": "\n    'one &amp;\n      two'",
       "tokens": [
         [
@@ -215,7 +237,7 @@
           "entityRef"
         ],
         [
-          "\n      two'",
+          "      two'",
           "string"
         ]
       ]
