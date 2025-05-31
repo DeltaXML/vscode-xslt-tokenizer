@@ -2078,8 +2078,15 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.function:
-					case TokenLevelState.number:
 						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+						break;
+					case TokenLevelState.number:
+						if (XsltTokenDiagnostics.validateNumber(token.value)) {
+							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+						} else {
+							token.error = ErrorType.XPathNumber;
+							problemTokens.push(token);
+						}
 						break;
 					case TokenLevelState.simpleType:
 						let tValue = token.value;
@@ -2449,6 +2456,11 @@ export class XsltTokenDiagnostics {
 				}
 			}
 		}
+	}
+
+	private static validateNumber(text: string) {
+       	const number = Number(text);
+		return !isNaN(number) && isFinite(number);
 	}
 
 	private static validateXMLDeclaration(lineNumber: number, token: BaseToken, document: vscode.TextDocument, problemTokens: BaseToken[]) {
@@ -3171,6 +3183,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.XPathTypeName:
 					msg = `XPath: Invalid type: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathNumber:
+					msg = `XPath: Invalid numeric literal: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathFunctionNamespace:
 					errCode = DiagnosticCode.unresolvedGenericRef;

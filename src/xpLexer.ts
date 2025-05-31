@@ -1261,6 +1261,7 @@ export enum ErrorType {
     XSLTInstrUnexpected,
     XSLTAttrUnexpected,
     XPathTypeName,
+    XPathNumber,
     XSLTPrefix,
     MissingTemplateParam,
     IterateParamInvalid,
