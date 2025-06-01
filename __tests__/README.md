@@ -1,16 +1,18 @@
 # Test Process for the XPath Lexer
 
 ## Overview
+This document explains how to create and run tests for the XPath lexer
+
 To test the XPath lexer we need the following: 
-1. then name of the test
+1. name of the test
 2. an XPath expression
 3. a set of tokens that we expect the lexer to generate.
 
-The mocha test [xpathLexer_catalog.spec.ts](../test/unit/xpathLexer_catalog.spec.ts) loads XPath strings and their expected token information from the first 'group' in the [catalog.json](data/xsl-test-files/catalog.json) file.
+The Mocha test [xpathLexer_catalog.spec.ts](../test/unit/xpathLexer_catalog.spec.ts) loads XPath strings and their expected token information from the first 'group' in the [catalog.json](data/xsl-test-files/catalog.json) file.
 
-Each file listed in the group contains a set of tests contained in a *.json* file that is generated from a single *.xsl* file. 
+Each file listed in the group contains a set of tests contained in a *.json* file that is generated from a single *.xsl* source file. 
 
-An *.xsl* test source file like [xpInAsAttribute.xsl](data/xsl-test-files/xpInAsAttribute.xsl) comprises a set of `xsl:variable` instructions. A `attribute-name` processing instruction indicates whether the `as` or `select` attribute on the `xsl:variable` instruction is to be tested, for example: 
+The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInAsAttribute.xsl)) comprises a set of `xsl:variable` instructions. A `attribute-name` processing instruction indicates whether the `as` or `select` attribute on the `xsl:variable` instruction is to be tested, for example: 
 
 ```xml
 <!-- file: __tests__/data/xsl-test-files/xpTypes.xsl -->
@@ -35,10 +37,10 @@ An *.xsl* test source file like [xpInAsAttribute.xsl](data/xsl-test-files/xpInAs
 
 #### 2. The task will then run, it comprises two stages:
 
-1. The first stage runs [xslXPathAttributesToJson.xsl](scripts/xslXPathAttributesToJson.xsl) to extract, for each 'xsl:variable' instruction, the name and XPath expression from the 'as' or 'select' attribute to a temporary JSON file.
+1. The first stage runs [xslXPathAttributesToJson.xsl](scripts/xslXPathAttributesToJson.xsl) to extract, from each 'xsl:variable' instruction, the name and XPath expression from the 'as' or 'select' attribute to an interim JSON file (named *temp/json-from-xml-out.json*).
 
-2. The final stage uses [xpLexerTestGen.ts](utils/xpLexerTestGen.ts) to run the XPath Lexer for each XPath expression and output data for the tokens on each XPath expression and add this to the JSON object.
-3. The JSON test file created is placed in the `__tests/data` directory, with a `-test.json` suffix added to the source XSLT selected
+2. The final stage uses [xpLexerTestGen.ts](utils/xpLexerTestGen.ts) to run the XPath Lexer for each XPath expression (in the interim JSON file) and output data for the tokens on each XPath expression and add this to the JSON object.
+3. The JSON test file created is placed in the *__tests/data* directory, with a *-test.json* suffix added to the source XSLT selected
 
 #### 3. Once the task has created the JSON test file, add the base name of the test to the [catalog.json](data/xsl-test-files/catalog.json) file.
 
