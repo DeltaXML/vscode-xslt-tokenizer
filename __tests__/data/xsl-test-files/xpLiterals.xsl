@@ -28,8 +28,8 @@
   <xsl:variable name="string10" select="'one &amp;amp;&amp;amp; two'"/>
   <xsl:variable name="string11" select="'one &amp;amp;amp; two'"/>
   
-  <xsl:variable name="string12" select="'one£#32;two'"/>
-  <xsl:variable name="string13" select="'one£#xa0;two'"/>
+  <xsl:variable name="string12" select="'one&#32;two'"/>
+  <xsl:variable name="string13" select="'one&#xa0;two'"/>
   <xsl:variable name="string14" select="'one(:this:)two'"/>
   
   <xsl:variable name="string15">

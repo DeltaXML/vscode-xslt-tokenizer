@@ -23,26 +23,14 @@
 			"detail": "eslint -c .eslintrc.js --ext .ts src"
 		},
 		{
-			"type": "xslt-js",
-			"label": "xslt: xpath-attributes-to-json",
-			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslXPathAttributesToJson.xsl",
-			"xmlSource": "${workspaceFolder}/__tests__/data/xsl-test-files/xpInAsAttribute.xsl",
-			"resultPath": "${workspaceFolder}/__tests__/data/as-attributes-to-json-out.json",
-			"group": {
-				"kind": "test",
-			},
-			"problemMatcher": [
-				"$saxon-xslt-js"
-			]
-		},
-		{
             // CHAIN (1/2)
 			// 1. prompts for input path
 			// 2. uses hard-coded temp file as output
 			"type": "xslt-js",
 			"label": "gen: json from xsl - PICK - CHAIN (1/2)",
 			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslXPathAttributesToJson.xsl",
-			"xmlSource": "${input:sourceOfXPathAttribute}",
+			"initialTemplate": "initial",
+			"parameters": [{"name": "testSourceURL", "value": "${input:sourceOfXPathAttribute}"}],
 			"resultPath": "${workspaceFolder}/temp/json-from-xml-out.json",
 			"presentation": {
 				"echo": true,
@@ -85,14 +73,7 @@
 	],
 	"inputs": [
 		/*
-		1. the specialist 'pickFile' command equivalents for the inputs defined here are:
-			"xsltFile": "${command:xslt-xpath.pickXsltFile}",              // can select from current file - if xslt - or recently used xslt files
-			"xmlSource": "${command:xslt-xpath.pickXmlSourceFile}",        // can select from current file or recently used stage1 source files
-			"xmlSource": "${command:xslt-xpath.pickStage2XmlSourceFile}",  // can select from recently used stage2 source files or stage1 result files
-			"resultPath": "${command:xslt-xpath.pickResultFile}",          // can save to recently used stage1 result files
-			"resultPath": "${command:xslt-xpath.pickStage2ResultFile}",    // can save to recently used stage2 result files
-
-		2. these inputs invoke the 'pickFile' command with args for custom behaviour:
+			the 'pickFile' command enhances 'QuickPick' by allowing selectin from a 'recent files' list:
 		*/
 		{
 			/* --- Usage: ---
@@ -102,48 +83,11 @@
 			"type": "command",
 			"command": "xslt-xpath.pickFile",
 			"args": {
-				"label": "(1/4) select source XSLT for test",
+				"label": "select source XSLT for test",
 				"extensions": [
 					"xsl"
 				]
 			}
 		},
-		{
-			/* --- Usage: ---
-			"source": "${input:asAttributeRawJSON}",
-			*/
-			"id": "asAttributeRawJSON",
-			"type": "command",
-			"command": "xslt-xpath.pickFile",
-			"args": {
-				"label": "(3/4) select raw json input file",
-				"prevStageLabel": "(2/4) select raw json output file",
-				"prevStageGroup": "recent raw json output"
-			}
-		},
-		{
-			/* --- Usage: ---
-			"out": "${input:outRawJSONofAsAttribute}",
-			*/
-			"id": "outRawJSONofAsAttribute",
-			"type": "command",
-			"command": "xslt-xpath.pickFile",
-			"args": {
-				"label": "(2/4) select raw json output file",
-				"isResult": true
-			}
-		},
-		{
-			/* --- Usage: ---
-			"out": "${input:outExpectedJSONofAsAttribute}",
-			*/
-			"id": "outExpectedJSONofAsAttribute",
-			"type": "command",
-			"command": "xslt-xpath.pickFile",
-			"args": {
-				"label": "(4/4) select raw json output file",
-				"isResult": true
-			}
-		}
 	]
 }

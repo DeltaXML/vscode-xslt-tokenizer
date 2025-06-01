@@ -11,17 +11,20 @@
                 version="3.0">
   
   <xsl:include href="../../xslt-resources/xpath-result-serializer/xpath-result-serializer-color.xsl"/>
+  <xsl:param name="testSourceURL" as="xs:string" select="'test'"/>
   <xsl:output method="json" indent="yes"/>
   
-  <xsl:variable name="nameOfAttribute" as="xs:string" select="/*/processing-instruction(test-attribute)"/>
-  <xsl:variable name="unicodeAmp" as="xs:integer" select="string-to-codepoints('&amp;')[1]"/>
-  <xsl:variable name="unicodePound" as="xs:integer" select="string-to-codepoints('£')[1]"/>
-  <xsl:variable name="unicodeEscapedAmp" as="xs:integer+" select="$unicodeAmp, string-to-codepoints('amp;')"/>
+  <xsl:template name="initial">
+    <xsl:variable name="testSourceTest" as="xs:string" select="unparsed-text($testSourceURL)"/>
+    <xsl:variable name="escapedSourceTest" as="xs:string" select="replace($testSourceTest, '&amp;', '&amp;amp;')"/>
+    <xsl:variable name="parsedSourceTest" as="node()" select="parse-xml($escapedSourceTest)"/>
+    <xsl:apply-templates select="$parsedSourceTest"/>
+  </xsl:template>
   
   <xsl:template match="/" mode="#all">
-    <xsl:message select="'unicodeAmp', $unicodeAmp"/>
-    <xsl:message select="'unicodeEscapedAmp', $unicodeEscapedAmp"/>
+    <xsl:variable name="nameOfAttribute" as="xs:string" select="/*/processing-instruction(test-attribute)"/>
     <xsl:variable name="result" as="map(*)">
+      
       <xsl:map>
         <xsl:variable name="sourceFileName" as="item()*" select="tokenize(base-uri(), '/')[last()]"/>
         <xsl:map-entry select="substring($sourceFileName, 1, string-length($sourceFileName) - 4)" key="'suite'"/>
@@ -31,7 +34,9 @@
         <xsl:map-entry select="'from: ' || static-base-uri()" key="'notes'"/>
         <xsl:map-entry key="'testCases'">
           <xsl:variable name="tests" as="array(*)*">
-            <xsl:apply-templates select="*/xsl:variable"/>
+            <xsl:apply-templates select="*/xsl:variable">
+              <xsl:with-param name="nameOfAttribute" as="xs:string" select="$nameOfAttribute"/>
+            </xsl:apply-templates>
           </xsl:variable>
           <xsl:variable name="result" select="array {$tests}"/>
           <xsl:sequence select="$result"/>
@@ -47,50 +52,20 @@
     <xsl:sequence select="$result"/>
   </xsl:template>
   
-  <xsl:template match="xsl:variable[@*/name() = $nameOfAttribute]" mode="#default">
+  <xsl:template match="xsl:variable[@name]" mode="#default">
+    <xsl:param name="nameOfAttribute" as="xs:string"/>
     <xsl:variable name="rawXPath" as="xs:string" select="string(@*[name() = $nameOfAttribute])"/>
     <xsl:message expand-text="yes">
-    ==== xsl:variable ====
+      ==== xsl:variable ====
       .           {ext:print(.)}
       rawXPath:   {ext:print($rawXPath,7,'  ')}
     </xsl:message>
-    <xsl:variable name="withEscapedAmps" as="xs:string" select="fn:escapeAmp($rawXPath)"/>
-    <xsl:sequence select="[string(@name), $withEscapedAmps]"/>
+    <xsl:sequence select="[string(@name), $rawXPath]"/>
   </xsl:template>
   
   <xsl:template match="xsl:variable[select]" mode="#default">
     <xsl:variable name="rawXPath" as="xs:string" select="substring(select/text(), 2, string-length(select/text()) - 2)"/>
-    <xsl:variable name="withEscapedAmps" as="xs:string" select="fn:escapeAmp($rawXPath)"/>
-    <xsl:sequence select="[string(@name), $withEscapedAmps]"/>
+    <xsl:sequence select="[string(@name), $rawXPath]"/>
   </xsl:template>
-  
-  <xsl:function name="fn:escapeAmp" as="item()*">
-    <xsl:param name="test" as="xs:string"/>
-    <xsl:message expand-text="yes">
-    ==== Watch: fn:escapeAmp ====
-      test:   {ext:print($test,5,'  ')}
-    </xsl:message>
-    <xsl:variable name="escapedCodePoints" as="xs:integer*">
-      <xsl:for-each select="string-to-codepoints($test)">
-        <xsl:variable name="char" as="xs:integer" select="."/>
-        <xsl:message expand-text="yes">
-        ==== Watch Variables ====
-          char:   {ext:print($char,7,'  ')}
-        </xsl:message>
-        <xsl:choose>
-          <xsl:when test="$char eq $unicodeAmp">
-            <xsl:sequence select="$unicodeEscapedAmp"/>  
-          </xsl:when>
-          <xsl:when test="$char eq $unicodePound">
-            <xsl:sequence select="$unicodeAmp"/>  
-          </xsl:when>
-          <xsl:otherwise>
-            <xsl:sequence select="$char"/>
-          </xsl:otherwise>
-        </xsl:choose>
-      </xsl:for-each>
-    </xsl:variable>
-    <xsl:sequence select="codepoints-to-string($escapedCodePoints)"/>
-  </xsl:function>
   
 </xsl:stylesheet>
