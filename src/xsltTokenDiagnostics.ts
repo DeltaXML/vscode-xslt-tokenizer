@@ -471,7 +471,7 @@ export class XsltTokenDiagnostics {
 			}
 		});
 
-		if (docType === DocumentTypes.XPath) {
+		if (docType === DocumentTypes.XPath || docType === DocumentTypes.SCH) {
 			xsltPrefixesToURIs.set('array', XSLTnamespaces.Array);
 			xsltPrefixesToURIs.set('map', XSLTnamespaces.Map);
 			xsltPrefixesToURIs.set('math', XSLTnamespaces.Map);
