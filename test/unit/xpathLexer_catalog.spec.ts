@@ -21,13 +21,11 @@
  * 
  */
 import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../../src/xpLexer';
-import * as fs from 'fs';
-import * as path from 'path';
-import { TestPaths } from '../../__tests__/utils/testPaths';
-import { CatalogGroup, ExpectedTokenData } from '../../__tests__/types';
+import { ExpectedTokenData } from '../../__tests__/types';
 import { expect } from 'chai';
+import { getCatalogGroup, getDataFromFile } from '../../__tests__/utils/getCatalogGroup';
 
-const catalogGroup = getFirstCatalogGroup();
+const catalogGroup = getCatalogGroup(0);
 
 catalogGroup.files.forEach(file => {
     const locadeFileData: ExpectedTokenData = getDataFromFile(file);
@@ -60,14 +58,4 @@ function describeTest(testData: ExpectedTokenData) {
     });
 }
 
-function getFirstCatalogGroup() {
-    const catalogPath = path.join(__dirname, '../../', TestPaths.testXslDataDir, 'catalog.json');
-    const groupArray: Array<CatalogGroup> = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-    return groupArray[0];
-}
 
-function getDataFromFile(name: string) {
-    const testDataFilePath = path.join(__dirname, '../../', TestPaths.testDataDir, name + "-test.json");
-    const testData: ExpectedTokenData = JSON.parse(fs.readFileSync(testDataFilePath, 'utf8'));
-    return testData;
-}
