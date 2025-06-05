@@ -23,14 +23,19 @@
 			"detail": "eslint -c .eslintrc.js --ext .ts src"
 		},
 		{
-            // CHAIN (1/2)
+			// CHAIN (1/2)
 			// 1. prompts for input path
 			// 2. uses hard-coded temp file as output
 			"type": "xslt-js",
 			"label": "gen: json from xsl - PICK - CHAIN (1/2)",
 			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslXPathAttributesToJson.xsl",
 			"initialTemplate": "initial",
-			"parameters": [{"name": "testSourceURL", "value": "${input:sourceOfXPathAttribute}"}],
+			"parameters": [
+				{
+					"name": "testSourceURL",
+					"value": "${input:sourceOfXPathAttribute}"
+				}
+			],
 			"resultPath": "${workspaceFolder}/temp/json-from-xml-out.json",
 			"presentation": {
 				"echo": true,

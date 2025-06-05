@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { CatalogGroup, ExpectedTokenData } from '../types';
+import { CatalogGroup, ExpectedProblemData, ExpectedTokenData } from '../types';
 import { TestPaths } from './testPaths';
 
 export function getCatalogGroup(groupIndex: number) {
@@ -11,9 +11,15 @@ export function getCatalogGroup(groupIndex: number) {
     const groupArray: Array<CatalogGroup> = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
     return groupArray[groupIndex];
 }
-export function getDataFromFile(name: string) {
+export function getTokenDataFromFile(name: string) {
     const testDataFilePath = path.join(getLocalRootDir(), TestPaths.testDataDir, name + "-test.json");
     const testData: ExpectedTokenData = JSON.parse(fs.readFileSync(testDataFilePath, 'utf8'));
+    return testData;
+}
+
+export function getProblemDataFromFile(name: string) {
+    const testDataFilePath = path.join(getLocalRootDir(), TestPaths.testDataDir, name + "-test.json");
+    const testData: ExpectedProblemData = JSON.parse(fs.readFileSync(testDataFilePath, 'utf8'));
     return testData;
 }
 

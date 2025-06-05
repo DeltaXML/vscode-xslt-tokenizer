@@ -20,42 +20,72 @@
  * 3. the data file with expected tokens added by @module xpLexerTestGen.ts
  * 
  */
-import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../../src/xpLexer';
-import { ExpectedTokenData } from '../../__tests__/types';
-import { expect } from 'chai';
-import { getCatalogGroup, getDataFromFile } from '../../__tests__/utils/getCatalogGroup';
+import * as vscode from 'vscode';
+import { XPathLexer, ExitCondition, LexPosition } from '../../src/xpLexer';
+import { ExpectedProblemData } from '../../__tests__/types';
+import { expect, assert } from 'chai';
+import { getCatalogGroup, getProblemDataFromFile } from '../../__tests__/utils/getCatalogGroup';
+import { XPathConfiguration } from '../../src/languageConfigurations';
+import { DocumentTypes } from '../../src/xslLexer';
+import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
+import { TestPaths } from '../../__tests__/utils/testPaths';
+import path = require('path');
+import fs = require('fs');
 
 const catalogGroup = getCatalogGroup(0);
 
 catalogGroup.files.forEach(file => {
-    const locadeFileData: ExpectedTokenData = getDataFromFile(file);
-    describeTest(locadeFileData);
+    const loadedFileData: ExpectedProblemData = getProblemDataFromFile(file);
+    describeTest(loadedFileData);
 });
 
-function describeTest(testData: ExpectedTokenData) {
+function describeTest(testData: ExpectedProblemData) {
     suite(`${testData.description}`, () => {
         const lexer = new XPathLexer();
         // position info for tokens is computed from this start:
         const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
         const isTestingAsAttribute = testData.attributeName === 'as';
 
+        const entries: any[] = [];
+
         testData.tests.forEach((testData) => {
-            const { label, xpath, tokens } = testData;
-            test(`${label} : ${xpath}`, () => {
+            const { label, xpath, problems } = testData;
+            test(`${label} : ${xpath}`, async () => {
                 // the call to the xpLexer.analyse function - the subject of the tests:
                 const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
-                expect(tokensOut.length).to.equal(tokens.length);
-                const errorTokens = tokensOut.filter(t => t.error);
-                expect(errorTokens.length).to.equal(0);
+                const document = await vscode.workspace.openTextDocument({ content: xpath, language: 'xml' });
+                const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, tokensOut, [], [], []);
 
-                tokensOut.forEach((token, idx) => {
-                    const [expectedValue, expectedType] = tokens[idx];
-                    expect(token.value).to.equal(expectedValue);
-                    expect(TokenLevelState[token.tokenType]).to.equal(expectedType);
+                const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
+                if (problems) {
+                    latestProblems.forEach((latestProblem, idx) => {
+                        const [expectedMessage, expectedTokenValue] = problems[idx];
+                        const [latestMessage, latestTokenValue] = latestProblem;
+
+                        expect(latestMessage).to.equal(expectedMessage);
+                        expect(latestTokenValue).to.equal(expectedTokenValue);
+                    });
+                } else {
+                    latestProblems.forEach((latestProblem) => {
+                        entries.push(latestProblem);
+                    });
+                    assert.fail('No expected "problems" found in test. "problems" now added to test.');
+                }
+                entries.push(problems);
+                const outputPath = resolvePath();
+
+                fs.writeFileSync(out)
+
+                diagnostics.forEach((token, idx) => {
+
                 });
             });
         });
     });
+}
+
+function resolvePath(suite: string) {
+    return path.join(__dirname, '../../../../', TestPaths.testDataDir, suite + '.dg-test.json');
 }
 
 

@@ -10,6 +10,18 @@ export interface ExpectedTokenData {
   }>;
 }
 
+export interface ExpectedProblemData {
+  suite: string;
+  description: string;
+  source: string;
+  attributeName: string;
+  tests: Array<{
+    label: string;
+    xpath: string;
+    problems?: Array<[string, string]>;
+  }>;
+}
+
 export interface RawLexerTestData {
   suite: string;
   source: string;

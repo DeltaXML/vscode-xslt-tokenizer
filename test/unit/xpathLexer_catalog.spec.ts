@@ -23,12 +23,12 @@
 import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../../src/xpLexer';
 import { ExpectedTokenData } from '../../__tests__/types';
 import { expect } from 'chai';
-import { getCatalogGroup, getDataFromFile } from '../../__tests__/utils/getCatalogGroup';
+import { getCatalogGroup, getTokenDataFromFile } from '../../__tests__/utils/getCatalogGroup';
 
 const catalogGroup = getCatalogGroup(0);
 
 catalogGroup.files.forEach(file => {
-    const locadeFileData: ExpectedTokenData = getDataFromFile(file);
+    const locadeFileData: ExpectedTokenData = getTokenDataFromFile(file);
     describeTest(locadeFileData);
 });
 
