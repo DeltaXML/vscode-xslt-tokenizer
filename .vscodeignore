@@ -4,6 +4,7 @@ __tests__/**
 temp/**
 xslt-out/**
 out/test/**
+out/__tests__/**
 out/**/*.map
 out/**/*.spec.js
 out/xpLexerRun.js
