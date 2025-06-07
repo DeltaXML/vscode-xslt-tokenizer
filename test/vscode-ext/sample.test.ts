@@ -53,8 +53,8 @@ function describeTest(testData: ExpectedProblemData) {
             test(`${label} : ${xpath}`, async () => {
                 // the call to the xpLexer.analyse function - the subject of the tests:
                 const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
-                const document = await vscode.workspace.openTextDocument({ content: xpath, language: 'xml' });
-                const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, tokensOut, [], [], []);
+                const document = await vscode.workspace.openTextDocument({ content: xpath, language: 'text' });
+                const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, tokensOut, [], [], [], isTestingAsAttribute);
 
                 const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
                 if (problems) {
