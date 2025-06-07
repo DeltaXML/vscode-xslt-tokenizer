@@ -62,7 +62,7 @@ function describeTest(testData: ExpectedProblemData) {
     <xsl:function name="ct:run" as="${xpath}">
         <xsl:sequence select="1"/>
     </xsl:function>
-</xsl:stylesheet>`;
+</xsl:stylesheet>error`;
                 } else {
                     xslt = `
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -71,7 +71,7 @@ function describeTest(testData: ExpectedProblemData) {
     <xsl:function name="ct:run">
         <xsl:sequence select="${xpath}"/>
     </xsl:function>
-</xsl:stylesheet>`;
+</xsl:stylesheet>error`;
                 }
                 // console.log('*****XSLT*****');
                 // console.log(xslt);
@@ -79,11 +79,14 @@ function describeTest(testData: ExpectedProblemData) {
                 const tempFilePath = path.join(tempDir, `my-temp-file-${Date.now()}-${idx}.xsl`);
                 fs.writeFileSync(tempFilePath, xslt);
                 const document = await vscode.workspace.openTextDocument(tempFilePath);
-                await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
+                const editor = await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
+                await editor.edit(editBuilder => {
+                    editBuilder.insert(new vscode.Position(0, 0), ' '); // Insert a space at the start
+                });
+                await editor.edit(editBuilder => {
+                    editBuilder.delete(new vscode.Range(0, 0, 0, 1)); // Remove the space
+                });
                 const diagnostics = await waitForDiagnostics(document.uri);
-                console.log('tempFile', tempFilePath);
-                // const diagnostics = vscode.languages.getDiagnostics(document.uri);
-                console.log('diagn', {diagnostics});
                 const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
                 if (problems) {
                     latestProblems.forEach((latestProblem, idx) => {
@@ -102,6 +105,7 @@ function describeTest(testData: ExpectedProblemData) {
 
                     // assert.fail('No expected "problems" found in test. "problems" now added to test.');
                 }
+                await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
                 // const outputPath = resolvePath();
 
                 // fs.writeFileSync(out)
