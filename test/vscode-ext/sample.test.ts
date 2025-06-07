@@ -21,12 +21,13 @@
  * 
  */
 import * as vscode from 'vscode';
+import * as os from 'os';
 import { XPathLexer, ExitCondition, LexPosition } from '../../src/xpLexer';
 import { ExpectedProblemData } from '../../__tests__/types';
 import { expect, assert } from 'chai';
 import { getCatalogGroup, getProblemDataFromFile } from '../../__tests__/utils/getCatalogGroup';
-import { XPathConfiguration } from '../../src/languageConfigurations';
-import { DocumentTypes } from '../../src/xslLexer';
+import { XPathConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
+import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 import { TestPaths } from '../../__tests__/utils/testPaths';
 import path = require('path');
@@ -41,21 +42,48 @@ catalogGroup.files.forEach(file => {
 
 function describeTest(testData: ExpectedProblemData) {
     suite(`${testData.description}`, () => {
-        const lexer = new XPathLexer();
+        const lexer = new XslLexer(XSLTConfiguration.configuration);
         // position info for tokens is computed from this start:
         const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
         const isTestingAsAttribute = testData.attributeName === 'as';
 
         const entries: any[] = [];
 
-        testData.tests.forEach((testData) => {
+        testData.tests.forEach((testData, idx) => {
             const { label, xpath, problems } = testData;
             test(`${label} : ${xpath}`, async () => {
                 // the call to the xpLexer.analyse function - the subject of the tests:
-                const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
-                const document = await vscode.workspace.openTextDocument({ content: xpath, language: 'text' });
-                const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, tokensOut, [], [], [], isTestingAsAttribute);
-
+                let xslt = '';
+                if (isTestingAsAttribute) {
+                    xslt = `
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:ct="com.example.test" version="3.0">
+    <xsl:function name="ct:run" as="${xpath}">
+        <xsl:sequence select="1"/>
+    </xsl:function>
+</xsl:stylesheet>`;
+                } else {
+                    xslt = `
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:ct="com.example.test" version="3.0">
+    <xsl:function name="ct:run">
+        <xsl:sequence select="${xpath}"/>
+    </xsl:function>
+</xsl:stylesheet>`;
+                }
+                // console.log('*****XSLT*****');
+                // console.log(xslt);
+                const tempDir = os.tmpdir();
+                const tempFilePath = path.join(tempDir, `my-temp-file-${Date.now()}-${idx}.xsl`);
+                fs.writeFileSync(tempFilePath, xslt);
+                const document = await vscode.workspace.openTextDocument(tempFilePath);
+                await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
+                const diagnostics = await waitForDiagnostics(document.uri);
+                console.log('tempFile', tempFilePath);
+                // const diagnostics = vscode.languages.getDiagnostics(document.uri);
+                console.log('diagn', {diagnostics});
                 const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
                 if (problems) {
                     latestProblems.forEach((latestProblem, idx) => {
@@ -68,8 +96,7 @@ function describeTest(testData: ExpectedProblemData) {
                 } else {
                     latestProblems.forEach((latestProblem) => {
                         entries.push(latestProblem);
-                        console.log("MYTEST *****************");
-                        console.log('message', latestProblem[0], 'tokenString', latestProblem[1]);
+                        console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
                     });
 
 
@@ -90,6 +117,24 @@ function describeTest(testData: ExpectedProblemData) {
 
 function resolvePath(suite: string) {
     return path.join(__dirname, '../../../../', TestPaths.testDataDir, suite + '.dg-test.json');
+}
+
+async function waitForDiagnostics(uri: vscode.Uri, timeout = 2000): Promise<vscode.Diagnostic[]> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            subscription.dispose();
+            reject(new Error('Timed out waiting for diagnostics'));
+        }, timeout);
+
+        const subscription = vscode.languages.onDidChangeDiagnostics(e => {
+            if (e.uris.some(changedUri => changedUri.toString() === uri.toString())) {
+                const diags = vscode.languages.getDiagnostics(uri);
+                clearTimeout(timer);
+                subscription.dispose();
+                resolve(diags);
+            }
+        });
+    });
 }
 
 
