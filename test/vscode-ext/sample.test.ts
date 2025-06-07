@@ -79,13 +79,7 @@ function describeTest(testData: ExpectedProblemData) {
                 const tempFilePath = path.join(tempDir, `my-temp-file-${Date.now()}-${idx}.xsl`);
                 fs.writeFileSync(tempFilePath, xslt);
                 const document = await vscode.workspace.openTextDocument(tempFilePath);
-                const editor = await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
-                await editor.edit(editBuilder => {
-                    editBuilder.insert(new vscode.Position(0, 0), ' '); // Insert a space at the start
-                });
-                await editor.edit(editBuilder => {
-                    editBuilder.delete(new vscode.Range(0, 0, 0, 1)); // Remove the space
-                });
+                await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
                 const diagnostics = await waitForDiagnostics(document.uri);
                 diagnostics.pop(); // Remove final error as this is added to ensure diagnostics change is fired
                 const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
