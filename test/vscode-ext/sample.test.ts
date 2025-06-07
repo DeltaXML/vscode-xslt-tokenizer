@@ -87,6 +87,7 @@ function describeTest(testData: ExpectedProblemData) {
                     editBuilder.delete(new vscode.Range(0, 0, 0, 1)); // Remove the space
                 });
                 const diagnostics = await waitForDiagnostics(document.uri);
+                diagnostics.pop(); // Remove final error as this is added to ensure diagnostics change is fired
                 const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
                 if (problems) {
                     latestProblems.forEach((latestProblem, idx) => {
