@@ -299,7 +299,7 @@ export class XsltTokenDiagnostics {
 		return valid;
 	}
 
-	public static calculateDiagnostics = (languageConfig: LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (languageConfig: LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[], testingAsAttribute = false): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 		let xslVariable = languageConfig.variableElementNames;
 		let inScopeVariablesList: VariableData[] = [];
@@ -1145,6 +1145,7 @@ export class XsltTokenDiagnostics {
 				}
 
 			} else {
+				withinTypeDeclarationAttr = testingAsAttribute ? true : withinTypeDeclarationAttr;
 				if (isWithinCDATA && !!prevToken) {
 					// reset prevToken if this token is preceded by a '{' char that is not in a token
 					try {
