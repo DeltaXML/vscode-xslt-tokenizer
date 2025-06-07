@@ -2094,7 +2094,7 @@ export class XsltTokenDiagnostics {
 						let tParts = tValue.split(':');
 						let isValidType = false;
 						let isNodeName = false;
-						if (withinTypeDeclarationAttr && prevToken?.charType === CharLevelState.lB && index > 2) {
+						if (withinTypeDeclarationAttr && prevToken?.charType === CharLevelState.lB && index > 1) {
 							const prevToken2 = allTokens[index - 2];
 							isNodeName = prevToken2.tokenType === TokenLevelState.nodeType && (prevToken2.value === 'element' || prevToken2.value === 'attribute');
 						}
