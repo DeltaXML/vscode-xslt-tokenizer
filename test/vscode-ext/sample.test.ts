@@ -23,7 +23,7 @@
 import * as vscode from 'vscode';
 import * as os from 'os';
 import { LexPosition } from '../../src/xpLexer';
-import { ExpectedProblemData } from '../../__tests__/types';
+import { ExpectedProblemData, ProblemTest } from '../../__tests__/types';
 import { expect, assert } from 'chai';
 import { getCatalogGroup, getProblemDataFromFile } from '../../__tests__/utils/getCatalogGroup';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
@@ -37,21 +37,19 @@ const catalogGroup = getCatalogGroup(0);
 
 catalogGroup.files.forEach(file => {
     const loadedFileData: ExpectedProblemData = getProblemDataFromFile(file);
-    describeTest(loadedFileData);
+    const newExpectedProblems = describeTest(loadedFileData);
 });
 
 function describeTest(testData: ExpectedProblemData) {
-    const newExpectedProblems: any[] = [];
     const isPopulatedWithExpectedProbs = !!testData.tests[0].problems;
 
     suite(`${testData.description}`, () => {
-        const lexer = new XslLexer(XSLTConfiguration.configuration);
-        // position info for tokens is computed from this start:
-        const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
         const isTestingAsAttribute = testData.attributeName === 'as';
 
         testData.tests.forEach((testData, idx) => {
             const { label, xpath, problems } = testData;
+            const newExpectedProblems: any[] = [];
+
             test(`${label} : ${xpath}`, async () => {
                 // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
                 const isDirect = true;
@@ -80,15 +78,13 @@ function describeTest(testData: ExpectedProblemData) {
                 if (!isDirect) {
                     await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
                 }
-                // const outputPath = resolvePath();
 
-                // fs.writeFileSync(out)
 
             });
         });
 
     });
-    return newExpectedProblems;
+    return isPopulatedWithExpectedProbs ? null : testData;
 }
 
 async function getDiagnostics(idx: number, xslt: string, direct: boolean) {

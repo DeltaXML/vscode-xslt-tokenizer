@@ -15,11 +15,13 @@ export interface ExpectedProblemData {
   description: string;
   source: string;
   attributeName: string;
-  tests: Array<{
+  tests: Array<ProblemTest>;
+}
+
+export interface ProblemTest {
     label: string;
     xpath: string;
     problems?: Array<[string, string]>;
-  }>;
 }
 
 export interface RawLexerTestData {
