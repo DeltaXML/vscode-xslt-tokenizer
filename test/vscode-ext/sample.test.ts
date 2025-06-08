@@ -41,13 +41,14 @@ catalogGroup.files.forEach(file => {
 });
 
 function describeTest(testData: ExpectedProblemData) {
+    const newExpectedProblems: any[] = [];
+    const isPopulatedWithExpectedProbs = !!testData.tests[0].problems;
+
     suite(`${testData.description}`, () => {
         const lexer = new XslLexer(XSLTConfiguration.configuration);
         // position info for tokens is computed from this start:
         const position: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
         const isTestingAsAttribute = testData.attributeName === 'as';
-
-        const entries: any[] = [];
 
         testData.tests.forEach((testData, idx) => {
             const { label, xpath, problems } = testData;
@@ -70,25 +71,24 @@ function describeTest(testData: ExpectedProblemData) {
                     });
                 } else {
                     latestProblems.forEach((latestProblem) => {
-                        entries.push(latestProblem);
+                        newExpectedProblems.push(latestProblem);
                         console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
                     });
 
-
                     // assert.fail('No expected "problems" found in test. "problems" now added to test.');
                 }
-                await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                if (!isDirect) {
+                    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                }
                 // const outputPath = resolvePath();
 
                 // fs.writeFileSync(out)
 
-                // diagnostics.forEach((token, idx) => {
-
-                // });
             });
         });
 
     });
+    return newExpectedProblems;
 }
 
 async function getDiagnostics(idx: number, xslt: string, direct: boolean) {
@@ -118,8 +118,6 @@ async function getDirectDiagnostics(idx: number, xslt: string) {
     const allTokens = xslLexer.analyse(xslt);
     const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'text' });
     const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XSLTConfiguration.configuration, DocumentTypes.XSLT, document, allTokens, [], [], []);
-
-    await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
     return { diagnostics, document };
 }
 
