@@ -37,18 +37,18 @@ const catalogGroup = getCatalogGroup(0);
 
 catalogGroup.files.forEach(file => {
     const loadedFileData: ExpectedProblemData = getProblemDataFromFile(file);
-    const newExpectedProblems = describeTest(loadedFileData);
+    describeTest(loadedFileData);
 });
 
 function describeTest(testData: ExpectedProblemData) {
     const isPopulatedWithExpectedProbs = !!testData.tests[0].problems;
+    console.log('isPop', isPopulatedWithExpectedProbs);
 
     suite(`${testData.description}`, () => {
         const isTestingAsAttribute = testData.attributeName === 'as';
 
-        testData.tests.forEach((testData, idx) => {
-            const { label, xpath, problems } = testData;
-            const newExpectedProblems: any[] = [];
+        testData.tests.forEach((testDataTest, idx) => {
+            const { label, xpath, problems } = testDataTest;
 
             test(`${label} : ${xpath}`, async () => {
                 // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
@@ -57,7 +57,7 @@ function describeTest(testData: ExpectedProblemData) {
                 // console.log('*****XSLT*****');
                 // console.log(xslt);
                 const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
-                const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
+                const latestProblems: [string, string][] = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
                 if (problems) {
                     latestProblems.forEach((latestProblem, idx) => {
                         const [expectedMessage, expectedTokenValue] = problems[idx];
@@ -67,22 +67,23 @@ function describeTest(testData: ExpectedProblemData) {
                         expect(latestTokenValue).to.equal(expectedTokenValue);
                     });
                 } else {
+                    testDataTest.problems = latestProblems;
+                    console.log('Updated test case:', testDataTest);
+                    console.log('problems found: ', latestProblems.length);
                     latestProblems.forEach((latestProblem) => {
-                        newExpectedProblems.push(latestProblem);
                         console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
                     });
-
-                    // assert.fail('No expected "problems" found in test. "problems" now added to test.');
                 }
                 if (!isDirect) {
                     await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
                 }
-
-
             });
         });
+        console.log('----testdata complete ------');
+        console.log(testData);
 
     });
+    console.log('finished suite() call');
     return isPopulatedWithExpectedProbs ? null : testData;
 }
 
@@ -106,9 +107,6 @@ async function getEditorDiagnostics(idx: number, xslt: string) {
 }
 
 async function getDirectDiagnostics(idx: number, xslt: string) {
-    // const tempDir = os.tmpdir();
-    // const tempFilePath = path.join(tempDir, `my-temp-file-${Date.now()}-${idx}.xsl`);
-    // fs.writeFileSync(tempFilePath, xslt);
     const xslLexer = new XslLexer(XSLTConfiguration.configuration);
     // IMPORTANT:
     xslLexer.provideCharLevelState = true;
