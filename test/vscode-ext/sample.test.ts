@@ -22,11 +22,11 @@
  */
 import * as vscode from 'vscode';
 import * as os from 'os';
-import { XPathLexer, ExitCondition, LexPosition } from '../../src/xpLexer';
+import { LexPosition } from '../../src/xpLexer';
 import { ExpectedProblemData } from '../../__tests__/types';
 import { expect, assert } from 'chai';
 import { getCatalogGroup, getProblemDataFromFile } from '../../__tests__/utils/getCatalogGroup';
-import { XPathConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
+import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 import { TestPaths } from '../../__tests__/utils/testPaths';
@@ -52,16 +52,12 @@ function describeTest(testData: ExpectedProblemData) {
         testData.tests.forEach((testData, idx) => {
             const { label, xpath, problems } = testData;
             test(`${label} : ${xpath}`, async () => {
-                // the call to the xpLexer.analyse function - the subject of the tests:
-                let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath);
+                // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
+                const isDirect = true;
+                let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath, isDirect);
                 // console.log('*****XSLT*****');
                 // console.log(xslt);
-                const tempDir = os.tmpdir();
-                const tempFilePath = path.join(tempDir, `my-temp-file-${Date.now()}-${idx}.xsl`);
-                fs.writeFileSync(tempFilePath, xslt);
-                const document = await vscode.workspace.openTextDocument(tempFilePath);
-                await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
-                const diagnostics = await waitForDiagnostics(document.uri);
+                const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
                 diagnostics.pop(); // Remove final error as this is added to ensure diagnostics change is fired
                 const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
                 if (problems) {
@@ -95,7 +91,39 @@ function describeTest(testData: ExpectedProblemData) {
     });
 }
 
-function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string) {
+async function getDiagnostics(idx: number, xslt: string, direct: boolean) {
+    if (direct) {
+        return await getDirectDiagnostics(idx, xslt);
+    } else {
+        return await getEditorDiagnostics(idx, xslt);
+    }
+}
+
+async function getEditorDiagnostics(idx: number, xslt: string) {
+    const tempDir = os.tmpdir();
+    const tempFilePath = path.join(tempDir, `my-temp-file-${Date.now()}-${idx}.xsl`);
+    fs.writeFileSync(tempFilePath, xslt);
+    const document = await vscode.workspace.openTextDocument(tempFilePath);
+    await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
+    const diagnostics = await waitForDiagnostics(document.uri);
+    return { diagnostics, document };
+}
+
+async function getDirectDiagnostics(idx: number, xslt: string) {
+    // const tempDir = os.tmpdir();
+    // const tempFilePath = path.join(tempDir, `my-temp-file-${Date.now()}-${idx}.xsl`);
+    // fs.writeFileSync(tempFilePath, xslt);
+    const xslLexer = new XslLexer(XSLTConfiguration.configuration);
+
+    const allTokens = xslLexer.analyse(xslt);
+    const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'text' });
+    const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XSLTConfiguration.configuration, DocumentTypes.XSLT, document, allTokens, [], [], []);
+
+    await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
+    return { diagnostics, document };
+}
+
+function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string, isDirect: boolean) {
     let xslt = '';
     if (isTestingAsAttribute) {
         xslt = `
@@ -105,7 +133,7 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string) {
     <xsl:function name="ct:run" as="${xpath}">
         <xsl:sequence select="1"/>
     </xsl:function>
-</xsl:stylesheet>error`;
+</xsl:stylesheet>`;
     } else {
         xslt = `
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -114,9 +142,9 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string) {
     <xsl:function name="ct:run">
         <xsl:sequence select="${xpath}"/>
     </xsl:function>
-</xsl:stylesheet>error`;
+</xsl:stylesheet>`;
     }
-    return xslt;
+    return isDirect ? xslt : xslt + 'error';
 }
 
 function resolvePath(suite: string) {
