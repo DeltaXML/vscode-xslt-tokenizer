@@ -43,48 +43,52 @@ catalogGroup.files.forEach(file => {
 function describeTest(testData: ExpectedProblemData) {
     const isPopulatedWithExpectedProbs = !!testData.tests[0].problems;
     console.log('isPop', isPopulatedWithExpectedProbs);
+    const isTestingAsAttribute = testData.attributeName === 'as';
 
     suite(`${testData.description}`, () => {
-        const isTestingAsAttribute = testData.attributeName === 'as';
 
-        testData.tests.forEach((testDataTest, idx) => {
-            const { label, xpath, problems } = testDataTest;
-
-            test(`${label} : ${xpath}`, async () => {
-                // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
-                const isDirect = true;
-                let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath, isDirect);
-                // console.log('*****XSLT*****');
-                // console.log(xslt);
-                const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
-                const latestProblems: [string, string][] = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
-                if (problems) {
-                    latestProblems.forEach((latestProblem, idx) => {
-                        const [expectedMessage, expectedTokenValue] = problems[idx];
-                        const [latestMessage, latestTokenValue] = latestProblem;
-
-                        expect(latestMessage).to.equal(expectedMessage);
-                        expect(latestTokenValue).to.equal(expectedTokenValue);
-                    });
-                } else {
-                    testDataTest.problems = latestProblems;
-                    console.log('Updated test case:', testDataTest);
-                    console.log('problems found: ', latestProblems.length);
-                    latestProblems.forEach((latestProblem) => {
-                        console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
-                    });
-                }
-                if (!isDirect) {
-                    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                }
-            });
-        });
+        invokeEachTest(testData, isTestingAsAttribute);
         console.log('----testdata complete ------');
         console.log(testData);
 
     });
     console.log('finished suite() call');
     return isPopulatedWithExpectedProbs ? null : testData;
+}
+
+function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boolean) {
+    testData.tests.forEach((testDataTest, idx) => {
+        const { label, xpath, problems } = testDataTest;
+
+        test(`${label} : ${xpath}`, async () => {
+            // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
+            const isDirect = true;
+            let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath, isDirect);
+            // console.log('*****XSLT*****');
+            // console.log(xslt);
+            const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
+            const latestProblems: [string, string][] = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
+            if (problems) {
+                latestProblems.forEach((latestProblem, idx) => {
+                    const [expectedMessage, expectedTokenValue] = problems[idx];
+                    const [latestMessage, latestTokenValue] = latestProblem;
+
+                    expect(latestMessage).to.equal(expectedMessage);
+                    expect(latestTokenValue).to.equal(expectedTokenValue);
+                });
+            } else {
+                testDataTest.problems = latestProblems;
+                console.log('Updated test case:', testDataTest);
+                console.log('problems found: ', latestProblems.length);
+                latestProblems.forEach((latestProblem) => {
+                    console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
+                });
+            }
+            if (!isDirect) {
+                await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+            }
+        });
+    });
 }
 
 async function getDiagnostics(idx: number, xslt: string, direct: boolean) {
