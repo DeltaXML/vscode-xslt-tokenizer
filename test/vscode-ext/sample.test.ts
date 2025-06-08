@@ -57,7 +57,6 @@ function describeTest(testData: ExpectedProblemData) {
                 // console.log('*****XSLT*****');
                 // console.log(xslt);
                 const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
-                diagnostics.pop(); // Remove final error as this is added to ensure diagnostics change is fired
                 const latestProblems = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
                 if (problems) {
                     latestProblems.forEach((latestProblem, idx) => {
@@ -102,6 +101,7 @@ async function getEditorDiagnostics(idx: number, xslt: string) {
     const document = await vscode.workspace.openTextDocument(tempFilePath);
     await vscode.window.showTextDocument(document); // (optional, but can help trigger diagnostics)
     const diagnostics = await waitForDiagnostics(document.uri);
+    diagnostics.pop(); // Remove final error as this is added to ensure diagnostics change is fired
     return { diagnostics, document };
 }
 
@@ -110,7 +110,8 @@ async function getDirectDiagnostics(idx: number, xslt: string) {
     // const tempFilePath = path.join(tempDir, `my-temp-file-${Date.now()}-${idx}.xsl`);
     // fs.writeFileSync(tempFilePath, xslt);
     const xslLexer = new XslLexer(XSLTConfiguration.configuration);
-
+    // IMPORTANT:
+    xslLexer.provideCharLevelState = true;
     const allTokens = xslLexer.analyse(xslt);
     const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'text' });
     const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XSLTConfiguration.configuration, DocumentTypes.XSLT, document, allTokens, [], [], []);
