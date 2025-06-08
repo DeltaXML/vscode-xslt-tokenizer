@@ -53,26 +53,7 @@ function describeTest(testData: ExpectedProblemData) {
             const { label, xpath, problems } = testData;
             test(`${label} : ${xpath}`, async () => {
                 // the call to the xpLexer.analyse function - the subject of the tests:
-                let xslt = '';
-                if (isTestingAsAttribute) {
-                    xslt = `
-<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-    xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    xmlns:ct="com.example.test" version="3.0">
-    <xsl:function name="ct:run" as="${xpath}">
-        <xsl:sequence select="1"/>
-    </xsl:function>
-</xsl:stylesheet>error`;
-                } else {
-                    xslt = `
-<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-    xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    xmlns:ct="com.example.test" version="3.0">
-    <xsl:function name="ct:run">
-        <xsl:sequence select="${xpath}"/>
-    </xsl:function>
-</xsl:stylesheet>error`;
-                }
+                let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath);
                 // console.log('*****XSLT*****');
                 // console.log(xslt);
                 const tempDir = os.tmpdir();
@@ -112,6 +93,30 @@ function describeTest(testData: ExpectedProblemData) {
         });
 
     });
+}
+
+function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string) {
+    let xslt = '';
+    if (isTestingAsAttribute) {
+        xslt = `
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:ct="com.example.test" version="3.0">
+    <xsl:function name="ct:run" as="${xpath}">
+        <xsl:sequence select="1"/>
+    </xsl:function>
+</xsl:stylesheet>error`;
+    } else {
+        xslt = `
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:ct="com.example.test" version="3.0">
+    <xsl:function name="ct:run">
+        <xsl:sequence select="${xpath}"/>
+    </xsl:function>
+</xsl:stylesheet>error`;
+    }
+    return xslt;
 }
 
 function resolvePath(suite: string) {
