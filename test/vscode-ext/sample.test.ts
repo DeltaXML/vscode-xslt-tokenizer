@@ -79,13 +79,14 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
                 });
             } else {
                 testDataTest.problems = latestProblems;
+                delete testDataTest['tokens'];
                 // console.log('Updated test case:', testDataTest);
                 console.log('problems found: ', latestProblems.length);
                 latestProblems.forEach((latestProblem) => {
                     console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
                 });
                 if (idx === lastIdx) {
-                    console.log('=== completedTest', testData);
+                    console.log('=== completedTest', JSON.stringify(testData, null, 2));
                 }
             }
             if (!isDirect) {

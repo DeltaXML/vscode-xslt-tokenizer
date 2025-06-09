@@ -22,6 +22,7 @@ export interface ProblemTest {
     label: string;
     xpath: string;
     problems?: Array<[string, string]>;
+    tokens?: any;
 }
 
 export interface RawLexerTestData {
