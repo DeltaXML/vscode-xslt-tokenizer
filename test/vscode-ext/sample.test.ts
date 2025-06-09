@@ -57,6 +57,7 @@ function describeTest(testData: ExpectedProblemData) {
 }
 
 function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boolean) {
+    const lastIdx = testData.tests.length - 1;
     testData.tests.forEach((testDataTest, idx) => {
         const { label, xpath, problems } = testDataTest;
 
@@ -83,6 +84,9 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
                 latestProblems.forEach((latestProblem) => {
                     console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
                 });
+                if (idx === lastIdx) {
+                    console.log('=== completedTest', testData);
+                }
             }
             if (!isDirect) {
                 await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
