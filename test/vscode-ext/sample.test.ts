@@ -78,7 +78,7 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
                 });
             } else {
                 testDataTest.problems = latestProblems;
-                console.log('Updated test case:', testDataTest);
+                // console.log('Updated test case:', testDataTest);
                 console.log('problems found: ', latestProblems.length);
                 latestProblems.forEach((latestProblem) => {
                     console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
