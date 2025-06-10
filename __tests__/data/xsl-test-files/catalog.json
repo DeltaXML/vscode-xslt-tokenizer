@@ -6,5 +6,13 @@
             "xpLiterals",
             "xpNumericLiterals"
         ]
+    },
+    {
+        "group": "XPath Linter",
+        "files": [
+            "xpInAsAttribute.dg",
+            "xpLiterals.dg",
+            "xpNumericLiterals.dg"
+        ]
     }
 ]

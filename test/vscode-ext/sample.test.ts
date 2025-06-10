@@ -22,8 +22,7 @@
  */
 import * as vscode from 'vscode';
 import * as os from 'os';
-import { LexPosition } from '../../src/xpLexer';
-import { ExpectedProblemData, ProblemTest } from '../../__tests__/types';
+import { ExpectedProblemData } from '../../__tests__/types';
 import { expect, assert } from 'chai';
 import { getCatalogGroup, getProblemDataFromFile } from '../../__tests__/utils/getCatalogGroup';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
@@ -33,7 +32,9 @@ import { TestPaths } from '../../__tests__/utils/testPaths';
 import path = require('path');
 import fs = require('fs');
 
-const catalogGroup = getCatalogGroup(0);
+// change this index to use an alternate catalog group:
+const LINTER_GROUP_INDEX = 1;
+const catalogGroup = getCatalogGroup(LINTER_GROUP_INDEX);
 
 catalogGroup.files.forEach(file => {
     const loadedFileData: ExpectedProblemData = getProblemDataFromFile(file);
