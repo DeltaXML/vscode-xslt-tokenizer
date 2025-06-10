@@ -1,0 +1,441 @@
+{
+  "suite": "xpInAsAttribute",
+  "source": "xpInAsAttribute.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT as attribute",
+  "attributeName": "as",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "test1",
+      "xpath": "xs:integer",
+      "problems": []
+    },
+    {
+      "label": "test2",
+      "xpath": "map(xs:integer, map(xs:string, array(xs:integer*)))?",
+      "problems": []
+    },
+    {
+      "label": "test3",
+      "xpath": "xs:integer+",
+      "problems": []
+    },
+    {
+      "label": "test4",
+      "xpath": "element(books)",
+      "problems": []
+    },
+    {
+      "label": "test5",
+      "xpath": "(function(element()) as xs:string)?",
+      "problems": []
+    },
+    {
+      "label": "test6",
+      "xpath": "xs:boolean",
+      "problems": []
+    },
+    {
+      "label": "test7",
+      "xpath": "document-node(element(abc))",
+      "problems": []
+    },
+    {
+      "label": "test8",
+      "xpath": "xs:anyAtomicType",
+      "problems": []
+    },
+    {
+      "label": "test9",
+      "xpath": "xs:numeric",
+      "problems": []
+    },
+    {
+      "label": "test10",
+      "xpath": "array(*)?",
+      "problems": []
+    },
+    {
+      "label": "test11",
+      "xpath": "map(*)",
+      "problems": []
+    },
+    {
+      "label": "test12",
+      "xpath": "array(map(xs:string, xs:integer))?",
+      "problems": []
+    },
+    {
+      "label": "test13",
+      "xpath": "element(ct:book)",
+      "problems": []
+    },
+    {
+      "label": "test14",
+      "xpath": "attribute(book)",
+      "problems": []
+    },
+    {
+      "label": "test15",
+      "xpath": "attribute()",
+      "problems": []
+    },
+    {
+      "label": "test16",
+      "xpath": "attribute(*, xs:date)",
+      "problems": []
+    },
+    {
+      "label": "test17",
+      "xpath": "element(*, xs:integer)",
+      "problems": []
+    },
+    {
+      "label": "test18",
+      "xpath": "element(as)",
+      "problems": []
+    },
+    {
+      "label": "test19",
+      "xpath": "function(*)",
+      "problems": []
+    },
+    {
+      "label": "XP4test1",
+      "xpath": "record(ssn as xs:string, emp as element(employee))",
+      "problems": []
+    },
+    {
+      "label": "XP4test2",
+      "xpath": "union(xs:dateTime, xs:date, xs:time, xs:string)",
+      "problems": []
+    },
+    {
+      "label": "XP4test3",
+      "xpath": "enum('NFC', 'NFD', 'NFKC', 'NFKD')",
+      "problems": []
+    },
+    {
+      "label": "XP4test4",
+      "xpath": "type(ct:complex)",
+      "problems": []
+    },
+    {
+      "label": "test1-error",
+      "xpath": "xs:intege",
+      "problems": [
+        [
+          "XPath: Invalid type: 'xs:intege'",
+          "xs:intege"
+        ]
+      ]
+    },
+    {
+      "label": "test1tvt-error",
+      "xpath": "xs:intege",
+      "problems": [
+        [
+          "XPath: Invalid type: 'xs:intege'",
+          "xs:intege"
+        ]
+      ]
+    },
+    {
+      "label": "test2-error",
+      "xpath": "arrayx(xs:string)",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: arrayx ",
+          "arrayx"
+        ]
+      ]
+    },
+    {
+      "label": "test3-error",
+      "xpath": "string",
+      "problems": [
+        [
+          "XPath: Invalid type: 'string'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "test4-error",
+      "xpath": "element('book')",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "test5-error",
+      "xpath": "map(element() xs:integer*)*",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: xs:integer ",
+          "xs:integer"
+        ]
+      ]
+    },
+    {
+      "label": "test6-error",
+      "xpath": "",
+      "problems": [
+        [
+          "XSLT: Expected XPath expression",
+          "\""
+        ]
+      ]
+    },
+    {
+      "label": "test7-error",
+      "xpath": "@name",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: @name ",
+          "@name"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: @name ",
+          "@name"
+        ]
+      ]
+    },
+    {
+      "label": "test8-error",
+      "xpath": "element(q:book)",
+      "problems": [
+        [
+          "XML: Undeclared prefix found for element 'q:book'",
+          "q:book"
+        ]
+      ]
+    },
+    {
+      "label": "test9-error",
+      "xpath": "element('book')",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "test10-error",
+      "xpath": "element(book",
+      "problems": [
+        [
+          "'(' has no matching ')'",
+          "("
+        ]
+      ]
+    },
+    {
+      "label": "test12-error",
+      "xpath": "map()",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: () ",
+          "()"
+        ],
+        [
+          "XPath Type: Expected type specifier within 'map'",
+          "map"
+        ]
+      ]
+    },
+    {
+      "label": "test13-error",
+      "xpath": "xs:map(*)",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: xs:map ",
+          "xs:map"
+        ]
+      ]
+    },
+    {
+      "label": "test15-error",
+      "xpath": "array( )",
+      "problems": [
+        [
+          "XPath Type: Expected number of itemType arguments for 'array()' is 1 but found: 0",
+          "array"
+        ]
+      ]
+    },
+    {
+      "label": "test16-error",
+      "xpath": "array()",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: () ",
+          "()"
+        ],
+        [
+          "XPath Type: Expected type specifier within 'array'",
+          "array"
+        ]
+      ]
+    },
+    {
+      "label": "test17-error",
+      "xpath": "map( )",
+      "problems": [
+        [
+          "XPath Type: Expected number of itemType arguments for 'map()' is 1 or 2 but found: 0",
+          "map"
+        ]
+      ]
+    },
+    {
+      "label": "test18-error",
+      "xpath": "map(xs:integer, xs:integer, xs:integer)",
+      "problems": [
+        [
+          "XPath Type: Expected number of itemType arguments for 'map()' is 1 or 2 but found: 3",
+          "map"
+        ]
+      ]
+    },
+    {
+      "label": "test19-error",
+      "xpath": "array(xs:integer, xs:integer)",
+      "problems": [
+        [
+          "XPath Type: Expected number of itemType arguments for 'array()' is 1 but found: 2",
+          "array"
+        ]
+      ]
+    },
+    {
+      "label": "test20-error",
+      "xpath": "attribute(*, xs:date, xs:integer)",
+      "problems": [
+        [
+          "XPath Type: Expected number of itemType arguments for 'attribute()' is 0 or 1 (or 2 if schema-aware) but found: 3",
+          "attribute"
+        ]
+      ]
+    },
+    {
+      "label": "test21-error",
+      "xpath": "element(*, xs:date, xs:integer)",
+      "problems": [
+        [
+          "XPath Type: Expected number of itemType arguments for 'element()' is 0 or 1 (or 2 if schema-aware) but found: 3",
+          "element"
+        ]
+      ]
+    },
+    {
+      "label": "test22-error",
+      "xpath": "as xs:integer",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: as ",
+          "as"
+        ]
+      ]
+    },
+    {
+      "label": "test23-error",
+      "xpath": "array(as)",
+      "problems": [
+        [
+          "XPath: Invalid type: 'as'",
+          "as"
+        ]
+      ]
+    },
+    {
+      "label": "test24-error",
+      "xpath": "array(*) as",
+      "problems": [
+        [
+          "XPath: Operator unexpected at this position: 'as'",
+          "as"
+        ]
+      ]
+    },
+    {
+      "label": "test25-error",
+      "xpath": "as array(*)",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: as ",
+          "as"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: array ",
+          "array"
+        ]
+      ]
+    },
+    {
+      "label": "test27-error",
+      "xpath": "function(book, library)",
+      "problems": [
+        [
+          "XPath: Invalid type: 'book'",
+          "book"
+        ],
+        [
+          "XPath: Invalid type: 'library'",
+          "library"
+        ]
+      ]
+    },
+    {
+      "label": "test29-error",
+      "xpath": "element(?)",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ? ",
+          "?"
+        ]
+      ]
+    },
+    {
+      "label": "test30-error",
+      "xpath": "element(..)?",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: .. ",
+          ".."
+        ]
+      ]
+    },
+    {
+      "label": "test31-error",
+      "xpath": "function()",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: () ",
+          "()"
+        ],
+        [
+          "XPath Type: Expected type specifier within 'function'",
+          "function"
+        ]
+      ]
+    },
+    {
+      "label": "test32-error",
+      "xpath": "element()()",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: () ",
+          "()"
+        ]
+      ]
+    }
+  ]
+}

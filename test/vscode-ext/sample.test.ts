@@ -86,7 +86,9 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
                     console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
                 });
                 if (idx === lastIdx) {
-                    console.log('=== completedTest', JSON.stringify(testData, null, 2));
+                    const outPath = resolvePath(testData.suite);
+                    console.log(`=== suite: '${testData.suite} saved as: ${outPath} ===`);
+                    fs.writeFileSync(outPath, JSON.stringify(testData, null, 2));
                 }
             }
             if (!isDirect) {
@@ -150,7 +152,7 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string, isDirec
 }
 
 function resolvePath(suite: string) {
-    return path.join(__dirname, '../../../../', TestPaths.testDataDir, suite + '.dg-test.json');
+    return path.join(__dirname, '../../../', TestPaths.testDataDir, suite + '.dg-test.json');
 }
 
 async function waitForDiagnostics(uri: vscode.Uri, timeout = 2000): Promise<vscode.Diagnostic[]> {

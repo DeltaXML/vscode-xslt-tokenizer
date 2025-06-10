@@ -1,0 +1,162 @@
+{
+  "suite": "xpNumericLiterals",
+  "source": "xpNumericLiterals.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "num1",
+      "xpath": "1",
+      "problems": []
+    },
+    {
+      "label": "num2",
+      "xpath": "100",
+      "problems": []
+    },
+    {
+      "label": "num3",
+      "xpath": "10.0",
+      "problems": []
+    },
+    {
+      "label": "num4",
+      "xpath": "10.02",
+      "problems": []
+    },
+    {
+      "label": "num5-error",
+      "xpath": "10.0.2",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '10.0.2'",
+          "10.0.2"
+        ]
+      ]
+    },
+    {
+      "label": "num6",
+      "xpath": ".2",
+      "problems": []
+    },
+    {
+      "label": "num7",
+      "xpath": "-1",
+      "problems": []
+    },
+    {
+      "label": "num8",
+      "xpath": "- 1",
+      "problems": []
+    },
+    {
+      "label": "num9",
+      "xpath": "-100",
+      "problems": []
+    },
+    {
+      "label": "num10",
+      "xpath": "-100.1",
+      "problems": []
+    },
+    {
+      "label": "num11-error",
+      "xpath": "-100.2.4",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '100.2.4'",
+          "100.2.4"
+        ]
+      ]
+    },
+    {
+      "label": "num12",
+      "xpath": "5E7",
+      "problems": []
+    },
+    {
+      "label": "num13",
+      "xpath": "5e-72",
+      "problems": []
+    },
+    {
+      "label": "num14",
+      "xpath": "5e+72",
+      "problems": []
+    },
+    {
+      "label": "num15-error",
+      "xpath": "5e77.5",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '5e77.5'",
+          "5e77.5"
+        ]
+      ]
+    },
+    {
+      "label": "num16-error",
+      "xpath": "5e7e8",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '5e7e8'",
+          "5e7e8"
+        ]
+      ]
+    },
+    {
+      "label": "num17-error",
+      "xpath": "5..5",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '5..5'",
+          "5..5"
+        ]
+      ]
+    },
+    {
+      "label": "num18-error",
+      "xpath": "5e.5",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '5e.5'",
+          "5e.5"
+        ]
+      ]
+    },
+    {
+      "label": "num19-error",
+      "xpath": "5e",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '5e'",
+          "5e"
+        ]
+      ]
+    },
+    {
+      "label": "num20-error",
+      "xpath": "5e.",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '5e.'",
+          "5e."
+        ]
+      ]
+    },
+    {
+      "label": "num21",
+      "xpath": "5.",
+      "problems": []
+    },
+    {
+      "label": "num22",
+      "xpath": "5e-5",
+      "problems": []
+    }
+  ]
+}

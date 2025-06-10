@@ -1,0 +1,161 @@
+{
+  "suite": "xpLiterals",
+  "source": "xpLiterals.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "string1",
+      "xpath": "'one'",
+      "problems": []
+    },
+    {
+      "label": "string2",
+      "xpath": "'o''ne'",
+      "problems": []
+    },
+    {
+      "label": "string3",
+      "xpath": "'o''ne'''",
+      "problems": []
+    },
+    {
+      "label": "string4",
+      "xpath": "'''one'",
+      "problems": []
+    },
+    {
+      "label": "string5",
+      "xpath": "\"one\"",
+      "problems": [
+        [
+          "XSLT: Expected XPath expression",
+          "\""
+        ],
+        [
+          "XML: Missing whitespace before attribute 'one\"\"'",
+          "one\"\""
+        ]
+      ]
+    },
+    {
+      "label": "string6",
+      "xpath": "\"o\"\"ne\"",
+      "problems": [
+        [
+          "XSLT: Expected XPath expression",
+          "\""
+        ],
+        [
+          "XML: Missing whitespace before attribute 'o\"\"ne\"\"'",
+          "o\"\"ne\"\""
+        ]
+      ]
+    },
+    {
+      "label": "string7",
+      "xpath": "\"o\"\"ne\"\"\"\"",
+      "problems": [
+        [
+          "XSLT: Expected XPath expression",
+          "\""
+        ],
+        [
+          "XML: Missing whitespace before attribute 'o\"\"ne\"\"\"\"\"'",
+          "o\"\"ne\"\"\"\"\""
+        ]
+      ]
+    },
+    {
+      "label": "string8",
+      "xpath": "\"\"\"one\"",
+      "problems": [
+        [
+          "XSLT: Expected XPath expression",
+          "\""
+        ],
+        [
+          "XML: Missing whitespace before attribute '\"\"one\"\"'",
+          "\"\"one\"\""
+        ]
+      ]
+    },
+    {
+      "label": "string9",
+      "xpath": "'one &amp;amp; two'",
+      "problems": []
+    },
+    {
+      "label": "string10",
+      "xpath": "'one &amp;amp;&amp;amp; two'",
+      "problems": []
+    },
+    {
+      "label": "string11",
+      "xpath": "'one &amp;amp;amp; two'",
+      "problems": []
+    },
+    {
+      "label": "string12",
+      "xpath": "'one&#32;two'",
+      "problems": []
+    },
+    {
+      "label": "string13",
+      "xpath": "'one&#xa0;two'",
+      "problems": []
+    },
+    {
+      "label": "string14",
+      "xpath": "'one(:this:)two'",
+      "problems": []
+    },
+    {
+      "label": "string15",
+      "xpath": "'\n      one\n      '",
+      "problems": []
+    },
+    {
+      "label": "string16",
+      "xpath": "\n      'one \n      &amp;&amp; two'",
+      "problems": []
+    },
+    {
+      "label": "string17",
+      "xpath": "'\n      one\n      two\n      three\n      four'",
+      "problems": []
+    },
+    {
+      "label": "string18",
+      "xpath": "\n      'one &amp; \n      two'",
+      "problems": []
+    },
+    {
+      "label": "string19",
+      "xpath": "\n      'one &amp;\n  two'",
+      "problems": []
+    },
+    {
+      "label": "string20",
+      "xpath": "\n  \"one &amp;\n  two\"",
+      "problems": [
+        [
+          "XSLT: Expected XPath expression",
+          "\""
+        ],
+        [
+          "XML: Missing whitespace before attribute 'one'",
+          "one"
+        ],
+        [
+          "XML: Missing whitespace before attribute ' '",
+          " "
+        ]
+      ]
+    }
+  ]
+}
