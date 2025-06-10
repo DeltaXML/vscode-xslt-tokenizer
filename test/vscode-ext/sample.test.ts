@@ -43,17 +43,11 @@ catalogGroup.files.forEach(file => {
 
 function describeTest(testData: ExpectedProblemData) {
     const isPopulatedWithExpectedProbs = !!testData.tests[0].problems;
-    console.log('isPop', isPopulatedWithExpectedProbs);
     const isTestingAsAttribute = testData.attributeName === 'as';
 
     suite(`${testData.description}`, () => {
-
         invokeEachTest(testData, isTestingAsAttribute);
-        console.log('----testdata complete ------');
-        console.log(testData);
-
     });
-    console.log('finished suite() call');
     return isPopulatedWithExpectedProbs ? null : testData;
 }
 
@@ -66,8 +60,13 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
             // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
             const isDirect = true;
             let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath, isDirect);
-            // console.log('*****XSLT*****');
-            // console.log(xslt);
+            if (label === 'string20') {
+                console.log('*****XPath*****');
+                console.log(xpath);
+                console.log('*****XSLT*****');
+                console.log('label', label);
+                console.log(xslt);
+            }
             const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
             const latestProblems: [string, string][] = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
             if (problems) {
@@ -131,6 +130,7 @@ async function getDirectDiagnostics(idx: number, xslt: string) {
 
 function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string, isDirect: boolean) {
     let xslt = '';
+    const xsltSequence = xpath.includes('"') ? `<xsl:sequence select='${xpath}'/>` : `<xsl:sequence select="${xpath}"/>`;
     if (isTestingAsAttribute) {
         xslt = `
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -146,7 +146,7 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string, isDirec
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:ct="com.example.test" version="3.0">
     <xsl:function name="ct:run">
-        <xsl:sequence select="${xpath}"/>
+        ${xsltSequence}
     </xsl:function>
 </xsl:stylesheet>`;
     }
