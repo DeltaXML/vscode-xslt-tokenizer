@@ -962,7 +962,7 @@
 		"lint": "eslint -c .eslintrc.js --ext .ts src",
 		"lint-fix": "eslint -c .eslintrc.js --fix --ext .ts src",
 		"watch": "tsc -watch -p ./",
-		"test": "npm run compile && vscode-test",
+		"test": "npm run compile && vscode-test --extensionDevelopmentPath=.",
 		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts"
 	},
 	"devDependencies": {
