@@ -5,10 +5,11 @@ import { TestPaths } from './testPaths';
 
 export function getCatalogGroup(groupIndex: number) {
     const catalogPath = path.join(getLocalRootDir(), TestPaths.testXslDataDir, 'catalog.json');
-    console.log("dirname", __dirname);
-    console.log("catalogPath", catalogPath);
-    console.log();
+    console.log('===== Catalog =======');
+    console.log("Path:", catalogPath);
     const groupArray: Array<CatalogGroup> = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+    console.log(`Group: '${groupArray[groupIndex].group}'`);
+    console.log();
     return groupArray[groupIndex];
 }
 export function getTokenDataFromFile(name: string) {

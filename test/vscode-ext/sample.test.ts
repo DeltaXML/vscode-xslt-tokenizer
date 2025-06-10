@@ -87,7 +87,7 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
                 });
                 if (idx === lastIdx) {
                     const outPath = resolvePath(testData.suite);
-                    console.log(`=== suite: '${testData.suite} saved as: ${outPath} ===`);
+                    console.log(`=== suite: '${testData.suite}' saved as: ${outPath} ===`);
                     fs.writeFileSync(outPath, JSON.stringify(testData, null, 2));
                 }
             }
