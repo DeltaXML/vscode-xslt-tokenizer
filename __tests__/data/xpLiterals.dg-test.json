@@ -1,7 +1,7 @@
 {
   "suite": "xpLiterals",
   "source": "xpLiterals.xsl",
-  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "description": "XPath Linter: expected diagnostics for each XSLT select attribute",
   "attributeName": "select",
   "metadata": {
     "moduleName": "xpLexerTestGen.js",

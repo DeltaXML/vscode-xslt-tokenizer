@@ -71,6 +71,7 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
             const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
             const latestProblems: [string, string][] = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
             if (problems) {
+                expect(latestProblems.length).to.equal(problems.length, `expected ${problems.length} diagnostics but found ${latestProblems.length}`);
                 latestProblems.forEach((latestProblem, idx) => {
                     const [expectedMessage, expectedTokenValue] = problems[idx];
                     const [latestMessage, latestTokenValue] = latestProblem;
