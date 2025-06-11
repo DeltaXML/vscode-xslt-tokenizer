@@ -135,7 +135,8 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string, isDirec
         xslt = `
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    xmlns:ct="com.example.test" version="3.0">
+    xmlns:ct="com.example.test"
+    xmlns:_ct="com.example.test.new" version="3.0">
     <xsl:function name="ct:run" as="${xpath}">
         <xsl:sequence select="1"/>
     </xsl:function>
@@ -144,7 +145,8 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string, isDirec
         xslt = `
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
-    xmlns:ct="com.example.test" version="3.0">
+    xmlns:ct="com.example.test"
+    xmlns:_ct="com.example.test" version="3.0">
     <xsl:function name="ct:run">
         ${xsltSequence}
     </xsl:function>
