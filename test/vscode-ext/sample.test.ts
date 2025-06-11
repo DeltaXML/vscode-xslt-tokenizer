@@ -60,13 +60,13 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
             // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
             const isDirect = true;
             let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath, isDirect);
-            if (label === 'string20') {
-                console.log('*****XPath*****');
-                console.log(xpath);
-                console.log('*****XSLT*****');
-                console.log('label', label);
-                console.log(xslt);
-            }
+            // if (label === 'string20') {
+            //     console.log('*****XPath*****');
+            //     console.log(xpath);
+            //     console.log('*****XSLT*****');
+            //     console.log('label', label);
+            //     console.log(xslt);
+            // }
             const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
             const latestProblems: [string, string][] = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
             if (problems) {
