@@ -1,7 +1,7 @@
 {
   "suite": "xpLiterals",
   "source": "xpLiterals.xsl",
-  "description": "XPath Linter: expected diagnostics for each XSLT select attribute",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
   "attributeName": "select",
   "metadata": {
     "moduleName": "xpLexerTestGen.js",
@@ -31,58 +31,22 @@
     {
       "label": "string5",
       "xpath": "\"one\"",
-      "problems": [
-        [
-          "XSLT: Expected XPath expression",
-          "\""
-        ],
-        [
-          "XML: Missing whitespace before attribute 'one\"\"'",
-          "one\"\""
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "string6",
       "xpath": "\"o\"\"ne\"",
-      "problems": [
-        [
-          "XSLT: Expected XPath expression",
-          "\""
-        ],
-        [
-          "XML: Missing whitespace before attribute 'o\"\"ne\"\"'",
-          "o\"\"ne\"\""
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "string7",
       "xpath": "\"o\"\"ne\"\"\"\"",
-      "problems": [
-        [
-          "XSLT: Expected XPath expression",
-          "\""
-        ],
-        [
-          "XML: Missing whitespace before attribute 'o\"\"ne\"\"\"\"\"'",
-          "o\"\"ne\"\"\"\"\""
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "string8",
       "xpath": "\"\"\"one\"",
-      "problems": [
-        [
-          "XSLT: Expected XPath expression",
-          "\""
-        ],
-        [
-          "XML: Missing whitespace before attribute '\"\"one\"\"'",
-          "\"\"one\"\""
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "string9",
@@ -142,20 +106,7 @@
     {
       "label": "string20",
       "xpath": "\n  \"one &amp;\n  two\"",
-      "problems": [
-        [
-          "XSLT: Expected XPath expression",
-          "\""
-        ],
-        [
-          "XML: Missing whitespace before attribute 'one'",
-          "one"
-        ],
-        [
-          "XML: Missing whitespace before attribute ' '",
-          " "
-        ]
-      ]
+      "problems": []
     }
   ]
 }
