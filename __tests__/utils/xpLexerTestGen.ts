@@ -42,6 +42,8 @@ function generator() {
 	console.log("Test Data File: " + testDataFile);
 	const rawTestData: RawLexerTestData = JSON.parse(fs.readFileSync(testDataFile, 'utf8'));
 	const { suite, source, description, attributeName, testCases } = rawTestData;
+	console.log('==== rawTestData');
+	console.log(rawTestData);
 
 	const metadata = getMetadata();
 
@@ -50,7 +52,7 @@ function generator() {
 	const entries: any[] = [];
 
 	testCases.forEach(([label, xpath]) => {
-		const isTypeDeclaration = true;
+		const isTypeDeclaration = attributeName === 'as';
 		const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTypeDeclaration);
 		const tokens = tokensOut.map(token => [token.value, TokenLevelState[token.tokenType]]);
 		entries.push({ label, xpath, tokens });
