@@ -32,13 +32,13 @@
   <xsl:variable name="bracedURILiteral2" select="Q{}name"/>
 
   <!-- following tests SHOULD be highlighted as errors - but are not currently -->
-  <xsl:variable name="bracedURILiteral3-BUG" select="Q{name"/>
-  <xsl:variable name="bracedURILiteral4-BUG" select="Q{name}"/>
-  <xsl:variable name="bracedURILiteral5-BUG" select="EQ{name}"/>
-  <xsl:variable name="bracedURILiteral6-BUG" select="Q{urn:com.example}ct:name"/>
-  <xsl:variable name="bracedURILiteral7-BUG" select="Q{name} name"/>
-  <xsl:variable name="bracedURILiteral8-BUG" select="9 Q{name}name"/>
-  <xsl:variable name="bracedURILiteral9-BUG" select="9Q{name}name"/>
-  <xsl:variable name="bracedURILiteral10-BUG" select="book Q{name}name"/>
+  <xsl:variable name="bracedURILiteral3-PENDING" select="Q{name"/>
+  <xsl:variable name="bracedURILiteral4-PENDING" select="Q{name}"/>
+  <xsl:variable name="bracedURILiteral5-PENDING" select="EQ{name}"/>
+  <xsl:variable name="bracedURILiteral6-PENDING" select="Q{urn:com.example}ct:name"/>
+  <xsl:variable name="bracedURILiteral7-PENDING" select="Q{name} name"/>
+  <xsl:variable name="bracedURILiteral8-PENDING" select="9 Q{name}name"/>
+  <xsl:variable name="bracedURILiteral9-PENDING" select="9Q{name}name"/>
+  <xsl:variable name="bracedURILiteral10-PENDING" select="book Q{name}name"/>
 
 </xsl:stylesheet>

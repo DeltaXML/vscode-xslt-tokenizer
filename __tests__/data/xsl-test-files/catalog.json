@@ -13,7 +13,14 @@
         "files": [
             "xpInAsAttribute.dg",
             "xpLiterals.dg",
-            "xpNumericLiterals.dg"
+            "xpNumericLiterals.dg",
+            "qnamesAndURILiterals.dg"
+        ]
+    },
+    {
+        "group": "XPath Linter (Generate Expected)",
+        "files": [
+            "qnamesAndURILiterals"
         ]
     }
 ]

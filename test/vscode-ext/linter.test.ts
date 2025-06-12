@@ -32,8 +32,9 @@ import { TestPaths } from '../../__tests__/utils/testPaths';
 import path = require('path');
 import fs = require('fs');
 
-// change this index to use an alternate catalog group:
-const LINTER_GROUP_INDEX = 1;
+// index to select group from catalog.json:
+const LINTER_GROUP_INDEX = 1; // when running all tests
+// const LINTER_GROUP_INDEX = 2; // when generating expected diagnostics for 1 or more tests
 const catalogGroup = getCatalogGroup(LINTER_GROUP_INDEX);
 
 catalogGroup.files.forEach(file => {
@@ -56,46 +57,50 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
     testData.tests.forEach((testDataTest, idx) => {
         const { label, xpath, problems } = testDataTest;
 
-        test(`${label} : ${xpath}`, async () => {
-            // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
-            const isDirect = true;
-            let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath, isDirect);
-            // if (label === 'string20') {
-            //     console.log('*****XPath*****');
-            //     console.log(xpath);
-            //     console.log('*****XSLT*****');
-            //     console.log('label', label);
-            //     console.log(xslt);
-            // }
-            const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
-            const latestProblems: [string, string][] = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
-            if (problems) {
-                expect(latestProblems.length).to.equal(problems.length, `expected ${problems.length} diagnostics but found ${latestProblems.length}`);
-                latestProblems.forEach((latestProblem, idx) => {
-                    const [expectedMessage, expectedTokenValue] = problems[idx];
-                    const [latestMessage, latestTokenValue] = latestProblem;
+        if (label.endsWith('-PENDING')) {
+            test.skip(`${label} : ${xpath}`);
+        } else {
+            test(`${label} : ${xpath}`, async () => {
+                // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
+                const isDirect = true;
+                let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath, isDirect);
+                // if (label === 'string20') {
+                //     console.log('*****XPath*****');
+                //     console.log(xpath);
+                //     console.log('*****XSLT*****');
+                //     console.log('label', label);
+                //     console.log(xslt);
+                // }
+                const { diagnostics, document } = await getDiagnostics(idx, xslt, isDirect);
+                const latestProblems: [string, string][] = diagnostics.map(problem => [problem.message, document.getText(problem.range)]);
+                if (problems) {
+                    expect(latestProblems.length).to.equal(problems.length, `expected ${problems.length} diagnostics but found ${latestProblems.length}`);
+                    latestProblems.forEach((latestProblem, idx) => {
+                        const [expectedMessage, expectedTokenValue] = problems[idx];
+                        const [latestMessage, latestTokenValue] = latestProblem;
 
-                    expect(latestMessage).to.equal(expectedMessage);
-                    expect(latestTokenValue).to.equal(expectedTokenValue);
-                });
-            } else {
-                testDataTest.problems = latestProblems;
-                delete testDataTest['tokens'];
-                // console.log('Updated test case:', testDataTest);
-                console.log('problems found: ', latestProblems.length);
-                latestProblems.forEach((latestProblem) => {
-                    console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
-                });
-                if (idx === lastIdx) {
-                    const outPath = resolvePath(testData.suite);
-                    console.log(`=== suite: '${testData.suite}' saved as: ${outPath} ===`);
-                    fs.writeFileSync(outPath, JSON.stringify(testData, null, 2));
+                        expect(latestMessage).to.equal(expectedMessage);
+                        expect(latestTokenValue).to.equal(expectedTokenValue);
+                    });
+                } else {
+                    testDataTest.problems = latestProblems;
+                    delete testDataTest['tokens'];
+                    // console.log('Updated test case:', testDataTest);
+                    console.log('problems found: ', latestProblems.length);
+                    latestProblems.forEach((latestProblem) => {
+                        console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
+                    });
+                    if (idx === lastIdx) {
+                        const outPath = resolvePath(testData.suite);
+                        console.log(`=== suite: '${testData.suite}' saved as: ${outPath} ===`);
+                        fs.writeFileSync(outPath, JSON.stringify(testData, null, 2));
+                    }
                 }
-            }
-            if (!isDirect) {
-                await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-            }
-        });
+                if (!isDirect) {
+                    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                }
+            });
+        }
     });
 }
 

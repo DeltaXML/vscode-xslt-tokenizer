@@ -41,19 +41,23 @@ function describeTest(testData: ExpectedTokenData) {
 
         testData.tests.forEach((test) => {
             const { label, xpath, tokens } = test;
-            it(`${label} : ${xpath}`, () => {
-                // the call to the xpLexer.analyse function - the subject of the tests:
-                const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
-                expect(tokensOut.length).to.equal(tokens.length);
-                const errorTokens = tokensOut.filter(t => t.error);
-                expect(errorTokens.length).to.equal(0);
+            if (label.endsWith('-PENDING')) {
+                it.skip(`${label} : ${xpath}`);
+            } else {
+                it(`${label} : ${xpath}`, () => {
+                    // the call to the xpLexer.analyse function - the subject of the tests:
+                    const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
+                    expect(tokensOut.length).to.equal(tokens.length);
+                    const errorTokens = tokensOut.filter(t => t.error);
+                    expect(errorTokens.length).to.equal(0);
 
-                tokensOut.forEach((token, idx) => {
-                    const [expectedValue, expectedType] = tokens[idx];
-                    expect(token.value).to.equal(expectedValue);
-                    expect(TokenLevelState[token.tokenType]).to.equal(expectedType);
+                    tokensOut.forEach((token, idx) => {
+                        const [expectedValue, expectedType] = tokens[idx];
+                        expect(token.value).to.equal(expectedValue);
+                        expect(TokenLevelState[token.tokenType]).to.equal(expectedType);
+                    });
                 });
-            });
+            }
         });
     });
 }

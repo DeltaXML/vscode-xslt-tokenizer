@@ -1,0 +1,278 @@
+{
+  "suite": "qnamesAndURILiterals",
+  "source": "qnamesAndURILiterals.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "qname1",
+      "xpath": "book",
+      "tokens": [
+        [
+          "book",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname2",
+      "xpath": "book.new",
+      "tokens": [
+        [
+          "book.new",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname3",
+      "xpath": "book-new",
+      "tokens": [
+        [
+          "book-new",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname4",
+      "xpath": "_book",
+      "tokens": [
+        [
+          "_book",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname5",
+      "xpath": "book1",
+      "tokens": [
+        [
+          "book1",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname6-error",
+      "xpath": "1book",
+      "tokens": [
+        [
+          "1",
+          "number"
+        ],
+        [
+          "book",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname7",
+      "xpath": "book_new",
+      "tokens": [
+        [
+          "book_new",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname8",
+      "xpath": "ct:book",
+      "tokens": [
+        [
+          "ct:book",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname9",
+      "xpath": "_ct:book",
+      "tokens": [
+        [
+          "_ct:book",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname10",
+      "xpath": "ct:book.",
+      "tokens": [
+        [
+          "ct:book.",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "qname11",
+      "xpath": "ct:book12.4",
+      "tokens": [
+        [
+          "ct:book12.4",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral1",
+      "xpath": "Q{http://www.w3.org/2005/xpath-functions/math}name",
+      "tokens": [
+        [
+          "Q{http://www.w3.org/2005/xpath-functions/math}",
+          "uriLiteral"
+        ],
+        [
+          "name",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral2",
+      "xpath": "Q{}name",
+      "tokens": [
+        [
+          "Q{}",
+          "uriLiteral"
+        ],
+        [
+          "name",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral3-PENDING",
+      "xpath": "Q{name",
+      "tokens": [
+        [
+          "Q{name",
+          "uriLiteral"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral4-PENDING",
+      "xpath": "Q{name}",
+      "tokens": [
+        [
+          "Q{name}",
+          "uriLiteral"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral5-PENDING",
+      "xpath": "EQ{name}",
+      "tokens": [
+        [
+          "EQ",
+          "nodeNameTest"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "name",
+          "nodeNameTest"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral6-PENDING",
+      "xpath": "Q{urn:com.example}ct:name",
+      "tokens": [
+        [
+          "Q{urn:com.example}",
+          "uriLiteral"
+        ],
+        [
+          "ct:name",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral7-PENDING",
+      "xpath": "Q{name} name",
+      "tokens": [
+        [
+          "Q{name}",
+          "uriLiteral"
+        ],
+        [
+          "name",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral8-PENDING",
+      "xpath": "9 Q{name}name",
+      "tokens": [
+        [
+          "9",
+          "number"
+        ],
+        [
+          "Q{name}",
+          "uriLiteral"
+        ],
+        [
+          "name",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral9-PENDING",
+      "xpath": "9Q{name}name",
+      "tokens": [
+        [
+          "9",
+          "number"
+        ],
+        [
+          "Q{name}",
+          "uriLiteral"
+        ],
+        [
+          "name",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral10-PENDING",
+      "xpath": "book Q{name}name",
+      "tokens": [
+        [
+          "book",
+          "nodeNameTest"
+        ],
+        [
+          "Q{name}",
+          "uriLiteral"
+        ],
+        [
+          "name",
+          "nodeNameTest"
+        ]
+      ]
+    }
+  ]
+}
