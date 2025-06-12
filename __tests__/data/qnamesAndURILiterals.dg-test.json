@@ -11,59 +11,34 @@
     {
       "label": "qname1",
       "xpath": "book",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'book'",
-          "book"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname2",
       "xpath": "book.new",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'book.new'",
-          "book.new"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname3",
       "xpath": "book-new",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'book-new'",
-          "book-new"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname4",
       "xpath": "_book",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: '_book'",
-          "_book"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname5",
       "xpath": "book1",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'book1'",
-          "book1"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname6-error",
       "xpath": "1book",
       "problems": [
         [
-          "XPath: Context-item is missing for: 'book'",
+          "XPath: Expression context - unexpected token here: book ",
           "book"
         ]
       ]
@@ -71,94 +46,65 @@
     {
       "label": "qname7",
       "xpath": "book_new",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'book_new'",
-          "book_new"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname8",
       "xpath": "ct:book",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'ct:book'",
-          "ct:book"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname9",
       "xpath": "_ct:book",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: '_ct:book'",
-          "_ct:book"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname10",
       "xpath": "ct:book.",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'ct:book.'",
-          "ct:book."
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "qname11",
       "xpath": "ct:book12.4",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'ct:book12.4'",
-          "ct:book12.4"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "bracedURILiteral1",
       "xpath": "Q{http://www.w3.org/2005/xpath-functions/math}name",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'name'",
-          "name"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "bracedURILiteral2",
       "xpath": "Q{}name",
-      "problems": [
-        [
-          "XPath: Context-item is missing for: 'name'",
-          "name"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "bracedURILiteral3-PENDING",
       "xpath": "Q{name",
-      "problems": []
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
     },
     {
       "label": "bracedURILiteral4-PENDING",
       "xpath": "Q{name}",
-      "problems": []
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
     },
     {
       "label": "bracedURILiteral5-PENDING",
       "xpath": "EQ{name}",
       "problems": [
         [
-          "XPath: Context-item is missing for: 'EQ'",
-          "EQ"
-        ],
-        [
-          "XPath: Context-item is missing for: 'name'",
-          "name"
+          "pending msg",
+          "pending tkn"
         ]
       ]
     },
@@ -167,8 +113,8 @@
       "xpath": "Q{urn:com.example}ct:name",
       "problems": [
         [
-          "XPath: Context-item is missing for: 'ct:name'",
-          "ct:name"
+          "pending msg",
+          "pending tkn"
         ]
       ]
     },
@@ -177,8 +123,8 @@
       "xpath": "Q{name} name",
       "problems": [
         [
-          "XPath: Context-item is missing for: 'name'",
-          "name"
+          "pending msg",
+          "pending tkn"
         ]
       ]
     },
@@ -187,8 +133,8 @@
       "xpath": "9 Q{name}name",
       "problems": [
         [
-          "XPath: Context-item is missing for: 'name'",
-          "name"
+          "pending msg",
+          "pending tkn"
         ]
       ]
     },
@@ -197,8 +143,8 @@
       "xpath": "9Q{name}name",
       "problems": [
         [
-          "XPath: Context-item is missing for: 'name'",
-          "name"
+          "pending msg",
+          "pending tkn"
         ]
       ]
     },
@@ -207,12 +153,8 @@
       "xpath": "book Q{name}name",
       "problems": [
         [
-          "XPath: Context-item is missing for: 'book'",
-          "book"
-        ],
-        [
-          "XPath: Context-item is missing for: 'name'",
-          "name"
+          "pending msg",
+          "pending tkn"
         ]
       ]
     }

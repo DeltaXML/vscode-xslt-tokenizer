@@ -34,7 +34,7 @@ import fs = require('fs');
 
 // index to select group from catalog.json:
 const LINTER_GROUP_INDEX = 1; // when running all tests
-// const LINTER_GROUP_INDEX = 2; // when generating expected diagnostics for 1 or more tests
+//const LINTER_GROUP_INDEX = 2; // when generating expected diagnostics for 1 or more tests
 const catalogGroup = getCatalogGroup(LINTER_GROUP_INDEX);
 
 catalogGroup.files.forEach(file => {
@@ -58,12 +58,20 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
         const { label, xpath, problems } = testDataTest;
 
         if (label.endsWith('-PENDING')) {
-            test.skip(`${label} : ${xpath}`);
+            if (problems) {
+                test.skip(`${label} : ${xpath}`);
+            } else {
+                test(`${label} : ${xpath}`, () => {
+                    testDataTest.problems = [['pending msg', 'pending tkn']];
+                    delete testDataTest['tokens'];
+                    writeJSONonLastTest(idx, lastIdx, testData);
+                });
+            }
         } else {
             test(`${label} : ${xpath}`, async () => {
                 // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
                 const isDirect = true;
-                let xslt = insertXPathInXSLT(isTestingAsAttribute, xpath, isDirect);
+                let xslt = insertXPathInXSLT(isTestingAsAttribute, label, xpath, isDirect);
                 // if (label === 'string20') {
                 //     console.log('*****XPath*****');
                 //     console.log(xpath);
@@ -90,18 +98,26 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
                     latestProblems.forEach((latestProblem) => {
                         console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
                     });
-                    if (idx === lastIdx) {
-                        const outPath = resolvePath(testData.suite);
-                        console.log(`=== suite: '${testData.suite}' saved as: ${outPath} ===`);
-                        fs.writeFileSync(outPath, JSON.stringify(testData, null, 2));
-                    }
                 }
+
                 if (!isDirect) {
                     await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
                 }
+                writeJSONonLastTest(idx, lastIdx, testData);
             });
         }
     });
+}
+
+function writeJSONonLastTest(idx: number, lastIdx: number, testData: ExpectedProblemData) {
+    if (idx === lastIdx) {
+        const outPath = resolvePath(testData.suite);
+        console.log('');
+        console.log('=================');
+        console.log(`suite: '${testData.suite}' saved as: ${outPath}`);
+        console.log('');
+        fs.writeFileSync(outPath, JSON.stringify(testData, null, 2));
+    }
 }
 
 async function getDiagnostics(idx: number, xslt: string, direct: boolean) {
@@ -133,18 +149,20 @@ async function getDirectDiagnostics(idx: number, xslt: string) {
     return { diagnostics, document };
 }
 
-function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string, isDirect: boolean) {
+function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: string, isDirect: boolean) {
     let xslt = '';
     const xsltSequence = xpath.includes('"') ? `<xsl:sequence select='${xpath}'/>` : `<xsl:sequence select="${xpath}"/>`;
+    const isTestWithContext = label.startsWith('qname') || label.startsWith('bracedURILiteral');
+    const templateOrFunction = isTestWithContext ? 'template' : 'function';
     if (isTestingAsAttribute) {
         xslt = `
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:ct="com.example.test"
     xmlns:_ct="com.example.test.new" version="3.0">
-    <xsl:function name="ct:run" as="${xpath}">
+    <xsl:${templateOrFunction} name="ct:run" as="${xpath}">
         <xsl:sequence select="1"/>
-    </xsl:function>
+    </xsl:${templateOrFunction}>
 </xsl:stylesheet>`;
     } else {
         xslt = `
@@ -152,9 +170,9 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, xpath: string, isDirec
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:ct="com.example.test"
     xmlns:_ct="com.example.test" version="3.0">
-    <xsl:function name="ct:run">
+    <xsl:${templateOrFunction} name="ct:run">
         ${xsltSequence}
-    </xsl:function>
+    </xsl:${templateOrFunction}>
 </xsl:stylesheet>`;
     }
     return isDirect ? xslt : xslt + 'error';
