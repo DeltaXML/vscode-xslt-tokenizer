@@ -98,12 +98,12 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
                     latestProblems.forEach((latestProblem) => {
                         console.log('message: ', latestProblem[0], 'tokenString: ', latestProblem[1]);
                     });
+                    writeJSONonLastTest(idx, lastIdx, testData);
                 }
 
                 if (!isDirect) {
                     await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
                 }
-                writeJSONonLastTest(idx, lastIdx, testData);
             });
         }
     });
