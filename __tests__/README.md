@@ -1,18 +1,17 @@
 # Test Process for the XPath Lexer and Linter
 
 ## Overview
-This document explains how to create and run tests for the XPath lexer
+This document explains how to create and run tests for the XPath lexer and, subsequently, for the XSLT linter - using the same XPath test data. These two components are the most important part of the extension as they drive amlost all language-specific features, from Syntax Highlighting to Symbol Referencing.
 
-To test the XPath lexer we need the following: 
+To test the XPath Lexer we need the following: 
 1. name of the test
 2. an XPath expression
 3. a set of tokens that we expect the lexer to generate.
 
 The Mocha test [xpathLexer_catalog.spec.ts](../test/unit/xpathLexer_catalog.spec.ts) loads XPath strings and their expected token information from the first 'group' in the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file.
 
-Each file listed in the group contains a set of tests contained in a *.json* file that is generated from a single *.xsl* source file. 
-
-The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInAsAttribute.xsl)) comprises a set of `xsl:variable` instructions. A `attribute-name` processing instruction indicates whether the `as` or `select` attribute on the `xsl:variable` instruction is to be tested, for example: 
+Each file listed in the group contains a set of tests contained in a *.json* file, generated from a single *.xsl* source file. The *.xsl* test source file
+(eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInAsAttribute.xsl)) comprises a set of `xsl:variable` instructions. A `attribute-name` processing instruction indicates whether the `as` or `select` attribute on the `xsl:variable` instruction is to be tested, for example: 
 
 ```xml
 <!-- file: __tests__/data/xsl-test-files/xpTypes.xsl -->
@@ -27,7 +26,7 @@ The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInA
 </xsl:stylesheet>
 ```
 
-### Generating Lexer test suite data from the XSLT source
+## Generating Lexer test suite data from the XSLT source
 *for example output see:  [xpInAsAttribute-test.json](data/xpInAsAttribute-test.json)*
 
 1. open the new source XSLT test file (eg. *xsl-tests-files/xpInAsAttribute.xsl*) in the editor
@@ -37,7 +36,7 @@ The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInA
 4. once the generator completes, review the `tokens` property for each test in the generated JSON data file
 5. if satisfied, add the test base name (eg. 'xpInAsAttribute') to the first group in [catalog.jsonc](data/xsl-test-files/catalog.jsonc)
 
-### Executing the Lexer Test
+## Executing the Lexer Test
 Run the test from the terminal using the command `npm run unit-test`. Each named test, corresponding to an `xsl:variable` will invoke the lexer and verify the output tokens correspond to those generated in the test data.
 
 All test suites will run, including the new test suite, which works as a regression test, ensuring future changes to 
@@ -61,6 +60,7 @@ the lexer do not affect existing functionality.
 - Review generated expected token data for accuracy
 - Use `<select>` elements for multi-line XPath expression testing (avoids XML attribute whitespace normalisation)
 - Mark pending tests in the .xsl test file by suffixing the test label (the `name` attribute of `xsl:variable`) with '-PENDING' - these tests will be skipped
+
 ## Linter testing (extending Lexer tests):
   - Tests for the **Linter** with a *'.dg'* suffix can be generated from the Lexer tests using the shell command `npm test`
   - Linter tests use the 2nd group in the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file
@@ -71,7 +71,7 @@ the lexer do not affect existing functionality.
   *this avoids a 500ms wait between each test - imposed by the editor for 'debouncing' purposes*
 
 ## Test Strategy
-The XSLT/XPath extension has evolved organically without any automated tests except those used
+The XSLT/XPath extension has evolved organically without, until now, any automated tests except those used
 at the time of project inception.
 
 The manual test strategy involves manually opening `*.xsl` files in the `sample` directory, along with other
@@ -81,20 +81,16 @@ XSLT resources such as those found in the W3C XSLT tests. The following are the 
 - Syntax-highlighting of XSLT and XPath (Lexers for XSLT and XPath)
 - Problem reporting for XSLT and XPath syntax (Linter)
 - Code formatting of XSLT and XPath (Formatting Provider)
+- Auto completion
+- Symbol referencing and outline views
 
-The tokens created by this extension's lexers are used in all XSLT/XPath language features with just one exception:
-when running XSLT tasks. If there's a problem with XPath generated tokens, all these language features are compromised.
-
-Syntax-highlighting proves to be a very effective way for manually testing the lexer behaviour. If tokens are highlighted
-badly then we know we have a problem that will affect other features like the linter or code-formatting provider.
-
-> The maintainer of this project is primarily an XSLT developer. This extension is therefore used, and thus tested, almost daily
+Syntax-highlighting proves to be a highly effective way for manually testing the lexer behaviour. When tokens are highlighted
+badly we know we have a problem that will affect other features like the linter or code-formatting provider.
 
 
-
-The automated test setup described here should be a useful supplement to this test strategy.
+The automated test setup described provides a useful supplement to this test strategy, but manual testing remains critical to this project.
 
 
 ## Conclusion
-The tests, with their expected 'tokens' and 'problems data', ensure later releases do not
-change the token structure inadvertently.
+The tests, with their expected 'tokens' and 'problems' data, are 'regression tests' ensuring later releases do not
+break features relying on the Lexer and Linter.
