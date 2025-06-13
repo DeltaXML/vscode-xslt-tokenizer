@@ -8,7 +8,8 @@
             "xpInAsAttribute",
             "xpLiterals",
             "xpNumericLiterals",
-            "qnamesAndURILiterals"
+            "qnamesAndURILiterals",
+            "expressions"
         ]
     },
     // 2nd group is used for Linter tests:

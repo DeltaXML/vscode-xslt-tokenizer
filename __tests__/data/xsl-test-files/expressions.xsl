@@ -162,4 +162,8 @@
 
   <!-- Anonymous function assigned and invoked via let -->
   <xsl:variable name="letAnonFnInvoke" select="let $f := function($x) { $x * 10 } return $f(7)"/>
+
+  <!-- Assigning named built-in functions to variables and invoking them -->
+  <xsl:variable name="fnVar1" select="upper-case#1"/>
+  <xsl:variable name="fnVar2" select="string-length#1"/>
 </xsl:stylesheet>
