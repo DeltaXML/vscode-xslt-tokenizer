@@ -8,7 +8,7 @@ To test the XPath lexer we need the following:
 2. an XPath expression
 3. a set of tokens that we expect the lexer to generate.
 
-The Mocha test [xpathLexer_catalog.spec.ts](../test/unit/xpathLexer_catalog.spec.ts) loads XPath strings and their expected token information from the first 'group' in the [catalog.json](data/xsl-test-files/catalog.json) file.
+The Mocha test [xpathLexer_catalog.spec.ts](../test/unit/xpathLexer_catalog.spec.ts) loads XPath strings and their expected token information from the first 'group' in the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file.
 
 Each file listed in the group contains a set of tests contained in a *.json* file that is generated from a single *.xsl* source file. 
 
@@ -35,7 +35,7 @@ The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInA
    *(the task: *gen: expected test json from xsl - PICK input* is now triggered as it's the default)*
 3. on the prompt *'Select source XSLT for test'*, pick the test file from the *recently used* list
 4. once the generator completes, review the `tokens` property for each test in the generated JSON data file
-5. if satisfied, add the test base name (eg. 'xpInAsAttribute') to the first group in [catalog.json](data/xsl-test-files/catalog.json)
+5. if satisfied, add the test base name (eg. 'xpInAsAttribute') to the first group in [catalog.jsonc](data/xsl-test-files/catalog.jsonc)
 
 ### Executing the Test
 Run the test from the terminal using the command `npm run unit-test`. Each named test, corresponding to an `xsl:variable` will invoke the lexer and verify the output tokens correspond to those generated in the test data.
@@ -51,7 +51,7 @@ the lexer do not affect existing functionality.
 >2. The final stage uses [xpLexerTestGen.ts](utils/xpLexerTestGen.ts) to run the XPath Lexer for each XPath expression (in the interim JSON file) and output data for the tokens on each XPath expression and add this to the JSON object.
 >3. The JSON test file created is placed in the *__tests/data* directory, with a *-test.json* suffix added to the source XSLT selected
 
-#### 3. Once the task has created the JSON test file, add the base name of the test to the [catalog.json](data/xsl-test-files/catalog.json) file.
+#### 3. Once the task has created the JSON test file, add the base name of the test to the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file.
 
 
 
