@@ -27,7 +27,7 @@ The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInA
 </xsl:stylesheet>
 ```
 
-### Generating test suite data from the XSLT source
+### Generating lexer test suite data from the XSLT source
 *for example output see:  [xpInAsAttribute-test.json](data/xpInAsAttribute-test.json)*
 
 1. open the new source XSLT test file (eg. *xsl-tests-files/xpInAsAttribute.xsl*) in the editor

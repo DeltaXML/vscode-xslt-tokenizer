@@ -2,13 +2,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { CatalogGroup, ExpectedProblemData, ExpectedTokenData } from '../types';
 import { TestPaths } from './testPaths';
+import * as jsc from 'jsonc-parser';
+
 
 export function getCatalogGroup(groupIndex: number) {
-    const catalogPath = path.join(getLocalRootDir(), TestPaths.testXslDataDir, 'catalog.json');
+    const catalogPath = path.join(getLocalRootDir(), TestPaths.testXslDataDir, 'catalog.jsonc');
     console.log('');
     console.log('===== Catalog =======');
     console.log("Path:", catalogPath);
-    const groupArray: Array<CatalogGroup> = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+    const groupArray: Array<CatalogGroup> = jsc.parse(fs.readFileSync(catalogPath, 'utf8'));
     console.log(`Group: '${groupArray[groupIndex].group}'`);
     console.log(`Group-Index: ${groupIndex}`);
     console.log();

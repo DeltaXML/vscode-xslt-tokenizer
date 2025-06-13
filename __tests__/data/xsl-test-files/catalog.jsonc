@@ -1,5 +1,8 @@
+// defines the test suites used for Lexer and Linter testing
+// only the first two groups are used
 [
     {
+        // 1st group is used for Lexer tests:
         "group": "XPath Lexer",
         "files": [
             "xpInAsAttribute",
@@ -8,6 +11,7 @@
             "qnamesAndURILiterals"
         ]
     },
+    // 2nd group is used for Linter tests:
     {
         "group": "XPath Linter",
         "files": [
@@ -17,9 +21,13 @@
             "qnamesAndURILiterals.dg"
         ]
     },
+    // to run Linter test in one-off generator mode
+    // temporarily replace the second group with this group
+    // (or modify LINTER_GROUP_INDEX in linter.test.ts to be 2)
     {
         "group": "XPath Linter (Generate Expected)",
         "files": [
+            // replace with a new *Lexer* test name:
             "qnamesAndURILiterals"
         ]
     }
