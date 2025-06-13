@@ -27,26 +27,34 @@ The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInA
 </xsl:stylesheet>
 ```
 
-### Generating a test suite from the XSLT source
-#### 1. To generate the [xpInAsAttribute-test.json](data/xpInAsAttribute-test.json)
+### Generating test suite data from the XSLT source
+*for example output see:  [xpInAsAttribute-test.json](data/xpInAsAttribute-test.json)*
 
-1. select the new source XSLT test file (eg. *xsl-tests-files/xpInAsAttribute.xsl*)
-2. invoke the VS Code command: 'Tasks: run tesk task' from the command pallette
-3. select the task: *gen: expected test json from xsl - PICK input*
-4. when prompted for a file, select from the list *xpInAsAttribute.xsl* (the last opened file). 
+1. open the new source XSLT test file (eg. *xsl-tests-files/xpInAsAttribute.xsl*) in the editor
+2. invoke the VS Code command: *'Tasks: run tesk task'* from the command pallette<br>
+   *(the task: *gen: expected test json from xsl - PICK input* is now triggered as it's the default)*
+3. on the prompt *'Select source XSLT for test'*, pick the test file from the *recently used* list
+4. once the generator completes, review the `tokens` property for each test in the generated JSON data file
+5. if satisfied, add the test base name (eg. 'xpInAsAttribute') to the first group in [catalog.json](data/xsl-test-files/catalog.json)
 
-#### 2. The task will then run, it comprises two stages:
+### Executing the Test
+Run the test from the terminal using the command `npm run unit-test`. Each named test, corresponding to an `xsl:variable` will invoke the lexer and verify the output tokens correspond to those generated in the test data.
 
-1. The first stage runs [xslXPathAttributesToJson.xsl](scripts/xslXPathAttributesToJson.xsl) to extract, from each 'xsl:variable' instruction, the name and XPath expression from the 'as' or 'select' attribute to an interim JSON file (named *temp/json-from-xml-out.json*).
+All test suites will run, including the new test suite, which works as a regression test, ensuring future changes to 
+the lexer do not affect existing functionality.
 
-2. The final stage uses [xpLexerTestGen.ts](utils/xpLexerTestGen.ts) to run the XPath Lexer for each XPath expression (in the interim JSON file) and output data for the tokens on each XPath expression and add this to the JSON object.
-3. The JSON test file created is placed in the *__tests/data* directory, with a *-test.json* suffix added to the source XSLT selected
+#### Aside
+>#### The *'gen: expected test json from xsl - PICK input'* task comprises these stages:
+>
+>1. The first stage runs [xslXPathAttributesToJson.xsl](scripts/xslXPathAttributesToJson.xsl) to extract, from each 'xsl:variable' instruction, the name and XPath expression from the 'as' or 'select' attribute to an interim JSON file (named *temp/json-from-xml-out.json*).
+>
+>2. The final stage uses [xpLexerTestGen.ts](utils/xpLexerTestGen.ts) to run the XPath Lexer for each XPath expression (in the interim JSON file) and output data for the tokens on each XPath expression and add this to the JSON object.
+>3. The JSON test file created is placed in the *__tests/data* directory, with a *-test.json* suffix added to the source XSLT selected
 
 #### 3. Once the task has created the JSON test file, add the base name of the test to the [catalog.json](data/xsl-test-files/catalog.json) file.
 
 
-### Executing the Test
-- Run the test using `npm run unit-test`
+
 
 ## Notes
 - Keep XPath expressions in the test *.xsl* files clear and focused

@@ -72,8 +72,11 @@
 				"reveal": "always",
 				"panel": "shared"
 			},
-			"group": "test",
-			"problemMatcher": []
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": [],
 		},
 	],
 	"inputs": [
