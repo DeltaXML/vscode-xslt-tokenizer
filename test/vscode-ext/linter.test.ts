@@ -33,8 +33,7 @@ import path = require('path');
 import fs = require('fs');
 
 // index to select group from catalog.json:
-const LINTER_GROUP_INDEX = 1; // when running all tests
-//const LINTER_GROUP_INDEX = 2; // when generating expected diagnostics for 1 or more tests
+const LINTER_GROUP_INDEX = 1; // when running all tests - see 2nd group in catalog.jsonc
 const catalogGroup = getCatalogGroup(LINTER_GROUP_INDEX);
 
 catalogGroup.files.forEach(file => {

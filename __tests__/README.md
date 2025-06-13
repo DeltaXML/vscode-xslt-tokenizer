@@ -1,4 +1,4 @@
-# Test Process for the XPath Lexer
+# Test Process for the XPath Lexer and Linter
 
 ## Overview
 This document explains how to create and run tests for the XPath lexer
@@ -27,7 +27,7 @@ The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInA
 </xsl:stylesheet>
 ```
 
-### Generating lexer test suite data from the XSLT source
+### Generating Lexer test suite data from the XSLT source
 *for example output see:  [xpInAsAttribute-test.json](data/xpInAsAttribute-test.json)*
 
 1. open the new source XSLT test file (eg. *xsl-tests-files/xpInAsAttribute.xsl*) in the editor
@@ -37,7 +37,7 @@ The *.xsl* test source file (eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInA
 4. once the generator completes, review the `tokens` property for each test in the generated JSON data file
 5. if satisfied, add the test base name (eg. 'xpInAsAttribute') to the first group in [catalog.jsonc](data/xsl-test-files/catalog.jsonc)
 
-### Executing the Test
+### Executing the Lexer Test
 Run the test from the terminal using the command `npm run unit-test`. Each named test, corresponding to an `xsl:variable` will invoke the lexer and verify the output tokens correspond to those generated in the test data.
 
 All test suites will run, including the new test suite, which works as a regression test, ensuring future changes to 
@@ -60,6 +60,15 @@ the lexer do not affect existing functionality.
 - Keep XPath expressions in the test *.xsl* files clear and focused
 - Review generated expected token data for accuracy
 - Use `<select>` elements for multi-line XPath expression testing (avoids XML attribute whitespace normalisation)
+- Mark pending tests in the .xsl test file by suffixing the test label (the `name` attribute of `xsl:variable`) with '-PENDING' - these tests will be skipped
+## Linter testing (extending Lexer tests):
+  - Tests for the **Linter** with a *'.dg'* suffix can be generated from the Lexer tests using the shell command `npm test`
+  - Linter tests use the 2nd group in the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file
+  - The `tokens` property from the Lexer test is replaced with a `problems` token - for expected diagnostics values
+  - The same `npm test` command is also used to run the **Linter** tests (when a `problems` property for expected diagnostics data exists for the test)
+  - **Linter** tests rely on the VS Code API and are therefore run (using an older Mocha version) within the VS Code extension host
+    - By default `isDirect` in [linter.test.ts](/test/vscode-ext/linter.test.ts) is set `false` so Linter tests bypass the VS Code editor (otherwise using the same API)<br>
+  *this avoids a 500ms wait between each test - imposed by the editor for 'debouncing' purposes*
 
 ## Test Strategy
 The XSLT/XPath extension has evolved organically without any automated tests except those used
@@ -87,5 +96,5 @@ The automated test setup described here should be a useful supplement to this te
 
 
 ## Conclusion
-The tests, with their expected token data, ensure later releases do not
+The tests, with their expected 'tokens' and 'problems data', ensure later releases do not
 change the token structure inadvertently.
