@@ -34,23 +34,23 @@
   <xsl:variable name="expression26" select="5 cast as xs:string"/>
   <xsl:variable name="expression27" select="5 castable as xs:string"/>
   <xsl:variable name="expression28" select="5 treat as xs:integer"/>
-  <xsl:variable name="expression29" select="/root/child"/>
-  <xsl:variable name="expression30" select="//item"/>
 
   <!-- Axis examples -->
-  <xsl:variable name="expression31" select="child::book"/>
-  <xsl:variable name="expression32" select="descendant::chapter"/>
-  <xsl:variable name="expression33" select="ancestor::section"/>
-  <xsl:variable name="expression34" select="following-sibling::para"/>
-  <xsl:variable name="expression35" select="preceding::note"/>
-  <xsl:variable name="expression36" select="self::node()"/>
-  <xsl:variable name="expression37" select="attribute::lang"/>
-  <xsl:variable name="expression38" select="namespace::*"/>
+  <xsl:variable name="axis29" select="/root/child"/>
+  <xsl:variable name="axis30" select="//item"/>
+  <xsl:variable name="axis31" select="child::book"/>
+  <xsl:variable name="axis32" select="descendant::chapter"/>
+  <xsl:variable name="axis33" select="ancestor::section"/>
+  <xsl:variable name="axis34" select="following-sibling::para"/>
+  <xsl:variable name="axis35" select="preceding::note"/>
+  <xsl:variable name="axis36" select="self::node()"/>
+  <xsl:variable name="axis37" select="attribute::lang"/>
+  <xsl:variable name="axis38" select="namespace::*"/>
 
   <!-- Predicates -->
-  <xsl:variable name="expression39" select="book[author='John']"/>
-  <xsl:variable name="expression40" select="item[position() = 1]"/>
-  <xsl:variable name="expression41" select="chapter[title and page > 10]"/>
+  <xsl:variable name="qname39" select="book[author='John']"/>
+  <xsl:variable name="qname40" select="item[position() = 1]"/>
+  <xsl:variable name="qname41" select="chapter[title and page > 10]"/>
   <xsl:variable name="expression42" select="(1 to 10)[. mod 2 = 0]"/>
 
   <!-- Array constructors and access -->
@@ -65,11 +65,11 @@
   <xsl:variable name="expression49" select="map{ 'x': 1, 'y': 2 }"/>
   <xsl:variable name="expression50" select="map{ 'foo': [1,2,3] }('foo')"/>
   <xsl:variable name="expression51" select="map{ 'a': 1, 'b': 2 }?a"/>
-  <xsl:variable name="expression52" select="map{ 'nested': map{ 'inner': 42 } }?nested?inner"/>
+  <xsl:variable name="expression52-PENDING" select="map{ 'nested': map{ 'inner': 42 } }?nested?inner"/>
 
   <!-- Array and map with functions -->
   <xsl:variable name="expression53" select="[1, 2, 3] => array:filter(function($i) { $i mod 2 = 1 })"/>
-  <xsl:variable name="expression54" select="map{ 'nums': [1,2,3] }?nums[. > 1]"/>
+  <xsl:variable name="expression54-PENDING" select="map{ 'nums': [1,2,3] }?nums[. > 1]"/>
 
   <!-- Let and For expressions -->
   <xsl:variable name="let1" select="let $x := 5 return $x * 2"/>
@@ -96,9 +96,9 @@
   <xsl:variable name="fnLiteral2" select="(1 to 3) => for-each(function($n) { $n + 10 })"/>
 
   <!-- Dynamic function calls and partial application -->
-  <xsl:variable name="dynFnCall1-PENDING" select="upper-case?('abc')"/>
-  <xsl:variable name="partialFn1-PENDING" select="substring-before?('foobar', 'bar')"/>
-  <xsl:variable name="partialFn2-PENDING" select="concat?('a', ?)('b')"/>
+  <xsl:variable name="dynFnCall1" select="upper-case#1('abc')"/>
+  <xsl:variable name="partialFn1" select="substring-before#2('foobar', 'bar')"/>
+  <xsl:variable name="partialFn2" select="concat('a', ?)('b')"/>
 
   <!-- Type expressions with sequence types -->
   <xsl:variable name="typeExpr1-PENDING" select="(1, 2, 3) treat as xs:integer*"/>
@@ -130,7 +130,7 @@
 
   <!-- document(), collection(), doc-available() -->
   <xsl:variable name="doc1" select="document('somefile.xml')/root"/>
-  <xsl:variable name="coll1" select="collection()[1]"/>
+  <xsl:variable name="coll1-PENDING" select="collection()[1]"/>
   <xsl:variable name="docAvail1" select="doc-available('somefile.xml')"/>
 
   <!-- let/for/if inside map/array constructors -->

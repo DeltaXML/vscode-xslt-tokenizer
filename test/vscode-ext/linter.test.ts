@@ -33,7 +33,7 @@ import path = require('path');
 import fs = require('fs');
 
 // index to select group from catalog.json:
-const LINTER_GROUP_INDEX = 1; // when running all tests - see 2nd group in catalog.jsonc
+const LINTER_GROUP_INDEX = 2; // when running all tests - see 2nd group in catalog.jsonc
 const catalogGroup = getCatalogGroup(LINTER_GROUP_INDEX);
 
 catalogGroup.files.forEach(file => {
@@ -151,12 +151,16 @@ async function getDirectDiagnostics(idx: number, xslt: string) {
 function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: string, isDirect: boolean) {
     let xslt = '';
     const xsltSequence = xpath.includes('"') ? `<xsl:sequence select='${xpath}'/>` : `<xsl:sequence select="${xpath}"/>`;
-    const isTestWithContext = label.startsWith('qname') || label.startsWith('bracedURILiteral');
+    const contextPrefixes = [
+      'qname', 'bracedURILiteral', 'axis', 'context', 'path', 'attr', 'node'
+    ];
+    const isTestWithContext = contextPrefixes.some(prefix => label.startsWith(prefix));
     const templateOrFunction = isTestWithContext ? 'template' : 'function';
     if (isTestingAsAttribute) {
         xslt = `
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:array="http://www.w3.org/2005/xpath-functions/array"
     xmlns:ct="com.example.test"
     xmlns:_ct="com.example.test.new" version="3.0">
     <xsl:${templateOrFunction} name="ct:run" as="${xpath}">
@@ -167,6 +171,7 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: 
         xslt = `
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:array="http://www.w3.org/2005/xpath-functions/array"
     xmlns:ct="com.example.test"
     xmlns:_ct="com.example.test" version="3.0">
     <xsl:${templateOrFunction} name="ct:run">

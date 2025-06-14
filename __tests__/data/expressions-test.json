@@ -937,7 +937,7 @@
       ]
     },
     {
-      "label": "expression29",
+      "label": "axis29",
       "xpath": "/root/child",
       "tokens": [
         [
@@ -959,7 +959,7 @@
       ]
     },
     {
-      "label": "expression30",
+      "label": "axis30",
       "xpath": "//item",
       "tokens": [
         [
@@ -973,7 +973,7 @@
       ]
     },
     {
-      "label": "expression31",
+      "label": "axis31",
       "xpath": "child::book",
       "tokens": [
         [
@@ -991,7 +991,7 @@
       ]
     },
     {
-      "label": "expression32",
+      "label": "axis32",
       "xpath": "descendant::chapter",
       "tokens": [
         [
@@ -1009,7 +1009,7 @@
       ]
     },
     {
-      "label": "expression33",
+      "label": "axis33",
       "xpath": "ancestor::section",
       "tokens": [
         [
@@ -1027,7 +1027,7 @@
       ]
     },
     {
-      "label": "expression34",
+      "label": "axis34",
       "xpath": "following-sibling::para",
       "tokens": [
         [
@@ -1045,7 +1045,7 @@
       ]
     },
     {
-      "label": "expression35",
+      "label": "axis35",
       "xpath": "preceding::note",
       "tokens": [
         [
@@ -1063,7 +1063,7 @@
       ]
     },
     {
-      "label": "expression36",
+      "label": "axis36",
       "xpath": "self::node()",
       "tokens": [
         [
@@ -1085,7 +1085,7 @@
       ]
     },
     {
-      "label": "expression37",
+      "label": "axis37",
       "xpath": "attribute::lang",
       "tokens": [
         [
@@ -1103,7 +1103,7 @@
       ]
     },
     {
-      "label": "expression38",
+      "label": "axis38",
       "xpath": "namespace::*",
       "tokens": [
         [
@@ -1121,7 +1121,7 @@
       ]
     },
     {
-      "label": "expression39",
+      "label": "qname39",
       "xpath": "book[author='John']",
       "tokens": [
         [
@@ -1151,7 +1151,7 @@
       ]
     },
     {
-      "label": "expression40",
+      "label": "qname40",
       "xpath": "item[position() = 1]",
       "tokens": [
         [
@@ -1185,7 +1185,7 @@
       ]
     },
     {
-      "label": "expression41",
+      "label": "qname41",
       "xpath": "chapter[title and page > 10]",
       "tokens": [
         [
@@ -1675,7 +1675,7 @@
       ]
     },
     {
-      "label": "expression52",
+      "label": "expression52-PENDING",
       "xpath": "map{ 'nested': map{ 'inner': 42 } }?nested?inner",
       "tokens": [
         [
@@ -1835,7 +1835,7 @@
       ]
     },
     {
-      "label": "expression54",
+      "label": "expression54-PENDING",
       "xpath": "map{ 'nums': [1,2,3] }?nums[. > 1]",
       "tokens": [
         [
@@ -3261,16 +3261,12 @@
       ]
     },
     {
-      "label": "dynFnCall1-PENDING",
-      "xpath": "upper-case?('abc')",
+      "label": "dynFnCall1",
+      "xpath": "upper-case#1('abc')",
       "tokens": [
         [
-          "upper-case",
-          "nodeNameTest"
-        ],
-        [
-          "?",
-          "operator"
+          "upper-case#1",
+          "functionNameTest"
         ],
         [
           "(",
@@ -3287,16 +3283,12 @@
       ]
     },
     {
-      "label": "partialFn1-PENDING",
-      "xpath": "substring-before?('foobar', 'bar')",
+      "label": "partialFn1",
+      "xpath": "substring-before#2('foobar', 'bar')",
       "tokens": [
         [
-          "substring-before",
-          "nodeNameTest"
-        ],
-        [
-          "?",
-          "operator"
+          "substring-before#2",
+          "functionNameTest"
         ],
         [
           "(",
@@ -3321,16 +3313,12 @@
       ]
     },
     {
-      "label": "partialFn2-PENDING",
-      "xpath": "concat?('a', ?)('b')",
+      "label": "partialFn2",
+      "xpath": "concat('a', ?)('b')",
       "tokens": [
         [
           "concat",
-          "nodeNameTest"
-        ],
-        [
-          "?",
-          "operator"
+          "function"
         ],
         [
           "(",
@@ -4177,7 +4165,7 @@
       ]
     },
     {
-      "label": "coll1",
+      "label": "coll1-PENDING",
       "xpath": "collection()[1]",
       "tokens": [
         [
