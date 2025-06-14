@@ -47,14 +47,14 @@ function describeTest(testData: ExpectedTokenData) {
                 it(`${label} : ${xpath}`, () => {
                     // the call to the xpLexer.analyse function - the subject of the tests:
                     const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTestingAsAttribute);
-                    expect(tokensOut.length).to.equal(tokens.length);
+                    expect(tokensOut.length).to.equal(tokens.length, 'number of tokens must be same as expected');
                     const errorTokens = tokensOut.filter(t => t.error);
-                    expect(errorTokens.length).to.equal(0);
+                    // expect(errorTokens.length).to.equal(0, 'number of error tokens must be zero?');
 
                     tokensOut.forEach((token, idx) => {
                         const [expectedValue, expectedType] = tokens[idx];
-                        expect(token.value).to.equal(expectedValue);
-                        expect(TokenLevelState[token.tokenType]).to.equal(expectedType);
+                        expect(token.value).to.equal(expectedValue, 'token value');
+                        expect(TokenLevelState[token.tokenType]).to.equal(expectedType), 'token type';
                     });
                 });
             }
