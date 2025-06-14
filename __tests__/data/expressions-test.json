@@ -1621,7 +1621,7 @@
       ]
     },
     {
-      "label": "expression51",
+      "label": "expression51-PENDING",
       "xpath": "map{ 'a': 1, 'b': 2 }?a",
       "tokens": [
         [
@@ -3577,7 +3577,7 @@
       ]
     },
     {
-      "label": "mapLookup1",
+      "label": "mapLookup1-PENDING",
       "xpath": "map{ 'a': 1, 'b': 2 }?concat('a', '')",
       "tokens": [
         [

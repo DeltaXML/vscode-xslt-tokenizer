@@ -1,0 +1,612 @@
+{
+  "suite": "expressions",
+  "source": "expressions.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "expression1",
+      "xpath": "1 + 1",
+      "problems": []
+    },
+    {
+      "label": "expression2",
+      "xpath": "5 div 20",
+      "problems": []
+    },
+    {
+      "label": "expression3",
+      "xpath": "10 mod xs:integer('1')",
+      "problems": []
+    },
+    {
+      "label": "expression4",
+      "xpath": "3 * 7",
+      "problems": []
+    },
+    {
+      "label": "expression5",
+      "xpath": "20 idiv 3",
+      "problems": []
+    },
+    {
+      "label": "expression6",
+      "xpath": "2 - 5",
+      "problems": []
+    },
+    {
+      "label": "expression7",
+      "xpath": "(1, 2, 3) = 2",
+      "problems": []
+    },
+    {
+      "label": "expression8",
+      "xpath": "(1, 2, 3) != 4",
+      "problems": []
+    },
+    {
+      "label": "expression9",
+      "xpath": "5 > 2",
+      "problems": []
+    },
+    {
+      "label": "expression10",
+      "xpath": "5 >= 5",
+      "problems": []
+    },
+    {
+      "label": "expression11",
+      "xpath": "2 < 3",
+      "problems": []
+    },
+    {
+      "label": "expression12",
+      "xpath": "2 <= 2",
+      "problems": []
+    },
+    {
+      "label": "expression13",
+      "xpath": "true() and false()",
+      "problems": []
+    },
+    {
+      "label": "expression14",
+      "xpath": "true() or false()",
+      "problems": []
+    },
+    {
+      "label": "expression15",
+      "xpath": "(1, 2) union (2, 3)",
+      "problems": []
+    },
+    {
+      "label": "expression16",
+      "xpath": "(1, 2, 3) intersect (2, 3, 4)",
+      "problems": []
+    },
+    {
+      "label": "expression17",
+      "xpath": "(1, 2, 3) except (2)",
+      "problems": []
+    },
+    {
+      "label": "expression18",
+      "xpath": "'foo' || 'bar'",
+      "problems": []
+    },
+    {
+      "label": "expression19",
+      "xpath": "(1 to 5)",
+      "problems": []
+    },
+    {
+      "label": "expression20",
+      "xpath": "map { 'a': 1, 'b': 2 }!string(.)",
+      "problems": []
+    },
+    {
+      "label": "expression21",
+      "xpath": "(1, 2, 3)!upper-case(string(.))",
+      "problems": []
+    },
+    {
+      "label": "expression22",
+      "xpath": "(1, 2, 3) => count()",
+      "problems": []
+    },
+    {
+      "label": "expression23",
+      "xpath": "some $x in (1,2,3) satisfies $x > 1",
+      "problems": []
+    },
+    {
+      "label": "expression24",
+      "xpath": "every $x in (1,2,3) satisfies $x > 0",
+      "problems": []
+    },
+    {
+      "label": "expression25",
+      "xpath": "5 instance of xs:integer",
+      "problems": []
+    },
+    {
+      "label": "expression26",
+      "xpath": "5 cast as xs:string",
+      "problems": []
+    },
+    {
+      "label": "expression27",
+      "xpath": "5 castable as xs:string",
+      "problems": []
+    },
+    {
+      "label": "expression28",
+      "xpath": "5 treat as xs:integer",
+      "problems": []
+    },
+    {
+      "label": "axis29",
+      "xpath": "/root/child",
+      "problems": []
+    },
+    {
+      "label": "axis30",
+      "xpath": "//item",
+      "problems": []
+    },
+    {
+      "label": "axis31",
+      "xpath": "child::book",
+      "problems": []
+    },
+    {
+      "label": "axis32",
+      "xpath": "descendant::chapter",
+      "problems": []
+    },
+    {
+      "label": "axis33",
+      "xpath": "ancestor::section",
+      "problems": []
+    },
+    {
+      "label": "axis34",
+      "xpath": "following-sibling::para",
+      "problems": []
+    },
+    {
+      "label": "axis35",
+      "xpath": "preceding::note",
+      "problems": []
+    },
+    {
+      "label": "axis36",
+      "xpath": "self::node()",
+      "problems": []
+    },
+    {
+      "label": "axis37",
+      "xpath": "attribute::lang",
+      "problems": []
+    },
+    {
+      "label": "axis38",
+      "xpath": "namespace::*",
+      "problems": []
+    },
+    {
+      "label": "qname39",
+      "xpath": "book[author='John']",
+      "problems": []
+    },
+    {
+      "label": "qname40",
+      "xpath": "item[position() = 1]",
+      "problems": []
+    },
+    {
+      "label": "qname41",
+      "xpath": "chapter[title and page > 10]",
+      "problems": []
+    },
+    {
+      "label": "expression42",
+      "xpath": "(1 to 10)[. mod 2 = 0]",
+      "problems": []
+    },
+    {
+      "label": "expression43",
+      "xpath": "[]",
+      "problems": []
+    },
+    {
+      "label": "expression44",
+      "xpath": "[1, 2, 3]",
+      "problems": []
+    },
+    {
+      "label": "expression45",
+      "xpath": "['a', 'b', 'c']",
+      "problems": []
+    },
+    {
+      "label": "expression46",
+      "xpath": "([10, 20, 30])[2]",
+      "problems": []
+    },
+    {
+      "label": "expression47",
+      "xpath": "(([1, 2, 3],[4, 5]) => array:join())",
+      "problems": []
+    },
+    {
+      "label": "expression48",
+      "xpath": "map{}",
+      "problems": []
+    },
+    {
+      "label": "expression49",
+      "xpath": "map{ 'x': 1, 'y': 2 }",
+      "problems": []
+    },
+    {
+      "label": "expression50",
+      "xpath": "map{ 'foo': [1,2,3] }('foo')",
+      "problems": []
+    },
+    {
+      "label": "expression51-PENDING",
+      "xpath": "map{ 'a': 1, 'b': 2 }?a",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "expression52-PENDING",
+      "xpath": "map{ 'nested': map{ 'inner': 42 } }?nested?inner",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "expression53",
+      "xpath": "[1, 2, 3] => array:filter(function($i) { $i mod 2 = 1 })",
+      "problems": []
+    },
+    {
+      "label": "expression54-PENDING",
+      "xpath": "map{ 'nums': [1,2,3] }?nums[. > 1]",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "let1",
+      "xpath": "let $x := 5 return $x * 2",
+      "problems": []
+    },
+    {
+      "label": "let2",
+      "xpath": "let $a := 1, $b := 2 return $a + $b",
+      "problems": []
+    },
+    {
+      "label": "for1",
+      "xpath": "for $i in 1 to 3 return $i * $i",
+      "problems": []
+    },
+    {
+      "label": "for2",
+      "xpath": "for $x in (10, 20), $y in (1, 2) return $x + $y",
+      "problems": []
+    },
+    {
+      "label": "nestedLetFor1",
+      "xpath": "for $i in 1 to 3 return let $j := $i * 2 return $j + 1",
+      "problems": []
+    },
+    {
+      "label": "nestedLetFor2",
+      "xpath": "let $seq := (1,2,3) return for $n in $seq return $n * 10",
+      "problems": []
+    },
+    {
+      "label": "nestedForLet",
+      "xpath": "for $x in (1,2) return for $y in (3,4) return let $z := $x + $y return $z * 2",
+      "problems": []
+    },
+    {
+      "label": "letInPredicate",
+      "xpath": "(1 to 10)[let $v := . * 2 return $v > 10]",
+      "problems": []
+    },
+    {
+      "label": "if1",
+      "xpath": "if (2 > 1) then 'yes' else 'no'",
+      "problems": []
+    },
+    {
+      "label": "if2",
+      "xpath": "if (false()) then 0 else 1",
+      "problems": []
+    },
+    {
+      "label": "if3",
+      "xpath": "if (3 = 3) then (10, 20) else (30, 40)",
+      "problems": []
+    },
+    {
+      "label": "if4",
+      "xpath": "if (1 = 2) then (1, 2, 3) else 99",
+      "problems": []
+    },
+    {
+      "label": "if5",
+      "xpath": "if (true()) then (('a', 'b')) else (('c', 'd'))",
+      "problems": []
+    },
+    {
+      "label": "if6",
+      "xpath": "if (5 > 10) then (1, if (2 = 2) then 2 else 3) else (4, 5)",
+      "problems": []
+    },
+    {
+      "label": "if7",
+      "xpath": "if (false()) then (if (true()) then 'x' else 'y', 'z') else ('a', 'b')",
+      "problems": []
+    },
+    {
+      "label": "if8",
+      "xpath": "for $i in 1 to 2 return if ($i = 1) then ('first', $i) else ('second', $i)",
+      "problems": []
+    },
+    {
+      "label": "fnLiteral1",
+      "xpath": "function($x) { $x * 2 }",
+      "problems": []
+    },
+    {
+      "label": "fnLiteral2",
+      "xpath": "(1 to 3) => for-each(function($n) { $n + 10 })",
+      "problems": []
+    },
+    {
+      "label": "dynFnCall1",
+      "xpath": "upper-case#1('abc')",
+      "problems": []
+    },
+    {
+      "label": "partialFn1",
+      "xpath": "substring-before#2('foobar', 'bar')",
+      "problems": []
+    },
+    {
+      "label": "partialFn2",
+      "xpath": "concat('a', ?)('b')",
+      "problems": []
+    },
+    {
+      "label": "typeExpr1-PENDING",
+      "xpath": "(1, 2, 3) treat as xs:integer*",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "typeExpr2-PENDING",
+      "xpath": "'abc' cast as xs:string?",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "typeExpr3-PENDING",
+      "xpath": "5 instance of xs:integer+",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "pathGroup1",
+      "xpath": "(/root/child)[1]",
+      "problems": []
+    },
+    {
+      "label": "pathGroup2",
+      "xpath": "(//item)[position() lt 3]",
+      "problems": []
+    },
+    {
+      "label": "contextItem1",
+      "xpath": ".",
+      "problems": []
+    },
+    {
+      "label": "contextItem2",
+      "xpath": ".//node()",
+      "problems": []
+    },
+    {
+      "label": "mapLookup1-PENDING",
+      "xpath": "map{ 'a': 1, 'b': 2 }?concat('a', '')",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "arrayLookup1",
+      "xpath": "[10, 20, 30][1 + 1]",
+      "problems": []
+    },
+    {
+      "label": "fnApply1",
+      "xpath": "fn:apply(function($a, $b) { $a + $b }, [1, 2])",
+      "problems": []
+    },
+    {
+      "label": "fnFilter1",
+      "xpath": "fn:filter(function($n) { $n mod 2 = 0 }, (1,2,3,4))",
+      "problems": []
+    },
+    {
+      "label": "fnFoldLeft1",
+      "xpath": "fn:fold-left((1,2,3), 0, function($a, $b) { $a + $b })",
+      "problems": []
+    },
+    {
+      "label": "closure1",
+      "xpath": "let $f := function($x) { $x + 1 } return $f(10)",
+      "problems": []
+    },
+    {
+      "label": "posPred1",
+      "xpath": "(10, 20, 30)[position() mod 2 = 1]",
+      "problems": []
+    },
+    {
+      "label": "doc1",
+      "xpath": "document('somefile.xml')/root",
+      "problems": []
+    },
+    {
+      "label": "coll1-PENDING",
+      "xpath": "collection()[1]",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "docAvail1",
+      "xpath": "doc-available('somefile.xml')",
+      "problems": []
+    },
+    {
+      "label": "mapWithLet",
+      "xpath": "map{ 'x': let $a := 2 return $a * 10 }",
+      "problems": []
+    },
+    {
+      "label": "arrayWithFor",
+      "xpath": "[for $i in 1 to 3 return $i * 2]",
+      "problems": []
+    },
+    {
+      "label": "arrayWithIf",
+      "xpath": "[if (2 > 1) then 'ok' else 'fail']",
+      "problems": []
+    },
+    {
+      "label": "switchSub1",
+      "xpath": "let $x := 1 return if ($x = 1) then 'one' else if ($x = 2) then 'two' else 'other'",
+      "problems": []
+    },
+    {
+      "label": "attrTest1",
+      "xpath": "@class",
+      "problems": []
+    },
+    {
+      "label": "attrTest2",
+      "xpath": "//div/@id",
+      "problems": []
+    },
+    {
+      "label": "attrTest3",
+      "xpath": "book/@*",
+      "problems": []
+    },
+    {
+      "label": "nodeTest1",
+      "xpath": "text()",
+      "problems": []
+    },
+    {
+      "label": "nodeTest2",
+      "xpath": "//para/text()",
+      "problems": []
+    },
+    {
+      "label": "nodeTest3",
+      "xpath": "processing-instruction()",
+      "problems": []
+    },
+    {
+      "label": "nodeTest4",
+      "xpath": "processing-instruction('xml-stylesheet')",
+      "problems": []
+    },
+    {
+      "label": "nestedMap1",
+      "xpath": "map{ 'outer': map{ 'inner': 123 } }",
+      "problems": []
+    },
+    {
+      "label": "nestedMap2",
+      "xpath": "map{ 'a': map{ 'b': map{} } }",
+      "problems": []
+    },
+    {
+      "label": "arrayCurly1",
+      "xpath": "array{ (1, 2, 3) }",
+      "problems": []
+    },
+    {
+      "label": "arrayCurly2",
+      "xpath": "array{ [10, 20], array{()} }",
+      "problems": []
+    },
+    {
+      "label": "arraySquare1",
+      "xpath": "[[1, 2], [3, 4]]",
+      "problems": []
+    },
+    {
+      "label": "arraySquare2",
+      "xpath": "[array{(5, 6)}, []]",
+      "problems": []
+    },
+    {
+      "label": "letAnonFnInvoke",
+      "xpath": "let $f := function($x) { $x * 10 } return $f(7)",
+      "problems": []
+    },
+    {
+      "label": "fnVar1",
+      "xpath": "upper-case#1",
+      "problems": []
+    },
+    {
+      "label": "fnVar2",
+      "xpath": "string-length#1",
+      "problems": []
+    }
+  ]
+}

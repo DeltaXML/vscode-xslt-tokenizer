@@ -33,7 +33,7 @@ import path = require('path');
 import fs = require('fs');
 
 // index to select group from catalog.json:
-const LINTER_GROUP_INDEX = 2; // when running all tests - see 2nd group in catalog.jsonc
+const LINTER_GROUP_INDEX = 1; // when running all tests - see 2nd group in catalog.jsonc
 const catalogGroup = getCatalogGroup(LINTER_GROUP_INDEX);
 
 catalogGroup.files.forEach(file => {
@@ -99,7 +99,6 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
                     });
                     writeJSONonLastTest(idx, lastIdx, testData);
                 }
-
                 if (!isDirect) {
                     await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
                 }
@@ -161,6 +160,7 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: 
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:array="http://www.w3.org/2005/xpath-functions/array"
+    xmlns:fn="http://www.w3.org/2005/xpath-functions"
     xmlns:ct="com.example.test"
     xmlns:_ct="com.example.test.new" version="3.0">
     <xsl:${templateOrFunction} name="ct:run" as="${xpath}">
@@ -172,6 +172,7 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: 
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
     xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:array="http://www.w3.org/2005/xpath-functions/array"
+    xmlns:fn="http://www.w3.org/2005/xpath-functions"
     xmlns:ct="com.example.test"
     xmlns:_ct="com.example.test" version="3.0">
     <xsl:${templateOrFunction} name="ct:run">

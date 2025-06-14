@@ -19,7 +19,8 @@
             "xpInAsAttribute.dg",
             "xpLiterals.dg",
             "xpNumericLiterals.dg",
-            "qnamesAndURILiterals.dg"
+            "qnamesAndURILiterals.dg",
+            "expressions.dg"
         ]
     },
     // to run Linter test in one-off generator mode
@@ -29,7 +30,7 @@
         "group": "XPath Linter (Generate Expected)",
         "files": [
             // replace with a new *Lexer* test name:
-            "qnamesAndURILiterals"
+            "expressions"
         ]
     }
 ]
