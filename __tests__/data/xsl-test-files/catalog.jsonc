@@ -31,7 +31,7 @@
         "group": "XPath Linter (Generate Expected)",
         "files": [
             // replace with a new *Lexer* test name:
-            "expressions"
+            "expressionsErrors"
         ]
     }
 ]

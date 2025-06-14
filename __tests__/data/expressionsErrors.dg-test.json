@@ -1,0 +1,1199 @@
+{
+  "suite": "expressionsErrors",
+  "source": "expressionsErrors.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "expressionNoErr1",
+      "xpath": "1 ++ 1",
+      "problems": []
+    },
+    {
+      "label": "expressionErr2",
+      "xpath": "5 div 2E",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '2E'",
+          "2E"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr3",
+      "xpath": "10 mode xs:integer('1')",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'mode'",
+          "mode"
+        ],
+        [
+          "XPath: Unexpected function after expression: 'xs:integer()' ",
+          "xs:integer"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr4",
+      "xpath": "3 ** 7",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '*'",
+          "*"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: 7 ",
+          "7"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr5",
+      "xpath": "20 idiv 3e",
+      "problems": [
+        [
+          "XPath: Invalid numeric literal: '3e'",
+          "3e"
+        ]
+      ]
+    },
+    {
+      "label": "expressionNoErr6",
+      "xpath": "2 -- 5",
+      "problems": []
+    },
+    {
+      "label": "expressionErr7",
+      "xpath": "(1, 2, 3) !!= 2",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: = ",
+          "="
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr8",
+      "xpath": "(1, 2, 3 != 4",
+      "problems": [
+        [
+          "'(' has no matching ')'",
+          "("
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr9-PENDING",
+      "xpath": "5 >> 2",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr10",
+      "xpath": "5 >= 5",
+      "problems": []
+    },
+    {
+      "label": "expressionErr11",
+      "xpath": "2 < 3",
+      "problems": []
+    },
+    {
+      "label": "expressionErr12",
+      "xpath": "2 <= 2",
+      "problems": []
+    },
+    {
+      "label": "expressionErr13",
+      "xpath": "true(j) and false()",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'j'",
+          "j"
+        ],
+        [
+          "XPath: Function: 'true' with 1 arguments not found",
+          "true"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr14",
+      "xpath": "true() or fals()",
+      "problems": [
+        [
+          "XPath: Function: 'fals' with 0 arguments not found",
+          "fals"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr15",
+      "xpath": "(1, 2) unon (2, 3)",
+      "problems": [
+        [
+          "XPath: Function: 'unon' with 2 arguments not found",
+          "unon"
+        ],
+        [
+          "XPath: Function: 'unon' with 2 arguments not found",
+          "unon"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr16",
+      "xpath": "(1, 2, 3) intersect 2, 3, 4)",
+      "problems": [
+        [
+          "')' has no matching '('",
+          ")"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr17",
+      "xpath": "(1, 2, 3) exept (2)",
+      "problems": [
+        [
+          "XPath: Function: 'exept' with 1 arguments not found",
+          "exept"
+        ],
+        [
+          "XPath: Function: 'exept' with 1 arguments not found",
+          "exept"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr18",
+      "xpath": "'foo' | 'bar'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'bar' ",
+          "'bar'"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr19",
+      "xpath": "(1 tox 5)",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'tox'",
+          "tox"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: 5 ",
+          "5"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr20-PENDING",
+      "xpath": "map { 'a': 1, 'b': 2 }string(.)",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr21",
+      "xpath": "(1, 2, 3)!upper-case(string(.))",
+      "problems": []
+    },
+    {
+      "label": "expressionErr22",
+      "xpath": "(1, 2, 3) => count(2)",
+      "problems": [
+        [
+          "XPath: Function: 'count' with 2 arguments not found",
+          "count"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr23-PENDING",
+      "xpath": "some $x in (1,2,3),4 satisfies $x > 1",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr24",
+      "xpath": "every $x in (1,2,3),a satisfies $x > 0",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'a'",
+          "a"
+        ],
+        [
+          "XPath: Context-item is missing for: 'a'",
+          "a"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr25",
+      "xpath": "5 instance of node()",
+      "problems": []
+    },
+    {
+      "label": "expressionErr26-PENDING",
+      "xpath": "5 cast as node()",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr27",
+      "xpath": "5 castable as xs:string",
+      "problems": []
+    },
+    {
+      "label": "expressionErr28",
+      "xpath": "5 treat as xs:integer",
+      "problems": []
+    },
+    {
+      "label": "expressionErr28b-PENDING",
+      "xpath": "5 treat as 5",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr28c",
+      "xpath": "5 treat as node()",
+      "problems": []
+    },
+    {
+      "label": "noContextaxisErr29",
+      "xpath": "/root/child",
+      "problems": [
+        [
+          "XPath: Context-item is missing for root: '/'",
+          "/"
+        ]
+      ]
+    },
+    {
+      "label": "noContextaxisErr30",
+      "xpath": "//item",
+      "problems": [
+        [
+          "XPath: Context-item is missing for root: '//'",
+          "//"
+        ]
+      ]
+    },
+    {
+      "label": "noContextaxisErr30b",
+      "xpath": "item",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'item'",
+          "item"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr31",
+      "xpath": "childa::book",
+      "problems": [
+        [
+          "XPath: Invalid axis name: 'childa",
+          "childa"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr32",
+      "xpath": "descendant::descendant::chapter",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: descendant ",
+          "descendant"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr33",
+      "xpath": "ancestor::55",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 55 ",
+          "55"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr34-PENDING",
+      "xpath": "following-sibling[1]::para",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr35-PENDING",
+      "xpath": "(preceding)::note",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr36",
+      "xpath": "self::@class",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: @class ",
+          "@class"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr37",
+      "xpath": "attributes::lang",
+      "problems": [
+        [
+          "XPath: Invalid axis name: 'attributes",
+          "attributes"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr38",
+      "xpath": "namespace::**",
+      "problems": [
+        [
+          "XPath: Operator unexpected at this position: '*'",
+          "*"
+        ]
+      ]
+    },
+    {
+      "label": "qnameErr39",
+      "xpath": ":book[author='John']",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: : ",
+          ":"
+        ]
+      ]
+    },
+    {
+      "label": "qnameErr40",
+      "xpath": "q:item[position() = 1]",
+      "problems": [
+        [
+          "XPath: Undeclared prefix in name: 'q:item'",
+          "q:item"
+        ]
+      ]
+    },
+    {
+      "label": "qnameErr41",
+      "xpath": "cha pter[title and page > 10]",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: pter ",
+          "pter"
+        ]
+      ]
+    },
+    {
+      "label": "qnameNoErr41a",
+      "xpath": "cha to abc",
+      "problems": []
+    },
+    {
+      "label": "expressionErr42",
+      "xpath": "(1 to 10 . mod 2 = 0]",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ],
+        [
+          "']' has no matching '['",
+          "]"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr43",
+      "xpath": "[",
+      "problems": [
+        [
+          "'[' has no matching ']'",
+          "["
+        ],
+        [
+          "'[' has no matching ']'",
+          "["
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr44",
+      "xpath": "[1, 2, 3",
+      "problems": [
+        [
+          "'[' has no matching ']'",
+          "["
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr45",
+      "xpath": "['a', 'b' 'c']",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'c' ",
+          "'c'"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr46",
+      "xpath": "([10, 20, 30])[2a]",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: a ",
+          "a"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr47",
+      "xpath": "(([1, 2, 3],[4, 5]) => array:join())",
+      "problems": []
+    },
+    {
+      "label": "expressionErr48",
+      "xpath": "map{{}}",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: {} ",
+          "{}"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr49",
+      "xpath": "map{ 'x': 1 'y': 2 }",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'y' ",
+          "'y'"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr50",
+      "xpath": "map{ 'foo', [1,2,3] }('foo')",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: , ",
+          ","
+        ],
+        [
+          "XPath: Expression context - unexpected token here: } ",
+          "}"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr53",
+      "xpath": "[1, 2, 3] => array:filter(function($i as) { $i mod 2 = 1 })",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ) ",
+          ")"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr53b-PENDING",
+      "xpath": "[1, 2, 3] => array:filter(function($i as xs:integer) as { $i mod 2 = 1 })",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr53c",
+      "xpath": "[1, 2, 3] => array:filter(function($i as xs:intege) { $i mod 2 = 1 })",
+      "problems": [
+        [
+          "XPath: Invalid type: 'xs:intege'",
+          "xs:intege"
+        ]
+      ]
+    },
+    {
+      "label": "letErr1",
+      "xpath": "let $x := 5 return $xyy * 2",
+      "problems": [
+        [
+          "variable is unused",
+          "$x"
+        ],
+        [
+          "XPath: The variable/parameter $xyy cannot be resolved",
+          "$xyy"
+        ]
+      ]
+    },
+    {
+      "label": "letNoErr2",
+      "xpath": "let $a := 1, $a := 2 return $a",
+      "problems": [
+        [
+          "variable is unused",
+          "$a"
+        ]
+      ]
+    },
+    {
+      "label": "forErr1",
+      "xpath": "for $i in 1 to 3 retur $i * $i",
+      "problems": [
+        [
+          "variable is unused",
+          "$i"
+        ],
+        [
+          "XPath: The variable/parameter $i cannot be resolved",
+          "$i"
+        ],
+        [
+          "XPath: The variable/parameter $i cannot be resolved",
+          "$i"
+        ],
+        [
+          "XPath: Context-item is missing for: 'retur'",
+          "retur"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: $i ",
+          "$i"
+        ],
+        [
+          "'for' has no matching 'return'",
+          "for"
+        ]
+      ]
+    },
+    {
+      "label": "forErr2",
+      "xpath": "for $x in (10, 20), $y in 1, 2 return $x + $y",
+      "problems": [
+        [
+          "XML: Expected '$' but found '2'",
+          "2"
+        ]
+      ]
+    },
+    {
+      "label": "nestedLetForErr1",
+      "xpath": "for $i in 1 to 3 let $j := $i * 2 return $j + 1",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 3 ",
+          "3"
+        ],
+        [
+          "'for' has no matching 'return'",
+          "for"
+        ]
+      ]
+    },
+    {
+      "label": "nestedLetForErr2",
+      "xpath": "$seq := (1,2,3) return for $n in $seq return $n * 1",
+      "problems": [
+        [
+          "XPath: The variable/parameter $seq cannot be resolved",
+          "$seq"
+        ],
+        [
+          "XPath: The variable/parameter $seq cannot be resolved",
+          "$seq"
+        ],
+        [
+          "XPath: No match found for 'return'",
+          "return"
+        ]
+      ]
+    },
+    {
+      "label": "nestedForLet",
+      "xpath": "for $x in (1,2) return for $y in (3,4) return let $z $x + $y return $z * 2",
+      "problems": [
+        [
+          "XPath: '$x' is invalid here, expected  ':='",
+          "$x"
+        ]
+      ]
+    },
+    {
+      "label": "letInPredicate",
+      "xpath": "(1 to 10)[let $v := . * 2 return $v > 10]",
+      "problems": []
+    },
+    {
+      "label": "ifErr1",
+      "xpath": "if (2 > 1) then 'yes'",
+      "problems": [
+        [
+          "'then' has no matching 'else'",
+          "then"
+        ]
+      ]
+    },
+    {
+      "label": "ifErr2",
+      "xpath": "(false()) then 0 else 1",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: then ",
+          "then"
+        ]
+      ]
+    },
+    {
+      "label": "ifErr3",
+      "xpath": "if (3 = 3) then (10, 20) else (30, 40) else 2",
+      "problems": [
+        [
+          "'else' has no matching 'then'",
+          "else"
+        ]
+      ]
+    },
+    {
+      "label": "ifErr4",
+      "xpath": "if (1 = 2) then (1, 2, 3) else ",
+      "problems": [
+        [
+          "XPath: Expected expression following: 'else'",
+          "else"
+        ]
+      ]
+    },
+    {
+      "label": "ifErr5",
+      "xpath": "if (true()) then (('a', 'b')) else else (('c', 'd'))",
+      "problems": [
+        [
+          "'else' has no matching 'then'",
+          "else"
+        ]
+      ]
+    },
+    {
+      "label": "ifErr6-PENDING",
+      "xpath": "22 if (2 = 2) then 2 else 3",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "ifErr6b-PENDING",
+      "xpath": "(count(2)) if (2 = 2) then 2 else 3",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "ifErr7",
+      "xpath": "if (false() then (if (true())) then 'x' else 'y', 'z') else ('a', 'b')",
+      "problems": [
+        [
+          "'then' has no matching 'else'",
+          "then"
+        ],
+        [
+          "XPath: 'then' expected after 'if ($condition)' but found: ')'",
+          ")"
+        ],
+        [
+          "XPath: 'then' expected after 'if ($condition)' but found: ')'",
+          ")"
+        ],
+        [
+          "XML: Expected 'else' but found ','",
+          ","
+        ],
+        [
+          "'then' has no matching 'else'",
+          "then"
+        ],
+        [
+          "'else' has no matching 'then'",
+          "else"
+        ],
+        [
+          "'(' has no matching ')'",
+          "("
+        ]
+      ]
+    },
+    {
+      "label": "ifErr8",
+      "xpath": "for $i in 1 to 2 return ($i = 1) then ('first', $i) else ('second', $i)",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: then ",
+          "then"
+        ]
+      ]
+    },
+    {
+      "label": "fnLiteralErr1-PENDING",
+      "xpath": "function($x, 5) { $x * 2 }",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "fnLiteralErr1a-PENDING",
+      "xpath": "function($x, ()) { $x * 2 }",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "fnLiteralErr1b",
+      "xpath": "function($x, ) { $x * 2 }",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ) ",
+          ")"
+        ]
+      ]
+    },
+    {
+      "label": "fnLiteralErr1c",
+      "xpath": "function($x as xs:strin ) { $x * 2 }",
+      "problems": [
+        [
+          "XPath: Invalid type: 'xs:strin'",
+          "xs:strin"
+        ]
+      ]
+    },
+    {
+      "label": "fnLiteralErr2",
+      "xpath": "(1 to 3) => for-each(function($n) { $nz + 10 })",
+      "problems": [
+        [
+          "variable is unused",
+          "$n"
+        ],
+        [
+          "XPath: The variable/parameter $nz cannot be resolved",
+          "$nz"
+        ]
+      ]
+    },
+    {
+      "label": "dynFnCallErr1",
+      "xpath": "upper-case#('abc')",
+      "problems": [
+        [
+          "XPath: Function: 'upper-case' with NaN arguments not found",
+          "upper-case#"
+        ]
+      ]
+    },
+    {
+      "label": "partialFnErr1",
+      "xpath": "substring-before#4('foobar', 'bar')",
+      "problems": [
+        [
+          "XPath: Function: 'substring-before' with 4 arguments not found",
+          "substring-before#4"
+        ]
+      ]
+    },
+    {
+      "label": "partialFnErr2",
+      "xpath": "concat('a', ??)('b')",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ?? ",
+          "??"
+        ]
+      ]
+    },
+    {
+      "label": "pathGroupErr1",
+      "xpath": "(/root/child/)[1]",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ) ",
+          ")"
+        ]
+      ]
+    },
+    {
+      "label": "pathGroupErr2",
+      "xpath": "(///item)[position() lt 3]",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: / ",
+          "/"
+        ]
+      ]
+    },
+    {
+      "label": "contextItemErr1",
+      "xpath": "./",
+      "problems": [
+        [
+          "XPath: Operator unexpected at this position: '/'",
+          "/"
+        ]
+      ]
+    },
+    {
+      "label": "contextItemErr2-PENDING",
+      "xpath": "...//node()",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "arrayLookupErr1",
+      "xpath": "[10, 20, 30][1 + ]",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ] ",
+          "]"
+        ]
+      ]
+    },
+    {
+      "label": "fnApplyErr1",
+      "xpath": "fn:apply(function($a as node(), $b as xs:anyAtomicType, $c) { $a + $b }, [1, 2])",
+      "problems": [
+        [
+          "variable is unused",
+          "$c"
+        ]
+      ]
+    },
+    {
+      "label": "fnFilterErr1",
+      "xpath": "fn:filter(function($n) { mod 2 = 0 }, (1,2,3,4))",
+      "problems": [
+        [
+          "variable is unused",
+          "$n"
+        ],
+        [
+          "XPath: Context-item is missing for: 'mod'",
+          "mod"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: 2 ",
+          "2"
+        ]
+      ]
+    },
+    {
+      "label": "fnFoldLeftErr1",
+      "xpath": "fn:fold-left((1,2,3), 0, function($a, $b) { $a + $b }, 22)",
+      "problems": [
+        [
+          "XPath: Function: 'fn:fold-left' with 4 arguments not found",
+          "fn:fold-left"
+        ]
+      ]
+    },
+    {
+      "label": "closureErr1-PENDING",
+      "xpath": "let $f := function($x) { $x + 1 } as xs:integer return $f(10)",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "closureErr1",
+      "xpath": "let $f := function($x) as xs:intege { $x + 1 } return $f(10)",
+      "problems": [
+        [
+          "XPath: Invalid type: 'xs:intege'",
+          "xs:intege"
+        ]
+      ]
+    },
+    {
+      "label": "posPredErr1-PENDING",
+      "xpath": "(10, 20, 30)[]",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "docErr1",
+      "xpath": "document('somefile.xml')/qq:root",
+      "problems": [
+        [
+          "XPath: Undeclared prefix in name: 'qq:root'",
+          "qq:root"
+        ]
+      ]
+    },
+    {
+      "label": "docAvailErr1",
+      "xpath": "doc-available('somefile.xml)",
+      "problems": [
+        [
+          "String literal not terminated properly: 'somefile.xml)",
+          "'somefile.xml)"
+        ],
+        [
+          "'(' has no matching ')'",
+          "("
+        ]
+      ]
+    },
+    {
+      "label": "mapWithLet",
+      "xpath": "map{ 'x': let $a := 2 return $a * 10 ",
+      "problems": [
+        [
+          "'{' has no matching '}'",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "arrayWithFor",
+      "xpath": "[[for $i in 1 to 3 return $i * 2]",
+      "problems": [
+        [
+          "'[' has no matching ']'",
+          "["
+        ]
+      ]
+    },
+    {
+      "label": "arrayWithIf",
+      "xpath": "[if (2 > 1 then 'ok') else 'fail']",
+      "problems": [
+        [
+          "'then' has no matching 'else'",
+          "then"
+        ],
+        [
+          "'then' has no matching 'else'",
+          "then"
+        ],
+        [
+          "'else' has no matching 'then'",
+          "else"
+        ],
+        [
+          "'[' has no matching ']'",
+          "["
+        ]
+      ]
+    },
+    {
+      "label": "switchSubErr1",
+      "xpath": "let $x := 1 return if ($x = 1) then 'one' if ($x = 2) then 'two' else 'other'",
+      "problems": [
+        [
+          "'then' has no matching 'else'",
+          "then"
+        ]
+      ]
+    },
+    {
+      "label": "attrTestErr1",
+      "xpath": "@qq:class",
+      "problems": [
+        [
+          "XPath: Undeclared prefix in name: '@qq:class'",
+          "@qq:class"
+        ]
+      ]
+    },
+    {
+      "label": "attrTestErr2",
+      "xpath": "//div/@",
+      "problems": [
+        [
+          "XPath: Invalid name: '@'",
+          "@"
+        ]
+      ]
+    },
+    {
+      "label": "attrTestErr3-PENDING",
+      "xpath": "book/@**",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTestErr1-PENDING",
+      "xpath": "text(ANY)",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTestErr2",
+      "xpath": "//para/texts()",
+      "problems": [
+        [
+          "XPath: Function: 'texts' with 0 arguments not found",
+          "texts"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTestNoErr3",
+      "xpath": "processing-instruction(any)",
+      "problems": []
+    },
+    {
+      "label": "nodeTestErr4-PENDING",
+      "xpath": "processing-instruction('xml-stylesheet', 'a')",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "nestedMapErr1",
+      "xpath": "map{ 'outer': array{ 'inner': 123 } }",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: : ",
+          ":"
+        ]
+      ]
+    },
+    {
+      "label": "nestedMapErr2",
+      "xpath": "map{ 'a': map{ 'b', map{} } }",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: , ",
+          ","
+        ],
+        [
+          "XPath: Expression context - unexpected token here: } ",
+          "}"
+        ]
+      ]
+    },
+    {
+      "label": "nestedMapNoErr2",
+      "xpath": "[1,2,3]?2",
+      "problems": []
+    },
+    {
+      "label": "arrayCurlyErr1-PENDING",
+      "xpath": "array{ 1, 2, 3 }a",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "letAnonFnInvoke-PENDING",
+      "xpath": "let $f := function($x$x) { $x$x * 10 } return $f(7)",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "fnVarErr1",
+      "xpath": "upper-case1",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'upper-case1'",
+          "upper-case1"
+        ]
+      ]
+    },
+    {
+      "label": "fnVarErr2",
+      "xpath": "string-length##1",
+      "problems": [
+        [
+          "XPath: Function: 'string-length' with NaN arguments not found",
+          "string-length##1"
+        ]
+      ]
+    }
+  ]
+}
