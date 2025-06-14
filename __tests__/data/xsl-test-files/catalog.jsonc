@@ -9,7 +9,8 @@
             "xpLiterals",
             "xpNumericLiterals",
             "qnamesAndURILiterals",
-            "expressions"
+            "expressions",
+            "expressionsErrors"
         ]
     },
     // 2nd group is used for Linter tests:
