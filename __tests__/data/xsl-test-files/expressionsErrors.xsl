@@ -149,9 +149,9 @@
 
   <!-- Node tests -->
   <xsl:variable name="nodeTestErr1-PENDING" select="text(ANY)"/>
+  <xsl:variable name="nodeTestErr4-PENDING" select="processing-instruction('xml-stylesheet', 'a')"/>
   <xsl:variable name="nodeTestErr2" select="//para/texts()"/>
   <xsl:variable name="nodeTestNoErr3" select="processing-instruction(any)"/>
-  <xsl:variable name="nodeTestErr4-PENDING" select="processing-instruction('xml-stylesheet', 'a')"/>
 
   <!-- Nested map and array constructor examples -->
   <xsl:variable name="nestedMapErr1" select="map{ 'outer': array{ 'inner': 123 } }"/>
@@ -163,6 +163,68 @@
   <xsl:variable name="letAnonFnInvoke-PENDING" select="let $f := function($x$x) { $x$x * 10 } return $f(7)"/>
 
   <!-- Assigning named built-in functions to variables and invoking them -->
-  <xsl:variable name="fnVarErr1" select="upper-case1"/>
+  <xsl:variable name="fnVarErr1" select="upper-case1#"/>
   <xsl:variable name="fnVarErr2" select="string-length##1"/>
+  
+  <!-- String literals in expressions -->
+  <xsl:variable name="stringErr1-PENDING" select="'book'as'title'"/>
+
+  <xsl:variable name="stringErr5-PENDING" select="'book'map{}"/>
+  <xsl:variable name="stringErr6-PENDING" select="'book'array{}"/>
+  <xsl:variable name="stringErrMessage39-PENDING" select="'book' count(1)"/>
+
+  <xsl:variable name="stringErr7-PENDING" select="'book'{}"/>
+  <xsl:variable name="stringErr8-PENDING" select="{'book'}"/>
+  <xsl:variable name="nodeStringErr12-PENDING" select="'book'()"/>
+  <xsl:variable name="nodeStringErr14-PENDING" select="'book'(1)"/>
+  <xsl:variable name="nodeStringErr15-PENDING" select="'book'[]"/>
+  <xsl:variable name="nodeStringNoErr19-PENDING" select="'book' castable as 'book'"/>
+  <xsl:variable name="nodeStringNoErr20-PENDING" select="'book' instance of 'book'"/>
+  <xsl:variable name="nodeStringNoErr21-PENDING" select="'book' instance of 1"/>
+  <xsl:variable name="stringErr33-PENDING" select="'book' * 22"/>
+  <xsl:variable name="stringErr34-PENDING" select="22 div 'book'"/>
+  <xsl:variable name="stringErr41-PENDING" select="'book' if (1) then 1 else 2"/>
+  <xsl:variable name="stringErr42" select="if (1) then 1 else 2 'book'"/>
+  <xsl:variable name="stringErr34" select="22 * 'book'"/>
+  <xsl:variable name="stringErr35" select="22 + 'book'"/>
+  <xsl:variable name="stringErr36" select="'book' let $a := 2 return $a"/>
+  <xsl:variable name="stringErr37" select="'book' every $a in (1,2) satisfies $a"/>
+
+  <xsl:variable name="stringErr31" select="'book' 1"/>
+  <xsl:variable name="stringErr32" select="22 'book'"/>
+  <xsl:variable name="stringErr33" select="'book'*"/>
+  <xsl:variable name="stringErr40" select="*'book'"/>
+  <xsl:variable name="nodeStringErr37" select="Q{'test'}name 'book'"/>
+  <xsl:variable name="nodeStringErr38-PENDING" select="'book' Q{'test'}name"/>
+  <xsl:variable name="stringErr38" select="let $a := '1' return 'book' $a"/>
+  <xsl:variable name="stringErr39" select="let $a := '1' return $a 'book'"/>
+
+  <xsl:variable name="bangStart23" select="!'book'"/>
+  <xsl:variable name="stringNoErr2" select="'book'!'title'"/>
+  <xsl:variable name="stringErr3" select="'book'+'title'"/>
+  <xsl:variable name="stringNoErr4" select="'book','title'"/>
+  <xsl:variable name="stringNoErr8" select="['book']"/>
+  <xsl:variable name="stringNoErr9" select="('book')"/>
+  <xsl:variable name="stringErr10" select="'book' 'title'"/>
+  <xsl:variable name="nodeStringErr10" select="'book' any"/>
+  <xsl:variable name="nodeStringErr11" select="any 'book'"/>
+  <xsl:variable name="nodeStringErr13" select="'book'count(1)"/>
+  <xsl:variable name="nodeStringErr15" select="[]'book'"/>
+  <xsl:variable name="nodeStringErr16" select="()'book'"/>
+  <xsl:variable name="nodeStringErr17" select="(1)'book'"/>
+
+  <xsl:variable name="nodeStringNoErr18a" select="'book' instance of xs:string"/>
+  <xsl:variable name="nodeStringNoErr18b" select="'book' castable as xs:string"/>
+  
+  <xsl:variable name="nodeStringNoErr22" select="'book' => count()"/>
+  <xsl:variable name="nodeStringNoErr23" select="'book'!count(.)"/>
+  <xsl:variable name="stringErr24" select="'book'/'book'"/>
+  <xsl:variable name="nodeStringNoErr25" select="any/'book'"/>
+  <xsl:variable name="nodeStringErr26" select="'book'/any"/>
+  <xsl:variable name="nodeStringErr27" select="'book'any"/>
+  <xsl:variable name="nodeStringErr28" select="any'book'"/>
+  <xsl:variable name="stringNoErr29" select="map{}?'book'"/>
+  <xsl:variable name="stringNoErr30" select="?'book'"/>
+
+  
 </xsl:stylesheet>
