@@ -4735,6 +4735,36 @@
       ]
     },
     {
+      "label": "nodeTestErr4-PENDING",
+      "xpath": "processing-instruction('xml-stylesheet', 'a')",
+      "tokens": [
+        [
+          "processing-instruction",
+          "nodeType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "'xml-stylesheet'",
+          "string"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "'a'",
+          "string"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
       "label": "nodeTestErr2",
       "xpath": "//para/texts()",
       "tokens": [
@@ -4775,36 +4805,6 @@
         [
           "any",
           "nodeNameTest"
-        ],
-        [
-          ")",
-          "operator"
-        ]
-      ]
-    },
-    {
-      "label": "nodeTestErr4-PENDING",
-      "xpath": "processing-instruction('xml-stylesheet', 'a')",
-      "tokens": [
-        [
-          "processing-instruction",
-          "nodeType"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "'xml-stylesheet'",
-          "string"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "'a'",
-          "string"
         ],
         [
           ")",
@@ -5076,11 +5076,11 @@
     },
     {
       "label": "fnVarErr1",
-      "xpath": "upper-case1",
+      "xpath": "upper-case1#",
       "tokens": [
         [
-          "upper-case1",
-          "nodeNameTest"
+          "upper-case1#",
+          "functionNameTest"
         ]
       ]
     },
@@ -5091,6 +5091,746 @@
         [
           "string-length##1",
           "functionNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr42",
+      "xpath": "if (1) then 1 else 2 'book'",
+      "tokens": [
+        [
+          "if",
+          "complexExpression"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "then",
+          "complexExpression"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "else",
+          "complexExpression"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr34",
+      "xpath": "22 * 'book'",
+      "tokens": [
+        [
+          "22",
+          "number"
+        ],
+        [
+          "*",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr35",
+      "xpath": "22 + 'book'",
+      "tokens": [
+        [
+          "22",
+          "number"
+        ],
+        [
+          "+",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr36",
+      "xpath": "'book' let $a := 2 return $a",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "let",
+          "complexExpression"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          ":=",
+          "complexExpression"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "return",
+          "complexExpression"
+        ],
+        [
+          "$a",
+          "variable"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr37",
+      "xpath": "'book' every $a in (1,2) satisfies $a",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "every",
+          "complexExpression"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          "in",
+          "complexExpression"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "satisfies",
+          "complexExpression"
+        ],
+        [
+          "$a",
+          "variable"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr31",
+      "xpath": "'book' 1",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "1",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr32",
+      "xpath": "22 'book'",
+      "tokens": [
+        [
+          "22",
+          "number"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr33",
+      "xpath": "'book'*",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "*",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr40",
+      "xpath": "*'book'",
+      "tokens": [
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr37",
+      "xpath": "Q{'test'}name 'book'",
+      "tokens": [
+        [
+          "Q{'test'}",
+          "uriLiteral"
+        ],
+        [
+          "name",
+          "nodeNameTest"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr38",
+      "xpath": "let $a := '1' return 'book' $a",
+      "tokens": [
+        [
+          "let",
+          "complexExpression"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          ":=",
+          "complexExpression"
+        ],
+        [
+          "'1'",
+          "string"
+        ],
+        [
+          "return",
+          "complexExpression"
+        ],
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "$a",
+          "variable"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr39",
+      "xpath": "let $a := '1' return $a 'book'",
+      "tokens": [
+        [
+          "let",
+          "complexExpression"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          ":=",
+          "complexExpression"
+        ],
+        [
+          "'1'",
+          "string"
+        ],
+        [
+          "return",
+          "complexExpression"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "bangStart23",
+      "xpath": "!'book'",
+      "tokens": [
+        [
+          "!",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr2",
+      "xpath": "'book'!'title'",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "!",
+          "operator"
+        ],
+        [
+          "'title'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr3",
+      "xpath": "'book'+'title'",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "+",
+          "operator"
+        ],
+        [
+          "'title'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr4",
+      "xpath": "'book','title'",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "'title'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr8",
+      "xpath": "['book']",
+      "tokens": [
+        [
+          "[",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "]",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr9",
+      "xpath": "('book')",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr10",
+      "xpath": "'book' 'title'",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "'title'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr10",
+      "xpath": "'book' any",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "any",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr11",
+      "xpath": "any 'book'",
+      "tokens": [
+        [
+          "any",
+          "nodeNameTest"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr13",
+      "xpath": "'book'count(1)",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "count",
+          "function"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr15",
+      "xpath": "[]'book'",
+      "tokens": [
+        [
+          "[]",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr16",
+      "xpath": "()'book'",
+      "tokens": [
+        [
+          "()",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr17",
+      "xpath": "(1)'book'",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringNoErr18a",
+      "xpath": "'book' instance of xs:string",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "instance",
+          "operator"
+        ],
+        [
+          "of",
+          "operator"
+        ],
+        [
+          "xs:string",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringNoErr18b",
+      "xpath": "'book' castable as xs:string",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "castable",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "xs:string",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringNoErr22",
+      "xpath": "'book' => count()",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "=>",
+          "operator"
+        ],
+        [
+          "count",
+          "function"
+        ],
+        [
+          "()",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringNoErr23",
+      "xpath": "'book'!count(.)",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "!",
+          "operator"
+        ],
+        [
+          "count",
+          "function"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          ".",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr24",
+      "xpath": "'book'/'book'",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "/",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringNoErr25",
+      "xpath": "any/'book'",
+      "tokens": [
+        [
+          "any",
+          "nodeNameTest"
+        ],
+        [
+          "/",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr26",
+      "xpath": "'book'/any",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "/",
+          "operator"
+        ],
+        [
+          "any",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr27",
+      "xpath": "'book'any",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "any",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr28",
+      "xpath": "any'book'",
+      "tokens": [
+        [
+          "any",
+          "nodeNameTest"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr29",
+      "xpath": "map{}?'book'",
+      "tokens": [
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{}",
+          "operator"
+        ],
+        [
+          "?",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr30",
+      "xpath": "?'book'",
+      "tokens": [
+        [
+          "?",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
         ]
       ]
     }

@@ -21,7 +21,8 @@
             "xpLiterals.dg",
             "xpNumericLiterals.dg",
             "qnamesAndURILiterals.dg",
-            "expressions.dg"
+            "expressions.dg",
+            "expressionsErrors.dg"
         ]
     },
     // to run Linter test in one-off generator mode

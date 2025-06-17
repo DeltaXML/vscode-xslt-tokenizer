@@ -1102,6 +1102,16 @@
       ]
     },
     {
+      "label": "nodeTestErr4-PENDING",
+      "xpath": "processing-instruction('xml-stylesheet', 'a')",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
       "label": "nodeTestErr2",
       "xpath": "//para/texts()",
       "problems": [
@@ -1115,16 +1125,6 @@
       "label": "nodeTestNoErr3",
       "xpath": "processing-instruction(any)",
       "problems": []
-    },
-    {
-      "label": "nodeTestErr4-PENDING",
-      "xpath": "processing-instruction('xml-stylesheet', 'a')",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
     },
     {
       "label": "nestedMapErr1",
@@ -1177,11 +1177,11 @@
     },
     {
       "label": "fnVarErr1",
-      "xpath": "upper-case1",
+      "xpath": "upper-case1#",
       "problems": [
         [
-          "XPath: Context-item is missing for: 'upper-case1'",
-          "upper-case1"
+          "XPath: Function: 'upper-case1' with NaN arguments not found",
+          "upper-case1#"
         ]
       ]
     },
@@ -1192,6 +1192,329 @@
         [
           "XPath: Function: 'string-length' with NaN arguments not found",
           "string-length##1"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr42",
+      "xpath": "if (1) then 1 else 2 'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr34",
+      "xpath": "22 * 'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr35",
+      "xpath": "22 + 'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr36",
+      "xpath": "'book' let $a := 2 return $a",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr37",
+      "xpath": "'book' every $a in (1,2) satisfies $a",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr31",
+      "xpath": "'book' 1",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 1 ",
+          "1"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr32",
+      "xpath": "22 'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr33",
+      "xpath": "'book'*",
+      "problems": [
+        [
+          "XPath: Operator unexpected at this position: '*'",
+          "*"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr40",
+      "xpath": "*'book'",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '*'",
+          "*"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr37",
+      "xpath": "Q{'test'}name 'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr38",
+      "xpath": "let $a := '1' return 'book' $a",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: $a ",
+          "$a"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr39",
+      "xpath": "let $a := '1' return $a 'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "bangStart23",
+      "xpath": "!'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ! ",
+          "!"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr2",
+      "xpath": "'book'!'title'",
+      "problems": []
+    },
+    {
+      "label": "stringErr3",
+      "xpath": "'book'+'title'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'title' ",
+          "'title'"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr4",
+      "xpath": "'book','title'",
+      "problems": []
+    },
+    {
+      "label": "stringNoErr8",
+      "xpath": "['book']",
+      "problems": []
+    },
+    {
+      "label": "stringNoErr9",
+      "xpath": "('book')",
+      "problems": []
+    },
+    {
+      "label": "stringErr10",
+      "xpath": "'book' 'title'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'title' ",
+          "'title'"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr10",
+      "xpath": "'book' any",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: any ",
+          "any"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr11",
+      "xpath": "any 'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr13",
+      "xpath": "'book'count(1)",
+      "problems": [
+        [
+          "XPath: Unexpected function after expression: 'count()' ",
+          "count"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr15",
+      "xpath": "[]'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr16",
+      "xpath": "()'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr17",
+      "xpath": "(1)'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringNoErr18a",
+      "xpath": "'book' instance of xs:string",
+      "problems": []
+    },
+    {
+      "label": "nodeStringNoErr18b",
+      "xpath": "'book' castable as xs:string",
+      "problems": []
+    },
+    {
+      "label": "nodeStringNoErr22",
+      "xpath": "'book' => count()",
+      "problems": []
+    },
+    {
+      "label": "nodeStringNoErr23",
+      "xpath": "'book'!count(.)",
+      "problems": []
+    },
+    {
+      "label": "stringErr24",
+      "xpath": "'book'/'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: / ",
+          "/"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: / ",
+          "/"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringNoErr25",
+      "xpath": "any/'book'",
+      "problems": []
+    },
+    {
+      "label": "nodeStringErr26",
+      "xpath": "'book'/any",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: / ",
+          "/"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr27",
+      "xpath": "'book'any",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: any ",
+          "any"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr28",
+      "xpath": "any'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr29",
+      "xpath": "map{}?'book'",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '?'",
+          "?"
+        ]
+      ]
+    },
+    {
+      "label": "stringNoErr30",
+      "xpath": "?'book'",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '?'",
+          "?"
         ]
       ]
     }
