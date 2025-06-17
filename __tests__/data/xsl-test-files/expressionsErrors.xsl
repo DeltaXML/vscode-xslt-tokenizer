@@ -167,35 +167,16 @@
   <xsl:variable name="fnVarErr2" select="string-length##1"/>
   
   <!-- String literals in expressions -->
-  <xsl:variable name="stringErr1-PENDING" select="'book'as'title'"/>
-
-  <xsl:variable name="stringErr5-PENDING" select="'book'map{}"/>
-  <xsl:variable name="stringErr6-PENDING" select="'book'array{}"/>
-  <xsl:variable name="stringErrMessage39-PENDING" select="'book' count(1)"/>
-
-  <xsl:variable name="stringErr7-PENDING" select="'book'{}"/>
-  <xsl:variable name="stringErr8-PENDING" select="{'book'}"/>
-  <xsl:variable name="nodeStringErr12-PENDING" select="'book'()"/>
-  <xsl:variable name="nodeStringErr14-PENDING" select="'book'(1)"/>
-  <xsl:variable name="nodeStringErr15-PENDING" select="'book'[]"/>
-  <xsl:variable name="nodeStringNoErr19-PENDING" select="'book' castable as 'book'"/>
-  <xsl:variable name="nodeStringNoErr20-PENDING" select="'book' instance of 'book'"/>
-  <xsl:variable name="nodeStringNoErr21-PENDING" select="'book' instance of 1"/>
-  <xsl:variable name="stringErr33-PENDING" select="'book' * 22"/>
-  <xsl:variable name="stringErr34-PENDING" select="22 div 'book'"/>
-  <xsl:variable name="stringErr41-PENDING" select="'book' if (1) then 1 else 2"/>
   <xsl:variable name="stringErr42" select="if (1) then 1 else 2 'book'"/>
   <xsl:variable name="stringErr34" select="22 * 'book'"/>
   <xsl:variable name="stringErr35" select="22 + 'book'"/>
   <xsl:variable name="stringErr36" select="'book' let $a := 2 return $a"/>
   <xsl:variable name="stringErr37" select="'book' every $a in (1,2) satisfies $a"/>
-
   <xsl:variable name="stringErr31" select="'book' 1"/>
   <xsl:variable name="stringErr32" select="22 'book'"/>
   <xsl:variable name="stringErr33" select="'book'*"/>
   <xsl:variable name="stringErr40" select="*'book'"/>
   <xsl:variable name="nodeStringErr37" select="Q{'test'}name 'book'"/>
-  <xsl:variable name="nodeStringErr38-PENDING" select="'book' Q{'test'}name"/>
   <xsl:variable name="stringErr38" select="let $a := '1' return 'book' $a"/>
   <xsl:variable name="stringErr39" select="let $a := '1' return $a 'book'"/>
 
