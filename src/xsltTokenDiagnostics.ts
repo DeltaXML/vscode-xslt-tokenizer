@@ -1596,6 +1596,22 @@ export class XsltTokenDiagnostics {
 										}
 										break;
 								}
+							} else if (!isXPathError && prevToken?.tokenType === TokenLevelState.string) {
+								// check operator is permitted to follow a string - not a node or numeric operator:
+								switch (tv.length) {
+									case 1:
+										isXPathError = (tv === '(' || tv === '[' || tv === '{' || tv === '-' || tv === '+' || tv === '|' || tv === '?' || tv === '*' || tv === '.');
+										break;
+									case 2:
+										isXPathError = (tv === 'as' || tv === 'of' || tv === '//' || tv === '{}' || tv === '[]' || tv === '()' || tv === '*:' || tv === '::' || tv === '<<' || tv === '>>');
+										break;
+									case 3:
+										isXPathError = (tv === 'div' || tv === 'mod');
+										break;
+									default:
+										isXPathError = (tv === 'idiv' || tv === 'union' || tv === 'except' || tv === 'intersect' || tv === '&lt;&lt;' || tv === '&gt;&gt;');
+										break;
+								}								
 							} else if (prevToken.tokenType === TokenLevelState.operator) {
 								// current type is operator and previous type is operator
 								let prevCharType = <CharLevelState>prevToken.charType;
