@@ -22,6 +22,7 @@
   <xsl:variable name="nodeStringNoErr21-PENDING" select="'book' instance of 1"/>
   <xsl:variable name="stringErr33-PENDING" select="'book' * 22"/>
   <xsl:variable name="stringErr34-PENDING" select="22 div 'book'"/>
+  <xsl:variable name="stringErr34b-PENDING" select="'book' div 298"/>
   <xsl:variable name="stringErr41-PENDING" select="'book' if (1) then 1 else 2"/>
   <xsl:variable name="nodeStringErr38-PENDING" select="'book' Q{'test'}name"/>
   
