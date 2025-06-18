@@ -8,13 +8,13 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
-import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
+import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken, TokenLevelState } from './xpLexer';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration } from './languageConfigurations';
 import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
-import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
+import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionData, GlobalInstructionType, XMLCharState, XSLTokenLevelState } from './xslLexer';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import { on } from 'process';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
@@ -87,11 +87,11 @@ export function activate(context: vscode.ExtensionContext) {
 			const formatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
 			formatter.indentMixedContent = true;
 			const opts = vscode.window.activeTextEditor.options;
-			const tabSize = opts.tabSize? opts.tabSize : 2;
-			const cTabSize = typeof tabSize === 'number'? tabSize : Number(tabSize); 
-			const insertSpaces = opts.insertSpaces !== undefined? opts.insertSpaces : true;
-			const cInsertSpaces = typeof insertSpaces === 'boolean'? insertSpaces : Boolean(insertSpaces); 
-			const formattingOpts: vscode.FormattingOptions = { tabSize: cTabSize, insertSpaces: cInsertSpaces};
+			const tabSize = opts.tabSize ? opts.tabSize : 2;
+			const cTabSize = typeof tabSize === 'number' ? tabSize : Number(tabSize);
+			const insertSpaces = opts.insertSpaces !== undefined ? opts.insertSpaces : true;
+			const cInsertSpaces = typeof insertSpaces === 'boolean' ? insertSpaces : Boolean(insertSpaces);
+			const formattingOpts: vscode.FormattingOptions = { tabSize: cTabSize, insertSpaces: cInsertSpaces };
 			const tokenSource = new vscode.CancellationTokenSource();
 			const edits = formatter.provideDocumentFormattingEdits(vscode.window.activeTextEditor.document, formattingOpts, tokenSource.token);
 			const docUri = vscode.window.activeTextEditor.document.uri;
@@ -104,14 +104,14 @@ export function activate(context: vscode.ExtensionContext) {
 				if (!result) {
 					break;
 				}
-			}			
+			}
 		}
 	}
 
 	async function showGotoXPathInputBox() {
-		let symbol: vscode.DocumentSymbol|undefined;
+		let symbol: vscode.DocumentSymbol | undefined;
 		const xpath = XsltSymbolProvider.getXPathFromSelection();
-		const inboxValue = xpath? xpath : '';
+		const inboxValue = xpath ? xpath : '';
 		const result = await window.showInputBox({
 			value: inboxValue,
 			valueSelection: [0, inboxValue.length],
@@ -121,15 +121,15 @@ export function activate(context: vscode.ExtensionContext) {
 					return 'XPath should start with "/"';
 				} else {
 					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text, XsltSymbolProvider.getSymbolsForActiveDocument());
-					return symbol? null : 'No matching elements';
+					return symbol ? null : 'No matching elements';
 				}
-				
+
 			}
 		});
 		if (result) {
 			XsltSymbolProvider.selectTextWithSymbol(symbol);
 			const foundSymbol = symbol !== undefined;
-			const msg = foundSymbol? `Matching element found: ${symbol?.name}` : 'No matching elements';
+			const msg = foundSymbol ? `Matching element found: ${symbol?.name}` : 'No matching elements';
 			window.showInformationMessage(msg);
 		}
 	}
@@ -142,7 +142,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const docUri = vscode.Uri.parse(uri);
 		const useCachedSymbols = cachedSymbolsDocUri === docUri;
 		const docs = vscode.workspace.textDocuments;
-		const foundDoc = textDocument? textDocument : docs.find(doc => doc.uri.toString() === uri);
+		const foundDoc = textDocument ? textDocument : docs.find(doc => doc.uri.toString() === uri);
 		if (!useCachedSymbols && foundDoc) {
 			const sp = new XsltSymbolProvider(XMLConfiguration.configuration, null);
 			const newSymbols = await sp.getDocumentSymbols(foundDoc, false);
@@ -161,9 +161,9 @@ export function activate(context: vscode.ExtensionContext) {
 		const { xpath, uri } = args[0];
 		const docUri = vscode.Uri.parse(uri);
 		let doc = await vscode.workspace.openTextDocument(docUri);
-    const viewColumn = vscode.ViewColumn.Beside;
+		const viewColumn = vscode.ViewColumn.Beside;
 		const keepFocus = true;
-    const editor = await vscode.window.showTextDocument(doc, viewColumn, keepFocus);
+		const editor = await vscode.window.showTextDocument(doc, viewColumn, keepFocus);
 		const symbol = await getSymbolFromXPath(args, doc);
 		if (symbol) {
 			editor.selection = new vscode.Selection(symbol.range.start, symbol.range.end);
@@ -201,8 +201,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, schLinkProvider));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider()));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider()));
-	context.subscriptions.push(vscode.languages.registerReferenceProvider({language: 'xslt'}, new XSLTReferenceProvider()));
-	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
+	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'xslt' }, new XSLTReferenceProvider()));
+	context.subscriptions.push(vscode.languages.registerRenameProvider({ language: 'xslt' }, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickFile', async (...args) => await fileSelector.pickFile(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXsltFile', async () => await fileSelector.pickXsltFile()));
@@ -233,6 +233,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp' }, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'sch' }, new XsltSemanticTokensProvider(SchConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'bpmn' }, new XsltSemanticTokensProvider(XMLConfiguration.configuration), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dv2' }, new Dv2SemanticTokensProvider(XMLConfiguration.configuration), legend));
 
 	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, new XPathSemanticTokensProvider(xpathDiagnosticsCollection), legend));
@@ -270,7 +271,7 @@ export function activate(context: vscode.ExtensionContext) {
 		dcpFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('dcp',
 		dcpFormatter, '\n', '/'));
-		
+
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('sch',
 		schFormatter));
 	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('sch',
@@ -301,7 +302,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 export class XPathSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
 	private xpLexer = new XPathLexer();
-	private collection: vscode.DiagnosticCollection|undefined;
+	private collection: vscode.DiagnosticCollection | undefined;
 	public constructor(collection?: vscode.DiagnosticCollection) {
 		this.collection = collection;
 	}
@@ -384,3 +385,55 @@ export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokens
 		return builder.build();
 	}
 }
+
+export class Dv2SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
+
+	private xslLexer: XslLexer;
+
+	public constructor(languageConfig: LanguageConfiguration) {
+		this.xslLexer = new XslLexer(languageConfig);
+		this.xslLexer.provideCharLevelState = true;
+	}
+
+	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
+		// console.log('provideDocumentSemanticTokens');
+		const allTokens = this.xslLexer.analyse(document.getText());
+		const builder = new vscode.SemanticTokensBuilder();
+		const prefixTokenTypeMap: Record<string, number> = {
+			deltaxml: TokenLevelState.function,
+			format: TokenLevelState.string,
+			preserve: TokenLevelState.complexExpression,
+			// add more mappings as needed
+		};
+		allTokens.forEach((token) => {
+			const isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+			let tokenType = token.tokenType;
+			if (isXMLToken) {
+				const xmlCharType = <XMLCharState>token.charType;
+				const xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
+				switch (xmlTokenType) {
+					case XSLTokenLevelState.elementName:
+						const tokenText = getText(token, document);
+						const nameParts = tokenText.split(':');
+						if (nameParts.length > 1) {
+							let [prefix, name] = nameParts;
+  							const updatedTokentype = prefixTokenTypeMap[prefix] ?? XSLTokenLevelState.elementName;
+  							tokenType = updatedTokentype;
+						}
+						break;
+				}
+			} else {
+
+			}
+			builder.push(token.line, token.startCharacter, token.length, tokenType, 0);
+		});
+		return builder.build();
+	}
+}
+function getText(token: BaseToken, document: vscode.TextDocument) {
+	const startPos = new vscode.Position(token.line, token.startCharacter);
+	const endPos = new vscode.Position(token.line, token.startCharacter + token.length);
+	const tokenText = document.getText(new vscode.Range(startPos, endPos));
+	return tokenText;
+}
+

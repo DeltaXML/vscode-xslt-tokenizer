@@ -864,6 +864,17 @@
 				"configuration": "./language-configuration.json"
 			},
 			{
+				"id": "dv2",
+				"aliases": [
+					"DeltaV2",
+					"deltav2"
+				],
+				"extensions": [
+					".dv2"
+				],
+				"configuration": "./language-configuration.json"
+			},
+			{
 				"id": "sch",
 				"aliases": [
 					"Schematron",
