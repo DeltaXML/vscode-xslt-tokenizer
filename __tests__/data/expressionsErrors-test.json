@@ -3269,6 +3269,48 @@
       ]
     },
     {
+      "label": "ifErr",
+      "xpath": "'book' if (1) then 1 else 2",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "if",
+          "complexExpression"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "then",
+          "complexExpression"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "else",
+          "complexExpression"
+        ],
+        [
+          "2",
+          "number"
+        ]
+      ]
+    },
+    {
       "label": "fnLiteralErr1-PENDING",
       "xpath": "function($x, 5) { $x * 2 }",
       "tokens": [

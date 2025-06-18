@@ -1346,6 +1346,9 @@ export class XsltTokenDiagnostics {
 							case 'if':
 								ifThenStack.push(token);
 								testStartOfExpression = true;
+								if (index > 0) {
+									XsltTokenDiagnostics.checkTokenIsExpected(prevToken, allTokens[index - 1], problemTokens, TokenLevelState.Unset);
+								}
 								break;
 							case 'every':
 							case 'for':

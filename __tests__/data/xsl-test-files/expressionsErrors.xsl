@@ -94,6 +94,8 @@
   <xsl:variable name="ifErr6b-PENDING" select="(count(2)) if (2 = 2) then 2 else 3"/>
   <xsl:variable name="ifErr7" select="if (false() then (if (true())) then 'x' else 'y', 'z') else ('a', 'b')"/>
   <xsl:variable name="ifErr8" select="for $i in 1 to 2 return ($i = 1) then ('first', $i) else ('second', $i)"/>
+  <xsl:variable name="ifErr" select="'book' if (1) then 1 else 2"/>
+
 
   <!-- Function literals and inline function expressions -->
   <xsl:variable name="fnLiteralErr1-PENDING" select="function($x, 5) { $x * 2 }"/>
@@ -218,6 +220,5 @@
   <xsl:variable name="nodeStringErr14" select="'book'(1)"/>
   <xsl:variable name="nodeStringErr15b" select="'book'[]"/>
   <xsl:variable name="stringErrMessage39" select="'book' count(1)"/>
-
   
 </xsl:stylesheet>

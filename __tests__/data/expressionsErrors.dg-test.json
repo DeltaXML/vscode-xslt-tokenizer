@@ -788,6 +788,16 @@
       ]
     },
     {
+      "label": "ifErr",
+      "xpath": "'book' if (1) then 1 else 2",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
       "label": "fnLiteralErr1-PENDING",
       "xpath": "function($x, 5) { $x * 2 }",
       "problems": [
@@ -1059,6 +1069,10 @@
       "label": "switchSubErr1",
       "xpath": "let $x := 1 return if ($x = 1) then 'one' if ($x = 2) then 'two' else 'other'",
       "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'one' ",
+          "'one'"
+        ],
         [
           "'then' has no matching 'else'",
           "then"
