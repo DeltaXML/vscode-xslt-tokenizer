@@ -178,6 +178,10 @@
       "xpath": "'foo' | 'bar'",
       "problems": [
         [
+          "XPath: Expression context - unexpected token here: | ",
+          "|"
+        ],
+        [
           "XPath: Expression context - unexpected token here: 'bar' ",
           "'bar'"
         ]
@@ -1270,7 +1274,7 @@
       "xpath": "'book'*",
       "problems": [
         [
-          "XPath: Operator unexpected at this position: '*'",
+          "XPath: Expression context - unexpected token here: * ",
           "*"
         ]
       ]
@@ -1338,6 +1342,10 @@
       "label": "stringErr3",
       "xpath": "'book'+'title'",
       "problems": [
+        [
+          "XPath: Expression context - unexpected token here: + ",
+          "+"
+        ],
         [
           "XPath: Expression context - unexpected token here: 'title' ",
           "'title'"
@@ -1515,6 +1523,111 @@
         [
           "XPath: Context-item is missing for: '?'",
           "?"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr1",
+      "xpath": "'book'as'title'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: as ",
+          "as"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr5",
+      "xpath": "'book'map{}",
+      "problems": [
+        [
+          "XPath: Unexpected function after expression: 'map()' ",
+          "map"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr6",
+      "xpath": "'book'array{}",
+      "problems": [
+        [
+          "XPath: Unexpected function after expression: 'array()' ",
+          "array"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr7",
+      "xpath": "'book'{}",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: {} ",
+          "{}"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr33b",
+      "xpath": "'book' * 22",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: * ",
+          "*"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr34b",
+      "xpath": "'book' div 298",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: div ",
+          "div"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr8",
+      "xpath": "{'book'}",
+      "problems": []
+    },
+    {
+      "label": "nodeStringErr12",
+      "xpath": "'book'()",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: () ",
+          "()"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr14",
+      "xpath": "'book'(1)",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ( ",
+          "("
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr15b",
+      "xpath": "'book'[]",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: [] ",
+          "[]"
+        ]
+      ]
+    },
+    {
+      "label": "stringErrMessage39",
+      "xpath": "'book' count(1)",
+      "problems": [
+        [
+          "XPath: Unexpected function after expression: 'count()' ",
+          "count"
         ]
       ]
     }

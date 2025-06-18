@@ -206,6 +206,18 @@
   <xsl:variable name="nodeStringErr28" select="any'book'"/>
   <xsl:variable name="stringNoErr29" select="map{}?'book'"/>
   <xsl:variable name="stringNoErr30" select="?'book'"/>
+  <xsl:variable name="stringErr1" select="'book'as'title'"/>
+  <xsl:variable name="stringErr5" select="'book'map{}"/>
+  <xsl:variable name="stringErr6" select="'book'array{}"/>
+  <xsl:variable name="stringErr7" select="'book'{}"/>
+  <xsl:variable name="stringErr33b" select="'book' * 22"/>
+  <xsl:variable name="stringErr34b" select="'book' div 298"/>
+  
+  <xsl:variable name="stringErr8" select="{'book'}"/>
+  <xsl:variable name="nodeStringErr12" select="'book'()"/>
+  <xsl:variable name="nodeStringErr14" select="'book'(1)"/>
+  <xsl:variable name="nodeStringErr15b" select="'book'[]"/>
+  <xsl:variable name="stringErrMessage39" select="'book' count(1)"/>
 
   
 </xsl:stylesheet>

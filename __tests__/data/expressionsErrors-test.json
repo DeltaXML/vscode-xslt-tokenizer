@@ -5833,6 +5833,204 @@
           "string"
         ]
       ]
+    },
+    {
+      "label": "stringErr1",
+      "xpath": "'book'as'title'",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "'title'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr5",
+      "xpath": "'book'map{}",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr6",
+      "xpath": "'book'array{}",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "array",
+          "operator"
+        ],
+        [
+          "{}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr7",
+      "xpath": "'book'{}",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "{}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr33b",
+      "xpath": "'book' * 22",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "*",
+          "operator"
+        ],
+        [
+          "22",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr34b",
+      "xpath": "'book' div 298",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "div",
+          "operator"
+        ],
+        [
+          "298",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "stringErr8",
+      "xpath": "{'book'}",
+      "tokens": [
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr12",
+      "xpath": "'book'()",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "()",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr14",
+      "xpath": "'book'(1)",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "nodeStringErr15b",
+      "xpath": "'book'[]",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "[]",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "stringErrMessage39",
+      "xpath": "'book' count(1)",
+      "tokens": [
+        [
+          "'book'",
+          "string"
+        ],
+        [
+          "count",
+          "function"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
     }
   ]
 }
