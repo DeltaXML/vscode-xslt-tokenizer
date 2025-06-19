@@ -113,6 +113,48 @@ export enum DiagnosticCode {
 }
 
 export class XsltTokenDiagnostics {
+	static oneCharOps = new Set([')', ']', '}', '-', '+', '|', '*', '.']);
+	static twoCharOps = new Set(['as', '//', '{}', '[]', '()', '*:', '::', '<<', '>>', '=>']);
+	static threeCharOps = new Set(['div', 'mod']);
+	static otherOps = new Set(['idiv', 'union', 'except', 'intersect', '&lt;&lt;', '&gt;&gt;']);
+	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
+		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber) {
+			return;
+		}
+		let isXPathError = false;
+		const pt = prevToken.value;
+		if (prevToken.tokenType === TokenLevelState.operator) {
+			// check string is permitted to follow a string - not a node or numeric operator:
+			switch (pt.length) {
+				case 1:
+					isXPathError = XsltTokenDiagnostics.oneCharOps.has(pt);
+					break;
+				case 2:
+					isXPathError = XsltTokenDiagnostics.twoCharOps.has(pt);
+					break;
+				case 3:
+					isXPathError = XsltTokenDiagnostics.threeCharOps.has(pt);
+					break;
+				default:
+					isXPathError = XsltTokenDiagnostics.otherOps.has(pt);
+					break;
+			}
+		} else if (prevToken.tokenType === TokenLevelState.complexExpression) {
+			isXPathError = false;
+		} else if (prevToken.tokenType === TokenLevelState.string || prevToken.tokenType === TokenLevelState.entityRef) {
+			// string tokens may be split by newline characters
+			const currentTokenFirstChar = token.value.charAt(0);
+			if (currentTokenFirstChar === '"' || currentTokenFirstChar === '\'') {
+				isXPathError = true;
+			}
+		} else {
+			isXPathError = true;
+		}
+		if (isXPathError) {
+			token.error = ErrorType.XPathUnexpected;
+			problemTokens.push(token);
+		}
+	}
 	public static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number'];
 	public static readonly xslInclude = 'xsl:include';
@@ -1279,7 +1321,7 @@ export class XsltTokenDiagnostics {
 						if (token.error && !isTypeError) {
 							problemTokens.push(token);
 						}
-						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+						XsltTokenDiagnostics.checkStringIsExpected(prevToken, token, problemTokens);
 						if (xpathStack.length > 0 && !isTypeError) {
 							let xp = xpathStack[xpathStack.length - 1];
 							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {

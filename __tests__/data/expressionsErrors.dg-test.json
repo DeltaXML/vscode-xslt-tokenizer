@@ -1547,6 +1547,10 @@
         [
           "XPath: Expression context - unexpected token here: as ",
           "as"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: 'title' ",
+          "'title'"
         ]
       ]
     },
