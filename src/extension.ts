@@ -402,15 +402,16 @@ export class Dv2SemanticTokensProvider implements vscode.DocumentSemanticTokensP
 		const prefixTokenTypeMap: Record<string, number> = {
 			deltaxml: TokenLevelState.function,
 			format: TokenLevelState.string,
-			preserve: TokenLevelState.complexExpression,
-			dxa: TokenLevelState.comment,
-			dxx: TokenLevelState.string
+			preserve: TokenLevelState.number,
+			dxa: TokenLevelState.complexExpression,
+			dxx: TokenLevelState.complexExpression
 			// add more mappings as needed
 		};
 		const prefixTokenTypeMapAttr: Record<string, number> = {
-			deltaxml: TokenLevelState.axisName,
+			deltaxml: TokenLevelState.nodeNameTest,
 			// add more mappings as needed
 		};
+		let isAfterAttrWithDeltaV2 = false;
 		allTokens.forEach((token) => {
 			const isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			let tokenType = token.tokenType;
@@ -425,16 +426,25 @@ export class Dv2SemanticTokensProvider implements vscode.DocumentSemanticTokensP
 							let [prefix, name] = nameParts;
   							const updatedTokentype = prefixTokenTypeMap[prefix] ?? XSLTokenLevelState.elementName + XsltTokenDiagnostics.xsltStartTokenNumber;
   							tokenType = updatedTokentype;
+						} else {
+							tokenType = XSLTokenLevelState.xslElementName + XsltTokenDiagnostics.xsltStartTokenNumber;
 						}
 						break;
 					case XSLTokenLevelState.attributeName:
 						const tokenTextAttr = getText(token, document);
+						isAfterAttrWithDeltaV2 = tokenTextAttr === 'deltaxml:deltaV2';
 						const namePartsAttr = tokenTextAttr.split(':');
 						if (namePartsAttr.length > 1) {
 							let [prefix, name] = namePartsAttr;
   							const updatedTokentype = prefixTokenTypeMapAttr[prefix] ?? XSLTokenLevelState.attributeName + XsltTokenDiagnostics.xsltStartTokenNumber;
   							tokenType = updatedTokentype;
-						}						
+						}
+						break;
+					case XSLTokenLevelState.attributeValue:
+						if (isAfterAttrWithDeltaV2) {
+							tokenType = TokenLevelState.complexExpression;
+						}
+						break;						
 				}
 			} else {
 
