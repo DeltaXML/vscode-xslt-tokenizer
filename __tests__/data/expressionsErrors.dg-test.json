@@ -1338,6 +1338,16 @@
       ]
     },
     {
+      "label": "stringErr43",
+      "xpath": "22 div 'book'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'book' ",
+          "'book'"
+        ]
+      ]
+    },
+    {
       "label": "bangStart23",
       "xpath": "!'book'",
       "problems": [
@@ -1547,6 +1557,10 @@
         [
           "XPath: Expression context - unexpected token here: as ",
           "as"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: 'title' ",
+          "'title'"
         ]
       ]
     },
