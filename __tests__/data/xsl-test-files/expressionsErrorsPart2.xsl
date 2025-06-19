@@ -14,6 +14,5 @@
   <xsl:variable name="stringErr34-PENDING" select="22 div 'book'"/>
   <xsl:variable name="nodeStringErr38-PENDING" select="'book' Q{'test'}name"/>
   <!-- there should be no error on final token below: -->
-  <xsl:variable name="stringEr1" select="'&#160;'"/>
   
 </xsl:stylesheet>

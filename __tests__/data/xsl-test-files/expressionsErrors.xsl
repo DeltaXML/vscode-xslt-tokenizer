@@ -221,5 +221,6 @@
   <xsl:variable name="nodeStringErr14" select="'book'(1)"/>
   <xsl:variable name="nodeStringErr15b" select="'book'[]"/>
   <xsl:variable name="stringErrMessage39" select="'book' count(1)"/>
+  <xsl:variable name="stringNoErr1" select="'&#160;'"/>
   
 </xsl:stylesheet>

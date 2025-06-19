@@ -6091,6 +6091,24 @@
           "operator"
         ]
       ]
+    },
+    {
+      "label": "stringNoErr1",
+      "xpath": "'&#160;'",
+      "tokens": [
+        [
+          "'",
+          "string"
+        ],
+        [
+          "&#160;",
+          "entityRef"
+        ],
+        [
+          "'",
+          "string"
+        ]
+      ]
     }
   ]
 }
