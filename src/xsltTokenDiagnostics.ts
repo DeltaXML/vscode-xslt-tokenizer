@@ -144,9 +144,7 @@ export class XsltTokenDiagnostics {
 		} else if (prevToken.tokenType === TokenLevelState.string || prevToken.tokenType === TokenLevelState.entityRef) {
 			// string tokens may be split by newline characters
 			const currentTokenFirstChar = token.value.charAt(0);
-			if (currentTokenFirstChar === '"' || currentTokenFirstChar === '\'') {
-				isXPathError = true;
-			}
+			isXPathError = token.value.length > 1 && (currentTokenFirstChar === '"' || currentTokenFirstChar === '\'');
 		} else {
 			isXPathError = true;
 		}
