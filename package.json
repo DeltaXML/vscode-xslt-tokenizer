@@ -804,7 +804,7 @@
 			},
 			{
 				"id": "xmlText",
-				"superType": "number",
+				"superType": "label",
 				"description": "XML Text Node"
 			},
 			{
