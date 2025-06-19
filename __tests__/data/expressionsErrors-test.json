@@ -5441,6 +5441,24 @@
       ]
     },
     {
+      "label": "stringErr43",
+      "xpath": "22 div 'book'",
+      "tokens": [
+        [
+          "22",
+          "number"
+        ],
+        [
+          "div",
+          "operator"
+        ],
+        [
+          "'book'",
+          "string"
+        ]
+      ]
+    },
+    {
       "label": "bangStart23",
       "xpath": "!'book'",
       "tokens": [

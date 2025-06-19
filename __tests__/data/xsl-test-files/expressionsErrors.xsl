@@ -181,6 +181,7 @@
   <xsl:variable name="nodeStringErr37" select="Q{'test'}name 'book'"/>
   <xsl:variable name="stringErr38" select="let $a := '1' return 'book' $a"/>
   <xsl:variable name="stringErr39" select="let $a := '1' return $a 'book'"/>
+  <xsl:variable name="stringErr43" select="22 div 'book'"/>
 
   <xsl:variable name="bangStart23" select="!'book'"/>
   <xsl:variable name="stringNoErr2" select="'book'!'title'"/>
