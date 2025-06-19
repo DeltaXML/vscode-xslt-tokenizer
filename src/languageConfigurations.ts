@@ -83,6 +83,19 @@ export class DCPConfiguration {
 	}; 
 }
 
+export class Dv2Configuration {
+	// initial configuration is for basic Schematron support only
+	public static configuration: LanguageConfiguration = {
+		expressionAtts: ['deltaxml:deltaV2'],
+		variableElementNames: [],
+		nativePrefix: 'xslq',
+		tvtAttributes: [],
+		nonNativeAvts: false,
+		schemaData: new SchSchema(),
+		docType: DocumentTypes.DCP,
+	}; 
+}
+
 export class SchConfiguration {
 	// initial configuration is for basic Schematron support only
 	public static configuration: LanguageConfiguration = {

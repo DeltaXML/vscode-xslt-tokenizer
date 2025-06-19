@@ -12,7 +12,7 @@ import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken, TokenLevelSta
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
-import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration } from './languageConfigurations';
+import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration, Dv2Configuration } from './languageConfigurations';
 import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionData, GlobalInstructionType, XMLCharState, XSLTokenLevelState } from './xslLexer';
 import { DocumentChangeHandler } from './documentChangeHandler';
@@ -233,7 +233,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp' }, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'sch' }, new XsltSemanticTokensProvider(SchConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'bpmn' }, new XsltSemanticTokensProvider(XMLConfiguration.configuration), legend));
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dv2' }, new Dv2SemanticTokensProvider(XMLConfiguration.configuration), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dv2' }, new Dv2SemanticTokensProvider(Dv2Configuration.configuration), legend));
 
 	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, new XPathSemanticTokensProvider(xpathDiagnosticsCollection), legend));
@@ -403,6 +403,12 @@ export class Dv2SemanticTokensProvider implements vscode.DocumentSemanticTokensP
 			deltaxml: TokenLevelState.function,
 			format: TokenLevelState.string,
 			preserve: TokenLevelState.complexExpression,
+			dxa: TokenLevelState.comment,
+			dxx: TokenLevelState.string
+			// add more mappings as needed
+		};
+		const prefixTokenTypeMapAttr: Record<string, number> = {
+			deltaxml: TokenLevelState.axisName,
 			// add more mappings as needed
 		};
 		allTokens.forEach((token) => {
@@ -417,10 +423,18 @@ export class Dv2SemanticTokensProvider implements vscode.DocumentSemanticTokensP
 						const nameParts = tokenText.split(':');
 						if (nameParts.length > 1) {
 							let [prefix, name] = nameParts;
-  							const updatedTokentype = prefixTokenTypeMap[prefix] ?? XSLTokenLevelState.elementName;
+  							const updatedTokentype = prefixTokenTypeMap[prefix] ?? XSLTokenLevelState.elementName + XsltTokenDiagnostics.xsltStartTokenNumber;
   							tokenType = updatedTokentype;
 						}
 						break;
+					case XSLTokenLevelState.attributeName:
+						const tokenTextAttr = getText(token, document);
+						const namePartsAttr = tokenTextAttr.split(':');
+						if (namePartsAttr.length > 1) {
+							let [prefix, name] = namePartsAttr;
+  							const updatedTokentype = prefixTokenTypeMapAttr[prefix] ?? XSLTokenLevelState.attributeName + XsltTokenDiagnostics.xsltStartTokenNumber;
+  							tokenType = updatedTokentype;
+						}						
 				}
 			} else {
 

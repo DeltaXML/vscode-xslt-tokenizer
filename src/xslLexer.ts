@@ -17,6 +17,7 @@ export enum DocumentTypes {
     XSLT40,
     XPath,
 	DCP,
+    DV2,
     SCH,
 	Other
 }
