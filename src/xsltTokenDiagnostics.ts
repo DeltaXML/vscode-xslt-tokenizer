@@ -1880,24 +1880,8 @@ export class XsltTokenDiagnostics {
 											if (index === allTokens.length - 1) {
 												hasProblem = true;
 											} else {
-												const nextToken = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index)?.value;
-												hasProblem = !(nextToken === '{' || nextToken === '{}');
-												if (hasProblem && nextToken === 'as') {
-													// crude test to get '{' in next 20 tokens
-													// allows for fairly complex types like map{map(xs:string, xs:string)}
-													// without texting the type properly
-													for (let i = 1; i < 20; i++) {
-														const s = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index + i)?.value;
-                                                        if (s) {
-															hasProblem = !(s === '{' || s === '{}');
-															if (!hasProblem) {
-																break;
-															}
-														} else {
-															break;
-														}
-													}
-												}
+												let foundDeclaration = XsltTokenDiagnostics.findFunctionDeclaration(allTokens, index);
+												hasProblem = !foundDeclaration;
 											}
 											if (hasProblem) {
 												const t = poppedData.token.context!;
@@ -2057,8 +2041,8 @@ export class XsltTokenDiagnostics {
 									token.error = ErrorType.XPathConditionExpected;
 									problemTokens.push(token);
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.anonymousFunction) {
-									const nexttoken = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index);
-									if (nexttoken && nexttoken.value.charAt(0) !== '{') {
+									let foundDeclaration = XsltTokenDiagnostics.findFunctionDeclaration(allTokens, index);
+									if (!foundDeclaration) {
 										prevToken.error = ErrorType.AnonymousFunctionSyntax;
 										problemTokens.push(prevToken);
 									}
@@ -2301,6 +2285,32 @@ export class XsltTokenDiagnostics {
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
 	};
+
+	private static findFunctionDeclaration(allTokens: BaseToken[], index: number) {
+		const nextToken = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index)?.value;
+		let foundDeclaration = (nextToken === '{' || nextToken === '{}');
+		if (!foundDeclaration && nextToken === 'as') {
+			// crude test to get '{' in next 20 tokens
+			// allows for fairly complex types like map{map(xs:string, xs:string)}
+			// without texting the type properly
+			for (let i = 1; i < 30; i++) {
+				const b = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index + i);
+				if (!b || b.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber) {
+					break;
+				}
+				const s = b?.value;
+				if (s) {
+					foundDeclaration = (s === '{' || s === '{}');
+					if (foundDeclaration) {
+						break;
+					}
+				} else {
+					break;
+				}
+			}
+		}
+		return foundDeclaration;
+	}
 
 	private static addProblemIfMissingContextSC(insideGlobalFunction: boolean, tagElementName: string, tagAttributeSymbols: vscode.DocumentSymbol[], elementStack: ElementData[], xpathStack: XPathData[], startTagToken: XSLTToken, problemTokens: BaseToken[]) {
 		if (insideGlobalFunction && (tagElementName === 'xsl:copy' || tagElementName === 'xsl:apply-templates')) {
