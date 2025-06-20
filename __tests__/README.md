@@ -90,6 +90,18 @@ badly we know we have a problem that will affect other features like the linter 
 
 The automated test setup described provides a useful supplement to this test strategy, but manual testing remains critical to this project.
 
+## Pre Release Testing
+1. Create a new vsix package: `vsce package`
+2. Install the .vsix VS Code extension created:
+```
+code --install-extension xslt-xpath-1.7.1.vsix
+```
+3. _note: from an existing VS Code instance you would need to press the **Restart Extensions** button in the Extensions panel_
+4. Launch VS Code with the 'sample' directory
+```
+code sample
+```
+
 
 ## Conclusion
 The tests, with their expected 'tokens' and 'problems' data, are 'regression tests' ensuring later releases do not
