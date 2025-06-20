@@ -166,4 +166,15 @@
   <!-- Assigning named built-in functions to variables and invoking them -->
   <xsl:variable name="fnVar1" select="upper-case#1"/>
   <xsl:variable name="fnVar2" select="string-length#1"/>
+  
+  <!-- Maps including functions -->
+  <xsl:variable name="mapFn1" select="map {'m1': function($a) {$a + 1}}"/>
+  <xsl:variable name="mapFnDupeKey-PENDING" select="map {'m1': function($a) {$a + 1}, 'm1': 'book'}"/>
+  <xsl:variable name="mapFn2" select="map {'m1': function($a) {$a + 1}, 'm2': function($a) {$a + 1}}"/>
+  <xsl:variable name="mapFn3" select="map {'m1': function($a) as xs:integer {$a + 1}}"/>
+  <xsl:variable name="mapFn4" select="map {'m1': function($a) as function(*) {count#1}}"/>
+  <xsl:variable name="mapFn5" select="function() { 22 }"/>
+  <xsl:variable name="mapFn6" select="function($a as xs:integer) as function(xs:integer) as xs:integer { function($b) as xs:integer { $a + $b + 1 } }"/>
+  <xsl:variable name="mapFnNoError7-PENDING" select="function($a as xs:integer) as function() as xs:integer { function() as xs:integer { $a + 1 } }"/>
+
 </xsl:stylesheet>
