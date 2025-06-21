@@ -1204,7 +1204,7 @@ export class XsltTokenDiagnostics {
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 				if (xpathStack.length > 0) {
 					const tv = xpathStack[xpathStack.length - 1].token.value;
-					if (prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && (tv === 'for' || tv === 'let' || tv === 'every')) {
+					if (prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && (tv === 'for' || tv === 'let' || tv === 'every' || tv === 'some')) {
 						if (xpathTokenType !== TokenLevelState.variable) {
 							const realType = (xpathTokenType === TokenLevelState.comment && index + 1 < allTokens.length) ? allTokens[index + 1].tokenType : xpathTokenType;
 							if (realType != TokenLevelState.variable) {

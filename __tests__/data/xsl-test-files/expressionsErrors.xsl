@@ -26,6 +26,8 @@
   <xsl:variable name="expressionErr19" select="(1 tox 5)"/>
   <xsl:variable name="expressionErr21" select="(1, 2, 3)!upper-case(string(.))"/>
   <xsl:variable name="expressionErr22" select="(1, 2, 3) => count(2)"/>
+  <xsl:variable name="expressionErr23a" select="every $x in (1,2,3),4 satisfies $x > 1"/>
+  <xsl:variable name="expressionErr23b" select="some $x in (1,2,3),4 satisfies $x > 1"/>
   <xsl:variable name="expressionErr24" select="every $x in (1,2,3),a satisfies $x > 0"/>
   <xsl:variable name="expressionErr25" select="5 instance of node()"/>
   <xsl:variable name="expressionErr27" select="5 castable as xs:string"/>
