@@ -545,6 +545,110 @@
       ]
     },
     {
+      "label": "expressionErr20",
+      "xpath": "map { 'a': 1, 'b': 2 }string(.)",
+      "tokens": [
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "'b'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "string",
+          "function"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          ".",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "nodeArrayCurlyErr1",
+      "xpath": "array{ 1, 2, 3 }a",
+      "tokens": [
+        [
+          "array",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "3",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "a",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
       "label": "expressionErr21",
       "xpath": "(1, 2, 3)!upper-case(string(.))",
       "tokens": [

@@ -192,6 +192,30 @@
       ]
     },
     {
+      "label": "expressionErr20",
+      "xpath": "map { 'a': 1, 'b': 2 }string(.)",
+      "problems": [
+        [
+          "XPath: Unexpected function after expression: 'string()' ",
+          "string"
+        ],
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "nodeArrayCurlyErr1",
+      "xpath": "array{ 1, 2, 3 }a",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: a ",
+          "a"
+        ]
+      ]
+    },
+    {
       "label": "expressionErr21",
       "xpath": "(1, 2, 3)!upper-case(string(.))",
       "problems": []

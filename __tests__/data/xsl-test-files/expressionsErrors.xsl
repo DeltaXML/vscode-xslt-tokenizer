@@ -24,6 +24,8 @@
   <xsl:variable name="expressionErr17" select="(1, 2, 3) exept (2)"/>
   <xsl:variable name="expressionErr18" select="'foo' | 'bar'"/>
   <xsl:variable name="expressionErr19" select="(1 tox 5)"/>
+  <xsl:variable name="expressionErr20" select="map { 'a': 1, 'b': 2 }string(.)"/>
+  <xsl:variable name="nodeArrayCurlyErr1" select="array{ 1, 2, 3 }a"/>
   <xsl:variable name="expressionErr21" select="(1, 2, 3)!upper-case(string(.))"/>
   <xsl:variable name="expressionErr22" select="(1, 2, 3) => count(2)"/>
   <xsl:variable name="expressionErr23a" select="every $x in (1,2,3),4 satisfies $x > 1"/>

@@ -2497,7 +2497,7 @@ export class XsltTokenDiagnostics {
 				} else if (prevToken.tokenType === TokenLevelState.uriLiteral && tokenType !== TokenLevelState.nodeNameTest) {
 					isXPathError = true;
 				} else if (prevToken.tokenType === TokenLevelState.operator) {
-					if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rPr) {
+					if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rBr) {
 						isXPathError = true;
 					}
 					else if (prevToken.charType === CharLevelState.dSep) {

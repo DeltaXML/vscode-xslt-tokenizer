@@ -7,7 +7,6 @@
 
   <?test-attribute select?>
   <xsl:variable name="expressionErr9-PENDING" select="5 >> 2"/>
-  <xsl:variable name="expressionErr20-PENDING" select="map { 'a': 1, 'b': 2 }string(.)"/>
   <xsl:variable name="expressionErr26-PENDING" select="5 cast as node()"/>
   <xsl:variable name="expressionErr28b-PENDING" select="5 treat as 5"/>
   <xsl:variable name="expressionErr53b-PENDING" select="[1, 2, 3] => array:filter(function($i as xs:integer) as { $i mod 2 = 1 })"/>
@@ -22,7 +21,6 @@
   <xsl:variable name="attrTestErr3-PENDING" select="book/@**"/>
   <xsl:variable name="nodeTestErr1-PENDING" select="text(ANY)"/>
   <xsl:variable name="nodeTestErr4-PENDING" select="processing-instruction('xml-stylesheet', 'a')"/>
-  <xsl:variable name="arrayCurlyErr1-PENDING" select="array{ 1, 2, 3 }a"/>
 
   <!-- VERIFY VARIABLE $X$X -->
   <xsl:variable name="letAnonFnInvoke-PENDING" select="let $f := function($x$x) { $x$x * 10 } return $f(7)"/>
