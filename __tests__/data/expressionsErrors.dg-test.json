@@ -207,6 +207,26 @@
       ]
     },
     {
+      "label": "expressionErr23a",
+      "xpath": "every $x in (1,2,3),4 satisfies $x > 1",
+      "problems": [
+        [
+          "XML: Expected '$' but found '4'",
+          "4"
+        ]
+      ]
+    },
+    {
+      "label": "expressionErr23b",
+      "xpath": "some $x in (1,2,3),4 satisfies $x > 1",
+      "problems": [
+        [
+          "XML: Expected '$' but found '4'",
+          "4"
+        ]
+      ]
+    },
+    {
       "label": "expressionErr24",
       "xpath": "every $x in (1,2,3),a satisfies $x > 0",
       "problems": [

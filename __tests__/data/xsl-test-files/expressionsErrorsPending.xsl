@@ -8,7 +8,6 @@
   <?test-attribute select?>
   <xsl:variable name="expressionErr9-PENDING" select="5 >> 2"/>
   <xsl:variable name="expressionErr20-PENDING" select="map { 'a': 1, 'b': 2 }string(.)"/>
-  <xsl:variable name="expressionErr23-PENDING" select="some $x in (1,2,3),4 satisfies $x > 1"/>
   <xsl:variable name="expressionErr26-PENDING" select="5 cast as node()"/>
   <xsl:variable name="expressionErr28b-PENDING" select="5 treat as 5"/>
   
