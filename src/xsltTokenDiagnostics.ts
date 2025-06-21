@@ -1620,7 +1620,8 @@ export class XsltTokenDiagnostics {
 								} else {
 									isXPathError = true;
 								}
-
+							} else if (tv === '::') {
+								isXPathError = prevToken.tokenType !== TokenLevelState.axisName;
 							} else if (isXMLToken) {
 								switch (currCharType) {
 									case CharLevelState.rB:
