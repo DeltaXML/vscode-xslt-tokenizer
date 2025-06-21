@@ -87,16 +87,6 @@
       ]
     },
     {
-      "label": "expressionErr9-PENDING",
-      "xpath": "5 >> 2",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
       "label": "expressionErr10",
       "xpath": "5 >= 5",
       "problems": []
@@ -202,16 +192,6 @@
       ]
     },
     {
-      "label": "expressionErr20-PENDING",
-      "xpath": "map { 'a': 1, 'b': 2 }string(.)",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
       "label": "expressionErr21",
       "xpath": "(1, 2, 3)!upper-case(string(.))",
       "problems": []
@@ -223,16 +203,6 @@
         [
           "XPath: Function: 'count' with 2 arguments not found",
           "count"
-        ]
-      ]
-    },
-    {
-      "label": "expressionErr23-PENDING",
-      "xpath": "some $x in (1,2,3),4 satisfies $x > 1",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
         ]
       ]
     },
@@ -256,16 +226,6 @@
       "problems": []
     },
     {
-      "label": "expressionErr26-PENDING",
-      "xpath": "5 cast as node()",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
       "label": "expressionErr27",
       "xpath": "5 castable as xs:string",
       "problems": []
@@ -274,16 +234,6 @@
       "label": "expressionErr28",
       "xpath": "5 treat as xs:integer",
       "problems": []
-    },
-    {
-      "label": "expressionErr28b-PENDING",
-      "xpath": "5 treat as 5",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
     },
     {
       "label": "expressionErr28c",
@@ -347,26 +297,6 @@
         [
           "XPath: Expression context - unexpected token here: 55 ",
           "55"
-        ]
-      ]
-    },
-    {
-      "label": "axisErr34-PENDING",
-      "xpath": "following-sibling[1]::para",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
-      "label": "axisErr35-PENDING",
-      "xpath": "(preceding)::note",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
         ]
       ]
     },
@@ -543,16 +473,6 @@
       ]
     },
     {
-      "label": "expressionErr53b-PENDING",
-      "xpath": "[1, 2, 3] => array:filter(function($i as xs:integer) as { $i mod 2 = 1 })",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
       "label": "expressionErr53c",
       "xpath": "[1, 2, 3] => array:filter(function($i as xs:intege) { $i mod 2 = 1 })",
       "problems": [
@@ -724,26 +644,6 @@
       ]
     },
     {
-      "label": "ifErr6-PENDING",
-      "xpath": "22 if (2 = 2) then 2 else 3",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
-      "label": "ifErr6b-PENDING",
-      "xpath": "(count(2)) if (2 = 2) then 2 else 3",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
       "label": "ifErr7",
       "xpath": "if (false() then (if (true())) then 'x' else 'y', 'z') else ('a', 'b')",
       "problems": [
@@ -794,26 +694,6 @@
         [
           "XPath: Expression context - unexpected token here: 'book' ",
           "'book'"
-        ]
-      ]
-    },
-    {
-      "label": "fnLiteralErr1-PENDING",
-      "xpath": "function($x, 5) { $x * 2 }",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
-      "label": "fnLiteralErr1a-PENDING",
-      "xpath": "function($x, ()) { $x * 2 }",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
         ]
       ]
     },
@@ -912,16 +792,6 @@
       ]
     },
     {
-      "label": "contextItemErr2-PENDING",
-      "xpath": "...//node()",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
       "label": "arrayLookupErr1",
       "xpath": "[10, 20, 30][1 + ]",
       "problems": [
@@ -970,32 +840,12 @@
       ]
     },
     {
-      "label": "closureErr1-PENDING",
-      "xpath": "let $f := function($x) { $x + 1 } as xs:integer return $f(10)",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
       "label": "closureErr1",
       "xpath": "let $f := function($x) as xs:intege { $x + 1 } return $f(10)",
       "problems": [
         [
           "XPath: Invalid type: 'xs:intege'",
           "xs:intege"
-        ]
-      ]
-    },
-    {
-      "label": "posPredErr1-PENDING",
-      "xpath": "(10, 20, 30)[]",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
         ]
       ]
     },
@@ -1100,36 +950,6 @@
       ]
     },
     {
-      "label": "attrTestErr3-PENDING",
-      "xpath": "book/@**",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
-      "label": "nodeTestErr1-PENDING",
-      "xpath": "text(ANY)",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
-      "label": "nodeTestErr4-PENDING",
-      "xpath": "processing-instruction('xml-stylesheet', 'a')",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
       "label": "nodeTestErr2",
       "xpath": "//para/texts()",
       "problems": [
@@ -1172,26 +992,6 @@
       "label": "nestedMapNoErr2",
       "xpath": "[1,2,3]?2",
       "problems": []
-    },
-    {
-      "label": "arrayCurlyErr1-PENDING",
-      "xpath": "array{ 1, 2, 3 }a",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
-    },
-    {
-      "label": "letAnonFnInvoke-PENDING",
-      "xpath": "let $f := function($x$x) { $x$x * 10 } return $f(7)",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
     },
     {
       "label": "fnVarErr1",
