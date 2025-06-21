@@ -1137,6 +1137,62 @@
       ]
     },
     {
+      "label": "axisErr34",
+      "xpath": "following-sibling[1]::para",
+      "tokens": [
+        [
+          "following-sibling",
+          "nodeNameTest"
+        ],
+        [
+          "[",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "]",
+          "operator"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "para",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr35",
+      "xpath": "(preceding)::note",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "preceding",
+          "nodeNameTest"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "note",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
       "label": "qnameErr39",
       "xpath": ":book[author='John']",
       "tokens": [

@@ -351,6 +351,26 @@
       ]
     },
     {
+      "label": "axisErr34",
+      "xpath": "following-sibling[1]::para",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: :: ",
+          "::"
+        ]
+      ]
+    },
+    {
+      "label": "axisErr35",
+      "xpath": "(preceding)::note",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: :: ",
+          "::"
+        ]
+      ]
+    },
+    {
       "label": "qnameErr39",
       "xpath": ":book[author='John']",
       "problems": [
