@@ -54,7 +54,7 @@
   <xsl:variable name="qnameErr40" select="q:item[position() = 1]"/>
   <xsl:variable name="qnameErr41" select="cha pter[title and page > 10]"/>
   <xsl:variable name="qnameNoErr41a" select="cha to abc"/>
-  <xsl:variable name="expressionErr42" select="(1 to 10 . mod 2 = 0]"/>
+  <xsl:variable name="contextExpressionErr42" select="(1 to 10 . mod 2 = 0]"/>
 
   <!-- Array constructors and access -->
   <xsl:variable name="expressionErr43" select="["/>
@@ -109,6 +109,8 @@
 
   <!-- Context item expressions -->
   <xsl:variable name="contextItemErr1" select="./"/>
+  <xsl:variable name="contextItemErr2" select="...//node()"/>
+
 
   <!-- Map and array lookup with computed keys/indices -->
   <xsl:variable name="arrayLookupErr1" select="[10, 20, 30][1 + ]"/>
@@ -142,6 +144,11 @@
   <!-- Node tests -->
   <xsl:variable name="nodeTestErr2" select="//para/texts()"/>
   <xsl:variable name="nodeTestNoErr3" select="processing-instruction(any)"/>
+  <xsl:variable name="nodeTesErr4" select="()node()"/>
+  <xsl:variable name="nodeTesNoErr5" select="child::node()"/>
+  <xsl:variable name="nodeTestErr6" select="element()node()"/>
+  <xsl:variable name="nodeTestNoErr7" select="any[node()]"/>
+  <xsl:variable name="nodeTestNoErr8" select="any/text()"/>
 
   <!-- Nested map and array constructor examples -->
   <xsl:variable name="nestedMapErr1" select="map{ 'outer': array{ 'inner': 123 } }"/>

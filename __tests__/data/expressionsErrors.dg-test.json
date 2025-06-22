@@ -430,11 +430,11 @@
       "problems": []
     },
     {
-      "label": "expressionErr42",
+      "label": "contextExpressionErr42",
       "xpath": "(1 to 10 . mod 2 = 0]",
       "problems": [
         [
-          "XPath: Context-item is missing for: '.'",
+          "XPath: Expression context - unexpected token here: . ",
           "."
         ],
         [
@@ -856,6 +856,16 @@
       ]
     },
     {
+      "label": "contextItemErr2",
+      "xpath": "...//node()",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: . ",
+          "."
+        ]
+      ]
+    },
+    {
       "label": "arrayLookupErr1",
       "xpath": "[10, 20, 30][1 + ]",
       "problems": [
@@ -1026,6 +1036,41 @@
     {
       "label": "nodeTestNoErr3",
       "xpath": "processing-instruction(any)",
+      "problems": []
+    },
+    {
+      "label": "nodeTesErr4",
+      "xpath": "()node()",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: node ",
+          "node"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTesNoErr5",
+      "xpath": "child::node()",
+      "problems": []
+    },
+    {
+      "label": "nodeTestErr6",
+      "xpath": "element()node()",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: node ",
+          "node"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTestNoErr7",
+      "xpath": "any[node()]",
+      "problems": []
+    },
+    {
+      "label": "nodeTestNoErr8",
+      "xpath": "any/text()",
       "problems": []
     },
     {

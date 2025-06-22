@@ -1425,7 +1425,7 @@
       ]
     },
     {
-      "label": "expressionErr42",
+      "label": "contextExpressionErr42",
       "xpath": "(1 to 10 . mod 2 = 0]",
       "tokens": [
         [
@@ -3509,6 +3509,32 @@
       ]
     },
     {
+      "label": "contextItemErr2",
+      "xpath": "...//node()",
+      "tokens": [
+        [
+          "..",
+          "nodeType"
+        ],
+        [
+          ".",
+          "nodeType"
+        ],
+        [
+          "//",
+          "operator"
+        ],
+        [
+          "node",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
+    },
+    {
       "label": "arrayLookupErr1",
       "xpath": "[10, 20, 30][1 + ]",
       "tokens": [
@@ -4351,6 +4377,116 @@
         [
           ")",
           "operator"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTesErr4",
+      "xpath": "()node()",
+      "tokens": [
+        [
+          "()",
+          "operator"
+        ],
+        [
+          "node",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTesNoErr5",
+      "xpath": "child::node()",
+      "tokens": [
+        [
+          "child",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "node",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTestErr6",
+      "xpath": "element()node()",
+      "tokens": [
+        [
+          "element",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ],
+        [
+          "node",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTestNoErr7",
+      "xpath": "any[node()]",
+      "tokens": [
+        [
+          "any",
+          "nodeNameTest"
+        ],
+        [
+          "[",
+          "operator"
+        ],
+        [
+          "node",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ],
+        [
+          "]",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "nodeTestNoErr8",
+      "xpath": "any/text()",
+      "tokens": [
+        [
+          "any",
+          "nodeNameTest"
+        ],
+        [
+          "/",
+          "operator"
+        ],
+        [
+          "text",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
         ]
       ]
     },

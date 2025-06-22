@@ -14,7 +14,6 @@
   <xsl:variable name="ifErr6b-PENDING" select="(count(2)) if (2 = 2) then 2 else 3"/>
   <xsl:variable name="fnLiteralErr1-PENDING" select="function($x, 5) { $x * 2 }"/>
   <xsl:variable name="fnLiteralErr1a-PENDING" select="function($x, ()) { $x * 2 }"/>
-  <xsl:variable name="contextItemErr2-PENDING" select="...//node()"/>
   <xsl:variable name="closureErr1-PENDING" select="let $f := function($x) { $x + 1 } as xs:integer return $f(10)"/>
   <xsl:variable name="posPredErr1-PENDING" select="(10, 20, 30)[]"/>
 

@@ -2074,7 +2074,10 @@ export class XsltTokenDiagnostics {
 								prevToken['error'] = ErrorType.XPathPrefix;
 								problemTokens.push(prevToken);
 							}
-						} else if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
+						} else if (!withinTypeDeclarationAttr) {
+							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+						}
+						if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
 							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
 								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()' || prevToken.value === 'as'))) {
@@ -2485,6 +2488,8 @@ export class XsltTokenDiagnostics {
 			errDoubleSeparators = ['{}', '[]', '()'];
 		} else if (tokenType === TokenLevelState.number || tokenType === TokenLevelState.string) {
 			errDoubleSeparators = ['{}', '[]', '()', '*:', '::', '//'];
+		} else if (tokenType === TokenLevelState.nodeType) {
+			errDoubleSeparators = ['{}', '[]', '()', '*:'];
 		} else {
 			errDoubleSeparators = ['{}', '[]', '()', '*:', '::'];
 		}
@@ -2496,6 +2501,12 @@ export class XsltTokenDiagnostics {
 					// no error
 				} else if (prevToken.tokenType === TokenLevelState.uriLiteral && tokenType !== TokenLevelState.nodeNameTest) {
 					isXPathError = true;
+				} else if (prevToken.tokenType === TokenLevelState.nodeType) {
+					if (token.value === '()') {
+						isXPathError = prevToken.value.charAt(0) === '.';
+					} else {
+						isXPathError = true;
+					}
 				} else if (prevToken.tokenType === TokenLevelState.operator) {
 					if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rBr) {
 						isXPathError = true;
