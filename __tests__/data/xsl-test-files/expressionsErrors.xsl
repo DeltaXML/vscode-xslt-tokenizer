@@ -48,6 +48,8 @@
   <xsl:variable name="axisErr38" select="namespace::**"/>
   <xsl:variable name="axisErr34" select="following-sibling[1]::para"/>
   <xsl:variable name="axisErr35" select="(preceding)::note"/>
+  <xsl:variable name="attrTestErr3" select="book/@**"/>
+
 
   <!-- Predicates -->
   <xsl:variable name="qnameErr39" select=":book[author='John']"/>

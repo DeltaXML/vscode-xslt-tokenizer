@@ -17,7 +17,6 @@
   <xsl:variable name="closureErr1-PENDING" select="let $f := function($x) { $x + 1 } as xs:integer return $f(10)"/>
   <xsl:variable name="posPredErr1-PENDING" select="(10, 20, 30)[]"/>
 
-  <xsl:variable name="attrTestErr3-PENDING" select="book/@**"/>
   <xsl:variable name="nodeTestErr1-PENDING" select="text(ANY)"/>
   <xsl:variable name="nodeTestErr4-PENDING" select="processing-instruction('xml-stylesheet', 'a')"/>
 

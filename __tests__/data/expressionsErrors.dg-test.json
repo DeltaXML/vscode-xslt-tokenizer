@@ -395,6 +395,16 @@
       ]
     },
     {
+      "label": "attrTestErr3",
+      "xpath": "book/@**",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: * ",
+          "*"
+        ]
+      ]
+    },
+    {
       "label": "qnameErr39",
       "xpath": ":book[author='John']",
       "problems": [

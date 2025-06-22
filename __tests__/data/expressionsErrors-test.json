@@ -1297,6 +1297,28 @@
       ]
     },
     {
+      "label": "attrTestErr3",
+      "xpath": "book/@**",
+      "tokens": [
+        [
+          "book",
+          "nodeNameTest"
+        ],
+        [
+          "/",
+          "operator"
+        ],
+        [
+          "@*",
+          "attributeNameTest"
+        ],
+        [
+          "*",
+          "nodeType"
+        ]
+      ]
+    },
+    {
       "label": "qnameErr39",
       "xpath": ":book[author='John']",
       "tokens": [
