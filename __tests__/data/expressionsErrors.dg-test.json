@@ -772,6 +772,36 @@
       ]
     },
     {
+      "label": "ifErr6",
+      "xpath": "22 if (2 = 2) then 2 else 3",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 22 ",
+          "22"
+        ]
+      ]
+    },
+    {
+      "label": "ifErr6b",
+      "xpath": "(count(2)) if (2 = 2) then 2 else 3",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: ) ",
+          ")"
+        ]
+      ]
+    },
+    {
+      "label": "letAnonFnInvokeDiv",
+      "xpath": "function($x div 1) {$x + 1}",
+      "problems": [
+        [
+          "XPath: Unexpected token 'div' - expected syntax: \n'function($v) {expression} or\n'function($v as <TYPE>) as <TYPE> {expression}'",
+          "div"
+        ]
+      ]
+    },
+    {
       "label": "fnLiteralErr1b",
       "xpath": "function($x, ) { $x * 2 }",
       "problems": [

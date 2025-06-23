@@ -93,6 +93,9 @@
   <xsl:variable name="ifErr7" select="if (false() then (if (true())) then 'x' else 'y', 'z') else ('a', 'b')"/>
   <xsl:variable name="ifErr8" select="for $i in 1 to 2 return ($i = 1) then ('first', $i) else ('second', $i)"/>
   <xsl:variable name="ifErr" select="'book' if (1) then 1 else 2"/>
+  <xsl:variable name="ifErr6" select="22 if (2 = 2) then 2 else 3"/>
+  <xsl:variable name="ifErr6b" select="(count(2)) if (2 = 2) then 2 else 3"/>
+  <xsl:variable name="letAnonFnInvokeDiv" select="function($x div 1) {$x + 1}"/>
 
 
   <!-- Function literals and inline function expressions -->

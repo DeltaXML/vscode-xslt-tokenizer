@@ -117,6 +117,8 @@ export class XsltTokenDiagnostics {
 	static twoCharOps = new Set(['as', '//', '{}', '[]', '()', '*:', '::', '<<', '>>', '=>']);
 	static threeCharOps = new Set(['div', 'mod']);
 	static otherOps = new Set(['idiv', 'union', 'except', 'intersect', '&lt;&lt;', '&gt;&gt;']);
+	static anonFunctionOps = new Set([')', '(', 'as', 'map', 'array', ',']);
+	static anonFunctionVarOps = new Set([')','as', ',']);
 	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
 		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber) {
 			return;
@@ -1545,6 +1547,18 @@ export class XsltTokenDiagnostics {
 								}
 							} else if (tv === '}' && stackItem.awaitingMapKey) {
 								isXPathError = prevToken?.value !== '{';
+							}
+						}
+						if (stackItem?.token.context?.value === 'function' ) {
+							let isFnError = false;
+							if (prevToken?.tokenType === TokenLevelState.variable) {
+								isFnError = !XsltTokenDiagnostics.anonFunctionVarOps.has(tv);
+							} else {
+								isFnError = !XsltTokenDiagnostics.anonFunctionOps.has(tv);
+							}
+							if (isFnError) {
+								token.error = ErrorType.AnonymousFunctionSyntax;
+								problemTokens.push(token);
 							}
 						}
 						if (prevToken?.tokenType === TokenLevelState.complexExpression) {
@@ -3298,7 +3312,7 @@ export class XsltTokenDiagnostics {
 					msg = `XML: Invalid attribute names on element '${tokenValue}'`;
 					break;
 				case ErrorType.AnonymousFunctionSyntax:
-					msg = `XPath: Expected syntax: 'function($v) {expression}'`;
+					msg = `XPath: Unexpected token '${tokenValue}' - expected syntax: \n'function($v) {expression} or\n'function($v as <TYPE>) as <TYPE> {expression}'`;
 					break;
 				case ErrorType.XMLAttributeXMLNS:
 					msg = `XML: Invalid prefix for attribute on element '${tokenValue}'`;
