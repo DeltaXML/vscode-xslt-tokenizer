@@ -7,6 +7,7 @@
 
   <?test-attribute select?>
   <!-- following 2 pending tests appears to be fixed - correclty marking token before 'if' as an error -->
+  <xsl:variable name="anonFunction-PENDING" select="function(any) {}"/>
   <xsl:variable name="expressionErr9-PENDING" select="5 >> 2"/>
   <xsl:variable name="expressionErr26-PENDING" select="5 cast as node()"/>
   <xsl:variable name="expressionErr28b-PENDING" select="5 treat as 5"/>
