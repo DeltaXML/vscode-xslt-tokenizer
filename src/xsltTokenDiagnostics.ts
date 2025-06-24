@@ -119,6 +119,7 @@ export class XsltTokenDiagnostics {
 	static otherOps = new Set(['idiv', 'union', 'except', 'intersect', '&lt;&lt;', '&gt;&gt;']);
 	static anonFunctionOps = new Set([')', '(', 'as', 'map', 'array', ',']);
 	static anonFunctionVarOps = new Set([')','as', ',']);
+	static anonFunctionTokenTypes = new Set([TokenLevelState.operator, TokenLevelState.variable, TokenLevelState.simpleType]);
 	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
 		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber) {
 			return;
@@ -1204,8 +1205,10 @@ export class XsltTokenDiagnostics {
 				}
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				if (xpathStack.length > 0) {
-					const tv = xpathStack[xpathStack.length - 1].token.value;
+				const stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+
+				if (stackItem) {
+					const tv = stackItem.token.value;
 					if (prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && (tv === 'for' || tv === 'let' || tv === 'every' || tv === 'some')) {
 						if (xpathTokenType !== TokenLevelState.variable) {
 							const realType = (xpathTokenType === TokenLevelState.comment && index + 1 < allTokens.length) ? allTokens[index + 1].tokenType : xpathTokenType;
@@ -1262,6 +1265,16 @@ export class XsltTokenDiagnostics {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
 						}
+					}
+				} else if (stackItem?.token.context?.value === 'function' ) {
+					let invalidTokenForAnonFunction = !XsltTokenDiagnostics.anonFunctionTokenTypes.has(token.tokenType);
+					// nodeType is also permitted except when value is '*'
+					if (invalidTokenForAnonFunction && token.tokenType === TokenLevelState.nodeType && token.value !== '*') {
+						invalidTokenForAnonFunction = false;
+					}
+					if (invalidTokenForAnonFunction) {
+						token.error = ErrorType.AnonymousFunctionSyntax;
+						problemTokens.push(token);
 					}
 				}
 				if (isTypeError) {
@@ -1513,21 +1526,21 @@ export class XsltTokenDiagnostics {
 						let tv = token.value;
 
 						// start checks
-						let stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
-						const sv = stackItem?.token.value;
+						let latestStackItem = stackItem;
+						const sv = latestStackItem?.token.value;
 						const tokenIsComma = tv === ',';
 						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies');
 						if (popStackLaterForComma && xpathStack.length > 1) {
-							stackItem = xpathStack[xpathStack.length - 2];
+							latestStackItem = xpathStack[xpathStack.length - 2];
 							if (xpathStack.length > 1) {
 								let deleteCount = 0;
 								for (let i = xpathStack.length - 1; i > -1; i--) {
-									const stackItem = xpathStack[i];
-									const sv = stackItem.token.value;
+									const loopStackItem = xpathStack[i];
+									const sv = loopStackItem.token.value;
 									if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
-										inScopeXPathVariablesList = stackItem.variables;
-										xpathVariableCurrentlyBeingDefined = stackItem.xpathVariableCurrentlyBeingDefined;
-										preXPathVariable = stackItem.xpathVariableCurrentlyBeingDefined;
+										inScopeXPathVariablesList = loopStackItem.variables;
+										xpathVariableCurrentlyBeingDefined = loopStackItem.xpathVariableCurrentlyBeingDefined;
+										preXPathVariable = loopStackItem.xpathVariableCurrentlyBeingDefined;
 										deleteCount++;
 									} else {
 										break;
@@ -1538,18 +1551,18 @@ export class XsltTokenDiagnostics {
 								}
 							}
 						}
-						if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
+						if (latestStackItem && latestStackItem.curlyBraceType === CurlyBraceType.Map) {
 							if (tokenIsComma) {
-								if (stackItem.awaitingMapKey) {
+								if (latestStackItem.awaitingMapKey) {
 									isXPathError = true;
 								} else {
-									stackItem.awaitingMapKey = true;
+									latestStackItem.awaitingMapKey = true;
 								}
-							} else if (tv === '}' && stackItem.awaitingMapKey) {
+							} else if (tv === '}' && latestStackItem.awaitingMapKey) {
 								isXPathError = prevToken?.value !== '{';
 							}
 						}
-						if (stackItem?.token.context?.value === 'function' ) {
+						if (latestStackItem?.token.context?.value === 'function' ) {
 							let isFnError = false;
 							if (prevToken?.tokenType === TokenLevelState.variable) {
 								isFnError = !XsltTokenDiagnostics.anonFunctionVarOps.has(tv);
@@ -1604,9 +1617,9 @@ export class XsltTokenDiagnostics {
 							let currCharType = <CharLevelState>token.charType;
 							let nextToken = index + 1 < allTokens.length ? allTokens[index + 1] : undefined;
 							if (tv === ':') {
-								if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
-									if (stackItem.awaitingMapKey) {
-										stackItem.awaitingMapKey = false;
+								if (latestStackItem && latestStackItem.curlyBraceType === CurlyBraceType.Map) {
+									if (latestStackItem.awaitingMapKey) {
+										latestStackItem.awaitingMapKey = false;
 									} else {
 										isXPathError = true;
 									}

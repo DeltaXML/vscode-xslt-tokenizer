@@ -8,12 +8,16 @@
   <?test-attribute select?>
   <!-- following 2 pending tests appears to be fixed - correclty marking token before 'if' as an error -->
   <xsl:variable name="anonFunction-PENDING" select="function(any) {}"/>
+  <xsl:variable name="fnLiteralErr1-PENDING" select="function($x, node()) { $x * 2 }"/>
+  <xsl:variable name="fnLiteralErr2-PENDING" select="function($x as xs:string*) { $x * 2 }"/>
+  <xsl:variable name="fnLiteralErr3-PENDING" select="function($x as node()*) { $x * 2 }"/>
+  <xsl:variable name="fnLiteralErr4-PENDING" select="function($x as *) { $x * 2 }"/>
+  <xsl:variable name="test" select="node()"/>
   <xsl:variable name="expressionErr9-PENDING" select="5 >> 2"/>
   <xsl:variable name="expressionErr26-PENDING" select="5 cast as node()"/>
   <xsl:variable name="expressionErr28b-PENDING" select="5 treat as 5"/>
   <xsl:variable name="expressionErr53b-PENDING" select="[1, 2, 3] => array:filter(function($i as xs:integer) as { $i mod 2 = 1 })"/>
-  <xsl:variable name="fnLiteralErr1-PENDING" select="function($x, 5) { $x * 2 }"/>
-  <xsl:variable name="closureErr1-PENDING" select="let $f := function($x) { $x + 1 } as xs:integer return $f(10)"/>
+  <xsl:variable name="closureErr1-PENDING" select="let $f := function($x as xs:string) { $x + 1 } as xs:integer return $f(10)"/>
   <xsl:variable name="posPredErr1-PENDING" select="(10, 20, 30)[]"/>
 
   <xsl:variable name="nodeTestErr1-PENDING" select="text(ANY)"/>
