@@ -7,11 +7,19 @@
 
   <?test-attribute select?>
   <!-- following 2 pending tests appears to be fixed - correclty marking token before 'if' as an error -->
+  
+  <xsl:variable name="type1" select="'a' instance of xs:string*"/>
+  <xsl:variable name="nodeType1" select="'a' instance of (xs:string)*"/>
+  <xsl:variable name="nodeType2" select=". instance of node()*"/>
+  <xsl:variable name="nodeType3" select=". instance of (map())*"/>
+  <xsl:variable name="nodeType4" select=". instance of (map(*))*"/>
+  
   <xsl:variable name="anonFunction-PENDING" select="function(any) {}"/>
   <xsl:variable name="fnLiteralErr1-PENDING" select="function($x, node()) { $x * 2 }"/>
   <xsl:variable name="fnLiteralErr2-PENDING" select="function($x as xs:string*) { $x * 2 }"/>
   <xsl:variable name="fnLiteralErr3-PENDING" select="function($x as node()*) { $x * 2 }"/>
   <xsl:variable name="fnLiteralErr4-PENDING" select="function($x as *) { $x * 2 }"/>
+  <xsl:variable name="fnLiteralErr5-PENDING" select="function(*) {}"/>
   <xsl:variable name="test" select="node()"/>
   <xsl:variable name="expressionErr9-PENDING" select="5 >> 2"/>
   <xsl:variable name="expressionErr26-PENDING" select="5 cast as node()*"/>
