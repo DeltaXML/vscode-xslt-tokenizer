@@ -14,7 +14,8 @@
   <xsl:variable name="fnLiteralErr4-PENDING" select="function($x as *) { $x * 2 }"/>
   <xsl:variable name="test" select="node()"/>
   <xsl:variable name="expressionErr9-PENDING" select="5 >> 2"/>
-  <xsl:variable name="expressionErr26-PENDING" select="5 cast as node()"/>
+  <xsl:variable name="expressionErr26-PENDING" select="5 cast as node()*"/>
+  <xsl:variable name="expressionErr26b-PENDING" select="5 castable as node()*"/>
   <xsl:variable name="expressionErr28b-PENDING" select="5 treat as 5"/>
   <xsl:variable name="expressionErr53b-PENDING" select="[1, 2, 3] => array:filter(function($i as xs:integer) as { $i mod 2 = 1 })"/>
   <xsl:variable name="closureErr1-PENDING" select="let $f := function($x as xs:string) { $x + 1 } as xs:integer return $f(10)"/>
