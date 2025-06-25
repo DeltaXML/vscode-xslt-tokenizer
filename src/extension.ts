@@ -175,6 +175,10 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
+	context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(document => {
+		docChangeHandler.handlEditorOpenForDev(vscode.window.activeTextEditor);
+	}));
+
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
 		const t = event.execution.task;
 		if (fileSelector.completedPick === true && (t.definition.type === 'xslt' || t.definition.type === 'xslt-js')) {
@@ -243,6 +247,8 @@ export function activate(context: vscode.ExtensionContext) {
 	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
 	let dcpFormatter = new XMLDocumentFormattingProvider(DCPConfiguration.configuration);
 	let schFormatter = new XMLDocumentFormattingProvider(SchConfiguration.configuration);
+	let dv2Formatter = new XMLDocumentFormattingProvider(Dv2Configuration.configuration);
+	dv2Formatter.indentMixedContent = true;
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt',
 		xsltFormatter));
@@ -278,6 +284,13 @@ export function activate(context: vscode.ExtensionContext) {
 		schFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('sch',
 		schFormatter, '\n', '/'));
+
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('dv2',
+		dv2Formatter));
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('dv2',
+		dv2Formatter));
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('dv2',
+		dv2Formatter, '\n', '/'));
 
 	let workspaceRoot = vscode.workspace.rootPath;
 	if (!workspaceRoot) {

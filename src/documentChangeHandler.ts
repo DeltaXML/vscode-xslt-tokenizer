@@ -194,6 +194,27 @@ export class DocumentChangeHandler {
 		}
 	};
 
+	public handlEditorOpenForDev = (editor: vscode.TextEditor | undefined) => {
+		if (!editor) {
+			return;
+		}
+		const doc = editor.document;
+		if (doc.languageId === 'dv2') {
+			
+		} else if (doc.languageId === 'xml') {
+			const document = doc;
+			const first300 = document.getText().substring(0, 300);
+			const hasDeltaXml = first300.includes("xmlns:deltaxml");
+			if (hasDeltaXml) {
+				vscode.languages.setTextDocumentLanguage(document, 'dv2');
+			}
+		}
+		// enable following to format the dv2 file when it's opened
+		// if (doc.languageId === 'dv2' && doc.lineCount <= 2) {
+		// 	vscode.commands.executeCommand('editor.action.formatDocument');
+		// }
+	};
+
 	private getXPathDocumentChangeHandler() {
 		if (this.xpathDocumentChangeHanlder === null) {
 			this.xpathDocumentChangeHanlder = new XPathDocumentChangeHandler();
