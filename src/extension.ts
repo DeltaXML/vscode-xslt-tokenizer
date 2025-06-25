@@ -76,6 +76,10 @@ export function activate(context: vscode.ExtensionContext) {
 	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection);
 	const bpmnSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, bpmnDiagnosticsCollection);
 
+	const dv2DiagnosticsCollection = vscode.languages.createDiagnosticCollection('dv2');
+	const dv2SymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, dv2DiagnosticsCollection);
+
+
 	const docChangeHandler = new DocumentChangeHandler();
 	let activeEditor = vscode.window.activeTextEditor;
 	if (activeEditor) {
@@ -194,6 +198,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'sch' }, schSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml' }, xmlSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'bpmn' }, bpmnSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dv2' }, dv2SymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));
