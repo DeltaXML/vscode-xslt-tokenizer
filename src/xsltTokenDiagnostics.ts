@@ -2895,8 +2895,22 @@ export class XsltTokenDiagnostics {
 				break;
 			default:
 				kind = vscode.SymbolKind.Null;
+				const prefixIdx = name.indexOf(':');
+				if (prefixIdx > -1) {
+					const prefix = name.substring(0, prefixIdx);
+					switch (prefix) {
+						case 'format':
+							kind = vscode.SymbolKind.Enum;
+							break;
+						case 'preserve':
+							kind = vscode.SymbolKind.Key;
+							break;
+						case 'deltaxml':
+							kind = vscode.SymbolKind.Function;
+							break;
+					}
+				}
 				break;
-
 		}
 		let startCharPos = fullStartToken.startCharacter > 0 ? fullStartToken.startCharacter - 1 : 0;
 		let startPos = new vscode.Position(fullStartToken.line, startCharPos);
