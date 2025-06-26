@@ -9,7 +9,7 @@ import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, Glob
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
-import { XSLTConfiguration } from './languageConfigurations';
+import { Dv2Configuration, XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
 
 enum HasCharacteristic {
@@ -403,6 +403,7 @@ export class XsltTokenDiagnostics {
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
 		const htmlParserString = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
+		let isDeltaV2 = false;
 		XsltTokenDiagnostics.isHtmlParserJarSet = !!htmlParserString && htmlParserString.trim().length > 0;
 
 		if (languageConfig.isVersion4) {
@@ -880,11 +881,16 @@ export class XsltTokenDiagnostics {
 								break;
 						}
 						break;
-
-					case XSLTokenLevelState.attributeName:
 					case XSLTokenLevelState.xmlnsName:
+					case XSLTokenLevelState.attributeName:
 						rootXmlnsName = null;
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						if (onRootStartTag && !isDeltaV2 && xmlTokenType === XSLTokenLevelState.xmlnsName) {
+							isDeltaV2 = attNameText === 'xmlns:deltaxml';
+							if (isDeltaV2) {
+								languageConfig = Dv2Configuration.configuration;
+							}
+						}
 						withinTypeDeclarationAttr = attNameText === 'as';
 						let problemReported = false;
 						if (prevToken) {
@@ -1047,6 +1053,10 @@ export class XsltTokenDiagnostics {
 									token['error'] = ErrorType.XPathEmpty;
 								}
 								break;
+						}
+						if (languageConfig.docType === DocumentTypes.DV2) {
+							const isDeltaV2attrValue = tagAttributeNames.length > 0 ? tagAttributeNames[tagAttributeNames.length - 1] === 'deltaxml:deltaV2' : false;
+							tagIdentifierName = isDeltaV2attrValue ? fullVariableName : '';
 						}
 
 						if (token.error) {

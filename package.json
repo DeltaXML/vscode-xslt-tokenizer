@@ -76,6 +76,14 @@
 				"editor.tabSize": 2,
 				"outline.showArrays": false
 			},
+			"[dv2]": {
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.detectIndentation": true,
+				"editor.insertSpaces": true,
+				"editor.tabSize": 4,
+				"outline.showArrays": false
+
+			},
 			"[bpmn]": {
 				"editor.semanticHighlighting.enabled": true
 			}
