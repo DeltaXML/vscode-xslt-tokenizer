@@ -1053,7 +1053,7 @@ export class XsltTokenDiagnostics {
 								}
 								break;
 						}
-						if (languageConfig.docType === DocumentTypes.DV2) {
+						if (languageConfig.docType === DocumentTypes.DV2 && tagIdentifierName === '') {
 							const isDeltaV2attrValue = tagAttributeNames.length > 0 ? tagAttributeNames[tagAttributeNames.length - 1] === 'deltaxml:deltaV2' : false;
 							tagIdentifierName = isDeltaV2attrValue ? fullVariableName : '';
 						}
