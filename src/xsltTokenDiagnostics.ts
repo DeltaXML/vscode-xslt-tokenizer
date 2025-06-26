@@ -2908,6 +2908,10 @@ export class XsltTokenDiagnostics {
 						case 'deltaxml':
 							kind = vscode.SymbolKind.Function;
 							break;
+						case 'dxa':
+						case 'dxx':
+							kind = vscode.SymbolKind.TypeParameter;
+							break;
 					}
 				}
 				break;
