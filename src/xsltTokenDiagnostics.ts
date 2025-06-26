@@ -403,7 +403,6 @@ export class XsltTokenDiagnostics {
 		const isSchematron = docType === DocumentTypes.SCH;
 		let pendingTemplateParamErrors: BaseToken[] = [];
 		const htmlParserString = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
-		let isDeltaV2 = false;
 		XsltTokenDiagnostics.isHtmlParserJarSet = !!htmlParserString && htmlParserString.trim().length > 0;
 
 		if (languageConfig.isVersion4) {
@@ -885,8 +884,8 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.attributeName:
 						rootXmlnsName = null;
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						if (onRootStartTag && !isDeltaV2 && xmlTokenType === XSLTokenLevelState.xmlnsName) {
-							isDeltaV2 = attNameText === 'xmlns:deltaxml';
+						if (onRootStartTag && languageConfig.docType === DocumentTypes.Other && xmlTokenType === XSLTokenLevelState.xmlnsName) {
+							const isDeltaV2 = attNameText === 'xmlns:deltaxml';
 							if (isDeltaV2) {
 								languageConfig = Dv2Configuration.configuration;
 							}
