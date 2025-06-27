@@ -1063,7 +1063,7 @@ export class XsltTokenDiagnostics {
 									const elementName =  XsltTokenDiagnostics.getTextForToken(infoToken.line, infoToken, document);
 									if (elementStack.length > 0 && elementName !== 'deltaxml:textGroup') {
 										const elementPath = elementStack.map(e => e.symbolName).join('/');
-										infoToken.value = `${fullVariableName} deltaV2 at: ${elementPath}/${elementName}`;
+										infoToken.value = `[DELTA] ${fullVariableName} on <${elementName}> at /${elementPath}/${elementName}`;
 									}
 									problemTokens.push(infoToken);
 								}
