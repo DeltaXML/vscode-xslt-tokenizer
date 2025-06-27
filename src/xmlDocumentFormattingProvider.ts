@@ -140,7 +140,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			this.xpLexer.reset();
 		}
 
-		allTokens.forEach((token) => {
+		allTokens.forEach((token, index) => {
 			let newMultiLineState = MultiLineState.None;
 			let stackLength = xmlSpacePreserveStack.length;
 			let addNewLine = false;
@@ -189,7 +189,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 									attributeValueOffset = 0;
 									xmlSpaceAttributeValue = null;
 								}
-									newNestingLevel++;
+								newNestingLevel++;
 								if (awaitingSecondTag === HasCharacteristic.unknown) {
 									firstStartTagLineNumber = lineNumber;
 									awaitingSecondTag = HasCharacteristic.yes;
@@ -224,7 +224,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								// outdent:
 								indent = -1;
 								newNestingLevel--;
-								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken, token);
+								let prevTokenWasTextOrEndOfStartTag = isPrevTokenOnTextOrEndOfStartTag(prevToken, document, index, allTokens);
+
+								addNewLine = (!prevTokenWasTextOrEndOfStartTag) && this.shouldAddNewLine(documenthasNewLines, prevToken, token);
 								if (this.isCloseTag) {
 									closeTagWithinText = this.closeTagPos?.line === token.line &&
 										this.closeTagPos.character >= token.startCharacter &&
@@ -556,3 +558,18 @@ enum MultiLineState {
 	Start,
 	Middle
 }
+function isPrevTokenOnTextOrEndOfStartTag(prevToken: BaseToken | null, document: vscode.TextDocument, index: number, allTokens: BaseToken[]) {
+	let prevTokenWasTextOrEndOfStartTag = false;
+	if (prevToken) {
+		let prevTokenWasText = prevToken.charType === XMLCharState.lText;
+		if (prevTokenWasText && index > 2) {
+			const prevToken2 = allTokens[index - 2];
+			// const debugPrevToken = XsltTokenDiagnostics.getTextForToken(prevToken2.line, prevToken2, document);
+			const prevToken2WasEndOfStartTag = prevToken2.charType === XMLCharState.rSt || prevToken2.charType === XMLCharState.rStNoAtt;
+			prevTokenWasText = prevToken2WasEndOfStartTag;
+		}
+		prevTokenWasTextOrEndOfStartTag = prevTokenWasText || prevToken.charType === XMLCharState.rSt || prevToken.charType === XMLCharState.rStNoAtt;
+	}
+	return prevTokenWasTextOrEndOfStartTag;
+}
+
