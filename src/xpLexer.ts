@@ -1320,6 +1320,7 @@ export enum ErrorType {
     MissingContextItemForGrouping,
     MissingContextItemForMerge,
     MissingContextItemForRegex,
+    Info_deltaV2
 }
 
 export interface BaseToken {

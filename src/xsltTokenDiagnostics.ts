@@ -523,7 +523,6 @@ export class XsltTokenDiagnostics {
 			xsltPrefixesToURIs.set('ixsl', XSLTnamespaces.IXSL);
 			inheritedPrefixes = inheritedPrefixes.concat(['array', 'map', 'math', 'xs', 'fn', 'xsl', 'ixsl']);
 		}
-
 		allTokens.forEach((token, index) => {
 			lineNumber = token.line;
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
@@ -1056,6 +1055,19 @@ export class XsltTokenDiagnostics {
 						if (languageConfig.docType === DocumentTypes.DV2 && tagIdentifierName === '') {
 							const isDeltaV2attrValue = tagAttributeNames.length > 0 ? tagAttributeNames[tagAttributeNames.length - 1] === 'deltaxml:deltaV2' : false;
 							tagIdentifierName = isDeltaV2attrValue ? fullVariableName : '';
+							if (isDeltaV2attrValue && startTagToken) {
+								const infoToken = { ...startTagToken };
+								// variableName is attributeValue with surrounding quotes stripped from token
+								if (infoToken && isDeltaV2attrValue && variableName.length === 1) {
+									infoToken.error = ErrorType.Info_deltaV2;
+									const elementName =  XsltTokenDiagnostics.getTextForToken(infoToken.line, infoToken, document);
+									if (elementStack.length > 0) {
+										const elementPath = elementStack.map(e => e.symbolName).join('/');
+										infoToken.value = `${fullVariableName} deltaV2 at: ${elementPath}/${elementName}`;
+									}
+									problemTokens.push(infoToken);
+								}
+							}
 						}
 
 						if (token.error) {
@@ -3324,6 +3336,10 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.DuplicateAccumulatorName:
 					msg = `XSLT: Duplicate xsl:accumulator name '${tokenValue}'`;
+					break;
+				case ErrorType.Info_deltaV2:
+					msg = tokenValue;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				default:
 					msg = 'Unexepected Error';
