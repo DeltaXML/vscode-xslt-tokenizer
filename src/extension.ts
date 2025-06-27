@@ -77,7 +77,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const bpmnSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, bpmnDiagnosticsCollection);
 
 	const dv2DiagnosticsCollection = vscode.languages.createDiagnosticCollection('dv2');
-	const dv2SymbolProvider = new XsltSymbolProvider(Dv2Configuration.configuration, dv2DiagnosticsCollection);
+	const dv2SymbolProvider = new XsltSymbolProvider(Dv2Configuration.configuration, dv2DiagnosticsCollection, xmlDiagnosticsCollection);
 
 
 	const docChangeHandler = new DocumentChangeHandler();
@@ -180,7 +180,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(document => {
-		docChangeHandler.handlEditorOpenForDev(vscode.window.activeTextEditor, xmlDiagnosticsCollection);
+		docChangeHandler.handlEditorOpenForDev(vscode.window.activeTextEditor);
 	}));
 
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {

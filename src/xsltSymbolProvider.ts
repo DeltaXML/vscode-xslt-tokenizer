@@ -76,6 +76,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static instanceForXSLT: XsltSymbolProvider|null = null;
 	private readonly xslLexer: XslLexer;
 	public readonly collection: vscode.DiagnosticCollection | null;
+	public readonly oldCollection: vscode.DiagnosticCollection | null;
 	private internalDiagnostics: vscode.Diagnostic[];
 	private readonly languageConfig: LanguageConfiguration;
 	private docType: DocumentTypes;
@@ -85,10 +86,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
 	private internalImportedGlobals: GlobalInstructionData[] = [];
 
-	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null) {
+	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null = null, oldCollection: vscode.DiagnosticCollection | null = null) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
+		this.oldCollection = oldCollection;
 		this.languageConfig = xsltConfiguration;
 		this.docType = xsltConfiguration.docType;
 		this.internalDiagnostics = [];
@@ -207,6 +209,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					importErrors.forEach((importError) => {
 						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
 					});
+					if (this.oldCollection) {
+						this.oldCollection.delete(document.uri);
+					}
 					let allDiagnostics = importDiagnostics.concat(diagnostics);
 					if (allDiagnostics.length > 0) {
 						this.collection.set(document.uri, allDiagnostics);

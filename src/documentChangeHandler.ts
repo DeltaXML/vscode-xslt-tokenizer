@@ -194,7 +194,7 @@ export class DocumentChangeHandler {
 		}
 	};
 
-	public handlEditorOpenForDev = async (editor: vscode.TextEditor | undefined, diagnosticCollection: vscode.DiagnosticCollection) => {
+	public handlEditorOpenForDev = (editor: vscode.TextEditor | undefined) => {
 		if (!editor) {
 			return;
 		}
@@ -206,8 +206,7 @@ export class DocumentChangeHandler {
 			const first300 = document.getText().substring(0, 300);
 			const hasDeltaXml = first300.includes("xmlns:deltaxml");
 			if (hasDeltaXml) {
-				await vscode.languages.setTextDocumentLanguage(document, 'dv2');
-				diagnosticCollection.delete(doc.uri);
+				vscode.languages.setTextDocumentLanguage(document, 'dv2');
 			}
 		}
 		// enable following to format the dv2 file when it's opened
