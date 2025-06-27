@@ -30,12 +30,14 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	private isCloseTag = false;
 	private closeTagLine: vscode.TextLine | null = null;
 	private closeTagPos: vscode.Position | null = null;
+	private diagnosticsCollection: vscode.DiagnosticCollection | null;
 
-	constructor(xsltConfiguration: LanguageConfiguration) {
+	constructor(xsltConfiguration: LanguageConfiguration, diagnosticCollection: vscode.DiagnosticCollection | null = null) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.docType = xsltConfiguration.docType;
 		this.xpLexer = new XPathLexer();
 		this.xslLexer.provideCharLevelState = true;
+		this.diagnosticsCollection = diagnosticCollection;
 	}
 
 	public provideOnTypeFormattingEdits = (document: vscode.TextDocument, pos: vscode.Position, ch: string, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
@@ -517,6 +519,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			prevToken = token;
 		});
 		this.isCloseTag = false;
+		if (result.length > 0 && this.diagnosticsCollection) {
+			this.diagnosticsCollection.delete(document.uri);
+		}
 		return result;
 	};
 

@@ -252,7 +252,8 @@ export function activate(context: vscode.ExtensionContext) {
 	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
 	let dcpFormatter = new XMLDocumentFormattingProvider(DCPConfiguration.configuration);
 	let schFormatter = new XMLDocumentFormattingProvider(SchConfiguration.configuration);
-	let dv2Formatter = new XMLDocumentFormattingProvider(Dv2Configuration.configuration);
+	// because we switch from 'xml' to 'dv2' language id - we must reset the xmlDiagnosticsCollection collection on reformatting dv2 files:
+	let dv2Formatter = new XMLDocumentFormattingProvider(Dv2Configuration.configuration, xmlDiagnosticsCollection);
 	dv2Formatter.indentMixedContent = true;
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt',
