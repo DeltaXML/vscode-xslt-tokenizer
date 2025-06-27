@@ -194,25 +194,21 @@ export class DocumentChangeHandler {
 		}
 	};
 
-	public handlEditorOpenForDev = (editor: vscode.TextEditor | undefined) => {
-		if (!editor) {
+	public handlEditorOpenForDev = async (eventDoc: vscode.TextDocument) => {
+		if (eventDoc.uri.scheme !== 'file') {
 			return;
 		}
-		const doc = editor.document;
-		if (doc.languageId === 'dv2') {
-			
-		} else if (doc.languageId === 'xml') {
-			const document = doc;
-			const first300 = document.getText().substring(0, 300);
+
+		if (eventDoc.languageId === 'dv2') {
+			// we're ok
+		} else if (eventDoc.languageId === 'xml') {
+			const first300 = eventDoc.getText().substring(0, 300);
 			const hasDeltaXml = first300.includes("xmlns:deltaxml");
+
 			if (hasDeltaXml) {
-				vscode.languages.setTextDocumentLanguage(document, 'dv2');
+				await vscode.languages.setTextDocumentLanguage(eventDoc, 'dv2');
 			}
 		}
-		// enable following to format the dv2 file when it's opened
-		// if (doc.languageId === 'dv2' && doc.lineCount <= 2) {
-		// 	vscode.commands.executeCommand('editor.action.formatDocument');
-		// }
 	};
 
 	private getXPathDocumentChangeHandler() {
