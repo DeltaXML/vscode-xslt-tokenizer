@@ -522,18 +522,13 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 	private shouldAddNewLine(documenthasNewLines: HasCharacteristic, prevToken: BaseToken | null, token: BaseToken): boolean {
 		let addNewLine = false;
-		if (documenthasNewLines === HasCharacteristic.no) {
-			if (this.indentMixedContent) {
-				addNewLine = prevToken?.line === token.line;
-			} else {
-				// TODO!!! check if prevtoken was a right-close-tag or a self-closing tag or comment????
-				let pct = prevToken?.line === token.line && prevToken.charType;
-				addNewLine = pct === XMLCharState.rSelfCt || pct === XMLCharState.rSt || pct === XMLCharState.rCt ||
-					pct === XMLCharState.rSelfCtNoAtt || pct === XMLCharState.rStNoAtt ||
-					pct === XMLCharState.rComment || pct === XMLCharState.rPi;
-			}
-		} else if (this.indentMixedContent) {
+		if (this.indentMixedContent) {
 			addNewLine = prevToken?.line === token.line;
+		} else if (documenthasNewLines === HasCharacteristic.no) {
+			let pct = prevToken?.line === token.line && prevToken.charType;
+			addNewLine = pct === XMLCharState.rSelfCt || pct === XMLCharState.rSt || pct === XMLCharState.rCt ||
+				pct === XMLCharState.rSelfCtNoAtt || pct === XMLCharState.rStNoAtt ||
+				pct === XMLCharState.rComment || pct === XMLCharState.rPi;
 		}
 		return addNewLine;
 	}
