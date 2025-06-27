@@ -180,7 +180,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(document => {
-		docChangeHandler.handlEditorOpenForDev(vscode.window.activeTextEditor);
+		docChangeHandler.handlEditorOpenForDev(vscode.window.activeTextEditor, xmlDiagnosticsCollection);
 	}));
 
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
