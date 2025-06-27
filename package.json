@@ -81,8 +81,8 @@
 				"editor.detectIndentation": true,
 				"editor.insertSpaces": true,
 				"editor.tabSize": 4,
-				"outline.showArrays": false
-
+				"outline.showArrays": false,
+				"editor.semanticHighlighting.enabled": true
 			},
 			"[bpmn]": {
 				"editor.semanticHighlighting.enabled": true
