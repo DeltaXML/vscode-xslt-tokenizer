@@ -117,8 +117,9 @@
 				"category": "XSLT"
 			},
 			{
-				"command": "xslt-xpath.formatUnchecked",
-				"title": "Format XML with newlines inside mixed-content",
+				"command": "editor.action.formatDocument",
+				"title": "Format XML - even mixed-content elements",
+				"icon": "$(list-tree)",
 				"category": "XML"
 			},
 			{
@@ -152,6 +153,15 @@
 				"category": "XML"
 			}
 		],
+		"menus": {
+			"editor/title": [
+				{
+					"command": "editor.action.formatDocument",
+					"group": "navigation",
+					"when": "editorLangId == 'dv2'"
+				}
+			]
+		},
 		"semanticTokenScopes": [
 			{
 				"scopes": {
