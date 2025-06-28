@@ -84,6 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let activeEditor = vscode.window.activeTextEditor;
 	if (activeEditor) {
 		docChangeHandler.registerXMLEditor(activeEditor);
+		docChangeHandler.handlEditorOpenForDev(activeEditor.document);
 	}
 
 	async function formatUnchecked() {
