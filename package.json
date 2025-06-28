@@ -123,6 +123,21 @@
 				"category": "XML"
 			},
 			{
+				"command": "editor.action.marker.next",
+				"title": "Next problem item",
+				"icon": "$(diff-editor-next-change)",
+				"category": "XML",
+				"when": "editorLangId == 'dv2'"
+			},
+			{
+				"command": "editor.action.marker.prev",
+				"title": "Next problem item",
+				"icon": "$(diff-editor-previous-change)",
+				"category": "XML",
+				"when": "editorLangId == 'dv2'"
+
+			},
+			{
 				"command": "xslt-xpath.gotoXPath",
 				"title": "Goto XPath",
 				"category": "XML"
@@ -157,6 +172,16 @@
 			"editor/title": [
 				{
 					"command": "editor.action.formatDocument",
+					"group": "navigation",
+					"when": "editorLangId == 'dv2'"
+				},
+				{
+					"command": "editor.action.marker.next",
+					"group": "navigation",
+					"when": "editorLangId == 'dv2'"
+				},
+				{
+					"command": "editor.action.marker.prev",
 					"group": "navigation",
 					"when": "editorLangId == 'dv2'"
 				}
