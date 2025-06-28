@@ -1059,13 +1059,16 @@ export class XsltTokenDiagnostics {
 								const infoToken = { ...startTagToken };
 								// variableName is attributeValue with surrounding quotes stripped from token
 								if (infoToken && isDeltaV2attrValue && variableName.length === 1) {
-									infoToken.error = ErrorType.Info_deltaV2;
 									const elementName =  XsltTokenDiagnostics.getTextForToken(infoToken.line, infoToken, document);
-									if (elementStack.length > 0 && elementName !== 'deltaxml:textGroup') {
-										const elementPath = elementStack.map(e => e.symbolName).join('/');
-										infoToken.value = `[DELTA] ${fullVariableName} on <${elementName}> at /${elementPath}/${elementName}`;
+									if (elementStack.length > 0 && elementName !== 'deltaxml:textGroup' && elementName !== 'deltaxml:attributes') {
+										const parentElementName = elementStack.length > 1 ? elementStack[elementStack.length - 1].symbolName : null;
+										if (parentElementName !== 'deltaxml:attributes') {
+											infoToken.error = ErrorType.Info_deltaV2;
+											const elementPath = elementStack.map(e => e.symbolName).join('/');
+											infoToken.value = `[DELTA] ${fullVariableName} on <${elementName}> at /${elementPath}`;
+											problemTokens.push(infoToken);
+										}
 									}
-									problemTokens.push(infoToken);
 								}
 							}
 						}
