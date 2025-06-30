@@ -167,6 +167,11 @@
 				"command": "xslt-xpath.selectFirstChildElement",
 				"title": "Select first child element",
 				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.clearDv2Diagnostics",
+				"title": "Clear delta file problem items",
+				"category": "DELTA"
 			}
 		],
 		"menus": {

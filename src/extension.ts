@@ -79,7 +79,6 @@ export function activate(context: vscode.ExtensionContext) {
 	const dv2DiagnosticsCollection = vscode.languages.createDiagnosticCollection('dv2');
 	const dv2SymbolProvider = new XsltSymbolProvider(Dv2Configuration.configuration, dv2DiagnosticsCollection, xmlDiagnosticsCollection);
 
-
 	const docChangeHandler = new DocumentChangeHandler();
 	let activeEditor = vscode.window.activeTextEditor;
 	if (activeEditor) {
@@ -233,6 +232,9 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPathInDocument', (...args) => selectXPathInDocument(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setExtensionXPathVariable', (...args) => XsltTokenCompletions.extXPathVariables.set(args[0], args[1])));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.clearDv2Diagnostics', () => {
+		dv2DiagnosticsCollection.clear();
+	}));
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xslt', new XSLTCodeActions(), { providedCodeActionKinds: XSLTCodeActions.providedCodeActionKinds }));
 	context.subscriptions.push(
 		vscode.commands.registerCommand(XSLTCodeActions.COMMAND, () => vscode.env.openExternal(vscode.Uri.parse('https://unicode.org/emoji/charts-12.0/full-emoji-list.html')))
