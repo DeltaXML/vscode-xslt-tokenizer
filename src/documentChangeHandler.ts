@@ -8,6 +8,7 @@ import { XslLexerLight } from './xslLexerLight';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { FileSelection } from './fileSelection';
+import { FormattingProviderDV2 } from './FormattingProviderDV2';
 
 export interface TagRenameEdit {
 	range: vscode.Range;
@@ -202,6 +203,10 @@ export class DocumentChangeHandler {
 		if (eventDoc.languageId === 'dv2') {
 			// we're ok
 		} else if (eventDoc.languageId === 'xml') {
+			const formattedXML = FormattingProviderDV2.formatXML(eventDoc.getText());
+			console.log('formatted:');
+			console.log(formattedXML);
+
 			const first300 = eventDoc.getText().substring(0, 300);
 			const hasDeltaXml = first300.includes("xmlns:deltaxml");
 
