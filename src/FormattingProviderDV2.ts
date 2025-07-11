@@ -216,6 +216,9 @@ export class FormattingProviderDV2 {
                                 break;
                             case XMLCharState.lPi:
                                 // may be xml-declaration:
+                                addNewLine = this.shouldAddNewLine(prevToken, token);
+                                break;
+                            case XMLCharState.rPi:
                                 if (awaitingSecondTag === HasCharacteristic.unknown) {
                                     firstStartTagLineNumber = lineNumber;
                                     awaitingSecondTag = HasCharacteristic.yes;
@@ -278,8 +281,8 @@ export class FormattingProviderDV2 {
                             }
                         }
                         break;
-                    case XSLTokenLevelState.processingInstrValue:
                     case XSLTokenLevelState.processingInstrName:
+                    case XSLTokenLevelState.processingInstrValue:
                         {
                             attributeNameOffset = 0;
                             newMultiLineState = (multiLineState === MultiLineState.None) ? MultiLineState.Start : MultiLineState.Middle;
