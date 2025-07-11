@@ -71,8 +71,8 @@ export class FormattingProviderDV2 {
     public static formatXML(xml: string) {
         let result: string = '';
         const minimiseXPathIndents = true;
-        const indentString = '  ';
-        const indentCharLength = indentString.length;
+        const indentString = ' ';
+        const indentCharLength = 2;
         const useTabs = false;
         const newLineChar = '\n';
         let isCloseTag = false;
@@ -302,6 +302,7 @@ export class FormattingProviderDV2 {
                                 && token.length > 0 && !trimLine.startsWith('-->') && !trimLine.startsWith('<!--');
                             indent = doIndent ? 1 : 0;
                             attributeNameOffset = doIndent ? 5 : 0;
+                            addNewLine = trimLine.startsWith('<!--') && this.shouldAddNewLine(prevToken, token);
                         }
                         break;
                 }
@@ -313,40 +314,43 @@ export class FormattingProviderDV2 {
             const tokenText = this.getText(token, currentLine);
 
             if (addNewLine || (prevLineNumber > -1 && lineNumberDiff > 0)) {
-                    let totalAttributeOffset;
-					if (!isXMLToken && minimiseXPathIndents) {
-						totalAttributeOffset = 0;
-					} else {
-						if (attributeValueOffset > 0) {
-							totalAttributeOffset = attributeValueOffset;
-						} else {
-							totalAttributeOffset = attributeNameOffset;
-						}
-					}
-					let requiredIndentLength = totalAttributeOffset + (nestingLevel * indentCharLength);
-					if (totalAttributeOffset > 0) {
-						indent = -1 + indent;
-					}
-                    requiredIndentLength += (indent * indentCharLength);
+                let totalAttributeOffset;
+                if (!isXMLToken && minimiseXPathIndents) {
+                    totalAttributeOffset = 0;
+                } else {
+                    if (attributeValueOffset > 0) {
+                        totalAttributeOffset = attributeValueOffset;
+                    } else {
+                        totalAttributeOffset = attributeNameOffset;
+                    }
+                }
+                let requiredIndentLength = totalAttributeOffset + (nestingLevel * indentCharLength);
+                if (totalAttributeOffset > 0) {
+                    indent = -1 + indent;
+                }
+                requiredIndentLength += (indent * indentCharLength);
 
-					requiredIndentLength = requiredIndentLength < 0 ? 0 : requiredIndentLength;
+                requiredIndentLength = requiredIndentLength < 0 ? 0 : requiredIndentLength;
+                console.log({ nestingLevel, indentCharLength, indent });
                 let replacementString = indentString.repeat(requiredIndentLength);
-                console.log('NEW_LINE_' + indent + '[' + replacementString + '|' + tokenText + ']');
+                console.log('NEW_LINE_' + requiredIndentLength + '[' + replacementString + '|' + tokenText + ']');
                 result += newLineChar + replacementString + tokenText;
             } else {
                 // not on a new line so insert characters between this token and the last
-                console.log('SAME_LINE[' + this.getTextPrecedingToken(prevToken, token, currentLine) +  '|' + tokenText + ']');
-                result += this.getTextPrecedingToken(prevToken, token, currentLine) + tokenText ;
+                console.log('SAME_LINE[' + this.getTextPrecedingToken(prevToken, token, currentLine) + '|' + tokenText + ']');
+                result += this.getTextPrecedingToken(prevToken, token, currentLine) + tokenText;
             }
             withinCDATA = false;
-			prevLineNumber = lineNumber;
-			nestingLevel = newNestingLevel;
-			multiLineState = newMultiLineState;
-			prevToken = token;
+            prevLineNumber = lineNumber;
+            nestingLevel = newNestingLevel;
+            multiLineState = newMultiLineState;
+            prevToken = token;
 
         });
         isCloseTag = false;
-        console.log(`RESULT{${result}}`);
+        console.log('formatted:');
+        const debugFormatted = result.replace(/ /g, '.');
+        console.log(debugFormatted);
         return result;
     }
 }

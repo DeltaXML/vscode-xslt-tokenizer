@@ -204,9 +204,6 @@ export class DocumentChangeHandler {
 			// we're ok
 		} else if (eventDoc.languageId === 'xml') {
 			const formattedXML = FormattingProviderDV2.formatXML(eventDoc.getText());
-			console.log('formatted:');
-			console.log(formattedXML);
-
 			const first300 = eventDoc.getText().substring(0, 300);
 			const hasDeltaXml = first300.includes("xmlns:deltaxml");
 
