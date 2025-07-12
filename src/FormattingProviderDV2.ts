@@ -68,6 +68,16 @@ export class FormattingProviderDV2 {
         }
     }
 
+    private static getSignificantTextOnLinePrecedingToken(prevToken: BaseToken | null, currentToken: BaseToken, currentLine: string) {
+        if (prevToken && prevToken.line === currentToken.line) {
+            return '';
+        }
+        const precedingText = currentLine.substring(0, currentToken.startCharacter - 1);
+        // only return text if it contains non-whitespace characters
+        return precedingText.trim().length > 0 ? precedingText : '';
+    }
+
+
     public static formatXML(xml: string) {
         let result: string = '';
         const minimiseXPathIndents = true;
@@ -312,7 +322,7 @@ export class FormattingProviderDV2 {
             }
 
             for (let i = 0; i < lineNumberDiff - 1; i++) {
-                result += newLineChar;
+                result += newLineChar + xmlLines[lineNumber - lineNumberDiff + i + 1];
             }
             const tokenText = this.getText(token, currentLine);
 
@@ -335,7 +345,12 @@ export class FormattingProviderDV2 {
 
                 requiredIndentLength = requiredIndentLength < 0 ? 0 : requiredIndentLength;
                 console.log({ nestingLevel, indentCharLength, indent });
-                let replacementString = indentString.repeat(requiredIndentLength);
+
+                const significantPrecedingTextOnLIne = this.getSignificantTextOnLinePrecedingToken(prevToken, token, currentLine);
+                const replacementString = significantPrecedingTextOnLIne.length > 0 ?
+                    significantPrecedingTextOnLIne :
+                    indentString.repeat(requiredIndentLength);
+
                 console.log('NEW_LINE_' + requiredIndentLength + '[' + replacementString + '|' + tokenText + ']');
                 result += newLineChar + replacementString + tokenText;
             } else {
