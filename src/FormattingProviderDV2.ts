@@ -72,7 +72,7 @@ export class FormattingProviderDV2 {
         if (prevToken && prevToken.line === currentToken.line) {
             return '';
         }
-        const precedingText = currentLine.substring(0, currentToken.startCharacter - 1);
+        const precedingText = currentLine.substring(0, currentToken.startCharacter);
         // only return text if it contains non-whitespace characters
         return precedingText.trim().length > 0 ? precedingText : '';
     }
