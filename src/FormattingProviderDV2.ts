@@ -1,6 +1,6 @@
 import { Dv2Configuration } from "./languageConfigurations";
-import type { BaseToken, CharLevelState, TokenLevelState } from "./xpLexer";
-import { DocumentTypes, XMLCharState, XslLexer, XSLTokenLevelState } from "./xslLexer";
+import type { BaseToken } from "./xpLexer";
+import { XMLCharState, XslLexer, XSLTokenLevelState } from "./xslLexer";
 
 enum MultiLineState {
     None,
@@ -12,15 +12,6 @@ enum HasCharacteristic {
     unknown,
     yes,
     no
-}
-
-class TagPosition {
-    readonly line: number;
-    readonly character: number;
-    constructor(line: number, character: number) {
-        this.line = line;
-        this.character = character;
-    }
 }
 
 export class FormattingProviderDV2 {
@@ -53,11 +44,6 @@ export class FormattingProviderDV2 {
         const trimmedLeft = text.trimLeft();
         const trimLength = text.length - trimmedLeft.length;
         return trimLength;
-    }
-
-    private static getCurrentLineWithNewIndent(currentLine: string, indentString: string): string {
-        const nonWSPos = this.firstNonWhitespaceCharacterIndex(currentLine);
-        return indentString + currentLine.substring(nonWSPos);
     }
 
     private static getTextPrecedingToken(prevToken: BaseToken | null, currentToken: BaseToken, currentLine: string) {
@@ -93,7 +79,6 @@ export class FormattingProviderDV2 {
         let lineNumber = -1;
         let prevLineNumber = -1;
         let nestingLevel = 0;
-        let xpathNestingLevel = 0;
         let newNestingLevel = 0;
         let multiLineState = MultiLineState.None;
 
@@ -104,8 +89,8 @@ export class FormattingProviderDV2 {
         let attributeNameOffset = 0;
         let attributeValueOffset = 0;
         let attributeNameOnNewLine = false;
-        let isPreserveSpaceElement = false;
-        let withinCDATA = false;
+        // TODO: use addNewLine with: if (!(preserveSpace || isPreserveSpaceElement)) {
+        //let isPreserveSpaceElement = false;
         let isXSLTStartTag = false;
         let nameIndentRequired = false;
         let documenthasNewLines: HasCharacteristic = HasCharacteristic.unknown;
@@ -115,7 +100,6 @@ export class FormattingProviderDV2 {
         let elementName = '';
         const xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
         const xmlLines = xml.split(/\r\n|\n/);
-        let absStringPosAtLine = 0;
         let currentLine = '';
 
 
@@ -126,24 +110,22 @@ export class FormattingProviderDV2 {
 
 
             lineNumber = token.line;
-            let lineNumberDiff = lineNumber - prevLineNumber;
+            const lineNumberDiff = lineNumber - prevLineNumber;
             if (lineNumberDiff > 0) {
                 currentLine = xmlLines[token.line];
-                absStringPosAtLine = 0;
             }
 
             const isXMLToken = token.tokenType >= xsltStartTokenNumber;
             let indent = 0;
 
             if (isXMLToken) {
-                xpathNestingLevel = 0;
                 const xmlCharType = <XMLCharState>token.charType;
                 const xmlTokenType = <XSLTokenLevelState>token.tokenType - xsltStartTokenNumber;
                 switch (xmlTokenType) {
                     case XSLTokenLevelState.xslElementName:
                         isXSLTStartTag = true;
                         elementName = this.getText(token, currentLine);
-                        isPreserveSpaceElement = elementName === 'xsl:text';
+                        //isPreserveSpaceElement = elementName === 'xsl:text';
                         break;
                     case XSLTokenLevelState.elementName:
                         isXSLTStartTag = false;
@@ -210,13 +192,13 @@ export class FormattingProviderDV2 {
                             case XMLCharState.rSelfCt:
                                 attributeNameOffset = 0;
                                 attributeValueOffset = 0;
-                                isPreserveSpaceElement = false;
+                                //isPreserveSpaceElement = false;
                                 newNestingLevel--;
                                 break;
                             case XMLCharState.rCt:
                                 attributeNameOffset = 0;
                                 attributeValueOffset = 0;
-                                isPreserveSpaceElement = false;
+                                //isPreserveSpaceElement = false;
                                 if (stackLength > 0) {
                                     xmlSpacePreserveStack.pop();
                                 }
@@ -235,12 +217,7 @@ export class FormattingProviderDV2 {
                                 }
                                 attributeNameOffset = 0;
                                 attributeValueOffset = 0;
-                                break;
-                            case XMLCharState.rPi:
                                 indent = 0;
-                                break;
-                            case XMLCharState.rCdataEnd:
-                                withinCDATA = true;
                                 break;
                         }
                         break;
@@ -283,7 +260,7 @@ export class FormattingProviderDV2 {
                             attributeValueOffset = lineNumberDiff > 0 ? attributeValueOffset : newValueOffset;
                             if (awaitingXmlSpaceAttributeValue) {
                                 // token includes surrounding quotes.
-                                xmlSpaceAttributeValue = attValueText === '\"preserve\"' || attValueText === '\'preserve\'';
+                                xmlSpaceAttributeValue = attValueText === '"preserve"' || attValueText === '\'preserve\'';
                                 awaitingXmlSpaceAttributeValue = false;
                             }
                             if (useTabs) {
@@ -344,7 +321,6 @@ export class FormattingProviderDV2 {
                 requiredIndentLength += (indent * indentCharLength);
 
                 requiredIndentLength = requiredIndentLength < 0 ? 0 : requiredIndentLength;
-                console.log({ nestingLevel, indentCharLength, indent });
 
                 const significantPrecedingTextOnLIne = this.getSignificantTextOnLinePrecedingToken(prevToken, token, currentLine);
                 const replacementString = significantPrecedingTextOnLIne.length > 0 ?
@@ -358,7 +334,6 @@ export class FormattingProviderDV2 {
                 console.log('SAME_LINE[' + this.getTextPrecedingToken(prevToken, token, currentLine) + '|' + tokenText + ']');
                 result += this.getTextPrecedingToken(prevToken, token, currentLine) + tokenText;
             }
-            withinCDATA = false;
             prevLineNumber = lineNumber;
             nestingLevel = newNestingLevel;
             multiLineState = newMultiLineState;
