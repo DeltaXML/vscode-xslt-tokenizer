@@ -70,6 +70,7 @@ export enum XMLCharState {
     escTvt,
     escTvtCdata,
     lsElementNameWs,
+    lcElementNameWs,
     wsAfterAttName,
     syntaxError,
     lsEqWs,
@@ -231,7 +232,9 @@ export class XslLexer {
                 rc = XMLCharState.lCtName;
                 break;
             case XMLCharState.lCtName:
-                if (char === '>') {
+                if (this.isWhitespace(isCurrentCharNewLine, char)) {
+                    rc = XMLCharState.lcElementNameWs;
+                } else if (char === '>') {
                     rc = XMLCharState.rCt;
                 }
                 break;
@@ -413,7 +416,16 @@ export class XslLexer {
                     rc = XMLCharState.lAn;
                 }
                 break;
-            // attribute name started
+            // whitespace after close tag name started
+            case XMLCharState.lcElementNameWs:
+                if (this.isWhitespace(isCurrentCharNewLine, char)) {
+                    rc = XMLCharState.lcElementNameWs;
+                } else if (char === '>') {
+                    rc = XMLCharState.rCt;
+                } else {
+                    rc = XMLCharState.init;
+                }
+                break;
             case XMLCharState.lAn:
                 if (this.isWhitespace(isCurrentCharNewLine, char)) {
                     rc = XMLCharState.wsAfterAttName;
@@ -797,6 +809,7 @@ export class XslLexer {
                             expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
                             // cascade, so no-break intentional
                         case XMLCharState.lsElementNameWs:
+                        case XMLCharState.lcElementNameWs:
                         case XMLCharState.rSelfCtNoAtt:
                         case XMLCharState.rCt:
                             let isCloseTag = nextState === XMLCharState.rCt;
