@@ -728,7 +728,6 @@ export class XslLexer {
                         switch (nextState) {
                             case XMLCharState.lPiValue:
                                 addToken = XSLTokenLevelState.processingInstrValue;
-                                this.addNewTokenToResult(tokenStartChar, addToken, result, nextState);
                                 break;
                             case XMLCharState.lComment:
                                 addToken = XSLTokenLevelState.xmlComment;
