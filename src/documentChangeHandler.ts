@@ -213,7 +213,7 @@ export class DocumentChangeHandler {
 		}
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLEditor = editor;
-			if (document.languageId !== 'xslt') {
+			if (document.languageId !== 'xslt' && document.languageId !== 'dcp') {
 				FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
 				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
 				if (!DocumentChangeHandler.lastActiveXMLNonXSLUri) {
@@ -229,7 +229,8 @@ export class DocumentChangeHandler {
 			this.xmlDocumentRegistered = true;
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
 		}
-		DocumentChangeHandler.updateStatusBarItem(isXPathDocument || isXSLTDocument);
+		let isDCPDocument = document.languageId === 'dcp';
+		DocumentChangeHandler.updateStatusBarItem(isXPathDocument || isXSLTDocument || isDCPDocument);
 
 	};
 
