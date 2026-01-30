@@ -19,7 +19,7 @@
     <xsl:call-template name="addComplexType"/>
     <xsl:call-template name="addElement"/>
     <xsl:call-template name="addAttributeGroup"/>
-    <xsl:text>}}
+    <xsl:text>}};
 </xsl:text>
   </xsl:template>
   
@@ -28,35 +28,37 @@
   <xsl:template name="addSimpleType">
     <xsl:text>simpleTypes: {{ [name: string]: SimpleType }} = {{</xsl:text>
     <xsl:apply-templates select="xs:simpleType"/>
-    <xsl:text>}}
+    <xsl:text>}};
 </xsl:text>
   </xsl:template>
   
   <xsl:template name="addComplexType">
     <xsl:text>complexTypes: {{ [name: string]: ComplexType }} = {{</xsl:text>
     <xsl:apply-templates select="xs:complexType"/>
-    <xsl:text>}}
+    <xsl:text>}};
 </xsl:text>
   </xsl:template>
   
   <xsl:template name="addElement">
     <xsl:text>elements: {{ [name: string]: ComplexType }} = {{</xsl:text>
     <xsl:apply-templates select=".//xs:element[@name]"/>
-    <xsl:text>}}
+    <xsl:text>}};
 </xsl:text>
   </xsl:template>
   
   <xsl:template name="addAttributeGroup">
     <xsl:text>attributeGroups: {{ [name: string]: any }} = {{</xsl:text>
     <xsl:apply-templates select="xs:attributeGroup"/>
-    <xsl:text>}}
+    <xsl:text>}};
 </xsl:text>
   </xsl:template>
   
   <xsl:template match="xs:attributeGroup">
-    <xsl:variable name="joined" as="xs:string" select="fxs:createAttrProperties(.)"/>  
+    <xsl:variable name="joined" as="xs:string?" select="fxs:createAttrProperties(.)"/>
+    <xsl:if test="$joined">      
     <xsl:text>"{@name}": {{{$joined}}},
 </xsl:text>
+    </xsl:if>
   </xsl:template>
   
   <xsl:function name="fxs:createAttrProperties" as="xs:string?">
@@ -78,7 +80,7 @@
     <xsl:variable name="base" as="xs:string*" 
       select="
         if ((.//xs:restriction| .//xs:extension)/@base) then
-          '&#xa;base: [' ||  string-join(for $a in (.//xs:restriction|.//xs:extension)/@base => distinct-values() return concat('''', $a, ''''), ',') || ']'
+          '&#xa;base: ' ||  string-join(for $a in (.//xs:restriction|.//xs:extension)/@base => distinct-values() return concat('''', $a, ''''), ',')
         else ()"/>
     <xsl:variable name="detail" as="xs:string?" select="if (self::xs:element) then fxs:getAnyDetail(.) else ()"/>
     <xsl:variable name="detailProperty" as="xs:string?" select="if (exists($detail)) then '&#xa;detail: `' || $detail || '`' else ()"/>
@@ -152,16 +154,16 @@
   to transform core-dcp-v1_0.xsd - included in XML Compare
  */
  
-import { SchemaData, ComplexType, SimpleType } from './xsltSchema'
+import { SchemaData, ComplexType, SimpleType } from './xsltSchema';
 import { DocumentTypes } from './xslLexer';
 
 export interface SubstitutionGroupType {
-    type: string,
-    elements: { [name: string]: ComplexType}
+    type: string;
+    elements: { [name: string]: ComplexType};
 }
 
 export interface AttributeItem {
-    name: string,
+    name: string;
     enum?: string[];
 }
     </xsl:text>  
