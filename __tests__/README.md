@@ -62,10 +62,10 @@ the lexer do not affect existing functionality.
 - Mark pending tests in the .xsl test file by suffixing the test label (the `name` attribute of `xsl:variable`) with '-PENDING' - these tests will be skipped
 
 ## Linter testing (extending Lexer tests):
-  - Tests for the **Linter** with a *'.dg'* suffix can be generated from the Lexer tests using the shell command `npm test`
+  - Tests for the **Linter** with a *'.dg'* suffix can be generated from the Lexer tests using the shell command `npm run test`
   - Linter tests use the 2nd group in the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file
   - The `tokens` property from the Lexer test is replaced with a `problems` token - for expected diagnostics values
-  - The same `npm test` command is also used to run the **Linter** tests (when a `problems` property for expected diagnostics data exists for the test)
+  - The same `npm run test` command is also used to run the **Linter** tests (when a `problems` property for expected diagnostics data exists for the test)
   - **Linter** tests rely on the VS Code API and are therefore run (using an older Mocha version) within the VS Code extension host
     - By default `isDirect` in [linter.test.ts](/test/vscode-ext/linter.test.ts) is set `false` so Linter tests bypass the VS Code editor (otherwise using the same API)<br>
   *this avoids a 500ms wait between each test - imposed by the editor for 'debouncing' purposes*
