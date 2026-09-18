@@ -1278,7 +1278,7 @@ export enum ErrorType {
     XPathTypeFullArity,
     XPathTypeEmptyArity,
     XPathFunctionParseHtml,
-    XPathFunctionExternalPrint,
+    XPathFunctionXdmDebug,
     XSLTFunctionNamePrefix,
     XPathEmpty,
     XPathFunctionNamespace,

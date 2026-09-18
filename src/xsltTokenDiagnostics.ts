@@ -98,7 +98,7 @@ export enum DiagnosticCode {
 	unresolvedVariableRef,
 	unresolvedGenericRef,
 	parseHtmlRef,
-	externalPrintRef,
+	xdmDebugRef,
 	fnWithNoContextItem,
 	currentWithNoContextItem,
 	groupOutsideForEachGroup,
@@ -2792,8 +2792,8 @@ export class XsltTokenDiagnostics {
 			isValid = !isParseHTMLFnWarning;
 		}
 		fErrorType = isParseHTMLFnWarning ? ErrorType.XPathFunctionParseHtml : isValid ? ErrorType.None : fErrorType;
-		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && tokenValue.startsWith('ext:print')) {
-			fErrorType = ErrorType.XPathFunctionExternalPrint;
+		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && tokenValue.startsWith('xdm:debug')) {
+			fErrorType = ErrorType.XPathFunctionXdmDebug;
 		}
 		return { isValid, qFunctionName, fErrorType };
 	}
@@ -3285,10 +3285,10 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					msg = `XPath: The 'parse-html' function requires the 'htmlParserJar' setting when invoked from VS Code`;
 					break;
-				case ErrorType.XPathFunctionExternalPrint:
-					errCode = DiagnosticCode.externalPrintRef;
+				case ErrorType.XPathFunctionXdmDebug:
+					errCode = DiagnosticCode.xdmDebugRef;
 					severity = vscode.DiagnosticSeverity.Warning;
-					msg = `XPath: 'ext:print/println' function not defined - use QuickFix`;
+					msg = `XPath: 'xdm:debug/debug-color' function not defined - use QuickFix`;
 					break;
 				case ErrorType.XPathTypeName:
 					msg = `XPath: Invalid type: '${tokenValue}'`;

@@ -1473,10 +1473,12 @@ export class XsltTokenCompletions {
 					if (inScopeVariablesList.length > 0) {
 						const newItem0 = new vscode.CompletionItem(tagName + ' - adaptive serialization', vscode.CompletionItemKind.Struct);
 						const newItem = new vscode.CompletionItem(tagName + ' - simple variables', vscode.CompletionItemKind.Struct);
-						const newItem2 = new vscode.CompletionItem(tagName + ' - complex variables', vscode.CompletionItemKind.Struct);
+						const newItem2 = new vscode.CompletionItem(tagName + ' - xdm:debug variables', vscode.CompletionItemKind.Struct);
+						const newItem3 = new vscode.CompletionItem(tagName + ' - xdm:debug-color variables', vscode.CompletionItemKind.Struct);
 						newItem0.documentation = "xsl:message adaptive serialize fn";
 						newItem.documentation = "xsl:message simple in-scope variable types";
-						newItem2.documentation = "xsl:message complex in-scope variable types";
+						newItem2.documentation = "xsl:message via xdm:debug - labelled variables, one formatted block";
+						newItem3.documentation = "xsl:message via xdm:debug-color - as xdm:debug, with ANSI color";
 						const scopeVarNames = inScopeVariablesList.map((item) => item.name);
 						let maxScopeVarLength = scopeVarNames.reduce((a, b) => a.length > b.length ? a : b).length + 3;
 						let currentIndentLength = XMLDocumentFormattingProvider.currentIndentString.length;
@@ -1484,28 +1486,28 @@ export class XsltTokenCompletions {
 						const maxScopeLengthRemainder = maxScopeVarLength % currentIndentLength;
 						maxScopeVarLength = maxScopeLengthRemainder === 0 ? maxScopeVarLength : maxScopeVarLength + (currentIndentLength - (maxScopeVarLength % currentIndentLength));
 						maxScopeVarLength--;
-						const computedElementIndent = currentIndentLength * (elementStack.length);
-						const fullIndent = computedElementIndent + maxScopeVarLength;
-						const fullIndentLevel = Math.floor(fullIndent / currentIndentLength);
 						const scopeVariables = scopeVarNames.map((name) => {
 							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) + '{\\$' + name + '}';
 						});
-						const scopeVariables2 = scopeVarNames.map((name) => {
-							return '\t' + name + ':' + ' '.repeat(maxScopeVarLength - name.length) +
-								'{ext:print(\\$' + name + ',' + (fullIndentLevel) + ",'" + XMLDocumentFormattingProvider.currentIndentString + "'" + ')}';
+						const debugLabelEntries = scopeVarNames.map((name, index) => {
+							const comma = index < scopeVarNames.length - 1 ? ',' : '';
+							return '\t\t\'' + name + '\': \\$' + name + comma;
 						});
 						const title = (symbolId && symbolId.length > 0) ? "Watch: " + symbolId : "Watch Variables";
 						const header = '==== ${1:' + title + '} ====\n';
+						const titleTabstop = '${1:' + title + '}';
 
 						const scopeVariablesString0 = scopeVarNames.length > 0? scopeVarNames[scopeVarNames.length - 1] : 'variable';
 						const scopeVariablesString = header + scopeVariables.join('\n');
-						const scopeVariablesString2 = header + scopeVariables2.join('\n');
+						const debugLabelsMap = 'map {\n' + debugLabelEntries.join('\n') + '\n\t}';
 						newItem0.insertText = new vscode.SnippetString(`xsl:message select="serialize($\${1:${scopeVariablesString0}}, map{'method':'adaptive'})"/>$0`);
 						newItem.insertText = new vscode.SnippetString(`xsl:message expand-text="yes">\n${scopeVariablesString}\n</xsl:message>$0`);
-						newItem2.insertText = new vscode.SnippetString(`xsl:message expand-text="yes">\n${scopeVariablesString2}\n</xsl:message>$0`);
+						newItem2.insertText = new vscode.SnippetString(`xsl:message select="xdm:debug('${titleTabstop}', ${debugLabelsMap})"/>$0`);
+						newItem3.insertText = new vscode.SnippetString(`xsl:message select="xdm:debug-color('${titleTabstop}', ${debugLabelsMap})"/>$0`);
 						completionItems.push(newItem0);
 						completionItems.push(newItem);
 						completionItems.push(newItem2);
+						completionItems.push(newItem3);
 					}
 					const newItem = new vscode.CompletionItem(tagName + ' (blank)', vscode.CompletionItemKind.Struct);
 					newItem.documentation = "xsl:message";

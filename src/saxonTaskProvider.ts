@@ -66,11 +66,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return obj[prop];
     }
 
-    public static async getResultSerializerPath(document: vscode.TextDocument) {
-        let serializerFiles = await vscode.workspace.findFiles('**/xpath-result-serializer-color.xsl');
-        const serializer = serializerFiles.length > 0 ? serializerFiles[0] : vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xpath-result-serializer/xpath-result-serializer-color.xsl');
+    public static async getXdmViewPath(document: vscode.TextDocument) {
+        let xdmViewFiles = await vscode.workspace.findFiles('**/xdm-view.xsl');
+        const xdmView = xdmViewFiles.length > 0 ? xdmViewFiles[0] : vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xdm-view/xdm-view.xsl');
         const docBaseURI = path.dirname(document.uri.fsPath);
-        return path.relative(docBaseURI, serializer.fsPath);
+        return path.relative(docBaseURI, xdmView.fsPath);
     }
 
     private getTasks(tasks: XSLTTask[]) {

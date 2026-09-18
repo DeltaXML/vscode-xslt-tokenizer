@@ -56,7 +56,7 @@ enum XsltCodeActionKind {
 	extractXsltFunctionPartial = 'xsl:function - partial refactor',
 	extractXsltTemplate = 'xsl:template',
 	extractXsltVariable = 'xsl:variable',
-	fixExternalPrintRef = 'include XSLT module for ext:print',
+	fixXdmDebugRef = 'include XSLT module for xdm:debug',
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
 }
@@ -97,17 +97,17 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let codeActions: vscode.CodeAction[] | undefined = [];
 
 		if (context.triggerKind === vscode.CodeActionTriggerKind.Automatic) {
-			const matchingRanges = context.diagnostics.filter(diagnostic => diagnostic.code === DiagnosticCode.externalPrintRef && diagnostic.range.start.line == range.start.line);
+			const matchingRanges = context.diagnostics.filter(diagnostic => diagnostic.code === DiagnosticCode.xdmDebugRef && diagnostic.range.start.line == range.start.line);
 			if (matchingRanges.length > 0) {
-				const quickFixAction = new vscode.CodeAction(XsltCodeActionKind.fixExternalPrintRef, vscode.CodeActionKind.QuickFix);
+				const quickFixAction = new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix);
 				codeActions = [quickFixAction];
 			}
 		} else if (this.actionProps?.firstSymbol || this.actionProps?.lastSymbol) {
 			codeActions = context.diagnostics
-				.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef || diagnotic.code === DiagnosticCode.externalPrintRef)
+				.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef || diagnotic.code === DiagnosticCode.xdmDebugRef)
 				.map(diagnostic => diagnostic.code === DiagnosticCode.parseHtmlRef ?
 					this.createCommandCodeAction(diagnostic) :
-					new vscode.CodeAction(XsltCodeActionKind.fixExternalPrintRef, vscode.CodeActionKind.QuickFix));
+					new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix));
 		}
 		if (codeActions.length > 0) {
 			codeActions[0].isPreferred = true;
@@ -164,12 +164,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const symbolKind = firstSymbol?.kind;
 		const extraDescendants = symbolKind === vscode.SymbolKind.Event || symbolKind === vscode.SymbolKind.Field ? 1 : 0;
 		const ancestorOrSelfCount = ancestorOrSelfSymbols.length;
-		const isPrintRefFix = codeAction.title == XsltCodeActionKind.fixExternalPrintRef;
-		if (!isPrintRefFix && ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
-		const targetSymbolRange = isPrintRefFix ? range : ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
+		const isXdmDebugFix = codeAction.title == XsltCodeActionKind.fixXdmDebugRef;
+		if (!isXdmDebugFix && ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
+		const targetSymbolRange = isXdmDebugFix ? range : ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
 
 		switch (codeAction.title) {
-			case XsltCodeActionKind.fixExternalPrintRef:
+			case XsltCodeActionKind.fixXdmDebugRef:
 				const rootElementSymbol = ancestorOrSelfSymbols[ancestorOrSelfSymbols.length - 1];
 				const rootElementAttributes = rootElementSymbol.children.find(item => item.kind === vscode.SymbolKind.Array)?.children;
 				if (rootElementAttributes) {
@@ -178,9 +178,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					if (firstChildElement && codeAction) {
 						codeAction.edit = new vscode.WorkspaceEdit();
 						const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
-						codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:ext="${'com.deltaxml.xpath.result.print'}"` + '\n' + prefixWS);
-						const serializerPath = await SaxonTaskProvider.getResultSerializerPath(document);
-						codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${serializerPath}"/>` + '\n\t');
+						codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:xdm="${'http://deltaxignia.com/ns/xdm-persistence'}"` + '\n' + prefixWS);
+						const xdmViewPath = await SaxonTaskProvider.getXdmViewPath(document);
+						codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${xdmViewPath}"/>` + '\n\t');
 					}
 				}
 				break;
@@ -259,7 +259,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 							const blockingIssue = diagnostics.find((item) => item.severity !== vscode.DiagnosticSeverity.Hint &&
 								item.code !== DiagnosticCode.unresolvedGenericRef &&
 								item.code !== DiagnosticCode.unresolvedVariableRef &&
-								item.code !== DiagnosticCode.externalPrintRef &&
+								item.code !== DiagnosticCode.xdmDebugRef &&
 								item.code !== DiagnosticCode.parseHtmlRef);
 							if (!blockingIssue) {
 								let pass = xpathText.length > 30;
