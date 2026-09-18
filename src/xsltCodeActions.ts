@@ -9,6 +9,7 @@ import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSym
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { Console } from 'console';
+import * as path from 'path';
 
 
 enum ElementSelectionType {
@@ -57,6 +58,7 @@ enum XsltCodeActionKind {
 	extractXsltTemplate = 'xsl:template',
 	extractXsltVariable = 'xsl:variable',
 	fixXdmDebugRef = 'include XSLT module for xdm:debug',
+	copyXdmViewToWorkspace = 'copy xdm-view library into workspace',
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
 }
@@ -99,15 +101,23 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (context.triggerKind === vscode.CodeActionTriggerKind.Automatic) {
 			const matchingRanges = context.diagnostics.filter(diagnostic => diagnostic.code === DiagnosticCode.xdmDebugRef && diagnostic.range.start.line == range.start.line);
 			if (matchingRanges.length > 0) {
-				const quickFixAction = new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix);
-				codeActions = [quickFixAction];
+				codeActions = [
+					new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix),
+					new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix)
+				];
 			}
 		} else if (this.actionProps?.firstSymbol || this.actionProps?.lastSymbol) {
-			codeActions = context.diagnostics
+			codeActions = [];
+			context.diagnostics
 				.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef || diagnotic.code === DiagnosticCode.xdmDebugRef)
-				.map(diagnostic => diagnostic.code === DiagnosticCode.parseHtmlRef ?
-					this.createCommandCodeAction(diagnostic) :
-					new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix));
+				.forEach(diagnostic => {
+					if (diagnostic.code === DiagnosticCode.parseHtmlRef) {
+						codeActions!.push(this.createCommandCodeAction(diagnostic));
+					} else {
+						codeActions!.push(new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix));
+						codeActions!.push(new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix));
+					}
+				});
 		}
 		if (codeActions.length > 0) {
 			codeActions[0].isPreferred = true;
@@ -164,26 +174,40 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const symbolKind = firstSymbol?.kind;
 		const extraDescendants = symbolKind === vscode.SymbolKind.Event || symbolKind === vscode.SymbolKind.Field ? 1 : 0;
 		const ancestorOrSelfCount = ancestorOrSelfSymbols.length;
-		const isXdmDebugFix = codeAction.title == XsltCodeActionKind.fixXdmDebugRef;
+		const isXdmDebugFix = codeAction.title == XsltCodeActionKind.fixXdmDebugRef || codeAction.title == XsltCodeActionKind.copyXdmViewToWorkspace;
 		if (!isXdmDebugFix && ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
 		const targetSymbolRange = isXdmDebugFix ? range : ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
 
 		switch (codeAction.title) {
-			case XsltCodeActionKind.fixXdmDebugRef:
-				const rootElementSymbol = ancestorOrSelfSymbols[ancestorOrSelfSymbols.length - 1];
-				const rootElementAttributes = rootElementSymbol.children.find(item => item.kind === vscode.SymbolKind.Array)?.children;
-				if (rootElementAttributes) {
-					const newXmlnsRange = rootElementAttributes[0].range;
-					const firstChildElement = rootElementSymbol.children[1];
-					if (firstChildElement && codeAction) {
-						codeAction.edit = new vscode.WorkspaceEdit();
-						const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
-						codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:xdm="${'http://deltaxignia.com/ns/xdm-persistence'}"` + '\n' + prefixWS);
-						const xdmViewPath = await SaxonTaskProvider.getXdmViewPath(document);
-						codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${xdmViewPath}"/>` + '\n\t');
+			case XsltCodeActionKind.fixXdmDebugRef: {
+				const xdmViewPath = await SaxonTaskProvider.getXdmViewPath(document);
+				this.insertXdmDebugInclude(codeAction, document, ancestorOrSelfSymbols, xdmViewPath);
+				break;
+			}
+			case XsltCodeActionKind.copyXdmViewToWorkspace: {
+				const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+				const targetBaseUri = workspaceFolder ? workspaceFolder.uri : vscode.Uri.file(path.dirname(document.uri.fsPath));
+				const targetDirUri = vscode.Uri.joinPath(targetBaseUri, 'xslt-resources', 'xdm-view');
+				const bundledDirUri = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xdm-view');
+				let targetExists = true;
+				try {
+					await vscode.workspace.fs.stat(targetDirUri);
+				} catch {
+					targetExists = false;
+				}
+				if (!targetExists) {
+					try {
+						await vscode.workspace.fs.copy(bundledDirUri, targetDirUri, { overwrite: false });
+					} catch (e: any) {
+						vscode.window.showErrorMessage(`Could not copy xdm-view into workspace: ${e?.message ?? e}`);
+						break;
 					}
 				}
+				const docBaseURI = path.dirname(document.uri.fsPath);
+				const newXdmViewPath = path.relative(docBaseURI, vscode.Uri.joinPath(targetDirUri, 'xdm-view.xsl').fsPath);
+				this.insertXdmDebugInclude(codeAction, document, ancestorOrSelfSymbols, newXdmViewPath);
 				break;
+			}
 			case XsltCodeActionKind.extractXsltFunction:
 			case XsltCodeActionKind.extractXsltFunctionPartial:
 			case XsltCodeActionKind.extractXsltTemplate:
@@ -200,6 +224,21 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				break;
 		}
 		return codeAction;
+	}
+
+	private insertXdmDebugInclude(codeAction: vscode.CodeAction, document: vscode.TextDocument, ancestorOrSelfSymbols: vscode.DocumentSymbol[], xdmViewIncludePath: string) {
+		const rootElementSymbol = ancestorOrSelfSymbols[ancestorOrSelfSymbols.length - 1];
+		const rootElementAttributes = rootElementSymbol.children.find(item => item.kind === vscode.SymbolKind.Array)?.children;
+		if (rootElementAttributes) {
+			const newXmlnsRange = rootElementAttributes[0].range;
+			const firstChildElement = rootElementSymbol.children[1];
+			if (firstChildElement) {
+				codeAction.edit = new vscode.WorkspaceEdit();
+				const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
+				codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:xdm="${'http://deltaxignia.com/ns/xdm-persistence'}"` + '\n' + prefixWS);
+				codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${xdmViewIncludePath}"/>` + '\n\t');
+			}
+		}
 	}
 
 	private populateAncestorArray(testSymbol: anyDocumentSymbol) {
