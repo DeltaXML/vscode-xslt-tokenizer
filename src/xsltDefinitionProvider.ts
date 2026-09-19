@@ -183,7 +183,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		return { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs };
 	}
 
-	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
+	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
 		const keepNameTests = true;
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		let symbolsForXPath: vscode.DocumentSymbol[] = [];
@@ -191,6 +191,14 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];
 		let uri: vscode.Uri|undefined;
+		// this.xslLexer is a single instance shared by every completion request for this language,
+		// so any value read off it (or off this.languageConfig) must be captured into a local
+		// variable immediately - i.e. before the first `await` below - otherwise an overlapping
+		// completion request (fired while this one is still awaiting) can overwrite it first,
+		// and this request would read back that other request's data instead of its own.
+		let attNames: string[] = [];
+		let nodeNames: string[] = [];
+		let localLanguageConfig = this.languageConfig;
 		if (this.docType === DocumentTypes.XPath) {
 			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
@@ -206,7 +214,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 			globalInstructionData = this.xslLexer.globalInstructionData;
+			attNames = this.xslLexer.attributeNameTests ? this.xslLexer.attributeNameTests : [];
+			nodeNames = this.xslLexer.elementNameTests ? this.xslLexer.elementNameTests : [];
 			this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
+			localLanguageConfig = { ...this.languageConfig };
 		}
 
 		if (uri) {
@@ -230,13 +241,18 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let processNestedGlobals = async () => {
 			let level = 0;
-			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel) {
+			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel && !token.isCancellationRequested) {
 				globalsSummary0 = await XsltSymbolProvider.processImportedGlobals(xsltPackages, globalsSummary0.globals, accumulatedHrefs, level === 0);
 				level++;
 			}
 		};
 
 		await processNestedGlobals();
+
+		if (token.isCancellationRequested) {
+			// a newer completion request has superseded this one - don't resolve with a stale result
+			return undefined;
+		}
 
 		return new Promise((resolve, reject) => {
 			let allImportedGlobals: GlobalInstructionData[] = [];
@@ -251,13 +267,14 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
-			let attNames = this.xslLexer.attributeNameTests? this.xslLexer.attributeNameTests: [];
-			let nodeNames = this.xslLexer.elementNameTests? this.xslLexer.elementNameTests: [];
 			let xslVariable = ['xsl:variable', 'xsl:param'];
-			
+
 			let completions: vscode.CompletionItem[]|undefined;
-			completions= XsltTokenCompletions.getCompletions(this.languageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
-			resolve(completions);
+			completions= XsltTokenCompletions.getCompletions(localLanguageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			// mark incomplete: these completions depend on surrounding code (variable scope, node
+			// context etc.), not just a static list to prefix-filter, so VS Code must call this
+			// provider again for every further keystroke rather than reusing/filtering this list
+			resolve(completions ? new vscode.CompletionList(completions, true) : undefined);
 		});
 
 	}

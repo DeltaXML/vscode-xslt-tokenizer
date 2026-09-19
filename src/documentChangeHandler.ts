@@ -25,6 +25,7 @@ export class DocumentChangeHandler {
 	private onDidChangeRegistration: vscode.Disposable | null = null;
 	private xmlDocumentRegistered = false;
 	private lastChangePerformed: TagRenameEdit | null = null;
+	private pendingTriggerSuggestTimeout: ReturnType<typeof setTimeout> | null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
 	private cachedFailedEdit: TagRenameEdit | null = null;
 	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler | null = null;
@@ -89,7 +90,15 @@ export class DocumentChangeHandler {
 
 			if (!isCloseTagFeature && !skipTrigger) {
 				// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
-				setTimeout(() => {
+				// debounce: fast typing schedules one of these per keystroke, and without
+				// cancelling earlier ones each still fires 10ms later, piling up overlapping
+				// triggerSuggest calls (and so overlapping completion requests) for what the
+				// user now sees as a single edit - only the latest keystroke should trigger.
+				if (this.pendingTriggerSuggestTimeout) {
+					clearTimeout(this.pendingTriggerSuggestTimeout);
+				}
+				this.pendingTriggerSuggestTimeout = setTimeout(() => {
+					this.pendingTriggerSuggestTimeout = null;
 					vscode.commands.executeCommand('editor.action.triggerSuggest');
 				}, 10);
 			}
