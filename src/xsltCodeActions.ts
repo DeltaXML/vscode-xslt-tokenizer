@@ -96,29 +96,25 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
-		let codeActions: vscode.CodeAction[] | undefined = [];
+		let codeActions: vscode.CodeAction[] = [];
 
-		if (context.triggerKind === vscode.CodeActionTriggerKind.Automatic) {
-			const matchingRanges = context.diagnostics.filter(diagnostic => diagnostic.code === DiagnosticCode.xdmDebugRef && diagnostic.range.start.line == range.start.line);
-			if (matchingRanges.length > 0) {
-				codeActions = [
-					new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix),
-					new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix)
-				];
-			}
-		} else if (this.actionProps?.firstSymbol || this.actionProps?.lastSymbol) {
-			codeActions = [];
-			context.diagnostics
-				.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef || diagnotic.code === DiagnosticCode.xdmDebugRef)
-				.forEach(diagnostic => {
-					if (diagnostic.code === DiagnosticCode.parseHtmlRef) {
-						codeActions!.push(this.createCommandCodeAction(diagnostic));
-					} else {
-						codeActions!.push(new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix));
-						codeActions!.push(new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix));
-					}
-				});
-		}
+		// Diagnostic-driven fixes are decided purely from context.diagnostics, which VS Code
+		// always passes fresh and pre-scoped to `range` - unlike `this.actionProps`, which is
+		// only populated as a side effect further down (via estimateSelectionType) and so lags
+		// one call behind. Gating these on actionProps meant the very first invocation for a
+		// given diagnostic (e.g. the first "Quick Fix..." click from a hover) returned an empty
+		// list, since actionProps hadn't been set yet.
+		context.diagnostics
+			.filter(diagnostic => (diagnostic.code === DiagnosticCode.parseHtmlRef || diagnostic.code === DiagnosticCode.xdmDebugRef)
+				&& diagnostic.range.start.line === range.start.line)
+			.forEach(diagnostic => {
+				if (diagnostic.code === DiagnosticCode.parseHtmlRef) {
+					codeActions.push(this.createCommandCodeAction(diagnostic));
+				} else {
+					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix));
+					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix));
+				}
+			});
 		if (codeActions.length > 0) {
 			codeActions[0].isPreferred = true;
 		}
