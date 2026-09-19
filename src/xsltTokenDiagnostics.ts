@@ -69,6 +69,7 @@ export interface XPathData {
 	awaitingMapKey?: boolean;
 	curlyBraceType?: CurlyBraceType;
 	hasContextItem?: boolean;
+	anonFnSyntaxErrorReported?: boolean;
 }
 
 export interface VariableData {
@@ -1272,9 +1273,10 @@ export class XsltTokenDiagnostics {
 					if (invalidTokenForAnonFunction && token.tokenType === TokenLevelState.nodeType && token.value !== '*') {
 						invalidTokenForAnonFunction = false;
 					}
-					if (invalidTokenForAnonFunction) {
+					if (invalidTokenForAnonFunction && !stackItem.anonFnSyntaxErrorReported) {
 						token.error = ErrorType.AnonymousFunctionSyntax;
 						problemTokens.push(token);
+						stackItem.anonFnSyntaxErrorReported = true;
 					}
 				}
 				if (isTypeError) {
@@ -1569,9 +1571,10 @@ export class XsltTokenDiagnostics {
 							} else {
 								isFnError = !XsltTokenDiagnostics.anonFunctionOps.has(tv);
 							}
-							if (isFnError) {
+							if (isFnError && !latestStackItem.anonFnSyntaxErrorReported) {
 								token.error = ErrorType.AnonymousFunctionSyntax;
 								problemTokens.push(token);
+								latestStackItem.anonFnSyntaxErrorReported = true;
 							}
 						}
 						if (prevToken?.tokenType === TokenLevelState.complexExpression) {
