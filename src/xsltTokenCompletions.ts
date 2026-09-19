@@ -67,6 +67,14 @@ export interface VariableData {
 	name: string;
 	uri?: string;
 	index: number;
+	// For xsl:variable/xsl:param declarations only: the token index where the
+	// bound expression (the select attribute's value) actually begins. This is
+	// captured directly while scanning the element's attributes so that
+	// fetchXPathVariableTokens doesn't have to guess a fixed offset from the
+	// name attribute, which breaks whenever another attribute (e.g. as=) sits
+	// between name= and select=. Left undefined for XPath-level let/for/anonymous
+	// function range-variable bindings, which continue to use the index+2 offset.
+	selectExprStartIndex?: number;
 }
 
 export class XsltTokenCompletions {
@@ -134,6 +142,11 @@ export class XsltTokenCompletions {
 		let keepProcessing = false;
 		let isOnStartOfRequiredToken = false;
 		let currentXSLTIterateParams: string[][] = [];
+		// see VariableData.selectExprStartIndex: track, while scanning an
+		// xsl:variable/xsl:param start-tag's attributes, the token index where the
+		// select attribute's embedded XPath expression begins.
+		let awaitingSelectExprStart = false;
+		let pendingSelectExprIndex: number | undefined = undefined;
 		// don't include imported for path completions:
 		let allInstructionData = globalInstructionData;
 		const lastTokenIndex = allTokens.length - 1;
@@ -201,6 +214,11 @@ export class XsltTokenCompletions {
 			// 	console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
 			// }
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
+			if (!isXMLToken && awaitingSelectExprStart) {
+				// first embedded-XPath token of the select attribute's value
+				pendingSelectExprIndex = index;
+				awaitingSelectExprStart = false;
+			}
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
 				xpathVariableCurrentlyBeingDefined = false;
@@ -264,12 +282,17 @@ export class XsltTokenCompletions {
 								tagElementName = '';
 								tagExcludeResultPrefixes = null;
 								tagType = TagType.Start;
+								awaitingSelectExprStart = false;
+								pendingSelectExprIndex = undefined;
 								break;
 							case XMLCharState.rStNoAtt:
 							case XMLCharState.rSt:
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								// start-tag ended, we're now within the new element scope:
+								if (variableData !== null && pendingSelectExprIndex !== undefined) {
+									variableData.selectExprStartIndex = pendingSelectExprIndex;
+								}
 								if (isOnRequiredToken) {
 									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
 								}
@@ -394,6 +417,9 @@ export class XsltTokenCompletions {
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
 						attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						// track the select attribute of an xsl:variable/xsl:param so its bound
+						// expression's start token can be captured precisely (see VariableData.selectExprStartIndex)
+						awaitingSelectExprStart = tagType === TagType.XSLTvar && xmlTokenType === XSLTokenLevelState.attributeName && attNameText === 'select';
 						let problemReported = false;
 
 						if (!problemReported) {

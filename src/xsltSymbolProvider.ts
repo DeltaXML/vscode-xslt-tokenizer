@@ -672,7 +672,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let exitForLoop = false;
 		let onXsltTokensAtStart = false;
 
-		const startPosiiton = xpv.index + 2;
+		// For xsl:variable/xsl:param declarations, selectExprStartIndex is captured directly
+		// while scanning the element's attributes and points at the true start of the select
+		// attribute's expression, regardless of what other attributes (e.g. as=) intervene
+		// between name= and select=. XPath-level let/for/anonymous-function range-variable
+		// bindings don't set this field, so they keep using the fixed +2 offset (xpv.index
+		// there points at the $var token itself, and +2 skips exactly one keyword - ':=' or 'in').
+		const startPosiiton = xpv.selectExprStartIndex !== undefined ? xpv.selectExprStartIndex : xpv.index + 2;
 
 		for (let index = startPosiiton; index < tokens.length; index++) {
 			const token = tokens[index];
