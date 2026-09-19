@@ -681,7 +681,7 @@ export class XsltTokenCompletions {
 						}
 						break;
 					case TokenLevelState.nodeNameTest:
-						if (isOnRequiredToken && requiredChar === token.startCharacter + 1) {
+						if (isOnRequiredToken && requiredChar > token.startCharacter) {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/', '//', '::'].indexOf(prevToken.value) !== -1)) {
 								resultCompletions = XsltTokenCompletions.getTokenPathCompletions(token, elementNames, attrNames, globalInstructionData, importedInstructionData);

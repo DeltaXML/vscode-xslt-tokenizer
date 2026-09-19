@@ -273,7 +273,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			completions= XsltTokenCompletions.getCompletions(localLanguageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 			// mark incomplete: these completions depend on surrounding code (variable scope, node
 			// context etc.), not just a static list to prefix-filter, so VS Code must call this
-			// provider again for every further keystroke rather than reusing/filtering this list
+			// provider again for every further keystroke rather than reusing/filtering this list.
+			// Safe now that the nodeNameTest completion branch no longer degrades to a near-empty
+			// list once more than one character of an identifier has been typed (see the
+			// `requiredChar > token.startCharacter` fix in XsltTokenCompletions.getCompletions).
 			resolve(completions ? new vscode.CompletionList(completions, true) : undefined);
 		});
 
