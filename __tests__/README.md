@@ -1,5 +1,20 @@
 # Test Process for the XPath Lexer and Linter
 
+## Quick Reference: the two test types
+
+There are two separate test setups here, each running in a different environment - hence two different Mocha versions, which isn't a mistake, just an artifact of needing two genuinely different execution contexts.
+
+| | Standalone | VS Code host |
+|---|---|---|
+| Command | `npm run unit-test` | `npm run test` |
+| Files | `test/unit/*.spec.ts` | `test/vscode-ext/*.test.ts` (compiled) |
+| Runner | top-level `mocha` devDependency | `@vscode/test-cli`'s own bundled/nested `mocha` |
+| Needs `vscode` API | No | Yes |
+| Needs compile first | No (`ts-node` on the fly) | Yes (`.vscode-test.cjs` points at `out/test/vscode-ext/**/*.test.js`) |
+
+- **Standalone lexer tests** (`test/unit/*.spec.ts`) are pure TypeScript with no `vscode` API involved - just the lexer/tokenizer logic. `npm run unit-test` runs them directly via `ts-node/register` in a plain Node process, no VS Code instance spun up.
+- **VS Code extension-host tests** (`test/vscode-ext/*.test.ts`) need the real `vscode` API (e.g. the linter tests open documents and read back diagnostics), so they run inside an actual headless VS Code instance, launched via `@vscode/test-cli`'s `vscode-test` CLI. That package bundles its own separate Mocha to drive tests inside that sandboxed environment - independent of, and not controlled by, the top-level Mocha version pinned in `package.json`.
+
 ## Overview
 This document explains how to create and run tests for the XPath lexer and, subsequently, for the XSLT linter - using the same XPath test data. These two components are the most important part of the extension as they drive amlost all language-specific features, from Syntax Highlighting to Symbol Referencing.
 
