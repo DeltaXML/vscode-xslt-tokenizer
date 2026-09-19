@@ -10,6 +10,7 @@ export class CodeActionDocument implements vscode.TextDocument {
     version: number = 1;
     isDirty: boolean = false;
     isClosed: boolean = false;
+    readonly encoding: string = 'utf8';
     private static wsRegex = new RegExp(/(^\s+)/);
     docText: string;
     private textLines: string[];
