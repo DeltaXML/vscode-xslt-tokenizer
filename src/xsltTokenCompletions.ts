@@ -332,7 +332,10 @@ export class XsltTokenCompletions {
 									} else if (startTagToken) {
 										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: [] });
 									}
-									inScopeVariablesList = [];
+									// copy (not reuse) newVariablesList so that variables still in scope (e.g. from
+									// an enclosing xsl:template) remain visible for completions inside this element,
+									// while leaving the snapshot on elementStack untouched for restoration on close
+									inScopeVariablesList = newVariablesList.slice();
 									newVariablesList = [];
 									tagType = TagType.NonStart;
 
