@@ -1283,7 +1283,7 @@ export class XsltTokenDiagnostics {
 				} else if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
-					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr))) {
+					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.tokenType === TokenLevelState.simpleType || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr))) {
 						let isNoArgFunctionCall = false;
 						if (prevToken.charType == CharLevelState.dSep && prevToken.value == '()' && index > 2) {
 							let prevToken2 = allTokens[index - 2];
@@ -2183,8 +2183,8 @@ export class XsltTokenDiagnostics {
 								token['value'] = tValue;
 								problemTokens.push(token);
 							}
-						} else if (withinTypeDeclarationAttr && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
-							// e.g. xs:integer* don't check name
+						} else if ((withinTypeDeclarationAttr || stackItem?.token.context?.value === 'function') && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
+							// e.g. xs:integer* don't check name - also valid for an anonymous function's inline 'as' type declaration, e.g. function($i as xs:integer*) {...}
 							isValidType = true;
 						} else if (tParts.length === 1) {
 							let nextToken = allTokens.length > index + 1 ? allTokens[index + 1] : null;

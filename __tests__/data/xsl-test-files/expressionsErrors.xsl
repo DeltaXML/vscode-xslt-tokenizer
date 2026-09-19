@@ -73,6 +73,8 @@
   <!-- Array and map with functions -->
   <xsl:variable name="expressionErr53" select="[1, 2, 3] => array:filter(function($i as) { $i mod 2 = 1 })"/>
   <xsl:variable name="expressionErr53c" select="[1, 2, 3] => array:filter(function($i as xs:intege) { $i mod 2 = 1 })"/>
+  <xsl:variable name="expressionNoErr53d" select="[1, 2, 3] => array:filter(function($i as xs:integer*) { $i mod 2 = 1 })"/>
+  <xsl:variable name="expressionNoErr53e" select="[1, 2, 3] => array:filter(function($i as xs:integer?) { $i mod 2 = 1 })"/>
 
   <!-- Let and For expressions -->
   <xsl:variable name="letErr1" select="let $x := 5 return $xyy * 2"/>

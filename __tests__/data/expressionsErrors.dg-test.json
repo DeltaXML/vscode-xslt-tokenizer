@@ -557,6 +557,16 @@
       ]
     },
     {
+      "label": "expressionNoErr53d",
+      "xpath": "[1, 2, 3] => array:filter(function($i as xs:integer*) { $i mod 2 = 1 })",
+      "problems": []
+    },
+    {
+      "label": "expressionNoErr53e",
+      "xpath": "[1, 2, 3] => array:filter(function($i as xs:integer?) { $i mod 2 = 1 })",
+      "problems": []
+    },
+    {
       "label": "letErr1",
       "xpath": "let $x := 5 return $xyy * 2",
       "problems": [
