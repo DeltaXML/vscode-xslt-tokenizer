@@ -1,5 +1,9 @@
+import * as path from "path";
 import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
+import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
+import { GlobalInstructionData, GlobalInstructionType } from "./xslLexer";
+import { LexPosition } from "./xpLexer";
 
 enum CharType {
 	none,
@@ -14,23 +18,60 @@ export class XSLTHoverProvider implements HoverProvider {
 
 	private functionData = XPathFunctionDetails.dataPlusIxslPlus40;
 
-	provideHover(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<Hover> {
+	constructor(private definitionProvider?: XsltDefinitionProvider) {
+	}
+
+	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
 		const line = document.lineAt(position.line);
-		let fnName = this.getFunctionName(line.text, position.character);
+		const rawFnName = this.getFunctionName(line.text, position.character);
 
-		if (fnName) {
-			fnName = fnName.startsWith('fn:')? fnName.substring(3) : fnName;
-			const trimmedFnName = fnName.trimRight();
-			const matchingData = this.functionData.find((item) => {
-				return item.name === trimmedFnName;
-			});
+		if (!rawFnName) {
+			return undefined;
+		}
 
-			if (matchingData) {
-				return this.createHover(matchingData.signature, matchingData.description);
+		const trimmedFnName = rawFnName.trimRight();
+		// the built-in function list stores names without their standard 'fn:' prefix
+		const builtinLookupName = trimmedFnName.startsWith('fn:') ? trimmedFnName.substring(3) : trimmedFnName;
+		const matchingData = this.functionData.find((item) => {
+			return item.name === builtinLookupName;
+		});
+
+		if (matchingData) {
+			return this.createHover(matchingData.signature, matchingData.description);
+		}
+
+		if (this.definitionProvider) {
+			// a user-defined xsl:function keeps whatever prefix it was declared with (which may itself
+			// be bound to a namespace other than the standard fn: one), so match on the name as written
+			const userFunction = await this.findUserFunctionHover(document, trimmedFnName, token);
+			if (userFunction) {
+				return userFunction;
 			}
 		}
 
-		//return this.createHover('analyze\u2011string( input as xs:string?, pattern as xs:string, flags as xs:string ) as element(fn:analyze-string-result)', '*Something* is going to happen now');
+		return undefined;
+	}
+
+	private async findUserFunctionHover(document: TextDocument, fnName: string, token: CancellationToken): Promise<Hover | undefined> {
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider!.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+
+		const candidates: GlobalInstructionData[] = globalInstructionData.concat(allImportedGlobals).filter(
+			(item) => item.type === GlobalInstructionType.Function && item.name === fnName
+		);
+		if (candidates.length === 0) {
+			return undefined;
+		}
+
+		// functions with the same name can be declared with different arities (overloads) - prefer the richest one
+		const bestMatch = candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
+		const paramList = bestMatch.memberNames && bestMatch.memberNames.length > 0 ? '$' + bestMatch.memberNames.join(', $') : '';
+		const signature = `${bestMatch.name}(${paramList})`;
+		const description = bestMatch.href ? `User-defined function, declared in ${path.basename(bestMatch.href)}` : 'User-defined function, declared in this stylesheet';
+		return this.createHover(signature, description);
 	}
 
 	private createHover(signature: string, description: string) {
