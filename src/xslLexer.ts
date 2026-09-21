@@ -143,8 +143,10 @@ export interface GlobalInstructionData {
     idNumber: number;
     memberNames?: string[];
     memberTokens?: BaseToken[];
+    memberTypes?: (string|undefined)[];
     href?: string;
     version?: string;
+    returnType?: string;
 }
 
 export class XslLexer {
@@ -693,6 +695,8 @@ export class XslLexer {
         let tokenStartLine = -1;
         let attributeNameTokenAdded = false;
         let collectParamName = false;
+        let pendingParamType: string|undefined;
+        let currentParamNamePushed = false;
         let xpathEnded = false;
         
         if (this.debug) {
@@ -807,6 +811,8 @@ export class XslLexer {
                             tagInstructionNameAdded = false;
                             tagMatchToken = null;
                             collectParamName = false;
+                            pendingParamType = undefined;
+                            currentParamNamePushed = false;
                             if (xmlElementStack.length === 0 && tokenChars.length > 5) {
                                 tagGlobalInstructionType = GlobalInstructionType.RootXSLT;
                             } if (xmlElementStack.length === 1) {
@@ -995,11 +1001,15 @@ export class XslLexer {
                                         }
                                         gd.memberNames.push(attValue);
                                         gd.memberTokens?.push({...newToken});
+                                        gd.memberTypes?.push(pendingParamType);
                                     } else {
                                         gd['memberNames'] = [attValue];
                                         gd['memberTokens'] = [{...newToken}];
+                                        gd['memberTypes'] = [pendingParamType];
                                     }
                                     gd.idNumber++;
+                                    pendingParamType = undefined;
+                                    currentParamNamePushed = true;
                                 }
                             } else if (isGlobalUsePackageVersion) {
                                 let attValue = tokenChars.join('');
@@ -1029,6 +1039,7 @@ export class XslLexer {
                             } else if (isXPathAttribute) {
                                 this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeValue, result, nextState);
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
+                                const typeAttributeStartOffset = this.charCount;
 
                                 let exit: ExitCondition;
                                 if (nextState === XMLCharState.lSq) {
@@ -1039,6 +1050,22 @@ export class XslLexer {
 
                                 xpLexer.analyse('', exit, p, isTypeDeclarationAttribute);
                                 this.updateNames(result);
+                                if (isTypeDeclarationAttribute) {
+                                    // 'as' attribute value - captured as raw text (not parsed) purely for display on hover
+                                    const declaredType = xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim();
+                                    if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
+                                        this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
+                                    } else if (collectParamName && this.globalInstructionData.length > 0) {
+                                        if (currentParamNamePushed) {
+                                            const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                            if (gd.memberTypes && gd.memberTypes.length > 0) {
+                                                gd.memberTypes[gd.memberTypes.length - 1] = declaredType;
+                                            }
+                                        } else {
+                                            pendingParamType = declaredType;
+                                        }
+                                    }
+                                }
                                 // need to process right double-quote/single-quote
                                 this.lineNumber = p.line;
                                 let newCharCount = p.documentOffset - 1;

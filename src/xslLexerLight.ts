@@ -39,12 +39,15 @@ export class XslLexerLight extends XslLexer {
         let isGlobalParameterName = false;
         let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
+        let isTypeDeclarationAttribute = false;
 
         let xmlElementStack: number = 0;
         let lCharCount = -1;
         let lineNumber = 0;
         let lineNumberChar = -1;
         let collectParamName = false;
+        let pendingParamType: string|undefined;
+        let currentParamNamePushed = false;
 
         while (lCharCount < xslLength + 1) {
             lCharCount++;
@@ -99,6 +102,8 @@ export class XslLexerLight extends XslLexer {
                             tagInstructionNameAdded = false;
                             tagMatchToken = null;
                             collectParamName = false;
+                            pendingParamType = undefined;
+                            currentParamNamePushed = false;
                             if (xmlElementStack === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
                             } else if (xmlElementStack === 2 
@@ -137,19 +142,22 @@ export class XslLexerLight extends XslLexer {
                             isGlobalParameterName = false;
                             isGlobalUsePackageVersion = false;
                             isGlobalInstructionMatch = false;
+                            isTypeDeclarationAttribute = false;
                             if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
                              && attName === 'href') {
                                 isGlobalInstructionName = true;
                             } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                 isGlobalInstructionName = true;
                             } else if (attName === 'mode') {
-                                isGlobalInstructionMode = true; 
+                                isGlobalInstructionMode = true;
                             } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'match') {
                                 isGlobalInstructionMatch = true;
                             } else if (collectParamName && attName === 'name') {
                                 isGlobalParameterName = true;
                             } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                 isGlobalUsePackageVersion = true;
+                            } else if ((tagGlobalInstructionType === GlobalInstructionType.Function || collectParamName) && attName === 'as') {
+                                isTypeDeclarationAttribute = true;
                             } else if (xmlnsPrefixesOnly && attName.startsWith('xmlns:')) {
                                 let xmlnsTkn: BaseToken = {
                                     line: lineNumber,
@@ -227,11 +235,29 @@ export class XslLexerLight extends XslLexer {
                                         if (gd.memberNames) {
                                             gd.memberNames.push(attValue);
                                             gd.memberTokens?.push(newToken);
+                                            gd.memberTypes?.push(pendingParamType);
                                         } else {
                                             gd['memberNames'] = [attValue];
                                             gd['memberTokens'] = [newToken];
+                                            gd['memberTypes'] = [pendingParamType];
                                         }
                                         gd.idNumber++;
+                                        pendingParamType = undefined;
+                                        currentParamNamePushed = true;
+                                    }
+                                }
+                            } else if (isTypeDeclarationAttribute) {
+                                const declaredType = tokenChars.join('').trim();
+                                if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
+                                    this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
+                                } else if (collectParamName && this.globalInstructionData.length > 0) {
+                                    if (currentParamNamePushed) {
+                                        const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                        if (gd.memberTypes && gd.memberTypes.length > 0) {
+                                            gd.memberTypes[gd.memberTypes.length - 1] = declaredType;
+                                        }
+                                    } else {
+                                        pendingParamType = declaredType;
                                     }
                                 }
                             } else if (isGlobalInstructionMatch) {

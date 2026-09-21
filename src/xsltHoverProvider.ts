@@ -68,8 +68,12 @@ export class XSLTHoverProvider implements HoverProvider {
 
 		// functions with the same name can be declared with different arities (overloads) - prefer the richest one
 		const bestMatch = candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
-		const paramList = bestMatch.memberNames && bestMatch.memberNames.length > 0 ? '$' + bestMatch.memberNames.join(', $') : '';
-		const signature = `${bestMatch.name}(${paramList})`;
+		const paramList = (bestMatch.memberNames ?? []).map((paramName, i) => {
+			const paramType = bestMatch.memberTypes?.[i];
+			return paramType ? `$${paramName} as ${paramType}` : `$${paramName}`;
+		}).join(', ');
+		const returnType = bestMatch.returnType ? ` as ${bestMatch.returnType}` : '';
+		const signature = `${bestMatch.name}(${paramList})${returnType}`;
 		const description = bestMatch.href ? `User-defined function, declared in ${path.basename(bestMatch.href)}` : 'User-defined function, declared in this stylesheet';
 		return this.createHover(signature, description);
 	}
