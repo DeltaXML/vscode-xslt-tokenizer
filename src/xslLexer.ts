@@ -147,6 +147,7 @@ export interface GlobalInstructionData {
     href?: string;
     version?: string;
     returnType?: string;
+    defaultSelect?: string;
 }
 
 export class XslLexer {
@@ -688,6 +689,7 @@ export class XslLexer {
         let isGlobalParameterName = false;
         let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
+        let isParamDefaultSelectAttribute = false;
 
         let expandTextValue: boolean|null = false;
         let xmlElementStack: XmlElement[] = [];
@@ -697,6 +699,8 @@ export class XslLexer {
         let collectParamName = false;
         let pendingParamType: string|undefined;
         let currentParamNamePushed = false;
+        let pendingParamSelect: string|undefined;
+        let topLevelParamNamePushed = false;
         let xpathEnded = false;
         
         if (this.debug) {
@@ -813,6 +817,8 @@ export class XslLexer {
                             collectParamName = false;
                             pendingParamType = undefined;
                             currentParamNamePushed = false;
+                            pendingParamSelect = undefined;
+                            topLevelParamNamePushed = false;
                             if (xmlElementStack.length === 0 && tokenChars.length > 5) {
                                 tagGlobalInstructionType = GlobalInstructionType.RootXSLT;
                             } if (xmlElementStack.length === 1) {
@@ -871,6 +877,7 @@ export class XslLexer {
                         case XMLCharState.lStEq:
                             let isXMLNSattribute = false;
                             isTypeDeclarationAttribute = false;
+                            isParamDefaultSelectAttribute = false;
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
@@ -915,6 +922,10 @@ export class XslLexer {
                                 } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                     isExpandTextAttribute = false;
                                     isGlobalUsePackageVersion = true;
+                                } else if (tagGlobalInstructionType === GlobalInstructionType.Parameter && attName === 'select') {
+                                    isExpandTextAttribute = false;
+                                    isParamDefaultSelectAttribute = true;
+                                    isXPathAttribute = this.isExpressionAtt(attName, tagElementName);
                                 } else {
                                     isExpandTextAttribute = false;
                                     // todo: 'as'
@@ -988,7 +999,13 @@ export class XslLexer {
                                     modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
                                 } else {
                                     const idNumber = globalType === GlobalInstructionType.Variable ? result.length : 0;
-                                    targetGlobal.push({type: globalType, name: attValue, token: newTokenCopy, idNumber: idNumber});
+                                    const newGlobal: GlobalInstructionData = {type: globalType, name: attValue, token: newTokenCopy, idNumber: idNumber};
+                                    if (globalType === GlobalInstructionType.Parameter) {
+                                        newGlobal.defaultSelect = pendingParamSelect;
+                                        pendingParamSelect = undefined;
+                                        topLevelParamNamePushed = true;
+                                    }
+                                    targetGlobal.push(newGlobal);
                                 }
                             } else if (isGlobalParameterName) {
                                 let attValue = tokenChars.join('');
@@ -1064,6 +1081,18 @@ export class XslLexer {
                                         } else {
                                             pendingParamType = declaredType;
                                         }
+                                    }
+                                } else if (isParamDefaultSelectAttribute) {
+                                    // top-level xsl:param's 'select' attribute value - captured as raw text (not evaluated), so it
+                                    // can be offered back as a Saxon '?param=<xpath>' command-line override with matching semantics
+                                    const declaredSelect = xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim();
+                                    if (topLevelParamNamePushed && this.globalInstructionData.length > 0) {
+                                        const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                        if (gd.type === GlobalInstructionType.Parameter) {
+                                            gd.defaultSelect = declaredSelect;
+                                        }
+                                    } else {
+                                        pendingParamSelect = declaredSelect;
                                     }
                                 }
                                 // need to process right double-quote/single-quote

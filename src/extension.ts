@@ -252,7 +252,7 @@ export function activate(context: vscode.ExtensionContext) {
 		// file-picker command, so it also lands in the recent-files list), letting the user add xslt parameters etc.
 		// by hand afterwards; subsequent runs re-execute that same (possibly since-edited) persisted task
 		try {
-			const label = await SaxonTaskProvider.findOrCreateQuickRunTaskLabel(activeEditor.document.uri.fsPath, contextUri.fsPath);
+			const label = await SaxonTaskProvider.findOrCreateQuickRunTaskLabel(activeEditor.document, contextUri.fsPath, xsltDefintiionProvider);
 			if (label) {
 				const persistedTasks = await vscode.tasks.fetchTasks({ type: 'xslt' });
 				const persistedTask = persistedTasks.find((t) => t.name === label);

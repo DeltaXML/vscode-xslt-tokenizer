@@ -40,6 +40,7 @@ export class XslLexerLight extends XslLexer {
         let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
         let isTypeDeclarationAttribute = false;
+        let isParamDefaultSelectAttribute = false;
 
         let xmlElementStack: number = 0;
         let lCharCount = -1;
@@ -48,6 +49,8 @@ export class XslLexerLight extends XslLexer {
         let collectParamName = false;
         let pendingParamType: string|undefined;
         let currentParamNamePushed = false;
+        let pendingParamSelect: string|undefined;
+        let topLevelParamNamePushed = false;
 
         while (lCharCount < xslLength + 1) {
             lCharCount++;
@@ -104,6 +107,8 @@ export class XslLexerLight extends XslLexer {
                             collectParamName = false;
                             pendingParamType = undefined;
                             currentParamNamePushed = false;
+                            pendingParamSelect = undefined;
+                            topLevelParamNamePushed = false;
                             if (xmlElementStack === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
                             } else if (xmlElementStack === 2 
@@ -143,6 +148,7 @@ export class XslLexerLight extends XslLexer {
                             isGlobalUsePackageVersion = false;
                             isGlobalInstructionMatch = false;
                             isTypeDeclarationAttribute = false;
+                            isParamDefaultSelectAttribute = false;
                             if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
                              && attName === 'href') {
                                 isGlobalInstructionName = true;
@@ -158,6 +164,8 @@ export class XslLexerLight extends XslLexer {
                                 isGlobalUsePackageVersion = true;
                             } else if ((tagGlobalInstructionType === GlobalInstructionType.Function || collectParamName) && attName === 'as') {
                                 isTypeDeclarationAttribute = true;
+                            } else if (tagGlobalInstructionType === GlobalInstructionType.Parameter && attName === 'select') {
+                                isParamDefaultSelectAttribute = true;
                             } else if (xmlnsPrefixesOnly && attName.startsWith('xmlns:')) {
                                 let xmlnsTkn: BaseToken = {
                                     line: lineNumber,
@@ -213,7 +221,13 @@ export class XslLexerLight extends XslLexer {
                                     const modeTokens = XslLexer.tokensInsideToken(tkn, attValue);
                                     modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
                                 } else {
-                                    targetGlobal.push({type: globalType, name: attValue, token: tkn, idNumber: 0});
+                                    const newGlobal: GlobalInstructionData = {type: globalType, name: attValue, token: tkn, idNumber: 0};
+                                    if (globalType === GlobalInstructionType.Parameter) {
+                                        newGlobal.defaultSelect = pendingParamSelect;
+                                        pendingParamSelect = undefined;
+                                        topLevelParamNamePushed = true;
+                                    }
+                                    targetGlobal.push(newGlobal);
                                 }
                                 isGlobalInstructionName = false;
                                 // fix bug where function arity was added to by following template params
@@ -260,6 +274,16 @@ export class XslLexerLight extends XslLexer {
                                         pendingParamType = declaredType;
                                     }
                                 }
+                            } else if (isParamDefaultSelectAttribute) {
+                                const declaredSelect = tokenChars.join('').trim();
+                                if (topLevelParamNamePushed && this.globalInstructionData.length > 0) {
+                                    const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                    if (gd.type === GlobalInstructionType.Parameter) {
+                                        gd.defaultSelect = declaredSelect;
+                                    }
+                                } else {
+                                    pendingParamSelect = declaredSelect;
+                                }
                             } else if (isGlobalInstructionMatch) {
                                 let attValue = tokenChars.join('');
                                 let tkn: BaseToken = {
@@ -278,7 +302,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage
-                                 || isGlobalInstructionName || isGlobalInstructionMode) {
+                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute) {
                                 storeToken = true;
                             }
                            break;

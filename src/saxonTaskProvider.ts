@@ -9,6 +9,9 @@ import * as  os from 'os';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import * as path from 'path';
 import * as jsc from 'jsonc-parser';
+import { GlobalInstructionType, GlobalInstructionData } from './xslLexer';
+import { XsltDefinitionProvider } from './xsltDefinitionProvider';
+import { LexPosition } from './xpLexer';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -77,7 +80,8 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     // finds (or persists, on first use) a 'xslt' task in .vscode/tasks.json for this xsltFile/xmlSource pair,
     // so the user can subsequently add xslt parameters etc. by hand - returns its label, or undefined if there
     // is no workspace folder to persist into (caller should fall back to an ad hoc, non-persisted task)
-    public static async findOrCreateQuickRunTaskLabel(xsltFsPath: string, xmlSourceFsPath: string): Promise<string | undefined> {
+    public static async findOrCreateQuickRunTaskLabel(xsltDocument: vscode.TextDocument, xmlSourceFsPath: string, definitionProvider: XsltDefinitionProvider): Promise<string | undefined> {
+        const xsltFsPath = xsltDocument.uri.fsPath;
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             return undefined;
@@ -116,6 +120,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         }
 
         const label = `${path.basename(xsltFsPath, path.extname(xsltFsPath))} with ${path.basename(xmlSourceFsPath)}`;
+        const parameters = await SaxonTaskProvider.extractTopLevelParameters(xsltDocument, definitionProvider);
         const newTask: XSLTTask = {
             type: 'xslt',
             label: label,
@@ -127,6 +132,9 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             allowSyntaxExtensions40: 'off',
             group: { kind: 'build' },
         };
+        if (parameters.length > 0) {
+            newTask.parameters = parameters;
+        }
 
         const formattingOptions = { tabSize: 4, insertSpaces: false, eol: '\n' };
         // an existing-but-empty (or otherwise incomplete) tasks.json has no top-level "version" yet - jsonc-parser's
@@ -144,6 +152,25 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         const newText = jsc.applyEdits(text, edits);
         await vscode.workspace.fs.writeFile(workspaceTaskUri, Buffer.from(newText, 'utf8'));
         return label;
+    }
+
+    // top-level xsl:param declarations (in this stylesheet, or anything it imports/includes) with a 'select'
+    // default become '?name=<the same xpath>' overrides - the leading '?' tells Saxon's CLI to evaluate the
+    // value as XPath rather than treat it as a literal string, so reusing the declared select expression
+    // verbatim reproduces the param's own default, not an empty override
+    private static async extractTopLevelParameters(xsltDocument: vscode.TextDocument, definitionProvider: XsltDefinitionProvider): Promise<XSLTParameter[]> {
+        const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+        const { globalInstructionData, allImportedGlobals } = await definitionProvider.getImportedGlobals(xsltDocument, lexPosition);
+
+        const seenNames = new Set<string>();
+        const parameters: XSLTParameter[] = [];
+        globalInstructionData.concat(allImportedGlobals).forEach((g: GlobalInstructionData) => {
+            if (g.type === GlobalInstructionType.Parameter && g.defaultSelect && !seenNames.has(g.name)) {
+                seenNames.add(g.name);
+                parameters.push({ name: '?' + g.name, value: g.defaultSelect });
+            }
+        });
+        return parameters;
     }
 
     private getTasks(tasks: XSLTTask[]) {
