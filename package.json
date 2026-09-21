@@ -94,6 +94,12 @@
 				"key": "Shift+Cmd+8"
 			},
 			{
+				"command": "xslt-xpath.quickRunXslt",
+				"key": "ctrl+alt+r",
+				"mac": "cmd+alt+r",
+				"when": "editorLangId == xslt"
+			},
+			{
 				"command": "xslt-xpath.selectFollowingElement",
 				"key": "Shift+Cmd+7"
 			},
@@ -142,8 +148,23 @@
 				"command": "xslt-xpath.selectFirstChildElement",
 				"title": "Select first child element",
 				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.quickRunXslt",
+				"title": "Quick Run with Saxon",
+				"category": "XSLT",
+				"icon": "$(play)"
 			}
 		],
+		"menus": {
+			"editor/title": [
+				{
+					"command": "xslt-xpath.quickRunXslt",
+					"when": "resourceLangId == xslt",
+					"group": "navigation"
+				}
+			]
+		},
 		"semanticTokenScopes": [
 			{
 				"scopes": {
@@ -250,7 +271,6 @@
 					"label",
 					"xsltFile",
 					"xmlSource",
-					"resultPath",
 					"saxonJar"
 				],
 				"properties": {
@@ -442,8 +462,7 @@
 				"required": [
 					"label",
 					"xsltFile",
-					"xmlSource",
-					"resultPath"
+					"xmlSource"
 				],
 				"properties": {
 					"label": {

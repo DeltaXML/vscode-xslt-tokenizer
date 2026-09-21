@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as  os from 'os';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import * as path from 'path';
+import * as jsc from 'jsonc-parser';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -22,7 +23,7 @@ interface XSLTTask extends vscode.TaskDefinition {
     saxonJar: string;
     xsltFile: string;
     xmlSource: string;
-    resultPath: string;
+    resultPath?: string;
     execute?: boolean;
     allowSyntaxExtensions40?: string;
     parameters?: XSLTParameter[];
@@ -71,6 +72,78 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         const xdmView = xdmViewFiles.length > 0 ? xdmViewFiles[0] : vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xdm-view/xdm-view.xsl');
         const docBaseURI = path.dirname(document.uri.fsPath);
         return path.relative(docBaseURI, xdmView.fsPath);
+    }
+
+    // finds (or persists, on first use) a 'xslt' task in .vscode/tasks.json for this xsltFile/xmlSource pair,
+    // so the user can subsequently add xslt parameters etc. by hand - returns its label, or undefined if there
+    // is no workspace folder to persist into (caller should fall back to an ad hoc, non-persisted task)
+    public static async findOrCreateQuickRunTaskLabel(xsltFsPath: string, xmlSourceFsPath: string): Promise<string | undefined> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return undefined;
+        }
+        const workspaceTaskUri = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json');
+
+        const toStoredPath = (fsPath: string) => {
+            const rel = path.relative(workspaceFolder.uri.fsPath, fsPath);
+            return (!rel.startsWith('..') && !path.isAbsolute(rel))
+                ? '${workspaceFolder}/' + rel.split(path.sep).join('/')
+                : fsPath;
+        };
+        const resolveStoredPath = (value: string) => path.normalize(value.startsWith('${workspaceFolder}')
+            ? path.join(workspaceFolder.uri.fsPath, value.substring('${workspaceFolder}'.length))
+            : value);
+
+        let text: string;
+        try {
+            const doc = await vscode.workspace.openTextDocument(workspaceTaskUri);
+            text = doc.getText();
+        } catch {
+            text = JSON.stringify({ version: '2.0.0', tasks: [] }, null, '\t');
+        }
+
+        const parsed = jsc.parse(text) || {};
+        const existingTasks: XSLTTask[] = parsed.tasks || [];
+        const normalizedXslt = path.normalize(xsltFsPath);
+        const normalizedSource = path.normalize(xmlSourceFsPath);
+        const match = existingTasks.find((t) =>
+            t.type === 'xslt' &&
+            typeof t.xsltFile === 'string' && resolveStoredPath(t.xsltFile) === normalizedXslt &&
+            typeof t.xmlSource === 'string' && resolveStoredPath(t.xmlSource) === normalizedSource
+        );
+        if (match) {
+            return match.label;
+        }
+
+        const label = `${path.basename(xsltFsPath, path.extname(xsltFsPath))} with ${path.basename(xmlSourceFsPath)}`;
+        const newTask: XSLTTask = {
+            type: 'xslt',
+            label: label,
+            saxonJar: '${config:XSLT.tasks.saxonJar}',
+            xsltFile: toStoredPath(xsltFsPath),
+            xmlSource: toStoredPath(xmlSourceFsPath),
+            resultPath: '${command:xslt-xpath.pickResultFile}',
+            messageEscaping: 'adaptive',
+            allowSyntaxExtensions40: 'off',
+            group: { kind: 'build' },
+        };
+
+        const formattingOptions = { tabSize: 4, insertSpaces: false, eol: '\n' };
+        // an existing-but-empty (or otherwise incomplete) tasks.json has no top-level "version" yet - jsonc-parser's
+        // modify() only ever adds the property path it's told to, so inserting straight into "tasks" would silently
+        // leave "version" out and produce a tasks.json VS Code considers invalid (breaking task discovery entirely)
+        if (typeof parsed.version !== 'string') {
+            const versionEdits = jsc.modify(text, ['version'], '2.0.0', { formattingOptions });
+            text = jsc.applyEdits(text, versionEdits);
+        }
+        const taskInsertionIndex = (jsc.parse(text)?.tasks || []).length;
+        const edits = jsc.modify(text, ['tasks', taskInsertionIndex], newTask, {
+            formattingOptions,
+            isArrayInsertion: true,
+        });
+        const newText = jsc.applyEdits(text, edits);
+        await vscode.workspace.fs.writeFile(workspaceTaskUri, Buffer.from(newText, 'utf8'));
+        return label;
     }
 
     private getTasks(tasks: XSLTTask[]) {
@@ -138,7 +211,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     //     return this.getTask(xsltTask);
     // }
 
-    private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
+    public getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt';
         const saxonJarConfig: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');

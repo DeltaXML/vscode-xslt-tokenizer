@@ -226,6 +226,58 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPathInDocument', (...args) => selectXPathInDocument(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setExtensionXPathVariable', (...args) => XsltTokenCompletions.extXPathVariables.set(args[0], args[1])));
+	const quickRunSaxonTaskProvider = new SaxonTaskProvider('');
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunXslt', async () => {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
+			vscode.window.showErrorMessage('Quick Run XSLT: open an XSLT stylesheet in the active editor first.');
+			return;
+		}
+		const javaTasksEnabled = vscode.workspace.getConfiguration('XSLT.tasks.java').get('enabled');
+		if (!javaTasksEnabled) {
+			vscode.window.showErrorMessage('Quick Run XSLT: Saxon (Java) tasks are disabled - enable the "XSLT.tasks.java.enabled" setting to use this.');
+			return;
+		}
+		const saxonJar: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
+		if (!saxonJar) {
+			vscode.window.showErrorMessage('Quick Run XSLT: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+			return;
+		}
+		const contextUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+		if (!contextUri) {
+			vscode.window.showErrorMessage('Quick Run XSLT: no XML context file is set - open an XML source file (or run "Pick XPath Context File") first.');
+			return;
+		}
+		// first use for this xslt+context pair persists a real task in .vscode/tasks.json (result path uses the
+		// file-picker command, so it also lands in the recent-files list), letting the user add xslt parameters etc.
+		// by hand afterwards; subsequent runs re-execute that same (possibly since-edited) persisted task
+		try {
+			const label = await SaxonTaskProvider.findOrCreateQuickRunTaskLabel(activeEditor.document.uri.fsPath, contextUri.fsPath);
+			if (label) {
+				const persistedTasks = await vscode.tasks.fetchTasks({ type: 'xslt' });
+				const persistedTask = persistedTasks.find((t) => t.name === label);
+				if (persistedTask) {
+					await vscode.tasks.executeTask(persistedTask);
+					return;
+				}
+			}
+		} catch (e) {
+			// no workspace, or tasks.json couldn't be read/written - fall back to an ad hoc, non-persisted run below
+		}
+
+		const task = quickRunSaxonTaskProvider.getTask({
+			type: 'xslt',
+			label: 'Saxon Quick Run',
+			saxonJar: saxonJar,
+			xsltFile: activeEditor.document.uri.fsPath,
+			xmlSource: contextUri.fsPath,
+			messageEscaping: 'adaptive',
+			allowSyntaxExtensions40: 'off',
+		});
+		if (task) {
+			await vscode.tasks.executeTask(task);
+		}
+	}));
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xslt', new XSLTCodeActions(), { providedCodeActionKinds: XSLTCodeActions.providedCodeActionKinds }));
 	context.subscriptions.push(
 		vscode.commands.registerCommand(XSLTCodeActions.COMMAND, () => vscode.env.openExternal(vscode.Uri.parse('https://unicode.org/emoji/charts-12.0/full-emoji-list.html')))

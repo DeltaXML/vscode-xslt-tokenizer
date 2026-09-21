@@ -16,7 +16,7 @@ interface XSLTJSTask {
     xmlSource: string;
     useJsonSource?: boolean;
     execute?: boolean;
-    resultPath: string;
+    resultPath?: string;
     relocate?: string;
     timing?: string;
     unprefixedElementNames?: string;
