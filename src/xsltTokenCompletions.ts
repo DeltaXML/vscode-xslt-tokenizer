@@ -1356,7 +1356,9 @@ export class XsltTokenCompletions {
 			newItem.detail = item.signature;
 			newItem.insertText = new vscode.SnippetString(item.name + suffixBrackets);
 			//if (useRange) newItem.range = range;
-			//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
+			if (!noArgs) {
+				newItem.command = { command: 'editor.action.triggerParameterHints', title: 'Trigger Parameter Hints' };
+			}
 			completionItems.push(newItem);
 		});
 		return completionItems;
@@ -1389,7 +1391,9 @@ export class XsltTokenCompletions {
 				if (useRange) {
 					newItem.range = range;
 				}
-				//newItem.command = { command: 'editor.action.triggerSuggest', title: 'Re-trigger completions...' };
+				if (!noArgs) {
+					newItem.command = { command: 'editor.action.triggerParameterHints', title: 'Trigger Parameter Hints' };
+				}
 				completionItems.push(newItem);
 			}
 		});
