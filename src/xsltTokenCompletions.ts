@@ -947,6 +947,18 @@ export class XsltTokenCompletions {
 							//resultCompletions = XsltTokenCompletions.createLocationFromInstrcution(instruction, document);
 						}
 						break;
+					case TokenLevelState.simpleType:
+					case TokenLevelState.nodeType:
+						// a type name being typed after 'instance of'/'castable as'/'treat as'/'cast as'
+						// (the equivalent case for the XML 'as="..."' attribute is handled separately, above,
+						// via the isOnRequiredToken && tagAttributeNames[...]==='as' branch)
+						if (isOnRequiredToken) {
+							const tokenStart = new vscode.Position(token.line, token.startCharacter);
+							const tokenEnd = new vscode.Position(token.line, token.startCharacter + token.length);
+							const tokenRange = new vscode.Range(tokenStart, tokenEnd);
+							resultCompletions = XsltTokenCompletions.getRangeInsertCompletions(XsltTokenCompletions.sequenceTypes, tokenRange, vscode.CompletionItemKind.TypeParameter);
+						}
+						break;
 				}
 			}
 			prevToken = token;
