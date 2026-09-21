@@ -52,14 +52,14 @@ export function activate(context: vscode.ExtensionContext) {
 	const fileSelector = new FileSelection(context);
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
 
-	// restore the XPath auto-completion context file from the top of this workspace's recently-used list on
-	// startup, rather than waiting for the user to open/pick an XML file again - only if it still exists
+	// restore the deliberately-chosen XML context file on startup, rather than waiting for the user to open/pick
+	// one again - only if it still exists. Deliberately not derived from the recently-used file list, since that
+	// list also gets entries from any XML file the user happens to view (e.g. inspecting a transform's output)
 	(async () => {
-		const recentXmlFiles: string[] | undefined = context.workspaceState.get(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL);
-		const mostRecentXmlFile = recentXmlFiles?.[0];
-		if (mostRecentXmlFile) {
+		const persistedContextFsPath = fileSelector.getContextFileUri();
+		if (persistedContextFsPath) {
 			try {
-				const uri = vscode.Uri.file(mostRecentXmlFile);
+				const uri = vscode.Uri.file(persistedContextFsPath);
 				await vscode.workspace.fs.stat(uri);
 				DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
 				// registerXMLEditor() below already ran by the time this resolves and may have rendered the

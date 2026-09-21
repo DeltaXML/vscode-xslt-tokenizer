@@ -17,6 +17,7 @@ export class FileSelection {
   private static readonly XML_SOURCE_LABEL = "Select XML Source File";
   private static readonly XSLT_CONTEXT_LABEL = "Select XSLT context file";
   public static readonly XSLT_CONTEXT_PREVIOIUS_LABEL = "recent XML files";
+  private static readonly XSLT_CONTEXT_URI_LABEL = "xslt context uri";
   private static readonly RESULT_LABEL = "Set Result File";
   private static commandList: string[] = [FileSelection.PICK_FILE];
   public static readonly MMO_PREFIX = 'qfs:';
@@ -45,7 +46,7 @@ export class FileSelection {
         const newSymbols = await sp.getDocumentSymbols(doc, false);
         if (newSymbols) {
           XsltSymbolProvider.documentSymbols.set(pickedUri, newSymbols);
-          DocumentChangeHandler.lastActiveXMLNonXSLUri = pickedUri;
+          DocumentChangeHandler.setLastActiveXMLNonXSLUri(pickedUri);
           DocumentChangeHandler.updateStatusBarItem(true);
         }
       } catch {
@@ -73,6 +74,16 @@ export class FileSelection {
   }
   public async pickStage2ResultFile() {
     return await this.pickFile({ label: "Set Stage2 Result File", isResult: true });
+  }
+
+  // persisted separately from the recently-used list, which also gets entries pushed to it by any XML file the
+  // user happens to view (e.g. inspecting a transform's output) - this holds only the deliberately chosen context
+  public setContextFileUri(fsPath: string | undefined) {
+    this.context.workspaceState.update(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_URI_LABEL, fsPath);
+  }
+
+  public getContextFileUri(): string | undefined {
+    return this.context.workspaceState.get(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_URI_LABEL);
   }
 
   public addToRecentlyUsedPickFile(workspaceLabel: string, pickedFsPath: string) {

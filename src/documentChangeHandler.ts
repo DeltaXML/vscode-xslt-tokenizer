@@ -22,6 +22,11 @@ export class DocumentChangeHandler {
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 	public static isWindowsOS: boolean | undefined;
 
+	public static setLastActiveXMLNonXSLUri(uri: vscode.Uri): void {
+		DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
+		FileSelection.instance?.setContextFileUri(uri.fsPath);
+	}
+
 	private onDidChangeRegistration: vscode.Disposable | null = null;
 	private xmlDocumentRegistered = false;
 	private lastChangePerformed: TagRenameEdit | null = null;
@@ -226,7 +231,7 @@ export class DocumentChangeHandler {
 				FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
 				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
 				if (!DocumentChangeHandler.lastActiveXMLNonXSLUri) {
-					DocumentChangeHandler.lastActiveXMLNonXSLUri = editor.document.uri;
+					DocumentChangeHandler.setLastActiveXMLNonXSLUri(editor.document.uri);
 				}
 			}
 			DocumentChangeHandler.getLastDocXmlnsPrefixes();
@@ -246,8 +251,8 @@ export class DocumentChangeHandler {
 	public static updateStatusBarItem(isXSLTOrXPath: boolean): void {
 		if (isXSLTOrXPath) {
 			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
-			const filename = docUri ? path.basename(docUri.path) : '[auto-completion context]';
-			DocumentChangeHandler.contextStatusBarItem.tooltip = 'set XML context file to use for xpath auto-completion';
+			const filename = docUri ? path.basename(docUri.path) : '[XML context file]';
+			DocumentChangeHandler.contextStatusBarItem.tooltip = 'XML context file - used for XPath auto-completion and as the source for Quick Run';
 			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
 			DocumentChangeHandler.contextStatusBarItem.show();
 		} else {
