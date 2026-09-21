@@ -11,10 +11,10 @@
 			"request": "launch",
 			"runtimeExecutable": "${execPath}",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}"
+				"--extensionDevelopmentPath=${workspaceFolder:vscode-xslt-tokenizer}"
 			],
 			"outFiles": [
-				"${workspaceFolder}/out/**/*.js"
+				"${workspaceFolder:vscode-xslt-tokenizer}/out/**/*.js"
 			],
 			"preLaunchTask": "npm: watch"
 		},
@@ -24,11 +24,11 @@
 			"request": "launch",
 			"runtimeExecutable": "${execPath}",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"--extensionTestsPath=${workspaceFolder}/out/test/vscode-ext"
+				"--extensionDevelopmentPath=${workspaceFolder:vscode-xslt-tokenizer}",
+				"--extensionTestsPath=${workspaceFolder:vscode-xslt-tokenizer}/out/test/vscode-ext"
 			],
 			"outFiles": [
-				"${workspaceFolder}/out/test/**/*.js"
+				"${workspaceFolder:vscode-xslt-tokenizer}/out/test/**/*.js"
 			],
 			"preLaunchTask": "npm: watch"
 		},
@@ -39,10 +39,10 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}/out/xpLexerRun.js",
+            "program": "${workspaceFolder:vscode-xslt-tokenizer}/out/xpLexerRun.js",
             "preLaunchTask": "tsc: build - tsconfig.json",
             "outFiles": [
-                "${workspaceFolder}/out/test/**/*.js"
+                "${workspaceFolder:vscode-xslt-tokenizer}/out/test/**/*.js"
             ]
 		},
 		{
@@ -52,10 +52,10 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}/out/xslLexerRun.js",
+            "program": "${workspaceFolder:vscode-xslt-tokenizer}/out/xslLexerRun.js",
             "preLaunchTask": "tsc: build - tsconfig.json",
             "outFiles": [
-                "${workspaceFolder}/out/test/**/*.js"
+                "${workspaceFolder:vscode-xslt-tokenizer}/out/test/**/*.js"
             ]
         }
 	]
