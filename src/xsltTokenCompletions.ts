@@ -58,6 +58,10 @@ export interface XPathData {
 	function?: BaseToken;
 	functionArity?: number;
 	isRangeVar?: boolean;
+	// the exact keyword text ('for'/'let'/'some'/'every') that pushed this range-var scope -
+	// captured directly at push time since token.value isn't populated for these keyword tokens
+	// (their text has to be read via XsltTokenDiagnostics.getTextForToken(document) instead)
+	rangeVarKeyword?: string;
 	awaitingArity: boolean;
 	tokenIndex?: number;
 }
@@ -167,7 +171,7 @@ export class XsltTokenCompletions {
 			let overranPos = !keepProcessing && (lineNumber > requiredLine || (lineNumber === requiredLine && token.startCharacter > requiredChar));
 			if (docType === DocumentTypes.XPath && index === lastTokenIndex && requiredChar > token.startCharacter + token.length) {
 				const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-				resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+				resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prevToken, token, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack);
 				if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 					resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 				}
@@ -195,7 +199,7 @@ export class XsltTokenCompletions {
 					} else {
 						let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 						const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-						resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+						resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack);
 						if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 							resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 						}
@@ -222,7 +226,11 @@ export class XsltTokenCompletions {
 			if (isXMLToken) {
 				inScopeXPathVariablesList = [];
 				xpathVariableCurrentlyBeingDefined = false;
-
+				// preserve a reference to the pre-reset xpathStack: the closing quote of an XPath-bearing
+				// attribute value is itself an XML token, so by the time its own case below runs,
+				// xpathStack has already been wiped - but a value sitting right at that boundary (e.g.
+				// "select=\"let $p := 22 |\"", cursor right before the closing quote) still needs it.
+				const xpathStackAtValueBoundary = xpathStack;
 				xpathStack = [];
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
@@ -278,7 +286,7 @@ export class XsltTokenCompletions {
 							if (isTVT) {
 								let prev2Token = prevToken?.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 								const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-								resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+								resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack);
 								if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 									resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 								}
@@ -592,11 +600,15 @@ export class XsltTokenCompletions {
 										} else if (
 											(languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1 && !(attName === 'use' && (tagElementName === 'xsl:context-item' || tagElementName === 'xsl:global-context-item'))) ||
 											(fullVariableName.startsWith('}') && (prevToken?.value.endsWith('{') || (prevToken && prevToken?.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber)))) {
+											// this is the closing quote of the attribute's value, i.e. we're right at
+											// the end of the XPath expression - xpathStack was already reset to []
+											// a few lines up (it's an XML-classified token), so use the preserved
+											// pre-reset reference to still see e.g. an enclosing for/let/some/every scope
 											let prev2Token = allTokens[index - 2];
-											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-											resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+											const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStackAtValueBoundary, xpathDocSymbols, elementNameTests, attNameTests);
+											resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStackAtValueBoundary);
 											if (!XsltTokenCompletions.isKindType(resultCompletions)) {
-												resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
+												resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStackAtValueBoundary, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 											}
 										} else {
 											if (attName === 'as') {
@@ -698,7 +710,7 @@ export class XsltTokenCompletions {
 							case 'some':
 								preXPathVariable = true;
 								xpathVariableCurrentlyBeingDefined = false;
-								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
+								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true, rangeVarKeyword: valueText });
 								break;
 							case 'then':
 								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
@@ -738,6 +750,11 @@ export class XsltTokenCompletions {
 							} else {
 								resultCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 								resultCompletions = resultCompletions.concat(XsltTokenCompletions.getAllTokenCompletions(docType, position, token, elementNames, attrNames, globalInstructionData, importedInstructionData));
+								if (XsltTokenCompletions.isValueCompletingToken(prevToken)) {
+									// e.g. "$test0 i|" or "book i|" - prevToken already completed a value,
+									// so 'instance of'/'castable as'/'return'/'satisfies' may also apply here
+									resultCompletions = resultCompletions.concat(XsltTokenCompletions.getTokenCommandCompletions(token, true, XsltTokenCompletions.getValueContinuationKeywords(xpathStack), vscode.CompletionItemKind.Keyword));
+								}
 							}
 						}
 						break;
@@ -769,7 +786,7 @@ export class XsltTokenCompletions {
 									if (isOnStartOfRequiredToken && prevToken) {
 										let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 										const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-										resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+										resultCompletions = XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack);
 									} else {
 										const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 										resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
@@ -812,7 +829,7 @@ export class XsltTokenCompletions {
 									let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 									const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 									resultCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
-									resultCompletions = resultCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
+									resultCompletions = resultCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack));
 								}
 								if (xpathStack.length > 0) {
 									let poppedData = xpathStack.pop();
@@ -859,7 +876,7 @@ export class XsltTokenCompletions {
 									if (isOnStartOfRequiredToken && prevToken) {
 										let prev2Token = prevToken.tokenType === TokenLevelState.operator ? allTokens[index - 2] : null;
 										resultCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
-										resultCompletions = resultCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
+										resultCompletions = resultCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack));
 									} else if (token.value === '/') {
 										resultCompletions = XsltTokenCompletions.getPathCompletions(position, elementNames, attrNames, globalInstructionData, importedInstructionData);
 									} else if (token.value === '!') {
@@ -1013,9 +1030,50 @@ export class XsltTokenCompletions {
 		}
 	}
 
-	private static getXPathCompletions(docType: DocumentTypes, previous2Token: BaseToken | null, previousToken: BaseToken | null, position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+	// 'instance of' and 'castable as' are valid after any completed value (a variable/node-name
+	// reference, a literal, or a closed predicate/argument-list/parenthesized-expression) -
+	// 'return' and 'satisfies' are ALSO only valid there, but additionally only when we're still
+	// inside the bound expression of a for/let (-> return) or some/every (-> satisfies) binding.
+	private static isValueCompletingToken(token: BaseToken | null): boolean {
+		if (!token) {
+			return false;
+		}
+		switch (<TokenLevelState>token.tokenType) {
+			case TokenLevelState.variable:
+			case TokenLevelState.nodeNameTest:
+			case TokenLevelState.nodeType:
+			case TokenLevelState.string:
+			case TokenLevelState.number:
+				return true;
+			case TokenLevelState.operator:
+				return token.charType === CharLevelState.rB || token.charType === CharLevelState.rBr || token.charType === CharLevelState.rPr;
+			default:
+				return false;
+		}
+	}
+
+	private static getValueContinuationKeywords(xpathStack: XPathData[]): string[] {
+		const keywords = ['instance of ', 'castable as '];
+		const top = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+		if (top?.isRangeVar) {
+			const introWord = top.rangeVarKeyword;
+			if (introWord === 'for' || introWord === 'let') {
+				keywords.push('return ');
+			} else if (introWord === 'some' || introWord === 'every') {
+				keywords.push('satisfies ');
+			}
+		}
+		return keywords;
+	}
+
+	private static getXPathCompletions(docType: DocumentTypes, previous2Token: BaseToken | null, previousToken: BaseToken | null, position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], xpathStack: XPathData[]) {
 		if (!previousToken || previousToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber) {
 			return XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+		}
+		if (XsltTokenCompletions.isValueCompletingToken(previousToken)) {
+			const xpathCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
+			const keywordCompletions = XsltTokenCompletions.getNormalCompletions(position, XsltTokenCompletions.getValueContinuationKeywords(xpathStack), vscode.CompletionItemKind.Keyword);
+			return xpathCompletions.concat(keywordCompletions);
 		}
 		let xpath2TokenType = <TokenLevelState>previousToken.tokenType;
 		let xpath2CharType = <CharLevelState>previousToken.charType;
@@ -1023,9 +1081,8 @@ export class XsltTokenCompletions {
 		switch (xpath2TokenType) {
 			case TokenLevelState.operator:
 				switch (xpath2CharType) {
-					case CharLevelState.rB:
-					case CharLevelState.rBr:
-					case CharLevelState.rPr:
+					// rB/rBr/rPr (closing ')'/']'/'}') are handled by the isValueCompletingToken
+					// check above, before this switch is reached
 					case CharLevelState.lBr:
 						break;
 					default:
