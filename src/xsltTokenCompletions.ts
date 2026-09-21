@@ -243,12 +243,33 @@ export class XsltTokenCompletions {
 								includeOrImport = tagElementName === XsltTokenCompletions.xslImport || tagElementName === XsltTokenCompletions.xslInclude;
 							}
 						}
+						if (isOnRequiredToken) {
+							// the tag name itself is still being typed (nothing follows it yet), so the
+							// token-scan never reaches an exact match for the '<' punctuation token above -
+							// without this, the loop falls through to the "past a complete element name"
+							// fallback further down, which wrongly offers attribute completions instead.
+							if (elementStack.length === 0) {
+								resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
+							} else {
+								const symbolId = elementStack[elementStack.length - 1].symbolID;
+								resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(document, docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList, symbolId);
+							}
+						}
 						break;
 					case XSLTokenLevelState.elementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						if (tagType === TagType.Start) {
 							tagType = TagType.XMLstart;
 							startTagToken = token;
+						}
+						if (isOnRequiredToken) {
+							// see the matching comment in the xslElementName case above
+							if (elementStack.length === 0) {
+								resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
+							} else {
+								const symbolId = elementStack[elementStack.length - 1].symbolID;
+								resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(document, docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList, symbolId);
+							}
 						}
 						break;
 					case XSLTokenLevelState.xmlText:
