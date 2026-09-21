@@ -51,6 +51,27 @@ const legend = (function () {
 export function activate(context: vscode.ExtensionContext) {
 	const fileSelector = new FileSelection(context);
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
+
+	// restore the XPath auto-completion context file from the top of this workspace's recently-used list on
+	// startup, rather than waiting for the user to open/pick an XML file again - only if it still exists
+	(async () => {
+		const recentXmlFiles: string[] | undefined = context.workspaceState.get(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL);
+		const mostRecentXmlFile = recentXmlFiles?.[0];
+		if (mostRecentXmlFile) {
+			try {
+				const uri = vscode.Uri.file(mostRecentXmlFile);
+				await vscode.workspace.fs.stat(uri);
+				DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
+				// registerXMLEditor() below already ran by the time this resolves and may have rendered the
+				// status bar with the placeholder text (lastActiveXMLNonXSLUri was still unset then) - refresh
+				// it now, using the same visibility rule registerXMLDocument uses for the current active editor
+				const activeLangId = vscode.window.activeTextEditor?.document.languageId;
+				DocumentChangeHandler.updateStatusBarItem(activeLangId === 'xslt' || activeLangId === 'xpath' || activeLangId === 'dcp');
+			} catch {
+				// file no longer exists - leave this to be set the usual way, by opening/picking an XML file
+			}
+		}
+	})();
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
 
@@ -260,9 +281,11 @@ export function activate(context: vscode.ExtensionContext) {
 					await vscode.tasks.executeTask(persistedTask);
 					return;
 				}
+				console.warn(`Quick Run XSLT: expected a persisted task named "${label}" but vscode.tasks.fetchTasks returned: [${persistedTasks.map((t) => t.name).join(', ')}] - falling back to an ad hoc run.`);
 			}
 		} catch (e) {
 			// no workspace, or tasks.json couldn't be read/written - fall back to an ad hoc, non-persisted run below
+			console.warn('Quick Run XSLT: failed to find/create a persisted task, falling back to an ad hoc run.', e);
 		}
 
 		const task = quickRunSaxonTaskProvider.getTask({
