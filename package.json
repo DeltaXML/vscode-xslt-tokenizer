@@ -100,6 +100,12 @@
 				"when": "editorLangId == xslt"
 			},
 			{
+				"command": "xslt-xpath.quickRunXml",
+				"key": "ctrl+alt+r",
+				"mac": "cmd+alt+r",
+				"when": "editorLangId == xml"
+			},
+			{
 				"command": "xslt-xpath.selectFollowingElement",
 				"key": "Shift+Cmd+7"
 			},
@@ -174,6 +180,12 @@
 				"icon": "$(play)"
 			},
 			{
+				"command": "xslt-xpath.quickRunXml",
+				"title": "Quick Run: Run XSLT on this XML File",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
 				"command": "xslt-xpath.quickRunSwitchProcessor",
 				"title": "Quick Run: Switch Processor",
 				"category": "XSLT",
@@ -182,6 +194,12 @@
 		],
 		"menus": {
 			"editor/title": [
+				{
+					"command": "xslt-xpath.quickRunXml",
+					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xml",
+					"group": "navigation"
+				},
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonJ",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",

@@ -154,18 +154,26 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     // change or duplicate) - stored paths may be relative to the task's workspace folder via '${workspaceFolder}'.
     // An undefined xmlSourceFsPath matches only tasks with no source document (xmlSource empty or absent)
     public static isQuickRunTaskFor(definition: vscode.TaskDefinition, taskType: QuickRunTaskType, xsltFsPath: string, xmlSourceFsPath: string | undefined, workspaceFolderFsPath: string): boolean {
-        const resolveStoredPath = (value: string) => path.normalize(value.startsWith('${workspaceFolder}')
-            ? path.join(workspaceFolderFsPath, value.substring('${workspaceFolder}'.length))
-            : value);
-        if (definition.type !== taskType || typeof definition.xsltFile !== 'string' || resolveStoredPath(definition.xsltFile) !== path.normalize(xsltFsPath)) {
+        if (definition.type !== taskType || typeof definition.xsltFile !== 'string' || SaxonTaskProvider.resolveStoredPath(definition.xsltFile, workspaceFolderFsPath) !== path.normalize(xsltFsPath)) {
             return false;
         }
-        const storedSource = definition.xmlSource;
-        const hasStoredSource = typeof storedSource === 'string' && storedSource !== '';
         if (xmlSourceFsPath === undefined) {
-            return !hasStoredSource;
+            return typeof definition.xmlSource !== 'string' || definition.xmlSource === '';
         }
-        return hasStoredSource && resolveStoredPath(storedSource) === path.normalize(xmlSourceFsPath);
+        return SaxonTaskProvider.hasXmlSource(definition, xmlSourceFsPath, workspaceFolderFsPath);
+    }
+
+    // true if the task's xmlSource is this file - a stored path may be relative to the task's workspace folder
+    public static hasXmlSource(definition: vscode.TaskDefinition, xmlSourceFsPath: string, workspaceFolderFsPath: string): boolean {
+        const storedSource = definition.xmlSource;
+        return typeof storedSource === 'string' && storedSource !== '' &&
+            SaxonTaskProvider.resolveStoredPath(storedSource, workspaceFolderFsPath) === path.normalize(xmlSourceFsPath);
+    }
+
+    private static resolveStoredPath(value: string, workspaceFolderFsPath: string) {
+        return path.normalize(value.startsWith('${workspaceFolder}')
+            ? path.join(workspaceFolderFsPath, value.substring('${workspaceFolder}'.length))
+            : value);
     }
 
     // true if this stylesheet, or any module it imports/includes, declares a template named xsl:initial-template -

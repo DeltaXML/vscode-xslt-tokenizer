@@ -68,6 +68,30 @@ suite('Quick Run - persisted task matching', () => {
 	});
 });
 
+suite('Quick Run - tasks listed for the active XML file', () => {
+	const workspaceFolder = path.resolve('/work/project');
+	const fsPath = (...segments: string[]) => path.join(workspaceFolder, ...segments);
+
+	test('lists tasks for any stylesheet whose xmlSource is the file', () => {
+		const reportTask = { type: 'xslt', label: 'report with books.xml', xsltFile: '${workspaceFolder}/report.xsl', xmlSource: '${workspaceFolder}/data/books.xml' };
+		const summaryTask = { type: 'xslt-c', label: 'summary', xsltFile: '/tools/summary.xsl', xmlSource: fsPath('data', 'books.xml') };
+		assert.isTrue(SaxonTaskProvider.hasXmlSource(reportTask, fsPath('data', 'books.xml'), workspaceFolder));
+		assert.isTrue(SaxonTaskProvider.hasXmlSource(summaryTask, fsPath('data', 'books.xml'), workspaceFolder));
+		assert.isFalse(SaxonTaskProvider.hasXmlSource(reportTask, fsPath('data', 'other.xml'), workspaceFolder));
+	});
+
+	test('does not treat tasks with no source, or a variable source, as being for the file', () => {
+		const xml = fsPath('books.xml');
+		const withoutSource = { type: 'xslt', label: 'report with xsl:initial-template', xsltFile: '${workspaceFolder}/report.xsl', xmlSource: '' };
+		const pickerSource = { type: 'xslt', label: 'Saxon Transform (New)', xsltFile: '${command:xslt-xpath.pickXsltFile}', xmlSource: '${command:xslt-xpath.pickXmlSourceFile}' };
+		const currentFileSource = { type: 'xslt', label: 'Summarise', xsltFile: '${workspaceFolder}/summary.xsl', xmlSource: '${file}' };
+		assert.isFalse(SaxonTaskProvider.hasXmlSource(withoutSource, xml, workspaceFolder));
+		assert.isFalse(SaxonTaskProvider.hasXmlSource(pickerSource, xml, workspaceFolder));
+		// '${file}' tasks are listed separately, as 'tasks for the current file'
+		assert.isFalse(SaxonTaskProvider.hasXmlSource(currentFileSource, xml, workspaceFolder));
+	});
+});
+
 suite('Quick Run - tasks with no XML source', () => {
 	const providers: { [type in QuickRunTaskType]: { getTask(definition: vscode.TaskDefinition): vscode.Task | undefined } } = {
 		'xslt': new SaxonTaskProvider(''),
