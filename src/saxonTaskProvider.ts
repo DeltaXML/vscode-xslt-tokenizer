@@ -151,7 +151,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     }
 
     public static readonly quickRunProcessorNames: { [type in QuickRunTaskType]: string } = {
-        'xslt': 'Saxon',
+        'xslt': 'SaxonJ',
         'xslt-js': 'SaxonJS',
         'xslt-c': 'SaxonC',
     };

@@ -253,13 +253,62 @@ export function activate(context: vscode.ExtensionContext) {
 		'xslt-js': new SaxonJsTaskProvider(''),
 		'xslt-c': new SaxonCTaskProvider(''),
 	};
-	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunXslt', async () => {
+	const getQuickRunTaskType = (uri?: vscode.Uri) => vscode.workspace.getConfiguration('XSLT.tasks', uri).get<QuickRunTaskType>('quickRunProcessor', 'xslt');
+
+	// the status bar item shows the active processor as text (editor title buttons can only show an icon); the
+	// context key picks which processor-specific variant of the editor title play button - and so its tooltip - is shown
+	const quickRunProcessorStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
+	quickRunProcessorStatusBarItem.command = 'xslt-xpath.quickRunSwitchProcessor';
+	context.subscriptions.push(quickRunProcessorStatusBarItem);
+	const updateQuickRunProcessorIndicators = () => {
+		const document = vscode.window.activeTextEditor?.document;
+		const taskType = getQuickRunTaskType(document?.uri);
+		vscode.commands.executeCommand('setContext', 'xslt-xpath.quickRunProcessor', taskType);
+		if (document?.languageId === 'xslt') {
+			const processorName = SaxonTaskProvider.quickRunProcessorNames[taskType] ?? taskType;
+			quickRunProcessorStatusBarItem.text = `$(play) ${processorName}`;
+			quickRunProcessorStatusBarItem.tooltip = `Quick Run processor: ${processorName} - click to switch`;
+			quickRunProcessorStatusBarItem.show();
+		} else {
+			quickRunProcessorStatusBarItem.hide();
+		}
+	};
+	updateQuickRunProcessorIndicators();
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => updateQuickRunProcessorIndicators()));
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+		if (e.affectsConfiguration('XSLT.tasks.quickRunProcessor')) {
+			updateQuickRunProcessorIndicators();
+		}
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunSwitchProcessor', async () => {
+		const uri = vscode.window.activeTextEditor?.document.uri;
+		const current = getQuickRunTaskType(uri);
+		const items = (Object.keys(SaxonTaskProvider.quickRunProcessorNames) as QuickRunTaskType[]).map((taskType) => ({
+			label: SaxonTaskProvider.quickRunProcessorNames[taskType],
+			description: taskType === current ? `'${taskType}' task (current)` : `'${taskType}' task`,
+			taskType: taskType,
+		}));
+		const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Select the XSLT processor used by Quick Run' });
+		if (!picked || picked.taskType === current) {
+			return;
+		}
+		// update the most specific level the setting is already defined at, so the change actually takes effect
+		const config = vscode.workspace.getConfiguration('XSLT.tasks', uri);
+		const inspected = config.inspect('quickRunProcessor');
+		const target = inspected?.workspaceFolderValue !== undefined ? vscode.ConfigurationTarget.WorkspaceFolder
+			: inspected?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace
+				: vscode.ConfigurationTarget.Global;
+		await config.update('quickRunProcessor', picked.taskType, target);
+	}));
+
+	const quickRunXslt = async () => {
 		const activeEditor = vscode.window.activeTextEditor;
 		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
 			vscode.window.showErrorMessage('Quick Run XSLT: open an XSLT stylesheet in the active editor first.');
 			return;
 		}
-		const taskType = vscode.workspace.getConfiguration('XSLT.tasks', activeEditor.document.uri).get<QuickRunTaskType>('quickRunProcessor', 'xslt');
+		const taskType = getQuickRunTaskType(activeEditor.document.uri);
 		const processorName = SaxonTaskProvider.quickRunProcessorNames[taskType];
 		if (!processorName) {
 			vscode.window.showErrorMessage(`Quick Run XSLT: unrecognised "XSLT.tasks.quickRunProcessor" setting value '${taskType}' - use 'xslt', 'xslt-js' or 'xslt-c'.`);
@@ -311,7 +360,11 @@ export function activate(context: vscode.ExtensionContext) {
 		if (task) {
 			await vscode.tasks.executeTask(task);
 		}
-	}));
+	};
+	// the processor-specific variants exist only so the editor title play button's tooltip names the processor
+	for (const command of ['xslt-xpath.quickRunXslt', 'xslt-xpath.quickRunXsltSaxonJ', 'xslt-xpath.quickRunXsltSaxonJS', 'xslt-xpath.quickRunXsltSaxonC']) {
+		context.subscriptions.push(vscode.commands.registerCommand(command, quickRunXslt));
+	}
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xslt', new XSLTCodeActions(), { providedCodeActionKinds: XSLTCodeActions.providedCodeActionKinds }));
 	context.subscriptions.push(
 		vscode.commands.registerCommand(XSLTCodeActions.COMMAND, () => vscode.env.openExternal(vscode.Uri.parse('https://unicode.org/emoji/charts-12.0/full-emoji-list.html')))

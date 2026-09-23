@@ -154,14 +154,65 @@
 				"title": "Quick Run with Saxon",
 				"category": "XSLT",
 				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunXsltSaxonJ",
+				"title": "Quick Run with SaxonJ",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunXsltSaxonJS",
+				"title": "Quick Run with SaxonJS",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunXsltSaxonC",
+				"title": "Quick Run with SaxonC",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunSwitchProcessor",
+				"title": "Quick Run: Switch Processor",
+				"category": "XSLT",
+				"icon": "$(arrow-swap)"
 			}
 		],
 		"menus": {
 			"editor/title": [
 				{
-					"command": "xslt-xpath.quickRunXslt",
-					"when": "resourceLangId == xslt",
+					"command": "xslt-xpath.quickRunXsltSaxonJ",
+					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt'",
 					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonJS",
+					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonC",
+					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
+					"group": "navigation"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonJ",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonJS",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonC",
+					"when": "false"
 				}
 			]
 		},
