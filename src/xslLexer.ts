@@ -116,6 +116,8 @@ export interface XslToken extends BaseToken {
 
 interface XmlElement {
     expandText: boolean;
+    // text content is an XPath expression (xsl:select)
+    xpathText?: boolean;
 }
 
 export interface LanguageConfiguration {
@@ -847,6 +849,10 @@ export class XslLexer {
                                 let punctuationLength = nextState === XMLCharState.rCt || nextState === XMLCharState.rStNoAtt? 1: 2;
                                 this.addCharTokenToResult(this.lineCharCount - 1, punctuationLength, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             }
+                            if (nextState === XMLCharState.rStNoAtt && this.isXPathTextElement(isNativeElement, tagElementName)) {
+                                xmlElementStack[xmlElementStack.length - 1].xpathText = true;
+                                nextChar = this.analyseXPathText(xpLexer, ExitCondition.LessThan, xsl, result);
+                            }
                             break;
                         case XMLCharState.rDtd:
                             this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar, XSLTokenLevelState.dtdEnd, result, currentState);
@@ -962,6 +968,10 @@ export class XslLexer {
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             storeToken = false;
                             tokenChars = [];
+                            if (this.isXPathTextElement(isNativeElement, tagElementName)) {
+                                xmlElementStack[xmlElementStack.length - 1].xpathText = true;
+                                nextChar = this.analyseXPathText(xpLexer, ExitCondition.LessThan, xsl, result);
+                            }
                             break;
                         case XMLCharState.lCt:
                         case XMLCharState.lPi:
@@ -1205,6 +1215,14 @@ export class XslLexer {
                             break;
                         case XMLCharState.lCdataEnd:
                             this.addCharTokenToResult(tokenStartChar - 2, 9, XSLTokenLevelState.xmlPunctuation, result, nextState);
+                            if (xmlElementStack.length > 0 && xmlElementStack[xmlElementStack.length - 1].xpathText) {
+                                // entity references are not recognised within CDATA sections
+                                const entityRefOn = xpLexer.entityRefOn;
+                                xpLexer.entityRefOn = false;
+                                nextChar = this.analyseXPathText(xpLexer, ExitCondition.CdataEnd, xsl, result);
+                                xpLexer.entityRefOn = entityRefOn;
+                                nextState = XMLCharState.awaitingRcdata;
+                            }
                             break;
                         case XMLCharState.rCdataEnd:
                             this.addCharTokenToResult(tokenStartChar, 3, XSLTokenLevelState.xmlPunctuation, result, nextState);
@@ -1240,6 +1258,24 @@ export class XslLexer {
         }
         this.globalInstructionData = this.globalInstructionData.concat(this.globalModeData);
         return result;
+    }
+
+    private isXPathTextElement(isNativeElement: boolean, nativeName: string) {
+        return isNativeElement && nativeName === 'select' && (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XSLT40);
+    }
+
+    // lex text node (or CDATA section) content as XPath, starting at the current char, and return the new nextChar
+    private analyseXPathText(xpLexer: XPathLexer, exit: ExitCondition, xsl: string, result: BaseToken[]) {
+        let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
+        xpLexer.analyse('', exit, p);
+        this.updateNames(result);
+        this.lineNumber = p.line;
+        let newCharCount = p.documentOffset - 1;
+        if (newCharCount > this.charCount) {
+            this.charCount = newCharCount;
+        }
+        this.lineCharCount = p.startCharacter;
+        return xsl.charAt(this.charCount);
     }
 
     private updateNames(result: BaseToken[]) {

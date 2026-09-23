@@ -88,7 +88,11 @@ export enum ExitCondition {
     None,
     SingleQuote,
     DoubleQuote,
-    CurlyBrace
+    CurlyBrace,
+    // text node content: exit on a lexical '<' (a character reference such as '&lt;' does not qualify)
+    LessThan,
+    // CDATA section content: exit on ']]>'
+    CdataEnd
 }
 
 export interface LexPosition {
@@ -393,7 +397,7 @@ export class XPathLexer {
                     } else {
                         rv = CharLevelState.rSq;
                     }
-                } else if (char === '&') {
+                } else if (char === '&' && this.entityRefOn) {
                     rv = CharLevelState.lLiteralSqEnt;
                 } else {
                     rv = CharLevelState.lSq;
@@ -426,7 +430,7 @@ export class XPathLexer {
                     } else {
                         rv = CharLevelState.rDq;
                     }
-                } else if (char === '&') {
+                } else if (char === '&' && this.entityRefOn) {
                     rv = CharLevelState.lLiteralDqEnt;
                 } else {
                     rv = CharLevelState.lDq;
@@ -534,6 +538,12 @@ export class XPathLexer {
                         break;
                     case ExitCondition.SingleQuote:
                         exitAnalysis = currentChar === "'";
+                        break;
+                    case ExitCondition.LessThan:
+                        exitAnalysis = currentChar === "<";
+                        break;
+                    case ExitCondition.CdataEnd:
+                        exitAnalysis = currentChar === "]" && nextChar === "]" && xpath.charAt(i + 1) === ">";
                         break;
                 }
                 if (exitAnalysis) {
