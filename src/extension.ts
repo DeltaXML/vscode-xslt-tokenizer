@@ -200,7 +200,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
 		const t = event.execution.task;
-		if (fileSelector.completedPick === true && (t.definition.type === 'xslt' || t.definition.type === 'xslt-js')) {
+		if (fileSelector.completedPick === true && (t.definition.type === 'xslt' || t.definition.type === 'xslt-js' || t.definition.type === 'xslt-c')) {
 			vscode.window.showInformationMessage(`Completed task: '${t.definition.label}'`);
 			fileSelector.pickedValues.clear();
 		}
