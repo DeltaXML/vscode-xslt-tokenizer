@@ -18,13 +18,23 @@ export class DocumentChangeHandler {
 	public static lastActiveXMLEditor: vscode.TextEditor | null = null;
 	public static lastActiveXMLNonXSLEditor: vscode.TextEditor | null = null;
 	public static lastActiveXMLNonXSLUri: vscode.Uri | null = null;
+	// true when the user deliberately chose 'None' as the XML context file - unlike the initial unset state,
+	// this is not replaced by the next XML file viewed
+	public static contextFileIsNone = false;
 
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 	public static isWindowsOS: boolean | undefined;
 
 	public static setLastActiveXMLNonXSLUri(uri: vscode.Uri): void {
 		DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
+		DocumentChangeHandler.contextFileIsNone = false;
 		FileSelection.instance?.setContextFileUri(uri.fsPath);
+	}
+
+	public static setNoContextFile(): void {
+		DocumentChangeHandler.lastActiveXMLNonXSLUri = null;
+		DocumentChangeHandler.contextFileIsNone = true;
+		FileSelection.instance?.setContextFileUri(FileSelection.NO_FILE_PICKED);
 	}
 
 	private onDidChangeRegistration: vscode.Disposable | null = null;
@@ -230,7 +240,7 @@ export class DocumentChangeHandler {
 			if (document.languageId !== 'xslt' && document.languageId !== 'dcp') {
 				FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
 				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
-				if (!DocumentChangeHandler.lastActiveXMLNonXSLUri) {
+				if (!DocumentChangeHandler.lastActiveXMLNonXSLUri && !DocumentChangeHandler.contextFileIsNone) {
 					DocumentChangeHandler.setLastActiveXMLNonXSLUri(editor.document.uri);
 				}
 			}
@@ -251,7 +261,7 @@ export class DocumentChangeHandler {
 	public static updateStatusBarItem(isXSLTOrXPath: boolean): void {
 		if (isXSLTOrXPath) {
 			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
-			const filename = docUri ? path.basename(docUri.path) : '[XML context file]';
+			const filename = docUri ? path.basename(docUri.path) : DocumentChangeHandler.contextFileIsNone ? '[no XML context]' : '[XML context file]';
 			DocumentChangeHandler.contextStatusBarItem.tooltip = 'XML context file - used for XPath auto-completion and as the source for Quick Run';
 			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
 			DocumentChangeHandler.contextStatusBarItem.show();

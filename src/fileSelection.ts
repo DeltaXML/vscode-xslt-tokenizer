@@ -14,6 +14,9 @@ type pickedFileItem = { label: string; description: string; fullDirname: string 
 export class FileSelection {
   private static readonly PICK_FILE = "$(explorer-view-icon) Pick File";
   private static readonly CLEAR_RECENTS = "$(root-folder) Clear Recently Used";
+  private static readonly NO_FILE = "$(circle-slash) None";
+  // returned by pickFile when the 'None' item is picked, and persisted as the context file to record that choice
+  public static readonly NO_FILE_PICKED = '<none>';
   private static readonly XML_SOURCE_LABEL = "Select XML Source File";
   private static readonly XSLT_CONTEXT_LABEL = "Select XSLT context file";
   public static readonly XSLT_CONTEXT_PREVIOIUS_LABEL = "recent XML files";
@@ -37,8 +40,11 @@ export class FileSelection {
     return await this.pickFile({ label: "Select XSLT File", extensions: ["xsl", "xslt"], xmlStylesheetPI: true });
   }
   public async pickXsltContextFile() {
-    const pickedFsPath = await this.pickFile({ label: FileSelection.XSLT_CONTEXT_LABEL, prevStageLabel: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, prevStageGroup: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"] });
-    if (pickedFsPath) {
+    const pickedFsPath = await this.pickFile({ label: FileSelection.XSLT_CONTEXT_LABEL, prevStageLabel: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, prevStageGroup: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"], noneItemDescription: '- no XML context file (Quick Run starts from xsl:initial-template)', clearIncludesPrevStage: true });
+    if (pickedFsPath === FileSelection.NO_FILE_PICKED) {
+      DocumentChangeHandler.setNoContextFile();
+      DocumentChangeHandler.updateStatusBarItem(true);
+    } else if (pickedFsPath) {
       try {
         const pickedUri = vscode.Uri.file(pickedFsPath);
         const doc = await vscode.workspace.openTextDocument(pickedUri);
@@ -82,8 +88,14 @@ export class FileSelection {
     this.context.workspaceState.update(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_URI_LABEL, fsPath);
   }
 
+  // undefined both when nothing has been chosen yet and when 'None' was chosen - use isNoContextFile() to tell apart
   public getContextFileUri(): string | undefined {
-    return this.context.workspaceState.get(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_URI_LABEL);
+    const fsPath: string | undefined = this.context.workspaceState.get(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_URI_LABEL);
+    return fsPath === FileSelection.NO_FILE_PICKED ? undefined : fsPath;
+  }
+
+  public isNoContextFile(): boolean {
+    return this.context.workspaceState.get(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_URI_LABEL) === FileSelection.NO_FILE_PICKED;
   }
 
   public addToRecentlyUsedPickFile(workspaceLabel: string, pickedFsPath: string) {
@@ -102,10 +114,10 @@ export class FileSelection {
     this.context.workspaceState.update(workspaceLabel, fileListForLabel);
   }
 
-  public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string; xmlStylesheetPI?: boolean }) {
+  public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string; xmlStylesheetPI?: boolean; noneItemDescription?: string; clearIncludesPrevStage?: boolean }) {
     // <?xml-stylesheet type="text/xsl" href="02list11.xsl"?>
     this.completedPick = true;
-    const { label, extensions, isResult, prevStageLabel, prevStageGroup, xmlStylesheetPI } = obj;
+    const { label, extensions, isResult, prevStageLabel, prevStageGroup, xmlStylesheetPI, noneItemDescription, clearIncludesPrevStage } = obj;
     const workspaceLabel = label === FileSelection.XSLT_CONTEXT_LABEL ? FileSelection.MMO_PREFIX + '{' + DocumentChangeHandler.lastActiveXMLEditor?.document.uri + '}' + label :
       FileSelection.MMO_PREFIX + label;
     let fileListForLabel: string[] | undefined = this.context.workspaceState.get(workspaceLabel);
@@ -115,7 +127,10 @@ export class FileSelection {
     const fileItems = this.createFileItems(fileListForLabel);
     let prevStageFilePaths: string[] | undefined = prevStageLabel ? this.context.workspaceState.get(FileSelection.MMO_PREFIX + prevStageLabel) : undefined;
     const commandItems: { label: string; description?: string }[] = FileSelection.commandList.map(label => ({ label, description: '- file explorer' }));
-    if (fileListForLabel.length > 0) {
+    // clearIncludesPrevStage: the previous-stage list belongs to this picker alone (e.g. the XML context file's
+    // 'recent XML files'), so 'Clear Recently Used' clears it too - otherwise it's another picker's list, left alone
+    const clearablePrevStage = clearIncludesPrevStage && prevStageLabel && prevStageFilePaths && prevStageFilePaths.length > 0;
+    if (fileListForLabel.length > 0 || clearablePrevStage) {
       commandItems.push({ label: FileSelection.CLEAR_RECENTS });
     }
     const explorerSeparator = {
@@ -174,6 +189,11 @@ export class FileSelection {
       listItems.push(prevStageSeparator);
       listItems = listItems.concat(prevStageFileItems);
     }
+    // the 'None' item is always offered - after the files, as it's the least likely choice - so the list is shown
+    // even when there are no files to choose from yet, rather than going straight to the file explorer
+    if (noneItemDescription) {
+      listItems.push({ label: FileSelection.NO_FILE, description: noneItemDescription });
+    }
     if (listItems.length > 0) {
       listItems.push(explorerSeparator);
       listItems = listItems.concat(commandItems);
@@ -187,11 +207,16 @@ export class FileSelection {
       let exit = true;
       if (picked) {
         if (picked.kind === vscode.QuickPickItemKind.Separator) {
+        } else if (picked.label === FileSelection.NO_FILE) {
+          return FileSelection.NO_FILE_PICKED;
         } else if (picked.label === FileSelection.PICK_FILE) {
           exit = false;
         } else if (picked.label === FileSelection.CLEAR_RECENTS) {
           fileListForLabel.length = 0;
           this.context.workspaceState.update(workspaceLabel, fileListForLabel);
+          if (clearablePrevStage) {
+            this.context.workspaceState.update(FileSelection.MMO_PREFIX + prevStageLabel, []);
+          }
         } else {
           const typedPick = <pickedFileItem>picked;
           const pickedFsPath = typedPick.fullDirname + path.sep + picked.label;

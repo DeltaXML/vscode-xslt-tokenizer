@@ -28,6 +28,7 @@ import { window } from 'vscode';
 import { XSLTHoverProvider } from './xsltHoverProvider';
 import { XSLTSignatureHelpProvider } from './xsltSignatureHelpProvider';
 import * as os from 'os';
+import * as path from 'path';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTReferenceProvider } from './xsltReferenceProvider';
 import { XSLTCodeActions } from './xsltCodeActions';
@@ -52,6 +53,10 @@ const legend = (function () {
 export function activate(context: vscode.ExtensionContext) {
 	const fileSelector = new FileSelection(context);
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
+
+	// a deliberate 'None' XML context file is restored synchronously, before registerXMLEditor() below can adopt
+	// the active XML file as the context file
+	DocumentChangeHandler.contextFileIsNone = fileSelector.isNoContextFile();
 
 	// restore the deliberately-chosen XML context file on startup, rather than waiting for the user to open/pick
 	// one again - only if it still exists. Deliberately not derived from the recently-used file list, since that
@@ -302,6 +307,18 @@ export function activate(context: vscode.ExtensionContext) {
 		await config.update('quickRunProcessor', picked.taskType, target);
 	}));
 
+	// a stylesheet with both match templates and xsl:initial-template can be run either way - Quick Run can't tell
+	// which is intended, so it keeps to the XML context file, and points out the alternative once, when the task is created
+	const showInitialTemplateTip = (label: string, sourceName: string) => {
+		const openTasksAction = 'Open tasks.json';
+		vscode.window.showInformationMessage(`Quick Run: task '${label}' applies templates to ${sourceName}. This stylesheet also declares xsl:initial-template - to start from it instead, add "initialTemplate": "" to the task (${sourceName} then becomes the global context item), or pick 'None' as the XML context file.`, openTasksAction).then((choice) => {
+			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+			if (choice === openTasksAction && workspaceFolder) {
+				vscode.window.showTextDocument(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'));
+			}
+		});
+	};
+
 	const quickRunXslt = async () => {
 		const activeEditor = vscode.window.activeTextEditor;
 		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
@@ -328,17 +345,38 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showErrorMessage('Quick Run XSLT: set the "XSLT.tasks.saxonCPath" setting to the folder containing the SaxonC Transform executable first.');
 			return;
 		}
-		const contextUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
-		if (!contextUri) {
-			vscode.window.showErrorMessage('Quick Run XSLT: no XML context file is set - open an XML source file (or run "Pick XPath Context File") first.');
-			return;
+		const pickContextFileAction = 'Pick XML Context File';
+		const offerContextFilePick = (message: string) => {
+			vscode.window.showErrorMessage(message, pickContextFileAction).then((choice) => {
+				if (choice === pickContextFileAction) {
+					vscode.commands.executeCommand('xslt-xpath.pickXsltContextFile');
+				}
+			});
+		};
+		const xsltFsPath = activeEditor.document.uri.fsPath;
+		// with 'None' deliberately chosen as the XML context file, the stylesheet runs with no source document,
+		// starting from xsl:initial-template ('-it') - an undefined xmlSourceFsPath selects this throughout
+		const xmlSourceFsPath = DocumentChangeHandler.lastActiveXMLNonXSLUri?.fsPath;
+		if (!xmlSourceFsPath) {
+			if (!DocumentChangeHandler.contextFileIsNone) {
+				offerContextFilePick('Quick Run XSLT: no XML context file is set - open an XML source file, or pick one (or \'None\', to start from xsl:initial-template) from the status bar.');
+				return;
+			}
+			if (!await SaxonTaskProvider.declaresInitialTemplate(activeEditor.document, xsltDefintiionProvider)) {
+				offerContextFilePick('Quick Run XSLT: the XML context file is \'None\', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.');
+				return;
+			}
 		}
 		// first use for this xslt+context pair persists a real task in .vscode/tasks.json (result path uses the
 		// file-picker command, so it also lands in the recent-files list), letting the user add xslt parameters etc.
 		// by hand afterwards; subsequent runs re-execute that same (possibly since-edited) persisted task
 		try {
-			const label = await SaxonTaskProvider.findOrCreateQuickRunTaskLabel(taskType, activeEditor.document, contextUri.fsPath, xsltDefintiionProvider);
-			if (label) {
+			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask(taskType, activeEditor.document, xmlSourceFsPath, xsltDefintiionProvider);
+			if (quickRunTask) {
+				const { label, created } = quickRunTask;
+				if (created && xmlSourceFsPath && await SaxonTaskProvider.declaresInitialTemplate(activeEditor.document, xsltDefintiionProvider)) {
+					showInitialTemplateTip(label, path.basename(xmlSourceFsPath));
+				}
 				// a task just written to tasks.json isn't returned by fetchTasks until VS Code has asynchronously
 				// reloaded the file - on a first run the initial fetch nearly always misses it, so retry briefly
 				let persistedTasks: vscode.Task[] = [];
@@ -347,20 +385,23 @@ export function activate(context: vscode.ExtensionContext) {
 						await new Promise((resolve) => setTimeout(resolve, 200));
 					}
 					persistedTasks = await vscode.tasks.fetchTasks({ type: taskType });
-					const persistedTask = persistedTasks.find((t) => t.name === label);
+					const persistedTask = persistedTasks.find((t) => {
+						const folder = typeof t.scope === 'object' ? t.scope : vscode.workspace.workspaceFolders?.[0];
+						return !!folder && SaxonTaskProvider.isQuickRunTaskFor(t.definition, taskType, xsltFsPath, xmlSourceFsPath, folder.uri.fsPath);
+					});
 					if (persistedTask) {
 						await vscode.tasks.executeTask(persistedTask);
 						return;
 					}
 				}
-				console.warn(`Quick Run XSLT: expected a persisted task named "${label}" but vscode.tasks.fetchTasks returned: [${persistedTasks.map((t) => t.name).join(', ')}] - falling back to an ad hoc run.`);
+				console.warn(`Quick Run XSLT: expected a persisted task "${label}" for this xsltFile/xmlSource but vscode.tasks.fetchTasks returned: [${persistedTasks.map((t) => t.name).join(', ')}] - falling back to an ad hoc run.`);
 			}
 		} catch (e) {
 			// no workspace, or tasks.json couldn't be read/written - fall back to an ad hoc, non-persisted run below
 			console.warn('Quick Run XSLT: failed to find/create a persisted task, falling back to an ad hoc run.', e);
 		}
 
-		const definition = SaxonTaskProvider.createQuickRunTaskDefinition(taskType, `${processorName} Quick Run`, activeEditor.document.uri.fsPath, contextUri.fsPath, '${command:xslt-xpath.pickResultFile}');
+		const definition = SaxonTaskProvider.createQuickRunTaskDefinition(taskType, `${processorName} Quick Run`, xsltFsPath, xmlSourceFsPath, '${command:xslt-xpath.pickResultFile}');
 		if (taskType === 'xslt') {
 			definition.saxonJar = saxonJar;
 		}
