@@ -26,6 +26,7 @@ interface XSLTTask extends vscode.TaskDefinition {
     saxonJar: string;
     xsltFile: string;
     xmlSource: string;
+    useJsonSource?: boolean;
     resultPath?: string;
     execute?: boolean;
     allowSyntaxExtensions40?: string;
@@ -352,7 +353,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         break;
                     case 'xmlSource':
                         if (propValue !== "") {
-                            commandLineArgs.push('-s:' + propValue);
+                            commandLineArgs.push((SaxonJsTaskProvider.isJsonSource(xsltTask) ? '-json:' : '-s:') + propValue);
                         }
                         break;
                     case 'resultPath':

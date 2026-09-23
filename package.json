@@ -393,7 +393,12 @@
 					},
 					"xmlSource": {
 						"type": "string",
-						"description": "The path to the XML source file"
+						"description": "The path to the XML/JSON source file (a '.json' file is passed as JSON - otherwise set 'useJsonSource')"
+					},
+					"useJsonSource": {
+						"type": "boolean",
+						"default": true,
+						"description": "Pass the 'xmlSource' file as JSON (-json:) rather than XML (-s:). When not set, files with a '.json' extension are passed as JSON"
 					},
 					"initialTemplate": {
 						"type": "string",
@@ -584,12 +589,12 @@
 					},
 					"xmlSource": {
 						"type": "string",
-						"description": "The path to the XML/JSON file (for JSON - set 'useJsonSource')"
+						"description": "The path to the XML/JSON source file (a '.json' file is passed as JSON - otherwise set 'useJsonSource')"
 					},
 					"useJsonSource": {
 						"type": "boolean",
 						"default": true,
-						"description": "To supply a JSON file in the 'xmlSource' property"
+						"description": "Pass the 'xmlSource' file as JSON (-json:) rather than XML (-s:). When not set, files with a '.json' extension are passed as JSON"
 					},
 					"unprefixedElementNames": {
 						"type": "string",
@@ -700,7 +705,12 @@
 					},
 					"xmlSource": {
 						"type": "string",
-						"description": "The path to the XML source file"
+						"description": "The path to the XML/JSON source file (a '.json' file is passed as JSON - otherwise set 'useJsonSource')"
+					},
+					"useJsonSource": {
+						"type": "boolean",
+						"default": true,
+						"description": "Pass the 'xmlSource' file as JSON (-json:) rather than XML (-s:). When not set, files with a '.json' extension are passed as JSON"
 					},
 					"initialTemplate": {
 						"type": "string",

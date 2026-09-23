@@ -102,6 +102,15 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
         return this.getTask(_task.definition);
     }
 
+    // true if the task's xmlSource should be passed as '-json:' rather than '-s:' - explicitly via useJsonSource,
+    // otherwise when xmlSource is a '.json' file (which '-s:' would fail to parse as XML). Shared by all XSLT task types
+    public static isJsonSource(task: { xmlSource?: unknown; useJsonSource?: boolean }): boolean {
+        if (task.useJsonSource !== undefined) {
+            return !!task.useJsonSource;
+        }
+        return typeof task.xmlSource === 'string' && /\.json$/i.test(task.xmlSource);
+    }
+
     public static async getTasksObject() {
         let workspaceUri = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri : vscode.Uri.file('/');
         let workspaceTaskUri = workspaceUri.with({ path: workspaceUri.path + '/.vscode/tasks.json' });
@@ -197,7 +206,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 
             let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
             let xsltParametersCommand: string[] = [];
-            let useJSON = !!xsltTask.useJsonSource;
+            let useJSON = SaxonJsTaskProvider.isJsonSource(xsltTask);
             let nogo = xsltTask.execute !== undefined && xsltTask.execute === false;
             for (const param of xsltParameters) {
                 xsltParametersCommand.push(param.name + '=' + param.value);
