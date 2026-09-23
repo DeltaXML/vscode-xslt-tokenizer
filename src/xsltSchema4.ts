@@ -28,17 +28,18 @@ export class XSLTSchema4 implements SchemaData {
         "xsl:accumulator-names": { base: ['xs:token'], list: 'xsl:EQName', enum: ['#all'] },
         "xsl:avt": { base: ['xs:string'] },
         "xsl:char": { base: ['xs:string'] },
-        "xsl:component-kind-type": { base: ['xs:token'], enum: ['template', 'function', 'variable', 'attribute-set', 'mode', '*'] },
+        "xsl:component-kind-type": { base: ['xs:token'], enum: ['template', 'function', 'variable', 'attribute-set', 'mode', 'item-type', 'record-type', '*'] },
         "xsl:default-mode-type": { base: ['xs:token'], enum: ['#unnamed'] },
         "xsl:expression": { base: ['xs:token'] },
         "xsl:item-type": { base: ['xs:token'] },
         "xsl:input-type-annotations-type": { base: ['xs:token'], enum: ['preserve', 'strip', 'unspecified'] },
+        "xsl:json-node-output-method-type": { base: ['xs:token', 'xsl:EQName'], enum: ['xml', 'xhtml', 'html', 'text'] },
         "xsl:level": { base: ['xs:token'], enum: ['single', 'multiple', 'any'] },
         "xsl:mode": { base: ['xs:token'], enum: ['#default', '#unnamed', '#current'] },
         "xsl:modes": { base: ['xs:token'], enum: ['#default', '#unnamed', '#all'] },
         "xsl:nametests": { base: ['xs:token'], enum: ['*'] },
         "xsl:on-multiple-match-type": { base: ['xs:token'], enum: ['use-last', 'fail'] },
-        "xsl:on-no-match-type": { base: ['xs:token'], enum: ['deep-copy', 'shallow-copy', 'shallow-copy-all', 'deep-skip', 'shallow-skip', 'shallow-skip-all', 'text-only-copy', 'fail'] },
+        "xsl:on-no-match-type": { base: ['xs:token'], enum: ['deep-copy', 'shallow-copy', 'shallow-copy-all', 'deep-skip', 'shallow-skip', 'text-only-copy', 'fail'] },
         "xsl:prefixes": { list: 'xs:NCName' },
         "xsl:prefix-list-or-all": { base: ['xs:token'], enum: ['#all'] },
         "xsl:prefix-list": { list: 'xsl:prefix-or-default' },
@@ -205,22 +206,19 @@ export class XSLTSchema4 implements SchemaData {
                         'separator': 'xsl:avt',
                         'mode': 'xsl:mode',
                         '_select': 'xs:string',
+                        '_separator': 'xs:string',
                         '_mode': 'xs:string'
                     },
                     elementNames: ['xsl:sort', 'xsl:with-param']
                 },
                 "xsl:array": {
-                    base: 'xsl:sequence-constructor',
-                    attrs: {
-                        'composite': 'xsl:yes-or-no',
-                    }
-                },
-                "xsl:array-member": {
                     base: 'xsl:sequence-constructor-or-select',
                     attrs: {
-                        'composite': 'xsl:yes-or-no',
+                        'for-each': 'xsl:expression',
+                        '_for-each': 'xs:string'
                     }
                 },
+                "xsl:array-member": { type: 'xsl:sequence-constructor-or-select' },
                 "xsl:assert": {
                     base: 'xsl:sequence-constructor',
                     attrs: {
@@ -329,13 +327,15 @@ export class XSLTSchema4 implements SchemaData {
                         'namespace-context': 'xsl:expression',
                         'schema-aware': 'xsl:avt',
                         'with-params': 'xsl:expression',
+                        'trusted': 'xsl:avt',
                         '_xpath': 'xs:string',
                         '_as': 'xs:string',
                         '_base-uri': 'xs:string',
                         '_context-item': 'xs:string',
                         '_namespace-context': 'xs:string',
                         '_schema-aware': 'xs:string',
-                        '_with-params': 'xs:string'
+                        '_with-params': 'xs:string',
+                        '_trusted': 'xs:string'
                     },
                     elementNames: ['xsl:with-param', 'xsl:fallback']
                 },
@@ -345,8 +345,6 @@ export class XSLTSchema4 implements SchemaData {
                     attrs: {
                         'select': 'xsl:expression',
                         'separator': 'xsl:avt',
-                        '_array': 'xsl:expression',
-                        '_map': 'xsl:expression',
                         '_select': 'xs:string',
                         '_separator': 'xs:string',
                     },
@@ -355,22 +353,25 @@ export class XSLTSchema4 implements SchemaData {
                 "xsl:for-each-group": {
                     base: 'xsl:versioned-element-type',
                     attrs: {
-                        'break-when': 'xsl:expression',
                         'select': 'xsl:expression',
                         'group-by': 'xsl:expression',
                         'group-adjacent': 'xsl:expression',
                         'group-starting-with': 'xsl:pattern',
                         'group-ending-with': 'xsl:pattern',
+                        'split-when': 'xsl:expression',
+                        'merge-when': 'xsl:expression',
+                        // Saxon 11/12 experimental name for 'split-when', retained as a synonym in Saxon 13
+                        'break-when': 'xsl:expression',
                         'composite': 'xsl:yes-or-no',
                         'collation': 'xsl:avt',
-                        '_array': 'xsl:expression',
-                        '_break-when': 'xs:string',
-                        '_map': 'xsl:expression',
                         '_select': 'xs:string',
                         '_group-by': 'xs:string',
                         '_group-adjacent': 'xs:string',
                         '_group-starting-with': 'xs:string',
                         '_group-ending-with': 'xs:string',
+                        '_split-when': 'xs:string',
+                        '_merge-when': 'xs:string',
+                        '_break-when': 'xs:string',
                         '_composite': 'xs:string',
                         '_collation': 'xs:string'
                     },
@@ -378,7 +379,7 @@ export class XSLTSchema4 implements SchemaData {
                 },
                 "xsl:fork": {
                     base: 'xsl:versioned-element-type',
-                    elementNames: ['xsl:fallback', 'xsl:sequence', 'xsl:fallback', 'xsl:for-each-group', 'xsl:fallback']
+                    elementNames: ['xsl:fallback', 'xsl:sequence', 'xsl:for-each-group']
                 },
                 "xsl:if": {
                     base: 'xsl:sequence-constructor',
@@ -394,20 +395,16 @@ export class XSLTSchema4 implements SchemaData {
                 "xsl:iterate": {
                     base: 'xsl:versioned-element-type',
                     attrs: {
-                        'array': 'xsl:expression',
-                        'map': 'xsl:expression',
                         'select': 'xsl:expression',
-                        '_array': 'xsl:expression',
-                        '_map': 'xsl:expression',
                         '_select': 'xs:string'
                     },
-                    elementNames: ['xsl:param', 'xsl:next-iteration', 'xsl:on-completion', 'xsl:instruction']
+                    elementNames: ['xsl:param', 'xsl:on-completion', 'xsl:instruction']
                 },
                 "xsl:map": {
-                    base: 'xsl:sequence-constructor',
+                    base: 'xsl:sequence-constructor-or-select',
                     attrs: {
-                        'on-duplicates': 'xsl:expression',
-                        '_on-duplicates': 'xs:string',
+                        'duplicates': 'xsl:expression',
+                        '_duplicates': 'xs:string'
                     }
                 },
                 "xsl:map-entry": {
@@ -420,24 +417,6 @@ export class XSLTSchema4 implements SchemaData {
                 "xsl:merge": {
                     base: 'xsl:element-only-versioned-element-type',
                     elementNames: ['xsl:merge-source', 'xsl:merge-action', 'xsl:fallback']
-                },
-                "xsl:merge-key": {
-                    base: 'xsl:versioned-element-type',
-                    attrs: {
-                        'select': 'xsl:expression',
-                        'lang': 'xsl:avt',
-                        'order': 'xsl:avt',
-                        'collation': 'xs:anyURI',
-                        'case-order': 'xsl:avt',
-                        'data-type': 'xsl:avt',
-                        '_select': 'xs:string',
-                        '_lang': 'xs:string',
-                        '_order': 'xs:string',
-                        '_collation': 'xs:string',
-                        '_case-order': 'xs:string',
-                        '_data-type': 'xs:string'
-                    },
-                    elementNames: ['xsl:instruction']
                 },
                 "xsl:message": {
                     base: 'xsl:sequence-constructor',
@@ -456,6 +435,10 @@ export class XSLTSchema4 implements SchemaData {
                         'name': 'xsl:avt',
                         '_name': 'xs:string'
                     }
+                },
+                "xsl:next-iteration": {
+                    base: 'xsl:element-only-versioned-element-type',
+                    elementNames: ['xsl:with-param']
                 },
                 "xsl:next-match": {
                     base: 'xsl:element-only-versioned-element-type',
@@ -495,7 +478,8 @@ export class XSLTSchema4 implements SchemaData {
                 "xsl:perform-sort": {
                     base: 'xsl:versioned-element-type',
                     attrs: {
-                        'select': 'xsl:expression'
+                        'select': 'xsl:expression',
+                        '_select': 'xs:string'
                     },
                     elementNames: ['xsl:sort', 'xsl:instruction']
                 },
@@ -506,8 +490,17 @@ export class XSLTSchema4 implements SchemaData {
                         '_name': 'xs:string'
                     }
                 },
-                "xsl:result-document": {
+                "xsl:record": {
                     base: 'xsl:sequence-constructor',
+                    // any no-namespace attribute defines a map entry
+                    anyAttribute: true,
+                    attrs: {
+                        'xsl:as': 'xsl:item-type',
+                        'xsl:duplicates': 'xsl:expression'
+                    }
+                },
+                "xsl:result-document": {
+                    base: 'xsl:sequence-constructor-or-select',
                     attrs: {
                         'format': 'xsl:avt',
                         'href': 'xsl:avt',
@@ -517,15 +510,18 @@ export class XSLTSchema4 implements SchemaData {
                         'allow-duplicate-names': 'xsl:avt',
                         'build-tree': 'xsl:avt',
                         'byte-order-mark': 'xsl:avt',
+                        'canonical': 'xsl:avt',
                         'cdata-section-elements': 'xsl:avt',
                         'doctype-public': 'xsl:avt',
                         'doctype-system': 'xsl:avt',
                         'encoding': 'xsl:avt',
+                        'escape-solidus': 'xsl:avt',
                         'escape-uri-attributes': 'xsl:avt',
                         'html-version': 'xsl:avt',
                         'include-content-type': 'xsl:avt',
                         'indent': 'xsl:avt',
                         'item-separator': 'xsl:avt',
+                        'json-lines': 'xsl:avt',
                         'json-node-output-method': 'xsl:avt',
                         'media-type': 'xsl:avt',
                         'normalization-form': 'xsl:avt',
@@ -541,16 +537,22 @@ export class XSLTSchema4 implements SchemaData {
                         '_type': 'xs:string',
                         '_validation': 'xs:string',
                         '_method': 'xs:string',
+                        '_allow-duplicate-names': 'xs:string',
+                        '_build-tree': 'xs:string',
                         '_byte-order-mark': 'xs:string',
+                        '_canonical': 'xs:string',
                         '_cdata-section-elements': 'xs:string',
                         '_doctype-public': 'xs:string',
                         '_doctype-system': 'xs:string',
                         '_encoding': 'xs:string',
+                        '_escape-solidus': 'xs:string',
                         '_escape-uri-attributes': 'xs:string',
                         '_html-version': 'xs:string',
                         '_include-content-type': 'xs:string',
                         '_indent': 'xs:string',
                         '_item-separator': 'xs:string',
+                        '_json-lines': 'xs:string',
+                        '_json-node-output-method': 'xs:string',
                         '_media-type': 'xs:string',
                         '_normalization-form': 'xs:string',
                         '_omit-xml-declaration': 'xs:string',
@@ -562,7 +564,21 @@ export class XSLTSchema4 implements SchemaData {
                         '_output-version': 'xs:string'
                     }
                 },
-                "xsl:sequence": { type: 'xsl:sequence-constructor-or-select' },
+                "xsl:select": {
+                    base: 'xsl:versioned-element-type',
+                    attrs: {
+                        'as': 'xsl:sequence-type',
+                        '_as': 'xs:string'
+                    },
+                    elementNames: ['xsl:fallback']
+                },
+                "xsl:sequence": {
+                    base: 'xsl:sequence-constructor-or-select',
+                    attrs: {
+                        'as': 'xsl:sequence-type',
+                        '_as': 'xs:string'
+                    }
+                },
                 "xsl:source-document": {
                     base: 'xsl:sequence-constructor',
                     attrs: {
@@ -582,11 +598,21 @@ export class XSLTSchema4 implements SchemaData {
                     base: 'xsl:element-only-versioned-element-type',
                     attrs: {
                         'select': 'xsl:expression',
-                        '_select': 'xsl:expression',
+                        '_select': 'xs:string'
                     },
-                    elementNames: ['xsl:when']
+                    elementNames: ['xsl:when', 'xsl:otherwise', 'xsl:fallback']
                 },
-                "xsl:text": { type: 'xsl:text-element-type' },
+                "xsl:text": {
+                    base: 'xsl:sequence-constructor-or-select',
+                    attrs: {
+                        'separator': 'xsl:avt',
+                        'cdata': 'xsl:avt',
+                        'disable-output-escaping': 'xsl:yes-or-no',
+                        '_separator': 'xs:string',
+                        '_cdata': 'xs:string',
+                        '_disable-output-escaping': 'xs:string'
+                    }
+                },
                 "xsl:try": {
                     base: 'xsl:versioned-element-type',
                     attrs: {
@@ -595,14 +621,16 @@ export class XSLTSchema4 implements SchemaData {
                         '_rollback-output': 'xs:string',
                         '_select': 'xs:string'
                     },
-                    elementNames: ['xsl:catch', 'xsl:catch', 'xsl:fallback', 'xsl:instruction']
+                    elementNames: ['xsl:catch', 'xsl:fallback', 'xsl:instruction']
                 },
                 "xsl:value-of": {
                     base: 'xsl:sequence-constructor-or-select',
                     attrs: {
                         'separator': 'xsl:avt',
+                        'cdata': 'xsl:avt',
                         'disable-output-escaping': 'xsl:yes-or-no',
                         '_separator': 'xs:string',
+                        '_cdata': 'xs:string',
                         '_disable-output-escaping': 'xs:string'
                     }
                 },
@@ -611,7 +639,7 @@ export class XSLTSchema4 implements SchemaData {
                     attrs: {
                         'name': 'xsl:EQName',
                         'as': 'xsl:sequence-type',
-                        'visibility': 'xsl:visibility-type',
+                        'visibility': 'xsl:visibility-not-hidden-type',
                         'static': 'xsl:yes-or-no',
                         '_name': 'xs:string',
                         '_as': 'xs:string',
@@ -646,7 +674,7 @@ export class XSLTSchema4 implements SchemaData {
                         'name': 'xsl:EQName',
                         'streamable': 'xsl:yes-or-no',
                         'use-attribute-sets': 'xsl:EQNames',
-                        'visibility': 'xsl:visibility-type',
+                        'visibility': 'xsl:visibility-not-hidden-type',
                         '_name': 'xs:string',
                         '_streamable': 'xs:string',
                         '_use-attribute-sets': 'xs:string',
@@ -668,14 +696,14 @@ export class XSLTSchema4 implements SchemaData {
                     base: 'xsl:element-only-versioned-element-type',
                     attrs: {
                         'name': 'xsl:EQName',
-                        'decimal-separator': 'xsl:char',
-                        'grouping-separator': 'xsl:char',
+                        'decimal-separator': 'xs:string',
+                        'grouping-separator': 'xs:string',
                         'infinity': 'xs:string',
-                        'minus-sign': 'xsl:char',
-                        'exponent-separator': 'xsl:char',
+                        'minus-sign': 'xs:string',
+                        'exponent-separator': 'xs:string',
                         'NaN': 'xs:string',
-                        'percent': 'xsl:char',
-                        'per-mille': 'xsl:char',
+                        'percent': 'xs:string',
+                        'per-mille': 'xs:string',
                         'zero-digit': 'xsl:zero-digit',
                         'digit': 'xsl:char',
                         'pattern-separator': 'xsl:char',
@@ -699,7 +727,7 @@ export class XSLTSchema4 implements SchemaData {
                         'name': 'xsl:EQName-in-namespace',
                         'override': 'xsl:yes-or-no',
                         'as': 'xsl:sequence-type',
-                        'visibility': 'xsl:visibility-type',
+                        'visibility': 'xsl:visibility-not-hidden-type',
                         'streamability': 'xsl:streamability-type',
                         'override-extension-function': 'xsl:yes-or-no',
                         'new-each-time': 'xsl:yes-or-no-or-maybe',
@@ -710,7 +738,7 @@ export class XSLTSchema4 implements SchemaData {
                         '_visibility': 'xs:string',
                         '_streamability': 'xs:string',
                         '_override-extension-function': 'xs:string',
-                        '_identity-sensitive': 'xs:string',
+                        '_new-each-time': 'xs:string',
                         '_cache': 'xs:string'
                     },
                     elementNames: ['xsl:param', 'xsl:instruction']
@@ -735,8 +763,10 @@ export class XSLTSchema4 implements SchemaData {
                 "xsl:import-schema": {
                     base: 'xsl:element-only-versioned-element-type',
                     attrs: {
+                        'role': 'xs:NCName',
                         'namespace': 'xs:anyURI',
                         'schema-location': 'xs:anyURI',
+                        '_role': 'xs:string',
                         '_namespace': 'xs:string',
                         '_schema-location': 'xs:string'
                     },
@@ -756,7 +786,10 @@ export class XSLTSchema4 implements SchemaData {
                         'as': 'xsl:sequence-type',
                         '_name': 'xs:string',
                         '_as': 'xs:string',
-                    }
+                        '_visibility': 'xs:string'
+                    },
+                    attributeList: [{ name: 'visibility', enum: ['private', 'public'] },
+                    ]
                 },
                 "xsl:key": {
                     base: 'xsl:sequence-constructor',
@@ -777,6 +810,8 @@ export class XSLTSchema4 implements SchemaData {
                     base: 'xsl:element-only-versioned-element-type',
                     attrs: {
                         'name': 'xsl:EQName',
+                        'as': 'xsl:sequence-type',
+                        'copy-namespaces': 'xsl:yes-or-no',
                         'streamable': 'xsl:yes-or-no',
                         'use-accumulators': 'xsl:accumulator-names',
                         'on-no-match': 'xsl:on-no-match-type',
@@ -785,7 +820,10 @@ export class XSLTSchema4 implements SchemaData {
                         'warning-on-multiple-match': 'xsl:yes-or-no',
                         'typed': 'xsl:typed-type',
                         '_name': 'xs:string',
+                        '_as': 'xs:string',
+                        '_copy-namespaces': 'xs:string',
                         '_streamable': 'xs:string',
+                        '_use-accumulators': 'xs:string',
                         '_on-no-match': 'xs:string',
                         '_on-multiple-match': 'xs:string',
                         '_warning-on-no-match': 'xs:string',
@@ -794,7 +832,8 @@ export class XSLTSchema4 implements SchemaData {
                         '_visibility': 'xs:string'
                     },
                     attributeList: [{ name: 'visibility', enum: ['public', 'private', 'final'] },
-                    ]
+                    ],
+                    elementNames: ['xsl:template']
                 },
                 "xsl:namespace-alias": {
                     base: 'xsl:element-only-versioned-element-type',
@@ -813,16 +852,19 @@ export class XSLTSchema4 implements SchemaData {
                         'allow-duplicate-names': 'xsl:yes-or-no',
                         'build-tree': 'xsl:yes-or-no',
                         'byte-order-mark': 'xsl:yes-or-no',
+                        'canonical': 'xsl:yes-or-no',
                         'cdata-section-elements': 'xsl:EQNames',
                         'doctype-public': 'xs:string',
                         'doctype-system': 'xs:string',
                         'encoding': 'xs:string',
+                        'escape-solidus': 'xsl:yes-or-no',
                         'escape-uri-attributes': 'xsl:yes-or-no',
                         'html-version': 'xs:decimal',
                         'include-content-type': 'xsl:yes-or-no',
                         'indent': 'xsl:yes-or-no',
                         'item-separator': 'xs:string',
-                        'json-node-output-method': 'xsl:method',
+                        'json-lines': 'xsl:yes-or-no',
+                        'json-node-output-method': 'xsl:json-node-output-method-type',
                         'media-type': 'xs:string',
                         'normalization-form': 'xs:NMTOKEN',
                         'omit-xml-declaration': 'xsl:yes-or-no',
@@ -834,16 +876,22 @@ export class XSLTSchema4 implements SchemaData {
                         'version': 'xs:NMTOKEN',
                         '_name': 'xs:string',
                         '_method': 'xs:string',
+                        '_allow-duplicate-names': 'xs:string',
+                        '_build-tree': 'xs:string',
                         '_byte-order-mark': 'xs:string',
+                        '_canonical': 'xs:string',
                         '_cdata-section-elements': 'xs:string',
                         '_doctype-public': 'xs:string',
                         '_doctype-system': 'xs:string',
                         '_encoding': 'xs:string',
+                        '_escape-solidus': 'xs:string',
                         '_escape-uri-attributes': 'xs:string',
                         '_html-version': 'xs:string',
                         '_include-content-type': 'xs:string',
                         '_indent': 'xs:string',
                         '_item-separator': 'xs:string',
+                        '_json-lines': 'xs:string',
+                        '_json-node-output-method': 'xs:string',
                         '_media-type': 'xs:string',
                         '_normalization-form': 'xs:string',
                         '_omit-xml-declaration': 'xs:string',
@@ -892,7 +940,7 @@ export class XSLTSchema4 implements SchemaData {
                         'mode': 'xsl:modes',
                         'name': 'xsl:EQName',
                         'as': 'xsl:sequence-type',
-                        'visibility': 'xsl:visibility-type',
+                        'visibility': 'xsl:visibility-not-hidden-type',
                         '_match': 'xs:string',
                         '_priority': 'xs:string',
                         '_mode': 'xs:string',
@@ -917,7 +965,7 @@ export class XSLTSchema4 implements SchemaData {
                     attrs: {
                         'name': 'xsl:EQName',
                         'as': 'xsl:sequence-type',
-                        'visibility': 'xsl:visibility-type',
+                        'visibility': 'xsl:visibility-not-hidden-type',
                         'static': 'xsl:yes-or-no',
                         '_name': 'xs:string',
                         '_as': 'xs:string',
@@ -945,8 +993,10 @@ export class XSLTSchema4 implements SchemaData {
             base: 'xsl:sequence-constructor-or-select',
             attrs: {
                 'match': 'xsl:pattern',
+                'capture': 'xsl:yes-or-no',
                 '_match': 'xs:string',
-                '_phase': 'xs:string'
+                '_phase': 'xs:string',
+                '_capture': 'xs:string'
             },
             attributeList: [{ name: 'phase', enum: ['start', 'end'] },
             ]
@@ -979,8 +1029,26 @@ export class XSLTSchema4 implements SchemaData {
                 '_visibility': 'xs:string'
             }
         },
-        "xsl:matching-substring": { type: 'xsl:sequence-constructor' },
+        "xsl:matching-substring": { type: 'xsl:sequence-constructor-or-select' },
         "xsl:merge-action": { type: 'xsl:sequence-constructor' },
+        "xsl:merge-key": {
+            base: 'xsl:versioned-element-type',
+            attrs: {
+                'select': 'xsl:expression',
+                'lang': 'xsl:avt',
+                'order': 'xsl:avt',
+                'collation': 'xsl:avt',
+                'case-order': 'xsl:avt',
+                'data-type': 'xsl:avt',
+                '_select': 'xs:string',
+                '_lang': 'xs:string',
+                '_order': 'xs:string',
+                '_collation': 'xs:string',
+                '_case-order': 'xs:string',
+                '_data-type': 'xs:string'
+            },
+            elementNames: ['xsl:instruction']
+        },
         "xsl:merge-source": {
             base: 'xsl:element-only-versioned-element-type',
             attrs: {
@@ -1005,11 +1073,12 @@ export class XSLTSchema4 implements SchemaData {
             },
             elementNames: ['xsl:merge-key']
         },
-        "xsl:non-matching-substring": { type: 'xsl:sequence-constructor' },
-        "xsl:next-iteration": {
-            base: 'xsl:element-only-versioned-element-type',
-            elementNames: ['xsl:with-param']
+        "xsl:note": {
+            base: 'xsl:versioned-element-type',
+            // permitted anywhere, with any attributes and content
+            anyAttribute: true
         },
+        "xsl:non-matching-substring": { type: 'xsl:sequence-constructor-or-select' },
         "xsl:on-completion": { type: 'xsl:sequence-constructor-or-select' },
         "xsl:otherwise": { type: 'xsl:sequence-constructor-or-select' },
         "xsl:output-character": {
@@ -1033,11 +1102,15 @@ export class XSLTSchema4 implements SchemaData {
                 'name': 'xs:anyURI',
                 'package-version': 'xs:string',
                 'input-type-annotations': 'xsl:input-type-annotations-type',
+                'fixed-namespaces': 'xs:string',
+                'schema-role': 'xs:NCName',
                 '_declared-modes': 'xs:string',
                 '_id': 'xs:string',
                 '_name': 'xs:string',
                 '_package-version': 'xs:string',
-                '_input-type-annotations': 'xs:string'
+                '_input-type-annotations': 'xs:string',
+                '_fixed-namespaces': 'xs:string',
+                '_schema-role': 'xs:string'
             },
             elementNames: ['xsl:expose', 'xsl:declaration']
         },
@@ -1063,8 +1136,14 @@ export class XSLTSchema4 implements SchemaData {
             attrs: {
                 'id': 'xs:ID',
                 'input-type-annotations': 'xsl:input-type-annotations-type',
+                'fixed-namespaces': 'xs:string',
+                'main-module': 'xs:anyURI',
+                'schema-role': 'xs:NCName',
                 '_id': 'xs:string',
-                '_input-type-annotations': 'xs:string'
+                '_input-type-annotations': 'xs:string',
+                '_fixed-namespaces': 'xs:string',
+                '_main-module': 'xs:string',
+                '_schema-role': 'xs:string'
             },
             elementNames: ['xsl:declaration']
         },

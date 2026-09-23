@@ -6,6 +6,7 @@ export class Expected {
     attrs: string[] = [];
     attributeValues: [string, string][] = [];
     foundAttributes: string[] = [];
+    anyAttribute: boolean = false;
 }
 
 export class SchemaQuery {
@@ -81,6 +82,7 @@ export class SchemaQuery {
         name = name === 'xsl:stylesheet'? 'xsl:transform': name;
         let ct = <ComplexType>this.schema.elements[name];
         if (ct) {
+            result.anyAttribute = !!ct.anyAttribute;
             this.addElementDetails(ct, result);
             this.collectAttributeDetails(ct, result, attributeName);
             let typeName: string|undefined = ct.type? ct.type: ct.base;
@@ -123,6 +125,7 @@ export class SchemaQuery {
                 sgElement = <ComplexType>this.schema.substitutionGroups.ixslInstruction.elements[name];
             }
             if (sgElement) {
+                result.anyAttribute = !!sgElement.anyAttribute;
                 this.collectAttributeDetails(sgElement, result, attributeName);
                 this.lookupBaseType(sgElement, result, attributeName);
                 let sgType: ComplexType;

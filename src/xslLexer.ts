@@ -216,6 +216,9 @@ export class XslLexer {
     public isExpressionAtt(name: string, parentElement: string) {
         if (name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item')) {
             return false;
+        } else if (parentElement === 'record') {
+            // xsl:record: each no-namespace attribute is a map entry expression
+            return name === 'xsl:duplicates' || name.indexOf(':') === -1;
         } else {
             return this.languageConfiguration.expressionAtts ? this.languageConfiguration.expressionAtts.indexOf(name) > -1 : false;
         }

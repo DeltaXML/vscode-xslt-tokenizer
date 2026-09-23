@@ -17,6 +17,7 @@ export interface ComplexType {
     primitive?: string;
     detail?: string;
     attributeGroup?: string;
+    anyAttribute?: boolean;
 }
 
 export interface SubstitutionGroupType {

@@ -226,6 +226,9 @@ export class XsltTokenDiagnostics {
 						if (isSchematron) {
 							// TODO: check xslt elements within schematron
 							valid = NameValidationError.None;
+						} else if (name === 'xsl:note' || elementStack?.find(item => item.symbolName === 'xsl:note')) {
+							// xsl:note is permitted anywhere and its content is not checked
+							valid = NameValidationError.None;
 						} else if (expectedNames.length === 0 && elementStack) {
 							const withinNextIteration = elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration';
 							valid = name === 'xsl:with-param' && withinNextIteration ? NameValidationError.None : NameValidationError.XSLTElementNameError;
@@ -356,7 +359,7 @@ export class XsltTokenDiagnostics {
 		let attType = AttributeType.None;
 		let tagElementName = '';
 		let tagElementId: number = -1;
-		let tagElementAttributes: string[] = [];
+		let tagElementAttributes: string[] | undefined = [];
 		let tagElementChildren: string[] = [];
 		let startTagToken: XSLTToken | null = null;
 		let preXPathVariable = false;
@@ -2459,7 +2462,7 @@ export class XsltTokenDiagnostics {
 
 	public static getExpectedElementNames(parentName: string, schemaQuery: SchemaQuery | undefined, elementStack: ElementData[]) {
 		let expectedElements: string[] = [];
-		let expectedAttributes: string[] = [];
+		let expectedAttributes: string[] | undefined = [];
 
 		if (schemaQuery?.docType === DocumentTypes.DCP ||
 			(parentName.startsWith('xsl:') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT) ||
@@ -2467,13 +2470,14 @@ export class XsltTokenDiagnostics {
 			const allExpected = schemaQuery.getExpected(parentName);
 			const nameDetailArray = allExpected.elements;
 			expectedElements = nameDetailArray.map(item => item[0]);
-			expectedAttributes = allExpected.attrs;
+			// undefined: attribute names are not checked against the schema
+			expectedAttributes = allExpected.anyAttribute ? undefined : allExpected.attrs;
 		} else if (elementStack.length > 0) {
 			expectedElements = elementStack[elementStack.length - 1].expectedChildElements;
 		} else {
 			expectedElements = [];
 		}
-		return [expectedElements, expectedAttributes];
+		return [expectedElements, expectedAttributes] as [string[], string[] | undefined];
 	}
 
 	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[]) {
