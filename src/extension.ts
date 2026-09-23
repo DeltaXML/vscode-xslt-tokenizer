@@ -339,11 +339,19 @@ export function activate(context: vscode.ExtensionContext) {
 		try {
 			const label = await SaxonTaskProvider.findOrCreateQuickRunTaskLabel(taskType, activeEditor.document, contextUri.fsPath, xsltDefintiionProvider);
 			if (label) {
-				const persistedTasks = await vscode.tasks.fetchTasks({ type: taskType });
-				const persistedTask = persistedTasks.find((t) => t.name === label);
-				if (persistedTask) {
-					await vscode.tasks.executeTask(persistedTask);
-					return;
+				// a task just written to tasks.json isn't returned by fetchTasks until VS Code has asynchronously
+				// reloaded the file - on a first run the initial fetch nearly always misses it, so retry briefly
+				let persistedTasks: vscode.Task[] = [];
+				for (let attempt = 0; attempt < 15; attempt++) {
+					if (attempt > 0) {
+						await new Promise((resolve) => setTimeout(resolve, 200));
+					}
+					persistedTasks = await vscode.tasks.fetchTasks({ type: taskType });
+					const persistedTask = persistedTasks.find((t) => t.name === label);
+					if (persistedTask) {
+						await vscode.tasks.executeTask(persistedTask);
+						return;
+					}
 				}
 				console.warn(`Quick Run XSLT: expected a persisted task named "${label}" but vscode.tasks.fetchTasks returned: [${persistedTasks.map((t) => t.name).join(', ')}] - falling back to an ad hoc run.`);
 			}
@@ -352,7 +360,7 @@ export function activate(context: vscode.ExtensionContext) {
 			console.warn('Quick Run XSLT: failed to find/create a persisted task, falling back to an ad hoc run.', e);
 		}
 
-		const definition = SaxonTaskProvider.createQuickRunTaskDefinition(taskType, `${processorName} Quick Run`, activeEditor.document.uri.fsPath, contextUri.fsPath);
+		const definition = SaxonTaskProvider.createQuickRunTaskDefinition(taskType, `${processorName} Quick Run`, activeEditor.document.uri.fsPath, contextUri.fsPath, '${command:xslt-xpath.pickResultFile}');
 		if (taskType === 'xslt') {
 			definition.saxonJar = saxonJar;
 		}
