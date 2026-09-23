@@ -10,7 +10,7 @@
 import * as vscode from 'vscode';
 import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
-import { SaxonTaskProvider } from './saxonTaskProvider';
+import { SaxonTaskProvider, QuickRunTaskType } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import { SaxonCTaskProvider } from './saxonCTaskProvider';
 import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration } from './languageConfigurations';
@@ -248,21 +248,35 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPathInDocument', (...args) => selectXPathInDocument(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setExtensionXPathVariable', (...args) => XsltTokenCompletions.extXPathVariables.set(args[0], args[1])));
-	const quickRunSaxonTaskProvider = new SaxonTaskProvider('');
+	const quickRunTaskProviders: { [type in QuickRunTaskType]: { getTask(definition: vscode.TaskDefinition): vscode.Task | undefined } } = {
+		'xslt': new SaxonTaskProvider(''),
+		'xslt-js': new SaxonJsTaskProvider(''),
+		'xslt-c': new SaxonCTaskProvider(''),
+	};
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunXslt', async () => {
 		const activeEditor = vscode.window.activeTextEditor;
 		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
 			vscode.window.showErrorMessage('Quick Run XSLT: open an XSLT stylesheet in the active editor first.');
 			return;
 		}
-		const javaTasksEnabled = vscode.workspace.getConfiguration('XSLT.tasks.java').get('enabled');
-		if (!javaTasksEnabled) {
-			vscode.window.showErrorMessage('Quick Run XSLT: Saxon (Java) tasks are disabled - enable the "XSLT.tasks.java.enabled" setting to use this.');
+		const taskType = vscode.workspace.getConfiguration('XSLT.tasks', activeEditor.document.uri).get<QuickRunTaskType>('quickRunProcessor', 'xslt');
+		const processorName = SaxonTaskProvider.quickRunProcessorNames[taskType];
+		if (!processorName) {
+			vscode.window.showErrorMessage(`Quick Run XSLT: unrecognised "XSLT.tasks.quickRunProcessor" setting value '${taskType}' - use 'xslt', 'xslt-js' or 'xslt-c'.`);
+			return;
+		}
+		const enabledSetting = { 'xslt': 'java', 'xslt-js': 'js', 'xslt-c': 'saxonc' }[taskType];
+		if (!vscode.workspace.getConfiguration(`XSLT.tasks.${enabledSetting}`).get('enabled')) {
+			vscode.window.showErrorMessage(`Quick Run XSLT: ${processorName} tasks are disabled - enable the "XSLT.tasks.${enabledSetting}.enabled" setting to use this.`);
 			return;
 		}
 		const saxonJar: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
-		if (!saxonJar) {
+		if (taskType === 'xslt' && !saxonJar) {
 			vscode.window.showErrorMessage('Quick Run XSLT: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+			return;
+		}
+		if (taskType === 'xslt-c' && !vscode.workspace.getConfiguration('XSLT.tasks').get('saxonCPath')) {
+			vscode.window.showErrorMessage('Quick Run XSLT: set the "XSLT.tasks.saxonCPath" setting to the folder containing the SaxonC Transform executable first.');
 			return;
 		}
 		const contextUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
@@ -274,9 +288,9 @@ export function activate(context: vscode.ExtensionContext) {
 		// file-picker command, so it also lands in the recent-files list), letting the user add xslt parameters etc.
 		// by hand afterwards; subsequent runs re-execute that same (possibly since-edited) persisted task
 		try {
-			const label = await SaxonTaskProvider.findOrCreateQuickRunTaskLabel(activeEditor.document, contextUri.fsPath, xsltDefintiionProvider);
+			const label = await SaxonTaskProvider.findOrCreateQuickRunTaskLabel(taskType, activeEditor.document, contextUri.fsPath, xsltDefintiionProvider);
 			if (label) {
-				const persistedTasks = await vscode.tasks.fetchTasks({ type: 'xslt' });
+				const persistedTasks = await vscode.tasks.fetchTasks({ type: taskType });
 				const persistedTask = persistedTasks.find((t) => t.name === label);
 				if (persistedTask) {
 					await vscode.tasks.executeTask(persistedTask);
@@ -289,15 +303,11 @@ export function activate(context: vscode.ExtensionContext) {
 			console.warn('Quick Run XSLT: failed to find/create a persisted task, falling back to an ad hoc run.', e);
 		}
 
-		const task = quickRunSaxonTaskProvider.getTask({
-			type: 'xslt',
-			label: 'Saxon Quick Run',
-			saxonJar: saxonJar,
-			xsltFile: activeEditor.document.uri.fsPath,
-			xmlSource: contextUri.fsPath,
-			messageEscaping: 'adaptive',
-			allowSyntaxExtensions40: 'off',
-		});
+		const definition = SaxonTaskProvider.createQuickRunTaskDefinition(taskType, `${processorName} Quick Run`, activeEditor.document.uri.fsPath, contextUri.fsPath);
+		if (taskType === 'xslt') {
+			definition.saxonJar = saxonJar;
+		}
+		const task = quickRunTaskProviders[taskType].getTask(definition);
 		if (task) {
 			await vscode.tasks.executeTask(task);
 		}

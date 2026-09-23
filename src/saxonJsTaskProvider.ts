@@ -182,7 +182,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
         return this.getTask(xsltTask);
     }
 
-    private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
+    public getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt-js';
 

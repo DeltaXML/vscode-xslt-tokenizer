@@ -246,6 +246,22 @@
 					"default": true,
 					"description": "Enable SaxonC Tasks"
 				},
+				"XSLT.tasks.quickRunProcessor": {
+					"type": "string",
+					"enum": [
+						"xslt",
+						"xslt-js",
+						"xslt-c"
+					],
+					"enumDescriptions": [
+						"Saxon (Java) - requires the 'XSLT.tasks.saxonJar' setting",
+						"SaxonJS - runs the 'xslt3' npm package via npx",
+						"SaxonC - requires the 'XSLT.tasks.saxonCPath' setting"
+					],
+					"default": "xslt",
+					"scope": "resource",
+					"markdownDescription": "The XSLT processor (task type) used by the **Quick Run** command. Quick Run persists a separate task in `.vscode/tasks.json` for each processor used with a given XSLT/XML pair"
+				},
 				"XSLT.resources.useSourceFile": {
 					"description": "Control how completion-list for XPath node names is populated",
 					"type": [

@@ -39,6 +39,8 @@ interface XSLTTask extends vscode.TaskDefinition {
     group?: TaskGroup;
 }
 
+export type QuickRunTaskType = 'xslt' | 'xslt-js' | 'xslt-c';
+
 interface TaskGroup {
     kind: string;
 }
@@ -77,10 +79,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return path.relative(docBaseURI, xdmView.fsPath);
     }
 
-    // finds (or persists, on first use) a 'xslt' task in .vscode/tasks.json for this xsltFile/xmlSource pair,
-    // so the user can subsequently add xslt parameters etc. by hand - returns its label, or undefined if there
-    // is no workspace folder to persist into (caller should fall back to an ad hoc, non-persisted task)
-    public static async findOrCreateQuickRunTaskLabel(xsltDocument: vscode.TextDocument, xmlSourceFsPath: string, definitionProvider: XsltDefinitionProvider): Promise<string | undefined> {
+    // finds (or persists, on first use) a task of the given quick-run type ('xslt', 'xslt-js' or 'xslt-c') in
+    // .vscode/tasks.json for this xsltFile/xmlSource pair, so the user can subsequently add xslt parameters etc. by
+    // hand - returns its label, or undefined if there is no workspace folder to persist into (caller should fall
+    // back to an ad hoc, non-persisted task)
+    public static async findOrCreateQuickRunTaskLabel(taskType: QuickRunTaskType, xsltDocument: vscode.TextDocument, xmlSourceFsPath: string, definitionProvider: XsltDefinitionProvider): Promise<string | undefined> {
         const xsltFsPath = xsltDocument.uri.fsPath;
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
@@ -107,11 +110,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         }
 
         const parsed = jsc.parse(text) || {};
-        const existingTasks: XSLTTask[] = parsed.tasks || [];
+        const existingTasks: vscode.TaskDefinition[] = parsed.tasks || [];
         const normalizedXslt = path.normalize(xsltFsPath);
         const normalizedSource = path.normalize(xmlSourceFsPath);
         const match = existingTasks.find((t) =>
-            t.type === 'xslt' &&
+            t.type === taskType &&
             typeof t.xsltFile === 'string' && resolveStoredPath(t.xsltFile) === normalizedXslt &&
             typeof t.xmlSource === 'string' && resolveStoredPath(t.xmlSource) === normalizedSource
         );
@@ -119,19 +122,12 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             return match.label;
         }
 
-        const label = `${path.basename(xsltFsPath, path.extname(xsltFsPath))} with ${path.basename(xmlSourceFsPath)}`;
+        // the Saxon (Java) label is unsuffixed so tasks persisted before quick-run became switchable still match
+        const labelSuffix = taskType === 'xslt' ? '' : ` (${SaxonTaskProvider.quickRunProcessorNames[taskType]})`;
+        const label = `${path.basename(xsltFsPath, path.extname(xsltFsPath))} with ${path.basename(xmlSourceFsPath)}${labelSuffix}`;
         const parameters = await SaxonTaskProvider.extractTopLevelParameters(xsltDocument, definitionProvider);
-        const newTask: XSLTTask = {
-            type: 'xslt',
-            label: label,
-            saxonJar: '${config:XSLT.tasks.saxonJar}',
-            xsltFile: toStoredPath(xsltFsPath),
-            xmlSource: toStoredPath(xmlSourceFsPath),
-            resultPath: '${command:xslt-xpath.pickResultFile}',
-            messageEscaping: 'adaptive',
-            allowSyntaxExtensions40: 'off',
-            group: { kind: 'build' },
-        };
+        const newTask = SaxonTaskProvider.createQuickRunTaskDefinition(taskType, label, toStoredPath(xsltFsPath), toStoredPath(xmlSourceFsPath), '${command:xslt-xpath.pickResultFile}');
+        newTask.group = { kind: 'build' };
         if (parameters.length > 0) {
             newTask.parameters = parameters;
         }
@@ -152,6 +148,41 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         const newText = jsc.applyEdits(text, edits);
         await vscode.workspace.fs.writeFile(workspaceTaskUri, Buffer.from(newText, 'utf8'));
         return label;
+    }
+
+    public static readonly quickRunProcessorNames: { [type in QuickRunTaskType]: string } = {
+        'xslt': 'Saxon',
+        'xslt-js': 'SaxonJS',
+        'xslt-c': 'SaxonC',
+    };
+
+    // the minimal task definition for each quick-run task type - processor paths reference the user's settings
+    // (rather than their current values) so a persisted task keeps working if those settings later change
+    public static createQuickRunTaskDefinition(taskType: QuickRunTaskType, label: string, xsltFile: string, xmlSource: string, resultPath?: string): vscode.TaskDefinition {
+        const definition: vscode.TaskDefinition = { type: taskType, label: label };
+        switch (taskType) {
+            case 'xslt':
+                definition.saxonJar = '${config:XSLT.tasks.saxonJar}';
+                break;
+            case 'xslt-c':
+                definition.saxonCPath = '${config:XSLT.tasks.saxonCPath}';
+                break;
+        }
+        definition.xsltFile = xsltFile;
+        definition.xmlSource = xmlSource;
+        if (resultPath) {
+            definition.resultPath = resultPath;
+        }
+        switch (taskType) {
+            case 'xslt':
+                definition.messageEscaping = 'adaptive';
+                definition.allowSyntaxExtensions40 = 'off';
+                break;
+            case 'xslt-c':
+                definition.allowSyntaxExtensions40 = 'off';
+                break;
+        }
+        return definition;
     }
 
     // top-level xsl:param declarations (in this stylesheet, or anything it imports/includes) with a 'select'
