@@ -21,7 +21,8 @@ export class FileSelection {
   private static readonly XSLT_CONTEXT_LABEL = "Select XSLT context file";
   public static readonly XSLT_CONTEXT_PREVIOIUS_LABEL = "recent XML files";
   private static readonly XSLT_CONTEXT_URI_LABEL = "xslt context uri";
-  private static readonly RESULT_LABEL = "Set Result File";
+  public static readonly RESULT_LABEL = "Set Result File";
+  public static readonly STAGE2_RESULT_LABEL = "Set Stage2 Result File";
   private static commandList: string[] = [FileSelection.PICK_FILE];
   public static readonly MMO_PREFIX = 'qfs:';
   private static readonly PATH_LENGTH_LIMIT = 50;
@@ -79,7 +80,7 @@ export class FileSelection {
     return await this.pickFile({ label: FileSelection.RESULT_LABEL, isResult: true });
   }
   public async pickStage2ResultFile() {
-    return await this.pickFile({ label: "Set Stage2 Result File", isResult: true });
+    return await this.pickFile({ label: FileSelection.STAGE2_RESULT_LABEL, isResult: true });
   }
 
   // persisted separately from the recently-used list, which also gets entries pushed to it by any XML file the
@@ -247,8 +248,8 @@ export class FileSelection {
           if (fileListForLabel.length > 10) {
             fileListForLabel.pop();
           }
-          this.pickedValues.set(label, newFilePath);
         }
+        this.pickedValues.set(label, newFilePath);
         this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         return newFilePath;
       }
@@ -278,9 +279,9 @@ export class FileSelection {
           if (fileListForLabel.length > 10) {
             fileListForLabel.pop();
           }
-          this.pickedValues.set(label, newFilePath);
           this.context.workspaceState.update(workspaceLabel, fileListForLabel);
         }
+        this.pickedValues.set(label, newFilePath);
         return newFilePath;
       }
     }

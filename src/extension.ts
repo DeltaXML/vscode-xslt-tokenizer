@@ -203,11 +203,92 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
-	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
+	// the task definition an ended task carries still has its '${...}' variables unresolved, so the result path is
+	// resolved here - file-picker commands (directly, or via a tasks.json input) resolve to the file the user picked
+	// for this run. Returns undefined for anything that can't be resolved
+	const resolveResultPath = async (task: vscode.Task): Promise<string | undefined> => {
+		const resultPath = task.definition.resultPath;
+		if (typeof resultPath !== 'string' || resultPath === '') {
+			return undefined;
+		}
+		const workspaceFolder = typeof task.scope === 'object' ? task.scope : vscode.workspace.workspaceFolders?.[0];
+		const resultPickerLabels: { [command: string]: string } = {
+			'xslt-xpath.pickResultFile': FileSelection.RESULT_LABEL,
+			'xslt-xpath.pickStage2ResultFile': FileSelection.STAGE2_RESULT_LABEL,
+		};
+		const inputs: { id?: string; command?: string; args?: { label?: string } }[] = resultPath.includes('${input:') ? (await SaxonJsTaskProvider.getTasksObject()).inputs ?? [] : [];
+		const pickedValueForCommand = (command: string | undefined, args?: { label?: string }) =>
+			command === 'xslt-xpath.pickFile' ? (args?.label ? fileSelector.pickedValues.get(args.label) : undefined)
+				: command && resultPickerLabels[command] ? fileSelector.pickedValues.get(resultPickerLabels[command]) : undefined;
+
+		let unresolved = false;
+		const resolved = resultPath.replace(/\$\{([^}]+)\}/g, (match: string, variable: string) => {
+			let value: string | undefined;
+			if (variable === 'workspaceFolder') {
+				value = workspaceFolder?.uri.fsPath;
+			} else if (variable === 'workspaceFolderBasename') {
+				value = workspaceFolder?.name;
+			} else if (variable === 'userHome') {
+				value = os.homedir();
+			} else if (variable === 'pathSeparator' || variable === '/') {
+				value = path.sep;
+			} else if (variable.startsWith('env:')) {
+				value = process.env[variable.substring('env:'.length)];
+			} else if (variable.startsWith('config:')) {
+				const configValue = vscode.workspace.getConfiguration().get(variable.substring('config:'.length));
+				value = typeof configValue === 'string' ? configValue : undefined;
+			} else if (variable.startsWith('command:')) {
+				value = pickedValueForCommand(variable.substring('command:'.length));
+			} else if (variable.startsWith('input:')) {
+				const input = inputs.find((i) => i.id === variable.substring('input:'.length));
+				value = pickedValueForCommand(input?.command, input?.args);
+			}
+			if (value === undefined) {
+				unresolved = true;
+				return match;
+			}
+			return value;
+		});
+		if (unresolved) {
+			return undefined;
+		}
+		// the processor runs in the workspace folder, so a relative result path is relative to it
+		return path.isAbsolute(resolved) || !workspaceFolder ? resolved : path.join(workspaceFolder.uri.fsPath, resolved);
+	};
+
+	// onDidEndTaskProcess (rather than onDidEndTask) provides the exit code, so 'Open' is only offered for a result
+	// written by this run - a failed run can leave an earlier run's result file in place
+	context.subscriptions.push(vscode.tasks.onDidEndTaskProcess(async (event) => {
 		const t = event.execution.task;
 		if (fileSelector.completedPick === true && (t.definition.type === 'xslt' || t.definition.type === 'xslt-js' || t.definition.type === 'xslt-c')) {
-			vscode.window.showInformationMessage(`Completed task: '${t.definition.label}'`);
+			// exitCode is undefined when VS Code can't determine it (e.g. the task was terminated) - not treated as a failure
+			const failed = event.exitCode !== undefined && event.exitCode !== 0;
+			const message = failed ? `Task '${t.definition.label}' failed (exit code ${event.exitCode})` : `Completed task: '${t.definition.label}'`;
+			let resultUri: vscode.Uri | undefined;
+			if (!failed) {
+				const resultFsPath = await resolveResultPath(t);
+				if (resultFsPath) {
+					try {
+						resultUri = vscode.Uri.file(resultFsPath);
+						await vscode.workspace.fs.stat(resultUri);
+					} catch {
+						resultUri = undefined;
+					}
+				}
+			}
 			fileSelector.pickedValues.clear();
+			if (resultUri) {
+				const openAction = 'Open';
+				vscode.window.showInformationMessage(message, openAction).then((choice) => {
+					if (choice === openAction) {
+						vscode.commands.executeCommand('vscode.open', resultUri);
+					}
+				});
+			} else if (failed) {
+				vscode.window.showErrorMessage(message);
+			} else {
+				vscode.window.showInformationMessage(message);
+			}
 		}
 		fileSelector.completedPick = true; // as fileselector may not be used for next task
 	}));
