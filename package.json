@@ -226,6 +226,26 @@
 					"default": true,
 					"description": "Enable Saxon-JS Tasks"
 				},
+				"XSLT.tasks.saxonCPath": {
+					"type": "string",
+					"description": "Path of the folder containing the installed SaxonC command-line executable (Transform / Transform.exe)"
+				},
+				"XSLT.tasks.saxonCLicenseFileLocation": {
+					"type": "string",
+					"description": "Path of the SaxonC saxon-license.lic file, passed as --licenseFileLocation: on the command line"
+				},
+				"XSLT.tasks.saxonCLibraryPaths": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "Extra folders to search for SaxonC's native libraries at runtime (macOS: DYLD_LIBRARY_PATH, Linux: LD_LIBRARY_PATH, Windows: PATH). The folder containing the installed SaxonC command-line executable's sibling 'lib' folder is always included automatically - use this for anything else, e.g. a separately-packaged core library"
+				},
+				"XSLT.tasks.saxonc.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable SaxonC Tasks"
+				},
 				"XSLT.resources.useSourceFile": {
 					"description": "Control how completion-list for XPath node names is populated",
 					"type": [
@@ -542,6 +562,191 @@
 								"value": {
 									"type": "string",
 									"description": "The xsl:param value. Special leading characters are: '?' (XPath), '!' (xsl:output), '+' (filename): See: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+								}
+							},
+							"required": [
+								"name",
+								"value"
+							]
+						},
+						"minItems": 1
+					},
+					"group": {
+						"type": "object",
+						"properties": {
+							"kind": {
+								"type": "string",
+								"description": "The kind of task. E.g. 'build'"
+							}
+						}
+					}
+				}
+			},
+			{
+				"type": "xslt-c",
+				"required": [
+					"label",
+					"xsltFile",
+					"xmlSource"
+				],
+				"properties": {
+					"label": {
+						"type": "string",
+						"description": "The user interface label. Change this to uniquely identify the task"
+					},
+					"saxonCPath": {
+						"type": "string",
+						"description": "Path of the folder containing the installed SaxonC command-line executable (Transform / Transform.exe). Defaults to the 'XSLT.tasks.saxonCPath' setting, or relies on it being on the PATH if neither is set"
+					},
+					"licenseFileLocation": {
+						"type": "string",
+						"description": "Path of the SaxonC saxon-license.lic file, passed as --licenseFileLocation: on the command line. Defaults to the 'XSLT.tasks.saxonCLicenseFileLocation' setting"
+					},
+					"saxonCLibraryPaths": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Extra folders to search for SaxonC's native libraries at runtime. The sibling 'lib' folder next to saxonCPath is always included automatically - use this for anything else, e.g. a separately-packaged core library. Defaults to the 'XSLT.tasks.saxonCLibraryPaths' setting"
+					},
+					"xsltFile": {
+						"type": "string",
+						"description": "The path to the XSLT stylesheet"
+					},
+					"xmlSource": {
+						"type": "string",
+						"description": "The path to the XML source file"
+					},
+					"initialTemplate": {
+						"type": "string",
+						"description": "The named template to be executed. Namespaced templates can be written as {uri}localname. Default is xsl:initial-template"
+					},
+					"initialMode": {
+						"type": "string",
+						"description": "The initial mode for the transformation. Namespaced modes can be written as {uri}localname"
+					},
+					"resultPath": {
+						"type": "string",
+						"description": "The destination path for the XSLT result"
+					},
+					"catalogFilenames": {
+						"type": "string",
+						"description": "Either a file name or a list of file names separated by semicolons; the files are OASIS XML catalogs defining how public identifiers and system identifiers (URIs) are to be redirected"
+					},
+					"configFilename": {
+						"type": "string",
+						"description": "If set, configuration properties (unless overridden by other properties here) are taken from the supplied configuration file."
+					},
+					"dtd": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Requests DTD-based validation of the source file and of any files read using the document() function"
+					},
+					"enableAssertions": {
+						"type": [
+							"string"
+						],
+						"enum": [
+							"on",
+							"off",
+							"recover"
+						],
+						"description": "Enables assertions both at compile time and at run time"
+					},
+					"allowSyntaxExtensions40": {
+						"type": [
+							"string"
+						],
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Enables experimental XPath 4.0 extensions. See: https://www.saxonica.com/documentation11/index.html#!v4extensions"
+					},
+					"expandValues": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Specifying 'off' suppresses expansion of DTD/Schema fixed or default values"
+					},
+					"explainFilename": {
+						"type": [
+							"string"
+						],
+						"description": "Writes an execution plan and other diagnostic information for the stylesheet to the specified filename"
+					},
+					"exportFilename": {
+						"type": "string",
+						"description": "Export filename: If set, exports the compiled stylesheet, in a form suitable for subsequent execution"
+					},
+					"traceOutFilename": {
+						"type": "string",
+						"description": "Display stylesheet tracing information using the class name supplied. An empty-string causes a system-supplied traceListener to be used."
+					},
+					"traceListener": {
+						"type": "string",
+						"description": "Indicates that the output of the trace() function should be directed to a specified file"
+					},
+					"timing": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Display version and timing information to the standard error output"
+					},
+					"execute": {
+						"type": "boolean",
+						"description": "Default: 'true'. If set 'false' any -export output is generated but XSLT is not executed"
+					},
+					"TPfilename": {
+						"type": "string",
+						"description": "Filename target for trace profile information to be sent"
+					},
+					"TPxslFilename": {
+						"type": "string",
+						"description": "Stylesheet filename to be used to format the result with the -TP option set"
+					},
+					"parameters": {
+						"description": "The xsl:param values for the XSLT",
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "The xsl:param name.\nNamespaced params are written as {uri}localname.\nSpecial prefix characters are:\n'?' (XPath)\n'!' (xsl:output)\n'+' (filename):\nSee: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+								},
+								"value": {
+									"type": "string",
+									"description": "The xsl:param value. "
+								}
+							},
+							"required": [
+								"name",
+								"value"
+							]
+						},
+						"minItems": 1
+					},
+					"features": {
+						"description": "Set a feature defined in the Saxon Configuration interface. See https://www.saxonica.com/documentation11/index.html#!configuration/config-features",
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "The feature name - the last part of the Configuration name after the '/' char (name may have a uri suffix). E.g. for 'http://saxon.sf.net/feature/parserFeature?uri=' enter  'parserFeature?uri='"
+								},
+								"value": {
+									"type": "string",
+									"description": "The value for the given feature"
 								}
 							},
 							"required": [

@@ -12,6 +12,7 @@ import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLe
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
+import { SaxonCTaskProvider } from './saxonCTaskProvider';
 import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration } from './languageConfigurations';
 import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
@@ -372,6 +373,12 @@ export function activate(context: vscode.ExtensionContext) {
 	if (xsltJsTaskEnabled) {
 		let xsltjsTaskProvider = vscode.tasks.registerTaskProvider(SaxonJsTaskProvider.SaxonBuildScriptType, new SaxonJsTaskProvider(workspaceRoot));
 		context.subscriptions.push(xsltjsTaskProvider);
+	}
+
+	let xsltCTaskEnabled = vscode.workspace.getConfiguration('XSLT.tasks.saxonc').get('enabled');
+	if (xsltCTaskEnabled) {
+		let xsltCTaskProvider = vscode.tasks.registerTaskProvider(SaxonCTaskProvider.SaxonBuildScriptType, new SaxonCTaskProvider(workspaceRoot));
+		context.subscriptions.push(xsltCTaskProvider);
 	}
 	//vscode.commands.executeCommand('xslt-xpath.setExtensionXPathVariable', 'new', '/countries/country');
 
