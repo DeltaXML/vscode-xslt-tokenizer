@@ -51,7 +51,13 @@ export enum CharLevelState {
     rLiteralSqEnt,
     lLiteralDqEnt,
     rLiteralDqEnt,
-    dot
+    dot,
+    // string template (back-tick) fixed parts - also used as token charTypes:
+    lBt,    // opening part: from '`' to the first '{'
+    mBt,    // middle part: from '}' to '{'
+    rBt,    // closing part: from '}' to '`' (also the char state for the closing '`')
+    sBt,    // whole template without variable parts: from '`' to '`'
+    escBt   // escape within a fixed part: '``', '{{' or '}}'
 }
 
 /*
@@ -463,6 +469,27 @@ export class XPathLexer {
             case CharLevelState.lEnt:
                 rv = (char === ';') ? CharLevelState.rEnt : existing;
                 break;
+            case CharLevelState.lBt:
+            case CharLevelState.mBt:
+                if (char === '`') {
+                    rv = nextChar === '`' ? CharLevelState.escBt : CharLevelState.rBt;
+                } else if (char === '{') {
+                    // '{' starts a variable part
+                    rv = nextChar === '{' ? CharLevelState.escBt : CharLevelState.lBr;
+                } else if (char === '}' && nextChar === '}') {
+                    rv = CharLevelState.escBt;
+                } else {
+                    rv = existing;
+                }
+                if (rv === CharLevelState.escBt) {
+                    // remember which fixed part to resume
+                    nesting = existing === CharLevelState.mBt ? 1 : 0;
+                }
+                break;
+            case CharLevelState.escBt:
+                rv = nesting === 1 ? CharLevelState.mBt : CharLevelState.lBt;
+                nesting = 0;
+                break;
             default:
                 ({ rv, nesting } = this.testChar(existing, isFirstChar, char, nextChar, nesting));
         }
@@ -492,6 +519,8 @@ export class XPathLexer {
         }
         let result = this.documentTokens;
         let nestedTokenStack: Token[] = [];
+        // nestedTokenStack lengths at which a string template variable part '{' was pushed
+        let templateBraceLevels: number[] = [];
         let poppedContext: Token | undefined | null = null;
 
         if (this.debug) {
@@ -521,6 +550,9 @@ export class XPathLexer {
                         if (currentLabelState !== CharLevelState.lDq &&
                             currentLabelState !== CharLevelState.lSq &&
                             currentLabelState !== CharLevelState.lC &&
+                            currentLabelState !== CharLevelState.lBt &&
+                            currentLabelState !== CharLevelState.mBt &&
+                            currentLabelState !== CharLevelState.escBt &&
                             currentChar === "}") {
                             let isNestedOk = false;
                             for (var x = 0; x < nestedTokenStack.length; x++) {
@@ -550,7 +582,9 @@ export class XPathLexer {
                     this.update(poppedContext, result, tokenChars, currentLabelState, isTypeDeclaration);
                     if (result.length > 0) {
                         let lastToken = result[result.length - 1];
-                        if (lastToken.tokenType === TokenLevelState.string) {
+                        if (XPathLexer.isWithinTemplateFixedPart(currentLabelState)) {
+                            XPathLexer.markUnterminatedTemplate(result);
+                        } else if (lastToken.tokenType === TokenLevelState.string) {
                             XPathLexer.checkExitStringLiteralEnd(lastToken, result);
                         } else if (lastToken.tokenType === TokenLevelState.entityRef) {
                             if (result.length > 1) {
@@ -586,7 +620,7 @@ export class XPathLexer {
                     || (currentLabelState === CharLevelState.exp && nextLabelState == CharLevelState.lNl)) {
                     // do nothing if state has not changed
                     // or we're within a number with an exponent
-                    if (currentChar == '\n' && (currentLabelState === CharLevelState.lSq || currentLabelState === CharLevelState.lDq ||
+                    if (currentChar == '\n' && (currentLabelState === CharLevelState.lSq || currentLabelState === CharLevelState.lDq || currentLabelState === CharLevelState.lBt || currentLabelState === CharLevelState.mBt ||
                         currentLabelState === CharLevelState.rLiteralSqEnt || currentLabelState === CharLevelState.rLiteralDqEnt ||
                         currentLabelState === CharLevelState.lC || currentLabelState === CharLevelState.lSqEnt || currentLabelState === CharLevelState.lDqEnt)) {
                         // split multi-line strings or comments - don't include newline char
@@ -628,6 +662,7 @@ export class XPathLexer {
                             break;
                         case CharLevelState.escSq:
                         case CharLevelState.escDq:
+                        case CharLevelState.escBt:
                             tokenChars.push(currentChar);
                             break;
                         case CharLevelState.rC:
@@ -644,6 +679,9 @@ export class XPathLexer {
                             this.updateResult(poppedContext, result, currentToken, isTypeDeclaration);
                             // add to nesting level
                             nestedTokenStack.push(currentToken);
+                            if (currentLabelState === CharLevelState.lBt || currentLabelState === CharLevelState.mBt) {
+                                templateBraceLevels.push(nestedTokenStack.length);
+                            }
                             this.latestRealToken = null;
                             break;
                         case CharLevelState.rB:
@@ -657,7 +695,12 @@ export class XPathLexer {
                                 if (nestedTokenStack.length > 0) {
                                     // remove from nesting level
                                     if (XPathLexer.closeMatchesOpen(nextLabelState, nestedTokenStack)) {
+                                        const closesTemplateBrace = templateBraceLevels.length > 0 && templateBraceLevels[templateBraceLevels.length - 1] === nestedTokenStack.length;
                                         poppedContext = nestedTokenStack.pop()?.context;
+                                        if (closesTemplateBrace) {
+                                            templateBraceLevels.pop();
+                                            nextState = [CharLevelState.mBt, 0];
+                                        }
                                     } else {
                                         newToken['error'] = ErrorType.BracketNesting;
                                     }
@@ -680,6 +723,10 @@ export class XPathLexer {
                                 tokenChars.length = 0;
                             }
                             break;
+                        case CharLevelState.rBt:
+                            tokenChars.push(currentChar);
+                            this.update(poppedContext, result, tokenChars, currentLabelState === CharLevelState.mBt ? CharLevelState.rBt : CharLevelState.sBt);
+                            break;
                         case CharLevelState.rSq:
                         case CharLevelState.rDq:
                         case CharLevelState.rUri:
@@ -690,10 +737,12 @@ export class XPathLexer {
                             break;
                         case CharLevelState.lSq:
                         case CharLevelState.lDq:
+                        case CharLevelState.lBt:
+                        case CharLevelState.mBt:
                         case CharLevelState.lC:
                         case CharLevelState.lWs:
                         case CharLevelState.lUri:
-                            if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq) {
+                            if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq && currentLabelState !== CharLevelState.escBt) {
                                 this.update(poppedContext, result, tokenChars, currentLabelState);
                             }
                             tokenChars.push(currentChar);
@@ -715,6 +764,9 @@ export class XPathLexer {
                 }
                 if (!nextChar && tokenChars.length > 0) {
                     this.update(poppedContext, result, tokenChars, nextLabelState, isTypeDeclaration);
+                    if (XPathLexer.isWithinTemplateFixedPart(nextLabelState)) {
+                        XPathLexer.markUnterminatedTemplate(result);
+                    }
                 }
                 currentState = nextState;
             } // end if(currentChar)
@@ -750,7 +802,28 @@ export class XPathLexer {
         }
     }
 
+    public static isTemplateFixedPart(charType: number | undefined) {
+        return charType === CharLevelState.lBt || charType === CharLevelState.mBt || charType === CharLevelState.rBt || charType === CharLevelState.sBt;
+    }
+
+    private static isWithinTemplateFixedPart(charType: CharLevelState) {
+        return charType === CharLevelState.lBt || charType === CharLevelState.mBt || charType === CharLevelState.escBt;
+    }
+
+    private static markUnterminatedTemplate(result: BaseToken[]) {
+        for (let i = result.length - 1; i > -1; i--) {
+            if (XPathLexer.isTemplateFixedPart(result[i].charType)) {
+                result[i]['error'] = ErrorType.XPathStringLiteral;
+                break;
+            }
+        }
+    }
+
     public static checkStringLiteralEnd(lastToken: BaseToken) {
+        if (XPathLexer.isTemplateFixedPart(lastToken.charType)) {
+            // an unterminated string template is flagged by the lexer
+            return;
+        }
         let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
         let firstChar = lastToken.value.charAt(0);
         if (!((lastChar === firstChar && lastToken.value.length > 1) || (lastToken.value.length > 6 &&
@@ -1034,6 +1107,8 @@ export class XPathLexer {
                     case CharLevelState.lVar:
                     case CharLevelState.lSq:
                     case CharLevelState.lDq:
+                    case CharLevelState.rBt:
+                    case CharLevelState.sBt:
                     case CharLevelState.rLiteralSqEnt:
                     case CharLevelState.rLiteralDqEnt:
                     case CharLevelState.rDqEnt:
@@ -1164,6 +1239,9 @@ export class XPathLexer {
                 break;
             case '\"':
                 rv = CharLevelState.lDq;
+                break;
+            case '`':
+                rv = CharLevelState.lBt;
                 break;
             case ' ':
             case '\t':
@@ -1438,6 +1516,10 @@ class BasicToken implements Token {
                 break;
             case CharLevelState.lSq:
             case CharLevelState.lDq:
+            case CharLevelState.lBt:
+            case CharLevelState.mBt:
+            case CharLevelState.rBt:
+            case CharLevelState.sBt:
             case CharLevelState.lSqEnt:
             case CharLevelState.lDqEnt:
             case CharLevelState.rDqEnt:

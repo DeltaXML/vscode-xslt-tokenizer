@@ -122,7 +122,9 @@ export class XsltTokenDiagnostics {
 	static anonFunctionVarOps = new Set([')','as', ',']);
 	static anonFunctionTokenTypes = new Set([TokenLevelState.operator, TokenLevelState.variable, TokenLevelState.simpleType]);
 	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
-		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber) {
+		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber ||
+			token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
+			// string template middle/closing parts always follow the '}' of a variable part
 			return;
 		}
 		let isXPathError = false;
@@ -148,7 +150,9 @@ export class XsltTokenDiagnostics {
 		} else if (prevToken.tokenType === TokenLevelState.string || prevToken.tokenType === TokenLevelState.entityRef) {
 			// string tokens may be split by newline characters
 			const currentTokenFirstChar = token.value.charAt(0);
-			isXPathError = token.value.length > 1 && (currentTokenFirstChar === '"' || currentTokenFirstChar === '\'');
+			// a template split by newlines continues on a new line, so only a same-line back-tick starts a new template
+			const startsTemplate = currentTokenFirstChar === '`' && prevToken.line === token.line && (token.charType === CharLevelState.lBt || token.charType === CharLevelState.sBt);
+			isXPathError = startsTemplate || (token.value.length > 1 && (currentTokenFirstChar === '"' || currentTokenFirstChar === '\''));
 		} else {
 			isXPathError = true;
 		}
@@ -1673,6 +1677,8 @@ export class XsltTokenDiagnostics {
 										}
 										break;
 								}
+							} else if (tv === '{' && (prevToken.charType === CharLevelState.lBt || prevToken.charType === CharLevelState.mBt)) {
+								// string template variable part
 							} else if (!isXPathError && prevToken?.tokenType === TokenLevelState.string) {
 								// check operator is permitted to follow a string - not a node or numeric operator:
 								switch (tv.length) {
@@ -2505,7 +2511,8 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], overridType?: TokenLevelState) {
-		if (token.error) {
+		if (token.error || token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
+			// string template middle/closing parts always follow the '}' of a variable part
 			return;
 		}
 		let tokenType = overridType ? overridType : token.tokenType;
