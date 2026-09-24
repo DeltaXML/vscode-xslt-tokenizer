@@ -702,7 +702,7 @@
 					"unescapeMessages": {
 						"type": "boolean",
 						"default": true,
-						"description": "SaxonC serializes xsl:message output as escaped XML text. When true (the default), character references and predefined entities are converted back to literal characters, so that e.g. '<' and ANSI color codes display as intended in the terminal. Requires 'perl' on the PATH. Not supported on Windows"
+						"description": "SaxonC serializes xsl:message output as escaped XML text. When true (the default), character references and predefined entities in messages (on stderr) are converted back to literal characters, so that e.g. '<' and ANSI color codes display as intended in the terminal. The transform result is never changed"
 					},
 					"xsltFile": {
 						"type": "string",

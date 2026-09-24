@@ -1,11 +1,11 @@
 /**
  * Test suite for the SaxonC task provider's platform-specific command lines
  *
- * The provider builds a different execution for each platform:
- * - macOS/Linux: /bin/sh running the bundled xslt-resources/saxonc-transform.sh script, which is passed the
- *   library path as SAXONC_LIBRARY_PATH and exports it as DYLD_LIBRARY_PATH/LD_LIBRARY_PATH itself (macOS strips
- *   DYLD_* variables a process merely inherits) and, with unescapeMessages, unescapes xsl:message output
- * - Windows: a plain process launch of Transform.exe, with SaxonC's lib folder prepended to PATH
+ * When SaxonC's library path must be set, or its xsl:message output unescaped (the default), the provider runs
+ * VS Code's own executable as Node.js, running the bundled xslt-resources/saxonc-transform.js script. The script
+ * is passed the library path as SAXONC_LIBRARY_PATH and prepends it to DYLD_LIBRARY_PATH (macOS strips DYLD_*
+ * variables a process merely inherits), LD_LIBRARY_PATH or PATH for Transform itself. Otherwise, Transform is
+ * launched directly.
  *
  * os.platform() (and, for Windows, path.join) are swapped out while each task is built, so all three
  * platforms can be verified from any one host. On a POSIX host the script itself is also run, with Transform
@@ -20,16 +20,22 @@ import { assert } from 'chai';
 import { SaxonCTaskProvider } from '../../src/saxonCTaskProvider';
 import { SaxonTaskProvider } from '../../src/saxonTaskProvider';
 
-const extensionRoot = path.resolve(__dirname, '..', '..', '..');
-const scriptPath = path.join(extensionRoot, 'xslt-resources', 'saxonc-transform.sh');
-
 type Platform = 'darwin' | 'linux' | 'win32';
 
-// paths with spaces, and a result path with a single quote, to exercise the shell quoting
+const extensionRoot = path.resolve(__dirname, '..', '..', '..');
+// derived as the provider does, via Uri.fsPath (which normalizes e.g. a Windows drive letter)
+const scriptPath = vscode.Uri.joinPath(vscode.Uri.file(extensionRoot), 'xslt-resources', 'saxonc-transform.js').fsPath;
+
+const platforms: { platform: Platform; saxonCPath: string; executablePath: string; extraLibraryPath: string; workFolder: string; expectedLibraryPath: string; lineBreak: string }[] = [
+	{ platform: 'darwin', saxonCPath: '/opt/Saxon C/bin', executablePath: '/opt/Saxon C/bin/Transform', extraLibraryPath: '/opt/extra libs', workFolder: '/work/my files/', expectedLibraryPath: '/opt/Saxon C/lib:/opt/extra libs', lineBreak: '\\\r\n   ' },
+	{ platform: 'linux', saxonCPath: '/opt/Saxon C/bin', executablePath: '/opt/Saxon C/bin/Transform', extraLibraryPath: '/opt/extra libs', workFolder: '/work/my files/', expectedLibraryPath: '/opt/Saxon C/lib:/opt/extra libs', lineBreak: '\\\r\n   ' },
+	{ platform: 'win32', saxonCPath: 'C:\\Saxon C\\bin', executablePath: 'C:\\Saxon C\\bin\\Transform.exe', extraLibraryPath: 'D:\\extra libs', workFolder: 'C:\\work\\my files\\', expectedLibraryPath: 'C:\\Saxon C\\lib;D:\\extra libs', lineBreak: '^\r\n   ' },
+];
+
+// paths with spaces, and a result path with a single quote
 function taskDefinition(saxonCPath: string, extraLibraryPath: string, workFolder: string, unescapeMessages?: boolean): vscode.TaskDefinition {
 	const workPath = (name: string) => workFolder + name;
 	return {
-		unescapeMessages: unescapeMessages,
 		type: 'xslt-c',
 		label: 'platform test',
 		saxonCPath: saxonCPath,
@@ -39,6 +45,7 @@ function taskDefinition(saxonCPath: string, extraLibraryPath: string, workFolder
 		xmlSource: workPath('in file.xml'),
 		resultPath: workPath("bob's out.xml"),
 		parameters: [{ name: '?greeting', value: "'hello world'" }],
+		unescapeMessages: unescapeMessages,
 	};
 }
 
@@ -52,42 +59,40 @@ function expectedArgs(workFolder: string) {
 	];
 }
 
-function getTaskForPlatform(platform: Platform, definition: vscode.TaskDefinition, libraryEnvVar: string, existingLibraryPath: string) {
+function getTaskForPlatform(platform: Platform, definition: vscode.TaskDefinition) {
 	const originalPlatform = os.platform;
 	const originalJoin = path.join;
-	const originalEnvValue = process.env[libraryEnvVar];
 	(os as any).platform = () => platform;
 	if (platform === 'win32') {
 		(path as any).join = path.win32.join;
 	}
-	process.env[libraryEnvVar] = existingLibraryPath;
 	try {
 		return new SaxonCTaskProvider('').getTask(definition);
 	} finally {
 		(os as any).platform = originalPlatform;
 		(path as any).join = originalJoin;
-		if (originalEnvValue === undefined) {
-			delete process.env[libraryEnvVar];
-		} else {
-			process.env[libraryEnvVar] = originalEnvValue;
-		}
 	}
 }
 
-// runs the script with the given environment, with Transform swapped for a fake that prints its arguments and
-// library path, then escaped text on stdout and stderr, and exits with status 3
+// runs the script with Transform swapped for a fake: it prints LD_LIBRARY_PATH, the env vars that shouldn't be
+// passed on, its arguments and an escaped (result) line to stdout, then escaped (message) lines to stderr, and
+// exits with status 3
 function runScript(env: { [key: string]: string }, args: string[]) {
 	const fakeTransform = path.join(os.tmpdir(), `fake-transform-${process.pid}.sh`);
 	fs.writeFileSync(fakeTransform, [
 		'#!/bin/sh',
-		`printf '%s\\n' "\${LD_LIBRARY_PATH:-none}"`,
+		`printf '%s\\n' "\${LD_LIBRARY_PATH:-none}" "\${ELECTRON_RUN_AS_NODE:-none}\${SAXONC_LIBRARY_PATH:-none}\${SAXONC_UNESCAPE_MESSAGES:-none}"`,
 		`printf '%s\\n' "$@"`,
-		`printf '%s\\n' '&lt;a href=&quot;x&quot;&gt; &amp;#x1b; caf&#xe9; &#8364;'`,
-		`printf '%s\\n' '&#x1b;[31mred&#27;[0m' >&2`,
+		`printf '%s\\n' '&lt;result/&gt;'`,
+		`printf '%s\\n' '&lt;a href=&quot;x&quot;&gt; &amp;#x1b; caf&#xe9; &#8364;' '&#x1b;[31mred&#27;[0m' >&2`,
 		'exit 3',
 	].join('\n'), { mode: 0o755 });
 	try {
-		return spawnSync('/bin/sh', [scriptPath, fakeTransform].concat(args), { encoding: 'utf8', env: { ...process.env, ...env } });
+		const result = spawnSync(process.execPath, [scriptPath, '\\\r\n   ', fakeTransform].concat(args), {
+			encoding: 'utf8',
+			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', LD_LIBRARY_PATH: '/usr/existing', ...env },
+		});
+		return { status: result.status, stdout: result.stdout.split('\n'), stderr: result.stderr.split('\n') };
 	} finally {
 		fs.unlinkSync(fakeTransform);
 	}
@@ -98,81 +103,69 @@ suite('SaxonC Task Provider - platform command lines', () => {
 		SaxonTaskProvider.extensionURI ??= vscode.Uri.file(extensionRoot);
 	});
 
-	const posixPlatforms: { platform: Platform; libraryEnvVar: string }[] = [
-		{ platform: 'darwin', libraryEnvVar: 'DYLD_LIBRARY_PATH' },
-		{ platform: 'linux', libraryEnvVar: 'LD_LIBRARY_PATH' },
-	];
-
-	for (const { platform, libraryEnvVar } of posixPlatforms) {
+	for (const { platform, saxonCPath, executablePath, extraLibraryPath, workFolder, expectedLibraryPath, lineBreak } of platforms) {
 		for (const unescapeMessages of [undefined, false]) {
-			test(`${platform}: runs Transform via the bundled script, passing ${libraryEnvVar} as SAXONC_LIBRARY_PATH (unescapeMessages: ${unescapeMessages})`, () => {
-				const definition = taskDefinition('/opt/Saxon C/bin', '/opt/extra libs', '/work/my files/', unescapeMessages);
-				const task = getTaskForPlatform(platform, definition, libraryEnvVar, '/usr/existing');
+			test(`${platform}: runs Transform via the bundled script, passing SAXONC_LIBRARY_PATH (unescapeMessages: ${unescapeMessages})`, () => {
+				const task = getTaskForPlatform(platform, taskDefinition(saxonCPath, extraLibraryPath, workFolder, unescapeMessages));
 				assert.exists(task);
 
 				const execution = task!.execution;
 				assert.instanceOf(execution, vscode.ProcessExecution);
 				const processExecution = execution as vscode.ProcessExecution;
-				assert.strictEqual(processExecution.process, '/bin/sh');
-				// arguments are passed as an array - no shell command line, so no quoting
-				assert.deepEqual(processExecution.args, [scriptPath, '/opt/Saxon C/bin/Transform'].concat(expectedArgs('/work/my files/')));
+				// VS Code's own executable, run as Node.js
+				assert.strictEqual(processExecution.process, process.execPath);
+				// arguments are passed as an array - no shell, so no quoting
+				assert.deepEqual(processExecution.args, [scriptPath, lineBreak, executablePath].concat(expectedArgs(workFolder)));
 				assert.deepEqual(processExecution.options?.env, {
-					SAXONC_LIBRARY_PATH: '/opt/Saxon C/lib:/opt/extra libs:/usr/existing',
+					ELECTRON_RUN_AS_NODE: '1',
 					// unescapeMessages is on unless explicitly set to false
 					SAXONC_UNESCAPE_MESSAGES: String(unescapeMessages !== false),
+					SAXONC_LIBRARY_PATH: expectedLibraryPath,
 				});
 			});
 		}
 
+		test(`${platform}: the echoed command line breaks before the Transform executable`, () => {
+			const processExecution = getTaskForPlatform(platform, taskDefinition(saxonCPath, extraLibraryPath, workFolder))!.execution as vscode.ProcessExecution;
+			// as VS Code echoes a ProcessExecution in the terminal: its arguments joined with spaces
+			const echoedLines = `${processExecution.process} ${processExecution.args.join(' ')}`.split('\r\n');
+			assert.deepEqual(echoedLines, [
+				`${process.execPath} ${scriptPath} ${lineBreak.charAt(0)}`,
+				`    ${executablePath} ${expectedArgs(workFolder).join(' ')}`,
+			]);
+		});
+
 		test(`${platform}: with no library path and unescapeMessages false, launches Transform directly`, () => {
-			const definition: vscode.TaskDefinition = { type: 'xslt-c', label: 'direct', xsltFile: '/work/a.xsl', xmlSource: '/work/a.xml', unescapeMessages: false };
-			const task = getTaskForPlatform(platform, definition, libraryEnvVar, '');
-			const processExecution = task!.execution as vscode.ProcessExecution;
-			assert.strictEqual(processExecution.process, 'Transform');
-			assert.deepEqual(processExecution.args, ['-xsl:/work/a.xsl', '-s:/work/a.xml']);
+			const definition: vscode.TaskDefinition = { type: 'xslt-c', label: 'direct', xsltFile: 'a.xsl', xmlSource: 'a.xml', unescapeMessages: false };
+			const processExecution = getTaskForPlatform(platform, definition)!.execution as vscode.ProcessExecution;
+			assert.strictEqual(processExecution.process, platform === 'win32' ? 'Transform.exe' : 'Transform');
+			assert.deepEqual(processExecution.args, ['-xsl:a.xsl', '-s:a.xml']);
+			assert.isUndefined(processExecution.options?.env);
 		});
 	}
 
-	test('saxonc-transform.sh: unescapes the output of Transform, keeping its arguments and exit status', function () {
-		if (os.platform() === 'win32' || spawnSync('/bin/sh', ['-c', 'command -v perl']).status !== 0) {
-			this.skip(); // needs /bin/sh and perl
+	test('saxonc-transform.js: unescapes messages on stderr, leaving stdout and the exit status unchanged', function () {
+		if (os.platform() === 'win32') {
+			this.skip(); // the fake Transform is a shell script
 		}
-		const args = expectedArgs('/work/my files/');
+		const args = expectedArgs('/work/my files/').concat(['?quoted="a \\"b\\""', '']);
 		const result = runScript({ SAXONC_UNESCAPE_MESSAGES: 'true', SAXONC_LIBRARY_PATH: '/opt/Saxon C/lib' }, args);
 		assert.strictEqual(result.status, 3);
-		// stderr is merged into stdout, so its line may be interleaved anywhere
-		const lines = result.stdout.replace(/\n$/, '').split('\n');
-		const stderrLine = '\x1b[31mred\x1b[0m';
-		assert.include(lines, stderrLine);
-		const stdoutLines = lines.filter((line) => line !== stderrLine);
-		// the fake prints LD_LIBRARY_PATH, exported by the script on Linux - on macOS it exports DYLD_LIBRARY_PATH
-		// instead, which SIP strips before it reaches the /bin/sh-run fake
-		assert.deepEqual(stdoutLines, [os.platform() === 'linux' ? '/opt/Saxon C/lib' : 'none'].concat(args, ['<a href="x"> &#x1b; caf\u00e9 \u20ac']));
-		assert.strictEqual(result.stderr, '');
+		// the fake prints LD_LIBRARY_PATH, prepended to by the script on Linux - on macOS it prepends to
+		// DYLD_LIBRARY_PATH instead, which SIP strips before it reaches the /bin/sh-run fake
+		const expectedLibraryPath = os.platform() === 'linux' ? '/opt/Saxon C/lib:/usr/existing' : '/usr/existing';
+		// neither ELECTRON_RUN_AS_NODE nor the SAXONC_ variables are passed on, nor the line-break argument
+		assert.deepEqual(result.stdout, [expectedLibraryPath, 'nonenonenone'].concat(args, ['&lt;result/&gt;', '']));
+		assert.deepEqual(result.stderr, ['<a href="x"> &#x1b; caf\u00e9 \u20ac', '\x1b[31mred\x1b[0m', '']);
 	});
 
-	test('saxonc-transform.sh: leaves the output of Transform unchanged when not unescaping', function () {
+	test('saxonc-transform.js: leaves messages unchanged when not unescaping', function () {
 		if (os.platform() === 'win32') {
-			this.skip(); // needs /bin/sh
+			this.skip(); // the fake Transform is a shell script
 		}
 		const result = runScript({ SAXONC_UNESCAPE_MESSAGES: 'false' }, ['-xsl:a.xsl']);
 		assert.strictEqual(result.status, 3);
-		assert.deepEqual(result.stdout.split('\n').slice(1), ['-xsl:a.xsl', '&lt;a href=&quot;x&quot;&gt; &amp;#x1b; caf&#xe9; &#8364;', '']);
-		assert.strictEqual(result.stderr, '&#x1b;[31mred&#27;[0m\n');
-	});
-
-	test('win32: launches Transform.exe directly, prepending the lib folders to PATH', () => {
-		// unescapeMessages is not supported on Windows, so is ignored
-		const definition = taskDefinition('C:\\Saxon C\\bin', 'D:\\extra libs', 'C:\\work\\my files\\', true);
-		const task = getTaskForPlatform('win32', definition, 'PATH', 'C:\\Windows\\System32');
-		assert.exists(task);
-
-		const execution = task!.execution;
-		assert.instanceOf(execution, vscode.ProcessExecution);
-		const processExecution = execution as vscode.ProcessExecution;
-		assert.strictEqual(processExecution.process, 'C:\\Saxon C\\bin\\Transform.exe');
-		// arguments are passed as an array - no shell, so no quoting
-		assert.deepEqual(processExecution.args, expectedArgs('C:\\work\\my files\\'));
-		assert.deepEqual(processExecution.options?.env, { PATH: 'C:\\Saxon C\\lib;D:\\extra libs;C:\\Windows\\System32' });
+		assert.deepEqual(result.stdout, ['/usr/existing', 'nonenonenone', '-xsl:a.xsl', '&lt;result/&gt;', '']);
+		assert.deepEqual(result.stderr, ['&lt;a href=&quot;x&quot;&gt; &amp;#x1b; caf&#xe9; &#8364;', '&#x1b;[31mred&#27;[0m', '']);
 	});
 });

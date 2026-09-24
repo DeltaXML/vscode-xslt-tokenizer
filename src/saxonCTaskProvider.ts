@@ -60,18 +60,10 @@ function saxonCExecutableName() {
 
 // SaxonC's native libraries are frequently built/packaged without an embedded rpath (macOS: "no LC_RPATH's
 // found" when loading e.g. libsaxonc-pe.dylib), so Transform can fail to launch even once its own path is
-// correctly configured. On Windows, DLLs are found via PATH itself; POSIX platforms use a dedicated env var.
-function libraryPathEnvVarName() {
-    const platform = os.platform();
-    if (platform === 'win32') {
-        return 'PATH';
-    }
-    return platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
-}
-
-// combines the sibling 'lib' folder next to the configured executable (the common case) with any additional
-// folders the user has configured - some SaxonC distributions split dependencies (e.g. a separate core library)
-// across folders that aren't a fixed, guessable path relative to the executable
+// correctly configured. This combines the sibling 'lib' folder next to the configured executable (the common
+// case) with any additional folders the user has configured - some SaxonC distributions split dependencies
+// (e.g. a separate core library) across folders that aren't a fixed, guessable path relative to the executable.
+// The bundled script prepends it to PATH on Windows, or a dedicated env var on macOS/Linux
 function buildLibraryPath(saxonCPath: string | undefined, extraLibraryPaths: string[] | undefined): string | undefined {
     const paths: string[] = [];
     if (saxonCPath) {
@@ -80,17 +72,19 @@ function buildLibraryPath(saxonCPath: string | undefined, extraLibraryPaths: str
     if (extraLibraryPaths) {
         paths.push(...extraLibraryPaths);
     }
-    if (paths.length === 0) {
-        return undefined;
-    }
-    const existingValue = process.env[libraryPathEnvVarName()];
-    return existingValue ? paths.concat(existingValue).join(pathSeparator()) : paths.join(pathSeparator());
+    return paths.length > 0 ? paths.join(pathSeparator()) : undefined;
 }
 
-// on macOS/Linux, Transform is launched via this script (run by /bin/sh, so it needs no execute permission) -
-// it exports the library path and, optionally, unescapes xsl:message output. See the script for details
+// Transform is launched via this bundled script when its library path must be set or its xsl:message output
+// unescaped. It's run by VS Code's own executable as Node.js, so needs nothing else installed. See the script
 function saxonCScriptPath() {
-    return vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'saxonc-transform.sh').fsPath;
+    return vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'saxonc-transform.js').fsPath;
+}
+
+// an argument the script ignores - VS Code echoes a task's command line as its arguments joined with spaces, so
+// this breaks the 'Executing task' line after the long VS Code executable and script paths
+function echoLineBreak() {
+    return (os.platform() === 'win32' ? '^' : '\\') + '\r\n   ';
 }
 
 export class SaxonCTaskProvider implements vscode.TaskProvider {
@@ -270,25 +264,21 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
             // this is overriden if problemMatcher is set in the tasks.json file
             let problemMatcher = "$saxon-xslt";
 
+            const unescapeMessages = xsltTask.unescapeMessages !== false;
             let execution: vscode.ProcessExecution;
-            if (os.platform() === 'win32') {
-                execution = new vscode.ProcessExecution(executablePath, allArgs, libraryPath ? { env: { PATH: libraryPath } } : undefined);
-            } else {
+            if (libraryPath || unescapeMessages) {
                 // macOS strips DYLD_* environment variables that a process merely *inherits* (a SIP protection
                 // against library injection) - and VS Code's task/terminal machinery goes through such a
                 // restricted intermediate, so ProcessExecutionOptions.env's DYLD_LIBRARY_PATH never survives to
                 // reach Transform. A process CAN still set these variables for its own children though, so the
-                // script is passed the library path under a different name and exports it itself
-                const unescapeMessages = xsltTask.unescapeMessages !== false;
-                if (libraryPath || unescapeMessages) {
-                    const env: { [key: string]: string } = { SAXONC_UNESCAPE_MESSAGES: String(unescapeMessages) };
-                    if (libraryPath) {
-                        env.SAXONC_LIBRARY_PATH = libraryPath;
-                    }
-                    execution = new vscode.ProcessExecution('/bin/sh', [saxonCScriptPath(), executablePath].concat(allArgs), { env });
-                } else {
-                    execution = new vscode.ProcessExecution(executablePath, allArgs);
+                // script is passed the library path under a different name and sets it itself
+                const env: { [key: string]: string } = { ELECTRON_RUN_AS_NODE: '1', SAXONC_UNESCAPE_MESSAGES: String(unescapeMessages) };
+                if (libraryPath) {
+                    env.SAXONC_LIBRARY_PATH = libraryPath;
                 }
+                execution = new vscode.ProcessExecution(process.execPath, [saxonCScriptPath(), echoLineBreak(), executablePath].concat(allArgs), { env });
+            } else {
+                execution = new vscode.ProcessExecution(executablePath, allArgs);
             }
             let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, execution, problemMatcher);
             newTask.presentationOptions.clear = false;
