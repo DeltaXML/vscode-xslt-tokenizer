@@ -235,11 +235,6 @@ export class XPathFunctionDetails {
 			description: "Returns a function whose effect is to apply a supplied binary operator to two arguments."
 		},
 		{
-			name: "parcel",
-			signature: "parcel(sequence as item()*) as record(value)",
-			description: "Wraps an arbitrary sequence of items as a parcel: a parcel is a map with a single entry, whose key is the string 'value' and whose value is the wrapped sequence. Parcels are useful because they enable an array to be treated as a sequence of items, by wrapping each member of the array as a parcel."
-		},
-		{
 			name: "parse-html",
 			signature: "parse-html(input as xs:string) as document-node()",
 			description: "Parses an HTML5 document (supplied as a string) using the HTML5 parsing algorithm, returning the result as an XDM document."
@@ -278,11 +273,6 @@ export class XPathFunctionDetails {
 			name: "trunk",
 			signature: "trunk(input as item()*) as item()*",
 			description: "Returns all but the last item in a sequence."
-		},
-		{
-			name: "unparcel",
-			signature: "unparcel(parcel as record(value, *)) as item()*",
-			description: "Reverses the effect of the fn:parcel() function. (Equivalent to $parcel?value.)"
 		},
 		{
 			name: "array:empty",
@@ -1044,12 +1034,6 @@ export class XPathFunctionDetails {
 			name: "insert-before",
 			signature: "insert-before( target as item()*, position as xs:integer, inserts as item()* ) as item()*",
 			description: "Returns a sequence constructed by inserting an item or a sequence of items at a given position within an existing sequence."
-		},
-		{
-
-			name: "remove",
-			signature: "remove( target as item()*, position as xs:integer ) as item()*",
-			description: "Returns a new sequence containing all the items of `$target` except the item at position `$position`."
 		},
 		{
 
