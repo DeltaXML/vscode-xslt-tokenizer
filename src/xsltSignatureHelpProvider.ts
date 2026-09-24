@@ -1,5 +1,7 @@
-import { CancellationToken, MarkdownString, ParameterInformation, Position, ProviderResult, Range, SignatureHelp, SignatureHelpProvider, SignatureInformation, TextDocument } from "vscode";
+import { CancellationToken, MarkdownString, ParameterInformation, Position, ProviderResult, SignatureHelp, SignatureHelpProvider, SignatureInformation, TextDocument } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
+import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from "./xpLexer";
+import { DocumentTypes, LanguageConfiguration, XslLexer } from "./xslLexer";
 
 interface EnclosingCall {
 	functionName: string;
@@ -10,10 +12,21 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 
 	private functionData = XPathFunctionDetails.dataPlusIxslPlus40;
 	private signatureCache = new Map<string, SignatureInformation>();
-	private static readonly maxLookbackLines = 200;
+	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	private readonly isXPath: boolean;
+	private readonly xslLexer: XslLexer | undefined;
+
+	constructor(languageConfiguration: LanguageConfiguration) {
+		this.isXPath = languageConfiguration.docType === DocumentTypes.XPath;
+		if (!this.isXPath) {
+			this.xslLexer = new XslLexer(languageConfiguration);
+			// no need for charLevelState as we're only interested in xpath charType which is always kept
+			this.xslLexer.provideCharLevelState = false;
+		}
+	}
 
 	provideSignatureHelp(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<SignatureHelp> {
-		const enclosingCall = this.findEnclosingCall(document, position);
+		const enclosingCall = XSLTSignatureHelpProvider.findEnclosingCall(this.getTokens(document), position);
 		if (!enclosingCall) {
 			return undefined;
 		}
@@ -93,59 +106,68 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		return params;
 	}
 
-	private findEnclosingCall(document: TextDocument, position: Position): EnclosingCall | null {
-		const startLine = Math.max(0, position.line - XSLTSignatureHelpProvider.maxLookbackLines);
-		const text = document.getText(new Range(new Position(startLine, 0), position));
+	private getTokens(document: TextDocument): BaseToken[] {
+		if (this.isXPath) {
+			const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+			return new XPathLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
+		}
+		return this.xslLexer!.analyse(document.getText());
+	}
+
+	// walk back through the XPath tokens preceding the cursor: string literals, string template fixed
+	// parts and comments are single tokens, so any ',' within them is never counted as a separator
+	public static findEnclosingCall(tokens: BaseToken[], position: Position): EnclosingCall | null {
+		let cursorIndex = -1;
+		for (let i = tokens.length - 1; i > -1; i--) {
+			const t = tokens[i];
+			if (t.line < position.line || (t.line === position.line && t.startCharacter < position.character)) {
+				cursorIndex = i;
+				break;
+			}
+		}
 
 		let depth = 0;
 		let commaCount = 0;
-		let quoteChar: string | null = null;
-
-		for (let i = text.length - 1; i >= 0; i--) {
-			const ch = text[i];
-
-			if (quoteChar) {
-				if (ch === quoteChar) {
-					quoteChar = null;
-				}
-				continue;
+		for (let i = cursorIndex; i > -1; i--) {
+			const t = tokens[i];
+			if (t.tokenType >= XSLTSignatureHelpProvider.xsltStartTokenNumber) {
+				// an XML token marks the start of the XPath expression
+				return null;
 			}
-
-			if (ch === '"' || ch === '\'') {
-				quoteChar = ch;
-			} else if (ch === ')' || ch === ']' || ch === '}') {
-				depth++;
-			} else if (ch === '(' || ch === '[' || ch === '{') {
-				if (depth === 0) {
-					if (ch !== '(') {
-						return null;
+			switch (t.charType) {
+				case CharLevelState.rB:
+				case CharLevelState.rPr:
+				case CharLevelState.rBr:
+					depth++;
+					break;
+				case CharLevelState.lB:
+				case CharLevelState.lPr:
+				case CharLevelState.lBr:
+					if (depth === 0) {
+						return t.charType === CharLevelState.lB ? XSLTSignatureHelpProvider.functionCall(tokens[i - 1], commaCount) : null;
 					}
-					return this.readFunctionName(text, i, commaCount);
-				}
-				depth--;
-			} else if (ch === ',' && depth === 0) {
-				commaCount++;
+					depth--;
+					break;
+				case CharLevelState.dSep:
+					// cursor between the brackets of '()', '[]' or '{}'
+					if (i === cursorIndex && t.line === position.line && t.startCharacter + 1 === position.character) {
+						return t.value === '()' ? XSLTSignatureHelpProvider.functionCall(tokens[i - 1], 0) : null;
+					}
+					break;
+				case CharLevelState.sep:
+					if (depth === 0 && t.value === ',') {
+						commaCount++;
+					}
+					break;
 			}
 		}
-
 		return null;
 	}
 
-	private readFunctionName(text: string, openParenIndex: number, activeParameter: number): EnclosingCall | null {
-		let j = openParenIndex - 1;
-		while (j >= 0 && /\s/.test(text[j])) {
-			j--;
+	private static functionCall(nameToken: BaseToken | undefined, activeParameter: number): EnclosingCall | null {
+		if (nameToken && nameToken.tokenType === TokenLevelState.function) {
+			return { functionName: nameToken.value, activeParameter };
 		}
-		const nameEnd = j + 1;
-		while (j >= 0 && /[A-Za-z0-9_\-:]/.test(text[j])) {
-			j--;
-		}
-		const nameStart = j + 1;
-
-		if (nameStart === nameEnd) {
-			return null;
-		}
-
-		return { functionName: text.substring(nameStart, nameEnd), activeParameter };
+		return null;
 	}
 }
