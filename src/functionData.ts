@@ -318,7 +318,6 @@ export class FunctionData {
 		"lowest#2",
 		"lowest#3",
 		"op#1",
-		"parcel#1",
 		"parse-html#1",
 		"parse-QName#1",
 		"parts#1",
@@ -328,7 +327,6 @@ export class FunctionData {
 		"starts-with-sequence#2",
 		"starts-with-sequence#3",
 		"trunk#1",
-		"unparcel#1"
 	].concat(FunctionData.xpath);
 
 	public static readonly array = [
