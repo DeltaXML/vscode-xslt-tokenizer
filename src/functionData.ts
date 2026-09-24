@@ -1,3 +1,5 @@
+import { xpath40Arities } from './xpath40FunctionDetails';
+
 export enum XSLTnamespaces {
 	NotDefined,
 	Array,
@@ -24,6 +26,14 @@ interface NamespaceData {
 }
 
 export class FunctionData {
+	// 'name#arity' entries in xpath40 replace all entries in xpath31 with the same name; other xpath31 entries
+	// (e.g. XSLT functions, which are not in the generated XPath 4.0 data) are kept
+	private static replaceByName(xpath40: string[], xpath31: string[]) {
+		const localName = (entry: string) => entry.substring(0, entry.lastIndexOf('#'));
+		const xpath40Names = new Set(xpath40.map(localName));
+		return xpath40.concat(xpath31.filter((entry) => !xpath40Names.has(localName(entry))));
+	}
+
 	public static readonly xpath = [
 		"count#1",
 		"QName#2",
@@ -45,7 +55,7 @@ export class FunctionData {
 		"collection#1",
 		"compare#2",
 		"compare#3",
-		"concat#3",
+		// "concat#3" (special case - variadic),
 		"contains#2",
 		"contains#3",
 		"contains-token#2",
@@ -286,48 +296,8 @@ export class FunctionData {
 		"unparsed-entity-uri#2"
 	];
 
-	public static readonly xpath40 = [
-		"all#2",
-		"all-different#1",
-		"all-different#2",
-		"all-equal#1",
-		"all-equal#2",
-		"characters#1",
-		"contains-sequence#2",
-		"contains-sequence#3",
-		"ends-with-sequence#2",
-		"ends-with-sequence#3",
-		"expanded-QName#1",
-		"foot#1",
-		"highest#1",
-		"highest#2",
-		"highest#3",
-		"identity#1",
-		"index-where#2",
-		"intersperse#2",
-		"in-scope-namespace#1",
-		"is-NAN#1",
-		"items-after#2",
-		"items-at#2",
-		"items-before#2",
-		"items-ending-where#2",
-		"items-starting-where#2",
-		"items-until#2",
-		"iterate-while#3",
-		"lowest#1",
-		"lowest#2",
-		"lowest#3",
-		"op#1",
-		"parse-html#1",
-		"parse-QName#1",
-		"parts#1",
-		"replicate#2",
-		"range#0",
-		"some#2",
-		"starts-with-sequence#2",
-		"starts-with-sequence#3",
-		"trunk#1",
-	].concat(FunctionData.xpath);
+	// XPath 4.0: generated from the Saxon function library documentation (see xpath40FunctionDetails.ts)
+	public static readonly xpath40 = FunctionData.replaceByName(xpath40Arities.fn, FunctionData.xpath);
 
 	public static readonly array = [
 		"append#2",
@@ -353,15 +323,7 @@ export class FunctionData {
 		"tail#1"
 	];
 
-	public static readonly array40 = [
-		"empty#1",
-		"exists#1",
-		"foot#1",
-		"index-where#2",
-		"members#1",
-		"of#1",
-		"trunk#1"
-	].concat(FunctionData.array);
+	public static readonly array40 = FunctionData.replaceByName(xpath40Arities.array, FunctionData.array);
 
 	public static readonly map = [
 		"contains#2",
@@ -377,14 +339,7 @@ export class FunctionData {
 		"size#1"
 	];
 
-	public static readonly map40 = [
-		"entries#1",
-		"build#1",
-		"build#2",
-		"build#3",
-		"build#4",
-		"filter#2"
-	].concat(FunctionData.map);
+	public static readonly map40 = FunctionData.replaceByName(xpath40Arities.map, FunctionData.map);
 
 	public static readonly ixsl = [
 		"apply#2",
@@ -418,6 +373,8 @@ export class FunctionData {
 		"sqrt#1",
 		"tan#1"
 	];
+
+	public static readonly math40 = FunctionData.replaceByName(xpath40Arities.math, FunctionData.math);
 
 	public static readonly sql = [
 		"connect#1",

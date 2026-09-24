@@ -52,7 +52,7 @@
  Do not edit - regenerate with: npm run generate-xpath40-functions
 */
 
-import {{ FunctionCompletionData }} from './xsltTokenCompletions';
+import type {{ FunctionCompletionData }} from './xsltTokenCompletions';
 
 // XPath 4.0 functions: {count($functions)} entries
 export const xpath40Data: FunctionCompletionData[] = [
@@ -68,6 +68,35 @@ export const xpath40Data: FunctionCompletionData[] = [
       <xsl:text>&#9;}}{if (position() eq last()) then '' else ','}&#10;</xsl:text>
     </xsl:for-each>
     <xsl:text>];&#10;</xsl:text>
+    <xsl:call-template name="arities">
+      <xsl:with-param name="functions" select="$functions"/>
+    </xsl:call-template>
+  </xsl:template>
+
+  <!-- 'local-name#arity' for each permitted arity, grouped by namespace: used by FunctionData for diagnostics -->
+  <xsl:template name="arities">
+    <xsl:param name="functions" as="element(f:function)*"/>
+    <xsl:text>
+// XPath 4.0 function arities ('local-name#arity') by namespace, for checking function calls
+export const xpath40Arities = {{
+</xsl:text>
+    <xsl:variable name="groups" as="map(xs:string, xs:string)*" select="
+      map{'key': 'fn', 'uri': 'http://www.w3.org/2005/xpath-functions'},
+      map{'key': 'map', 'uri': 'http://www.w3.org/2005/xpath-functions/map'},
+      map{'key': 'array', 'uri': 'http://www.w3.org/2005/xpath-functions/array'},
+      map{'key': 'math', 'uri': 'http://www.w3.org/2005/xpath-functions/math'}"/>
+    <xsl:for-each select="$groups">
+      <xsl:variable name="group" select="."/>
+      <xsl:variable name="entries" as="xs:string*" select="
+        for $fn in $functions[f:name/@namespace eq $group?uri],
+            $proto in $fn/f:signatures/f:proto[f:in-spec = 'xpath40'],
+            $arity in count($proto/f:arg[not(@default)]) to count($proto/f:arg)
+        return $fn/f:name || '#' || $arity"/>
+      <xsl:text>&#9;{$group?key}: [&#10;</xsl:text>
+      <xsl:value-of select="distinct-values($entries) ! ('&#9;&#9;' || gen:ts-string(.))" separator=",&#10;"/>
+      <xsl:text>&#10;&#9;]{if (position() eq last()) then '' else ','}&#10;</xsl:text>
+    </xsl:for-each>
+    <xsl:text>}};&#10;</xsl:text>
   </xsl:template>
 
   <xsl:function name="gen:arg" as="xs:string">

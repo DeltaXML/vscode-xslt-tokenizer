@@ -2696,7 +2696,7 @@ export class XsltTokenDiagnostics {
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
 		if (fNameParts.length === 1) {
-			if (tokenValue === 'concat' || tokenValue === 'codepoints-to-string') {
+			if (tokenValue === 'concat') {
 				isValid = arity > 0;
 			} else if (useXPath40) {
 				isValid = FunctionData.xpath40.indexOf(fNameParts[0]) > -1;
@@ -2717,7 +2717,7 @@ export class XsltTokenDiagnostics {
 			} else if (useXPath40) {
 				switch (xsltType) {
 					case XSLTnamespaces.XPath:
-						if (tokenValue.endsWith(':concat') || tokenValue.endsWith(':codepoints-to-string')) {
+						if (tokenValue.endsWith(':concat')) {
 							isValid = arity > 0;
 						} else {
 							isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
@@ -2727,17 +2727,13 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTnamespaces.Array:
-						if (tokenValue.endsWith(':members') || tokenValue.endsWith(':of')) {
-							isValid = arity > 0;
-						} else {
-							isValid = FunctionData.array40.indexOf(fNameParts[1]) > -1;
-						}
+						isValid = FunctionData.array40.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.Map:
 						isValid = FunctionData.map40.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.Math:
-						isValid = FunctionData.math.indexOf(fNameParts[1]) > -1;
+						isValid = FunctionData.math40.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.SQL:
 						isValid = FunctionData.sql.indexOf(fNameParts[1]) > -1;
@@ -2763,10 +2759,10 @@ export class XsltTokenDiagnostics {
 			} else {
 				switch (xsltType) {
 					case XSLTnamespaces.XPath:
-						if (tokenValue.endsWith(':concat') || tokenValue.endsWith(':codepoints-to-string')) {
+						if (tokenValue.endsWith(':concat')) {
 							isValid = arity > 0;
 						} else {
-							isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
+							isValid = FunctionData.xpath.indexOf(fNameParts[1]) > -1;
 						}
 						break;
 					case XSLTnamespaces.Array:
