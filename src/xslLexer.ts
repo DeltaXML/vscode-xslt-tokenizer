@@ -650,6 +650,7 @@ export class XslLexer {
         }
         this.globalInstructionData.length = 0;
         this.globalModeData.length = 0;
+        this.isXSLT40 = false;
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.charCount = -1;

@@ -2,7 +2,7 @@ import * as path from "path";
 import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
-import { GlobalInstructionData, GlobalInstructionType } from "./xslLexer";
+import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration } from "./xslLexer";
 import { LexPosition } from "./xpLexer";
 
 enum CharType {
@@ -16,9 +16,15 @@ enum CharType {
 
 export class XSLTHoverProvider implements HoverProvider {
 
-	private functionData = XPathFunctionDetails.dataPlusIxslPlus40;
+	constructor(private definitionProvider?: XsltDefinitionProvider, private languageConfiguration?: LanguageConfiguration) {
+	}
 
-	constructor(private definitionProvider?: XsltDefinitionProvider) {
+	// isVersion4 is set on the shared language configuration each time the document symbols are updated
+	private getFunctionData() {
+		if (this.languageConfiguration?.docType === DocumentTypes.XPath) {
+			return XPathFunctionDetails.xpathData;
+		}
+		return this.languageConfiguration?.isVersion4 ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlusIxsl;
 	}
 
 	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
@@ -32,7 +38,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const trimmedFnName = rawFnName.trimRight();
 		// the built-in function list stores names without their standard 'fn:' prefix
 		const builtinLookupName = trimmedFnName.startsWith('fn:') ? trimmedFnName.substring(3) : trimmedFnName;
-		const matchingData = this.functionData.find((item) => {
+		const matchingData = this.getFunctionData().find((item) => {
 			return item.name === builtinLookupName;
 		});
 

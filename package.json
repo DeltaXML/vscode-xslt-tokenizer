@@ -1282,7 +1282,9 @@
 		"lint-fix": "eslint --fix src",
 		"watch": "tsc -watch -p ./",
 		"test": "npm run compile && vscode-test --extensionDevelopmentPath=.",
-		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts"
+		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts",
+		"generate-xpath40-functions": "xslt3 -xsl:resources/xslt/saxon-functions-to-typescript.xsl -s:resources/data/saxon-functions.xml -o:src/xpath40FunctionDetails.ts",
+		"update-saxon-functions": "curl -sfL https://www.saxonica.com/documentation13/doc/functions.xml -o resources/data/saxon-functions.xml && npm run generate-xpath40-functions"
 	},
 	"devDependencies": {
 		"@types/chai": "^5.2.2",

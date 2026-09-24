@@ -10,7 +10,6 @@ interface EnclosingCall {
 
 export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 
-	private functionData = XPathFunctionDetails.dataPlusIxslPlus40;
 	private signatureCache = new Map<string, SignatureInformation>();
 	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	private readonly isXPath: boolean;
@@ -26,7 +25,8 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 	}
 
 	provideSignatureHelp(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<SignatureHelp> {
-		const enclosingCall = XSLTSignatureHelpProvider.findEnclosingCall(this.getTokens(document), position);
+		const tokens = this.getTokens(document);
+		const enclosingCall = XSLTSignatureHelpProvider.findEnclosingCall(tokens, position);
 		if (!enclosingCall) {
 			return undefined;
 		}
@@ -34,7 +34,7 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		let fnName = enclosingCall.functionName;
 		fnName = fnName.startsWith('fn:') ? fnName.substring(3) : fnName;
 
-		const matchingData = this.functionData.find((item) => item.name === fnName);
+		const matchingData = this.getFunctionData().find((item) => item.name === fnName);
 		if (!matchingData) {
 			return undefined;
 		}
@@ -49,7 +49,8 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 	}
 
 	private getSignatureInformation(name: string, signature: string, description: string): SignatureInformation {
-		const cached = this.signatureCache.get(name);
+		// keyed by signature, as the XPath 3.1 and 4.0 function lists may have different signatures for the same name
+		const cached = this.signatureCache.get(signature);
 		if (cached) {
 			return cached;
 		}
@@ -82,7 +83,7 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 			}
 		}
 
-		this.signatureCache.set(name, info);
+		this.signatureCache.set(signature, info);
 		return info;
 	}
 
@@ -104,6 +105,14 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		}
 		params.push(paramsText.substring(start).trim());
 		return params;
+	}
+
+	// call after getTokens(), which sets the lexer's isXSLT40 property
+	private getFunctionData() {
+		if (this.isXPath) {
+			return XPathFunctionDetails.xpathData;
+		}
+		return this.xslLexer!.isXSLT40 ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlusIxsl;
 	}
 
 	private getTokens(document: TextDocument): BaseToken[] {
