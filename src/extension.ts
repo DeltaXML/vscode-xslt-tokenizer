@@ -642,6 +642,9 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('sch',
 		schFormatter, '\n', '/'));
 
+	// used to locate bundled resources (xslt-resources) by task providers and code actions
+	SaxonTaskProvider.extensionURI = context.extensionUri;
+
 	let workspaceRoot = vscode.workspace.rootPath;
 	if (!workspaceRoot) {
 		return;
@@ -649,7 +652,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	let xsltTaskEnabled = vscode.workspace.getConfiguration('XSLT.tasks.java').get('enabled');
 	if (xsltTaskEnabled) {
-		SaxonTaskProvider.extensionURI = context.extensionUri;
 		let xsltTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
 		context.subscriptions.push(xsltTaskProvider);
 	}

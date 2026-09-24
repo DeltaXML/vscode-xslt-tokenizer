@@ -93,6 +93,11 @@ suite('Quick Run - tasks listed for the active XML file', () => {
 });
 
 suite('Quick Run - tasks with no XML source', () => {
+	// SaxonC tasks on macOS/Linux run a script bundled with the extension - the extension may not be activated
+	suiteSetup(() => {
+		SaxonTaskProvider.extensionURI ??= vscode.Uri.file(path.resolve(__dirname, '..', '..', '..'));
+	});
+
 	const providers: { [type in QuickRunTaskType]: { getTask(definition: vscode.TaskDefinition): vscode.Task | undefined } } = {
 		'xslt': new SaxonTaskProvider(''),
 		'xslt-js': new SaxonJsTaskProvider(''),

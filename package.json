@@ -699,6 +699,11 @@
 						},
 						"description": "Extra folders to search for SaxonC's native libraries at runtime. The sibling 'lib' folder next to saxonCPath is always included automatically - use this for anything else, e.g. a separately-packaged core library. Defaults to the 'XSLT.tasks.saxonCLibraryPaths' setting"
 					},
+					"unescapeMessages": {
+						"type": "boolean",
+						"default": true,
+						"description": "SaxonC serializes xsl:message output as escaped XML text. When true (the default), character references and predefined entities are converted back to literal characters, so that e.g. '<' and ANSI color codes display as intended in the terminal. Requires 'perl' on the PATH. Not supported on Windows"
+					},
 					"xsltFile": {
 						"type": "string",
 						"description": "The path to the XSLT stylesheet"

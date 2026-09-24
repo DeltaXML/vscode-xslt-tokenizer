@@ -5,12 +5,18 @@
  * 'useJsonSource' is not set - when xmlSource is a '.json' file. 'useJsonSource: false' always passes '-s:'.
  */
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { assert } from 'chai';
 import { SaxonTaskProvider, QuickRunTaskType } from '../../src/saxonTaskProvider';
 import { SaxonJsTaskProvider } from '../../src/saxonJsTaskProvider';
 import { SaxonCTaskProvider } from '../../src/saxonCTaskProvider';
 
 suite('XSLT tasks - JSON source documents', () => {
+	// SaxonC tasks on macOS/Linux run a script bundled with the extension - the extension may not be activated
+	suiteSetup(() => {
+		SaxonTaskProvider.extensionURI ??= vscode.Uri.file(path.resolve(__dirname, '..', '..', '..'));
+	});
+
 	const providers: { [type in QuickRunTaskType]: { getTask(definition: vscode.TaskDefinition): vscode.Task | undefined } } = {
 		'xslt': new SaxonTaskProvider(''),
 		'xslt-js': new SaxonJsTaskProvider(''),
