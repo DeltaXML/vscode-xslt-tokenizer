@@ -1645,6 +1645,7 @@ export enum ErrorType {
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,
+    AccumulatorNotApplicable,
     BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,

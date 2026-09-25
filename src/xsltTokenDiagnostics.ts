@@ -35,6 +35,8 @@ export enum AttributeType {
 	InstructionName,
 	InstructionMode,
 	UseAttributeSets,
+	// a list of accumulator names, e.g. on xsl:mode or xsl:source-document
+	UseAccumulators,
 	ExcludeResultPrefixes,
 	XPath
 }
@@ -1069,6 +1071,8 @@ export class XsltTokenDiagnostics {
 								attType = AttributeType.InstructionMode;
 							} else if (attNameText === XsltTokenDiagnostics.useAttSet) {
 								attType = AttributeType.UseAttributeSets;
+							} else if (attNameText === 'use-accumulators') {
+								attType = AttributeType.UseAccumulators;
 							} else if (attNameText === XsltTokenDiagnostics.excludePrefixes || attNameText === XsltTokenDiagnostics.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -1179,6 +1183,14 @@ export class XsltTokenDiagnostics {
 								problemTokens.push(token);
 								hasProblem = true;
 							}
+						}
+						if (!hasProblem && attType === AttributeType.UseAccumulators) {
+							// each name must be a declared accumulator (XTSE3300)
+							XslLexer.tokensInsideToken(token, variableName).forEach((nameToken) => {
+								if (nameToken.value !== '#all' && !globalAccumulatorNames.includes(nameToken.value)) {
+									problemTokens.push({ ...nameToken, tokenType: token.tokenType, error: ErrorType.AccumulatorNameUnresolved });
+								}
+							});
 						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
 							if (!namedTemplates.get(variableName)) {
@@ -2647,6 +2659,7 @@ export class XsltTokenDiagnostics {
 				}
 			}
 		});
+		XsltTokenDiagnostics.checkAccumulatorsApplicable(globalInstructionData, importedInstructionData, problemTokens);
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
@@ -2729,6 +2742,20 @@ export class XsltTokenDiagnostics {
 			foundContextBracketsOrPredicate = hasOperandContext(rootOperandContext) || !!xpathStack.find((item) => item.hasContextItem === true || hasOperandContext(item));
 		}
 		return foundContextBracketsOrPredicate;
+	}
+
+	// an accumulator is only applicable to the principal source document if it's listed in the initial mode's use-accumulators
+	// (otherwise XTDE3362 is raised at run time), or to an xsl:source-document or xsl:merge-source tree if listed there -
+	// it's applicable to documents loaded with doc() etc. regardless. So a warning, for accumulators declared in this document
+	// that aren't listed in any use-accumulators attribute, here or in an included or imported module
+	private static checkAccumulatorsApplicable(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], problemTokens: BaseToken[]) {
+		const usedNames = globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.AccumulatorUse).map((g) => g.name);
+		if (usedNames.includes('#all')) {
+			return;
+		}
+		globalInstructionData.filter((g) => g.type === GlobalInstructionType.Accumulator && !usedNames.includes(g.name)).forEach((accumulator) => {
+			problemTokens.push({ ...accumulator.token, error: ErrorType.AccumulatorNotApplicable, value: accumulator.name });
+		});
 	}
 
 	private static textForTokenRange(document: vscode.TextDocument, allTokens: BaseToken[], range: [number, number]) {
@@ -3717,6 +3744,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XSLTKeyUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.AccumulatorNotApplicable:
+					msg = `XSLT: The accumulator '${tokenValue}' is not listed in any use-accumulators attribute, e.g. on xsl:mode, so it only applies to documents loaded with functions such as doc()`;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.AccumulatorNameUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;

@@ -176,6 +176,14 @@ export class XslLexer {
         return arity <= instruction.idNumber && arity >= instruction.idNumber - optionalCount;
     }
 
+    // accumulator names (or '#all') in a use-accumulators attribute value - as AccumulatorUse entries, so that the names used
+    // in included or imported modules are known
+    protected static recordAccumulatorUses(globalInstructionData: GlobalInstructionData[], valueToken: BaseToken, attValue: string) {
+        XslLexer.tokensInsideToken(valueToken, attValue).forEach((nameToken) => {
+            globalInstructionData.push({ type: GlobalInstructionType.AccumulatorUse, name: nameToken.value, token: nameToken, idNumber: 0 });
+        });
+    }
+
     protected static hasDeclaredType(instructionType: GlobalInstructionType) {
         return instructionType === GlobalInstructionType.ItemType || instructionType === GlobalInstructionType.Variable || instructionType === GlobalInstructionType.Parameter;
     }
@@ -214,7 +222,6 @@ export class XslLexer {
     private nonNativeAvts = false;
     private docType: DocumentTypes;
     private static splitModesregexp = /([^\s]+)|(\s+)/g;
-    private static startsWithWSRegex = new RegExp('$\s');
 
 
     constructor(languageConfiguration: LanguageConfiguration) {
@@ -743,6 +750,7 @@ export class XslLexer {
         let isParamRequiredAttribute = false;
         let pendingParamOptional: boolean | undefined;
         let pendingDeclaredType: string | undefined;
+        let isUseAccumulatorsAttribute = false;
         let pendingParamSelect: string|undefined;
         let topLevelParamNamePushed = false;
         let xpathEnded = false;
@@ -932,6 +940,7 @@ export class XslLexer {
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
                             isParamRequiredAttribute = false;
+                            isUseAccumulatorsAttribute = false;
                             isGlobalInstructionMatch = false;
                             isGlobalUsePackageVersion = false;
                             isGlobalVersion = false;
@@ -973,6 +982,9 @@ export class XslLexer {
                                 } else if (collectParamName && attName === 'required') {
                                     isExpandTextAttribute = false;
                                     isParamRequiredAttribute = true;
+                                } else if (attName === 'use-accumulators') {
+                                    isExpandTextAttribute = false;
+                                    isUseAccumulatorsAttribute = true;
                                 } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                     isExpandTextAttribute = false;
                                     isGlobalUsePackageVersion = true;
@@ -1096,6 +1108,9 @@ export class XslLexer {
                                 const gd = this.globalInstructionData.length > 0 ? this.globalInstructionData[this.globalInstructionData.length - 1] : undefined;
                                 pendingParamOptional = XslLexer.recordParamRequired(gd, tokenChars.join(''), currentParamNamePushed);
                                 isParamRequiredAttribute = false;
+                            } else if (isUseAccumulatorsAttribute) {
+                                XslLexer.recordAccumulatorUses(this.globalInstructionData, newToken, tokenChars.join(''));
+                                isUseAccumulatorsAttribute = false;
                             } else if (isGlobalUsePackageVersion) {
                                 let attValue = tokenChars.join('');
                                 if (this.globalInstructionData.length > 0) {
@@ -1119,7 +1134,7 @@ export class XslLexer {
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage || tagGlobalInstructionType === GlobalInstructionType.RootXSLT) {
                                 storeToken = true;
                             }
-                            if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode) {
+                            if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode || isUseAccumulatorsAttribute) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
                                 this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeValue, result, nextState);
@@ -1363,17 +1378,11 @@ export class XslLexer {
         const result: BaseToken[] = [];
         const tokenType = -1; // not a standard token
 
-        let isWhitespace = false;
         // attValue startwith a " character so offset by one:
         let partPosition = token.startCharacter + 1;
-        tokenValues.forEach((value, index) => {
-            if (index === 0) {
-                isWhitespace = this.startsWithWSRegex.test(tokenValues[index]);
-            } else {
-                // tokenValues isWhiteSpace alternates: 
-                // eg: "mode1 mode2" => ["mode1", " ", "mode2"]
-                isWhitespace = !isWhitespace;
-            }
+        tokenValues.forEach((value) => {
+            // each part is either a name or a whitespace run, eg: " mode1 mode2" => [" ", "mode1", " ", "mode2"]
+            const isWhitespace = /^\s/.test(value);
             const valueLength = value.length;
             if (!isWhitespace) {
                 let tkn: BaseToken = {
@@ -1524,7 +1533,9 @@ export enum GlobalInstructionType {
     RootXMLNS,
     RootXSLT,
     Unknown,
-    ItemType
+    ItemType,
+    // not a declaration: an accumulator name listed in a use-accumulators attribute, e.g. on xsl:mode
+    AccumulatorUse
 }
 
 

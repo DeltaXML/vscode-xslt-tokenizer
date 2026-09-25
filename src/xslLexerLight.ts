@@ -52,6 +52,7 @@ export class XslLexerLight extends XslLexer {
         let isParamRequiredAttribute = false;
         let pendingParamOptional: boolean | undefined;
         let pendingDeclaredType: string | undefined;
+        let isUseAccumulatorsAttribute = false;
         let pendingParamSelect: string|undefined;
         let topLevelParamNamePushed = false;
 
@@ -137,7 +138,8 @@ export class XslLexerLight extends XslLexer {
                             break;      
                         case XMLCharState.lAn:
                             if ((xmlElementStack === 1 && tagGlobalInstructionType !== GlobalInstructionType.Unknown) ||
-                                xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage) {
+                                xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage ||
+                                (xmlElementStack === 1 && isNativeElement)) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             } else if (xmlElementStack < 3 && xmlnsPrefixesOnly) {
@@ -151,6 +153,7 @@ export class XslLexerLight extends XslLexer {
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
                             isParamRequiredAttribute = false;
+                            isUseAccumulatorsAttribute = false;
                             isGlobalUsePackageVersion = false;
                             isGlobalInstructionMatch = false;
                             isTypeDeclarationAttribute = false;
@@ -168,6 +171,8 @@ export class XslLexerLight extends XslLexer {
                                 isGlobalParameterName = true;
                             } else if (collectParamName && attName === 'required') {
                                 isParamRequiredAttribute = true;
+                            } else if (isNativeElement && attName === 'use-accumulators') {
+                                isUseAccumulatorsAttribute = true;
                             } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                 isGlobalUsePackageVersion = true;
                             } else if ((tagGlobalInstructionType === GlobalInstructionType.Function || collectParamName || XslLexer.hasDeclaredType(tagGlobalInstructionType)) && attName === 'as') {
@@ -278,6 +283,10 @@ export class XslLexerLight extends XslLexer {
                                 const gd = this.globalInstructionData.length > 0 ? this.globalInstructionData[this.globalInstructionData.length - 1] : undefined;
                                 pendingParamOptional = XslLexer.recordParamRequired(gd, tokenChars.join(''), currentParamNamePushed);
                                 isParamRequiredAttribute = false;
+                            } else if (isUseAccumulatorsAttribute) {
+                                const valueToken: BaseToken = { line: lineNumber, length: tokenChars.length + 2, startCharacter: lineNumberChar - (tokenChars.length + 2), value: tokenChars.join(''), tokenType: XSLTokenLevelState.attributeValue };
+                                XslLexer.recordAccumulatorUses(this.globalInstructionData, valueToken, tokenChars.join(''));
+                                isUseAccumulatorsAttribute = false;
                             } else if (isTypeDeclarationAttribute) {
                                 const declaredType = tokenChars.join('').trim();
                                 if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
@@ -326,7 +335,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage
-                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute) {
+                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute || isUseAccumulatorsAttribute) {
                                 storeToken = true;
                             }
                            break;

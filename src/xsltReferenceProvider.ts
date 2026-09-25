@@ -489,6 +489,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								attType = AttributeType.InstructionMode;
 							} else if (attNameText === XsltTokenDiagnostics.useAttSet) {
 								attType = AttributeType.UseAttributeSets;
+							} else if (attNameText === 'use-accumulators') {
+								attType = AttributeType.UseAccumulators;
 							} else if (attNameText === XsltTokenDiagnostics.excludePrefixes || attNameText === XsltTokenDiagnostics.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -594,6 +596,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 							case AttributeType.UseAttributeSets:
 								if (seekInstruction.type === GlobalInstructionType.AttributeSet && variableName === seekInstruction.name) {
 									referenceTokens.push(token);
+								}
+								break;
+							case AttributeType.UseAccumulators:
+								if (seekInstruction.type === GlobalInstructionType.Accumulator) {
+									XslLexer.tokensInsideToken(token, variableName).filter((nameToken) => nameToken.value === seekInstruction.name).forEach((nameToken) => referenceTokens.push(nameToken));
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:

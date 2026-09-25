@@ -81,7 +81,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
 		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
 		let matchingGlobal = globalInstructionData.find(global => { 
-			return global.token.line === position.line && 
+			return global.type !== GlobalInstructionType.AccumulatorUse && global.token.line === position.line &&
 			position.character >= global.token.startCharacter && 
 			position.character <= global.token.startCharacter + global.token.length;
 		});

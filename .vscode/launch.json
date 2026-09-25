@@ -11,7 +11,11 @@
 			"request": "launch",
 			"runtimeExecutable": "${execPath}",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder:vscode-xslt-tokenizer}"
+				// other extensions are disabled, except the XSLT Dark Themes extension, which is loaded as a second development extension
+				// - update its version here after the extension updates
+				"--disable-extensions",
+				"--extensionDevelopmentPath=${workspaceFolder:vscode-xslt-tokenizer}",
+				"--extensionDevelopmentPath=${userHome}/.vscode/extensions/deltaxml.xslt-dark-themes-1.3.0"
 			],
 			"outFiles": [
 				"${workspaceFolder:vscode-xslt-tokenizer}/out/**/*.js"

@@ -28,6 +28,7 @@ enum AttributeType {
 	InstructionName,
 	InstructionMode,
 	UseAttributeSets,
+	UseAccumulators,
 	ExcludeResultPrefixes
 }
 
@@ -345,6 +346,8 @@ export class XsltTokenDefinitions {
 								attType = AttributeType.InstructionMode;
 							} else if (attNameText === XsltTokenDefinitions.useAttSet) {
 								attType = AttributeType.UseAttributeSets;
+							} else if (attNameText === 'use-accumulators') {
+								attType = AttributeType.UseAccumulators;
 							} else if (attNameText === XsltTokenDefinitions.excludePrefixes || attNameText === XsltTokenDefinitions.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -417,6 +420,17 @@ export class XsltTokenDefinitions {
 											}
 										}
 										resultInputToken = { token: token, type: GlobalInstructionType.Variable };
+									}
+								}
+								break;
+							case AttributeType.UseAccumulators:
+								if (isOnRequiredToken) {
+									const nameToken = XslLexer.tokensInsideToken(token, variableName).find((innerToken) =>
+										position.character >= innerToken.startCharacter && position.character <= (innerToken.startCharacter + innerToken.length));
+									if (nameToken) {
+										const instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, nameToken.value, GlobalInstructionType.Accumulator);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
+										resultInputToken = { token: nameToken, type: GlobalInstructionType.Accumulator };
 									}
 								}
 								break;
