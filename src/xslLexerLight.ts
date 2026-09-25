@@ -49,6 +49,8 @@ export class XslLexerLight extends XslLexer {
         let collectParamName = false;
         let pendingParamType: string|undefined;
         let currentParamNamePushed = false;
+        let isParamRequiredAttribute = false;
+        let pendingParamOptional: boolean | undefined;
         let pendingParamSelect: string|undefined;
         let topLevelParamNamePushed = false;
 
@@ -106,6 +108,7 @@ export class XslLexerLight extends XslLexer {
                             tagMatchToken = null;
                             collectParamName = false;
                             pendingParamType = undefined;
+                            pendingParamOptional = undefined;
                             currentParamNamePushed = false;
                             pendingParamSelect = undefined;
                             topLevelParamNamePushed = false;
@@ -145,6 +148,7 @@ export class XslLexerLight extends XslLexer {
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
+                            isParamRequiredAttribute = false;
                             isGlobalUsePackageVersion = false;
                             isGlobalInstructionMatch = false;
                             isTypeDeclarationAttribute = false;
@@ -160,6 +164,8 @@ export class XslLexerLight extends XslLexer {
                                 isGlobalInstructionMatch = true;
                             } else if (collectParamName && attName === 'name') {
                                 isGlobalParameterName = true;
+                            } else if (collectParamName && attName === 'required') {
+                                isParamRequiredAttribute = true;
                             } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                 isGlobalUsePackageVersion = true;
                             } else if ((tagGlobalInstructionType === GlobalInstructionType.Function || collectParamName) && attName === 'as') {
@@ -255,11 +261,17 @@ export class XslLexerLight extends XslLexer {
                                             gd['memberTokens'] = [newToken];
                                             gd['memberTypes'] = [pendingParamType];
                                         }
+                                        XslLexer.pushParamOptional(gd, pendingParamOptional);
+                                        pendingParamOptional = undefined;
                                         gd.idNumber++;
                                         pendingParamType = undefined;
                                         currentParamNamePushed = true;
                                     }
                                 }
+                            } else if (isParamRequiredAttribute) {
+                                const gd = this.globalInstructionData.length > 0 ? this.globalInstructionData[this.globalInstructionData.length - 1] : undefined;
+                                pendingParamOptional = XslLexer.recordParamRequired(gd, tokenChars.join(''), currentParamNamePushed);
+                                isParamRequiredAttribute = false;
                             } else if (isTypeDeclarationAttribute) {
                                 const declaredType = tokenChars.join('').trim();
                                 if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {

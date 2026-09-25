@@ -11,6 +11,7 @@ import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
+import { XPathFunctionDetails } from './xpathFunctionDetails';
 
 enum HasCharacteristic {
 	unknown,
@@ -75,6 +76,8 @@ export interface XPathData extends OperandContext {
 	awaitingMapKey?: boolean;
 	curlyBraceType?: CurlyBraceType;
 	hasContextItem?: boolean;
+	// XPath 4.0 keyword arguments, e.g. subsequence($s, start := 2)
+	keywordNames?: string[];
 	// XPath 4.0 map constructor without the 'map' keyword
 	isBareMap?: boolean;
 	anonFnSyntaxErrorReported?: boolean;
@@ -377,6 +380,10 @@ export class XsltTokenDiagnostics {
 		let xpathStack: XPathData[] = [];
 		// the operand context when the xpathStack is empty:
 		let rootOperandContext: OperandContext = {};
+		// XPath 4.0 namespace declarations at the start of an expression: the prefixes are in scope only for that expression
+		let prologSavedPrefixes: { prefixes: string[], prefixesToURIs: Map<string, XSLTnamespaces> } | null = null;
+		let prologNamespaceDeclared = false;
+		let prologUriToken: BaseToken | null = null;
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
@@ -407,6 +414,8 @@ export class XsltTokenDiagnostics {
 		let globalVariableData: VariableData[] = [];
 		let checkedGlobalVarNames: string[] = [];
 		let checkedGlobalFnNames: string[] = [];
+		// parameter names for each declaration of a user-defined function, for XPath 4.0 keyword arguments
+		let userFunctionParams = new Map<string, string[][]>();
 		let importedGlobalVarNames: string[] = [];
 		let importedGlobalFnNames: string[] = [];
 		let incrementFunctionArity = false;
@@ -460,13 +469,18 @@ export class XsltTokenDiagnostics {
 					xsltVariableDeclarations.push(instruction.token);
 					break;
 				case GlobalInstructionType.Function:
-					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
-					if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
-						checkedGlobalFnNames.push(functionNameWithArity);
-					} else {
-						instruction.token['error'] = ErrorType.DuplicateFnName;
-						instruction.token.value = functionNameWithArity;
-						problemTokens.push(instruction.token);
+					XsltTokenDiagnostics.checkOptionalParams(instruction, docType, problemTokens);
+					XsltTokenDiagnostics.addUserFunctionParams(userFunctionParams, instruction);
+					// with XSLT 4.0 optional parameters, a function has an arity range
+					for (const functionNameWithArity of XsltTokenDiagnostics.functionNamesWithArity(instruction)) {
+						if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
+							checkedGlobalFnNames.push(functionNameWithArity);
+						} else {
+							instruction.token['error'] = ErrorType.DuplicateFnName;
+							instruction.token.value = functionNameWithArity;
+							problemTokens.push(instruction.token);
+							break;
+						}
 					}
 					break;
 				case GlobalInstructionType.Template:
@@ -519,10 +533,12 @@ export class XsltTokenDiagnostics {
 					}
 					break;
 				case GlobalInstructionType.Function:
-					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
-					if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
-						checkedGlobalFnNames.push(functionNameWithArity);
-						importedGlobalFnNames.push(functionNameWithArity);
+					XsltTokenDiagnostics.addUserFunctionParams(userFunctionParams, instruction);
+					for (const functionNameWithArity of XsltTokenDiagnostics.functionNamesWithArity(instruction)) {
+						if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
+							checkedGlobalFnNames.push(functionNameWithArity);
+							importedGlobalFnNames.push(functionNameWithArity);
+						}
 					}
 					break;
 				case GlobalInstructionType.Template:
@@ -563,6 +579,18 @@ export class XsltTokenDiagnostics {
 			lineNumber = token.line;
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			if (isXMLToken) {
+				if (prologSavedPrefixes) {
+					inheritedPrefixes = prologSavedPrefixes.prefixes;
+					xsltPrefixesToURIs = prologSavedPrefixes.prefixesToURIs;
+					prologSavedPrefixes = null;
+				}
+				prologNamespaceDeclared = false;
+				if (prologUriToken) {
+					// expected ';' after the namespace URI
+					prologUriToken.error = ErrorType.NamespaceDeclSemicolon;
+					problemTokens.push(prologUriToken);
+					prologUriToken = null;
+				}
 				if (ifThenStack.length > 0) {
 					let ifToken = ifThenStack[0];
 					ifToken['error'] = ErrorType.BracketNesting;
@@ -1242,6 +1270,23 @@ export class XsltTokenDiagnostics {
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 				const stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
 
+				if (prologUriToken && xpathTokenType !== TokenLevelState.comment) {
+					if (!(xpathCharType === CharLevelState.sep && token.value === ';')) {
+						prologUriToken.error = ErrorType.NamespaceDeclSemicolon;
+						problemTokens.push(prologUriToken);
+					}
+					prologUriToken = null;
+				} else if (xpathCharType === CharLevelState.sep && token.value === ';') {
+					// ';' is only permitted after a namespace declaration
+					token.error = ErrorType.XPathUnexpected;
+					problemTokens.push(token);
+				}
+				const isKeywordName = xpathTokenType === TokenLevelState.mapKey && allTokens[index + 1]?.value === ':=';
+				if (stackItem?.keywordNames && prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && !isKeywordName && xpathTokenType !== TokenLevelState.comment) {
+					token.error = ErrorType.PositionalArgumentAfterKeyword;
+					problemTokens.push(token);
+				}
+
 				if (stackItem) {
 					const tv = stackItem.token.value;
 					if (prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && (tv === 'for' || tv === 'let' || tv === 'every' || tv === 'some')) {
@@ -1309,7 +1354,7 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 						}
 					}
-				} else if (stackItem?.token.context?.value === 'function' ) {
+				} else if (XsltTokenDiagnostics.isAnonymousFunctionParams(stackItem)) {
 					let invalidTokenForAnonFunction = !XsltTokenDiagnostics.anonFunctionTokenTypes.has(token.tokenType);
 					// nodeType is also permitted except when value is '*'
 					if (invalidTokenForAnonFunction && token.tokenType === TokenLevelState.nodeType && token.value !== '*') {
@@ -1378,6 +1423,28 @@ export class XsltTokenDiagnostics {
 						if (token.error && !isTypeError) {
 							problemTokens.push(token);
 						}
+						if (prevToken?.tokenType === TokenLevelState.complexExpression && prevToken.value === 'namespace' && allTokens[index - 2]?.value === 'element') {
+							// declare default element namespace 'uri';
+							prologUriToken = token;
+							break;
+						} else if (prevToken?.value === '=' && allTokens[index - 2]?.tokenType === TokenLevelState.mapKey && allTokens[index - 3]?.value === 'namespace' &&
+							allTokens[index - 3].tokenType === TokenLevelState.complexExpression) {
+							// declare namespace prefix = 'uri';
+							const prefix = allTokens[index - 2].value;
+							if (!prologSavedPrefixes) {
+								prologSavedPrefixes = { prefixes: inheritedPrefixes, prefixesToURIs: xsltPrefixesToURIs };
+								xsltPrefixesToURIs = new Map(xsltPrefixesToURIs);
+							}
+							inheritedPrefixes = inheritedPrefixes.includes(prefix) ? inheritedPrefixes : inheritedPrefixes.concat([prefix]);
+							const nsType = FunctionData.namespaces.get(token.value.substring(1, token.value.length - 1));
+							if (nsType === undefined) {
+								xsltPrefixesToURIs.delete(prefix);
+							} else {
+								xsltPrefixesToURIs.set(prefix, nsType);
+							}
+							prologUriToken = token;
+							break;
+						}
 						XsltTokenDiagnostics.checkStringIsExpected(prevToken, token, problemTokens);
 						if (xpathStack.length > 0 && !isTypeError) {
 							let xp = xpathStack[xpathStack.length - 1];
@@ -1440,6 +1507,21 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.complexExpression:
+						if (token.value === 'declare' && (allTokens[index + 1]?.value === 'namespace' || allTokens[index + 1]?.value === 'default')) {
+							// XPath 4.0 namespace declaration
+							const isDefault = allTokens[index + 1].value === 'default';
+							if (!XsltTokenDiagnostics.isXPath40(docType)) {
+								token.error = ErrorType.NamespaceDeclRequiresXPath40;
+								problemTokens.push(token);
+							} else if (isDefault && prologNamespaceDeclared) {
+								token.error = ErrorType.NamespaceDeclOrder;
+								problemTokens.push(token);
+							}
+							prologNamespaceDeclared = true;
+							break;
+						} else if (['namespace', 'default', 'element'].includes(token.value) && allTokens[index - 1]?.tokenType === TokenLevelState.complexExpression) {
+							break;
+						}
 						let valueText = withinTypeDeclarationAttr? '' : token.value;
 						let testStartOfExpression = false;
 						switch (valueText) {
@@ -1564,10 +1646,29 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.mapKey:
-						if (!(prevToken && prevToken.tokenType === TokenLevelState.operator
+						if (isKeywordName) {
+							// XPath 4.0 keyword argument, e.g. subsequence($s, start := 2)
+							if (!token.error) {
+								XsltTokenDiagnostics.checkKeywordArgument(token, stackItem, docType, userFunctionParams, xsltPrefixesToURIs);
+							}
+							if (token.error) {
+								problemTokens.push(token);
+							}
+						} else if (prevToken?.tokenType === TokenLevelState.complexExpression && prevToken.value === 'namespace') {
+							// namespace prefix in: declare namespace prefix = 'uri';
+						} else if (!(prevToken && prevToken.tokenType === TokenLevelState.operator
 							&& (prevToken.value === ',' || prevToken.value === '{'))) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
+						}
+						break;
+					case TokenLevelState.anonymousFunction:
+						if (!XsltTokenDiagnostics.isXPath40(docType)) {
+							const isFocusFunction = allTokens[index + 1]?.charType === CharLevelState.lBr;
+							if (isFocusFunction || token.value === 'fn') {
+								token.error = isFocusFunction ? ErrorType.FocusFunctionRequiresXPath40 : ErrorType.InlineFunctionFnRequiresXPath40;
+								problemTokens.push(token);
+							}
 						}
 						break;
 					case TokenLevelState.operator:
@@ -1628,7 +1729,7 @@ export class XsltTokenDiagnostics {
 								isXPathError = prevToken?.value !== '{' && !XsltTokenDiagnostics.isXPath40(docType) && !latestStackItem.isBareMap;
 							}
 						}
-						if (latestStackItem?.token.context?.value === 'function' ) {
+						if (XsltTokenDiagnostics.isAnonymousFunctionParams(latestStackItem)) {
 							let isFnError = false;
 							if (prevToken?.tokenType === TokenLevelState.variable) {
 								isFnError = !XsltTokenDiagnostics.anonFunctionVarOps.has(tv);
@@ -1895,6 +1996,10 @@ export class XsltTokenDiagnostics {
 								}
 								if (isBareMap) {
 									stackItem.isBareMap = true;
+								}
+								if (prevToken?.tokenType === TokenLevelState.anonymousFunction) {
+									// XPath 4.0 focus function, e.g. fn { @code }
+									stackItem.hasContextItem = true;
 								}
 								xpathStack.push(stackItem);
 								if (anonymousFunctionParams) {
@@ -2300,7 +2405,7 @@ export class XsltTokenDiagnostics {
 							// only '?' is permitted for the single type in 'cast as' and 'castable as'
 							const typeOperator = allTokens[index - 3].value;
 							isValidType = tValue === '?' || !(typeOperator === 'cast' || typeOperator === 'castable');
-						} else if ((withinTypeDeclarationAttr || stackItem?.token.context?.value === 'function') && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
+						} else if ((withinTypeDeclarationAttr || XsltTokenDiagnostics.isAnonymousFunctionParams(stackItem)) && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
 							// e.g. xs:integer* don't check name - also valid for an anonymous function's inline 'as' type declaration, e.g. function($i as xs:integer*) {...}
 							isValidType = true;
 						} else if (tParts.length === 1) {
@@ -2536,6 +2641,125 @@ export class XsltTokenDiagnostics {
 			foundContextBracketsOrPredicate = hasOperandContext(rootOperandContext) || !!xpathStack.find((item) => item.hasContextItem === true || hasOperandContext(item));
 		}
 		return foundContextBracketsOrPredicate;
+	}
+
+	private static isAnonymousFunctionParams(item: XPathData | undefined): item is XPathData {
+		// within the parameter list of an inline function: function($a, $b) or fn($a, $b)
+		const ctx = item?.token.context;
+		return !!ctx && item?.token.charType === CharLevelState.lB && (ctx.value === 'function' || (ctx.value === 'fn' && ctx.tokenType === TokenLevelState.anonymousFunction));
+	}
+
+	private static functionNamesWithArity(instruction: GlobalInstructionData) {
+		// e.g. ['f:add#1', 'f:add#2'] for a function with one required and one optional parameter
+		const total = instruction.idNumber;
+		const optionalCount = instruction.memberOptional ? instruction.memberOptional.filter((o) => o).length : 0;
+		const names: string[] = [];
+		for (let arity = total - optionalCount; arity <= total; arity++) {
+			names.push(instruction.name + '#' + arity);
+		}
+		return names;
+	}
+
+	private static addUserFunctionParams(userFunctionParams: Map<string, string[][]>, instruction: GlobalInstructionData) {
+		const paramLists = userFunctionParams.get(instruction.name) ?? [];
+		paramLists.push(instruction.memberNames ?? []);
+		userFunctionParams.set(instruction.name, paramLists);
+	}
+
+	private static checkOptionalParams(instruction: GlobalInstructionData, docType: DocumentTypes, problemTokens: BaseToken[]) {
+		// XSLT 4.0: optional function parameters, xsl:param required="no", must follow any required parameters
+		const optional = instruction.memberOptional ?? [];
+		const tokens = instruction.memberTokens ?? [];
+		const names = instruction.memberNames ?? [];
+		let optionalFound = false;
+		optional.forEach((isOptional, i) => {
+			const paramToken = tokens[i];
+			if (!paramToken) {
+				return;
+			}
+			paramToken.value = names[i] ?? paramToken.value;
+			if (isOptional && docType !== DocumentTypes.XSLT40) {
+				paramToken.error = ErrorType.OptionalParamRequiresXSLT40;
+				problemTokens.push(paramToken);
+			} else if (!isOptional && optionalFound) {
+				paramToken.error = ErrorType.RequiredParamAfterOptional;
+				problemTokens.push(paramToken);
+			}
+			optionalFound = optionalFound || isOptional;
+		});
+	}
+
+	private static builtInParamNamesCache = new Map<typeof XPathFunctionDetails.data, Map<string, string[]>>();
+
+	private static builtInParamNames(docType: DocumentTypes, functionName: string) {
+		// parameter names from the function signatures, e.g. subsequence($input as item()*, $start as xs:numeric, ...)
+		const data = XsltTokenDiagnostics.isXPath40(docType) ? XPathFunctionDetails.dataPlus40 : XPathFunctionDetails.data;
+		let names = XsltTokenDiagnostics.builtInParamNamesCache.get(data);
+		if (!names) {
+			names = new Map();
+			for (const item of data) {
+				const params = XsltTokenDiagnostics.signatureParamNames(item.signature);
+				names.set(item.name, (names.get(item.name) ?? []).concat(params));
+			}
+			XsltTokenDiagnostics.builtInParamNamesCache.set(data, names);
+		}
+		return names.get(functionName);
+	}
+
+	private static signatureParamNames(signature: string) {
+		// the '$name' of each top-level parameter in the signature's parameter list
+		const params: string[] = [];
+		let depth = 0;
+		for (let i = signature.indexOf('('); i > -1 && i < signature.length; i++) {
+			const ch = signature[i];
+			if (ch === '(' || ch === '[' || ch === '{') {
+				depth++;
+			} else if (ch === ')' || ch === ']' || ch === '}') {
+				if (--depth === 0) {
+					break;
+				}
+			} else if (ch === '$' && depth === 1) {
+				const match = /^\$([\w.-]+)/.exec(signature.substring(i));
+				if (match) {
+					params.push(match[1]);
+				}
+			}
+		}
+		return params;
+	}
+
+	private static checkKeywordArgument(token: BaseToken, callItem: XPathData | undefined, docType: DocumentTypes, userFunctionParams: Map<string, string[][]>, xsltPrefixesToURIs: Map<string, XSLTnamespaces>) {
+		if (!XsltTokenDiagnostics.isXPath40(docType)) {
+			token.error = ErrorType.KeywordArgumentRequiresXPath40;
+			return;
+		}
+		const functionToken = callItem?.function;
+		if (!callItem || !functionToken) {
+			return;
+		}
+		const keywordNames = callItem.keywordNames ?? [];
+		if (keywordNames.includes(token.value)) {
+			token.error = ErrorType.KeywordArgumentDuplicate;
+			return;
+		}
+		callItem.keywordNames = keywordNames.concat([token.value]);
+		// the known parameter names for the function, if any
+		let paramNames: string[] | undefined;
+		const userParams = userFunctionParams.get(functionToken.value);
+		if (userParams) {
+			paramNames = userParams.flat();
+		} else {
+			const parts = functionToken.value.split(':');
+			const nsType = parts.length === 2 ? xsltPrefixesToURIs.get(parts[0]) : XSLTnamespaces.XPath;
+			const prefix = nsType === XSLTnamespaces.Map ? 'map:' : nsType === XSLTnamespaces.Array ? 'array:' : nsType === XSLTnamespaces.Math ? 'math:' : nsType === XSLTnamespaces.XPath ? '' : undefined;
+			if (prefix !== undefined) {
+				paramNames = XsltTokenDiagnostics.builtInParamNames(docType, prefix + parts[parts.length - 1]);
+			}
+		}
+		if (paramNames && !paramNames.includes(token.value)) {
+			token.error = ErrorType.KeywordArgumentUnknown;
+			token.value = token.value + '#' + functionToken.value;
+		}
 	}
 
 	// the item type whose parentheses enclose the current token, e.g. 'record' for record(a as xs:string)
@@ -3420,6 +3644,41 @@ export class XsltTokenDiagnostics {
 					msg = tokenValue === 'union' ? `XPath: 'union(...)' is not supported - use a choice item type instead, e.g. (xs:date | xs:time)` :
 						tokenValue === 'type' ? `XPath: 'type(...)' is not supported - use the named item type directly, e.g. my:type instead of type(my:type)` :
 						`XPath: '${tokenValue}(...)' is not supported - use 'record(...)' instead`;
+					break;
+				case ErrorType.InlineFunctionFnRequiresXPath40:
+					msg = `XPath: The 'fn' keyword for inline functions requires XPath 4.0 - use 'function' instead`;
+					break;
+				case ErrorType.FocusFunctionRequiresXPath40:
+					msg = `XPath: Focus functions, e.g. ${tokenValue} { . + 1 }, require XPath 4.0`;
+					break;
+				case ErrorType.KeywordArgumentRequiresXPath40:
+					msg = `XPath: Keyword arguments, e.g. ${tokenValue} := value, require XPath 4.0`;
+					break;
+				case ErrorType.KeywordArgumentUnknown: {
+					const [keyword, fnName] = tokenValue.split('#');
+					msg = `XPath: The function '${fnName}' has no parameter named '${keyword}'`;
+					break;
+				}
+				case ErrorType.KeywordArgumentDuplicate:
+					msg = `XPath: Duplicate keyword argument: '${tokenValue}'`;
+					break;
+				case ErrorType.PositionalArgumentAfterKeyword:
+					msg = `XPath: A positional argument cannot follow a keyword argument`;
+					break;
+				case ErrorType.NamespaceDeclRequiresXPath40:
+					msg = `XPath: Namespace declarations in an XPath expression require XPath 4.0`;
+					break;
+				case ErrorType.NamespaceDeclOrder:
+					msg = `XPath: 'declare default element namespace' must come before any 'declare namespace'`;
+					break;
+				case ErrorType.NamespaceDeclSemicolon:
+					msg = `XPath: Expected ';' after the namespace declaration's URI: ${tokenValue}`;
+					break;
+				case ErrorType.OptionalParamRequiresXSLT40:
+					msg = `XSLT: Optional function parameters, with required="no", require XSLT 4.0: '${tokenValue}'`;
+					break;
+				case ErrorType.RequiredParamAfterOptional:
+					msg = `XSLT: A required function parameter cannot follow an optional parameter: '${tokenValue}'`;
 					break;
 				case ErrorType.UndeclaredItemType:
 					msg = `XPath: The item type '${tokenValue}' is not declared - expected an xsl:item-type declaration with this name`;

@@ -6,6 +6,8 @@ import { DocumentTypes, LanguageConfiguration, XslLexer } from "./xslLexer";
 interface EnclosingCall {
 	functionName: string;
 	activeParameter: number;
+	// XPath 4.0 keyword argument at the cursor, e.g. 'length' for subsequence($s, length := |
+	keyword?: string;
 }
 
 export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
@@ -44,7 +46,8 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		help.signatures = [signatureInfo];
 		help.activeSignature = 0;
 		const paramCount = signatureInfo.parameters.length;
-		help.activeParameter = paramCount === 0 ? 0 : Math.min(enclosingCall.activeParameter, paramCount - 1);
+		const keywordIndex = enclosingCall.keyword ? signatureInfo.parameters.findIndex((p) => typeof p.label === 'string' && (p.label === '$' + enclosingCall.keyword || p.label.startsWith('$' + enclosingCall.keyword + ' '))) : -1;
+		help.activeParameter = keywordIndex > -1 ? keywordIndex : paramCount === 0 ? 0 : Math.min(enclosingCall.activeParameter, paramCount - 1);
 		return help;
 	}
 
@@ -137,6 +140,7 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 
 		let depth = 0;
 		let commaCount = 0;
+		let keyword: string | undefined;
 		for (let i = cursorIndex; i > -1; i--) {
 			const t = tokens[i];
 			if (t.tokenType >= XSLTSignatureHelpProvider.xsltStartTokenNumber) {
@@ -153,7 +157,11 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 				case CharLevelState.lPr:
 				case CharLevelState.lBr:
 					if (depth === 0) {
-						return t.charType === CharLevelState.lB ? XSLTSignatureHelpProvider.functionCall(tokens, i - 1, commaCount) : null;
+						const call = t.charType === CharLevelState.lB ? XSLTSignatureHelpProvider.functionCall(tokens, i - 1, commaCount) : null;
+						if (call && keyword) {
+							call.keyword = keyword;
+						}
+						return call;
 					}
 					depth--;
 					break;
@@ -166,6 +174,12 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 				case CharLevelState.sep:
 					if (depth === 0 && t.value === ',') {
 						commaCount++;
+					}
+					break;
+				case CharLevelState.lName:
+					if (depth === 0 && commaCount === 0 && t.tokenType === TokenLevelState.mapKey && tokens[i + 1]?.value === ':=') {
+						// keyword argument
+						keyword = t.value;
 					}
 					break;
 			}

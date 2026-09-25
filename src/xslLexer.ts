@@ -146,6 +146,8 @@ export interface GlobalInstructionData {
     memberNames?: string[];
     memberTokens?: BaseToken[];
     memberTypes?: (string|undefined)[];
+    // XSLT 4.0: xsl:function parameters with required="no", in parameter order
+    memberOptional?: boolean[];
     href?: string;
     version?: string;
     returnType?: string;
@@ -153,6 +155,33 @@ export interface GlobalInstructionData {
 }
 
 export class XslLexer {
+    // XSLT 4.0 optional function parameter: xsl:param required="no" (the 'required' attribute may come before or after 'name')
+    protected static recordParamRequired(gd: GlobalInstructionData | undefined, requiredValue: string, currentParamNamePushed: boolean): boolean | undefined {
+        const isOptional = ['no', 'false', '0'].includes(requiredValue.trim());
+        if (currentParamNamePushed && gd?.memberOptional && gd.memberOptional.length > 0) {
+            gd.memberOptional[gd.memberOptional.length - 1] = isOptional;
+            return undefined;
+        }
+        return isOptional;
+    }
+
+    // true if a call with this arity matches the function - which may have XSLT 4.0 optional parameters (a negative idNumber matches any arity)
+    public static functionArityMatches(instruction: GlobalInstructionData, arity: number) {
+        if (instruction.idNumber < 0) {
+            return true;
+        }
+        const optionalCount = instruction.memberOptional ? instruction.memberOptional.filter((isOptional) => isOptional).length : 0;
+        return arity <= instruction.idNumber && arity >= instruction.idNumber - optionalCount;
+    }
+
+    protected static pushParamOptional(gd: GlobalInstructionData, pendingParamOptional: boolean | undefined) {
+        if (gd.memberOptional) {
+            gd.memberOptional.push(!!pendingParamOptional);
+        } else {
+            gd.memberOptional = [!!pendingParamOptional];
+        }
+    }
+
     public debug: boolean = false;
     public flatten: boolean = false;
     public timerOn: boolean = false;
@@ -705,6 +734,8 @@ export class XslLexer {
         let collectParamName = false;
         let pendingParamType: string|undefined;
         let currentParamNamePushed = false;
+        let isParamRequiredAttribute = false;
+        let pendingParamOptional: boolean | undefined;
         let pendingParamSelect: string|undefined;
         let topLevelParamNamePushed = false;
         let xpathEnded = false;
@@ -822,6 +853,7 @@ export class XslLexer {
                             tagMatchToken = null;
                             collectParamName = false;
                             pendingParamType = undefined;
+                            pendingParamOptional = undefined;
                             currentParamNamePushed = false;
                             pendingParamSelect = undefined;
                             topLevelParamNamePushed = false;
@@ -891,6 +923,7 @@ export class XslLexer {
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
+                            isParamRequiredAttribute = false;
                             isGlobalInstructionMatch = false;
                             isGlobalUsePackageVersion = false;
                             isGlobalVersion = false;
@@ -929,6 +962,9 @@ export class XslLexer {
                                     isXPathAttribute = true;
                                 } else if (collectParamName && attName === 'name') {
                                     isGlobalParameterName = true;
+                                } else if (collectParamName && attName === 'required') {
+                                    isExpandTextAttribute = false;
+                                    isParamRequiredAttribute = true;
                                 } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                     isExpandTextAttribute = false;
                                     isGlobalUsePackageVersion = true;
@@ -1038,10 +1074,16 @@ export class XslLexer {
                                         gd['memberTokens'] = [{...newToken}];
                                         gd['memberTypes'] = [pendingParamType];
                                     }
+                                    XslLexer.pushParamOptional(gd, pendingParamOptional);
+                                    pendingParamOptional = undefined;
                                     gd.idNumber++;
                                     pendingParamType = undefined;
                                     currentParamNamePushed = true;
                                 }
+                            } else if (isParamRequiredAttribute) {
+                                const gd = this.globalInstructionData.length > 0 ? this.globalInstructionData[this.globalInstructionData.length - 1] : undefined;
+                                pendingParamOptional = XslLexer.recordParamRequired(gd, tokenChars.join(''), currentParamNamePushed);
+                                isParamRequiredAttribute = false;
                             } else if (isGlobalUsePackageVersion) {
                                 let attValue = tokenChars.join('');
                                 if (this.globalInstructionData.length > 0) {

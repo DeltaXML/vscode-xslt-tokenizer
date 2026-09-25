@@ -833,7 +833,7 @@ export class XsltTokenDefinitions {
 			if (type !== instruction.type) {
 				return;
 			} else if (findFunction && arity) {
-				return instruction.name === name && instruction.idNumber === arity;
+				return instruction.name === name && XslLexer.functionArityMatches(instruction, arity);
 			} else {
 				return instruction.name === name;
 			}
@@ -843,7 +843,7 @@ export class XsltTokenDefinitions {
 				if (type !== instruction.type) {
 					return;
 				} else if (findFunction && arity) {
-					return instruction.name === name && instruction.idNumber === arity;
+					return instruction.name === name && XslLexer.functionArityMatches(instruction, arity);
 				} else {
 					return instruction.name === name;
 				}

@@ -1,0 +1,178 @@
+{
+  "suite": "xpFunctionSyntax40",
+  "source": "xpFunctionSyntax40.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "xsltVersion": "4.0",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "inlineFn1",
+      "xpath": "fn($x) { $x * 2 }(3)",
+      "problems": []
+    },
+    {
+      "label": "inlineFn2",
+      "xpath": "for-each((1, 2), fn($x) { $x + 1 })",
+      "problems": []
+    },
+    {
+      "label": "inlineFn3",
+      "xpath": "fn($x as xs:integer, $y) as xs:integer { $x + $y }",
+      "problems": []
+    },
+    {
+      "label": "inlineFn4",
+      "xpath": "fn() { 1 }",
+      "problems": []
+    },
+    {
+      "label": "inlineFn5",
+      "xpath": "fold-left((1, 2, 3), 1, fn($x, $y) { $x * $y })",
+      "problems": []
+    },
+    {
+      "label": "focusFn1",
+      "xpath": "fn { . * 2 }(3)",
+      "problems": []
+    },
+    {
+      "label": "focusFn2",
+      "xpath": "function { . * 2 }(3)",
+      "problems": []
+    },
+    {
+      "label": "focusFn3",
+      "xpath": "filter((1, 2, 3), fn { . gt 1 })",
+      "problems": []
+    },
+    {
+      "label": "focusFn4",
+      "xpath": "sort((3, 1, 2), (), fn { -. })",
+      "problems": []
+    },
+    {
+      "label": "focusFn5",
+      "xpath": "let $f := fn { string-length(.) } return $f('abc')",
+      "problems": []
+    },
+    {
+      "label": "keywordArg1",
+      "xpath": "subsequence((1, 2, 3, 4), start := 2)",
+      "problems": []
+    },
+    {
+      "label": "keywordArg2",
+      "xpath": "subsequence((1, 2, 3, 4), 2, length := 1)",
+      "problems": []
+    },
+    {
+      "label": "keywordArg3",
+      "xpath": "subsequence((1, 2, 3, 4), length := 1, start := 2)",
+      "problems": []
+    },
+    {
+      "label": "keywordArg4",
+      "xpath": "let $s := subsequence(start := ?, input := (1, 2, 3)) return $s(2)",
+      "problems": []
+    },
+    {
+      "label": "keywordArg5",
+      "xpath": "fn:subsequence((1, 2), start := 1)",
+      "problems": []
+    },
+    {
+      "label": "keywordArg6",
+      "xpath": "subsequence((1, 2, 3), start := let $a := 2 return $a)",
+      "problems": []
+    },
+    {
+      "label": "contextNsDecl1",
+      "xpath": "declare namespace m = 'http://www.w3.org/2005/xpath-functions/math'; m:pi()",
+      "problems": []
+    },
+    {
+      "label": "contextNsDecl2",
+      "xpath": "declare default element namespace 'urn:x'; count(//a)",
+      "problems": []
+    },
+    {
+      "label": "contextNsDecl3",
+      "xpath": "declare default element namespace 'urn:x'; declare namespace p = 'com.example.p'; //p:a",
+      "problems": []
+    },
+    {
+      "label": "contextNsDecl4",
+      "xpath": "declare namespace p = 'com.example.p'; declare namespace q = 'com.example.q'; //p:a/q:b",
+      "problems": []
+    },
+    {
+      "label": "focusFn6",
+      "xpath": "fn { }()",
+      "problems": []
+    },
+    {
+      "label": "keywordArgError1",
+      "xpath": "subsequence(start := 2, (1, 2, 3, 4))",
+      "problems": [
+        [
+          "XPath: A positional argument cannot follow a keyword argument",
+          "("
+        ]
+      ]
+    },
+    {
+      "label": "keywordArgError2",
+      "xpath": "subsequence((1, 2, 3, 4), stat := 2)",
+      "problems": [
+        [
+          "XPath: The function 'subsequence' has no parameter named 'stat'",
+          "stat"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArgError3",
+      "xpath": "subsequence((1, 2), start := 1, start := 2)",
+      "problems": [
+        [
+          "XPath: Duplicate keyword argument: 'start'",
+          "start"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDeclError1",
+      "xpath": "declare namespace p = 'com.example.p' //p:a",
+      "problems": [
+        [
+          "XPath: Expected ';' after the namespace declaration's URI: 'com.example.p'",
+          "'com.example.p'"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDeclError2",
+      "xpath": "declare namespace p = 'com.example.p'; declare default element namespace 'urn:x'; //a",
+      "problems": [
+        [
+          "XPath: 'declare default element namespace' must come before any 'declare namespace'",
+          "declare"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDeclError3",
+      "xpath": "declare namespace p = 'com.example.p'; //q:a",
+      "problems": [
+        [
+          "XPath: Undeclared prefix in name: 'q:a'",
+          "q:a"
+        ]
+      ]
+    }
+  ]
+}

@@ -881,7 +881,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 												} else {
 													functionName = fnToken.value;
 												}
-												if (functionName === seekInstruction.name && (arity === seekInstruction.idNumber || seekInstruction.idNumber < 0)) {
+												if (functionName === seekInstruction.name && XslLexer.functionArityMatches(seekInstruction, arity)) {
 													referenceTokens.push(fnToken);
 												}
 											}
@@ -936,8 +936,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity ? 1 : 0;
 									if (seekInstruction.type === GlobalInstructionType.Function) {
-										const sameArity = fnArity == seekInstruction.idNumber;
-										if (prevToken.value === seekInstruction.name && (sameArity || seekInstruction.idNumber < 0)) {
+										if (prevToken.value === seekInstruction.name && XslLexer.functionArityMatches(seekInstruction, fnArity)) {
 											referenceTokens.push(prevToken);
 										}
 									}
@@ -956,7 +955,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 							const parts = token.value.split('#');
 							const arity = Number.parseInt(parts[1]);
 							const functionName = parts[0];
-							if (functionName === seekInstruction.name && (arity === seekInstruction.idNumber || seekInstruction.idNumber < 0)) {
+							if (functionName === seekInstruction.name && XslLexer.functionArityMatches(seekInstruction, arity)) {
 								token.length = functionName.length;
 								referenceTokens.push(token);
 							}

@@ -11,7 +11,7 @@ import { assert } from 'chai';
 import { XSLTSignatureHelpProvider } from '../../src/xsltSignatureHelpProvider';
 import { ExitCondition, LexPosition, XPathLexer } from '../../src/xpLexer';
 
-const cases: [string, string | null, number?][] = [
+const cases: [string, string | null, number?, string?][] = [
 	['substring(|', 'substring', 0],
 	['substring($s, |', 'substring', 1],
 	['substring($s, 1, |)', 'substring', 2],
@@ -26,12 +26,15 @@ const cases: [string, string | null, number?][] = [
 	['$s -> substring(., |', 'substring', 1],
 	['$s => substring(string-length(|', 'string-length', 0],
 	['$s => substring(1, string-length(|', 'string-length', 0],
+	['subsequence($s, length := |', 'subsequence', 1, 'length'],
+	['subsequence($s, length := 1, start := |)', 'subsequence', 2, 'start'],
+	['subsequence($s, length := count(|', 'count', 0],
 	['$f(|', null],
 	['$s => $f(|', null],
 ];
 
 suite('Signature help: enclosing function call', () => {
-	cases.forEach(([marked, expectedName, expectedParam]) => {
+	cases.forEach(([marked, expectedName, expectedParam, expectedKeyword]) => {
 		test(marked, () => {
 			const cursor = marked.indexOf('|');
 			const xpath = marked.substring(0, cursor) + marked.substring(cursor + 1);
@@ -41,7 +44,8 @@ suite('Signature help: enclosing function call', () => {
 			if (expectedName === null) {
 				assert.isNull(result);
 			} else {
-				assert.deepEqual(result, { functionName: expectedName, activeParameter: expectedParam });
+				const expected = expectedKeyword ? { functionName: expectedName, activeParameter: expectedParam, keyword: expectedKeyword } : { functionName: expectedName, activeParameter: expectedParam };
+				assert.deepEqual(result, expected);
 			}
 		});
 	});

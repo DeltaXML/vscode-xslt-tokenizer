@@ -93,6 +93,19 @@ export enum TokenLevelState {
     mapNameLookup,
 }
 
+enum PrologState {
+    Start,
+    Declare,
+    Namespace,
+    Prefix,
+    Equals,
+    Default,
+    DefaultElement,
+    DefaultNamespace,
+    Uri,
+    Done
+}
+
 export enum ExitCondition {
     None,
     SingleQuote,
@@ -118,7 +131,8 @@ export enum ModifierState {
 }
 
 export class Data {
-    public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%'];
+    // ';' ends an XPath 4.0 namespace declaration, e.g. declare namespace p = 'uri';
+    public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%', ';'];
     public static completionTriggers = ['"', '!', '*', '+', ',', '/', '=', '|', '(', '[', '{'];
     public static estimatorSeparators = Data.separators.concat(['(',')','[',']','{', '}','\'', '"']);
     public static readonly fnTypes = ['map', 'array', 'function', 'record'];
@@ -217,6 +231,8 @@ export class XPathLexer {
     public attributeNameTests: string[] | undefined;
     public elementNameTests: string[] | undefined;
     private latestRealToken: Token | null = null;
+    // XPath 4.0 namespace declarations at the start of an expression, e.g. declare namespace p = 'uri';
+    private prologState = PrologState.Start;
     private lineNumber: number = 0;
     private wsCharNumber: number = 0;
     private tokenCharNumber: number = 0;
@@ -520,6 +536,7 @@ export class XPathLexer {
             console.time('xplexer.analyse');
         }
         this.latestRealToken = null;
+        this.prologState = PrologState.Start;
         this.lineNumber = position.line;
         this.wsCharNumber = 0;
         this.tokenCharNumber = position.startCharacter;
@@ -976,6 +993,12 @@ export class XPathLexer {
             } else if (newToken.charType === CharLevelState.lName && prevToken) {
                 XPathLexer.setLabelWithinTypeParen(result, result.length - 1, prevToken);
             }
+            if (prevToken && newToken.charType === CharLevelState.dSep && newToken.value === ':=') {
+                XPathLexer.setLabelsForKeywordArgument(result, prevToken, newToken);
+            }
+            if (this.prologState !== PrologState.Done && !isWhitespace && newToken.tokenType !== TokenLevelState.comment) {
+                this.prologState = XPathLexer.setLabelsForProlog(this.prologState, prevToken, newToken);
+            }
             // the label for a name token is only final once the following token is known
             const prevIndex = result.length - 2;
             if (prevIndex > 0 && result[prevIndex] === prevToken && prevToken.charType === CharLevelState.lName && !prevToken.choiceSeparator) {
@@ -1038,6 +1061,81 @@ export class XPathLexer {
             return !!beforeName && beforeName.charType === CharLevelState.lB && (isTypeDeclaration || XPathLexer.isTypeParen(beforeName));
         }
         return false;
+    }
+
+    private static setLabelsForKeywordArgument(result: Token[], prevToken: Token, newToken: Token) {
+        // XPath 4.0 keyword argument in a static function call, e.g. subsequence($s, start := 2)
+        const nameIndex = result.length - 2;
+        if (nameIndex < 1 || result[nameIndex] !== prevToken || prevToken.charType !== CharLevelState.lName) {
+            return;
+        }
+        const beforeName = result[nameIndex - 1];
+        if (!(beforeName.charType === CharLevelState.lB || beforeName.value === ',')) {
+            return;
+        }
+        const parenIndex = XPathLexer.enclosingParenIndex(result, nameIndex);
+        const callToken = parenIndex > -1 ? result[parenIndex].context : undefined;
+        if (callToken && callToken.tokenType === TokenLevelState.function) {
+            prevToken.tokenType = TokenLevelState.mapKey;
+            newToken.tokenType = TokenLevelState.operator;
+        }
+    }
+
+    private static setLabelsForProlog(state: PrologState, prevToken: Token | null, newToken: Token) {
+        // labels are set on prevToken once newToken confirms the declaration, as 'declare' could also be a name test
+        const v = newToken.value;
+        const isName = newToken.charType === CharLevelState.lName;
+        const confirm = (tokenType: TokenLevelState) => { if (prevToken) prevToken.tokenType = tokenType; };
+        switch (state) {
+            case PrologState.Start:
+                return isName && v === 'declare' ? PrologState.Declare : PrologState.Done;
+            case PrologState.Declare:
+                if (isName && (v === 'namespace' || v === 'default')) {
+                    confirm(TokenLevelState.complexExpression);
+                    return v === 'namespace' ? PrologState.Namespace : PrologState.Default;
+                }
+                return PrologState.Done;
+            case PrologState.Default:
+                if (isName && v === 'element') {
+                    confirm(TokenLevelState.complexExpression);
+                    return PrologState.DefaultElement;
+                }
+                return PrologState.Done;
+            case PrologState.DefaultElement:
+                if (isName && v === 'namespace') {
+                    confirm(TokenLevelState.complexExpression);
+                    return PrologState.DefaultNamespace;
+                }
+                return PrologState.Done;
+            case PrologState.DefaultNamespace:
+                if (newToken.tokenType === TokenLevelState.string) {
+                    confirm(TokenLevelState.complexExpression);
+                    return PrologState.Uri;
+                }
+                return PrologState.Done;
+            case PrologState.Namespace:
+                if (isName) {
+                    confirm(TokenLevelState.complexExpression);
+                    return PrologState.Prefix;
+                }
+                return PrologState.Done;
+            case PrologState.Prefix:
+                if (v === '=') {
+                    confirm(TokenLevelState.mapKey);
+                    return PrologState.Equals;
+                }
+                return PrologState.Done;
+            case PrologState.Equals:
+                return newToken.tokenType === TokenLevelState.string ? PrologState.Uri : PrologState.Done;
+            case PrologState.Uri:
+                if (v === ';') {
+                    newToken.tokenType = TokenLevelState.operator;
+                    return PrologState.Start;
+                }
+                return PrologState.Done;
+            default:
+                return PrologState.Done;
+        }
     }
 
     private static isTypeParen(token: Token) {
@@ -1128,9 +1226,9 @@ export class XPathLexer {
                 prevToken.tokenType = TokenLevelState.complexExpression;
             } else if (prevToken.value === 'function') {
                 prevToken.tokenType = isTypeDeclaration? TokenLevelState.nodeType : TokenLevelState.anonymousFunction;
-            } else if (prevToken.value === 'fn' && isTypeDeclaration) {
-                // XPath 4.0 function type, e.g. fn(xs:string) as xs:integer
-                prevToken.tokenType = TokenLevelState.nodeType;
+            } else if (prevToken.value === 'fn') {
+                // XPath 4.0: function type, e.g. fn(xs:string) as xs:integer, or inline function, e.g. fn($a) { $a + 1 }
+                prevToken.tokenType = isTypeDeclaration ? TokenLevelState.nodeType : TokenLevelState.anonymousFunction;
             } else if (Data.nonFunctionTypes.includes(prevToken.value)) {
                 prevToken.tokenType = TokenLevelState.simpleType;
             } else {
@@ -1175,6 +1273,9 @@ export class XPathLexer {
                     case CharLevelState.lBr:
                         if (prevToken.value === 'map' || prevToken.value === 'array') {
                             prevToken.tokenType = TokenLevelState.operator;
+                        } else if (!isTypeDeclaration && prevToken.tokenType === TokenLevelState.nodeNameTest && (prevToken.value === 'fn' || prevToken.value === 'function')) {
+                            // XPath 4.0 focus function, e.g. fn { @code }
+                            prevToken.tokenType = TokenLevelState.anonymousFunction;
                         }
                         break;
                     case CharLevelState.lName:
@@ -1529,6 +1630,17 @@ export enum ErrorType {
     ObsoleteItemType,
     ExtensibleRecordType,
     UndeclaredItemType,
+    InlineFunctionFnRequiresXPath40,
+    FocusFunctionRequiresXPath40,
+    KeywordArgumentRequiresXPath40,
+    KeywordArgumentUnknown,
+    KeywordArgumentDuplicate,
+    PositionalArgumentAfterKeyword,
+    NamespaceDeclRequiresXPath40,
+    NamespaceDeclOrder,
+    NamespaceDeclSemicolon,
+    OptionalParamRequiresXSLT40,
+    RequiredParamAfterOptional,
     BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,

@@ -25,7 +25,9 @@
             "xpItemTypesAs40",
             "xpItemTypesAs31",
             "xpItemTypesSel40",
-            "xpItemTypesSel31"
+            "xpItemTypesSel31",
+            "xpFunctionSyntax40",
+            "xpFunctionSyntax31"
         ]
     },
     // 2nd group is used for Linter tests:
@@ -52,7 +54,9 @@
             "xpItemTypesAs40.dg",
             "xpItemTypesAs31.dg",
             "xpItemTypesSel40.dg",
-            "xpItemTypesSel31.dg"
+            "xpItemTypesSel31.dg",
+            "xpFunctionSyntax40.dg",
+            "xpFunctionSyntax31.dg"
         ]
     },
     // to run Linter test in one-off generator mode
