@@ -1413,6 +1413,7 @@ export enum ErrorType {
     XMLRootMissing,
     DTD,
     FunctionAfterArrowOp,
+    MapConstructorRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,
     MissingContextItemForLast,

@@ -64,12 +64,12 @@
   <xsl:variable name="expression48" select="map{}"/>
   <xsl:variable name="expression49" select="map{ 'x': 1, 'y': 2 }"/>
   <xsl:variable name="expression50" select="map{ 'foo': [1,2,3] }('foo')"/>
-  <xsl:variable name="expression51-PENDING" select="map{ 'a': 1, 'b': 2 }?a"/>
-  <xsl:variable name="expression52-PENDING" select="map{ 'nested': map{ 'inner': 42 } }?nested?inner"/>
+  <xsl:variable name="expression51" select="map{ 'a': 1, 'b': 2 }?a"/>
+  <xsl:variable name="expression52" select="map{ 'nested': map{ 'inner': 42 } }?nested?inner"/>
 
   <!-- Array and map with functions -->
   <xsl:variable name="expression53" select="[1, 2, 3] => array:filter(function($i) { $i mod 2 = 1 })"/>
-  <xsl:variable name="expression54-PENDING" select="map{ 'nums': [1,2,3] }?nums[. > 1]"/>
+  <xsl:variable name="expression54" select="map{ 'nums': [1,2,3] }?nums[. > 1]"/>
 
   <!-- Let and For expressions -->
   <xsl:variable name="let1" select="let $x := 5 return $x * 2"/>
@@ -114,7 +114,7 @@
   <xsl:variable name="contextItem2" select=".//node()"/>
 
   <!-- Map and array lookup with computed keys/indices -->
-  <xsl:variable name="mapLookup1-PENDING" select="map{ 'a': 1, 'b': 2 }?concat('a', '')"/>
+  <xsl:variable name="mapLookup1" select="map{ 'a': 1, 'b': 2 }?concat('a', '')"/>
   <xsl:variable name="arrayLookup1" select="[10, 20, 30][1 + 1]"/>
 
   <!-- fn:apply, fn:filter, fn:fold-left/right -->

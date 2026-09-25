@@ -507,7 +507,7 @@
       "xpath": "map{{}}",
       "problems": [
         [
-          "XPath: Expression context - unexpected token here: {} ",
+          "XPath: A map constructor without the 'map' keyword requires XPath 4.0",
           "{}"
         ]
       ]
@@ -1576,7 +1576,12 @@
     {
       "label": "stringErr8",
       "xpath": "{'book'}",
-      "problems": []
+      "problems": [
+        [
+          "XPath: A map constructor without the 'map' keyword requires XPath 4.0",
+          "{"
+        ]
+      ]
     },
     {
       "label": "nodeStringErr12",

@@ -14,7 +14,9 @@
             "xpPipeline",
             "xpMappingArrow",
             "xpSequenceTypes",
-            "xpArrowTargets"
+            "xpArrowTargets",
+            "xpMapConstructor40",
+            "xpMapConstructor31"
         ]
     },
     // 2nd group is used for Linter tests:
@@ -30,7 +32,9 @@
             "xpPipeline.dg",
             "xpMappingArrow.dg",
             "xpSequenceTypes.dg",
-            "xpArrowTargets.dg"
+            "xpArrowTargets.dg",
+            "xpMapConstructor40.dg",
+            "xpMapConstructor31.dg"
         ]
     },
     // to run Linter test in one-off generator mode

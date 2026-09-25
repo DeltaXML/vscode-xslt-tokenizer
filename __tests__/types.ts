@@ -3,6 +3,8 @@ export interface ExpectedTokenData {
   description: string;
   source: string;
   attributeName: string;
+  // the version attribute of the source XSLT, when this is not '3.0'
+  xsltVersion?: string;
   tests: Array<{
     label: string;
     xpath: string;
@@ -15,6 +17,7 @@ export interface ExpectedProblemData {
   description: string;
   source: string;
   attributeName: string;
+  xsltVersion?: string;
   tests: Array<ProblemTest>;
 }
 
@@ -30,6 +33,7 @@ export interface RawLexerTestData {
   source: string;
   attributeName: string;
   description: string;
+  xsltVersion?: string;
   testCases: [string, string][];
 }
 

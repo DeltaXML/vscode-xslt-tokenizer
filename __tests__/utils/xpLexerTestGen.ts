@@ -41,7 +41,7 @@ function generator() {
 	}
 	console.log("Test Data File: " + testDataFile);
 	const rawTestData: RawLexerTestData = JSON.parse(fs.readFileSync(testDataFile, 'utf8'));
-	const { suite, source, description, attributeName, testCases } = rawTestData;
+	const { suite, source, description, attributeName, xsltVersion, testCases } = rawTestData;
 	console.log('==== rawTestData');
 	console.log(rawTestData);
 
@@ -63,6 +63,8 @@ function generator() {
 		source,
 		description,
 		attributeName,
+		// omitted for XSLT 3.0 sources, and then used by the linter tests
+		...(xsltVersion && xsltVersion !== '3.0' ? { xsltVersion } : {}),
 		metadata,
 		tests: entries
 	}

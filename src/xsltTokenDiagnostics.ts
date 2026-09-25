@@ -70,6 +70,8 @@ export interface XPathData {
 	curlyBraceType?: CurlyBraceType;
 	hasContextItem?: boolean;
 	hasPipelineContext?: boolean;
+	// XPath 4.0 map constructor without the 'map' keyword
+	isBareMap?: boolean;
 	anonFnSyntaxErrorReported?: boolean;
 }
 
@@ -1297,7 +1299,7 @@ export class XsltTokenDiagnostics {
 				} else if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
-					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.tokenType === TokenLevelState.simpleType || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr))) {
+					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.tokenType === TokenLevelState.simpleType || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rBr))) {
 						let isNoArgFunctionCall = false;
 						if (prevToken.charType == CharLevelState.dSep && prevToken.value == '()' && index > 2) {
 							let prevToken2 = allTokens[index - 2];
@@ -1568,6 +1570,8 @@ export class XsltTokenDiagnostics {
 								}
 							}
 						}
+						// XPath 4.0 empty map constructor without the 'map' keyword
+						const isBareEmptyMap = tv === '{}' && token.charType === CharLevelState.dSep && XsltTokenDiagnostics.isOperandExpected(prevToken);
 						// the pipeline operator '->' sets the context value for its right-hand operand
 						const pipelineStackItem = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
 						if (tv === '->' && token.charType === CharLevelState.dSep) {
@@ -1585,14 +1589,15 @@ export class XsltTokenDiagnostics {
 							}
 						}
 						if (latestStackItem && latestStackItem.curlyBraceType === CurlyBraceType.Map) {
+							// in XPath 4.0 a map constructor entry without ':' is a sequence of maps to be merged, e.g. { $map1, $map2 }
 							if (tokenIsComma) {
 								if (latestStackItem.awaitingMapKey) {
-									isXPathError = true;
+									isXPathError = docType !== DocumentTypes.XSLT40 && !latestStackItem.isBareMap;
 								} else {
 									latestStackItem.awaitingMapKey = true;
 								}
 							} else if (tv === '}' && latestStackItem.awaitingMapKey) {
-								isXPathError = prevToken?.value !== '{';
+								isXPathError = prevToken?.value !== '{' && docType !== DocumentTypes.XSLT40 && !latestStackItem.isBareMap;
 							}
 						}
 						if (latestStackItem?.token.context?.value === 'function' ) {
@@ -1788,7 +1793,7 @@ export class XsltTokenDiagnostics {
 								}
 
 							}
-							if (isXPathError && !isTypeError) {
+							if (isXPathError && !isTypeError && !isBareEmptyMap) {
 								token['error'] = ErrorType.XPathUnexpected;
 								problemTokens.push(token);
 								// token is pushed onto problemTokens later
@@ -1816,6 +1821,10 @@ export class XsltTokenDiagnostics {
 								problemTokens.push(token);
 							}
 						}
+						if (isBareEmptyMap && docType !== DocumentTypes.XSLT40 && !token.error) {
+							token.error = ErrorType.MapConstructorRequiresXPath40;
+							problemTokens.push(token);
+						}
 						// end checks
 						let functionToken: BaseToken | null = null;
 						const isBrackets = xpathCharType === CharLevelState.lB;
@@ -1835,12 +1844,25 @@ export class XsltTokenDiagnostics {
 										setContextItemProp = prevToken2Val === '!' || prevToken2Val === '/';
 									}
 								}
+								const isBareMap = curlyBraceType === CurlyBraceType.None && XsltTokenDiagnostics.isOperandExpected(prevToken);
+								if (isBareMap) {
+									// XPath 4.0 map constructor without the 'map' keyword, e.g. { 'a': 1 }
+									curlyBraceType = CurlyBraceType.Map;
+									setContextItemProp = !!prevToken && (prevToken.value === '!' || prevToken.value === '/');
+									if (docType !== DocumentTypes.XSLT40) {
+										token.error = ErrorType.MapConstructorRequiresXPath40;
+										problemTokens.push(token);
+									}
+								}
 								const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
 								if (curlyBraceType === CurlyBraceType.Map) {
 									stackItem.awaitingMapKey = true;
 								}
 								if (setContextItemProp) {
 									stackItem.hasContextItem = true;
+								}
+								if (isBareMap) {
+									stackItem.isBareMap = true;
 								}
 								xpathStack.push(stackItem);
 								if (anonymousFunctionParams) {
@@ -2442,6 +2464,31 @@ export class XsltTokenDiagnostics {
 			foundContextBracketsOrPredicate = pipelineContextAtRoot || !!xpathStack.find((item) => item.hasContextItem === true || item.hasPipelineContext === true);
 		}
 		return foundContextBracketsOrPredicate;
+	}
+
+	private static isOperandExpected(prevToken: BaseToken | null) {
+		// true if the previous token cannot end an operand - so a '{' here starts a map constructor rather than an enclosed expression
+		// e.g. a function body, as in function($a) as xs:integer* { $a }, or the braced action in if ($a) { 1 }
+		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber || prevToken.tokenType === TokenLevelState.complexExpression) {
+			return true;
+		}
+		if (prevToken.tokenType !== TokenLevelState.operator) {
+			return false;
+		}
+		switch (prevToken.charType) {
+			case CharLevelState.lB:
+			case CharLevelState.lPr:
+			case CharLevelState.lBr:
+			case CharLevelState.sep:
+				return true;
+			case CharLevelState.dSep:
+				return !(prevToken.value === '()' || prevToken.value === '[]' || prevToken.value === '{}' || prevToken.value === '..');
+			case CharLevelState.lName:
+				// e.g. 'and', 'div', 'to' - but not 'map' or 'array' which have their own braces
+				return !(prevToken.value === 'map' || prevToken.value === 'array');
+			default:
+				return false;
+		}
 	}
 
 	private static isEndOfOperand(token: BaseToken) {
@@ -3247,6 +3294,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.FunctionAfterArrowOp:
 					msg = `XPath: Expected function after arrow operator`;
+					break;
+				case ErrorType.MapConstructorRequiresXPath40:
+					msg = `XPath: A map constructor without the 'map' keyword requires XPath 4.0`;
 					break;
 				case ErrorType.XPathEmpty:
 					msg = 'XSLT: Expected XPath expression';

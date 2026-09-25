@@ -70,7 +70,7 @@ function invokeEachTest(testData: ExpectedProblemData, isTestingAsAttribute: boo
             test(`${label} : ${xpath}`, async () => {
                 // 'isDirect' when set, saves time, avoiding use of vscode editor and uses lower-level API calls instead
                 const isDirect = true;
-                let xslt = insertXPathInXSLT(isTestingAsAttribute, label, xpath, isDirect);
+                let xslt = insertXPathInXSLT(isTestingAsAttribute, label, xpath, isDirect, testData.xsltVersion);
                 // if (label === 'string20') {
                 //     console.log('*****XPath*****');
                 //     console.log(xpath);
@@ -144,11 +144,13 @@ async function getDirectDiagnostics(idx: number, xslt: string) {
     xslLexer.provideCharLevelState = true;
     const allTokens = xslLexer.analyse(xslt);
     const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'text' });
-    const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XSLTConfiguration.configuration, DocumentTypes.XSLT, document, allTokens, [], [], []);
+    // as for the symbol provider: the lexer detects version="4.0" on the stylesheet
+    const languageConfig = { ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 };
+    const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(languageConfig, DocumentTypes.XSLT, document, allTokens, [], [], []);
     return { diagnostics, document };
 }
 
-function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: string, isDirect: boolean) {
+function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: string, isDirect: boolean, xsltVersion = '3.0') {
     let xslt = '';
     const xsltSequence = xpath.includes('"') ? `<xsl:sequence select='${xpath}'/>` : `<xsl:sequence select="${xpath}"/>`;
     const contextPrefixes = [
@@ -163,7 +165,7 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: 
     xmlns:array="http://www.w3.org/2005/xpath-functions/array"
     xmlns:fn="http://www.w3.org/2005/xpath-functions"
     xmlns:ct="com.example.test"
-    xmlns:_ct="com.example.test.new" version="3.0">
+    xmlns:_ct="com.example.test.new" version="${xsltVersion}">
     <xsl:${templateOrFunction} name="ct:run" as="${xpath}">
         <xsl:sequence select="1"/>
     </xsl:${templateOrFunction}>
@@ -175,7 +177,7 @@ function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: 
     xmlns:array="http://www.w3.org/2005/xpath-functions/array"
     xmlns:fn="http://www.w3.org/2005/xpath-functions"
     xmlns:ct="com.example.test"
-    xmlns:_ct="com.example.test" version="3.0">
+    xmlns:_ct="com.example.test" version="${xsltVersion}">
     <xsl:${templateOrFunction} name="ct:run">
         ${xsltSequence}
     </xsl:${templateOrFunction}>

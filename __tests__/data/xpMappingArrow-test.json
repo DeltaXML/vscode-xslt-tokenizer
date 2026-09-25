@@ -3,6 +3,7 @@
   "source": "xpMappingArrow.xsl",
   "description": "XPath Lexer: expected tokens for each XSLT select attribute",
   "attributeName": "select",
+  "xsltVersion": "4.0",
   "metadata": {
     "moduleName": "xpLexerTestGen.js",
     "version": "1.7.2"

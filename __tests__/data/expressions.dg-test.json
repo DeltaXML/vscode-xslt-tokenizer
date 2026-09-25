@@ -259,24 +259,14 @@
       "problems": []
     },
     {
-      "label": "expression51-PENDING",
+      "label": "expression51",
       "xpath": "map{ 'a': 1, 'b': 2 }?a",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
+      "problems": []
     },
     {
-      "label": "expression52-PENDING",
+      "label": "expression52",
       "xpath": "map{ 'nested': map{ 'inner': 42 } }?nested?inner",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "expression53",
@@ -284,14 +274,9 @@
       "problems": []
     },
     {
-      "label": "expression54-PENDING",
+      "label": "expression54",
       "xpath": "map{ 'nums': [1,2,3] }?nums[. > 1]",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "let1",
@@ -434,14 +419,9 @@
       "problems": []
     },
     {
-      "label": "mapLookup1-PENDING",
+      "label": "mapLookup1",
       "xpath": "map{ 'a': 1, 'b': 2 }?concat('a', '')",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "arrayLookup1",

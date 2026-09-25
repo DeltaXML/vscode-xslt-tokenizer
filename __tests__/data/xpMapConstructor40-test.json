@@ -1,6 +1,6 @@
 {
-  "suite": "xpPipeline",
-  "source": "xpPipeline.xsl",
+  "suite": "xpMapConstructor40",
+  "source": "xpMapConstructor40.xsl",
   "description": "XPath Lexer: expected tokens for each XSLT select attribute",
   "attributeName": "select",
   "xsltVersion": "4.0",
@@ -10,607 +10,9 @@
   },
   "tests": [
     {
-      "label": "pipeline1",
-      "xpath": "'a b c' -> tokenize(.) -> count(.) -> concat('count=', .)",
+      "label": "mapCons1",
+      "xpath": "{ 'a': 1, 'b': 2 }",
       "tokens": [
-        [
-          "'a b c'",
-          "string"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "tokenize",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "count",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "concat",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "'count='",
-          "string"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline2",
-      "xpath": "(1 to 10) ! (. * 2) -> sum(.)",
-      "tokens": [
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          "to",
-          "operator"
-        ],
-        [
-          "10",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "!",
-          "operator"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          "*",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "sum",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline3",
-      "xpath": "(1 to 4) -> for-each(., abs#1) -> exists(.)",
-      "tokens": [
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          "to",
-          "operator"
-        ],
-        [
-          "4",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "for-each",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "abs#1",
-          "functionNameTest"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "exists",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline4",
-      "xpath": "(1, 2, 3) -> (. + 1)",
-      "tokens": [
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "3",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          "+",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline5",
-      "xpath": "(1, 2, 3)->count(.)",
-      "tokens": [
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "3",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "count",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline6",
-      "xpath": "(1, 2) -> (if (. gt 2) then . else 0)",
-      "tokens": [
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "if",
-          "complexExpression"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          "gt",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "then",
-          "complexExpression"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          "else",
-          "complexExpression"
-        ],
-        [
-          "0",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline7",
-      "xpath": "(1, 2) -> -. * 2",
-      "tokens": [
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "-",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          "*",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline8",
-      "xpath": "(1, 2) -> . => string() cast as xs:string",
-      "tokens": [
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          "=>",
-          "operator"
-        ],
-        [
-          "string",
-          "function"
-        ],
-        [
-          "()",
-          "operator"
-        ],
-        [
-          "cast",
-          "operator"
-        ],
-        [
-          "as",
-          "operator"
-        ],
-        [
-          "xs:string",
-          "simpleType"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline9",
-      "xpath": "let $a := (1, 2) -> . return $a -> (., .)",
-      "tokens": [
-        [
-          "let",
-          "complexExpression"
-        ],
-        [
-          "$a",
-          "variable"
-        ],
-        [
-          ":=",
-          "complexExpression"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          "return",
-          "complexExpression"
-        ],
-        [
-          "$a",
-          "variable"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ]
-      ]
-    },
-    {
-      "label": "pipeline10",
-      "xpath": "map { 'a': (1, 2) -> ., 'b': 2 }",
-      "tokens": [
-        [
-          "map",
-          "operator"
-        ],
         [
           "{",
           "operator"
@@ -624,32 +26,8 @@
           "operator"
         ],
         [
-          "(",
-          "operator"
-        ],
-        [
           "1",
           "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
         ],
         [
           ",",
@@ -674,8 +52,164 @@
       ]
     },
     {
-      "label": "pipeline11",
-      "xpath": "(1, 2) -> [., .]",
+      "label": "mapCons2",
+      "xpath": "{}",
+      "tokens": [
+        [
+          "{}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons3",
+      "xpath": "{ 1: 'one' }?1",
+      "tokens": [
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "'one'",
+          "string"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "?",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons4",
+      "xpath": "let $m := { 'a': 1 } return $m?a",
+      "tokens": [
+        [
+          "let",
+          "complexExpression"
+        ],
+        [
+          "$m",
+          "variable"
+        ],
+        [
+          ":=",
+          "complexExpression"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "return",
+          "complexExpression"
+        ],
+        [
+          "$m",
+          "variable"
+        ],
+        [
+          "?",
+          "operator"
+        ],
+        [
+          "a",
+          "mapNameLookup"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons5",
+      "xpath": "({ 'a': 1 }, { 'b': 2 })",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'b'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons6",
+      "xpath": "(1, 2) -> { 'value': . }",
       "tokens": [
         [
           "(",
@@ -702,20 +236,352 @@
           "operator"
         ],
         [
-          "[",
+          "{",
+          "operator"
+        ],
+        [
+          "'value'",
+          "mapKey"
+        ],
+        [
+          ":",
           "operator"
         ],
         [
           ".",
           "nodeType"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons7",
+      "xpath": "(1, 2) ! { 'n': . }",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
         ],
         [
           ",",
           "operator"
         ],
         [
+          "2",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "!",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'n'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
           ".",
           "nodeType"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons8",
+      "xpath": "{ 'a': { 'b': 1 } }?a?b",
+      "tokens": [
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'b'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "?",
+          "operator"
+        ],
+        [
+          "a",
+          "mapNameLookup"
+        ],
+        [
+          "?",
+          "operator"
+        ],
+        [
+          "b",
+          "mapNameLookup"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons9",
+      "xpath": "if (true()) then { 'a': 1 } else {}",
+      "tokens": [
+        [
+          "if",
+          "complexExpression"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "true",
+          "function"
+        ],
+        [
+          "()",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "then",
+          "complexExpression"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "else",
+          "complexExpression"
+        ],
+        [
+          "{}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons10",
+      "xpath": "{ 'a': 1 } => exists()",
+      "tokens": [
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "=>",
+          "operator"
+        ],
+        [
+          "exists",
+          "function"
+        ],
+        [
+          "()",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons11",
+      "xpath": "function($a) as map(*) { { 'a': $a } }",
+      "tokens": [
+        [
+          "function",
+          "anonymousFunction"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "map",
+          "simpleType"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapCons12",
+      "xpath": "[{ 'a': 1 }, { 'b': 2 }]",
+      "tokens": [
+        [
+          "[",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'b'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
         ],
         [
           "]",
@@ -724,11 +590,19 @@
       ]
     },
     {
-      "label": "pipeline12",
-      "xpath": "(1, 2) -> .?*",
+      "label": "mapCons13",
+      "xpath": "{ 'a': 1 } instance of map(*)",
       "tokens": [
         [
-          "(",
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
           "operator"
         ],
         [
@@ -736,41 +610,189 @@
           "number"
         ],
         [
-          ",",
+          "}",
           "operator"
         ],
         [
-          "2",
-          "number"
-        ],
-        [
-          ")",
+          "instance",
           "operator"
         ],
         [
-          "->",
+          "of",
           "operator"
         ],
         [
-          ".",
-          "nodeType"
+          "map",
+          "simpleType"
         ],
         [
-          "?",
+          "(",
           "operator"
         ],
         [
           "*",
-          "mapNameLookup"
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
         ]
       ]
     },
     {
-      "label": "pipelineError1",
-      "xpath": "(1, 2) -> . + .",
+      "label": "mapMerge1",
+      "xpath": "{ map { 'a': 1 }, map { 'b': 2 } }",
       "tokens": [
         [
-          "(",
+          "{",
+          "operator"
+        ],
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'b'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapMerge2",
+      "xpath": "map { map { 'a': 1 }, map { 'b': 2 } }",
+      "tokens": [
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'b'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapMerge3",
+      "xpath": "map { 'a': 1, map { 'b': 2 } }",
+      "tokens": [
+        [
+          "map",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
           "operator"
         ],
         [
@@ -782,41 +804,53 @@
           "operator"
         ],
         [
+          "map",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'b'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
           "2",
           "number"
         ],
         [
-          ")",
+          "}",
           "operator"
         ],
         [
-          "->",
+          "}",
           "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          "+",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
         ]
       ]
     },
     {
-      "label": "pipelineError2",
-      "xpath": "((1, 2) -> .), .",
+      "label": "notMap1",
+      "xpath": "map { 'a': 1 }",
       "tokens": [
         [
-          "(",
+          "map",
           "operator"
         ],
         [
-          "(",
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
           "operator"
         ],
         [
@@ -824,163 +858,99 @@
           "number"
         ],
         [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ]
-      ]
-    },
-    {
-      "label": "pipelineError3",
-      "xpath": "(1, 2) -> string(.), count(.)",
-      "tokens": [
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          "->",
-          "operator"
-        ],
-        [
-          "string",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
-          "operator"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "count",
-          "function"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          ".",
-          "nodeType"
-        ],
-        [
-          ")",
+          "}",
           "operator"
         ]
       ]
     },
     {
-      "label": "pipelineError4",
-      "xpath": "let $a := (1, 2) -> . return .",
+      "label": "notMap2",
+      "xpath": "function($a) as xs:integer* { $a }",
       "tokens": [
         [
-          "let",
-          "complexExpression"
+          "function",
+          "anonymousFunction"
+        ],
+        [
+          "(",
+          "operator"
         ],
         [
           "$a",
           "variable"
         ],
         [
-          ":=",
-          "complexExpression"
-        ],
-        [
-          "(",
-          "operator"
-        ],
-        [
-          "1",
-          "number"
-        ],
-        [
-          ",",
-          "operator"
-        ],
-        [
-          "2",
-          "number"
-        ],
-        [
           ")",
           "operator"
         ],
         [
-          "->",
+          "as",
           "operator"
         ],
         [
-          ".",
-          "nodeType"
+          "xs:integer",
+          "simpleType"
         ],
         [
-          "return",
-          "complexExpression"
+          "*",
+          "simpleType"
         ],
         [
-          ".",
-          "nodeType"
+          "{",
+          "operator"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          "}",
+          "operator"
         ]
       ]
     },
     {
-      "label": "pipelineError5",
-      "xpath": "(1, 2) -> current()",
+      "label": "notMap3",
+      "xpath": "array { 1, 2 }",
       "tokens": [
+        [
+          "array",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "notMap4",
+      "xpath": "for-each((1, 2), function($a) { $a + 1 })",
+      "tokens": [
+        [
+          "for-each",
+          "function"
+        ],
+        [
+          "(",
+          "operator"
+        ],
         [
           "(",
           "operator"
@@ -1002,15 +972,111 @@
           "operator"
         ],
         [
-          "->",
+          ",",
           "operator"
         ],
         [
-          "current",
-          "function"
+          "function",
+          "anonymousFunction"
         ],
         [
-          "()",
+          "(",
+          "operator"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "$a",
+          "variable"
+        ],
+        [
+          "+",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "}",
+          "operator"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapConsError1",
+      "xpath": "{ 'a': 1, }",
+      "tokens": [
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "}",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "mapConsError2",
+      "xpath": "{ 'a': 1 : 2 }",
+      "tokens": [
+        [
+          "{",
+          "operator"
+        ],
+        [
+          "'a'",
+          "mapKey"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          ":",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          "}",
           "operator"
         ]
       ]
