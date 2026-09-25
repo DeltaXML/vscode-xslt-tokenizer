@@ -117,6 +117,15 @@ export enum ExitCondition {
     CdataEnd
 }
 
+// how a lexical '<' is treated in XPath embedded within XML - standalone XPath allows it as an operator
+export enum XmlLessThan {
+    Allowed,
+    // an attribute value: '<' makes the XML not well-formed, it must be written as '&lt;'
+    Error,
+    // element content: '<' starts a tag, ending the XPath, e.g. an unterminated text value template
+    Exit
+}
+
 export interface LexPosition {
     line: number;
     startCharacter: number;
@@ -230,6 +239,8 @@ export class XPathLexer {
     public entityRefOn: boolean = true;
     public documentText: string = '';
     public documentTokens: BaseToken[] = [];
+    // set by the XSLT lexer for XPath within XML
+    public xmlLessThan = XmlLessThan.Allowed;
     public attributeNameTests: string[] | undefined;
     public elementNameTests: string[] | undefined;
     private latestRealToken: Token | null = null;
@@ -568,6 +579,7 @@ export class XPathLexer {
             this.documentTokens.length = 0;
         }
         let result = this.documentTokens;
+        const firstResultIndex = result.length;
         let nestedTokenStack: Token[] = [];
         // nestedTokenStack lengths at which a string template variable part '{' was pushed
         let templateBraceLevels: number[] = [];
@@ -628,8 +640,21 @@ export class XPathLexer {
                         exitAnalysis = currentChar === "]" && nextChar === "]" && xpath.charAt(i + 1) === ">";
                         break;
                 }
+                const isTagStart = !exitAnalysis && currentChar === '<' && this.xmlLessThan === XmlLessThan.Exit;
+                if (isTagStart) {
+                    exitAnalysis = true;
+                }
                 if (exitAnalysis) {
                     this.update(poppedContext, result, tokenChars, currentLabelState, isTypeDeclaration);
+                    if (isTagStart && result.length > firstResultIndex) {
+                        result[result.length - 1]['error'] = ErrorType.XPathLessThanTagStart;
+                    } else if (this.xmlLessThan === XmlLessThan.Error) {
+                        for (let t = firstResultIndex; t < result.length; t++) {
+                            if (result[t].value.includes('<')) {
+                                result[t]['error'] = ErrorType.XPathLessThanInAttribute;
+                            }
+                        }
+                    }
                     if (result.length > 0) {
                         let lastToken = result[result.length - 1];
                         if (XPathLexer.isWithinTemplateFixedPart(currentLabelState)) {
@@ -1656,6 +1681,8 @@ export enum ErrorType {
     ForKeyValueRequiresXPath40,
     QNameLiteralRequiresXPath40,
     EnclosedModeName,
+    XPathLessThanInAttribute,
+    XPathLessThanTagStart,
     EnclosedTemplateAttribute,
     EnclosedTemplateMatch,
     ItemTypeRequiresXPath40,

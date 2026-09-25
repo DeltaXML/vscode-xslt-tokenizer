@@ -2773,6 +2773,13 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
+		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
+		const reportedTokens = new Set(problemTokens);
+		allTokens.forEach((token) => {
+			if ((token.error === ErrorType.XPathLessThanInAttribute || token.error === ErrorType.XPathLessThanTagStart) && !reportedTokens.has(token)) {
+				problemTokens.push(token);
+			}
+		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
 	};
@@ -4059,6 +4066,12 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ExtensibleRecordType:
 					msg = `XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead`;
+					break;
+				case ErrorType.XPathLessThanInAttribute:
+					msg = `XML: A '<' character is not allowed in an attribute value - use '&lt;' instead: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathLessThanTagStart:
+					msg = `XPath: Expected '}' to end the text value template before '<' - use '&lt;' for the less-than operator`;
 					break;
 				case ErrorType.EnclosedModeName:
 					msg = `XSLT: An xsl:mode with enclosed xsl:template elements must have a name attribute`;

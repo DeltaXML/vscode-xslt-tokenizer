@@ -8,7 +8,7 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 
-import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType} from "./xpLexer";
+import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType, XmlLessThan } from "./xpLexer";
 import { SchemaData } from "./xsltSchema";
 import { Snippet} from './xsltSnippets';
 
@@ -1148,7 +1148,9 @@ export class XslLexer {
                                     exit = ExitCondition.DoubleQuote;
                                 }
 
+                                xpLexer.xmlLessThan = XmlLessThan.Error;
                                 xpLexer.analyse('', exit, p, isTypeDeclarationAttribute);
+                                xpLexer.xmlLessThan = XmlLessThan.Allowed;
                                 this.updateNames(result);
                                 if (isTypeDeclarationAttribute) {
                                     // 'as' attribute value - captured as raw text (not parsed) purely for display on hover
@@ -1222,7 +1224,9 @@ export class XslLexer {
 
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
+                                xpLexer.xmlLessThan = XmlLessThan.Error;
                                 xpLexer.analyse('', exit, p);
+                                xpLexer.xmlLessThan = XmlLessThan.Allowed;
                                 this.updateNames(result);
 
                                 // need to process right double-quote
@@ -1247,7 +1251,10 @@ export class XslLexer {
                             if (useTvt) {
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
+                                // a '<' ends a text value template in element content, but not in a CDATA section
+                                xpLexer.xmlLessThan = nextState === XMLCharState.tvtCdata ? XmlLessThan.Allowed : XmlLessThan.Exit;
                                 xpLexer.analyse('', ExitCondition.CurlyBrace, p);
+                                xpLexer.xmlLessThan = XmlLessThan.Allowed;
                                 this.updateNames(result);
                                 // need to process right double-quote
                                 this.lineNumber = p.line;

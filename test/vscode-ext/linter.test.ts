@@ -150,8 +150,10 @@ async function getDirectDiagnostics(idx: number, xslt: string) {
     return { diagnostics, document };
 }
 
-function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpath: string, isDirect: boolean, xsltVersion = '3.0') {
+function insertXPathInXSLT(isTestingAsAttribute: boolean, label: string, xpathText: string, isDirect: boolean, xsltVersion = '3.0') {
     let xslt = '';
+    // a lexical '<' is not allowed in an attribute value
+    const xpath = xpathText.replace(/</g, '&lt;');
     const xsltSequence = xpath.includes('"') ? `<xsl:sequence select='${xpath}'/>` : `<xsl:sequence select="${xpath}"/>`;
     const contextPrefixes = [
       'qname', 'bracedURILiteral', 'axis', 'context', 'path', 'attr', 'node'
