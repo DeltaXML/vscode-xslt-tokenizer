@@ -667,6 +667,16 @@ export class XsltTokenDefinitions {
 						}
 						break;
 
+					case TokenLevelState.simpleType:
+						if (isOnRequiredToken) {
+							// XSLT 4.0 named item type, declared with xsl:item-type, e.g. as="cx:complex"
+							const instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, token.value, GlobalInstructionType.ItemType);
+							if (instruction) {
+								resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
+								resultInputToken = { token: token, type: GlobalInstructionType.ItemType };
+							}
+						}
+						break;
 					case TokenLevelState.functionNameTest:
 						if (isOnRequiredToken) {
 							let { name, arity } = XsltTokenDefinitions.resolveFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token);

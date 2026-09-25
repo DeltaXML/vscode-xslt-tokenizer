@@ -950,6 +950,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								break;
 						}
 						break;
+					case TokenLevelState.simpleType:
+						// XSLT 4.0 named item type, declared with xsl:item-type, e.g. as="cx:complex" or instance of cx:complex
+						if (seekInstruction.type === GlobalInstructionType.ItemType && token.value === seekInstruction.name) {
+							referenceTokens.push(token);
+						}
+						break;
 					case TokenLevelState.functionNameTest:
 						if (seekInstruction.type === GlobalInstructionType.Function) {
 							const parts = token.value.split('#');
