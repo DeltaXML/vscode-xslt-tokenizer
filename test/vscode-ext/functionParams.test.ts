@@ -38,6 +38,11 @@ const cases: [string, string, string, [string, string][]][] = [
 	['positional then keyword', '4.0', call('f:add(1, b := 5)'), []],
 	['unknown keyword', '4.0', call('f:add(1, c := 3)'), [["XPath: The function 'f:add' has no parameter named 'c'", 'c']]],
 	['function reference with optional arity', '4.0', call('f:add#1'), []],
+	// partial function application, with keyword placeholders:
+	['placeholders for keyword arguments', '4.0', call('f:add(a := ?, b := ?)(1, 2)'), []],
+	['positional and keyword placeholders', '4.0', call('f:add(?, b := 5)(1)'), []],
+	['placeholder for an unknown keyword', '4.0', call('f:add(1, c := ?)(5)'), [["XPath: The function 'f:add' has no parameter named 'c'", 'c']]],
+	['positional placeholder after a keyword', '4.0', call('f:add(b := ?, ?)(5)'), [['XPath: A positional argument cannot follow a keyword argument', '?']]],
 	// declarations:
 	['required after optional', '4.0', `<xsl:function name="f:g">
 		<xsl:param name="a" required="no" select="1"/>
