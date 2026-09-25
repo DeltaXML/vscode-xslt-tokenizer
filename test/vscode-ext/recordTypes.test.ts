@@ -33,6 +33,7 @@ const lookup = (field: string, type: string) => `XPath: Lookup of '${field}' - t
 
 const cases: [string, string, string, [string, string][]][] = [
 	// map constructors:
+	['quoted field names with types', '4.0', inTemplate(`<xsl:variable name="n" as="record('nick name' as xs:string, 'full name'? as xs:string, age as xs:integer)" select="{ 'nick name': 'Annie', 'age': 1 }"/>`), []],
 	['exact fields', '4.0', inTemplate(`<xsl:variable name="c" as="cx:complex" select="map { 'r': 1.0, 'i': 2.0 }"/>`), []],
 	['missing field', '4.0', inTemplate(`<xsl:variable name="c" as="cx:complex" select="map { 'r': 1.0 }"/>`), [[missing('i', 'cx:complex'), 'map']]],
 	['misspelt key', '4.0', inTemplate(`<xsl:variable name="c" as="cx:complex" select="{ 'r': 1.0, 'j': 2.0 }"/>`), [[missing('i', 'cx:complex'), '{'], [unknown('j', 'cx:complex'), "'j'"]]],

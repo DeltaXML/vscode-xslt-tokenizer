@@ -1958,6 +1958,10 @@ export class XsltTokenDiagnostics {
 										break;
 									case 2:
 										isXPathError = (tv === 'as' || tv === 'of' || tv === '//' || tv === '{}' || tv === '[]' || tv === '()' || tv === '*:' || tv === '::' || tv === '<<' || tv === '>>');
+										if (tv === 'as' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record') {
+											// a quoted record field name with a type, e.g. record('nick name' as xs:string)
+											isXPathError = false;
+										}
 										break;
 									case 3:
 										isXPathError = (tv === 'div' || tv === 'mod');
