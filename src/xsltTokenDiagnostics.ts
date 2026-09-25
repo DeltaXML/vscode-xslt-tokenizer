@@ -1377,6 +1377,9 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.axisName:
+						if (!token.error && !withinTypeDeclarationAttr && !XsltTokenDiagnostics.isXPath40(docType) && Data.axes40.includes(token.value)) {
+							token.error = ErrorType.AxisRequiresXPath40;
+						}
 						if (token.error && !withinTypeDeclarationAttr) {
 							problemTokens.push(token);
 						}
@@ -3203,7 +3206,7 @@ export class XsltTokenDiagnostics {
 			let isFunctionContextProblem = false;
 			switch (token.error) {
 				case ErrorType.AxisName:
-					msg = `XPath: Invalid axis name: '${tokenValue}`;
+					msg = `XPath: Invalid axis name: '${tokenValue}'`;
 					break;
 				case ErrorType.BracketNesting:
 					let matchingChar: any = XsltTokenDiagnostics.getMatchingSymbol(tokenValue);
@@ -3314,6 +3317,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.FunctionAfterArrowOp:
 					msg = `XPath: Expected function after arrow operator`;
+					break;
+				case ErrorType.AxisRequiresXPath40:
+					msg = `XPath: The axis '${tokenValue}' requires XPath 4.0`;
 					break;
 				case ErrorType.MapConstructorRequiresXPath40:
 					msg = `XPath: A map constructor without the 'map' keyword requires XPath 4.0`;

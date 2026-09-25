@@ -133,11 +133,16 @@ export class Data {
         "then", "to", "union", "&lt;", "&gt;"];
 
 
-    public static axes = ["ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self",
-        "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"];
+    // axes added in XPath 4.0:
+    public static axes40 = ["following-or-self", "following-sibling-or-self", "preceding-or-self", "preceding-sibling-or-self"];
 
+    public static axes = ["ancestor", "ancestor-or-self", "attribute", "child", "descendant", "descendant-or-self",
+        "following", "following-sibling", "namespace", "parent", "preceding", "preceding-sibling", "self"].concat(Data.axes40);
+
+    // axes for completions
     public static cAxes = ["ancestor", "ancestor-or-self", "descendant", "descendant-or-self",
         "following", "following-sibling", "parent", "preceding", "preceding-sibling", "self"];
+    public static cAxes40 = Data.cAxes.concat(Data.axes40).sort();
 
     public static nodeTypes = ["attribute",
         "comment", "document-node", "element", "empty-sequence", "item", "namespace-node", "node",
@@ -1414,6 +1419,7 @@ export enum ErrorType {
     DTD,
     FunctionAfterArrowOp,
     MapConstructorRequiresXPath40,
+    AxisRequiresXPath40,
     BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,

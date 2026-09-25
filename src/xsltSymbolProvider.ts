@@ -565,7 +565,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					case TokenLevelState.axisName:
 						saveToken = token.value !== 'child';
 						if (!hasParentAxis) {
-							hasParentAxis = ['parent', 'ancestor', 'ancestor-or-self', 'following-sibling', 'preceding-sibling'].indexOf(token.value) !== -1;
+							hasParentAxis = ['parent', 'ancestor', 'ancestor-or-self', 'following-sibling', 'preceding-sibling', 'following-sibling-or-self', 'preceding-sibling-or-self'].indexOf(token.value) !== -1;
 						}
 						break;
 					case TokenLevelState.nodeType:
@@ -890,12 +890,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							currentSymbols.forEach(symbol => { if (symbol.parent) nextSymbols.push(symbol.parent); });
 							nextAxis = AxisType.ParentKeep;
 							break;
-					  case 'following-sibling':
-							nextAxis = AxisType.FollowingSibling;
+						case 'following-sibling':
+						case 'following-sibling-or-self':
 						case 'preceding-sibling':
-							// include all siblings
-							const isFollowing = nextAxis === AxisType.FollowingSibling;
+						case 'preceding-sibling-or-self': {
+							// include all following or preceding siblings - and, for the XPath 4.0 '-or-self' axes, the node itself
+							const isFollowing = token.value.startsWith('following');
+							const includeSelfNode = token.value.endsWith('-or-self');
 							currentSymbols.forEach(symbol => {
+								if (includeSelfNode) {
+									nextSymbols.push(symbol);
+								}
 								const sParent = symbol.parent;
 								if (sParent) {
 									const pos = symbol.range.start;
@@ -913,10 +918,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 									});
 								} 
 							});
-							if (!isFollowing) {
-								nextAxis = AxisType.PrecedingSibling;
-							}
+							nextAxis = isFollowing ? AxisType.FollowingSibling : AxisType.PrecedingSibling;
 							break;
+						}
 						case 'ancestor-or-self':
 							nextAxis = AxisType.AncestorOrSelf;
 						case 'ancestor':

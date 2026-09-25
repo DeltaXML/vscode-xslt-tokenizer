@@ -319,7 +319,7 @@
       "xpath": "childa::book",
       "problems": [
         [
-          "XPath: Invalid axis name: 'childa",
+          "XPath: Invalid axis name: 'childa'",
           "childa"
         ]
       ]
@@ -359,7 +359,7 @@
       "xpath": "attributes::lang",
       "problems": [
         [
-          "XPath: Invalid axis name: 'attributes",
+          "XPath: Invalid axis name: 'attributes'",
           "attributes"
         ]
       ]

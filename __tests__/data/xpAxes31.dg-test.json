@@ -1,0 +1,116 @@
+{
+  "suite": "xpAxes31",
+  "source": "xpAxes31.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "axis40a",
+      "xpath": "following-or-self::*",
+      "problems": [
+        [
+          "XPath: The axis 'following-or-self' requires XPath 4.0",
+          "following-or-self"
+        ]
+      ]
+    },
+    {
+      "label": "axis40b",
+      "xpath": "following-sibling-or-self::a",
+      "problems": [
+        [
+          "XPath: The axis 'following-sibling-or-self' requires XPath 4.0",
+          "following-sibling-or-self"
+        ]
+      ]
+    },
+    {
+      "label": "axis40c",
+      "xpath": "preceding-or-self::node()",
+      "problems": [
+        [
+          "XPath: The axis 'preceding-or-self' requires XPath 4.0",
+          "preceding-or-self"
+        ]
+      ]
+    },
+    {
+      "label": "axis40d",
+      "xpath": "preceding-sibling-or-self::a[1]",
+      "problems": [
+        [
+          "XPath: The axis 'preceding-sibling-or-self' requires XPath 4.0",
+          "preceding-sibling-or-self"
+        ]
+      ]
+    },
+    {
+      "label": "axis40e",
+      "xpath": "a/following-sibling-or-self::b/preceding-sibling-or-self::*",
+      "problems": [
+        [
+          "XPath: The axis 'following-sibling-or-self' requires XPath 4.0",
+          "following-sibling-or-self"
+        ],
+        [
+          "XPath: The axis 'preceding-sibling-or-self' requires XPath 4.0",
+          "preceding-sibling-or-self"
+        ]
+      ]
+    },
+    {
+      "label": "axis40f",
+      "xpath": "(a, b)/following-or-self::text()",
+      "problems": [
+        [
+          "XPath: The axis 'following-or-self' requires XPath 4.0",
+          "following-or-self"
+        ]
+      ]
+    },
+    {
+      "label": "axis40g",
+      "xpath": "count(preceding-sibling-or-self::*)",
+      "problems": [
+        [
+          "XPath: The axis 'preceding-sibling-or-self' requires XPath 4.0",
+          "preceding-sibling-or-self"
+        ]
+      ]
+    },
+    {
+      "label": "axis31a",
+      "xpath": "following-sibling::a",
+      "problems": []
+    },
+    {
+      "label": "axis31b",
+      "xpath": "preceding::node()",
+      "problems": []
+    },
+    {
+      "label": "axisError1",
+      "xpath": "following-or-selfie::a",
+      "problems": [
+        [
+          "XPath: Invalid axis name: 'following-or-selfie'",
+          "following-or-selfie"
+        ]
+      ]
+    },
+    {
+      "label": "axisError2",
+      "xpath": "preceding-sibling-or-self:a",
+      "problems": [
+        [
+          "XPath: Undeclared prefix in name: 'preceding-sibling-or-self:a'",
+          "preceding-sibling-or-self:a"
+        ]
+      ]
+    }
+  ]
+}

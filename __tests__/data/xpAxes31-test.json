@@ -1,0 +1,286 @@
+{
+  "suite": "xpAxes31",
+  "source": "xpAxes31.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "axis40a",
+      "xpath": "following-or-self::*",
+      "tokens": [
+        [
+          "following-or-self",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "axis40b",
+      "xpath": "following-sibling-or-self::a",
+      "tokens": [
+        [
+          "following-sibling-or-self",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "a",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "axis40c",
+      "xpath": "preceding-or-self::node()",
+      "tokens": [
+        [
+          "preceding-or-self",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "node",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "axis40d",
+      "xpath": "preceding-sibling-or-self::a[1]",
+      "tokens": [
+        [
+          "preceding-sibling-or-self",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "a",
+          "nodeNameTest"
+        ],
+        [
+          "[",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "]",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "axis40e",
+      "xpath": "a/following-sibling-or-self::b/preceding-sibling-or-self::*",
+      "tokens": [
+        [
+          "a",
+          "nodeNameTest"
+        ],
+        [
+          "/",
+          "operator"
+        ],
+        [
+          "following-sibling-or-self",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "b",
+          "nodeNameTest"
+        ],
+        [
+          "/",
+          "operator"
+        ],
+        [
+          "preceding-sibling-or-self",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "axis40f",
+      "xpath": "(a, b)/following-or-self::text()",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "a",
+          "nodeNameTest"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "b",
+          "nodeNameTest"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "/",
+          "operator"
+        ],
+        [
+          "following-or-self",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "text",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "axis40g",
+      "xpath": "count(preceding-sibling-or-self::*)",
+      "tokens": [
+        [
+          "count",
+          "function"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "preceding-sibling-or-self",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "*",
+          "nodeType"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "axis31a",
+      "xpath": "following-sibling::a",
+      "tokens": [
+        [
+          "following-sibling",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "a",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "axis31b",
+      "xpath": "preceding::node()",
+      "tokens": [
+        [
+          "preceding",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "node",
+          "nodeType"
+        ],
+        [
+          "()",
+          "nodeType"
+        ]
+      ]
+    },
+    {
+      "label": "axisError1",
+      "xpath": "following-or-selfie::a",
+      "tokens": [
+        [
+          "following-or-selfie",
+          "axisName"
+        ],
+        [
+          "::",
+          "operator"
+        ],
+        [
+          "a",
+          "nodeNameTest"
+        ]
+      ]
+    },
+    {
+      "label": "axisError2",
+      "xpath": "preceding-sibling-or-self:a",
+      "tokens": [
+        [
+          "preceding-sibling-or-self:a",
+          "nodeNameTest"
+        ]
+      ]
+    }
+  ]
+}
