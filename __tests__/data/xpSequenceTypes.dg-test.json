@@ -1,0 +1,77 @@
+{
+  "suite": "xpSequenceTypes",
+  "source": "xpSequenceTypes.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "seqType1",
+      "xpath": "5 instance of xs:integer",
+      "problems": []
+    },
+    {
+      "label": "seqType2",
+      "xpath": "5 instance of xs:integer?",
+      "problems": []
+    },
+    {
+      "label": "seqType3",
+      "xpath": "(5, 6) instance of xs:integer*",
+      "problems": []
+    },
+    {
+      "label": "seqType4",
+      "xpath": "(5, 6) instance of xs:integer+ and true()",
+      "problems": []
+    },
+    {
+      "label": "seqType5",
+      "xpath": "(5, 6) treat as xs:integer+",
+      "problems": []
+    },
+    {
+      "label": "seqType6",
+      "xpath": "'5' cast as xs:integer?",
+      "problems": []
+    },
+    {
+      "label": "seqType7",
+      "xpath": "'5' castable as xs:integer?",
+      "problems": []
+    },
+    {
+      "label": "seqType8",
+      "xpath": "(1 instance of xs:integer*, 2)",
+      "problems": []
+    },
+    {
+      "label": "seqType9",
+      "xpath": "if (5 instance of xs:integer+) then 1 else 0",
+      "problems": []
+    },
+    {
+      "label": "seqTypeError1",
+      "xpath": "'5' cast as xs:integer*",
+      "problems": [
+        [
+          "XPath: Invalid type: '*'",
+          "*"
+        ]
+      ]
+    },
+    {
+      "label": "seqTypeError2",
+      "xpath": "'5' castable as xs:integer+",
+      "problems": [
+        [
+          "XPath: Invalid type: '+'",
+          "+"
+        ]
+      ]
+    }
+  ]
+}

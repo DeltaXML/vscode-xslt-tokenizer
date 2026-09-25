@@ -964,6 +964,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						break;
 				}
 			}
+			if (incrementFunctionArity && prevToken?.charType === CharLevelState.dSep && (prevToken.value === '=>' || prevToken.value === '=!>') && token.tokenType !== TokenLevelState.function) {
+				// the implicit first argument only applies to a static function call, not to a dynamic call
+				incrementFunctionArity = false;
+			}
 			prevToken = token.tokenType === TokenLevelState.comment ? prevToken : token;
 			if (index === lastTokenIndex) {
 				if (elementStack.length > 0) {

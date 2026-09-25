@@ -1,0 +1,82 @@
+{
+  "suite": "xpArrowTargets",
+  "source": "xpArrowTargets.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "arrowTarget1",
+      "xpath": "2 => function($x) { $x + 1 }()",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget2",
+      "xpath": "(1, 2) =!> function($x) { $x + 1 }()",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget3",
+      "xpath": "2 => function($x, $y) { $x + $y }(3)",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget4",
+      "xpath": "2 => function($x) { abs($x) }()",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget5",
+      "xpath": "-2 => abs#1()",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget6",
+      "xpath": "1 => map { 1: 'one', 2: 'two' }()",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget7",
+      "xpath": "(1, 2) =!> array { 'x', 'y' }()",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget8",
+      "xpath": "2 => [ 'x', 'y' ]()",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget9",
+      "xpath": "2 => (function($x) { $x * 2 })()",
+      "problems": []
+    },
+    {
+      "label": "arrowTarget10",
+      "xpath": "'abc' => function($s) { substring($s, 2) }()",
+      "problems": []
+    },
+    {
+      "label": "arrowTargetError1",
+      "xpath": "2 => function($x) { substring($x) }()",
+      "problems": [
+        [
+          "XPath: Function: 'substring' with 1 arguments not found",
+          "substring"
+        ]
+      ]
+    },
+    {
+      "label": "arrowTargetError2",
+      "xpath": "2 => 'abc'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'abc' ",
+          "'abc'"
+        ]
+      ]
+    }
+  ]
+}

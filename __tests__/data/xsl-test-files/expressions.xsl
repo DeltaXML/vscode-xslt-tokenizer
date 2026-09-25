@@ -101,9 +101,9 @@
   <xsl:variable name="partialFn2" select="concat('a', ?)('b')"/>
 
   <!-- Type expressions with sequence types -->
-  <xsl:variable name="typeExpr1-PENDING" select="(1, 2, 3) treat as xs:integer*"/>
-  <xsl:variable name="typeExpr2-PENDING" select="'abc' cast as xs:string?"/>
-  <xsl:variable name="typeExpr3-PENDING" select="5 instance of xs:integer+"/>
+  <xsl:variable name="typeExpr1" select="(1, 2, 3) treat as xs:integer*"/>
+  <xsl:variable name="typeExpr2" select="'abc' cast as xs:string?"/>
+  <xsl:variable name="typeExpr3" select="5 instance of xs:integer+"/>
 
   <!-- Path expressions with parenthesis grouping -->
   <xsl:variable name="pathGroup1" select="(/root/child)[1]"/>

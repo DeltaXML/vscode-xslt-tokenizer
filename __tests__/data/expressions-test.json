@@ -3355,7 +3355,7 @@
       ]
     },
     {
-      "label": "typeExpr1-PENDING",
+      "label": "typeExpr1",
       "xpath": "(1, 2, 3) treat as xs:integer*",
       "tokens": [
         [
@@ -3405,7 +3405,7 @@
       ]
     },
     {
-      "label": "typeExpr2-PENDING",
+      "label": "typeExpr2",
       "xpath": "'abc' cast as xs:string?",
       "tokens": [
         [
@@ -3431,7 +3431,7 @@
       ]
     },
     {
-      "label": "typeExpr3-PENDING",
+      "label": "typeExpr3",
       "xpath": "5 instance of xs:integer+",
       "tokens": [
         [

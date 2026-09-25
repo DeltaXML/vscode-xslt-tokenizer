@@ -153,14 +153,14 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 				case CharLevelState.lPr:
 				case CharLevelState.lBr:
 					if (depth === 0) {
-						return t.charType === CharLevelState.lB ? XSLTSignatureHelpProvider.functionCall(tokens[i - 1], commaCount) : null;
+						return t.charType === CharLevelState.lB ? XSLTSignatureHelpProvider.functionCall(tokens, i - 1, commaCount) : null;
 					}
 					depth--;
 					break;
 				case CharLevelState.dSep:
 					// cursor between the brackets of '()', '[]' or '{}'
 					if (i === cursorIndex && t.line === position.line && t.startCharacter + 1 === position.character) {
-						return t.value === '()' ? XSLTSignatureHelpProvider.functionCall(tokens[i - 1], 0) : null;
+						return t.value === '()' ? XSLTSignatureHelpProvider.functionCall(tokens, i - 1, 0) : null;
 					}
 					break;
 				case CharLevelState.sep:
@@ -173,9 +173,13 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		return null;
 	}
 
-	private static functionCall(nameToken: BaseToken | undefined, activeParameter: number): EnclosingCall | null {
+	private static functionCall(tokens: BaseToken[], nameIndex: number, commaCount: number): EnclosingCall | null {
+		const nameToken = nameIndex > -1 ? tokens[nameIndex] : undefined;
 		if (nameToken && nameToken.tokenType === TokenLevelState.function) {
-			return { functionName: nameToken.value, activeParameter };
+			// with the arrow operators '=>' and '=!>' the first argument is supplied by the left-hand operand
+			const arrowToken = nameIndex > 0 ? tokens[nameIndex - 1] : undefined;
+			const isArrowCall = !!arrowToken && arrowToken.charType === CharLevelState.dSep && (arrowToken.value === '=>' || arrowToken.value === '=!>');
+			return { functionName: nameToken.value, activeParameter: isArrowCall ? commaCount + 1 : commaCount };
 		}
 		return null;
 	}

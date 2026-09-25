@@ -1,0 +1,398 @@
+{
+  "suite": "xpSequenceTypes",
+  "source": "xpSequenceTypes.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "seqType1",
+      "xpath": "5 instance of xs:integer",
+      "tokens": [
+        [
+          "5",
+          "number"
+        ],
+        [
+          "instance",
+          "operator"
+        ],
+        [
+          "of",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "seqType2",
+      "xpath": "5 instance of xs:integer?",
+      "tokens": [
+        [
+          "5",
+          "number"
+        ],
+        [
+          "instance",
+          "operator"
+        ],
+        [
+          "of",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "?",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "seqType3",
+      "xpath": "(5, 6) instance of xs:integer*",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "5",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "6",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "instance",
+          "operator"
+        ],
+        [
+          "of",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "*",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "seqType4",
+      "xpath": "(5, 6) instance of xs:integer+ and true()",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "5",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "6",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "instance",
+          "operator"
+        ],
+        [
+          "of",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "+",
+          "simpleType"
+        ],
+        [
+          "and",
+          "operator"
+        ],
+        [
+          "true",
+          "function"
+        ],
+        [
+          "()",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "seqType5",
+      "xpath": "(5, 6) treat as xs:integer+",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "5",
+          "number"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "6",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "treat",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "+",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "seqType6",
+      "xpath": "'5' cast as xs:integer?",
+      "tokens": [
+        [
+          "'5'",
+          "string"
+        ],
+        [
+          "cast",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "?",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "seqType7",
+      "xpath": "'5' castable as xs:integer?",
+      "tokens": [
+        [
+          "'5'",
+          "string"
+        ],
+        [
+          "castable",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "?",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "seqType8",
+      "xpath": "(1 instance of xs:integer*, 2)",
+      "tokens": [
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "instance",
+          "operator"
+        ],
+        [
+          "of",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "*",
+          "simpleType"
+        ],
+        [
+          ",",
+          "operator"
+        ],
+        [
+          "2",
+          "number"
+        ],
+        [
+          ")",
+          "operator"
+        ]
+      ]
+    },
+    {
+      "label": "seqType9",
+      "xpath": "if (5 instance of xs:integer+) then 1 else 0",
+      "tokens": [
+        [
+          "if",
+          "complexExpression"
+        ],
+        [
+          "(",
+          "operator"
+        ],
+        [
+          "5",
+          "number"
+        ],
+        [
+          "instance",
+          "operator"
+        ],
+        [
+          "of",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "+",
+          "simpleType"
+        ],
+        [
+          ")",
+          "operator"
+        ],
+        [
+          "then",
+          "complexExpression"
+        ],
+        [
+          "1",
+          "number"
+        ],
+        [
+          "else",
+          "complexExpression"
+        ],
+        [
+          "0",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "seqTypeError1",
+      "xpath": "'5' cast as xs:integer*",
+      "tokens": [
+        [
+          "'5'",
+          "string"
+        ],
+        [
+          "cast",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "*",
+          "simpleType"
+        ]
+      ]
+    },
+    {
+      "label": "seqTypeError2",
+      "xpath": "'5' castable as xs:integer+",
+      "tokens": [
+        [
+          "'5'",
+          "string"
+        ],
+        [
+          "castable",
+          "operator"
+        ],
+        [
+          "as",
+          "operator"
+        ],
+        [
+          "xs:integer",
+          "simpleType"
+        ],
+        [
+          "+",
+          "simpleType"
+        ]
+      ]
+    }
+  ]
+}

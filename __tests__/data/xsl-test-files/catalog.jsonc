@@ -12,7 +12,9 @@
             "expressions",
             "expressionsErrors",
             "xpPipeline",
-            "xpMappingArrow"
+            "xpMappingArrow",
+            "xpSequenceTypes",
+            "xpArrowTargets"
         ]
     },
     // 2nd group is used for Linter tests:
@@ -26,7 +28,9 @@
             "expressions.dg",
             "expressionsErrors.dg",
             "xpPipeline.dg",
-            "xpMappingArrow.dg"
+            "xpMappingArrow.dg",
+            "xpSequenceTypes.dg",
+            "xpArrowTargets.dg"
         ]
     },
     // to run Linter test in one-off generator mode

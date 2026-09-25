@@ -2214,6 +2214,12 @@ export class XsltTokenDiagnostics {
 								token['value'] = tValue;
 								problemTokens.push(token);
 							}
+						} else if ((tValue === '*' || tValue === '?' || tValue === '+') && index > 2 && prevToken?.tokenType === TokenLevelState.simpleType &&
+							!(prevToken.value === '*' || prevToken.value === '?' || prevToken.value === '+')) {
+							// occurrence indicator on the type in 'treat as', 'instance of', 'cast as' or 'castable as' - e.g. 5 instance of xs:integer+
+							// only '?' is permitted for the single type in 'cast as' and 'castable as'
+							const typeOperator = allTokens[index - 3].value;
+							isValidType = tValue === '?' || !(typeOperator === 'cast' || typeOperator === 'castable');
 						} else if ((withinTypeDeclarationAttr || stackItem?.token.context?.value === 'function') && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
 							// e.g. xs:integer* don't check name - also valid for an anonymous function's inline 'as' type declaration, e.g. function($i as xs:integer*) {...}
 							isValidType = true;
@@ -2291,7 +2297,16 @@ export class XsltTokenDiagnostics {
 				}
 				if (!token.error && prevToken?.charType === CharLevelState.dSep && (prevToken.value === '=>' || prevToken.value === '=!>')) {
 					let isValid = false;
+					if (xpathTokenType !== TokenLevelState.function) {
+						// the implicit first argument only applies to a static function call, not to a dynamic call
+						incrementFunctionArity = false;
+					}
 					if (xpathCharType === CharLevelState.lB || xpathTokenType === TokenLevelState.function) {
+						isValid = true;
+					} else if (xpathTokenType === TokenLevelState.anonymousFunction || xpathTokenType === TokenLevelState.functionNameTest ||
+						xpathCharType === CharLevelState.lPr || xpathCharType === CharLevelState.lBr ||
+						(xpathTokenType === TokenLevelState.operator && (token.value === 'map' || token.value === 'array'))) {
+						// XPath 4.0 dynamic call on an inline function, named function reference, map or array constructor
 						isValid = true;
 					} else if (xpathTokenType === TokenLevelState.variable) {
 						if (allTokens.length > index + 2) {

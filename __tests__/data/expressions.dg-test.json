@@ -399,34 +399,19 @@
       "problems": []
     },
     {
-      "label": "typeExpr1-PENDING",
+      "label": "typeExpr1",
       "xpath": "(1, 2, 3) treat as xs:integer*",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
+      "problems": []
     },
     {
-      "label": "typeExpr2-PENDING",
+      "label": "typeExpr2",
       "xpath": "'abc' cast as xs:string?",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
+      "problems": []
     },
     {
-      "label": "typeExpr3-PENDING",
+      "label": "typeExpr3",
       "xpath": "5 instance of xs:integer+",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "pathGroup1",
