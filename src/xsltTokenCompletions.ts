@@ -664,7 +664,12 @@ export class XsltTokenCompletions {
 							}
 							preXPathVariable = xp.preXPathVariable;
 						}
-						if (isOnRequiredToken) {
+						if (isOnRequiredToken && XsltTokenCompletions.isInsideString(token, requiredChar)) {
+							// only key and accumulator names are completed within a string literal
+							if (!resultCompletions) {
+								resultCompletions = [];
+							}
+						} else if (isOnRequiredToken) {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
 							resultCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 							resultCompletions = resultCompletions.concat(XsltTokenCompletions.getAllCompletions(docType, position, elementNames, attrNames, globalInstructionData, importedInstructionData));
@@ -1083,6 +1088,13 @@ export class XsltTokenCompletions {
 		} else {
 			return XPathFunctionDetails.xpathData;
 		}
+	}
+
+	// true when the character position is after the opening quote of a string literal and before its closing quote, if any
+	private static isInsideString(token: BaseToken, character: number): boolean {
+		const quote = token.value.startsWith('&') ? token.value.substring(0, token.value.indexOf(';') + 1) : token.value.charAt(0);
+		const isClosed = token.value.length >= quote.length * 2 && token.value.endsWith(quote);
+		return character >= token.startCharacter + quote.length && (!isClosed || character <= token.startCharacter + token.length - quote.length);
 	}
 
 	// 'instance of' and 'castable as' are valid after any completed value (a variable/node-name
