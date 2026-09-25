@@ -1681,8 +1681,23 @@ export class XsltTokenCompletions {
 				} else if (tagName === 'xsl:switch') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
-					newItem.insertText = new vscode.SnippetString('xsl:switch>\n\t<xsl:when test="${1:$expr}">\n\t\t$2\n\t</xsl:when>\n</xsl:switch>');
+					newItem.insertText = new vscode.SnippetString('xsl:switch select="${1:$expr}">\n\t<xsl:when test="${2:value}">\n\t\t$3\n\t</xsl:when>\n</xsl:switch>');
 					completionItems.push(newItem);
+				} else if (tagName === 'xsl:key') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:key name="${1:name}" match="${2:pattern}" use="${3:xpath}"/>$0');
+					completionItems.push(newItem);
+				} else if (tagName === 'xsl:array') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName + ' select', vscode.CompletionItemKind.Struct);
+					newItem.documentation = "xsl:array - each item selected is an array member";
+					newItem.insertText = new vscode.SnippetString('xsl:array select="${1:$expr}"/>$0');
+					completionItems.push(newItem);
+					const newItem2 = new vscode.CompletionItem(tagName + ' members', vscode.CompletionItemKind.Struct);
+					newItem2.documentation = "xsl:array - each xsl:array-member is an array member, which may be any sequence";
+					newItem2.insertText = new vscode.SnippetString('xsl:array>\n\t<xsl:array-member select="${1:$expr}"/>$0\n</xsl:array>');
+					completionItems.push(newItem2);
 				} else if (xsltParent === 'xsl:function' && tagName === 'xsl:param') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
