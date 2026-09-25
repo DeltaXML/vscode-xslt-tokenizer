@@ -1668,10 +1668,28 @@ export class XsltTokenDiagnostics {
 								if (allTokens.length > index + 2) {
 									const nextToken = allTokens[index + 1];
 									const isForMember = valueText === 'for' && nextToken.value === 'member';
-									if (!isForMember) {
+									// XPath 4.0: for key $k value $v in map-expression
+									const isForKeyValue = valueText === 'for' && (nextToken.value === 'key' || nextToken.value === 'value') && nextToken.tokenType === TokenLevelState.complexExpression;
+									if (isForKeyValue && !XsltTokenDiagnostics.isXPath40(docType)) {
+										nextToken.error = ErrorType.ForKeyValueRequiresXPath40;
+										problemTokens.push(nextToken);
+									} else if (!isForMember && !isForKeyValue) {
 										const opToken = allTokens[index + 2];
 										const expectedOp = valueText === 'let' ? ':=' : 'in';
-										if (opToken.value !== expectedOp) {
+										if (opToken.value === 'as' && valueText !== 'member') {
+											// XPath 4.0 typed variable binding, e.g. let $x as xs:integer := 3
+											if (!XsltTokenDiagnostics.isXPath40(docType)) {
+												opToken.error = ErrorType.TypedBindingRequiresXPath40;
+												problemTokens.push(opToken);
+											} else {
+												// the ':=' or 'in' follows the type
+												const afterType = allTokens.slice(index + 3).find((t) => t.tokenType === TokenLevelState.complexExpression);
+												if (afterType && afterType.value !== expectedOp) {
+													afterType['error'] = ErrorType.XPathExpectedComplex;
+													problemTokens.push(afterType);
+												}
+											}
+										} else if (opToken.value !== expectedOp) {
 											opToken['error'] = ErrorType.XPathExpectedComplex;
 											problemTokens.push(opToken);
 										}
@@ -1685,6 +1703,14 @@ export class XsltTokenDiagnostics {
 									xpathVariableCurrentlyBeingDefined = false;
 									xpathStack.push({ token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
 								}
+								break;
+							case 'key':
+							case 'value':
+								// XPath 4.0: for key $k value $v in map-expression - the variable after 'value' is a new binding
+								if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].isRangeVar) {
+									preXPathVariable = xpathStack[xpathStack.length - 1].preXPathVariable;
+								}
+								xpathVariableCurrentlyBeingDefined = false;
 								break;
 							case 'then':
 								if (ifThenStack.length > 0) {
@@ -2501,6 +2527,21 @@ export class XsltTokenDiagnostics {
 						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						break;
 					case TokenLevelState.functionNameTest:
+						if (token.value.startsWith('#')) {
+							// XPath 4.0 QName literal, e.g. #xml:lang
+							const qNamePrefixEnd = token.value.indexOf(':');
+							const qNamePrefix = qNamePrefixEnd === -1 ? '' : token.value.substring(1, qNamePrefixEnd);
+							if (!XsltTokenDiagnostics.isXPath40(docType)) {
+								token.error = ErrorType.QNameLiteralRequiresXPath40;
+								problemTokens.push(token);
+							} else if (qNamePrefix !== '' && qNamePrefix !== 'xml' && inheritedPrefixes.indexOf(qNamePrefix) === -1) {
+								token.error = ErrorType.XPathPrefix;
+								problemTokens.push(token);
+							} else {
+								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+							}
+							break;
+						}
 						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, token, checkedGlobalFnNames);
 						if (!isValid) {
 							token['error'] = fErrorType;
@@ -2512,7 +2553,10 @@ export class XsltTokenDiagnostics {
 						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						break;
 					case TokenLevelState.number:
-						if (XsltTokenDiagnostics.validateNumber(token.value)) {
+						if (!XsltTokenDiagnostics.isXPath40(docType) && XsltTokenDiagnostics.isXPath40Number(token.value)) {
+							token.error = ErrorType.NumberRequiresXPath40;
+							problemTokens.push(token);
+						} else if (XsltTokenDiagnostics.validateNumber(token.value)) {
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						} else {
 							token.error = ErrorType.XPathNumber;
@@ -3246,8 +3290,21 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static validateNumber(text: string) {
-       	const number = Number(text);
+		if (text.startsWith('0x')) {
+			return /^0x[0-9a-fA-F]+(_+[0-9a-fA-F]+)*$/.test(text);
+		} else if (text.startsWith('0b')) {
+			return /^0b[01]+(_+[01]+)*$/.test(text);
+		} else if (text.includes('_') && /(^|[^0-9_])_|_($|[^0-9_])/.test(text)) {
+			// XPath 4.0 '_' digit separators are only allowed between digits
+			return false;
+		}
+		const number = Number(text.replace(/_/g, ''));
 		return !isNaN(number) && isFinite(number);
+	}
+
+	// XPath 4.0 hexadecimal and binary integer literals, and '_' digit separators
+	private static isXPath40Number(text: string) {
+		return text.startsWith('0x') || text.startsWith('0b') || text.includes('_');
 	}
 
 	private static validateXMLDeclaration(lineNumber: number, token: BaseToken, document: vscode.TextDocument, problemTokens: BaseToken[]) {
@@ -3974,6 +4031,18 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ExtensibleRecordType:
 					msg = `XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead`;
+					break;
+				case ErrorType.QNameLiteralRequiresXPath40:
+					msg = `XPath: The QName literal '${tokenValue}' requires XPath 4.0`;
+					break;
+				case ErrorType.TypedBindingRequiresXPath40:
+					msg = `XPath: A type declaration with 'as' for a variable binding requires XPath 4.0`;
+					break;
+				case ErrorType.ForKeyValueRequiresXPath40:
+					msg = `XPath: 'for ${tokenValue}' map bindings require XPath 4.0`;
+					break;
+				case ErrorType.NumberRequiresXPath40:
+					msg = `XPath: Hexadecimal and binary numeric literals, and '_' digit separators, require XPath 4.0: '${tokenValue}'`;
 					break;
 				case ErrorType.AxisRequiresXPath40:
 					msg = `XPath: The axis '${tokenValue}' requires XPath 4.0`;

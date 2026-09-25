@@ -177,7 +177,8 @@ export class Data {
         "then", "to", "treat", "union", "&lt;", "&gt;"];
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
-    public static rangeVars = ["every", "for", "let", "member", "some", "return"];
+    // 'key' and 'value' are for XPath 4.0 map bindings: for key $k value $v in map-expression
+    public static rangeVars = ["every", "for", "let", "member", "some", "return", "key", "value"];
     public static firstParts = ["cast", "castable", "instance", "treat"];
     public static secondParts = ["as", "of"];
 
@@ -277,6 +278,9 @@ export class XPathLexer {
         return result;
     }
 
+    // the characters of the current token, for XPath 4.0 numeric literals
+    private numberChars: string[] = [];
+
     private calcNewState(isFirstChar: boolean, nesting: number, char: string, nextChar: string, existing: CharLevelState): [CharLevelState, number] {
         let rv: CharLevelState;
         let firstCharOfToken = true;
@@ -286,7 +290,19 @@ export class XPathLexer {
             case CharLevelState.lNl:
                 let charCode = char.charCodeAt(0);
                 let nextCharCode = (nextChar) ? nextChar.charCodeAt(0) : -1;
+                // XPath 4.0 hexadecimal and binary integer literals, e.g. 0x1F and 0b101, and '_' digit separators, e.g. 1_000
+                const numberSoFar = this.numberChars.join('');
+                const isHexOrBinary = numberSoFar.startsWith('0x') || numberSoFar.startsWith('0b');
                 if (XPathLexer.isDigit(charCode) || char === '.') {
+                    rv = existing;
+                } else if ((char === 'x' || char === 'b') && numberSoFar === '0' && /[0-9a-fA-F_]/.test(nextChar)) {
+                    rv = existing;
+                } else if (numberSoFar.startsWith('0x') && /[a-fA-F]/.test(char)) {
+                    rv = existing;
+                } else if (char === '_' && /[0-9a-fA-F_]/.test(nextChar)) {
+                    rv = existing;
+                } else if (isHexOrBinary && /[a-zA-Z_]/.test(char)) {
+                    // an invalid digit - keep it within the number token, to be reported as an invalid numeric literal
                     rv = existing;
                 } else if (char === 'e' || char === 'E') {
                     if (nextChar === '-' || nextChar === '+' || XPathLexer.isDigit(nextCharCode)) {
@@ -637,6 +653,7 @@ export class XPathLexer {
                     return result;
                 }
 
+                this.numberChars = tokenChars;
                 nextState = this.calcNewState(
                     isFirstTokenChar,
                     nestingState,
@@ -1288,7 +1305,7 @@ export class XPathLexer {
                         }
                         break;
                     case CharLevelState.lName:
-                        if (currentToken.value === 'member' && prevToken.value === 'for') {
+                        if ((currentToken.value === 'member' || currentToken.value === 'key' || currentToken.value === 'value') && prevToken.value === 'for') {
                             prevToken.tokenType = TokenLevelState.complexExpression;
                         }
                         break;
@@ -1634,6 +1651,10 @@ export enum ErrorType {
     FunctionAfterArrowOp,
     MapConstructorRequiresXPath40,
     AxisRequiresXPath40,
+    NumberRequiresXPath40,
+    TypedBindingRequiresXPath40,
+    ForKeyValueRequiresXPath40,
+    QNameLiteralRequiresXPath40,
     ItemTypeRequiresXPath40,
     ChoiceTypeRequiresXPath40,
     ObsoleteItemType,
