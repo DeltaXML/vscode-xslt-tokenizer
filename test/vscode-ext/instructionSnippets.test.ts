@@ -38,6 +38,12 @@ suite('Instruction snippets', () => {
 		assert.equal(result.get('xsl:switch'), 'xsl:switch select="${1:$expr}">\n\t<xsl:when test="${2:value}">\n\t\t$3\n\t</xsl:when>\n</xsl:switch>');
 	});
 
+	test('xsl:template within xsl:mode has only a match attribute', async () => {
+		const result = await snippets('4.0', '<xsl:mode name="m"><|</xsl:mode>');
+		assert.equal(result.get('xsl:template match'), 'xsl:template match="$1">\n\t$0\n</xsl:template>');
+		assert.isFalse(result.has('xsl:template name'));
+	});
+
 	test('xsl:array with select, or with xsl:array-member children', async () => {
 		const result = await snippets('4.0', '<xsl:template name="t"><|</xsl:template>');
 		assert.equal(result.get('xsl:array select'), 'xsl:array select="${1:$expr}"/>$0');

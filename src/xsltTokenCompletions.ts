@@ -1653,6 +1653,13 @@ export class XsltTokenCompletions {
 			if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 				if (tagName === 'xsl:break' || tagName === 'xsl:next-iteration') {
 					useCurrent = false;
+				} else if (tagName === 'xsl:template' && xsltParent === 'xsl:mode') {
+					// XSLT 4.0 enclosed mode: a template rule has a match attribute, but no mode or name attribute
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName + ' match', vscode.CompletionItemKind.Struct);
+					newItem.documentation = "template rule for the enclosing xsl:mode";
+					newItem.insertText = new vscode.SnippetString('xsl:template match="$1">\n\t$0\n</xsl:template>');
+					completionItems.push(newItem);
 				} else if (tagName === 'xsl:template') {
 					const newItem = new vscode.CompletionItem(tagName + ' match', vscode.CompletionItemKind.Struct);
 					newItem.documentation = "xsl:template with 'match' attribute";

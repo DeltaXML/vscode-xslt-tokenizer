@@ -740,6 +740,7 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								isGroupingAttribute = false;
+								const startTagAttributeNames = tagAttributeNames;
 								tagAttributeNames = [];
 								withinTypeDeclarationAttr = false;
 								// e.g. a text value template in the element's content is not part of the last attribute
@@ -825,6 +826,25 @@ export class XsltTokenDiagnostics {
 										startTagToken['error'] = ErrorType.XSLTAttrUnexpected;
 										startTagToken['value'] = tagElementName + '\': \'' + xsltAttsWithNameErrors.join('\', ');
 										problemTokens.push(startTagToken);
+									}
+								}
+
+								const enclosingMode = elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:mode' ? elementStack[elementStack.length - 1] : undefined;
+								if (startTagToken && !problem && !startTagToken.error && enclosingMode && tagElementName === 'xsl:template' && XsltTokenDiagnostics.isXPath40(docType)) {
+									// XSLT 4.0 enclosed mode: a template rule within xsl:mode has a match but no mode or name, and the mode must be named
+									const disallowedAttribute = ['mode', 'name'].find((attName) => startTagAttributeNames.includes(attName));
+									if (disallowedAttribute) {
+										startTagToken.error = ErrorType.EnclosedTemplateAttribute;
+										startTagToken.value = disallowedAttribute;
+										problemTokens.push(startTagToken);
+									} else if (!startTagAttributeNames.includes('match')) {
+										startTagToken.error = ErrorType.EnclosedTemplateMatch;
+										problemTokens.push(startTagToken);
+									}
+									const modeToken = enclosingMode.identifierToken;
+									if (enclosingMode.symbolID === '' && modeToken && !modeToken.error) {
+										modeToken.error = ErrorType.EnclosedModeName;
+										problemTokens.push(modeToken);
 									}
 								}
 
@@ -4039,6 +4059,15 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ExtensibleRecordType:
 					msg = `XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead`;
+					break;
+				case ErrorType.EnclosedModeName:
+					msg = `XSLT: An xsl:mode with enclosed xsl:template elements must have a name attribute`;
+					break;
+				case ErrorType.EnclosedTemplateAttribute:
+					msg = `XSLT: A template rule enclosed within xsl:mode must not have a '${tokenValue}' attribute`;
+					break;
+				case ErrorType.EnclosedTemplateMatch:
+					msg = `XSLT: A template rule enclosed within xsl:mode must have a match attribute`;
 					break;
 				case ErrorType.QNameLiteralRequiresXPath40:
 					msg = `XPath: The QName literal '${tokenValue}' requires XPath 4.0`;
