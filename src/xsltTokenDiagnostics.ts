@@ -117,7 +117,7 @@ export enum DiagnosticCode {
 export class XsltTokenDiagnostics {
 	static oneCharOps = new Set([')', ']', '}', '-', '+', '|', '*', '.']);
 	static twoCharOps = new Set(['as', '//', '{}', '[]', '()', '*:', '::', '<<', '>>', '=>']);
-	static threeCharOps = new Set(['div', 'mod']);
+	static threeCharOps = new Set(['div', 'mod', '=!>']);
 	static otherOps = new Set(['idiv', 'union', 'except', 'intersect', '&lt;&lt;', '&gt;&gt;']);
 	static anonFunctionOps = new Set([')', '(', 'as', 'map', 'array', ',']);
 	static anonFunctionVarOps = new Set([')','as', ',']);
@@ -1325,7 +1325,7 @@ export class XsltTokenDiagnostics {
 										const ntt = <TokenLevelState>nt.tokenType;
 										const ntv = nt.value;
 										isRootOnly = !(ntt === TokenLevelState.nodeNameTest || ntt === TokenLevelState.anonymousFunction || ntt === TokenLevelState.axisName ||
-											ntt === TokenLevelState.function || ntt === TokenLevelState.variable || ntv === '*' || ntv === '()' || ntv === '(' || ntv === '=>');
+											ntt === TokenLevelState.function || ntt === TokenLevelState.variable || ntv === '*' || ntv === '()' || ntv === '(' || ntv === '=>' || ntv === '=!>');
 									}
 									token.error = isRootOnly ? ErrorType.MissingContextItemForRootOnly : ErrorType.MissingContextItemForRoot;
 									problemTokens.push(token);
@@ -1675,7 +1675,7 @@ export class XsltTokenDiagnostics {
 										const invalidPrevOperators = ['{', '?'];
 										isXPathError = invalidPrevOperators.indexOf(prevToken.value) !== -1;
 									} else if (prevToken.charType === CharLevelState.dSep) {
-										const illegalPrevOperators = ['=>', '//', '..', '*:', '::'];
+										const illegalPrevOperators = ['=>', '=!>', '//', '..', '*:', '::'];
 										isXPathError = illegalPrevOperators.indexOf(prevToken.value) !== -1;
 									}
 								} else {
@@ -2122,7 +2122,7 @@ export class XsltTokenDiagnostics {
 										token.error = ErrorType.XPathUnexpected;
 										problemTokens.push(token);
 									}
-								} else if (token.value === '=>') {
+								} else if (token.value === '=>' || token.value === '=!>') {
 									incrementFunctionArity = true;
 								}
 								break;
@@ -2289,7 +2289,7 @@ export class XsltTokenDiagnostics {
 
 					}
 				}
-				if (!token.error && prevToken?.charType === CharLevelState.dSep && prevToken.value === '=>') {
+				if (!token.error && prevToken?.charType === CharLevelState.dSep && (prevToken.value === '=>' || prevToken.value === '=!>')) {
 					let isValid = false;
 					if (xpathCharType === CharLevelState.lB || xpathTokenType === TokenLevelState.function) {
 						isValid = true;

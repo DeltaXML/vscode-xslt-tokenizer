@@ -11,7 +11,8 @@
             "qnamesAndURILiterals",
             "expressions",
             "expressionsErrors",
-            "xpPipeline"
+            "xpPipeline",
+            "xpMappingArrow"
         ]
     },
     // 2nd group is used for Linter tests:
@@ -24,7 +25,8 @@
             "qnamesAndURILiterals.dg",
             "expressions.dg",
             "expressionsErrors.dg",
-            "xpPipeline.dg"
+            "xpPipeline.dg",
+            "xpMappingArrow.dg"
         ]
     },
     // to run Linter test in one-off generator mode

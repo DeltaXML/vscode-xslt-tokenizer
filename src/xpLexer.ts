@@ -57,7 +57,10 @@ export enum CharLevelState {
     mBt,    // middle part: from '}' to '{'
     rBt,    // closing part: from '}' to '`' (also the char state for the closing '`')
     sBt,    // whole template without variable parts: from '`' to '`'
-    escBt   // escape within a fixed part: '``', '{{' or '}}'
+    escBt,  // escape within a fixed part: '``', '{{' or '}}'
+    // triple char separator (the mapping arrow '=!>') - the token charType is dSep:
+    tSep,   // 1st char of triple char separator
+    tSep2   // 2nd char of triple char separator (3rd char uses dSep2)
 }
 
 /*
@@ -121,6 +124,7 @@ export class Data {
     public static readonly fnTypes = ['map', 'array', 'function', 'record'];
 
     public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||', '!!', '??'];
+    public static tripleSeps = ['=!>'];
     public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!', '*', '+', ',', '-', '.', '?', '['];
     public static triggerWords = ["and", "andAlso", "array", "as", "div",
         "else", "eq", "except",
@@ -386,6 +390,12 @@ export class XPathLexer {
             case CharLevelState.dSep:
                 rv = CharLevelState.dSep2;
                 break;
+            case CharLevelState.tSep:
+                rv = CharLevelState.tSep2;
+                break;
+            case CharLevelState.tSep2:
+                rv = CharLevelState.dSep2;
+                break;
             case CharLevelState.lUri:
                 rv = (char === '}') ? CharLevelState.rUri : existing;
                 break;
@@ -610,6 +620,9 @@ export class XPathLexer {
                     nextChar,
                     currentLabelState
                 );
+                if (nextState[0] === CharLevelState.sep && Data.tripleSeps.includes(currentChar + nextChar + xpath.charAt(i + 1))) {
+                    nextState[0] = CharLevelState.tSep;
+                }
                 let [nextLabelState] = nextState;
                 if (
                     (nextLabelState === currentLabelState
@@ -653,7 +666,13 @@ export class XPathLexer {
                             let bothChars = currentChar + nextChar;
                             this.updateResult(poppedContext, result, new BasicToken(bothChars, nextLabelState), isTypeDeclaration);
                             break;
+                        case CharLevelState.tSep:
+                            this.update(poppedContext, result, tokenChars, currentLabelState);
+                            const tripleChars = currentChar + nextChar + xpath.charAt(i + 1);
+                            this.updateResult(poppedContext, result, new BasicToken(tripleChars, CharLevelState.dSep), isTypeDeclaration);
+                            break;
                         case CharLevelState.dSep2:
+                        case CharLevelState.tSep2:
                             break;
                         case CharLevelState.sep:
                         case CharLevelState.dot:

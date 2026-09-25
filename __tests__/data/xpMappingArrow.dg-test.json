@@ -1,0 +1,92 @@
+{
+  "suite": "xpMappingArrow",
+  "source": "xpMappingArrow.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "mappingArrow1",
+      "xpath": "(-2 to 2) =!> abs()",
+      "problems": []
+    },
+    {
+      "label": "mappingArrow2",
+      "xpath": "(-2 to 2)=!>abs()",
+      "problems": []
+    },
+    {
+      "label": "mappingArrow3",
+      "xpath": "'The cat sat' => tokenize() =!> concat('.') =!> upper-case() => string-join(' ')",
+      "problems": []
+    },
+    {
+      "label": "mappingArrow4",
+      "xpath": "('a', 'b') =!> string-length() -> sum(.)",
+      "problems": []
+    },
+    {
+      "label": "mappingArrow5",
+      "xpath": "(1, 2) =!> (function($a) { $a * 2 })()",
+      "problems": []
+    },
+    {
+      "label": "mappingArrow6",
+      "xpath": "(1.5, 2.5) =!> round(1) = (2, 3)",
+      "problems": []
+    },
+    {
+      "label": "mappingArrow7",
+      "xpath": "('=!>', '=! >') =!> string-length()",
+      "problems": []
+    },
+    {
+      "label": "mappingArrow8",
+      "xpath": "(1, 2) =!> fn:abs()",
+      "problems": []
+    },
+    {
+      "label": "mappingArrowError1",
+      "xpath": "(1, 2) =!> 'abs'",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: 'abs' ",
+          "'abs'"
+        ]
+      ]
+    },
+    {
+      "label": "mappingArrowError2",
+      "xpath": "(1, 2) =!> 3",
+      "problems": [
+        [
+          "XPath: Expected function after arrow operator",
+          "3"
+        ]
+      ]
+    },
+    {
+      "label": "mappingArrowError3",
+      "xpath": "(1, 2) =!> abs",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'abs'",
+          "abs"
+        ]
+      ]
+    },
+    {
+      "label": "mappingArrowError4",
+      "xpath": "(1, 2) =!> round(1, 2, 3)",
+      "problems": [
+        [
+          "XPath: Function: 'round' with 4 arguments not found",
+          "round"
+        ]
+      ]
+    }
+  ]
+}

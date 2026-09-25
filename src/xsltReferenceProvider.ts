@@ -945,7 +945,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.variable) {
 									// TODO: check arity of variable of type 'function'
 									incrementFunctionArity = false;
-								} else if (token.value === '=>') {
+								} else if (token.value === '=>' || token.value === '=!>') {
 									incrementFunctionArity = true;
 								}
 								break;

@@ -660,7 +660,7 @@ export class XsltTokenDefinitions {
 									}
 									awaitingRequiredArity = false;
 									incrementFunctionArity = false;
-								} else if (token.value === '=>') {
+								} else if (token.value === '=>' || token.value === '=!>') {
 									incrementFunctionArity = true;
 								}
 								break;
