@@ -10,6 +10,7 @@ import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
 import { BaseToken, ExitCondition, LexPosition, XPathLexer } from './xpLexer';
 import { XPathSemanticTokensProvider } from './extension';
 import { DocumentChangeHandler } from './documentChangeHandler';
+import { XMLConfiguration } from './languageConfigurations';
 import * as url from 'url';
 
 interface ImportedGlobals {
@@ -107,6 +108,34 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	private static nameCharRgx = new RegExp(/[A-Z]|[a-z]|_|-|:/);
+
+	// the symbols of the XML context file, for element and attribute name completions - computed here if they're not
+	// cached yet, e.g. when VS Code restores the context file's editor at startup without its symbols being requested
+	private static async contextFileSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[] | undefined> {
+		let symbols = XsltSymbolProvider.documentSymbols.get(uri);
+		if (!symbols) {
+			// the cache is keyed by Uri object: look for another Uri object for the same file
+			const uriString = uri.toString();
+			for (const [cachedUri, cachedSymbols] of XsltSymbolProvider.documentSymbols) {
+				if (cachedUri.toString() === uriString) {
+					symbols = cachedSymbols;
+					break;
+				}
+			}
+		}
+		if (!symbols) {
+			try {
+				const contextDocument = await vscode.workspace.openTextDocument(uri);
+				symbols = await new XsltSymbolProvider(XMLConfiguration.configuration, null).getDocumentSymbols(contextDocument, false);
+				if (symbols) {
+					XsltSymbolProvider.documentSymbols.set(uri, symbols);
+				}
+			} catch {
+				// e.g. the file no longer exists
+			}
+		}
+		return symbols;
+	}
 
 	public static functionInstructionFromDocPosition(document: vscode.TextDocument, position: vscode.Position) {
 		let fnName: string | undefined;
@@ -221,7 +250,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		}
 
 		if (uri) {
-			const lastSymbols = XsltSymbolProvider.documentSymbols.get(uri);
+			const lastSymbols = await XsltDefinitionProvider.contextFileSymbols(uri);
 			if (lastSymbols) {
 				symbolsForXPath = lastSymbols;
 			}
