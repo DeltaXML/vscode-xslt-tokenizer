@@ -9,6 +9,7 @@ import { assert } from 'chai';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
+import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 
 function stylesheet(version: string, select: string) {
 	return `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cx="com.example.cx" version="${version}">
@@ -51,6 +52,27 @@ suite('JNodes', () => {
 			const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(languageConfig, DocumentTypes.XSLT, document, allTokens, xslLexer.globalInstructionData, [], []);
 			const problems = diagnostics.filter((d) => d.message !== 'variable is unused').map((d) => [d.message, document.getText(d.range)]);
 			assert.deepEqual(problems, expected);
+		});
+	});
+});
+
+suite('JNodes: type completions', () => {
+	['4.0', '3.0'].forEach((version) => {
+		test(`${version}: jnode() is only offered for XPath 4.0`, async () => {
+			const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="${version}">
+	<xsl:variable name="v" as="|" select="()"/>
+</xsl:stylesheet>`;
+			const offset = marked.indexOf('|');
+			const document = await vscode.workspace.openTextDocument({ content: marked.replace('|', ''), language: 'xslt' });
+			const provider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
+			const result = await provider.provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+			const labels = (Array.isArray(result) ? result : result?.items ?? []).map((item) => typeof item.label === 'string' ? item.label : item.label.label);
+			assert.include(labels, 'element()');
+			if (version === '4.0') {
+				assert.include(labels, 'jnode()');
+			} else {
+				assert.notInclude(labels, 'jnode()');
+			}
 		});
 	});
 });
