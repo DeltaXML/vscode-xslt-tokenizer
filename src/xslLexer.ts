@@ -151,6 +151,8 @@ export interface GlobalInstructionData {
     href?: string;
     version?: string;
     returnType?: string;
+    // the 'as' attribute of an xsl:item-type, or of a global xsl:variable or xsl:param
+    declaredType?: string;
     defaultSelect?: string;
 }
 
@@ -172,6 +174,10 @@ export class XslLexer {
         }
         const optionalCount = instruction.memberOptional ? instruction.memberOptional.filter((isOptional) => isOptional).length : 0;
         return arity <= instruction.idNumber && arity >= instruction.idNumber - optionalCount;
+    }
+
+    protected static hasDeclaredType(instructionType: GlobalInstructionType) {
+        return instructionType === GlobalInstructionType.ItemType || instructionType === GlobalInstructionType.Variable || instructionType === GlobalInstructionType.Parameter;
     }
 
     protected static pushParamOptional(gd: GlobalInstructionData, pendingParamOptional: boolean | undefined) {
@@ -736,6 +742,7 @@ export class XslLexer {
         let currentParamNamePushed = false;
         let isParamRequiredAttribute = false;
         let pendingParamOptional: boolean | undefined;
+        let pendingDeclaredType: string | undefined;
         let pendingParamSelect: string|undefined;
         let topLevelParamNamePushed = false;
         let xpathEnded = false;
@@ -854,6 +861,7 @@ export class XslLexer {
                             collectParamName = false;
                             pendingParamType = undefined;
                             pendingParamOptional = undefined;
+                            pendingDeclaredType = undefined;
                             currentParamNamePushed = false;
                             pendingParamSelect = undefined;
                             topLevelParamNamePushed = false;
@@ -1050,6 +1058,10 @@ export class XslLexer {
                                 } else {
                                     const idNumber = globalType === GlobalInstructionType.Variable ? result.length : 0;
                                     const newGlobal: GlobalInstructionData = {type: globalType, name: attValue, token: newTokenCopy, idNumber: idNumber};
+                                    if (pendingDeclaredType !== undefined) {
+                                        newGlobal.declaredType = pendingDeclaredType;
+                                        pendingDeclaredType = undefined;
+                                    }
                                     if (globalType === GlobalInstructionType.Parameter) {
                                         newGlobal.defaultSelect = pendingParamSelect;
                                         pendingParamSelect = undefined;
@@ -1128,6 +1140,12 @@ export class XslLexer {
                                     const declaredType = xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim();
                                     if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
                                         this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
+                                    } else if (XslLexer.hasDeclaredType(tagGlobalInstructionType)) {
+                                        if (tagInstructionNameAdded && this.globalInstructionData.length > 0) {
+                                            this.globalInstructionData[this.globalInstructionData.length - 1].declaredType = declaredType;
+                                        } else {
+                                            pendingDeclaredType = declaredType;
+                                        }
                                     } else if (collectParamName && this.globalInstructionData.length > 0) {
                                         if (currentParamNamePushed) {
                                             const gd = this.globalInstructionData[this.globalInstructionData.length - 1];

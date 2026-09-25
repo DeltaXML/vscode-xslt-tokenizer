@@ -51,6 +51,7 @@ export class XslLexerLight extends XslLexer {
         let currentParamNamePushed = false;
         let isParamRequiredAttribute = false;
         let pendingParamOptional: boolean | undefined;
+        let pendingDeclaredType: string | undefined;
         let pendingParamSelect: string|undefined;
         let topLevelParamNamePushed = false;
 
@@ -109,6 +110,7 @@ export class XslLexerLight extends XslLexer {
                             collectParamName = false;
                             pendingParamType = undefined;
                             pendingParamOptional = undefined;
+                            pendingDeclaredType = undefined;
                             currentParamNamePushed = false;
                             pendingParamSelect = undefined;
                             topLevelParamNamePushed = false;
@@ -168,7 +170,7 @@ export class XslLexerLight extends XslLexer {
                                 isParamRequiredAttribute = true;
                             } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                 isGlobalUsePackageVersion = true;
-                            } else if ((tagGlobalInstructionType === GlobalInstructionType.Function || collectParamName) && attName === 'as') {
+                            } else if ((tagGlobalInstructionType === GlobalInstructionType.Function || collectParamName || XslLexer.hasDeclaredType(tagGlobalInstructionType)) && attName === 'as') {
                                 isTypeDeclarationAttribute = true;
                             } else if (tagGlobalInstructionType === GlobalInstructionType.Parameter && attName === 'select') {
                                 isParamDefaultSelectAttribute = true;
@@ -228,6 +230,10 @@ export class XslLexerLight extends XslLexer {
                                     modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
                                 } else {
                                     const newGlobal: GlobalInstructionData = {type: globalType, name: attValue, token: tkn, idNumber: 0};
+                                    if (pendingDeclaredType !== undefined) {
+                                        newGlobal.declaredType = pendingDeclaredType;
+                                        pendingDeclaredType = undefined;
+                                    }
                                     if (globalType === GlobalInstructionType.Parameter) {
                                         newGlobal.defaultSelect = pendingParamSelect;
                                         pendingParamSelect = undefined;
@@ -276,6 +282,12 @@ export class XslLexerLight extends XslLexer {
                                 const declaredType = tokenChars.join('').trim();
                                 if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
                                     this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
+                                } else if (XslLexer.hasDeclaredType(tagGlobalInstructionType)) {
+                                    if (tagInstructionNameAdded && this.globalInstructionData.length > 0) {
+                                        this.globalInstructionData[this.globalInstructionData.length - 1].declaredType = declaredType;
+                                    } else {
+                                        pendingDeclaredType = declaredType;
+                                    }
                                 } else if (collectParamName && this.globalInstructionData.length > 0) {
                                     if (currentParamNamePushed) {
                                         const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
@@ -314,7 +326,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage
-                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute) {
+                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute) {
                                 storeToken = true;
                             }
                            break;

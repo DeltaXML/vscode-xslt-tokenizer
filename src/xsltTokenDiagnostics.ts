@@ -12,6 +12,7 @@ import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
+import { RecordType, RecordTypes } from './recordTypes';
 
 enum HasCharacteristic {
 	unknown,
@@ -86,6 +87,8 @@ export interface XPathData extends OperandContext {
 export interface VariableData {
 	token: BaseToken;
 	name: string;
+	// XPath 4.0: the record type from the declaration's 'as' attribute, for checking lookups such as $c?r
+	recordType?: RecordType;
 }
 
 enum NameValidationError {
@@ -430,6 +433,17 @@ export class XsltTokenDiagnostics {
 		let globalKeys: string[] = [];
 		// names declared with xsl:item-type
 		let globalItemTypeNames: string[] = [];
+		// XPath 4.0 record types: xsl:item-type declarations, and the 'as' of global variables and parameters
+		let itemTypeDeclarations = new Map<string, string>();
+		let globalVariableTypes = new Map<string, string>();
+		// the 'as' and 'select' attributes of the current start tag, as allTokens index ranges
+		let currentAttName = '';
+		let tagAsRange: [number, number] | null = null;
+		let tagSelectRange: [number, number] | null = null;
+		// the record type of the current xsl:function, and the 'select' of its last xsl:sequence (a direct child)
+		let functionResult: { record: RecordType | undefined, select: [number, number] | null } | null = null;
+		// lookups whose value is a record, e.g. $a?b for record(b as record(c)), so $a?b?c can be checked
+		let lookupRecords = new Map<BaseToken, RecordType>();
 		let globalAccumulatorNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
@@ -454,6 +468,11 @@ export class XsltTokenDiagnostics {
 			xsltSchemaQuery = new SchemaQuery(XSLTConfiguration.configuration.schemaData);
 		}
 
+		globalInstructionData.concat(importedInstructionData).forEach((instruction) => {
+			if (instruction.declaredType && (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) && !globalVariableTypes.has(instruction.name)) {
+				globalVariableTypes.set(instruction.name, instruction.declaredType);
+			}
+		});
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
 				case GlobalInstructionType.Variable:
@@ -502,6 +521,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case GlobalInstructionType.ItemType:
 					globalItemTypeNames.push(instruction.name);
+					if (instruction.declaredType) {
+						itemTypeDeclarations.set(instruction.name, instruction.declaredType);
+					}
 					break;
 				case GlobalInstructionType.Accumulator:
 					if (globalAccumulatorNames.indexOf(instruction.name) < 0) {
@@ -554,6 +576,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case GlobalInstructionType.ItemType:
 					globalItemTypeNames.push(instruction.name);
+					if (instruction.declaredType) {
+						itemTypeDeclarations.set(instruction.name, instruction.declaredType);
+					}
 					break;
 				case GlobalInstructionType.Accumulator:
 					globalAccumulatorNames.push(instruction.name);
@@ -695,6 +720,9 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.lSt:
 								tagAttributeNames = [];
 								withinTypeDeclarationAttr = false;
+								currentAttName = '';
+								tagAsRange = null;
+								tagSelectRange = null;
 								tagAttributeSymbols = [];
 								tagXmlnsNames = [];
 								tagIdentifierName = '';
@@ -710,6 +738,8 @@ export class XsltTokenDiagnostics {
 								isGroupingAttribute = false;
 								tagAttributeNames = [];
 								withinTypeDeclarationAttr = false;
+								// e.g. a text value template in the element's content is not part of the last attribute
+								currentAttName = '';
 								// start-tag ended, we're now within the new element scope:
 								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
@@ -794,6 +824,24 @@ export class XsltTokenDiagnostics {
 									}
 								}
 
+								if (XsltTokenDiagnostics.isXPath40(docType)) {
+									// XPath 4.0 record types: check a map constructor against the declared record type
+									const asText = tagAsRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, tagAsRange) : undefined;
+									const record = asText && ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function'].includes(tagElementName) ? RecordTypes.resolve(asText, itemTypeDeclarations) : undefined;
+									const parentName = elementStack.length > 0 ? elementStack[elementStack.length - 1].symbolName : '';
+									if (tagElementName === 'xsl:function') {
+										functionResult = { record, select: null };
+									} else if (functionResult && parentName === 'xsl:function' && tagElementName !== 'xsl:param') {
+										// the function result is the last instruction, if it's an xsl:sequence
+										functionResult.select = tagElementName === 'xsl:sequence' ? tagSelectRange : null;
+									}
+									if (record && tagSelectRange && tagElementName !== 'xsl:function') {
+										RecordTypes.checkMapConstructor(allTokens.slice(tagSelectRange[0], tagSelectRange[1] + 1), record, itemTypeDeclarations, problemTokens);
+									}
+									if (record && variableData) {
+										variableData.recordType = record;
+									}
+								}
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
 									// on a start tag
 									if (tagElementName === 'xsl:accumulator') {
@@ -875,6 +923,12 @@ export class XsltTokenDiagnostics {
 									let poppedData = elementStack.pop()!;
 									inheritedPrefixes = poppedData.namespacePrefixes;
 									if (tagElementName === 'xsl:function') insideGlobalFunction = false;
+									if (tagElementName === 'xsl:function' && functionResult) {
+										if (functionResult.record && functionResult.select) {
+											RecordTypes.checkMapConstructor(allTokens.slice(functionResult.select[0], functionResult.select[1] + 1), functionResult.record, itemTypeDeclarations, problemTokens);
+										}
+										functionResult = null;
+									}
 									if (tagElementName === 'xsl:iterate') {
 										currentXSLTIterateParams.pop();
 									} else if (tagElementName === 'xsl:function') {
@@ -950,6 +1004,7 @@ export class XsltTokenDiagnostics {
 						rootXmlnsName = null;
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						withinTypeDeclarationAttr = attNameText === 'as';
+						currentAttName = attNameText;
 						let problemReported = false;
 						if (prevToken) {
 							if (token.line === prevToken.line && token.startCharacter - (prevToken.startCharacter + prevToken.length) === 0) {
@@ -1269,6 +1324,39 @@ export class XsltTokenDiagnostics {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 				const stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+
+				if (currentAttName === 'as') {
+					tagAsRange = tagAsRange ? [tagAsRange[0], index] : [index, index];
+				} else if (currentAttName === 'select') {
+					tagSelectRange = tagSelectRange ? [tagSelectRange[0], index] : [index, index];
+				}
+				if (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?' && XsltTokenDiagnostics.isXPath40(docType)) {
+					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r
+					const operand = index > 1 ? allTokens[index - 2] : undefined;
+					let record: RecordType | undefined;
+					if (operand?.tokenType === TokenLevelState.variable) {
+						const variableName = operand.value.substring(1);
+						const isXPathVariable = inScopeXPathVariablesList.some((v) => v.name === variableName) || xpathStack.some((x) => x.variables.some((v) => v.name === variableName));
+						if (!isXPathVariable) {
+							const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
+							const globalType = globalVariableTypes.get(variableName);
+							record = localVariable ? localVariable.recordType : globalType ? RecordTypes.resolve(globalType, itemTypeDeclarations) : undefined;
+						}
+					} else if (operand) {
+						record = lookupRecords.get(operand);
+					}
+					if (record && /^[\w.-]+$/.test(token.value) && !/^\d+$/.test(token.value)) {
+						const field = record.fields.find((f) => f.name === token.value);
+						if (!field) {
+							problemTokens.push(RecordTypes.problemToken(token, ErrorType.RecordLookupUnknown, token.value, record.name));
+						} else {
+							const fieldRecord = RecordTypes.fieldRecord(field, itemTypeDeclarations);
+							if (fieldRecord) {
+								lookupRecords.set(token, fieldRecord);
+							}
+						}
+					}
+				}
 
 				if (prologUriToken && xpathTokenType !== TokenLevelState.comment) {
 					if (!(xpathCharType === CharLevelState.sep && token.value === ';')) {
@@ -2643,6 +2731,31 @@ export class XsltTokenDiagnostics {
 		return foundContextBracketsOrPredicate;
 	}
 
+	private static textForTokenRange(document: vscode.TextDocument, allTokens: BaseToken[], range: [number, number]) {
+		const first = allTokens[range[0]];
+		const last = allTokens[range[1]];
+		return document.getText(new vscode.Range(first.line, first.startCharacter, last.line, last.startCharacter + last.length));
+	}
+
+	// the xsl:variable or xsl:param in scope with the name, not including globals - these are resolved from the global instruction data
+	private static findLocalVariable(name: string, inScopeVariablesList: VariableData[], elementStack: ElementData[], globalVariableData: VariableData[]) {
+		const findIn = (list: VariableData[]) => {
+			for (let i = list.length - 1; i > -1; i--) {
+				if (list[i].name === name) {
+					return list[i];
+				}
+			}
+			return undefined;
+		};
+		let found = findIn(inScopeVariablesList);
+		for (let i = elementStack.length - 1; !found && i > -1; i--) {
+			if (elementStack[i].variables !== globalVariableData) {
+				found = findIn(elementStack[i].variables);
+			}
+		}
+		return found;
+	}
+
 	private static isAnonymousFunctionParams(item: XPathData | undefined): item is XPathData {
 		// within the parameter list of an inline function: function($a, $b) or fn($a, $b)
 		const ctx = item?.token.context;
@@ -3680,6 +3793,28 @@ export class XsltTokenDiagnostics {
 				case ErrorType.RequiredParamAfterOptional:
 					msg = `XSLT: A required function parameter cannot follow an optional parameter: '${tokenValue}'`;
 					break;
+				case ErrorType.RecordFieldMissing: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: Record field '${field}' is missing - it's required by the record type: ${recordName}`;
+					break;
+				}
+				case ErrorType.RecordFieldUnknown: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: '${field}' is not a field of the record type: ${recordName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.RecordFieldValueType: {
+					const [field, fieldType] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: The value for record field '${field}' must be of type: ${fieldType}`;
+					break;
+				}
+				case ErrorType.RecordLookupUnknown: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: Lookup of '${field}' - this is not a field of the record type: ${recordName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
 				case ErrorType.UndeclaredItemType:
 					msg = `XPath: The item type '${tokenValue}' is not declared - expected an xsl:item-type declaration with this name`;
 					break;
