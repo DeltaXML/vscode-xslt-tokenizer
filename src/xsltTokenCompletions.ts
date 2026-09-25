@@ -758,7 +758,12 @@ export class XsltTokenCompletions {
 					case TokenLevelState.nodeNameTest:
 						if (isOnRequiredToken && requiredChar > token.startCharacter) {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-							if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/', '//', '::'].indexOf(prevToken.value) !== -1)) {
+							const stepRecord = prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/' && XsltTokenCompletions.isXPath40(docType) ?
+								XsltTokenCompletions.lookupRecordType(document, allTokens, index - 1, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData) : undefined;
+							if (stepRecord) {
+								// XPath 4.0: a partly typed child step on a value with a record type, e.g. $c/r
+								resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(stepRecord, true);
+							} else if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/', '//', '::'].indexOf(prevToken.value) !== -1)) {
 								resultCompletions = XsltTokenCompletions.getTokenPathCompletions(docType, token, elementNames, attrNames, globalInstructionData, importedInstructionData);
 								let axes = XsltTokenCompletions.axisCompletionNames(docType);
 								let axisCompletions = XsltTokenCompletions.getTokenCommandCompletions(token, true, axes, vscode.CompletionItemKind.Function);
@@ -894,7 +899,11 @@ export class XsltTokenCompletions {
 										resultCompletions = XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList);
 										resultCompletions = resultCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack));
 									} else if (token.value === '/') {
-										resultCompletions = XsltTokenCompletions.getPathCompletions(docType, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
+										// XPath 4.0: a child step on a value with a record type, e.g. $c/ - a JNode for each field
+										const record = XsltTokenCompletions.isXPath40(docType) && requiredChar === token.startCharacter + 1 ?
+											XsltTokenCompletions.lookupRecordType(document, allTokens, index, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData) : undefined;
+										resultCompletions = record ? XsltTokenCompletions.getRecordFieldCompletions(record, true) :
+											XsltTokenCompletions.getPathCompletions(docType, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
 									} else if (token.value === '!') {
 										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType));
 										let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
@@ -1205,7 +1214,9 @@ export class XsltTokenCompletions {
 				declaredType = globals.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === name)?.declaredType;
 			}
 			return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
-		} else if (operand?.tokenType === TokenLevelState.mapNameLookup && allTokens[lookupIndex - 2]?.value === '?') {
+		} else if ((operand?.tokenType === TokenLevelState.mapNameLookup && allTokens[lookupIndex - 2]?.value === '?') ||
+			(operand?.tokenType === TokenLevelState.nodeNameTest && allTokens[lookupIndex - 2]?.value === '/')) {
+			// e.g. $p?address? or $p/address/ for record(address as record(...))
 			const record = XsltTokenCompletions.lookupRecordType(document, allTokens, lookupIndex - 2, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
 			const field = record?.fields.find((f) => f.name === operand.value);
 			return field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
@@ -1213,11 +1224,16 @@ export class XsltTokenCompletions {
 		return undefined;
 	}
 
-	private static getRecordFieldCompletions(record: RecordType): vscode.CompletionItem[] {
+	private static isXPath40(docType: DocumentTypes) {
+		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
+	}
+
+	private static getRecordFieldCompletions(record: RecordType, isChildStep = false): vscode.CompletionItem[] {
 		return record.fields.map((field, index) => {
-			// a field name that isn't an NCName is looked up with a string literal, e.g. $p?'first name'
+			// a field name that isn't an NCName is looked up with a string literal, e.g. $p?'first name', or in a child step with get(), e.g. $p/get('first name')
 			const isNCName = /^[A-Za-z_][\w.-]*$/.test(field.name);
-			const item = new vscode.CompletionItem(isNCName ? field.name : `'${field.name}'`, vscode.CompletionItemKind.Field);
+			const label = isNCName ? field.name : isChildStep ? `get('${field.name}')` : `'${field.name}'`;
+			const item = new vscode.CompletionItem(label, vscode.CompletionItemKind.Field);
 			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
 			item.documentation = `Field of the record type: ${record.name}`;
 			// keep the declaration order
