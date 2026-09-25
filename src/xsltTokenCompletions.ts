@@ -17,6 +17,7 @@ import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
+import { RecordType, RecordTypes } from './recordTypes';
 
 enum TagType {
 	XSLTstart,
@@ -739,6 +740,15 @@ export class XsltTokenCompletions {
 								break;
 						}
 						break;
+					case TokenLevelState.mapNameLookup:
+						if (isOnRequiredToken && requiredChar > token.startCharacter && prevToken?.value === '?') {
+							// XPath 4.0: the fields of a record, for a partly typed lookup, e.g. $c?r
+							const record = XsltTokenCompletions.lookupRecordType(document, allTokens, index - 1, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
+							if (record) {
+								resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(record);
+							}
+						}
+						break;
 					case TokenLevelState.nodeNameTest:
 						if (isOnRequiredToken && requiredChar > token.startCharacter) {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
@@ -883,6 +893,12 @@ export class XsltTokenCompletions {
 										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType));
 										let userFnCompletions = XsltTokenCompletions.getUserFnCompletions(position, globalInstructionData, importedInstructionData);
 										resultCompletions = fnCompletions.concat(userFnCompletions);
+									} else if (token.value === '?' && requiredChar === token.startCharacter + 1) {
+										// XPath 4.0: the fields of a record, for a lookup on a variable declared with a record type, e.g. $c?
+										const record = XsltTokenCompletions.lookupRecordType(document, allTokens, index, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
+										if (record) {
+											resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(record);
+										}
 									}
 								}
 								break;
@@ -1152,6 +1168,56 @@ export class XsltTokenCompletions {
 		let name = parts[0];
 
 		return { name, arity };
+	}
+
+	// the record type for the value before the '?' at lookupIndex: a variable declared with a record type, e.g. $c?,
+	// or a lookup of a field whose type is a record, e.g. $p?address?
+	private static lookupRecordType(document: vscode.TextDocument, allTokens: BaseToken[], lookupIndex: number, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[],
+		inScopeVariablesList: VariableData[], elementStack: ElementData[], globalVariableData: VariableData[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): RecordType | undefined {
+		const globals = globalInstructionData.concat(importedInstructionData);
+		const itemTypes = new Map<string, string>();
+		globals.filter((g) => g.type === GlobalInstructionType.ItemType && g.declaredType).forEach((g) => itemTypes.set(g.name, g.declaredType!));
+		const operand = lookupIndex > 0 ? allTokens[lookupIndex - 1] : undefined;
+		if (operand?.tokenType === TokenLevelState.variable) {
+			const name = operand.value.substring(1);
+			if (inScopeXPathVariablesList.some((v) => v.name === name) || xpathStack.some((x) => x.variables.some((v) => v.name === name))) {
+				// a variable declared in the XPath expression, e.g. by 'let', has no declared type
+				return undefined;
+			}
+			const findIn = (list: VariableData[]) => [...list].reverse().find((v) => v.name === name);
+			let localVariable = findIn(inScopeVariablesList);
+			for (let i = elementStack.length - 1; !localVariable && i > -1; i--) {
+				if (elementStack[i].variables !== globalVariableData) {
+					localVariable = findIn(elementStack[i].variables);
+				}
+			}
+			let declaredType: string | undefined;
+			if (localVariable) {
+				const token = localVariable.token;
+				declaredType = RecordTypes.attributeOfElementAt(document.getText(), document.offsetAt(new vscode.Position(token.line, token.startCharacter)), 'as');
+			} else {
+				declaredType = globals.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === name)?.declaredType;
+			}
+			return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
+		} else if (operand?.tokenType === TokenLevelState.mapNameLookup && allTokens[lookupIndex - 2]?.value === '?') {
+			const record = XsltTokenCompletions.lookupRecordType(document, allTokens, lookupIndex - 2, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
+			const field = record?.fields.find((f) => f.name === operand.value);
+			return field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+		}
+		return undefined;
+	}
+
+	private static getRecordFieldCompletions(record: RecordType): vscode.CompletionItem[] {
+		return record.fields.map((field, index) => {
+			// a field name that isn't an NCName is looked up with a string literal, e.g. $p?'first name'
+			const isNCName = /^[A-Za-z_][\w.-]*$/.test(field.name);
+			const item = new vscode.CompletionItem(isNCName ? field.name : `'${field.name}'`, vscode.CompletionItemKind.Field);
+			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
+			item.documentation = `Field of the record type: ${record.name}`;
+			// keep the declaration order
+			item.sortText = String(index).padStart(4, '0');
+			return item;
+		});
 	}
 
 	private static getVariableCompletions(pos: vscode.Position, globalVarName: string | null, elementStack: ElementData[], xpathStack: XPathData[], token: BaseToken, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[],

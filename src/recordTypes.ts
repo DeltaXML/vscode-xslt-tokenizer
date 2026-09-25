@@ -79,6 +79,30 @@ export class RecordTypes {
 		RecordTypes.checkMapTokens(realTokens, 0, realTokens.length - 1, record, itemTypes, problemTokens);
 	}
 
+	// the value of an attribute on the element whose start tag contains the offset, e.g. the 'as' of an xsl:variable
+	// from the position of its 'name' attribute value - attribute values may contain '>'
+	public static attributeOfElementAt(text: string, offset: number, attributeName: string): string | undefined {
+		const tagStart = text.lastIndexOf('<', offset);
+		if (tagStart < 0) {
+			return undefined;
+		}
+		const nameRgx = /<[\w.:-]+/y;
+		nameRgx.lastIndex = tagStart;
+		if (!nameRgx.exec(text)) {
+			return undefined;
+		}
+		const attributeRgx = /\s+([\w.:-]+)\s*=\s*("[^"]*"|'[^']*')/y;
+		attributeRgx.lastIndex = nameRgx.lastIndex;
+		let match: RegExpExecArray | null;
+		while ((match = attributeRgx.exec(text)) !== null) {
+			if (match[1] === attributeName) {
+				const value = match[2].substring(1, match[2].length - 1);
+				return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, '\'').replace(/&amp;/g, '&');
+			}
+		}
+		return undefined;
+	}
+
 	public static problemToken(token: BaseToken, error: ErrorType, ...parts: string[]): BaseToken {
 		return { ...token, error, value: parts.join(RecordTypes.valueSeparator) };
 	}

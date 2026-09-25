@@ -50,3 +50,19 @@ describe('RecordTypes.resolve()', () => {
         });
     });
 });
+
+describe('RecordTypes.attributeOfElementAt()', () => {
+    const text = `<xsl:variable select="$a > 1" name="v" as="cx:complex"/>\n<xsl:param name="p" as='record(a as xs:string)'/>\n<xsl:variable name="w"/>`;
+
+    it('should find an attribute after the offset, where an earlier value contains >', () => {
+        expect(RecordTypes.attributeOfElementAt(text, text.indexOf('"v"'), 'as')).to.equal('cx:complex');
+    });
+
+    it('should find an attribute in apostrophes', () => {
+        expect(RecordTypes.attributeOfElementAt(text, text.indexOf('"p"'), 'as')).to.equal('record(a as xs:string)');
+    });
+
+    it('should return undefined when the element has no such attribute', () => {
+        expect(RecordTypes.attributeOfElementAt(text, text.indexOf('"w"'), 'as')).to.be.undefined;
+    });
+});

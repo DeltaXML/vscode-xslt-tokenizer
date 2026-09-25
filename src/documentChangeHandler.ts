@@ -95,7 +95,12 @@ export class DocumentChangeHandler {
 				skipTrigger = true;
 			}
 		}
-		const triggerSuggest = DocumentChangeHandler.setTriggerSuggestP1(skipTrigger, activeChange, e);
+		let triggerSuggest = DocumentChangeHandler.setTriggerSuggestP1(skipTrigger, activeChange, e);
+		if (!triggerSuggest && !skipTrigger && activeChange.text === '?') {
+			// XPath 4.0 record fields for a lookup on a variable, e.g. $c? or $p?address? - not for an occurrence indicator such as xs:string?
+			const textBefore = e.document.lineAt(activeChange.range.start.line).text.substring(0, activeChange.range.start.character);
+			triggerSuggest = /\$[\w.:-]+(\?[\w.-]+)*$/.test(textBefore);
+		}
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<' || activeChange.text.endsWith('::')) {
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {
