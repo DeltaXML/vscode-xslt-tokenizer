@@ -158,7 +158,8 @@ export class Data {
         "following", "following-sibling", "parent", "preceding", "preceding-sibling", "self"];
     public static cAxes40 = Data.cAxes.concat(Data.axes40).sort();
 
-    public static nodeTypes = ["attribute",
+    // 'jnode' is an XPath 4.0 item type, e.g. jnode(), jnode(name)
+    public static nodeTypes = ["jnode", "attribute",
         "comment", "document-node", "element", "empty-sequence", "item", "namespace-node", "node",
         "processing-instruction",
         "schema-attribute", "schema-element", "text"];
@@ -996,6 +997,14 @@ export class XPathLexer {
             if (prevToken && newToken.charType === CharLevelState.dSep && newToken.value === ':=') {
                 XPathLexer.setLabelsForKeywordArgument(result, prevToken, newToken);
             }
+            if (prevToken?.value === 'get' && prevToken.tokenType === TokenLevelState.function && result.length > 2 &&
+                (newToken.charType === CharLevelState.lB || (newToken.charType === CharLevelState.dSep && newToken.value === '()'))) {
+                // XPath 4.0 JNode node test, e.g. $tree/get('a b') or $array/child::get(1), rather than a function call
+                const beforeGet = result[result.length - 3];
+                if (beforeGet.tokenType === TokenLevelState.operator && (beforeGet.value === '/' || beforeGet.value === '//' || beforeGet.value === '::')) {
+                    prevToken.tokenType = TokenLevelState.nodeType;
+                }
+            }
             if (this.prologState !== PrologState.Done && !isWhitespace && newToken.tokenType !== TokenLevelState.comment) {
                 this.prologState = XPathLexer.setLabelsForProlog(this.prologState, prevToken, newToken);
             }
@@ -1650,6 +1659,9 @@ export enum ErrorType {
     ItemTypeReservedNamespace,
     ItemTypeCircular,
     OperatorNotSupported,
+    NodeTestRequiresXPath40,
+    TypeNodeTestNotSupported,
+    RecordStepUnknown,
     BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,

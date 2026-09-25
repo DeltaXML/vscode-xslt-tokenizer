@@ -193,7 +193,7 @@ export class XsltTokenDiagnostics {
 	public static readonly typesWithArity1 = ['array', 'map'];
 	public static readonly typesInXPath4_specialArgs = ['record', 'enum', 'tuple'];
 	// item types added in XPath 4.0, and obsolete Saxon extension item types (dropped in Saxon 13)
-	public static readonly itemTypes40 = ['record', 'enum', 'fn'];
+	public static readonly itemTypes40 = ['record', 'enum', 'fn', 'jnode'];
 	public static readonly obsoleteItemTypes = ['union', 'type', 'tuple'];
 
 
@@ -1343,7 +1343,17 @@ export class XsltTokenDiagnostics {
 				} else if (currentAttName === 'select') {
 					tagSelectRange = tagSelectRange ? [tagSelectRange[0], index] : [index, index];
 				}
-				if (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?' && XsltTokenDiagnostics.isXPath40(docType)) {
+				const isStepPosition = prevToken?.tokenType === TokenLevelState.operator && (prevToken.value === '/' || prevToken.value === '//' || prevToken.value === '::');
+				if (isStepPosition && (xpathTokenType === TokenLevelState.function || xpathTokenType === TokenLevelState.nodeNameTest) && token.value.startsWith('~') && !token.error) {
+					// e.g. $tree//~record(a, b) or child::~xs:string - shown in the Saxon 13 JNodes documentation, but rejected by Saxon 13
+					token.error = ErrorType.TypeNodeTestNotSupported;
+					if (xpathTokenType === TokenLevelState.function) {
+						// a name test token's error is reported with the name test checks
+						problemTokens.push(token);
+					}
+				}
+				const isRecordStep = xpathTokenType === TokenLevelState.nodeNameTest && prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/';
+				if ((isRecordStep || (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?')) && XsltTokenDiagnostics.isXPath40(docType)) {
 					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r
 					const operand = index > 1 ? allTokens[index - 2] : undefined;
 					let record: RecordType | undefined;
@@ -1361,7 +1371,7 @@ export class XsltTokenDiagnostics {
 					if (record && /^[\w.-]+$/.test(token.value) && !/^\d+$/.test(token.value)) {
 						const field = record.fields.find((f) => f.name === token.value);
 						if (!field) {
-							problemTokens.push(RecordTypes.problemToken(token, ErrorType.RecordLookupUnknown, token.value, record.name));
+							problemTokens.push(RecordTypes.problemToken(token, isRecordStep ? ErrorType.RecordStepUnknown : ErrorType.RecordLookupUnknown, token.value, record.name));
 						} else {
 							const fieldRecord = RecordTypes.fieldRecord(field, itemTypeDeclarations);
 							if (fieldRecord) {
@@ -2402,7 +2412,10 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.nodeType:
-						if (token.value === 'fn' && XsltTokenDiagnostics.checkItemTypeVersion(token, docType)) {
+						if ((token.value === 'fn' || token.value === 'jnode') && XsltTokenDiagnostics.checkItemTypeVersion(token, docType)) {
+							problemTokens.push(token);
+						} else if (token.value === 'get' && !token.error && !XsltTokenDiagnostics.isXPath40(docType)) {
+							token.error = ErrorType.NodeTestRequiresXPath40;
 							problemTokens.push(token);
 						} else if (token.value === '*' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record') {
 							// Saxon 13 has dropped extensible record types, e.g. record(*) or record(a, *)
@@ -3329,7 +3342,10 @@ export class XsltTokenDiagnostics {
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
 		if (fNameParts.length === 1) {
-			if (tokenValue === 'concat') {
+			if (tokenValue.startsWith('~')) {
+				// reported as a type node test, e.g. ~record(a, b)
+				isValid = true;
+			} else if (tokenValue === 'concat') {
 				isValid = arity > 0;
 			} else if (useXPath40) {
 				isValid = FunctionData.xpath40.indexOf(fNameParts[0]) > -1;
@@ -3809,6 +3825,18 @@ export class XsltTokenDiagnostics {
 				case ErrorType.OperatorNotSupported:
 					msg = `XPath: The '${tokenValue}' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...`;
 					break;
+				case ErrorType.NodeTestRequiresXPath40:
+					msg = `XPath: The '${tokenValue}(...)' node test requires XPath 4.0`;
+					break;
+				case ErrorType.TypeNodeTestNotSupported:
+					msg = `XPath: Type node tests, e.g. ~record(...) or ~xs:string, are not supported by Saxon 13: '${tokenValue}'`;
+					break;
+				case ErrorType.RecordStepUnknown: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: Child step '${field}' - this is not a field of the record type: ${recordName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
 				case ErrorType.ItemTypeDuplicate:
 					msg = `XSLT: Duplicate xsl:item-type name '${tokenValue}' - not allowed for declarations with the same import precedence (XTSE4030). Saxon 13 uses the last declaration`;
 					severity = vscode.DiagnosticSeverity.Warning;
