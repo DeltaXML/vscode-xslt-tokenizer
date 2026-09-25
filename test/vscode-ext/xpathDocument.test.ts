@@ -29,6 +29,9 @@ const cases: [string, [string, string][]][] = [
 	// still reported:
 	["unknown-function(1)", [["XPath: Function: 'unknown-function' with 1 arguments not found", 'unknown-function']]],
 	["{ 'a': 1, }", [['XPath: Expression context - unexpected token here: } ', '}']]],
+	// not supported by Saxon 13: deep lookup and the draft ternary conditional
+	["map { 'a': 1 }??a", [["XPath: The '??' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...", '??']]],
+	["true() ?? 1 !! 2", [["XPath: The '??' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...", '??'], ["XPath: The '!!' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...", '!!']]],
 ];
 
 suite('XPath documents: XPath 4.0 diagnostics', () => {

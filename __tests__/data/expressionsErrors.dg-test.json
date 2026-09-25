@@ -71,8 +71,8 @@
       "xpath": "(1, 2, 3) !!= 2",
       "problems": [
         [
-          "XPath: Expression context - unexpected token here: = ",
-          "="
+          "XPath: The '!!' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...",
+          "!!"
         ]
       ]
     },

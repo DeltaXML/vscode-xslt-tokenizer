@@ -1649,6 +1649,7 @@ export enum ErrorType {
     ItemTypeDuplicate,
     ItemTypeReservedNamespace,
     ItemTypeCircular,
+    OperatorNotSupported,
     BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,

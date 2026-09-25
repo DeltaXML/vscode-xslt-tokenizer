@@ -2059,6 +2059,11 @@ export class XsltTokenDiagnostics {
 							token.error = ErrorType.MapConstructorRequiresXPath40;
 							problemTokens.push(token);
 						}
+						if (token.charType === CharLevelState.dSep && (tv === '??' || tv === '!!') && !token.error) {
+							// deep lookup '??' and the draft ternary conditional '?? !!' are not supported by Saxon 13
+							token.error = ErrorType.OperatorNotSupported;
+							problemTokens.push(token);
+						}
 						// end checks
 						let functionToken: BaseToken | null = null;
 						const isBrackets = xpathCharType === CharLevelState.lB;
@@ -3800,6 +3805,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XSLTKeyUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.OperatorNotSupported:
+					msg = `XPath: The '${tokenValue}' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...`;
 					break;
 				case ErrorType.ItemTypeDuplicate:
 					msg = `XSLT: Duplicate xsl:item-type name '${tokenValue}' - not allowed for declarations with the same import precedence (XTSE4030). Saxon 13 uses the last declaration`;
