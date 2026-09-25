@@ -27,7 +27,12 @@
     {
       "label": "choiceSel4",
       "xpath": "'a' instance of (ct:complex | xs:string)+",
-      "problems": []
+      "problems": [
+        [
+          "XPath: The item type 'ct:complex' is not declared - expected an xsl:item-type declaration with this name",
+          "ct:complex"
+        ]
+      ]
     },
     {
       "label": "choiceSel5",
@@ -67,7 +72,12 @@
     {
       "label": "namedSel1",
       "xpath": "map { 'r': 1.0, 'i': 2.0 } instance of ct:complex",
-      "problems": []
+      "problems": [
+        [
+          "XPath: The item type 'ct:complex' is not declared - expected an xsl:item-type declaration with this name",
+          "ct:complex"
+        ]
+      ]
     },
     {
       "label": "plainSel1",

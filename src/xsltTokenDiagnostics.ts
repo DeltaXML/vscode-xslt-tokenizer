@@ -2331,8 +2331,14 @@ export class XsltTokenDiagnostics {
 									}
 								} 
 							} else if (inheritedPrefixes.indexOf(tParts[0]) !== -1) {
-								// this namespace prefix is declared, assume this is an imported XML Schema type
-								isValidType = true;
+								// the namespace prefix is declared: in XSLT 4.0 the type must be declared with xsl:item-type,
+								// except for the type annotation in element(*, my:type) - schema-aware processing is not supported
+								const isTypeAnnotation = ['element', 'attribute', 'schema-element', 'schema-attribute'].includes(XsltTokenDiagnostics.enclosingTypeName(xpathStack) ?? '');
+								isValidType = docType !== DocumentTypes.XSLT40 || isTypeAnnotation || globalItemTypeNames.includes(tValue);
+								if (!isValidType) {
+									token.error = ErrorType.UndeclaredItemType;
+									problemTokens.push(token);
+								}
 							}
 						}
 						if (!isValidType && !token.error) {
@@ -3414,6 +3420,9 @@ export class XsltTokenDiagnostics {
 					msg = tokenValue === 'union' ? `XPath: 'union(...)' is not supported - use a choice item type instead, e.g. (xs:date | xs:time)` :
 						tokenValue === 'type' ? `XPath: 'type(...)' is not supported - use the named item type directly, e.g. my:type instead of type(my:type)` :
 						`XPath: '${tokenValue}(...)' is not supported - use 'record(...)' instead`;
+					break;
+				case ErrorType.UndeclaredItemType:
+					msg = `XPath: The item type '${tokenValue}' is not declared - expected an xsl:item-type declaration with this name`;
 					break;
 				case ErrorType.ExtensibleRecordType:
 					msg = `XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead`;

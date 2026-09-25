@@ -32,7 +32,12 @@
     {
       "label": "choice5",
       "xpath": "(ct:complex | xs:string)?",
-      "problems": []
+      "problems": [
+        [
+          "XPath: The item type 'ct:complex' is not declared - expected an xsl:item-type declaration with this name",
+          "ct:complex"
+        ]
+      ]
     },
     {
       "label": "choice6",
@@ -97,12 +102,22 @@
     {
       "label": "named1",
       "xpath": "ct:complex",
-      "problems": []
+      "problems": [
+        [
+          "XPath: The item type 'ct:complex' is not declared - expected an xsl:item-type declaration with this name",
+          "ct:complex"
+        ]
+      ]
     },
     {
       "label": "named2",
       "xpath": "ct:complex*",
-      "problems": []
+      "problems": [
+        [
+          "XPath: The item type 'ct:complex' is not declared - expected an xsl:item-type declaration with this name",
+          "ct:complex"
+        ]
+      ]
     },
     {
       "label": "fnType1",
@@ -136,6 +151,10 @@
         [
           "XPath: 'type(...)' is not supported - use the named item type directly, e.g. my:type instead of type(my:type)",
           "type"
+        ],
+        [
+          "XPath: The item type 'ct:complex' is not declared - expected an xsl:item-type declaration with this name",
+          "ct:complex"
         ]
       ]
     },

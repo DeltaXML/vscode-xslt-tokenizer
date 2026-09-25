@@ -1528,6 +1528,7 @@ export enum ErrorType {
     ChoiceTypeRequiresXPath40,
     ObsoleteItemType,
     ExtensibleRecordType,
+    UndeclaredItemType,
     BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,

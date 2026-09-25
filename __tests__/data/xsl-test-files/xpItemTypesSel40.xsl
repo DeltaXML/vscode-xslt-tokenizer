@@ -5,6 +5,7 @@
                 xmlns:ct="com.example.test"
                 version="4.0">
 
+  <!-- ct:complex is not declared with xsl:item-type here, so it's reported: see test/vscode-ext/namedItemTypes.test.ts for declared named item types -->
   <?test-attribute select?>
   <xsl:variable name="choiceSel1" select="'2020-01-01' instance of (xs:date | xs:string)"/>
   <xsl:variable name="choiceSel2" select="'2020-01-01' cast as (xs:date | xs:time)"/>

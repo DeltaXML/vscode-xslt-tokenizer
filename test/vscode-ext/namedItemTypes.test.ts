@@ -11,10 +11,12 @@ import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 
+const itemTypeDeclarations = `<xsl:item-type name="complex" as="record(r as xs:double, i as xs:double)"/>
+	<xsl:item-type name="cx:complex" as="record(r as xs:double, i as xs:double)"/>`;
+
 function stylesheet(version: string, body: string) {
 	return `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cx="com.example.complex" version="${version}">
-	<xsl:item-type name="complex" as="record(r as xs:double, i as xs:double)"/>
-	<xsl:item-type name="cx:complex" as="record(r as xs:double, i as xs:double)"/>
+	${version === '4.0' ? itemTypeDeclarations : ''}
 	${body}
 </xsl:stylesheet>`;
 }
@@ -26,6 +28,14 @@ const cases: [string, string, [string, string][]][] = [
 	['4.0', `<xsl:variable name="a" as="cx:complex" select="map { 'r': 1.0, 'i': 2.0 }"/>`, []],
 	['4.0', `<xsl:variable name="a" select="map { 'r': 1.0, 'i': 2.0 } instance of complex"/>`, []],
 	['4.0', `<xsl:variable name="a" as="undeclared" select="()"/>`, [["XPath: Invalid type: 'undeclared'", 'undeclared']]],
+	// prefixed names must also be declared with xsl:item-type in XSLT 4.0:
+	['4.0', `<xsl:variable name="a" as="cx:complx" select="()"/>`, [["XPath: The item type 'cx:complx' is not declared - expected an xsl:item-type declaration with this name", 'cx:complx']]],
+	['4.0', `<xsl:variable name="a" as="(cx:complex | cx:point)*" select="()"/>`, [["XPath: The item type 'cx:point' is not declared - expected an xsl:item-type declaration with this name", 'cx:point']]],
+	['4.0', `<xsl:variable name="a" select="map { 'r': 1.0 } instance of cx:point"/>`, [["XPath: The item type 'cx:point' is not declared - expected an xsl:item-type declaration with this name", 'cx:point']]],
+	['4.0', `<xsl:variable name="a" as="element(*, cx:schemaType)" select="()"/>`, []],
+	['4.0', `<xsl:variable name="a" as="xs:string" select="()"/>`, []],
+	// before XSLT 4.0 a prefixed type can only be an imported schema type, so it's not checked:
+	['3.0', `<xsl:variable name="a" as="cx:schemaType" select="()"/>`, []],
 ];
 
 suite('Named item types: xsl:item-type', () => {
