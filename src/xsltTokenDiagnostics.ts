@@ -1936,7 +1936,15 @@ export class XsltTokenDiagnostics {
 										const isIfExpr = ctx.tokenType === TokenLevelState.complexExpression && ctx.value === 'if';
 										if (isIfExpr) {
 											const tokenAfterIf = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index);
-											if (tokenAfterIf && tokenAfterIf.value !== 'then') {
+											const isBracedAction = !!tokenAfterIf && (tokenAfterIf.charType === CharLevelState.lBr || (tokenAfterIf.charType === CharLevelState.dSep && tokenAfterIf.value === '{}'));
+											if (isBracedAction) {
+												// XPath 4.0 braced action: if ($condition) { ... } has no 'then' or 'else'
+												ifThenStack.pop();
+												if (!XsltTokenDiagnostics.isXPath40(docType)) {
+													tokenAfterIf['error'] = ErrorType.BracedIfRequiresXPath40;
+													problemTokens.push(tokenAfterIf);
+												}
+											} else if (tokenAfterIf && tokenAfterIf.value !== 'then') {
 												tokenAfterIf['error'] = ErrorType.XPathIfAwaitingThen;
 												problemTokens.push(tokenAfterIf);
 											}
@@ -3309,6 +3317,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.MapConstructorRequiresXPath40:
 					msg = `XPath: A map constructor without the 'map' keyword requires XPath 4.0`;
+					break;
+				case ErrorType.BracedIfRequiresXPath40:
+					msg = `XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0`;
 					break;
 				case ErrorType.XPathEmpty:
 					msg = 'XSLT: Expected XPath expression';

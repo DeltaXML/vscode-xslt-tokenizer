@@ -1414,6 +1414,7 @@ export enum ErrorType {
     DTD,
     FunctionAfterArrowOp,
     MapConstructorRequiresXPath40,
+    BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,
     MissingContextItemForLast,

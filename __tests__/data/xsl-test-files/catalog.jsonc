@@ -17,7 +17,9 @@
             "xpArrowTargets",
             "xpMapConstructor40",
             "xpMapConstructor31",
-            "xpSimpleMap"
+            "xpSimpleMap",
+            "xpBracedIf40",
+            "xpBracedIf31"
         ]
     },
     // 2nd group is used for Linter tests:
@@ -36,7 +38,9 @@
             "xpArrowTargets.dg",
             "xpMapConstructor40.dg",
             "xpMapConstructor31.dg",
-            "xpSimpleMap.dg"
+            "xpSimpleMap.dg",
+            "xpBracedIf40.dg",
+            "xpBracedIf31.dg"
         ]
     },
     // to run Linter test in one-off generator mode

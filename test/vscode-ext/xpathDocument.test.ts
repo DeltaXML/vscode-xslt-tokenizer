@@ -21,6 +21,8 @@ const cases: [string, [string, string][]][] = [
 	["{ 'a': 1 } => map:keys()", []],
 	["array:build(1 to 3)", []],
 	["math:pi()", []],
+	// XPath 4.0 braced if expression:
+	["if (true()) { 1 }", []],
 	// XPath 4.0 operators:
 	["(1, 2) -> sum(.)", []],
 	["(-1, -2) =!> abs()", []],

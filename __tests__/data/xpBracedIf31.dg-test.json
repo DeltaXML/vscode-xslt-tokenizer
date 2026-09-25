@@ -1,0 +1,183 @@
+{
+  "suite": "xpBracedIf31",
+  "source": "xpBracedIf31.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "bracedIf1",
+      "xpath": "if (true()) { 1 }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf2",
+      "xpath": "if (true()) {}",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{}"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf3",
+      "xpath": "if (true()) { 1, 2 }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf4",
+      "xpath": "(if (true()) { 1 }, 2)",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf5",
+      "xpath": "if (true()) { if (false()) { 1 } }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ],
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf6",
+      "xpath": "if (true()) { if (false()) then 1 else 2 }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf7",
+      "xpath": "if (true()) then if (false()) { 1 } else 2",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf8",
+      "xpath": "let $a := 1 return if ($a eq 1) { 'one' }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf9",
+      "xpath": "for $a in (1, 2) return if ($a gt 1) { $a }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf10",
+      "xpath": "if (true()) { map { 'a': 1 } }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf11",
+      "xpath": "if (true()) { (: comment :) 1 }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIf12",
+      "xpath": "if (true()) (: comment :) { 1 }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "unbracedIf1",
+      "xpath": "if (true()) then 1 else 2",
+      "problems": []
+    },
+    {
+      "label": "bracedIfError1",
+      "xpath": "if (true()) { 1 } else { 2 }",
+      "problems": [
+        [
+          "XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0",
+          "{"
+        ],
+        [
+          "'else' has no matching 'then'",
+          "else"
+        ],
+        [
+          "XPath: A map constructor without the 'map' keyword requires XPath 4.0",
+          "{"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIfError2",
+      "xpath": "if (true()) 1",
+      "problems": [
+        [
+          "XPath: 'then' expected after 'if ($condition)' but found: '1'",
+          "1"
+        ],
+        [
+          "'if' has no matching 'then'",
+          "if"
+        ]
+      ]
+    },
+    {
+      "label": "bracedIfError3",
+      "xpath": "if (true()) then 1",
+      "problems": [
+        [
+          "'then' has no matching 'else'",
+          "then"
+        ]
+      ]
+    }
+  ]
+}
