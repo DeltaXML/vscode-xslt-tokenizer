@@ -106,22 +106,42 @@
     {
       "label": "XP4test1",
       "xpath": "record(ssn as xs:string, emp as element(employee))",
-      "problems": []
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
     },
     {
       "label": "XP4test2",
       "xpath": "union(xs:dateTime, xs:date, xs:time, xs:string)",
-      "problems": []
+      "problems": [
+        [
+          "XPath: 'union(...)' is not supported - use a choice item type instead, e.g. (xs:date | xs:time)",
+          "union"
+        ]
+      ]
     },
     {
       "label": "XP4test3",
       "xpath": "enum('NFC', 'NFD', 'NFKC', 'NFKD')",
-      "problems": []
+      "problems": [
+        [
+          "XPath: The 'enum(...)' item type requires XPath 4.0",
+          "enum"
+        ]
+      ]
     },
     {
       "label": "XP4test4",
       "xpath": "type(ct:complex)",
-      "problems": []
+      "problems": [
+        [
+          "XPath: 'type(...)' is not supported - use the named item type directly, e.g. my:type instead of type(my:type)",
+          "type"
+        ]
+      ]
     },
     {
       "label": "test1-error",

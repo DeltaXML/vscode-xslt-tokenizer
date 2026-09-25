@@ -182,7 +182,10 @@ export class XsltTokenDiagnostics {
 	public static readonly typesWithMaxArity2 = ['map', 'attribute', 'element'];
 	public static readonly typesWithMinArity0 = ['element', 'attribute'];
 	public static readonly typesWithArity1 = ['array', 'map'];
-	public static readonly typesInXPath4_specialArgs = ['record', 'enum'];
+	public static readonly typesInXPath4_specialArgs = ['record', 'enum', 'tuple'];
+	// item types added in XPath 4.0, and obsolete Saxon extension item types (dropped in Saxon 13)
+	public static readonly itemTypes40 = ['record', 'enum', 'fn'];
+	public static readonly obsoleteItemTypes = ['union', 'type', 'tuple'];
 
 
 	public static readonly xslFunction = 'xsl:function';
@@ -416,6 +419,8 @@ export class XsltTokenDiagnostics {
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default'];
 		let globalKeys: string[] = [];
+		// names declared with xsl:item-type
+		let globalItemTypeNames: string[] = [];
 		let globalAccumulatorNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
@@ -481,6 +486,9 @@ export class XsltTokenDiagnostics {
 				case GlobalInstructionType.Key:
 					globalKeys.push(instruction.name);
 					break;
+				case GlobalInstructionType.ItemType:
+					globalItemTypeNames.push(instruction.name);
+					break;
 				case GlobalInstructionType.Accumulator:
 					if (globalAccumulatorNames.indexOf(instruction.name) < 0) {
 						globalAccumulatorNames.push(instruction.name);
@@ -527,6 +535,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case GlobalInstructionType.Key:
 					globalKeys.push(instruction.name);
+					break;
+				case GlobalInstructionType.ItemType:
+					globalItemTypeNames.push(instruction.name);
 					break;
 				case GlobalInstructionType.Accumulator:
 					globalAccumulatorNames.push(instruction.name);
@@ -1244,6 +1255,10 @@ export class XsltTokenDiagnostics {
 					}
 				}
 				let isTypeError = false;
+				if (token.choiceSeparator && !XsltTokenDiagnostics.isXPath40(docType)) {
+					token.error = ErrorType.ChoiceTypeRequiresXPath40;
+					problemTokens.push(token);
+				}
 				if (withinTypeDeclarationAttr) {
 					const tType = token.tokenType;
 					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType)) {
@@ -1253,7 +1268,11 @@ export class XsltTokenDiagnostics {
 						} else if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
 							const lastStackEntry = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
 							const typeName = !lastStackEntry ? undefined : lastStackEntry.function ? lastStackEntry.function.value : undefined;
- 							const isValidXPath4SpecialArg = (typeName === 'enum' && tType === TokenLevelState.string) || (typeName === 'record' && tType === TokenLevelState.nodeNameTest);
+							const isRecord = typeName === 'record' || typeName === 'tuple';
+							const isValidXPath4SpecialArg = (typeName === 'enum' && tType === TokenLevelState.string) ||
+								(isRecord && (tType === TokenLevelState.nodeNameTest || tType === TokenLevelState.string)) ||
+								(isRecord && XsltTokenDiagnostics.isOptionalFieldMarker(token, prevToken)) ||
+								(token.value === '()' && prevToken?.value === 'record') || !!token.choiceSeparator;
 							if (!isValidXPath4SpecialArg) {
 								token['error'] = ErrorType.XPathUnexpected;
 								problemTokens.push(token);
@@ -1681,6 +1700,8 @@ export class XsltTokenDiagnostics {
 								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens, TokenLevelState.function);
 							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType !== TokenLevelState.string) {
 								// either a number of an operator so show no error
+							} else if (tv === '?' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record' && XsltTokenDiagnostics.isOptionalFieldMarker(token, prevToken)) {
+								// optional record field, e.g. record(a? as xs:string)
 							} else if (tv === '?') {
 								if (isXMLToken || prevToken.value === '.' || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment || prevToken.tokenType === TokenLevelState.mapNameLookup) {
 									// don't check
@@ -1786,7 +1807,9 @@ export class XsltTokenDiagnostics {
 												if ((pv === '&gt;' && (tv === '&gt;' || tv === '=')) || (pv === '&lt;' && (tv === '&lt;' || tv === '&gt;' || tv === '='))) {
 													// allow << <> >> <= >=
 												} else if (tv === 'as') {
-													isXPathError = pv !== 'castable' && pv !== 'cast' && pv !== 'treat';
+													// also permitted after an optional record field, e.g. record(a? as xs:string)
+													isXPathError = pv !== 'castable' && pv !== 'cast' && pv !== 'treat' &&
+														!(pv === '?' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record');
 												} else if (tv === 'of') {
 													isXPathError = pv !== 'instance';
 												} else if (!(
@@ -2088,7 +2111,7 @@ export class XsltTokenDiagnostics {
 								break;
 							case CharLevelState.dSep:
 								const isEmptyBracketsToken = token.value === '()';
-								if (withinTypeDeclarationAttr && isEmptyBracketsToken && (prevToken?.value === 'function' || prevToken?.tokenType === TokenLevelState.simpleType)) {
+								if (withinTypeDeclarationAttr && isEmptyBracketsToken && (prevToken?.value === 'function' || prevToken?.tokenType === TokenLevelState.simpleType) && prevToken?.value !== 'record') {
 									prevToken['error'] = ErrorType.XPathTypeEmptyArity;
 									problemTokens.push(prevToken);
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
@@ -2168,7 +2191,25 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.nodeType:
-						if (token.value === ':*' && prevToken && !prevToken.error) {
+						if (token.value === 'fn' && XsltTokenDiagnostics.checkItemTypeVersion(token, docType)) {
+							problemTokens.push(token);
+						} else if (token.value === '*' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record') {
+							// Saxon 13 has dropped extensible record types, e.g. record(*) or record(a, *)
+							token.error = ErrorType.ExtensibleRecordType;
+							problemTokens.push(token);
+						}
+						const isChoiceOccurrence = prevToken?.charType === CharLevelState.rB && token.charType === CharLevelState.lName &&
+							(token.value === '?' || token.value === '*' || token.value === '+');
+						if (token.error) {
+							// already reported
+						} else if (isChoiceOccurrence && !withinTypeDeclarationAttr) {
+							// e.g. castable as (xs:date | xs:time)? - only '?' is permitted for 'cast as' and 'castable as'
+							const castOperator = XsltTokenDiagnostics.typeOperatorBeforeParen(allTokens, index - 1);
+							if (token.value !== '?' && (castOperator === 'cast' || castOperator === 'castable')) {
+								token.error = ErrorType.XPathTypeName;
+								problemTokens.push(token);
+							}
+						} else if (token.value === ':*' && prevToken && !prevToken.error) {
 							let pfx = prevToken.tokenType === TokenLevelState.attributeNameTest ? prevToken.value.substring(1) : prevToken.value;
 							if (inheritedPrefixes.indexOf(pfx) === -1 && pfx !== 'xml') {
 								prevToken['error'] = ErrorType.XPathPrefix;
@@ -2268,8 +2309,15 @@ export class XsltTokenDiagnostics {
 							if (nextToken && (nextToken.charType === CharLevelState.lB || (nextToken.charType === CharLevelState.dSep && nextToken.value === '()'))) {
 								isValidType = Data.nodeTypes.indexOf(tParts[0]) > -1;
 								if (!isValidType) {
-									isValidType = Data.nonFunctionTypes.indexOf(tParts[0]) > -1;
+									isValidType = Data.nonFunctionTypes.indexOf(tParts[0]) > -1 || tParts[0] === 'fn';
 								}
+								if (isValidType && XsltTokenDiagnostics.checkItemTypeVersion(token, docType)) {
+									problemTokens.push(token);
+									isTypeError = true;
+								}
+							} else {
+								// XPath 4.0 named item type, declared with xsl:item-type
+								isValidType = XsltTokenDiagnostics.isXPath40(docType) && globalItemTypeNames.includes(tValue);
 							}
 						} else if (tParts.length === 2) {
 							let nsType = xsltPrefixesToURIs.get(tParts[0]);
@@ -2287,7 +2335,7 @@ export class XsltTokenDiagnostics {
 								isValidType = true;
 							}
 						}
-						if (!isValidType) {
+						if (!isValidType && !token.error) {
 							token['error'] = ErrorType.XPathTypeName;
 							problemTokens.push(token);
 						}
@@ -2482,6 +2530,44 @@ export class XsltTokenDiagnostics {
 			foundContextBracketsOrPredicate = hasOperandContext(rootOperandContext) || !!xpathStack.find((item) => item.hasContextItem === true || hasOperandContext(item));
 		}
 		return foundContextBracketsOrPredicate;
+	}
+
+	// the item type whose parentheses enclose the current token, e.g. 'record' for record(a as xs:string)
+	private static enclosingTypeName(xpathStack: XPathData[]) {
+		const lastStackEntry = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+		if (!lastStackEntry || lastStackEntry.token.charType !== CharLevelState.lB) {
+			return undefined;
+		}
+		return lastStackEntry.function ? lastStackEntry.function.value : lastStackEntry.token.context?.value;
+	}
+
+	private static isOptionalFieldMarker(token: BaseToken, prevToken: BaseToken | null) {
+		// e.g. record(a? as xs:string, 'b c'? as xs:integer)
+		return token.value === '?' && !!prevToken && (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.string);
+	}
+
+	// sets an error on an XPath 4.0 item type used with XPath 3.1, or an obsolete Saxon item type, returning true if set
+	private static checkItemTypeVersion(token: BaseToken, docType: DocumentTypes) {
+		if (XsltTokenDiagnostics.obsoleteItemTypes.includes(token.value)) {
+			token.error = ErrorType.ObsoleteItemType;
+		} else if (XsltTokenDiagnostics.itemTypes40.includes(token.value) && !XsltTokenDiagnostics.isXPath40(docType)) {
+			token.error = ErrorType.ItemTypeRequiresXPath40;
+		}
+		return !!token.error;
+	}
+
+	// for the ')' at closeIndex, the operator before its '(', e.g. 'castable' for castable as (xs:date | xs:time)
+	private static typeOperatorBeforeParen(allTokens: BaseToken[], closeIndex: number) {
+		let depth = 0;
+		for (let i = closeIndex; i > -1; i--) {
+			const t = allTokens[i];
+			if (t.charType === CharLevelState.rB) {
+				depth++;
+			} else if (t.charType === CharLevelState.lB && --depth === 0) {
+				return i > 1 && allTokens[i - 1].value === 'as' ? allTokens[i - 2].value : undefined;
+			}
+		}
+		return undefined;
 	}
 
 	// XSLT 4.0 stylesheets and XPath documents (e.g. .xpath files) use XPath 4.0
@@ -3317,6 +3403,20 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.FunctionAfterArrowOp:
 					msg = `XPath: Expected function after arrow operator`;
+					break;
+				case ErrorType.ItemTypeRequiresXPath40:
+					msg = `XPath: The '${tokenValue}(...)' item type requires XPath 4.0`;
+					break;
+				case ErrorType.ChoiceTypeRequiresXPath40:
+					msg = `XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0`;
+					break;
+				case ErrorType.ObsoleteItemType:
+					msg = tokenValue === 'union' ? `XPath: 'union(...)' is not supported - use a choice item type instead, e.g. (xs:date | xs:time)` :
+						tokenValue === 'type' ? `XPath: 'type(...)' is not supported - use the named item type directly, e.g. my:type instead of type(my:type)` :
+						`XPath: '${tokenValue}(...)' is not supported - use 'record(...)' instead`;
+					break;
+				case ErrorType.ExtensibleRecordType:
+					msg = `XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead`;
 					break;
 				case ErrorType.AxisRequiresXPath40:
 					msg = `XPath: The axis '${tokenValue}' requires XPath 4.0`;

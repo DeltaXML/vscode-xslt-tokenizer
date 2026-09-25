@@ -167,8 +167,9 @@ export class Data {
     public static secondParts = ["as", "of"];
 
     public static nonFunctionConditional = ["if", "then", "else"];
-    public static nonFunctionTypes = ["atomic", "type", "map", "array", "function", "enum", "union", "record"];
-    public static nonFunctionTypesBrackets = Data.nonFunctionTypes.map(t => t + '(*)');
+    // 'type', 'union' and 'tuple' are obsolete Saxon extensions (dropped in Saxon 13) - recognised so they can be reported
+    public static nonFunctionTypes = ["atomic", "type", "map", "array", "function", "enum", "union", "record", "tuple"];
+    public static nonFunctionTypesBrackets = ["map", "array", "function"].map(t => t + '(*)');
 
     public static setAsOperatorIfKeyword(token: Token) {
         if (token.value === 'return' || token.value === 'satisfies' || token.value === 'in' ||
@@ -964,6 +965,29 @@ export class XPathLexer {
             }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
             this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration);
+            if (prevToken && newToken.charType === CharLevelState.sep && newToken.value === '|' && XPathLexer.isChoiceSeparator(result, prevToken, poppedContext, isTypeDeclaration)) {
+                // XPath 4.0 choice item type, e.g. (xs:date | xs:time) - the item type before '|' may have been labelled as a name test
+                newToken.choiceSeparator = true;
+                if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
+                    prevToken.tokenType = TokenLevelState.simpleType;
+                }
+            } else if (prevToken?.choiceSeparator && newToken.tokenType === TokenLevelState.nodeNameTest) {
+                newToken.tokenType = TokenLevelState.simpleType;
+            } else if (newToken.charType === CharLevelState.lName && prevToken) {
+                XPathLexer.setLabelWithinTypeParen(result, result.length - 1, prevToken);
+            }
+            // the label for a name token is only final once the following token is known
+            const prevIndex = result.length - 2;
+            if (prevIndex > 0 && result[prevIndex] === prevToken && prevToken.charType === CharLevelState.lName && !prevToken.choiceSeparator) {
+                const prevTokenType = prevToken.tokenType;
+                XPathLexer.setLabelWithinTypeParen(result, prevIndex, result[prevIndex - 1]);
+                if (prevTokenType !== prevToken.tokenType && prevToken.tokenType === TokenLevelState.simpleType && newToken.charType === CharLevelState.sep &&
+                    (newToken.value === '?' || newToken.value === '*' || newToken.value === '+')) {
+                    // occurrence indicator, e.g. xs:numeric?
+                    newToken.charType = CharLevelState.lName;
+                    newToken.tokenType = TokenLevelState.simpleType;
+                }
+            }
             if (newToken.tokenType === TokenLevelState.nodeNameTest && 
                 (actualLastToken?.charType === CharLevelState.lB || actualLastToken?.value === ',')) {
                 const isValidType = newToken.value.length > 3 && newTokenValue.startsWith('xs:') && FunctionData.schema.indexOf(newToken.value.substring(3) + '#1') > -1;
@@ -991,6 +1015,82 @@ export class XPathLexer {
             if (this.debug) {
                 Debug.printDebugOutput(cachedRealToken, newToken, newToken.line, newToken.startCharacter);
             }
+        }
+    }
+
+    private static isChoiceSeparator(result: Token[], prevToken: Token, poppedContext: Token | undefined | null, isTypeDeclaration: boolean) {
+        // prevToken is the token before '|', result ends with the '|' token
+        if (prevToken.choiceSeparator) {
+            return false;
+        }
+        if (prevToken.tokenType === TokenLevelState.simpleType || (prevToken.tokenType === TokenLevelState.nodeType && prevToken.charType !== CharLevelState.dot)) {
+            // e.g. xs:date | or node() | or xs:integer* |
+            return isTypeDeclaration || XPathLexer.isInTypeParen(result);
+        }
+        if (prevToken.charType === CharLevelState.rB) {
+            // e.g. map(*) | or enum('a') |
+            return !!poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType) &&
+                (isTypeDeclaration || XPathLexer.isInTypeParen(result));
+        }
+        if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
+            // e.g. a prefixed named item type straight after the '(': (ct:complex | xs:string)
+            const beforeName = result.length > 2 ? result[result.length - 3] : undefined;
+            return !!beforeName && beforeName.charType === CharLevelState.lB && (isTypeDeclaration || XPathLexer.isTypeParen(beforeName));
+        }
+        return false;
+    }
+
+    private static isTypeParen(token: Token) {
+        // the '(' of a choice item type that follows 'instance of', 'treat as', 'cast as', 'castable as' or a parameter's 'as'
+        const ctx = token.context;
+        return !!ctx && ctx.tokenType === TokenLevelState.operator && (ctx.value === 'as' || ctx.value === 'of');
+    }
+
+    private static isInTypeParen(result: Token[]) {
+        // the unclosed '(' before the '|' at the end of result
+        const index = XPathLexer.enclosingParenIndex(result);
+        return index > -1 && (XPathLexer.isTypeParen(result[index]) || !!result[index - 1]?.choiceSeparator);
+    }
+
+    private static enclosingParenIndex(result: Token[], tokenIndex = result.length - 1) {
+        // index of the unclosed '(' enclosing the token at tokenIndex
+        let depth = 0;
+        for (let i = tokenIndex - 1; i > -1; i--) {
+            const t = result[i];
+            if (t.charType === CharLevelState.rB) {
+                depth++;
+            } else if (t.charType === CharLevelState.lB) {
+                if (depth === 0) {
+                    return i;
+                }
+                depth--;
+            }
+        }
+        return -1;
+    }
+
+    private static setLabelWithinTypeParen(result: Token[], tokenIndex: number, prevToken: Token) {
+        // names within the parentheses of a record type, e.g. record(a? as xs:string), or of a map, array or function type
+        const newToken = result[tokenIndex];
+        const actualLastToken = tokenIndex > 0 ? result[tokenIndex - 1] : null;
+        const index = XPathLexer.enclosingParenIndex(result, tokenIndex);
+        const typeToken = index > -1 ? result[index].context : undefined;
+        if (!typeToken || !(typeToken.tokenType === TokenLevelState.simpleType || typeToken.tokenType === TokenLevelState.nodeType)) {
+            return;
+        }
+        const isFirstInParam = actualLastToken?.charType === CharLevelState.lB || actualLastToken?.value === ',';
+        if (typeToken.value === 'record') {
+            if (isFirstInParam && newToken.value !== '*') {
+                // field name
+                newToken.tokenType = TokenLevelState.nodeNameTest;
+            } else if (newToken.value === 'as' && prevToken.value === '?' && prevToken.tokenType === TokenLevelState.operator) {
+                // after an optional field name: a? as xs:string
+                newToken.tokenType = TokenLevelState.operator;
+            }
+        } else if (isFirstInParam && newToken.tokenType === TokenLevelState.nodeNameTest &&
+            (typeToken.value === 'map' || typeToken.value === 'array' || typeToken.value === 'function' || typeToken.value === 'fn')) {
+            // e.g. instance of function(xs:numeric?) as xs:numeric?
+            newToken.tokenType = TokenLevelState.simpleType;
         }
     }
 
@@ -1028,6 +1128,9 @@ export class XPathLexer {
                 prevToken.tokenType = TokenLevelState.complexExpression;
             } else if (prevToken.value === 'function') {
                 prevToken.tokenType = isTypeDeclaration? TokenLevelState.nodeType : TokenLevelState.anonymousFunction;
+            } else if (prevToken.value === 'fn' && isTypeDeclaration) {
+                // XPath 4.0 function type, e.g. fn(xs:string) as xs:integer
+                prevToken.tokenType = TokenLevelState.nodeType;
             } else if (Data.nonFunctionTypes.includes(prevToken.value)) {
                 prevToken.tokenType = TokenLevelState.simpleType;
             } else {
@@ -1183,7 +1286,8 @@ export class XPathLexer {
                         } else if (prevTokenT === TokenLevelState.operator && (prevToken.value === ')') || prevToken.value === ']') {
                             // ($a) * 9 or count($a) * 8 or abc as map(*)* or $item as node()+
                             if (isTypeDeclaration && prevToken.value === ')' || (
-                                poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType))) {
+                                poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType ||
+                                    (poppedContext.tokenType === TokenLevelState.operator && (poppedContext.value === 'as' || poppedContext.value === 'of'))))) {
                                 currentToken.charType = CharLevelState.lName;
                                 currentToken.tokenType = TokenLevelState.nodeType;
                             }
@@ -1420,6 +1524,10 @@ export enum ErrorType {
     FunctionAfterArrowOp,
     MapConstructorRequiresXPath40,
     AxisRequiresXPath40,
+    ItemTypeRequiresXPath40,
+    ChoiceTypeRequiresXPath40,
+    ObsoleteItemType,
+    ExtensibleRecordType,
     BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,
@@ -1447,6 +1555,8 @@ export interface BaseToken {
     nesting?: number;
     referenced?: boolean;
     tagElementId?: number;
+    // XPath 4.0: the '|' separating the item types of a choice item type, e.g. (xs:date | xs:time)
+    choiceSeparator?: boolean;
 }
 
 export interface Token extends BaseToken {

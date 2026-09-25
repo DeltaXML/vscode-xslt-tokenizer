@@ -1,0 +1,205 @@
+{
+  "suite": "xpItemTypesSel31",
+  "source": "xpItemTypesSel31.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "choiceSel1",
+      "xpath": "'2020-01-01' instance of (xs:date | xs:string)",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choiceSel2",
+      "xpath": "'2020-01-01' cast as (xs:date | xs:time)",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choiceSel3",
+      "xpath": "'2020-01-01' castable as (xs:date | xs:time)?",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choiceSel4",
+      "xpath": "'a' instance of (ct:complex | xs:string)+",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choiceSel5",
+      "xpath": "'a' treat as (map(*) | xs:string)",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "enumSel1",
+      "xpath": "'red' instance of enum('red', 'green')",
+      "problems": [
+        [
+          "XPath: The 'enum(...)' item type requires XPath 4.0",
+          "enum"
+        ]
+      ]
+    },
+    {
+      "label": "enumSel2",
+      "xpath": "'red' cast as enum('red', 'green')",
+      "problems": [
+        [
+          "XPath: The 'enum(...)' item type requires XPath 4.0",
+          "enum"
+        ]
+      ]
+    },
+    {
+      "label": "recordSel1",
+      "xpath": "map { 'r': 1.0, 'i': 2.0 } instance of record(r as xs:double, i as xs:double)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "recordSel2",
+      "xpath": "map { 'a': 1 } treat as record('a', b? as xs:string)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "fnParamSel1",
+      "xpath": "function($a as (xs:string | xs:integer)) as record(n as xs:integer) { map { 'n': $a } }",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ],
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "fnTypeSel1",
+      "xpath": "abs#1 instance of fn(xs:numeric?) as xs:numeric?",
+      "problems": [
+        [
+          "XPath: The 'fn(...)' item type requires XPath 4.0",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "namedSel1",
+      "xpath": "map { 'r': 1.0, 'i': 2.0 } instance of ct:complex",
+      "problems": []
+    },
+    {
+      "label": "plainSel1",
+      "xpath": "5 instance of xs:integer+",
+      "problems": []
+    },
+    {
+      "label": "pathUnion1",
+      "xpath": "(a | b)",
+      "problems": []
+    },
+    {
+      "label": "pathUnion2",
+      "xpath": "(a | b)[1]",
+      "problems": []
+    },
+    {
+      "label": "pathUnion3",
+      "xpath": "a/(b | c)",
+      "problems": []
+    },
+    {
+      "label": "oldUnionSel1",
+      "xpath": "'a' instance of union(xs:date, xs:string)",
+      "problems": [
+        [
+          "XPath: 'union(...)' is not supported - use a choice item type instead, e.g. (xs:date | xs:time)",
+          "union"
+        ]
+      ]
+    },
+    {
+      "label": "recordSel3",
+      "xpath": "map {} instance of record()",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "recordSel4",
+      "xpath": "map { 'a b': 1 } instance of record('a b', 'c'?)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "choiceSelErr1",
+      "xpath": "'a' cast as (xs:date | xs:time)*",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ],
+        [
+          "XPath: Invalid type: '*'",
+          "*"
+        ]
+      ]
+    },
+    {
+      "label": "oldTupleSel1",
+      "xpath": "map {} instance of tuple(a)",
+      "problems": [
+        [
+          "XPath: 'tuple(...)' is not supported - use 'record(...)' instead",
+          "tuple"
+        ]
+      ]
+    }
+  ]
+}

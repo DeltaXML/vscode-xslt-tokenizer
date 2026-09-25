@@ -1428,6 +1428,9 @@ export class XslLexer {
                     case 'use-package':
                         instructionType = GlobalInstructionType.UsePackage;
                         break;
+                    case 'item-type':
+                        instructionType = GlobalInstructionType.ItemType;
+                        break;
                 }
             }
         }
@@ -1460,7 +1463,8 @@ export enum GlobalInstructionType {
     UsePackage,
     RootXMLNS,
     RootXSLT,
-    Unknown
+    Unknown,
+    ItemType
 }
 
 
