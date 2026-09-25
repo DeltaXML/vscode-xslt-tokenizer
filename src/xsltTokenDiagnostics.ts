@@ -445,8 +445,9 @@ export class XsltTokenDiagnostics {
 		let tagSelectRange: [number, number] | null = null;
 		// the record type of the current xsl:function, and the 'select' of its last xsl:sequence (a direct child)
 		let functionResult: { record: RecordType | undefined, select: [number, number] | null } | null = null;
-		// lookups whose value is a record, e.g. $a?b for record(b as record(c)), so $a?b?c can be checked
-		let lookupRecords = new Map<BaseToken, RecordType>();
+		// lookups and child steps whose value is a record, e.g. $a?b for record(b as record(c)), so $a?b?c can be checked -
+		// isJNode is true for a child step, e.g. jtree($a)/b, whose result can be used with '/' again
+		let lookupRecords = new Map<BaseToken, { record: RecordType, isJNode: boolean }>();
 		let globalAccumulatorNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
@@ -1354,28 +1355,41 @@ export class XsltTokenDiagnostics {
 				}
 				const isRecordStep = xpathTokenType === TokenLevelState.nodeNameTest && prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/';
 				if ((isRecordStep || (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?')) && XsltTokenDiagnostics.isXPath40(docType)) {
-					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r
-					const operand = index > 1 ? allTokens[index - 2] : undefined;
-					let record: RecordType | undefined;
-					if (operand?.tokenType === TokenLevelState.variable) {
-						const variableName = operand.value.substring(1);
+					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r, or a child step on a JNode for one, e.g. jtree($c)/r
+					const variableRecord = (variableToken: BaseToken) => {
+						const variableName = variableToken.value.substring(1);
 						const isXPathVariable = inScopeXPathVariablesList.some((v) => v.name === variableName) || xpathStack.some((x) => x.variables.some((v) => v.name === variableName));
-						if (!isXPathVariable) {
-							const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
-							const globalType = globalVariableTypes.get(variableName);
-							record = localVariable ? localVariable.recordType : globalType ? RecordTypes.resolve(globalType, itemTypeDeclarations) : undefined;
+						if (isXPathVariable) {
+							return undefined;
 						}
+						const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
+						const globalType = globalVariableTypes.get(variableName);
+						return localVariable ? localVariable.recordType : globalType ? RecordTypes.resolve(globalType, itemTypeDeclarations) : undefined;
+					};
+					const operandIndex = index - 2;
+					const operand = operandIndex > -1 ? allTokens[operandIndex] : undefined;
+					let operandRecord: { record: RecordType | undefined, isJNode: boolean } | undefined;
+					if (operand?.tokenType === TokenLevelState.variable) {
+						operandRecord = { record: variableRecord(operand), isJNode: false };
+					} else if (operand?.charType === CharLevelState.rB && operandIndex > 2 && allTokens[operandIndex - 1].tokenType === TokenLevelState.variable &&
+						allTokens[operandIndex - 2].charType === CharLevelState.lB && allTokens[operandIndex - 3].value === 'jtree') {
+						// jtree($c)
+						operandRecord = { record: variableRecord(allTokens[operandIndex - 1]), isJNode: true };
 					} else if (operand) {
-						record = lookupRecords.get(operand);
+						operandRecord = lookupRecords.get(operand);
 					}
-					if (record && /^[\w.-]+$/.test(token.value) && !/^\d+$/.test(token.value)) {
+					const record = operandRecord?.record;
+					if (record && isRecordStep && !operandRecord!.isJNode) {
+						// Saxon 13 requires a node on the left of '/' when the static type is a record type (XPTY0019)
+						problemTokens.push(RecordTypes.problemToken(prevToken!, ErrorType.RecordStepNeedsJtree, record.name));
+					} else if (record && /^[\w.-]+$/.test(token.value) && !/^\d+$/.test(token.value)) {
 						const field = record.fields.find((f) => f.name === token.value);
 						if (!field) {
 							problemTokens.push(RecordTypes.problemToken(token, isRecordStep ? ErrorType.RecordStepUnknown : ErrorType.RecordLookupUnknown, token.value, record.name));
 						} else {
 							const fieldRecord = RecordTypes.fieldRecord(field, itemTypeDeclarations);
 							if (fieldRecord) {
-								lookupRecords.set(token, fieldRecord);
+								lookupRecords.set(token, { record: fieldRecord, isJNode: isRecordStep });
 							}
 						}
 					}
@@ -3834,6 +3848,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.TypeNodeTestNotSupported:
 					msg = `XPath: Type node tests, e.g. ~record(...) or ~xs:string, are not supported by Saxon 13: '${tokenValue}'`;
+					break;
+				case ErrorType.RecordStepNeedsJtree:
+					msg = `XPath: A value with the record type ${tokenValue} must be converted with jtree() before '/', e.g. jtree($value)/field (Saxon 13 reports XPTY0019)`;
 					break;
 				case ErrorType.RecordStepUnknown: {
 					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);

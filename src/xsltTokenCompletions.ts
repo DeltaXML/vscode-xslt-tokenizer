@@ -1185,14 +1185,28 @@ export class XsltTokenCompletions {
 		return { name, arity };
 	}
 
-	// the record type for the value before the '?' at lookupIndex: a variable declared with a record type, e.g. $c?,
-	// or a lookup of a field whose type is a record, e.g. $p?address?
+	// the record type for the value before the '?' or '/' at lookupIndex: a variable declared with a record type, e.g. $c?,
+	// or a lookup of a field whose type is a record, e.g. $p?address? - for a child step ('/') the value must be a JNode:
+	// jtree($c)/ or a child step, e.g. jtree($p)/address/ (Saxon 13 reports XPTY0019 for $c/ when $c has a record type)
 	private static lookupRecordType(document: vscode.TextDocument, allTokens: BaseToken[], lookupIndex: number, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[],
 		inScopeVariablesList: VariableData[], elementStack: ElementData[], globalVariableData: VariableData[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): RecordType | undefined {
 		const globals = globalInstructionData.concat(importedInstructionData);
 		const itemTypes = new Map<string, string>();
 		globals.filter((g) => g.type === GlobalInstructionType.ItemType && g.declaredType).forEach((g) => itemTypes.set(g.name, g.declaredType!));
-		const operand = lookupIndex > 0 ? allTokens[lookupIndex - 1] : undefined;
+		const isChildStep = allTokens[lookupIndex]?.value === '/';
+		let operand = lookupIndex > 0 ? allTokens[lookupIndex - 1] : undefined;
+		const isJtree = operand?.charType === CharLevelState.rB && lookupIndex > 3 && allTokens[lookupIndex - 2].tokenType === TokenLevelState.variable &&
+			allTokens[lookupIndex - 3].charType === CharLevelState.lB && allTokens[lookupIndex - 4].value === 'jtree';
+		if (isJtree) {
+			// jtree($c)
+			operand = allTokens[lookupIndex - 2];
+		} else if (isChildStep && !(operand?.tokenType === TokenLevelState.nodeNameTest && allTokens[lookupIndex - 2]?.value === '/')) {
+			// not a JNode
+			return undefined;
+		} else if (!isChildStep && operand?.tokenType === TokenLevelState.nodeNameTest) {
+			// a lookup can't follow a path step, e.g. jtree($p)/address?city is a syntax error
+			return undefined;
+		}
 		if (operand?.tokenType === TokenLevelState.variable) {
 			const name = operand.value.substring(1);
 			if (inScopeXPathVariablesList.some((v) => v.name === name) || xpathStack.some((x) => x.variables.some((v) => v.name === name))) {
@@ -1216,7 +1230,7 @@ export class XsltTokenCompletions {
 			return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
 		} else if ((operand?.tokenType === TokenLevelState.mapNameLookup && allTokens[lookupIndex - 2]?.value === '?') ||
 			(operand?.tokenType === TokenLevelState.nodeNameTest && allTokens[lookupIndex - 2]?.value === '/')) {
-			// e.g. $p?address? or $p/address/ for record(address as record(...))
+			// e.g. $p?address? or jtree($p)/address/ for record(address as record(...))
 			const record = XsltTokenCompletions.lookupRecordType(document, allTokens, lookupIndex - 2, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
 			const field = record?.fields.find((f) => f.name === operand.value);
 			return field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;

@@ -2,7 +2,8 @@
  * Test suite for XPath 4.0 JNodes, as supported by Saxon 13: path expressions on trees of maps and arrays
  * - supported: name steps and axes, get(...) node tests, jtree/jkey/jvalue, and jnode(...) item types
  * - not supported by Saxon 13 (though shown in its JNodes documentation): type node tests such as ~record(...) in a step
- * - a child step on a variable declared with a record type is checked against the record's fields, as for a '?' lookup
+ * - a value with a record type needs jtree() before '/' (Saxon 13 reports XPTY0019 for $c/r); a child step on jtree($c) is
+ *   checked against the record's fields, as for a '?' lookup
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
@@ -23,6 +24,7 @@ function stylesheet(version: string, select: string) {
 }
 
 const notSupported = (name: string) => `XPath: Type node tests, e.g. ~record(...) or ~xs:string, are not supported by Saxon 13: '${name}'`;
+const needsJtree = (type: string) => `XPath: A value with the record type ${type} must be converted with jtree() before '/', e.g. jtree($value)/field (Saxon 13 reports XPTY0019)`;
 const stepUnknown = (field: string, type: string) => `XPath: Child step '${field}' - this is not a field of the record type: ${type}`;
 
 const cases: [string, string, string, [string, string][]][] = [
@@ -34,9 +36,11 @@ const cases: [string, string, string, [string, string][]][] = [
 	['type node test on a record', '4.0', 'count($tree//~record(type, name))', [[notSupported('~record'), '~record']]],
 	['type node test on an atomic type', '4.0', 'count($tree/child::~xs:string)', [[notSupported('~xs:string'), '~xs:string']]],
 	['type node test on an array', '4.0', 'count($tree/child::~array())', [[notSupported('~array'), '~array']]],
-	['child steps on a record', '4.0', '$p/name, $p/address/city', []],
-	['child step not a field', '4.0', '$p/nam, $p/address/town', [[stepUnknown('nam', 'person'), 'nam'], [stepUnknown('town', 'record(city as xs:string)'), 'town']]],
-	['child step after a lookup', '4.0', '$p?address/town', [[stepUnknown('town', 'record(city as xs:string)'), 'town']]],
+	['child steps on a record need jtree()', '4.0', '$p/name', [[needsJtree('person'), '/']]],
+	['child steps via jtree()', '4.0', 'jtree($p)/name, jtree($p)/address/city', []],
+	['child step not a field', '4.0', 'jtree($p)/nam, jtree($p)/address/town', [[stepUnknown('nam', 'person'), 'nam'], [stepUnknown('town', 'record(city as xs:string)'), 'town']]],
+	['child step after a lookup needs jtree()', '4.0', '$p?address/city', [[needsJtree('record(city as xs:string)'), '/']]],
+	['lookup after a path step', '4.0', "jtree($p)/address?city, (jtree($p)/address)?city", [['XPath: Expression context - unexpected token here: ? ', '?']]],
 	['XSLT 3.0', '3.0', "$tree/get('a'), . instance of jnode()", [["XPath: The 'get(...)' node test requires XPath 4.0", 'get'], ["XPath: The 'jnode(...)' item type requires XPath 4.0", 'jnode']]],
 ];
 

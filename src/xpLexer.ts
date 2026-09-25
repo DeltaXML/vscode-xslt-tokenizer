@@ -1662,6 +1662,7 @@ export enum ErrorType {
     NodeTestRequiresXPath40,
     TypeNodeTestNotSupported,
     RecordStepUnknown,
+    RecordStepNeedsJtree,
     BracedIfRequiresXPath40,
     MissingContextItemForFn,
     MissingContextItemForPosition,

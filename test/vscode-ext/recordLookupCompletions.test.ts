@@ -42,14 +42,15 @@ const cases: [string, string, string[]][] = [
 	<xsl:variable name="g" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/>`, ['r', 'i']],
 	['let variable shadows a record variable', `<xsl:template name="t"><xsl:variable name="c" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/><xsl:sequence select="let $c := map { 'x': 1 } return $c?|"/></xsl:template>`, []],
 	['not a record type', `<xsl:template name="t"><xsl:variable name="s" as="map(*)" select="map {}"/><xsl:sequence select="$s?|"/></xsl:template>`, []],
-	// JNode child steps on a value with a record type:
-	['child step', `<xsl:template name="t"><xsl:variable name="c" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/><xsl:sequence select="$c/|"/></xsl:template>`, ['r', 'i']],
-	['partly typed child step', `<xsl:template name="t"><xsl:variable name="c" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/><xsl:sequence select="$c/r|"/></xsl:template>`, ['r', 'i']],
-	['nested child steps', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="$p/address/|"/></xsl:template>`, ['city', 'zip']],
-	['child step after a lookup', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="$p?address/|"/></xsl:template>`, ['city', 'zip']],
-	['lookup after a child step', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="$p/address?|"/></xsl:template>`, ['city', 'zip']],
-	['child step, quoted field name', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="$p/|"/></xsl:template>`, ['name', 'age', 'address', "get('nick name')"]],
-	['child step, not a record type', `<xsl:template name="t"><xsl:variable name="s" as="map(*)" select="map {}"/><xsl:sequence select="$s/|"/></xsl:template>`, []],
+	// JNode child steps on a value with a record type - it must be converted with jtree() first (Saxon 13 reports XPTY0019 for $c/r):
+	['child step via jtree()', `<xsl:template name="t"><xsl:variable name="c" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/><xsl:sequence select="jtree($c)/|"/></xsl:template>`, ['r', 'i']],
+	['partly typed child step', `<xsl:template name="t"><xsl:variable name="c" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/><xsl:sequence select="jtree($c)/r|"/></xsl:template>`, ['r', 'i']],
+	['nested child steps', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="jtree($p)/address/|"/></xsl:template>`, ['city', 'zip']],
+	['lookup after a child step (a syntax error)', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="jtree($p)/address?|"/></xsl:template>`, []],
+	['child step, quoted field name', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="jtree($p)/|"/></xsl:template>`, ['name', 'age', 'address', "get('nick name')"]],
+	['child step without jtree()', `<xsl:template name="t"><xsl:variable name="c" as="cx:complex" select="map { 'r': 1, 'i': 2 }"/><xsl:sequence select="$c/|"/></xsl:template>`, []],
+	['child step after a lookup, without jtree()', `<xsl:template name="t"><xsl:param name="p" as="person"/><xsl:sequence select="$p?address/|"/></xsl:template>`, []],
+	['child step, not a record type', `<xsl:template name="t"><xsl:variable name="s" as="map(*)" select="map {}"/><xsl:sequence select="jtree($s)/|"/></xsl:template>`, []],
 ];
 
 suite('Record types: completions after the lookup operator', () => {
