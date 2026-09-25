@@ -5,8 +5,9 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer, ExitCondition } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
@@ -2660,6 +2661,9 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		XsltTokenDiagnostics.checkAccumulatorsApplicable(globalInstructionData, importedInstructionData, problemTokens);
+		if (docType === DocumentTypes.XSLT40) {
+			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
+		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		return allDiagnostics;
@@ -2742,6 +2746,58 @@ export class XsltTokenDiagnostics {
 			foundContextBracketsOrPredicate = hasOperandContext(rootOperandContext) || !!xpathStack.find((item) => item.hasContextItem === true || hasOperandContext(item));
 		}
 		return foundContextBracketsOrPredicate;
+	}
+
+	// xsl:item-type declarations in this document:
+	// - XTSE4030: no two with the same name and import precedence - i.e. in this document, or in a module it includes (a module it imports
+	//   has lower precedence, so a declaration here overrides it). Saxon 13 doesn't report this, and uses the last declaration, so it's a warning
+	// - the name must not be in a reserved namespace, e.g. xs:point (Saxon 13 reports XTSE0080)
+	// - XTSE4035: a named item type must not refer to itself, directly or through other named item types
+	private static checkItemTypeDeclarations(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], itemTypeDeclarations: Map<string, string>,
+		xsltPrefixesToURIs: Map<string, XSLTnamespaces>, documentPath: string, problemTokens: BaseToken[]) {
+		const localItemTypes = globalInstructionData.filter((g) => g.type === GlobalInstructionType.ItemType);
+		const includedPaths = globalInstructionData.filter((g) => g.type === GlobalInstructionType.Include).map((g) => path.resolve(path.dirname(documentPath), g.name));
+		const includedItemTypeNames = importedInstructionData.filter((g) => g.type === GlobalInstructionType.ItemType && g.href && includedPaths.includes(path.resolve(g.href))).map((g) => g.name);
+		const reservedNamespaces = [XSLTnamespaces.XMLSchema, XSLTnamespaces.XPath, XSLTnamespaces.XSLT, XSLTnamespaces.Map, XSLTnamespaces.Array, XSLTnamespaces.Math];
+		const seenNames: string[] = [];
+		localItemTypes.forEach((itemType) => {
+			const prefix = itemType.name.includes(':') ? itemType.name.substring(0, itemType.name.indexOf(':')) : undefined;
+			const nsType = prefix ? xsltPrefixesToURIs.get(prefix) : undefined;
+			if (nsType !== undefined && reservedNamespaces.includes(nsType)) {
+				problemTokens.push({ ...itemType.token, error: ErrorType.ItemTypeReservedNamespace, value: itemType.name });
+			} else if (XsltTokenDiagnostics.isCircularItemType(itemType.name, itemTypeDeclarations)) {
+				problemTokens.push({ ...itemType.token, error: ErrorType.ItemTypeCircular, value: itemType.name });
+			} else if (seenNames.includes(itemType.name) || includedItemTypeNames.includes(itemType.name)) {
+				problemTokens.push({ ...itemType.token, error: ErrorType.ItemTypeDuplicate, value: itemType.name });
+			}
+			seenNames.push(itemType.name);
+		});
+	}
+
+	// true if the named item type refers to itself, e.g. record(a as t) for t, or through other named item types
+	private static isCircularItemType(name: string, itemTypeDeclarations: Map<string, string>) {
+		const referencedNames = (typeName: string) => {
+			const declaredType = itemTypeDeclarations.get(typeName);
+			if (!declaredType) {
+				return [];
+			}
+			// the item type names in the 'as' attribute - lexed as a type declaration, so record field names aren't included
+			const tokens = new XPathLexer().analyse(declaredType, ExitCondition.None, { line: 0, startCharacter: 0, documentOffset: 0 }, true);
+			return tokens.filter((t) => t.tokenType === TokenLevelState.simpleType && itemTypeDeclarations.has(t.value)).map((t) => t.value);
+		};
+		const visited = new Set<string>();
+		const pending = referencedNames(name);
+		while (pending.length > 0) {
+			const next = pending.pop()!;
+			if (next === name) {
+				return true;
+			}
+			if (!visited.has(next)) {
+				visited.add(next);
+				pending.push(...referencedNames(next));
+			}
+		}
+		return false;
 	}
 
 	// an accumulator is only applicable to the principal source document if it's listed in the initial mode's use-accumulators
@@ -3744,6 +3800,16 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XSLTKeyUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.ItemTypeDuplicate:
+					msg = `XSLT: Duplicate xsl:item-type name '${tokenValue}' - not allowed for declarations with the same import precedence (XTSE4030). Saxon 13 uses the last declaration`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.ItemTypeReservedNamespace:
+					msg = `XSLT: The xsl:item-type name '${tokenValue}' is in a reserved namespace`;
+					break;
+				case ErrorType.ItemTypeCircular:
+					msg = `XSLT: The item type '${tokenValue}' refers to itself, directly or through other named item types (XTSE4035)`;
 					break;
 				case ErrorType.AccumulatorNotApplicable:
 					msg = `XSLT: The accumulator '${tokenValue}' is not listed in any use-accumulators attribute, e.g. on xsl:mode, so it only applies to documents loaded with functions such as doc()`;
