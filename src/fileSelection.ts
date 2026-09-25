@@ -18,6 +18,7 @@ export class FileSelection {
   // returned by pickFile when the 'None' item is picked, and persisted as the context file to record that choice
   public static readonly NO_FILE_PICKED = '<none>';
   private static readonly XML_SOURCE_LABEL = "Select XML Source File";
+  public static readonly XSLT_LABEL = "Select XSLT File";
   private static readonly XSLT_CONTEXT_LABEL = "Select XSLT context file";
   public static readonly XSLT_CONTEXT_PREVIOIUS_LABEL = "recent XML files";
   private static readonly XSLT_CONTEXT_URI_LABEL = "xslt context uri";
@@ -38,7 +39,7 @@ export class FileSelection {
   public completedPick = true;
 
   public async pickXsltFile() {
-    return await this.pickFile({ label: "Select XSLT File", extensions: ["xsl", "xslt"], xmlStylesheetPI: true });
+    return await this.pickFile({ label: FileSelection.XSLT_LABEL, extensions: ["xsl", "xslt"], xmlStylesheetPI: true });
   }
   public async pickXsltContextFile() {
     const pickedFsPath = await this.pickFile({ label: FileSelection.XSLT_CONTEXT_LABEL, prevStageLabel: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, prevStageGroup: FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, extensions: ["xml", "html", "xhtml", "svg", "dcp", "xspec", "sch", "docbook", "dita", "ditamap", "xsd", "xbrl"], noneItemDescription: '- no XML context file (Quick Run starts from xsl:initial-template)', clearIncludesPrevStage: true });

@@ -444,10 +444,17 @@
 							"string"
 						],
 						"enum": [
+							"auto",
 							"on",
 							"off"
 						],
-						"description": "Enables experimental XPath 4.0 extensions. See: https://www.saxonica.com/documentation11/index.html#!v4extensions"
+						"enumDescriptions": [
+							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
+							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
+						],
+						"default": "auto",
+						"description": "Enables XPath 4.0 syntax (the Saxon '--allowSyntaxExtensions' option). See: https://www.saxonica.com/html/documentation13/expressions/xpath40new.html"
 					},
 					"expandValues": {
 						"type": "string",
@@ -761,10 +768,17 @@
 							"string"
 						],
 						"enum": [
+							"auto",
 							"on",
 							"off"
 						],
-						"description": "Enables experimental XPath 4.0 extensions. See: https://www.saxonica.com/documentation11/index.html#!v4extensions"
+						"enumDescriptions": [
+							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
+							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
+						],
+						"default": "auto",
+						"description": "Enables XPath 4.0 syntax (the Saxon '--allowSyntaxExtensions' option). See: https://www.saxonica.com/html/documentation13/expressions/xpath40new.html"
 					},
 					"expandValues": {
 						"type": "string",

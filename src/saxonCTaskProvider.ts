@@ -139,7 +139,7 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
             xsltFile: xsltFilePath,
             xmlSource: xmlSourceValue,
             resultPath: resultPathValue,
-            allowSyntaxExtensions40: 'off',
+            allowSyntaxExtensions40: 'auto',
             group: {
                 kind: "build"
             }
@@ -244,9 +244,13 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('-TPxsl:' + propValue);
                         break;
                     case 'allowSyntaxExtensions40':
-                        commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
+                        commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonCPath));
                         break;
                 }
+            }
+            if (xsltTask.allowSyntaxExtensions40 === undefined && SaxonTaskProvider.syntaxExtensions40Value(undefined, taskSaxonCPath) === 'on') {
+                // no setting: as for 'auto'
+                commandLineArgs.push('--allowSyntaxExtensions:on');
             }
 
             if (nogo) {

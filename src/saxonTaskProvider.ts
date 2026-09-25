@@ -69,6 +69,20 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return this.getTask(_task.definition);
     }
 
+    // 'auto' (the default): XPath 4.0 syntax is enabled unless the processor is Saxon-HE - with Saxon-HE 13, enabling it
+    // makes every transform fail with a licence error, whereas with Saxon-PE/EE it's harmless for pre-4.0 stylesheets
+    public static syntaxExtensions40Value(setting: string | undefined, saxonPath: string | undefined): string {
+        if (setting === 'on' || setting === 'off') {
+            return setting;
+        }
+        return SaxonTaskProvider.isSaxonHE(saxonPath) ? 'off' : 'on';
+    }
+
+    // e.g. .../SaxonHE13-0J/saxon-he-13.0.jar, saxon9he.jar or .../SaxonCHE-macos-arm64-13-0-0/bin
+    public static isSaxonHE(saxonPath: string | undefined) {
+        return !!saxonPath && /saxonc?[-\d]*he(?=[-\d._]|j|$)/i.test(saxonPath);
+    }
+
     private getProp(obj: any, prop: string): string {
         return obj[prop];
     }
@@ -218,10 +232,10 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         switch (taskType) {
             case 'xslt':
                 definition.messageEscaping = 'adaptive';
-                definition.allowSyntaxExtensions40 = 'off';
+                definition.allowSyntaxExtensions40 = 'auto';
                 break;
             case 'xslt-c':
-                definition.allowSyntaxExtensions40 = 'off';
+                definition.allowSyntaxExtensions40 = 'auto';
                 break;
         }
         return definition;
@@ -279,7 +293,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             xmlSource: xmlSourceValue,
             resultPath: resultPathValue,
             messageEscaping: 'adaptive',
-            allowSyntaxExtensions40: 'off',
+            allowSyntaxExtensions40: 'auto',
             group: {
                 kind: "build"
             }
@@ -418,7 +432,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                         break;
                     case 'allowSyntaxExtensions40':
                         isXSLT40 = true;
-                        commandLineArgs.push('--allowSyntaxExtensions:' + propValue);
+                        commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonJarPath));
                         break;
                     case 'messageEscaping':
                         useSaxonTextEmitter = propValue === "off" || (propValue === "adaptive" && isPriorToSaxon9902);
@@ -426,6 +440,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 }
             }
 
+            if (xsltTask.allowSyntaxExtensions40 === undefined && SaxonTaskProvider.syntaxExtensions40Value(undefined, taskSaxonJarPath) === 'on') {
+                // no setting: as for 'auto'
+                isXSLT40 = true;
+                commandLineArgs.push('--allowSyntaxExtensions:on');
+            }
             if (nogo) {
                 commandLineArgs.push('-nogo');
             }

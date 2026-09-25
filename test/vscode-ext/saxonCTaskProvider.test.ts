@@ -54,6 +54,8 @@ function expectedArgs(workFolder: string) {
 		`-xsl:${workFolder}my style.xsl`,
 		`-s:${workFolder}in file.xml`,
 		`-o:${workFolder}bob's out.xml`,
+		// no allowSyntaxExtensions40 setting: as for 'auto', which enables XPath 4.0 syntax for a non Saxon-HE processor
+		'--allowSyntaxExtensions:on',
 		`--licenseFileLocation:${workFolder}saxon-license.lic`,
 		"?greeting='hello world'",
 	];
@@ -139,7 +141,7 @@ suite('SaxonC Task Provider - platform command lines', () => {
 			const definition: vscode.TaskDefinition = { type: 'xslt-c', label: 'direct', xsltFile: 'a.xsl', xmlSource: 'a.xml', unescapeMessages: false };
 			const processExecution = getTaskForPlatform(platform, definition)!.execution as vscode.ProcessExecution;
 			assert.strictEqual(processExecution.process, platform === 'win32' ? 'Transform.exe' : 'Transform');
-			assert.deepEqual(processExecution.args, ['-xsl:a.xsl', '-s:a.xml']);
+			assert.deepEqual(processExecution.args, ['-xsl:a.xsl', '-s:a.xml', '--allowSyntaxExtensions:on']);
 			assert.isUndefined(processExecution.options?.env);
 		});
 	}

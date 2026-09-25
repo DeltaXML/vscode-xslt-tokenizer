@@ -50,6 +50,18 @@ const legend = (function () {
 	return new vscode.SemanticTokensLegend(tokenTypesLegend, tokenModifiersLegend);
 })();
 
+// true if the stylesheet's root element (xsl:stylesheet, xsl:transform or xsl:package) has version="4.0"
+async function isXSLT40File(fsPath: string) {
+	try {
+		const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fsPath));
+		const text = doc.getText().substring(0, 8000).replace(/<!--[\s\S]*?-->/g, '');
+		const rootTag = /<([\w.-]+:)?(stylesheet|transform|package)\b[^>]*>/.exec(text);
+		return !!rootTag && /\sversion\s*=\s*["']4\.0["']/.test(rootTag[0]);
+	} catch {
+		return false;
+	}
+}
+
 export function activate(context: vscode.ExtensionContext) {
 	const fileSelector = new FileSelection(context);
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
@@ -203,11 +215,11 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
-	// the task definition an ended task carries still has its '${...}' variables unresolved, so the result path is
-	// resolved here - file-picker commands (directly, or via a tasks.json input) resolve to the file the user picked
-	// for this run. Returns undefined for anything that can't be resolved
-	const resolveResultPath = async (task: vscode.Task): Promise<string | undefined> => {
-		const resultPath = task.definition.resultPath;
+	// the task definition a started or ended task carries still has its '${...}' variables unresolved, so a path
+	// property (e.g. 'resultPath' or 'xsltFile') is resolved here - file-picker commands (directly, or via a tasks.json
+	// input) resolve to the file the user picked for this run. Returns undefined for anything that can't be resolved
+	const resolveTaskPath = async (task: vscode.Task, propName: string): Promise<string | undefined> => {
+		const resultPath = task.definition[propName];
 		if (typeof resultPath !== 'string' || resultPath === '') {
 			return undefined;
 		}
@@ -215,6 +227,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const resultPickerLabels: { [command: string]: string } = {
 			'xslt-xpath.pickResultFile': FileSelection.RESULT_LABEL,
 			'xslt-xpath.pickStage2ResultFile': FileSelection.STAGE2_RESULT_LABEL,
+			'xslt-xpath.pickXsltFile': FileSelection.XSLT_LABEL,
 		};
 		const inputs: { id?: string; command?: string; args?: { label?: string } }[] = resultPath.includes('${input:') ? (await SaxonJsTaskProvider.getTasksObject()).inputs ?? [] : [];
 		const pickedValueForCommand = (command: string | undefined, args?: { label?: string }) =>
@@ -226,6 +239,8 @@ export function activate(context: vscode.ExtensionContext) {
 			let value: string | undefined;
 			if (variable === 'workspaceFolder') {
 				value = workspaceFolder?.uri.fsPath;
+			} else if (variable === 'file') {
+				value = vscode.window.activeTextEditor?.document.uri.fsPath;
 			} else if (variable === 'workspaceFolderBasename') {
 				value = workspaceFolder?.name;
 			} else if (variable === 'userHome') {
@@ -256,6 +271,33 @@ export function activate(context: vscode.ExtensionContext) {
 		return path.isAbsolute(resolved) || !workspaceFolder ? resolved : path.join(workspaceFolder.uri.fsPath, resolved);
 	};
 
+	// an XSLT 4.0 stylesheet run with "allowSyntaxExtensions40": "off" fails on any XPath 4.0 syntax, with Saxon errors
+	// that don't mention the setting - so warn once per task (Saxon-HE is excluded, as it has no XPath 4.0 syntax support)
+	const warnedSyntaxExtensionTasks = new Set<string>();
+	context.subscriptions.push(vscode.tasks.onDidStartTaskProcess(async (event) => {
+		const t = event.execution.task;
+		const isJava = t.definition.type === 'xslt';
+		if (!(isJava || t.definition.type === 'xslt-c') || t.definition.allowSyntaxExtensions40 !== 'off' || warnedSyntaxExtensionTasks.has(t.name)) {
+			return;
+		}
+		const saxonPathSetting = isJava ? 'saxonJar' : 'saxonCPath';
+		const saxonPath = t.definition[saxonPathSetting] === '${config:XSLT.tasks.' + saxonPathSetting + '}' ?
+			vscode.workspace.getConfiguration('XSLT.tasks').get<string>(saxonPathSetting) : t.definition[saxonPathSetting];
+		const xsltFsPath = await resolveTaskPath(t, 'xsltFile');
+		if (SaxonTaskProvider.isSaxonHE(saxonPath) || !xsltFsPath || !(await isXSLT40File(xsltFsPath))) {
+			return;
+		}
+		warnedSyntaxExtensionTasks.add(t.name);
+		const openAction = 'Open tasks.json';
+		const message = `Task '${t.name}': the XSLT 4.0 stylesheet '${path.basename(xsltFsPath)}' is run with "allowSyntaxExtensions40": "off", so Saxon will report any XPath 4.0 syntax as an error. Set it to "auto" or "on" in tasks.json.`;
+		vscode.window.showWarningMessage(message, openAction).then(async (choice) => {
+			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+			if (choice === openAction && workspaceFolder) {
+				vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'));
+			}
+		});
+	}));
+
 	// onDidEndTaskProcess (rather than onDidEndTask) provides the exit code, so 'Open' is only offered for a result
 	// written by this run - a failed run can leave an earlier run's result file in place
 	context.subscriptions.push(vscode.tasks.onDidEndTaskProcess(async (event) => {
@@ -266,7 +308,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const message = failed ? `Task '${t.definition.label}' failed (exit code ${event.exitCode})` : `Completed task: '${t.definition.label}'`;
 			let resultUri: vscode.Uri | undefined;
 			if (!failed) {
-				const resultFsPath = await resolveResultPath(t);
+				const resultFsPath = await resolveTaskPath(t, 'resultPath');
 				if (resultFsPath) {
 					try {
 						resultUri = vscode.Uri.file(resultFsPath);
