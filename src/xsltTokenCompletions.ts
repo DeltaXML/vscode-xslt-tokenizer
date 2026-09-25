@@ -33,6 +33,7 @@ enum AttributeType {
 	InstructionName,
 	InstructionMode,
 	UseAttributeSets,
+	UseAccumulators,
 	ExcludeResultPrefixes,
 	Xmlns
 }
@@ -96,6 +97,7 @@ export class XsltTokenCompletions {
 	private static readonly xslModeAtt = 'mode';
 	private static readonly useAttSet = 'use-attribute-sets';
 	private static readonly xslUseAttSet = 'xsl:use-attribute-sets';
+	private static readonly useAccumulators = 'use-accumulators';
 	private static readonly excludePrefixes = 'exclude-result-prefixes';
 	private static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 	private static readonly sequenceTypes = FunctionData.simpleTypes.concat(Data.nodeTypesBrackets, Data.nonFunctionTypesBrackets);
@@ -486,6 +488,8 @@ export class XsltTokenCompletions {
 									attType = AttributeType.InstructionMode;
 								} else if (attNameText === XsltTokenCompletions.useAttSet) {
 									attType = AttributeType.UseAttributeSets;
+								} else if (attNameText === XsltTokenCompletions.useAccumulators) {
+									attType = AttributeType.UseAccumulators;
 								} else if (attNameText === XsltTokenCompletions.excludePrefixes || attNameText === XsltTokenCompletions.xslExcludePrefixes) {
 									attType = AttributeType.ExcludeResultPrefixes;
 								} else {
@@ -582,6 +586,13 @@ export class XsltTokenCompletions {
 							case AttributeType.UseAttributeSets:
 								if (isOnRequiredToken) {
 									resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.AttributeSet, globalInstructionData, importedInstructionData);
+								}
+								break;
+							case AttributeType.UseAccumulators:
+								if (isOnRequiredToken) {
+									let allCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Accumulator, globalInstructionData, importedInstructionData);
+									XsltTokenCompletions.createNonAlphanumericCompletions(document, position, ['all'], allCompletions);
+									resultCompletions = allCompletions;
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
@@ -1351,7 +1362,7 @@ export class XsltTokenCompletions {
 			globalInstructionData.forEach((instruction) => {
 				const name = instruction.name;
 				if (instruction.type === type) {
-					if (completionStrings.indexOf(name)) {
+					if (completionStrings.indexOf(name) === -1) {
 						completionStrings.push(name);
 					}
 				}
@@ -1360,7 +1371,7 @@ export class XsltTokenCompletions {
 			importedInstructionData.forEach((instruction) => {
 				const name = instruction.name;
 				if (instruction.type === type) {
-					if (completionStrings.indexOf(name)) {
+					if (completionStrings.indexOf(name) === -1) {
 						completionStrings.push(name);
 					}
 				}

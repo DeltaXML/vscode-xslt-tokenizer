@@ -13,6 +13,7 @@ import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, XslLexer }
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 import { XsltTokenDefinitions } from '../../src/xsltTokenDefintions';
 import { XSLTReferenceProvider } from '../../src/xsltReferenceProvider';
+import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 
 const accumulator = `<xsl:accumulator name="count" as="xs:integer" initial-value="0">
 		<xsl:accumulator-rule match="a" select="$value + 1"/>
@@ -87,5 +88,29 @@ suite('Accumulators: use-accumulators', () => {
 		const definition = XsltTokenDefinitions.findDefinition(true, document, allTokens, globals, [], position).definitionLocation;
 		assert.equal(definition?.instruction?.type, GlobalInstructionType.Accumulator);
 		assert.equal(document.getText(definition!.range), 'count');
+	});
+});
+
+suite('Accumulators: use-accumulators completions', () => {
+	async function completionLabels(body: string) {
+		const marked = stylesheet(`<xsl:accumulator name="total" initial-value="0">
+		<xsl:accumulator-rule match="a" select="$value + 1"/>
+	</xsl:accumulator>
+	${body}`);
+		const offset = marked.indexOf('|');
+		const text = marked.substring(0, offset) + marked.substring(offset + 1);
+		const document = await vscode.workspace.openTextDocument({ content: text, language: 'xslt' });
+		const provider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
+		const result = await provider.provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		return items.map((item) => typeof item.label === 'string' ? item.label : item.label.label);
+	}
+
+	test('accumulator names and #all on xsl:mode', async () => {
+		assert.deepEqual(await completionLabels(`<xsl:mode use-accumulators="|"/>`), ['count', 'total', '#all']);
+	});
+
+	test('accumulator names on xsl:source-document', async () => {
+		assert.includeMembers(await completionLabels(`<xsl:template name="t"><xsl:source-document href="a.xml" use-accumulators="count |"/></xsl:template>`), ['count', 'total']);
 	});
 });
