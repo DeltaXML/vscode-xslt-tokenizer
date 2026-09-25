@@ -1,0 +1,126 @@
+{
+  "suite": "xpPipeline",
+  "source": "xpPipeline.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "pipeline1",
+      "xpath": "'a b c' -> tokenize(.) -> count(.) -> concat('count=', .)",
+      "problems": []
+    },
+    {
+      "label": "pipeline2",
+      "xpath": "(1 to 10) ! (. * 2) -> sum(.)",
+      "problems": []
+    },
+    {
+      "label": "pipeline3",
+      "xpath": "(1 to 4) -> for-each(., abs#1) -> exists(.)",
+      "problems": []
+    },
+    {
+      "label": "pipeline4",
+      "xpath": "(1, 2, 3) -> (. + 1)",
+      "problems": []
+    },
+    {
+      "label": "pipeline5",
+      "xpath": "(1, 2, 3)->count(.)",
+      "problems": []
+    },
+    {
+      "label": "pipeline6",
+      "xpath": "(1, 2) -> (if (. gt 2) then . else 0)",
+      "problems": []
+    },
+    {
+      "label": "pipeline7",
+      "xpath": "(1, 2) -> -. * 2",
+      "problems": []
+    },
+    {
+      "label": "pipeline8",
+      "xpath": "(1, 2) -> . => string() cast as xs:string",
+      "problems": []
+    },
+    {
+      "label": "pipeline9",
+      "xpath": "let $a := (1, 2) -> . return $a -> (., .)",
+      "problems": []
+    },
+    {
+      "label": "pipeline10",
+      "xpath": "map { 'a': (1, 2) -> ., 'b': 2 }",
+      "problems": []
+    },
+    {
+      "label": "pipeline11",
+      "xpath": "(1, 2) -> [., .]",
+      "problems": []
+    },
+    {
+      "label": "pipeline12",
+      "xpath": "(1, 2) -> .?*",
+      "problems": []
+    },
+    {
+      "label": "pipelineError1",
+      "xpath": "(1, 2) -> . + .",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "pipelineError2",
+      "xpath": "((1, 2) -> .), .",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "pipelineError3",
+      "xpath": "(1, 2) -> string(.), count(.)",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "pipelineError4",
+      "xpath": "let $a := (1, 2) -> . return .",
+      "problems": [
+        [
+          "variable is unused",
+          "$a"
+        ],
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "pipelineError5",
+      "xpath": "(1, 2) -> current()",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'current()'",
+          "current"
+        ]
+      ]
+    }
+  ]
+}

@@ -69,6 +69,7 @@ export interface XPathData {
 	awaitingMapKey?: boolean;
 	curlyBraceType?: CurlyBraceType;
 	hasContextItem?: boolean;
+	hasPipelineContext?: boolean;
 	anonFnSyntaxErrorReported?: boolean;
 }
 
@@ -121,6 +122,9 @@ export class XsltTokenDiagnostics {
 	static anonFunctionOps = new Set([')', '(', 'as', 'map', 'array', ',']);
 	static anonFunctionVarOps = new Set([')','as', ',']);
 	static anonFunctionTokenTypes = new Set([TokenLevelState.operator, TokenLevelState.variable, TokenLevelState.simpleType]);
+	// binary operators with lower precedence than the pipeline operator '->', these end the pipeline's right-hand operand
+	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>', '&lt;', '&lt;=', '&gt;', '&gt;=', '&lt;&lt;', '&gt;&gt;',
+		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance']);
 	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
 		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber ||
 			token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
@@ -359,6 +363,8 @@ export class XsltTokenDiagnostics {
 		let inScopeXPathVariablesList: VariableData[] = [];
 		let anonymousFunctionParamList: VariableData[] = [];
 		let xpathStack: XPathData[] = [];
+		// the pipeline context when the xpathStack is empty:
+		let pipelineContextAtRoot = false;
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
@@ -569,6 +575,7 @@ export class XsltTokenDiagnostics {
 					}
 				}
 				xpathStack = [];
+				pipelineContextAtRoot = false;
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
@@ -1304,12 +1311,12 @@ export class XsltTokenDiagnostics {
 							const nextToken = allTokens[index + 1];
 							isPartialFunctionArg = (nextToken.charType === CharLevelState.rB  || nextToken.value === ',');
 						}
-						if (!withinTypeDeclarationAttr && !isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+						if (!withinTypeDeclarationAttr && !isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, pipelineContextAtRoot)) {
 							token.error = ErrorType.MissingContextItemGeneral;
 							problemTokens.push(token);
 						}
 					} else if (prevToken && (isRootSelector || xpathTokenType === TokenLevelState.nodeNameTest || xpathTokenType === TokenLevelState.attributeNameTest || xpathTokenType === TokenLevelState.axisName)) {
-						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, pipelineContextAtRoot)) {
 							if (isRootSelector) {
 								if (!XsltTokenDiagnostics.providesContext(prevToken)) {
 									let isRootOnly = true;
@@ -1504,6 +1511,7 @@ export class XsltTokenDiagnostics {
 											//const ptv = peekedStack.token.value;
 											//peekedStack.hasContextItem = ptv === 'for' || ptv === 'every' || ptv === 'some';
 											peekedStack.token = token;
+											peekedStack.hasPipelineContext = false;
 										}
 									} else {
 										inScopeXPathVariablesList = [];
@@ -1558,6 +1566,22 @@ export class XsltTokenDiagnostics {
 								if (deleteCount > 0) {
 									xpathStack.splice(xpathStack.length - deleteCount);
 								}
+							}
+						}
+						// the pipeline operator '->' sets the context value for its right-hand operand
+						const pipelineStackItem = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+						if (tv === '->' && token.charType === CharLevelState.dSep) {
+							if (pipelineStackItem) {
+								pipelineStackItem.hasPipelineContext = true;
+							} else {
+								pipelineContextAtRoot = true;
+							}
+						} else if ((pipelineStackItem ? pipelineStackItem.hasPipelineContext : pipelineContextAtRoot) &&
+							XsltTokenDiagnostics.endPipelineOps.has(tv) && prevToken && XsltTokenDiagnostics.isEndOfOperand(prevToken)) {
+							if (pipelineStackItem) {
+								pipelineStackItem.hasPipelineContext = false;
+							} else {
+								pipelineContextAtRoot = false;
 							}
 						}
 						if (latestStackItem && latestStackItem.curlyBraceType === CurlyBraceType.Map) {
@@ -1810,8 +1834,6 @@ export class XsltTokenDiagnostics {
 										const prevToken2Val = index > 2 ? allTokens[index - 2].value : '';
 										setContextItemProp = prevToken2Val === '!' || prevToken2Val === '/';
 									}
-								} else if (prevToken && prevToken.tokenType === TokenLevelState.anonymousFunction) {
-									setContextItemProp = prevToken.value === '->';
 								}
 								const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
 								if (curlyBraceType === CurlyBraceType.Map) {
@@ -2040,7 +2062,7 @@ export class XsltTokenDiagnostics {
 										problemTokens.push(prevToken);
 									} else if (fnArity === 0) {
 										const isCurrentFunction = prevToken.value === 'current';
-										if (!isGroupingAttribute && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction)) {
+										if (!isGroupingAttribute && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction, pipelineContextAtRoot)) {
 											if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 												const prevToken2 = allTokens[index - 2];
 												if (isCurrentFunction) {
@@ -2118,7 +2140,7 @@ export class XsltTokenDiagnostics {
 						}
 						if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
-							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, pipelineContextAtRoot)) {
 								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()' || prevToken.value === 'as'))) {
 									token.error = ErrorType.MissingContextItemGeneral;
 									problemTokens.push(token);
@@ -2390,7 +2412,7 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean, forFunctionNamedCurrent = false) {
+	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean, forFunctionNamedCurrent = false, pipelineContextAtRoot = false) {
 		if (!insideGlobalFunction) return true;
 
 		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' ||
@@ -2399,12 +2421,21 @@ export class XsltTokenDiagnostics {
 		if (foundForEach) return true;
 		let foundContextBracketsOrPredicate: boolean;
 		if (forFunctionNamedCurrent) {
-			// need to ignore predicates from xpath stack
+			// need to ignore predicates and pipeline operators from xpath stack
 			foundContextBracketsOrPredicate = !!xpathStack.find((item) => item.token.charType !== CharLevelState.lPr && item.hasContextItem === true);
 		} else {
-			foundContextBracketsOrPredicate = !!xpathStack.find((item) => item.hasContextItem === true);
+			foundContextBracketsOrPredicate = pipelineContextAtRoot || !!xpathStack.find((item) => item.hasContextItem === true || item.hasPipelineContext === true);
 		}
 		return foundContextBracketsOrPredicate;
+	}
+
+	private static isEndOfOperand(token: BaseToken) {
+		// used to distinguish a binary operator from a unary operator or wildcard
+		if (token.tokenType !== TokenLevelState.operator) {
+			return token.tokenType !== TokenLevelState.complexExpression;
+		}
+		return token.charType === CharLevelState.rB || token.charType === CharLevelState.rPr || token.charType === CharLevelState.rBr ||
+			(token.charType === CharLevelState.dSep && (token.value === '()' || token.value === '[]' || token.value === '{}'));
 	}
 
 	private static providesContext(token: BaseToken) {
