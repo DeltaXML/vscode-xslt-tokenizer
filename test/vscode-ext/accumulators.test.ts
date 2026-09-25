@@ -47,7 +47,8 @@ const cases: [string, string, [string, string][]][] = [
 	['listed on xsl:mode', `<xsl:mode use-accumulators="count"/>`, []],
 	['#all on xsl:mode', `<xsl:mode use-accumulators="#all"/>`, []],
 	['listed on xsl:source-document', `<xsl:template match="/"><xsl:source-document href="in.xml" use-accumulators="count"><xsl:sequence select="1"/></xsl:source-document></xsl:template>`, []],
-	['listed on xsl:global-context-item', `<xsl:global-context-item use-accumulators="count"/>`, []],
+	// use-accumulators is not allowed on xsl:global-context-item (Saxon 13: XTSE0090)
+	['not allowed on xsl:global-context-item', `<xsl:global-context-item use-accumulators="count"/>`, [[`XSLT: Invalid attribute on element 'xsl:global-context-item': 'use-accumulators'`, 'xsl:global-context-item']]],
 	['not listed', `<xsl:mode name="m"/>`, [[notApplicable('count'), '"count"']]],
 	['undeclared name', `<xsl:mode use-accumulators="count counter"/>`, [[notFound('counter'), 'counter']]],
 	['undeclared names only', `<xsl:mode use-accumulators="  total "/>`, [[notFound('total'), 'total'], [notApplicable('count'), '"count"']]],

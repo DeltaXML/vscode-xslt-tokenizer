@@ -786,7 +786,7 @@ export class XsltTokenDiagnostics {
 
 								let tunnelAttributeFound = false;
 								const checkPendingErrors = pendingTemplateParamErrors.length !== 0;
-								tagAttributeNames.forEach((attName) => {
+								startTagAttributeNames.forEach((attName) => {
 									if (checkPendingErrors && !tunnelAttributeFound) {
 										tunnelAttributeFound = attName === 'tunnel';
 									}
@@ -805,7 +805,7 @@ export class XsltTokenDiagnostics {
 								pendingTemplateParamErrors = [];
 
 
-								if (startTagToken && !problem) {
+								if (startTagToken && !problem && !startTagToken.error) {
 									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, docType, inheritedPrefixes, elementStack);
 									if (validationError !== NameValidationError.None) {
 										startTagToken['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
