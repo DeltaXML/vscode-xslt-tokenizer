@@ -110,7 +110,7 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 	// call after getTokens(), which sets the lexer's isXSLT40 property
 	private getFunctionData() {
 		if (this.isXPath) {
-			return XPathFunctionDetails.xpathData;
+			return XPathFunctionDetails.xpathDataPlus40;
 		}
 		return this.xslLexer!.isXSLT40 ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlusIxsl;
 	}

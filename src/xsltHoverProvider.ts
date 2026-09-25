@@ -22,7 +22,7 @@ export class XSLTHoverProvider implements HoverProvider {
 	// isVersion4 is set on the shared language configuration each time the document symbols are updated
 	private getFunctionData() {
 		if (this.languageConfiguration?.docType === DocumentTypes.XPath) {
-			return XPathFunctionDetails.xpathData;
+			return XPathFunctionDetails.xpathDataPlus40;
 		}
 		return this.languageConfiguration?.isVersion4 ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlusIxsl;
 	}

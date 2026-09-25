@@ -1360,4 +1360,6 @@ export class XPathFunctionDetails {
 	private static xpath40Names = new Set(xpath40Data.map((item) => item.name));
 	public static dataPlus40: FunctionCompletionData[] = xpath40Data.concat(XPathFunctionDetails.data.filter((item) => !XPathFunctionDetails.xpath40Names.has(item.name)));
 	public static dataPlusIxslPlus40: FunctionCompletionData[] = XPathFunctionDetails.dataPlus40.concat(XPathFunctionDetails.ixslData);
+	// for XPath documents (no XSLT functions): XPath 4.0 functions, with the xs: constructor and sql: extension functions
+	public static xpathDataPlus40: FunctionCompletionData[] = xpath40Data.concat(XPathFunctionDetails.xpathData.filter((item) => !XPathFunctionDetails.xpath40Names.has(item.name)));
 }

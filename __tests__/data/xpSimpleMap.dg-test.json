@@ -1,0 +1,131 @@
+{
+  "suite": "xpSimpleMap",
+  "source": "xpSimpleMap.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "simpleMap1",
+      "xpath": "(1, 2) ! (function($a) { $a + 1 })(.)",
+      "problems": []
+    },
+    {
+      "label": "simpleMap2",
+      "xpath": "(1, 2) ! string(.)",
+      "problems": []
+    },
+    {
+      "label": "simpleMap3",
+      "xpath": "('a', 'b') ! upper-case(.) ! string-length(.)",
+      "problems": []
+    },
+    {
+      "label": "simpleMap4",
+      "xpath": "(1, 2) ! .[. gt 1]",
+      "problems": []
+    },
+    {
+      "label": "simpleMap5",
+      "xpath": "(1, 2) ! (. + 1)",
+      "problems": []
+    },
+    {
+      "label": "simpleMap6",
+      "xpath": "let $f := abs#1 return (1, 2) ! $f(.)",
+      "problems": []
+    },
+    {
+      "label": "simpleMap7",
+      "xpath": "(1, 2) ! [., .]",
+      "problems": []
+    },
+    {
+      "label": "simpleMap8",
+      "xpath": "(1, 2) ! map { 'a': . }?a",
+      "problems": []
+    },
+    {
+      "label": "simpleMap9",
+      "xpath": "(1, 2) ! concat(., 'a') => string-length()",
+      "problems": []
+    },
+    {
+      "label": "simpleMap10",
+      "xpath": "(1, 2) ! string(.) || 'a'",
+      "problems": []
+    },
+    {
+      "label": "simpleMap11",
+      "xpath": "(1, 2) ! (function($a, $b) { $a + $b })(., .)[1]",
+      "problems": []
+    },
+    {
+      "label": "simpleMapError1",
+      "xpath": "(1, 2) ! . + .",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "simpleMapError2",
+      "xpath": "(1, 2) ! ., .",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "simpleMapError3",
+      "xpath": "(1, 2) ! string(.) => concat(.)",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "simpleMapError4",
+      "xpath": "for $a in (1, 2) ! . return .",
+      "problems": [
+        [
+          "variable is unused",
+          "$a"
+        ],
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "simpleMapError5",
+      "xpath": "(1, 2) ! string(.) || string(.)",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: '.'",
+          "."
+        ]
+      ]
+    },
+    {
+      "label": "simpleMapError6",
+      "xpath": "(1, 2) ! current()",
+      "problems": [
+        [
+          "XPath: Context-item is missing for: 'current()'",
+          "current"
+        ]
+      ]
+    }
+  ]
+}

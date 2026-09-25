@@ -58,7 +58,13 @@ export interface ElementData {
 	namespacePrefixes: string[];
 	expectedChildElements: string[];
 }
-export interface XPathData {
+// context value set by the pipeline operator '->' or the simple map operator '!' for their right-hand operand
+export interface OperandContext {
+	hasPipelineContext?: boolean;
+	hasSimpleMapContext?: boolean;
+}
+
+export interface XPathData extends OperandContext {
 	token: BaseToken;
 	variables: VariableData[];
 	preXPathVariable: boolean;
@@ -69,7 +75,6 @@ export interface XPathData {
 	awaitingMapKey?: boolean;
 	curlyBraceType?: CurlyBraceType;
 	hasContextItem?: boolean;
-	hasPipelineContext?: boolean;
 	// XPath 4.0 map constructor without the 'map' keyword
 	isBareMap?: boolean;
 	anonFnSyntaxErrorReported?: boolean;
@@ -124,6 +129,8 @@ export class XsltTokenDiagnostics {
 	static anonFunctionOps = new Set([')', '(', 'as', 'map', 'array', ',']);
 	static anonFunctionVarOps = new Set([')','as', ',']);
 	static anonFunctionTokenTypes = new Set([TokenLevelState.operator, TokenLevelState.variable, TokenLevelState.simpleType]);
+	// operators within a path expression, all other binary operators end the right-hand operand of the simple map operator '!'
+	static pathExprOps = new Set(['/', '//', '!', '?', '::', '()', '[]', '{}', '*:', '..']);
 	// binary operators with lower precedence than the pipeline operator '->', these end the pipeline's right-hand operand
 	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>', '&lt;', '&lt;=', '&gt;', '&gt;=', '&lt;&lt;', '&gt;&gt;',
 		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance']);
@@ -365,8 +372,8 @@ export class XsltTokenDiagnostics {
 		let inScopeXPathVariablesList: VariableData[] = [];
 		let anonymousFunctionParamList: VariableData[] = [];
 		let xpathStack: XPathData[] = [];
-		// the pipeline context when the xpathStack is empty:
-		let pipelineContextAtRoot = false;
+		// the operand context when the xpathStack is empty:
+		let rootOperandContext: OperandContext = {};
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
@@ -533,7 +540,7 @@ export class XsltTokenDiagnostics {
 		if (docType === DocumentTypes.XPath) {
 			xsltPrefixesToURIs.set('array', XSLTnamespaces.Array);
 			xsltPrefixesToURIs.set('map', XSLTnamespaces.Map);
-			xsltPrefixesToURIs.set('math', XSLTnamespaces.Map);
+			xsltPrefixesToURIs.set('math', XSLTnamespaces.Math);
 			xsltPrefixesToURIs.set('xs', XSLTnamespaces.XMLSchema);
 			xsltPrefixesToURIs.set('fn', XSLTnamespaces.XPath);
 			xsltPrefixesToURIs.set('xsl', XSLTnamespaces.XSLT);
@@ -577,7 +584,7 @@ export class XsltTokenDiagnostics {
 					}
 				}
 				xpathStack = [];
-				pipelineContextAtRoot = false;
+				rootOperandContext = {};
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
@@ -1313,12 +1320,12 @@ export class XsltTokenDiagnostics {
 							const nextToken = allTokens[index + 1];
 							isPartialFunctionArg = (nextToken.charType === CharLevelState.rB  || nextToken.value === ',');
 						}
-						if (!withinTypeDeclarationAttr && !isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, pipelineContextAtRoot)) {
+						if (!withinTypeDeclarationAttr && !isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, rootOperandContext)) {
 							token.error = ErrorType.MissingContextItemGeneral;
 							problemTokens.push(token);
 						}
 					} else if (prevToken && (isRootSelector || xpathTokenType === TokenLevelState.nodeNameTest || xpathTokenType === TokenLevelState.attributeNameTest || xpathTokenType === TokenLevelState.axisName)) {
-						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, pipelineContextAtRoot)) {
+						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, rootOperandContext)) {
 							if (isRootSelector) {
 								if (!XsltTokenDiagnostics.providesContext(prevToken)) {
 									let isRootOnly = true;
@@ -1514,6 +1521,7 @@ export class XsltTokenDiagnostics {
 											//peekedStack.hasContextItem = ptv === 'for' || ptv === 'every' || ptv === 'some';
 											peekedStack.token = token;
 											peekedStack.hasPipelineContext = false;
+											peekedStack.hasSimpleMapContext = false;
 										}
 									} else {
 										inScopeXPathVariablesList = [];
@@ -1572,32 +1580,30 @@ export class XsltTokenDiagnostics {
 						}
 						// XPath 4.0 empty map constructor without the 'map' keyword
 						const isBareEmptyMap = tv === '{}' && token.charType === CharLevelState.dSep && XsltTokenDiagnostics.isOperandExpected(prevToken);
-						// the pipeline operator '->' sets the context value for its right-hand operand
-						const pipelineStackItem = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+						// the pipeline operator '->' and simple map operator '!' set the context value for their right-hand operand
+						const operandContext: OperandContext = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : rootOperandContext;
+						const isBinaryOperator = !!prevToken && XsltTokenDiagnostics.isEndOfOperand(prevToken);
 						if (tv === '->' && token.charType === CharLevelState.dSep) {
-							if (pipelineStackItem) {
-								pipelineStackItem.hasPipelineContext = true;
-							} else {
-								pipelineContextAtRoot = true;
-							}
-						} else if ((pipelineStackItem ? pipelineStackItem.hasPipelineContext : pipelineContextAtRoot) &&
-							XsltTokenDiagnostics.endPipelineOps.has(tv) && prevToken && XsltTokenDiagnostics.isEndOfOperand(prevToken)) {
-							if (pipelineStackItem) {
-								pipelineStackItem.hasPipelineContext = false;
-							} else {
-								pipelineContextAtRoot = false;
-							}
+							operandContext.hasPipelineContext = true;
+						} else if (operandContext.hasPipelineContext && isBinaryOperator && XsltTokenDiagnostics.endPipelineOps.has(tv)) {
+							operandContext.hasPipelineContext = false;
+						}
+						if (tv === '!' && token.charType === CharLevelState.sep) {
+							operandContext.hasSimpleMapContext = true;
+						} else if (operandContext.hasSimpleMapContext && isBinaryOperator && !XsltTokenDiagnostics.pathExprOps.has(tv) && !XsltTokenDiagnostics.isBracket(<CharLevelState>token.charType)) {
+							// the right-hand operand of '!' is a path expression, including any predicates, lookups and dynamic function calls
+							operandContext.hasSimpleMapContext = false;
 						}
 						if (latestStackItem && latestStackItem.curlyBraceType === CurlyBraceType.Map) {
 							// in XPath 4.0 a map constructor entry without ':' is a sequence of maps to be merged, e.g. { $map1, $map2 }
 							if (tokenIsComma) {
 								if (latestStackItem.awaitingMapKey) {
-									isXPathError = docType !== DocumentTypes.XSLT40 && !latestStackItem.isBareMap;
+									isXPathError = !XsltTokenDiagnostics.isXPath40(docType) && !latestStackItem.isBareMap;
 								} else {
 									latestStackItem.awaitingMapKey = true;
 								}
 							} else if (tv === '}' && latestStackItem.awaitingMapKey) {
-								isXPathError = prevToken?.value !== '{' && docType !== DocumentTypes.XSLT40 && !latestStackItem.isBareMap;
+								isXPathError = prevToken?.value !== '{' && !XsltTokenDiagnostics.isXPath40(docType) && !latestStackItem.isBareMap;
 							}
 						}
 						if (latestStackItem?.token.context?.value === 'function' ) {
@@ -1821,7 +1827,7 @@ export class XsltTokenDiagnostics {
 								problemTokens.push(token);
 							}
 						}
-						if (isBareEmptyMap && docType !== DocumentTypes.XSLT40 && !token.error) {
+						if (isBareEmptyMap && !XsltTokenDiagnostics.isXPath40(docType) && !token.error) {
 							token.error = ErrorType.MapConstructorRequiresXPath40;
 							problemTokens.push(token);
 						}
@@ -1849,7 +1855,7 @@ export class XsltTokenDiagnostics {
 									// XPath 4.0 map constructor without the 'map' keyword, e.g. { 'a': 1 }
 									curlyBraceType = CurlyBraceType.Map;
 									setContextItemProp = !!prevToken && (prevToken.value === '!' || prevToken.value === '/');
-									if (docType !== DocumentTypes.XSLT40) {
+									if (!XsltTokenDiagnostics.isXPath40(docType)) {
 										token.error = ErrorType.MapConstructorRequiresXPath40;
 										problemTokens.push(token);
 									}
@@ -2084,7 +2090,7 @@ export class XsltTokenDiagnostics {
 										problemTokens.push(prevToken);
 									} else if (fnArity === 0) {
 										const isCurrentFunction = prevToken.value === 'current';
-										if (!isGroupingAttribute && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction, pipelineContextAtRoot)) {
+										if (!isGroupingAttribute && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction, rootOperandContext)) {
 											if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 												const prevToken2 = allTokens[index - 2];
 												if (isCurrentFunction) {
@@ -2162,7 +2168,7 @@ export class XsltTokenDiagnostics {
 						}
 						if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
-							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, pipelineContextAtRoot)) {
+							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, rootOperandContext)) {
 								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()' || prevToken.value === 'as'))) {
 									token.error = ErrorType.MissingContextItemGeneral;
 									problemTokens.push(token);
@@ -2449,7 +2455,7 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean, forFunctionNamedCurrent = false, pipelineContextAtRoot = false) {
+	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean, forFunctionNamedCurrent = false, rootOperandContext: OperandContext = {}) {
 		if (!insideGlobalFunction) return true;
 
 		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' ||
@@ -2458,12 +2464,18 @@ export class XsltTokenDiagnostics {
 		if (foundForEach) return true;
 		let foundContextBracketsOrPredicate: boolean;
 		if (forFunctionNamedCurrent) {
-			// need to ignore predicates and pipeline operators from xpath stack
+			// need to ignore predicates, pipeline and simple map operators from xpath stack
 			foundContextBracketsOrPredicate = !!xpathStack.find((item) => item.token.charType !== CharLevelState.lPr && item.hasContextItem === true);
 		} else {
-			foundContextBracketsOrPredicate = pipelineContextAtRoot || !!xpathStack.find((item) => item.hasContextItem === true || item.hasPipelineContext === true);
+			const hasOperandContext = (item: OperandContext) => item.hasPipelineContext === true || item.hasSimpleMapContext === true;
+			foundContextBracketsOrPredicate = hasOperandContext(rootOperandContext) || !!xpathStack.find((item) => item.hasContextItem === true || hasOperandContext(item));
 		}
 		return foundContextBracketsOrPredicate;
+	}
+
+	// XSLT 4.0 stylesheets and XPath documents (e.g. .xpath files) use XPath 4.0
+	private static isXPath40(docType: DocumentTypes) {
+		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
 	}
 
 	private static isOperandExpected(prevToken: BaseToken | null) {
@@ -2774,7 +2786,7 @@ export class XsltTokenDiagnostics {
 	}
 
 	public static isValidFunctionName(docType: DocumentTypes, xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number) {
-		const useXPath40 = docType === DocumentTypes.XSLT40;
+		const useXPath40 = XsltTokenDiagnostics.isXPath40(docType);
 		let isParseHTMLFnWarning = false;
 		let tokenValue;
 		if (arity === undefined) {

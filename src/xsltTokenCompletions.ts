@@ -1041,6 +1041,9 @@ export class XsltTokenCompletions {
 			return XsltTokenCompletions.useIxslFunctions ? XPathFunctionDetails.dataPlusIxsl : XPathFunctionDetails.data;
 		} else if (docType === DocumentTypes.XSLT40) {
 			return XsltTokenCompletions.useIxslFunctions ? XPathFunctionDetails.dataPlusIxslPlus40 : XPathFunctionDetails.dataPlus40;
+		} else if (docType === DocumentTypes.XPath) {
+			// XPath documents use XPath 4.0
+			return XPathFunctionDetails.xpathDataPlus40;
 		} else {
 			return XPathFunctionDetails.xpathData;
 		}
