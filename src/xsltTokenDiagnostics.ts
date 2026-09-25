@@ -1618,6 +1618,14 @@ export class XsltTokenDiagnostics {
 									problemTokens.push(token);
 								}
 							}
+							// XSLT 4.0: $group and $next are in scope only within the split-when attribute of xsl:for-each-group
+							// (and 'break-when', its Saxon 12 name, still accepted by Saxon 13)
+							const isSplitWhenVariable = tagElementName === 'xsl:for-each-group' && (currentAttName === 'split-when' || currentAttName === 'break-when') &&
+								(token.value === '$group' || token.value === '$next');
+							if (isSplitWhenVariable) {
+								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+								break;
+							}
 							// don't include any current pending variable declarations when resolving
 							let globalVarName: string | null = null;
 							if (tagType === TagType.XSLTvar && elementStack.length === 1) {

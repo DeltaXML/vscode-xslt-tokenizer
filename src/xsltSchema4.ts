@@ -359,7 +359,6 @@ export class XSLTSchema4 implements SchemaData {
                         'group-starting-with': 'xsl:pattern',
                         'group-ending-with': 'xsl:pattern',
                         'split-when': 'xsl:expression',
-                        'merge-when': 'xsl:expression',
                         // Saxon 11/12 experimental name for 'split-when', retained as a synonym in Saxon 13
                         'break-when': 'xsl:expression',
                         'composite': 'xsl:yes-or-no',
@@ -370,7 +369,6 @@ export class XSLTSchema4 implements SchemaData {
                         '_group-starting-with': 'xs:string',
                         '_group-ending-with': 'xs:string',
                         '_split-when': 'xs:string',
-                        '_merge-when': 'xs:string',
                         '_break-when': 'xs:string',
                         '_composite': 'xs:string',
                         '_collation': 'xs:string'
