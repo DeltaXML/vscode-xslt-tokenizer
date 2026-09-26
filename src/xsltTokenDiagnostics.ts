@@ -442,6 +442,8 @@ export class XsltTokenDiagnostics {
 		// XPath 4.0 record types: xsl:item-type declarations, and the 'as' of global variables and parameters
 		let itemTypeDeclarations = new Map<string, string>();
 		let globalVariableTypes = new Map<string, string>();
+		// XPath 4.0: the declared types of variable references that may be function call arguments
+		const argumentVariableTypes = new Map<BaseToken, string>();
 		// the 'as' and 'select' attributes of the current start tag, as allTokens index ranges
 		let currentAttName = '';
 		let tagAsRange: [number, number] | null = null;
@@ -1684,6 +1686,25 @@ export class XsltTokenDiagnostics {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+							const nextValue = allTokens[index + 1]?.value;
+							if (XsltTokenDiagnostics.isXPath40(docType) && (nextValue === ')' || nextValue === ',' || nextValue === '=>' || nextValue === '=!>')) {
+								// XPath 4.0: the declared type of a variable that may be a function call argument, for checking against the parameter type
+								const variableName = token.value.substring(1);
+								const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList, anonymousFunctionParamList);
+								const xpathVariable = [...xpathVariables].reverse().find((v) => v.name === variableName);
+								let declaredType: string | undefined;
+								if (xpathVariable) {
+									const typeRange = RecordTypes.xpathVariableTypeRange(allTokens, allTokens.indexOf(xpathVariable.token));
+									declaredType = typeRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, typeRange) : undefined;
+								} else {
+									const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
+									declaredType = localVariable ? RecordTypes.attributeOfElementAt(document.getText(), document.offsetAt(new vscode.Position(localVariable.token.line, localVariable.token.startCharacter)), 'as') :
+										globalVariableTypes.get(variableName);
+								}
+								if (declaredType) {
+									argumentVariableTypes.set(token, declaredType);
+								}
+							}
 						}
 						break;
 					case TokenLevelState.complexExpression:
@@ -2809,8 +2830,11 @@ export class XsltTokenDiagnostics {
 			RecordTypes.checkLetBindings(xpathTokens, (range) => XsltTokenDiagnostics.textForTokenRange(document, xpathTokens, range), itemTypeDeclarations, problemTokens);
 			// the arguments of calls of user-defined functions, e.g. cx:area({ ... }) or cx:area(shape := { ... })
 			const allGlobals = globalInstructionData.concat(importedInstructionData);
-			RecordTypes.checkFunctionArguments(xpathTokens, (name, arity, position, keyword) =>
-				XsltTokenDiagnostics.parameterType(allGlobals, GlobalInstructionType.Function, name, arity, position, keyword), itemTypeDeclarations, problemTokens);
+			RecordTypes.checkFunctionArguments(xpathTokens, {
+				paramType: (name, arity, position, keyword) => XsltTokenDiagnostics.parameterType(allGlobals, GlobalInstructionType.Function, name, arity, position, keyword),
+				variableType: (token) => argumentVariableTypes.get(token),
+				returnType: (name, arity) => allGlobals.find((g) => g.type === GlobalInstructionType.Function && g.name === name && XslLexer.functionArityMatches(g, arity))?.returnType
+			}, itemTypeDeclarations, problemTokens);
 			XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
 		}
 		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
@@ -4098,6 +4122,11 @@ export class XsltTokenDiagnostics {
 					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XPath: '${field}' is not a field of the record type: ${recordName}`;
 					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.ArgumentTypeMismatch: {
+					const [argument, argType, paramType, reason] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: The type of '${argument}', ${argType}, doesn't match the parameter type ${paramType} - ${reason}`;
 					break;
 				}
 				case ErrorType.EnumValueUnknown: {

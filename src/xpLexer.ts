@@ -1704,6 +1704,7 @@ export enum ErrorType {
     RequiredParamAfterOptional,
     RecordFieldMissing,
     EnumValueUnknown,
+    ArgumentTypeMismatch,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,

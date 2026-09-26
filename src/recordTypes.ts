@@ -21,6 +21,14 @@ export interface RecordType {
 	fields: RecordField[];
 }
 
+// for checking function call arguments: a parameter's declared type, and the declared types of variable references and
+// user-defined function results
+export interface ArgumentTypes {
+	paramType: (name: string, arity: number, position: number, keyword?: string) => string | undefined;
+	variableType: (token: BaseToken) => string | undefined;
+	returnType: (name: string, arity: number) => string | undefined;
+}
+
 export type TemplateParamType = (templateName: string, paramName: string) => string | undefined;
 
 interface MapEntry {
@@ -338,7 +346,11 @@ export class RecordTypes {
 	public static checkValue(tokens: BaseToken[], valueStart: number, singleEnd: number, declaredType: string, itemTypes: Map<string, string>, problemTokens: BaseToken[], valueEnd?: number) {
 		const record = RecordTypes.resolve(declaredType, itemTypes);
 		const mapEnd = record ? RecordTypes.mapConstructorEnd(tokens, valueStart) : -1;
-		if (record && mapEnd > -1 && (valueEnd === undefined || mapEnd === valueEnd)) {
+		// without a valueEnd, the value ends at a 'return' or ',', e.g. for a let binding
+		const after = tokens[mapEnd + 1];
+		const isWholeValue = valueEnd !== undefined ? mapEnd === valueEnd :
+			!after || (after.tokenType === TokenLevelState.complexExpression && after.value === 'return') || (after.charType === CharLevelState.sep && after.value === ',');
+		if (record && mapEnd > -1 && isWholeValue) {
 			RecordTypes.checkMapConstructor(tokens.slice(valueStart, mapEnd + 1), record, itemTypes, problemTokens);
 			return;
 		}
@@ -396,21 +408,29 @@ export class RecordTypes {
 	}
 
 	// checks the arguments of each call of a user-defined function: a map constructor against a parameter with a record type,
-	// and a string literal against one with an enumeration type - paramType gives a parameter's declared type
-	public static checkFunctionArguments(tokens: BaseToken[], paramType: (name: string, arity: number, position: number, keyword?: string) => string | undefined, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+	// a string literal against one with an enumeration type, and a variable reference or function call with a declared type
+	// against the parameter's type - including the operand of an arrow operator, e.g. { ... } => cx:area(), the first argument
+	public static checkFunctionArguments(tokens: BaseToken[], types: ArgumentTypes, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
 		tokens.forEach((t, open) => {
-			if (t.charType !== CharLevelState.lB || tokens[open - 1]?.tokenType !== TokenLevelState.function) {
+			// an empty argument list, e.g. cx:mag(), is a single '()' token - with an arrow operator's operand as the argument
+			const isEmptyCall = t.charType === CharLevelState.dSep && t.value === '()';
+			if (!(t.charType === CharLevelState.lB || isEmptyCall) || tokens[open - 1]?.tokenType !== TokenLevelState.function) {
 				return;
 			}
-			const close = RecordTypes.closingTokenIndex(tokens, open);
+			const close = isEmptyCall ? open : RecordTypes.closingTokenIndex(tokens, open);
 			if (close === -1) {
 				return;
 			}
-			// the arguments' token ranges
 			const args: [number, number][] = [];
+			// the operand of '=>' or '=!>' before the function name is the first argument
+			const arrow = tokens[open - 2];
+			const operand = arrow?.tokenType === TokenLevelState.operator && (arrow.value === '=>' || arrow.value === '=!>') ? RecordTypes.operandStart(tokens, open - 3) : -1;
+			if (operand > -1) {
+				args.push([operand, open - 3]);
+			}
 			let argStart = open + 1;
 			let depth = 0;
-			for (let i = open + 1; i <= close; i++) {
+			for (let i = open + 1; i <= close && !isEmptyCall; i++) {
 				const a = tokens[i];
 				if (i === close || (depth === 0 && a.charType === CharLevelState.sep && a.value === ',')) {
 					if (i > argStart) {
@@ -423,15 +443,100 @@ export class RecordTypes {
 					depth--;
 				}
 			}
+			const name = tokens[open - 1].value;
 			args.forEach(([start, end], position) => {
 				const hasKeyword = tokens[start].tokenType === TokenLevelState.mapKey && tokens[start + 1]?.value === ':=';
 				const valueStart = hasKeyword ? start + 2 : start;
-				const declaredType = valueStart <= end ? paramType(tokens[open - 1].value, args.length, position, hasKeyword ? tokens[start].value : undefined) : undefined;
-				if (declaredType) {
-					RecordTypes.checkValue(tokens, valueStart, end, declaredType, itemTypes, problemTokens, end);
+				const declaredType = valueStart <= end ? types.paramType(name, args.length, position, hasKeyword ? tokens[start].value : undefined) : undefined;
+				if (!declaredType) {
+					return;
+				}
+				RecordTypes.checkValue(tokens, valueStart, end, declaredType, itemTypes, problemTokens, end);
+				// a variable reference or function call with a declared type
+				const valueToken = tokens[valueStart];
+				const call = valueToken.tokenType === TokenLevelState.function ? RecordTypes.functionCallAt(tokens, end) : undefined;
+				const isCall = !!call && call.name === valueToken.value && (tokens[valueStart + 1]?.value === '()' ? valueStart + 1 === end : RecordTypes.closingTokenIndex(tokens, valueStart + 1) === end);
+				const argType = valueStart === end && valueToken.tokenType === TokenLevelState.variable ? types.variableType(valueToken) :
+					isCall ? types.returnType(call!.name, call!.arity) : undefined;
+				if (argType) {
+					RecordTypes.checkTypeCompatible(valueToken, argType, declaredType, itemTypes, problemTokens);
 				}
 			});
 		});
+	}
+
+	// for the operand ending at tokens[operandEnd] of an arrow operator, e.g. { ... } => cx:area(2): the function's name and
+	// the call's arity, including the operand, the first argument - undefined if it's not an arrow operator's operand
+	public static arrowTarget(tokens: BaseToken[], operandEnd: number): { name: string, arity: number } | undefined {
+		const arrow = tokens[operandEnd + 1];
+		const fn = tokens[operandEnd + 2];
+		const open = tokens[operandEnd + 3];
+		if (!(arrow?.tokenType === TokenLevelState.operator && (arrow.value === '=>' || arrow.value === '=!>')) || fn?.tokenType !== TokenLevelState.function || !open) {
+			return undefined;
+		}
+		if (open.charType === CharLevelState.dSep && open.value === '()') {
+			return { name: fn.value, arity: 1 };
+		}
+		const close = open.charType === CharLevelState.lB ? RecordTypes.closingTokenIndex(tokens, operandEnd + 3) : -1;
+		if (close === -1) {
+			return undefined;
+		}
+		const commas = tokens.slice(operandEnd + 4, close).filter((a, k, all) => a.charType === CharLevelState.sep && a.value === ',' && RecordTypes.bracketDepth(all, k) === 0).length;
+		return { name: fn.value, arity: close > operandEnd + 4 ? commas + 2 : 1 };
+	}
+
+	// the index of the first token of the operand ending at tokens[end]: a variable reference, a map constructor or a
+	// function call - otherwise -1
+	private static operandStart(tokens: BaseToken[], end: number): number {
+		const last = tokens[end];
+		if (!last) {
+			return -1;
+		} else if (last.tokenType === TokenLevelState.variable) {
+			return end;
+		}
+		let open = -1;
+		if (last.charType === CharLevelState.dSep && (last.value === '{}' || last.value === '()')) {
+			open = end;
+		} else if (RecordTypes.isCloseBracket(last)) {
+			let depth = 0;
+			for (let i = end; i > -1 && open === -1; i--) {
+				if (RecordTypes.isCloseBracket(tokens[i])) {
+					depth++;
+				} else if (RecordTypes.isOpenBracket(tokens[i]) && --depth === 0) {
+					open = i;
+				}
+			}
+		}
+		if (open === -1) {
+			return -1;
+		}
+		const before = tokens[open - 1];
+		if (tokens[open].value.startsWith('{')) {
+			// a map constructor, e.g. map { ... } or { ... }
+			return before?.tokenType === TokenLevelState.operator && before.value === 'map' ? open - 1 : open;
+		}
+		// a function call
+		return before?.tokenType === TokenLevelState.function ? open - 1 : -1;
+	}
+
+	// reports a value whose declared type can't match the parameter's: a record type that doesn't have a field that the
+	// parameter's record type requires, or a record type and an enumeration type - Saxon 13 accepts a value with one
+	// enumeration type for a parameter with another, even with no values in common, so that's not reported
+	private static checkTypeCompatible(token: BaseToken, argType: string, paramType: string, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const argRecord = RecordTypes.resolve(argType, itemTypes);
+		const paramRecord = RecordTypes.resolve(paramType, itemTypes);
+		const argEnum = RecordTypes.resolveEnum(argType, itemTypes);
+		const paramEnum = RecordTypes.resolveEnum(paramType, itemTypes);
+		let reason: string | undefined;
+		if (argRecord && paramRecord) {
+			const missingField = paramRecord.fields.find((field) => !field.optional && !argRecord.fields.some((f) => f.name === field.name));
+			reason = missingField ? `it has no field '${missingField.name}'` : undefined;
+		} else if ((argRecord && paramEnum) || (argEnum && paramRecord)) {
+			reason = argRecord ? 'a record is not an enumeration value' : 'an enumeration value is not a record';
+		}
+		if (reason) {
+			problemTokens.push(RecordTypes.problemToken(token, ErrorType.ArgumentTypeMismatch, token.value, argType.trim(), paramType.trim(), reason));
+		}
 	}
 
 	private static nextNonComment(tokens: BaseToken[], index: number) {

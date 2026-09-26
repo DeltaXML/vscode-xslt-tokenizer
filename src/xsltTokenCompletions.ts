@@ -1362,7 +1362,12 @@ export class XsltTokenCompletions {
 		let declaredType: string | undefined;
 		const beforeMap = xpathTokens[entryPosition.outerStart - 1];
 		const letTypeRange = beforeMap?.value === ':=' ? RecordTypes.letBindingTypeRange(xpathTokens, entryPosition.outerStart - 1) : undefined;
-		if (entryPosition.outerStart === 0) {
+		// the operand of an arrow operator, e.g. { ... } => cx:area() - the first argument
+		const outerEnd = RecordTypes.mapConstructorEnd(xpathTokens, entryPosition.outerStart);
+		const arrowTarget = outerEnd > -1 ? RecordTypes.arrowTarget(xpathTokens, outerEnd) : undefined;
+		if (arrowTarget) {
+			declaredType = XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Function, arrowTarget.name, arrowTarget.arity, 0);
+		} else if (entryPosition.outerStart === 0) {
 			declaredType = XsltTokenCompletions.declaredTypeForSelect(text, attributeOffset, itemTypes, XsltTokenCompletions.templateParamTypes(globalInstructionData, importedInstructionData));
 		} else if (letTypeRange) {
 			// the value of a let binding with a type, e.g. let $p as person := {
