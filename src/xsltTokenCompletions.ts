@@ -104,8 +104,21 @@ export class XsltTokenCompletions {
 	// XPath 3.1 has no jnode() item type
 	private static readonly sequenceTypes31 = XsltTokenCompletions.sequenceTypes.filter((t) => t !== 'jnode()');
 
+	// XSLT 4.0 named item types, declared with xsl:item-type - set for each getCompletions call
+	private static itemTypeNames: string[] = [];
+	// the named item types that may be atomic, for 'cast as' and 'castable as', e.g. as="enum('a', 'b')"
+	private static atomicItemTypeNames: string[] = [];
+
 	private static sequenceTypesFor(docType: DocumentTypes) {
-		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? XsltTokenCompletions.sequenceTypes : XsltTokenCompletions.sequenceTypes31;
+		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? XsltTokenCompletions.itemTypeNames.concat(XsltTokenCompletions.sequenceTypes) : XsltTokenCompletions.sequenceTypes31;
+	}
+
+	private static setItemTypeNames(docType: DocumentTypes, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+		const itemTypes = docType === DocumentTypes.XSLT40 ? globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.ItemType) : [];
+		const names = (list: GlobalInstructionData[]) => list.map((g) => g.name).filter((name, index, all) => all.indexOf(name) === index);
+		XsltTokenCompletions.itemTypeNames = names(itemTypes);
+		const nonAtomic = /^\s*\(?\s*(record|map|array|function|fn|element|attribute|document-node|node|item|text|comment|processing-instruction|namespace-node|jnode|gnode)\s*\(/;
+		XsltTokenCompletions.atomicItemTypeNames = names(itemTypes.filter((g) => g.declaredType && !nonAtomic.test(g.declaredType)));
 	}
 	private static readonly doubleParts = ['castable as', 'cast as', 'instance of', 'treat as'];
 	private static useIxslFunctions = false;
@@ -146,6 +159,7 @@ export class XsltTokenCompletions {
 		let globalModes: string[] = ['#current', '#default'];
 		let attNameText: string = '';
 		XsltTokenCompletions.useIxslFunctions = false;
+		XsltTokenCompletions.setItemTypeNames(docType, globalInstructionData, importedInstructionData);
 
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
 		let requiredLine = position.line;
@@ -1174,7 +1188,7 @@ export class XsltTokenCompletions {
 							xpathCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 						}
 						if (!xpathCompletions) {
-							let completionStrings = isSimpleType ? FunctionData.simpleTypes : XsltTokenCompletions.sequenceTypesFor(docType);
+							let completionStrings = isSimpleType ? XsltTokenCompletions.atomicItemTypeNames.concat(FunctionData.simpleTypes) : XsltTokenCompletions.sequenceTypesFor(docType);
 							xpathCompletions = XsltTokenCompletions.getNormalCompletions(position, completionStrings, vscode.CompletionItemKind.TypeParameter);
 						}
 						break;
