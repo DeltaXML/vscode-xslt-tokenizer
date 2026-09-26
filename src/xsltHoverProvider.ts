@@ -4,6 +4,7 @@ import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration } from "./xslLexer";
 import { LexPosition } from "./xpLexer";
+import { XsltTokenDiagnostics } from "./xsltTokenDiagnostics";
 
 enum CharType {
 	none,
@@ -28,6 +29,17 @@ export class XSLTHoverProvider implements HoverProvider {
 	}
 
 	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		// XPath 4.0: a record field, e.g. 'r' in $c?r
+		const fieldReference = XsltTokenDiagnostics.recordFieldAt(document, position);
+		if (fieldReference) {
+			const { field, record } = fieldReference;
+			const quotedName = /^[A-Za-z_][\w.-]*$/.test(field.name) ? field.name : `'${field.name}'`;
+			const declaration = `${quotedName}${field.optional ? '?' : ''}${field.type ? ' as ' + field.type : ''}`;
+			const markdown = new MarkdownString();
+			markdown.appendCodeblock(declaration, 'xpath');
+			markdown.appendMarkdown(`${field.optional ? 'Optional field' : 'Field'} of the record type: \`${record.name}\``);
+			return new Hover(markdown);
+		}
 		const line = document.lineAt(position.line);
 		const rawFnName = this.getFunctionName(line.text, position.character);
 

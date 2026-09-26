@@ -4,6 +4,7 @@ import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
 import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
@@ -60,6 +61,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
 		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
+		// XPath 4.0: a record field, e.g. 'r' in $c?r
+		const fieldLocation = XsltDefinitionProvider.recordFieldLocation(document, position, globalInstructionData.concat(allImportedGlobals));
+		if (fieldLocation) {
+			return fieldLocation;
+		}
 
 		return new Promise((resolve, reject) => {
 			let location: DefinitionLocation|undefined = undefined;
@@ -109,6 +115,20 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	private static nameCharRgx = new RegExp(/[A-Z]|[a-z]|_|-|:/);
+
+	// the declaration of the record field at the position, e.g. on 'r' in $c?r: the field within the record type - or for
+	// a record type declared in an imported module, its xsl:item-type declaration
+	private static recordFieldLocation(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[]): DefinitionLocation | undefined {
+		const reference = XsltTokenDiagnostics.recordFieldAt(document, position);
+		if (!reference) {
+			return undefined;
+		} else if (reference.field.nameOffset !== undefined) {
+			const start = document.positionAt(reference.field.nameOffset);
+			return new vscode.Location(document.uri, new vscode.Range(start, start.translate(0, reference.field.name.length)));
+		}
+		const itemType = globals.find((g) => g.type === GlobalInstructionType.ItemType && g.name === reference.record.name);
+		return itemType ? XsltTokenDefinitions.createLocationFromInstruction(itemType, document) : undefined;
+	}
 
 	// the symbols of the XML context file, for element and attribute name completions - computed here if they're not
 	// cached yet, e.g. when VS Code restores the context file's editor at startup without its symbols being requested

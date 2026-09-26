@@ -13,7 +13,7 @@ import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
-import { RecordType, RecordTypes } from './recordTypes';
+import { RecordType, RecordTypes, FieldReference } from './recordTypes';
 
 enum HasCharacteristic {
 	unknown,
@@ -441,6 +441,9 @@ export class XsltTokenDiagnostics {
 		let globalItemTypeNames: string[] = [];
 		// XPath 4.0 record types: xsl:item-type declarations, and the 'as' of global variables and parameters
 		let itemTypeDeclarations = new Map<string, string>();
+		const documentText = document.getText();
+		RecordTypes.itemTypeOffsets = new Map<string, number>();
+		RecordTypes.fieldReferences = [];
 		let globalVariableTypes = new Map<string, string>();
 		// XPath 4.0: the declared types of variable references that may be function call arguments
 		const argumentVariableTypes = new Map<BaseToken, string>();
@@ -532,6 +535,11 @@ export class XsltTokenDiagnostics {
 					globalItemTypeNames.push(instruction.name);
 					if (instruction.declaredType) {
 						itemTypeDeclarations.set(instruction.name, instruction.declaredType);
+						// the offset of the declaration's 'as' value, for the offsets of record fields
+						const asOffset = RecordTypes.attributeValueOffset(documentText, document.offsetAt(new vscode.Position(instruction.token.line, instruction.token.startCharacter)), 'as');
+						if (asOffset !== undefined) {
+							RecordTypes.itemTypeOffsets.set(instruction.name, asOffset);
+						}
 					}
 					break;
 				case GlobalInstructionType.Accumulator:
@@ -857,6 +865,8 @@ export class XsltTokenDiagnostics {
 									// XPath 4.0 record types: check a map constructor against the declared record type
 									const parentName = elementStack.length > 0 ? elementStack[elementStack.length - 1].symbolName : '';
 									let asText = tagAsRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, tagAsRange) : undefined;
+									// the offset of an inline record type, for the offsets of its fields
+									const asOffset = tagAsRange ? document.offsetAt(new vscode.Position(allTokens[tagAsRange[0]].line, allTokens[tagAsRange[0]].startCharacter)) : undefined;
 									if (!asText && tagElementName === 'xsl:with-param' && startTagToken && (parentName === 'xsl:call-template' || parentName === 'xsl:next-iteration')) {
 										// the type of the parameter it sets: of the called template, or the enclosing xsl:iterate
 										const text = document.getText();
@@ -866,7 +876,7 @@ export class XsltTokenDiagnostics {
 										asText = RecordTypes.withParamType(text, ancestors, ancestors.length - 1, (template, param) =>
 											XsltTokenDiagnostics.parameterType(allGlobals, GlobalInstructionType.Template, template, undefined, -1, param));
 									}
-									const record = asText && ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function'].includes(tagElementName) ? RecordTypes.resolve(asText, itemTypeDeclarations) : undefined;
+									const record = asText && ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function'].includes(tagElementName) ? RecordTypes.resolve(asText, itemTypeDeclarations, 0, tagAsRange ? asOffset : undefined) : undefined;
 									if (tagElementName === 'xsl:function') {
 										functionResult = { record, select: null };
 									} else if (functionResult && parentName === 'xsl:function' && tagElementName !== 'xsl:param') {
@@ -1406,7 +1416,10 @@ export class XsltTokenDiagnostics {
 						}
 						const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
 						const globalType = globalVariableTypes.get(variableName);
-						return localVariable ? localVariable.recordType : globalType ? RecordTypes.resolve(globalType, itemTypeDeclarations) : undefined;
+						// the offset of a global variable's 'as' in this document, for the offsets of an inline record type's fields
+						const globalDeclaration = globalType ? globalInstructionData.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === variableName) : undefined;
+						const globalTypeOffset = globalDeclaration ? RecordTypes.attributeValueOffset(documentText, document.offsetAt(new vscode.Position(globalDeclaration.token.line, globalDeclaration.token.startCharacter)), 'as') : undefined;
+						return localVariable ? localVariable.recordType : globalType ? RecordTypes.resolve(globalType, itemTypeDeclarations, 0, globalTypeOffset) : undefined;
 					};
 					const operandIndex = index - 2;
 					const operand = operandIndex > -1 ? allTokens[operandIndex] : undefined;
@@ -1434,6 +1447,7 @@ export class XsltTokenDiagnostics {
 						if (!field) {
 							problemTokens.push(RecordTypes.problemToken(token, isRecordStep ? ErrorType.RecordStepUnknown : ErrorType.RecordLookupUnknown, token.value, record.name));
 						} else {
+							RecordTypes.fieldReferences.push({ token, field, record });
 							const fieldRecord = RecordTypes.fieldRecord(field, itemTypeDeclarations);
 							if (fieldRecord) {
 								lookupRecords.set(token, { record: fieldRecord, isJNode: isRecordStep });
@@ -2837,6 +2851,10 @@ export class XsltTokenDiagnostics {
 			}, itemTypeDeclarations, problemTokens);
 			XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
 		}
+		// the record field references, for hover and go to definition - the offsets only apply to this document
+		XsltTokenDiagnostics.recordFieldReferences.set(document.uri.toString(), RecordTypes.fieldReferences);
+		RecordTypes.fieldReferences = [];
+		RecordTypes.itemTypeOffsets = new Map<string, number>();
 		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
 		const reportedTokens = new Set(problemTokens);
 		allTokens.forEach((token) => {
@@ -4474,8 +4492,10 @@ export class XsltTokenDiagnostics {
 				const tagStart = text.lastIndexOf('<', offset);
 				const tagText = text.substring(tagStart, offset);
 				const selectElement = /^<(xsl:sequence|xsl:map-entry)\s(?:[^<>]*\s)?select\s*=\s*["']\s*$/.exec(tagText)?.[1] ?? (/^<xsl:select(?:\s[^<>]*)?>\s*$/.test(tagText) ? 'xsl:select' : undefined);
-				if (selectElement) {
-					candidates.push({ tokens: run, isLiteral, name: selectElement, tagStart });
+				// the key of an xsl:map-entry, for a reference to a record field
+				const isMapEntryKey = isLiteral && /^<xsl:map-entry\s(?:[^<>]*\s)?key\s*=\s*["']\s*$/.test(tagText);
+				if (selectElement || isMapEntryKey) {
+					candidates.push({ tokens: run, isLiteral, name: selectElement ?? 'key', tagStart });
 				}
 			}
 		}
@@ -4485,6 +4505,18 @@ export class XsltTokenDiagnostics {
 		const templateParamType = (template: string, param: string) => XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Template, template, undefined, -1, param);
 		const openElements = RecordTypes.openElementsAt(RecordTypes.blankMarkup(text), candidates.map((c) => c.tagStart));
 		candidates.forEach((candidate, index) => {
+			if (candidate.name === 'key') {
+				// the record field for an xsl:map-entry key in an xsl:map with a record type
+				const mapAncestors = openElements[index];
+				const mapIndex = mapAncestors.length - 1;
+				const record = mapIndex > -1 && mapAncestors[mapIndex].name === 'xsl:map' ? RecordTypes.xslMapRecord(text, mapAncestors, mapIndex, itemTypes, templateParamType) : undefined;
+				const keyToken = candidate.tokens[0];
+				const field = record?.fields.find((f) => f.name === keyToken.value.substring(1, keyToken.value.length - 1));
+				if (record && field) {
+					RecordTypes.fieldReferences.push({ token: keyToken, field, record });
+				}
+				return;
+			}
 			const ancestors = openElements[index].concat([{ name: candidate.name, offset: candidate.tagStart }]);
 			const ownType = candidate.name === 'xsl:map-entry' ? undefined : RecordTypes.attributeOfElementAt(text, candidate.tagStart + 1, 'as');
 			if (!ownType && candidate.name === 'xsl:sequence' && ancestors[ancestors.length - 2]?.name === 'xsl:function') {
@@ -4512,6 +4544,15 @@ export class XsltTokenDiagnostics {
 	public static readonly placeholderPrefix = RecordTypes.placeholderPrefix;
 	// XPath 4.0 record types: the quick fixes for missing fields, for each document - by the diagnostic's position and message
 	public static readonly recordFixes = new Map<string, Map<string, { line: number, character: number, text: string }>>();
+
+	// XPath 4.0 record types: the tokens that refer to record fields, for each document
+	public static readonly recordFieldReferences = new Map<string, FieldReference[]>();
+
+	// the record field reference at the position, e.g. on 'r' in $c?r
+	public static recordFieldAt(document: vscode.TextDocument, position: vscode.Position): FieldReference | undefined {
+		return XsltTokenDiagnostics.recordFieldReferences.get(document.uri.toString())?.find((ref) => ref.token.line === position.line &&
+			position.character >= ref.token.startCharacter && position.character <= ref.token.startCharacter + ref.token.length);
+	}
 
 	public static recordFixKey(range: vscode.Range, message: string) {
 		return `${range.start.line}:${range.start.character}:${message}`;

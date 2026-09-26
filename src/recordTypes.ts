@@ -13,6 +13,9 @@ export interface RecordField {
 	optional: boolean;
 	// the declared SequenceType, e.g. 'xs:double' - undefined if there's no 'as'
 	type?: string;
+	// the document offsets of the field's name and type in its declaration, where known - for go to definition
+	nameOffset?: number;
+	typeOffset?: number;
 }
 
 export interface RecordType {
@@ -27,6 +30,13 @@ export interface ArgumentTypes {
 	paramType: (name: string, arity: number, position: number, keyword?: string) => string | undefined;
 	variableType: (token: BaseToken) => string | undefined;
 	returnType: (name: string, arity: number) => string | undefined;
+}
+
+// a token that refers to a field of a record type, e.g. 'r' in $c?r - for hover and go to definition
+export interface FieldReference {
+	token: BaseToken;
+	field: RecordField;
+	record: RecordType;
 }
 
 export type TemplateParamType = (templateName: string, paramName: string) => string | undefined;
@@ -49,8 +59,11 @@ export class RecordTypes {
 
 	// the record type for a SequenceType, e.g. 'record(a as xs:string)*' or 'cx:complex', using the xsl:item-type
 	// declarations to resolve named item types - undefined if it's not a record type
-	public static resolve(typeText: string, itemTypes: Map<string, string>, depth = 0): RecordType | undefined {
+	// - with the document offset of typeText, if known, the fields have their offsets - for a named item type, the offset
+	// of its declaration's 'as' value is from itemTypeOffsets
+	public static resolve(typeText: string, itemTypes: Map<string, string>, depth = 0, offset?: number): RecordType | undefined {
 		let text = typeText.trim();
+		const start = offset === undefined ? undefined : offset + typeText.length - typeText.trimStart().length;
 		if (depth > 10 || text.length === 0) {
 			return undefined;
 		}
@@ -59,7 +72,7 @@ export class RecordTypes {
 		}
 		if (text.startsWith('(') && RecordTypes.closingIndex(text, 0) === text.length - 1 && RecordTypes.splitTopLevel(text.substring(1, text.length - 1), '|').length === 1) {
 			// a parenthesized item type
-			return RecordTypes.resolve(text.substring(1, text.length - 1), itemTypes, depth + 1);
+			return RecordTypes.resolve(text.substring(1, text.length - 1), itemTypes, depth + 1, start === undefined ? undefined : start + 1);
 		}
 		const recordMatch = /^record\s*\(/.exec(text);
 		if (recordMatch) {
@@ -67,16 +80,22 @@ export class RecordTypes {
 			if (RecordTypes.closingIndex(text, openIndex) !== text.length - 1) {
 				return undefined;
 			}
-			const fields = RecordTypes.parseFields(text.substring(openIndex + 1, text.length - 1));
+			const fields = RecordTypes.parseFields(text.substring(openIndex + 1, text.length - 1), start === undefined ? undefined : start + openIndex + 1);
 			return fields ? { name: text.replace(/\s+/g, ' '), fields } : undefined;
 		}
 		if (/^[\w.-]+(:[\w.-]+)?$/.test(text)) {
 			const declared = itemTypes.get(text);
-			const resolved = declared ? RecordTypes.resolve(declared, itemTypes, depth + 1) : undefined;
+			const resolved = declared ? RecordTypes.resolve(declared, itemTypes, depth + 1, RecordTypes.itemTypeOffsets.get(text)) : undefined;
 			return resolved ? { name: text, fields: resolved.fields } : undefined;
 		}
 		return undefined;
 	}
+
+	// the document offsets of the 'as' values of the xsl:item-type declarations in the document being processed - set
+	// for each linter run, for the offsets of record fields
+	public static itemTypeOffsets = new Map<string, number>();
+	// the tokens matched to record fields in the document being processed: lookups, child steps and map keys
+	public static fieldReferences: FieldReference[] = [];
 
 	// the type that a named item type is declared as, following named item types, e.g. 'xs:boolean' for 'flag'
 	public static resolveNamedType(typeText: string, itemTypes: Map<string, string>, depth = 0): string | undefined {
@@ -141,13 +160,32 @@ export class RecordTypes {
 
 	// the record type of a field's value, e.g. for record(a as record(b as xs:integer))
 	public static fieldRecord(field: RecordField, itemTypes: Map<string, string>) {
-		return field.type ? RecordTypes.resolve(field.type, itemTypes) : undefined;
+		return field.type ? RecordTypes.resolve(field.type, itemTypes, 0, field.typeOffset) : undefined;
 	}
 
 	// checks the tokens of an expression that is a single map constructor against the record type
 	public static checkMapConstructor(tokens: BaseToken[], record: RecordType, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
 		const realTokens = tokens.filter((t) => t.tokenType !== TokenLevelState.comment);
 		RecordTypes.checkMapTokens(realTokens, 0, realTokens.length - 1, record, itemTypes, problemTokens);
+	}
+
+	// the document offset of the value of an attribute on the element whose start tag contains the offset, after its quote
+	public static attributeValueOffset(text: string, offset: number, attributeName: string): number | undefined {
+		const tagStart = text.lastIndexOf('<', offset);
+		const nameRgx = /<[\w.:-]+/y;
+		nameRgx.lastIndex = tagStart;
+		if (tagStart < 0 || !nameRgx.exec(text)) {
+			return undefined;
+		}
+		const attributeRgx = /\s+([\w.:-]+)(\s*=\s*)("[^"]*"|'[^']*')/y;
+		attributeRgx.lastIndex = nameRgx.lastIndex;
+		let match: RegExpExecArray | null;
+		while ((match = attributeRgx.exec(text)) !== null) {
+			if (match[1] === attributeName) {
+				return attributeRgx.lastIndex - match[3].length + 1;
+			}
+		}
+		return undefined;
 	}
 
 	// the value of an attribute on the element whose start tag contains the offset, e.g. the 'as' of an xsl:variable
@@ -743,6 +781,7 @@ export class RecordTypes {
 				problemTokens.push(RecordTypes.problemToken(entry.keyToken, ErrorType.RecordFieldUnknown, entry.key, record.name));
 				return;
 			}
+			RecordTypes.fieldReferences.push({ token: entry.keyToken, field, record });
 			const nestedRecord = RecordTypes.fieldRecord(field, itemTypes);
 			const enumValues = field.type ? RecordTypes.resolveEnum(field.type, itemTypes) : undefined;
 			if (nestedRecord) {
@@ -887,17 +926,29 @@ export class RecordTypes {
 	}
 
 	// fields of record(...), e.g. "r as xs:double, 'first name', b? as xs:integer" - undefined for record(*)
-	private static parseFields(fieldsText: string): RecordField[] | undefined {
+	private static parseFields(fieldsText: string, offset?: number): RecordField[] | undefined {
 		const fields: RecordField[] = [];
 		if (fieldsText.trim().length === 0) {
 			return fields;
 		}
+		let partStart = 0;
 		for (const fieldText of RecordTypes.splitTopLevel(fieldsText, ',')) {
-			const match = /^\s*(?:'([^']*)'|"([^"]*)"|([\w.-]+))\s*(\?)?\s*(?:as\s+([\s\S]+))?$/.exec(fieldText);
+			const match = /^(\s*)(?:'([^']*)'|"([^"]*)"|([\w.-]+))(\s*\??\s*)(?:as(\s+)([\s\S]+))?$/.exec(fieldText);
 			if (!match) {
 				return undefined;
 			}
-			fields.push({ name: match[1] ?? match[2] ?? match[3], optional: !!match[4], type: match[5]?.trim() });
+			const name = match[2] ?? match[3] ?? match[4];
+			const field: RecordField = { name, optional: match[5].includes('?'), type: match[7]?.trim() };
+			if (offset !== undefined) {
+				// the name, within any quotes, and the type after 'as'
+				const isQuoted = match[4] === undefined;
+				const nameStart = offset + partStart + match[1].length;
+				field.nameOffset = isQuoted ? nameStart + 1 : nameStart;
+				const afterName = nameStart + name.length + (isQuoted ? 2 : 0);
+				field.typeOffset = match[7] !== undefined ? afterName + match[5].length + 2 + match[6].length : undefined;
+			}
+			fields.push(field);
+			partStart += fieldText.length + 1;
 		}
 		return fields;
 	}
