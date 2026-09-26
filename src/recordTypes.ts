@@ -41,7 +41,7 @@ export interface FieldReference {
 
 export type TemplateParamType = (templateName: string, paramName: string) => string | undefined;
 
-interface MapEntry {
+export interface MapEntry {
 	keyToken: BaseToken;
 	key: string;
 	valueStart: number;
@@ -756,7 +756,7 @@ export class RecordTypes {
 
 	public static readonly conditionalInstructions = ['xsl:if', 'xsl:choose', 'xsl:when', 'xsl:otherwise', 'xsl:try', 'xsl:catch'];
 	// a start tag, end tag or empty element tag: [1] is '/' for an end tag, [2] the name, [3] '/' for an empty element
-	private static readonly tagPattern = /<(\/?)([\w.:-]+)(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*(\/?)>/.source;
+	public static readonly tagPattern = /<(\/?)([\w.:-]+)(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*(\/?)>/.source;
 
 	public static problemToken(token: BaseToken, error: ErrorType, ...parts: string[]): BaseToken {
 		return { ...token, error, value: parts.join(RecordTypes.valueSeparator) };
@@ -857,7 +857,7 @@ export class RecordTypes {
 
 	// the entries of a map constructor with string literal keys spanning tokens[start..end], e.g. map { 'a': 1 } or { 'a': 1 } -
 	// undefined if it's not one, or any key is not a string literal
-	private static parseMapConstructor(tokens: BaseToken[], start: number, end: number): { startToken: BaseToken, entries: MapEntry[] } | undefined {
+	public static parseMapConstructor(tokens: BaseToken[], start: number, end: number): { startToken: BaseToken, entries: MapEntry[] } | undefined {
 		if (start > end) {
 			return undefined;
 		}
