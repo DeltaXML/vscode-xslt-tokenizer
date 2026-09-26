@@ -229,6 +229,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let attNames: string[] = [];
 		let nodeNames: string[] = [];
 		let localLanguageConfig = this.languageConfig;
+		const isCommaTrigger = DocumentChangeHandler.consumeCommaTrigger();
 		if (this.docType === DocumentTypes.XPath) {
 			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
@@ -300,6 +301,13 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let xslVariable = ['xsl:variable', 'xsl:param'];
 
 			let completions: vscode.CompletionItem[]|undefined;
+			// XPath 4.0 record types: the next entry of a map constructor
+			const recordEntries = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT ?
+				XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (recordEntries || isCommaTrigger) {
+				resolve(recordEntries && recordEntries.length > 0 ? new vscode.CompletionList(recordEntries, true) : undefined);
+				return;
+			}
 			completions= XsltTokenCompletions.getCompletions(localLanguageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
 			// mark incomplete: these completions depend on surrounding code (variable scope, node
 			// context etc.), not just a static list to prefix-filter, so VS Code must call this

@@ -1261,6 +1261,111 @@ export class XsltTokenCompletions {
 		return undefined;
 	}
 
+	// XPath 4.0: at the start of a new entry in a map constructor, e.g. after '{' or ',', the fields of the record type
+	// that aren't yet entries - for the select of an element declared with a record type, such as xsl:variable, or an
+	// xsl:sequence that is the result of an xsl:function declared with one - undefined if it's not such a position
+	public static getRecordEntryCompletions(document: vscode.TextDocument, allTokens: BaseToken[], position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const isXPathToken = (t: BaseToken) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber;
+		const offset = document.offsetAt(position);
+		const tokenEnd = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter + t.length));
+		let cursorIndex = allTokens.findIndex((t) => tokenEnd(t) > offset);
+		if (cursorIndex === -1) {
+			cursorIndex = allTokens.length;
+		}
+		// the XPath tokens of the attribute value at the cursor: tokens[first..last - 1]
+		const anchor = cursorIndex < allTokens.length && isXPathToken(allTokens[cursorIndex]) ? cursorIndex : cursorIndex - 1;
+		if (anchor < 1 || !isXPathToken(allTokens[anchor])) {
+			return undefined;
+		}
+		let first = anchor;
+		while (first > 0 && isXPathToken(allTokens[first - 1])) {
+			first--;
+		}
+		let last = anchor + 1;
+		while (last < allTokens.length && isXPathToken(allTokens[last])) {
+			last++;
+		}
+		// the XSLT attribute name token before the attribute value
+		const attributeNameToken = [...allTokens.slice(0, first)].reverse().find((t) => t.tokenType === XSLTokenLevelState.attributeName + XsltTokenDiagnostics.xsltStartTokenNumber);
+		const attributeName = attributeNameToken ? document.getText(new vscode.Range(attributeNameToken.line, attributeNameToken.startCharacter, attributeNameToken.line, attributeNameToken.startCharacter + attributeNameToken.length)) : '';
+		if (attributeName !== 'select') {
+			return undefined;
+		}
+		let xpathTokens = allTokens.slice(first, last);
+		let xpathCursor = cursorIndex - first;
+		const cursorToken = allTokens[cursorIndex];
+		if (cursorToken && cursorToken.value === '{}' && cursorToken.charType === CharLevelState.dSep && document.offsetAt(new vscode.Position(cursorToken.line, cursorToken.startCharacter)) < offset) {
+			// an empty map constructor, e.g. {|}
+			const openBrace: BaseToken = { ...cursorToken, value: '{', length: 1, charType: CharLevelState.lBr };
+			const closeBrace: BaseToken = { ...cursorToken, value: '}', length: 1, startCharacter: cursorToken.startCharacter + 1, charType: CharLevelState.rBr };
+			xpathTokens = xpathTokens.slice(0, xpathCursor).concat([openBrace, closeBrace], xpathTokens.slice(xpathCursor + 1));
+			xpathCursor++;
+		}
+		const entryPosition = RecordTypes.mapEntryPosition(xpathTokens, xpathCursor);
+		if (!entryPosition) {
+			return undefined;
+		}
+		const text = document.getText();
+		const attributeOffset = document.offsetAt(new vscode.Position(attributeNameToken!.line, attributeNameToken!.startCharacter));
+		const declaredType = XsltTokenCompletions.declaredTypeForSelect(text, attributeOffset);
+		const globals = globalInstructionData.concat(importedInstructionData);
+		const itemTypes = new Map<string, string>();
+		globals.filter((g) => g.type === GlobalInstructionType.ItemType && g.declaredType).forEach((g) => itemTypes.set(g.name, g.declaredType!));
+		let record = declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
+		for (const key of entryPosition.keyPath) {
+			const field = record?.fields.find((f) => f.name === key);
+			record = field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+		}
+		if (!record) {
+			return undefined;
+		}
+		const charBefore = offset > 0 ? text.charAt(offset - 1) : '';
+		const leadingSpace = charBefore === ',' || charBefore === '{' ? ' ' : '';
+		return record.fields.filter((field) => !entryPosition.usedKeys.includes(field.name)).map((field, index) => {
+			const item = new vscode.CompletionItem(`'${field.name}'`, vscode.CompletionItemKind.Field);
+			item.insertText = new vscode.SnippetString(`${leadingSpace}'${field.name.replace(/[$}\\]/g, '\\$&')}': $0`);
+			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
+			item.documentation = `Field of the record type: ${record!.name}`;
+			// required fields first, in declaration order
+			item.sortText = (field.optional ? '1' : '0') + String(index).padStart(4, '0');
+			item.preselect = index === 0;
+			return item;
+		});
+	}
+
+	// the 'as' for the select attribute at the offset: the element's own 'as', e.g. on xsl:variable, or for an xsl:sequence,
+	// the 'as' of the xsl:function whose result it is - within any xsl:if or xsl:choose etc.
+	private static declaredTypeForSelect(text: string, attributeOffset: number): string | undefined {
+		const tagStart = text.lastIndexOf('<', attributeOffset);
+		const elementName = /^<([\w.:-]+)/.exec(text.substring(tagStart, tagStart + 100))?.[1];
+		if (elementName === 'xsl:variable' || elementName === 'xsl:param' || elementName === 'xsl:with-param') {
+			return RecordTypes.attributeOfElementAt(text, attributeOffset, 'as');
+		} else if (elementName !== 'xsl:sequence') {
+			return undefined;
+		}
+		// the ancestors of the xsl:sequence - comments, CDATA sections and processing instructions are blanked out
+		const markup = text.substring(0, tagStart).replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g, (m) => ' '.repeat(m.length));
+		const tagRgx = /<(\/?)([\w.:-]+)(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*(\/?)>/g;
+		const ancestors: { name: string, offset: number }[] = [];
+		let match: RegExpExecArray | null;
+		while ((match = tagRgx.exec(markup)) !== null) {
+			if (match[1]) {
+				ancestors.pop();
+			} else if (!match[3]) {
+				ancestors.push({ name: match[2], offset: match.index });
+			}
+		}
+		const conditionals = ['xsl:if', 'xsl:choose', 'xsl:when', 'xsl:otherwise', 'xsl:try', 'xsl:catch'];
+		for (let i = ancestors.length - 1; i > -1; i--) {
+			if (ancestors[i].name === 'xsl:function') {
+				return RecordTypes.attributeOfElementAt(text, ancestors[i].offset + 1, 'as');
+			} else if (!conditionals.includes(ancestors[i].name)) {
+				return undefined;
+			}
+		}
+		return undefined;
+	}
+
 	private static isXPath40(docType: DocumentTypes) {
 		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
 	}

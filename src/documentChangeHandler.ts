@@ -23,6 +23,15 @@ export class DocumentChangeHandler {
 	public static contextFileIsNone = false;
 
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
+	// set when completions are triggered by typing ',' in an XSLT 4.0 stylesheet: the completion provider then only
+	// offers the entries of a map constructor for a record type, and otherwise no completions
+	private static commaTriggerPending = false;
+
+	public static consumeCommaTrigger(): boolean {
+		const pending = DocumentChangeHandler.commaTriggerPending;
+		DocumentChangeHandler.commaTriggerPending = false;
+		return pending;
+	}
 	public static isWindowsOS: boolean | undefined;
 
 	public static setLastActiveXMLNonXSLUri(uri: vscode.Uri): void {
@@ -100,6 +109,11 @@ export class DocumentChangeHandler {
 			// XPath 4.0 record fields for a lookup on a variable, e.g. $c? or $p?address? - not for an occurrence indicator such as xs:string?
 			const textBefore = e.document.lineAt(activeChange.range.start.line).text.substring(0, activeChange.range.start.character);
 			triggerSuggest = /\$[\w.:-]+(\?[\w.-]+)*$/.test(textBefore);
+		}
+		if (!triggerSuggest && !skipTrigger && activeChange.text === ',' && e.document.languageId === 'xslt' && /\sversion\s*=\s*["']4\.0["']/.test(e.document.getText(new vscode.Range(0, 0, 50, 0)))) {
+			// XPath 4.0 record types: the next entry of a map constructor
+			triggerSuggest = true;
+			DocumentChangeHandler.commaTriggerPending = true;
 		}
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<' || activeChange.text.endsWith('::')) {
 			let isCloseTagFeature = false;

@@ -103,6 +103,57 @@ export class RecordTypes {
 		return undefined;
 	}
 
+	// for completions: when tokens[cursor - 1] is the '{' or ',' before a new entry of a map constructor, e.g. { 'a': 1, |,
+	// the keys of the entries that contain it, from the outermost map constructor, e.g. ['address'] for { 'address': { |
+	// and the keys the map constructor already has, before or after the cursor - undefined if the outermost map
+	// constructor isn't the whole expression, or a containing map constructor isn't the value of a string literal key
+	public static mapEntryPosition(tokens: BaseToken[], cursor: number): { keyPath: string[], usedKeys: string[] } | undefined {
+		interface Frame { isMap: boolean, parentKey?: string, key?: string, keys: string[] }
+		const realTokens = tokens.filter((t, i) => t.tokenType !== TokenLevelState.comment || i >= cursor);
+		const cursorIndex = cursor - (tokens.length - realTokens.length);
+		const previous = realTokens[cursorIndex - 1];
+		if (!previous || !(previous.charType === CharLevelState.lBr || (previous.charType === CharLevelState.sep && previous.value === ','))) {
+			return undefined;
+		}
+		const stack: Frame[] = [];
+		let cursorFrames: Frame[] | undefined;
+		for (let i = 0; i < realTokens.length; i++) {
+			if (i === cursorIndex) {
+				cursorFrames = stack.slice();
+			}
+			const t = realTokens[i];
+			const top = stack[stack.length - 1];
+			const prev = realTokens[i - 1];
+			if (t.charType === CharLevelState.lBr) {
+				// a map constructor starts the expression, e.g. { or map {, or is the value of an entry with a string literal key
+				const start = prev?.tokenType === TokenLevelState.operator && prev.value === 'map' ? i - 1 : i;
+				const before = realTokens[start - 1];
+				const isOuterMap = stack.length === 0 && start === 0;
+				const isEntryValue = !!top?.isMap && top.key !== undefined && before?.charType === CharLevelState.sep && before.value === ':';
+				stack.push({ isMap: isOuterMap || isEntryValue, parentKey: isEntryValue ? top.key : undefined, keys: [] });
+			} else if (RecordTypes.isOpenBracket(t)) {
+				stack.push({ isMap: false, keys: [] });
+			} else if (RecordTypes.isCloseBracket(t)) {
+				stack.pop();
+			} else if (top?.isMap && t.charType === CharLevelState.sep && t.value === ':') {
+				const isStringKey = prev && (prev.tokenType === TokenLevelState.mapKey || prev.tokenType === TokenLevelState.string) && /^(['"]).*\1$/.test(prev.value);
+				top.key = isStringKey ? prev.value.substring(1, prev.value.length - 1) : undefined;
+				if (top.key !== undefined) {
+					top.keys.push(top.key);
+				}
+			} else if (top?.isMap && t.charType === CharLevelState.sep && t.value === ',') {
+				top.key = undefined;
+			}
+		}
+		if (cursorIndex >= realTokens.length) {
+			cursorFrames = stack.slice();
+		}
+		if (!cursorFrames || cursorFrames.length === 0 || !cursorFrames.every((frame) => frame.isMap)) {
+			return undefined;
+		}
+		return { keyPath: cursorFrames.slice(1).map((frame) => frame.parentKey!), usedKeys: cursorFrames[cursorFrames.length - 1].keys };
+	}
+
 	public static problemToken(token: BaseToken, error: ErrorType, ...parts: string[]): BaseToken {
 		return { ...token, error, value: parts.join(RecordTypes.valueSeparator) };
 	}
