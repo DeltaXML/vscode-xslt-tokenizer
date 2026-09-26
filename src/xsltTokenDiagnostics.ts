@@ -2842,6 +2842,9 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
+		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
+			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
+		}
 		if (XsltTokenDiagnostics.isXPath40(docType)) {
 			// XPath 4.0: the value of a typed let binding, e.g. let $p as person := { ... }
 			const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
@@ -4157,6 +4160,15 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: '${tokenValue}' is also tested by an earlier xsl:when, so this xsl:when never matches it`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
+				case ErrorType.IterateTailPosition:
+					msg = `XSLT: ${tokenValue} must be the last instruction of xsl:iterate - or of an xsl:if, xsl:when, xsl:otherwise, xsl:try or xsl:catch in that position`;
+					break;
+				case ErrorType.IterateParamOrder:
+					msg = `XSLT: xsl:param must come before any other content of xsl:iterate`;
+					break;
+				case ErrorType.IterateOnCompletionOrder:
+					msg = `XSLT: xsl:on-completion must come after any xsl:param and before any other content of xsl:iterate`;
+					break;
 				case ErrorType.SwitchWithoutWhen:
 					msg = `XSLT: xsl:switch must contain at least one xsl:when`;
 					break;
@@ -4491,6 +4503,129 @@ export class XsltTokenDiagnostics {
 			severity: vscode.DiagnosticSeverity.Error,
 			source: '',
 		};
+	}
+
+	// the children of an xsl:iterate are any xsl:param elements, then an optional xsl:on-completion, then the rest -
+	// Saxon 13 reports XTSE0010 for an xsl:param or xsl:on-completion out of order (comments are ignored, and so are
+	// elements with use-when, as they may be excluded)
+	private static checkIterateOrder(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const iterateStarts = [...text.matchAll(/<xsl:iterate[\s>]/g)].map((match) => match.index!);
+		if (iterateStarts.length === 0) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const nameToken = (offset: number, name: string, error: ErrorType): BaseToken => {
+			const position = document.positionAt(offset + 1);
+			return { line: position.line, startCharacter: position.character, length: name.length, value: name, tokenType: 0, error };
+		};
+		XsltTokenDiagnostics.checkIterateTailPositions(document, text, markup, problemTokens);
+		iterateStarts.forEach((iterateStart) => {
+			const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+			tagRgx.lastIndex = iterateStart;
+			const iterateTag = tagRgx.exec(markup);
+			if (!iterateTag || iterateTag[3]) {
+				return;
+			}
+			// 0: xsl:param elements, 1: after xsl:on-completion, 2: after other content
+			let phase = 0;
+			let depth = 1;
+			let previousEnd = tagRgx.lastIndex;
+			let match: RegExpExecArray | null;
+			while (depth > 0 && (match = tagRgx.exec(markup)) !== null) {
+				if (depth === 1 && markup.substring(previousEnd, match.index).trim() !== '') {
+					// text content
+					phase = 2;
+				}
+				if (match[1]) {
+					depth--;
+				} else {
+					if (depth === 1) {
+						const name = match[2];
+						if (name === 'xsl:param') {
+							if (phase > 0) {
+								problemTokens.push(nameToken(match.index, name, ErrorType.IterateParamOrder));
+							}
+						} else if (name === 'xsl:on-completion') {
+							if (phase > 0) {
+								problemTokens.push(nameToken(match.index, name, ErrorType.IterateOnCompletionOrder));
+							}
+							phase = Math.max(phase, 1);
+						} else if (!/\s(?:xsl:)?use-when\s*=/.test(match[0])) {
+							// an instruction with use-when may be excluded at compile time, so it doesn't affect the order
+							phase = 2;
+						}
+					}
+					if (!match[3]) {
+						depth++;
+					}
+				}
+				previousEnd = tagRgx.lastIndex;
+			}
+		});
+	}
+
+	// xsl:next-iteration and xsl:break must be in a tail position of the xsl:iterate: its last instruction, or the last in an
+	// xsl:if, xsl:when or xsl:otherwise (of xsl:choose or xsl:switch), xsl:try or xsl:catch that is in a tail position -
+	// Saxon 13 reports XTSE3120 - comments, and xsl:fallback after the instruction, are ignored
+	private static checkIterateTailPositions(document: vscode.TextDocument, text: string, markup: string, problemTokens: BaseToken[]) {
+		const candidates = [...markup.matchAll(/<(xsl:next-iteration|xsl:break)[\s/>]/g)].map((match) => ({ offset: match.index!, name: match[1] }));
+		if (candidates.length === 0) {
+			return;
+		}
+		// true if only whitespace, xsl:fallback (or xsl:catch, for the content of xsl:try) follows the element in its parent
+		const isLast = (elementOffset: number, parentOffset: number, allowCatch: boolean) => {
+			const parentEnd = RecordExtraction.elementEnd(markup, parentOffset);
+			const endTagStart = markup.lastIndexOf('<', parentEnd - 1);
+			const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+			let position = RecordExtraction.elementEnd(markup, elementOffset);
+			while (position > -1 && position < endTagStart) {
+				tagRgx.lastIndex = position;
+				const next = tagRgx.exec(markup);
+				const nextStart = next && next.index < endTagStart ? next.index : endTagStart;
+				if (markup.substring(position, nextStart).trim() !== '') {
+					return false;
+				} else if (nextStart === endTagStart) {
+					return true;
+				} else if (next![1] || !(next![2] === 'xsl:fallback' || (allowCatch && next![2] === 'xsl:catch'))) {
+					return false;
+				}
+				position = RecordExtraction.elementEnd(markup, next!.index);
+			}
+			return true;
+		};
+		const openElements = RecordTypes.openElementsAt(markup, candidates.map((c) => c.offset));
+		candidates.forEach((candidate, index) => {
+			const ancestors = openElements[index];
+			if (!ancestors.some((a) => a.name === 'xsl:iterate')) {
+				return;
+			}
+			let current = candidate.offset;
+			let i = ancestors.length - 1;
+			let inTailPosition = false;
+			while (i > -1) {
+				const parent = ancestors[i];
+				if (!isLast(current, parent.offset, parent.name === 'xsl:try')) {
+					break;
+				} else if (parent.name === 'xsl:iterate') {
+					inTailPosition = true;
+					break;
+				} else if (parent.name === 'xsl:if' || parent.name === 'xsl:try') {
+					current = parent.offset;
+					i--;
+				} else if ((parent.name === 'xsl:when' || parent.name === 'xsl:otherwise' || parent.name === 'xsl:catch') && i > 0) {
+					// a branch of an xsl:choose, xsl:switch or xsl:try: that must be in a tail position
+					current = ancestors[i - 1].offset;
+					i -= 2;
+				} else {
+					break;
+				}
+			}
+			if (!inTailPosition) {
+				const position = document.positionAt(candidate.offset + 1);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: candidate.name.length, value: candidate.name, tokenType: 0, error: ErrorType.IterateTailPosition });
+			}
+		});
 	}
 
 	// XSLT 4.0: for each xsl:switch whose select has an enumeration type, the declared type, by the offset of its start tag
