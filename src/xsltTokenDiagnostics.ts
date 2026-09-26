@@ -2794,6 +2794,11 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
+		if (XsltTokenDiagnostics.isXPath40(docType)) {
+			// XPath 4.0: the value of a typed let binding, e.g. let $p as person := { ... }
+			const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
+			RecordTypes.checkLetBindings(xpathTokens, (range) => XsltTokenDiagnostics.textForTokenRange(document, xpathTokens, range), itemTypeDeclarations, problemTokens);
+		}
 		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
 		const reportedTokens = new Set(problemTokens);
 		allTokens.forEach((token) => {

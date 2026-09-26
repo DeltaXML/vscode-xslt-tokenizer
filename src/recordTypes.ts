@@ -282,6 +282,52 @@ export class RecordTypes {
 		return undefined;
 	}
 
+	// the index of the last token of the map constructor starting at tokens[start], e.g. map { ... }, { ... } or {} -
+	// -1 if there isn't one there
+	public static mapConstructorEnd(tokens: BaseToken[], start: number): number {
+		let i = start;
+		if (tokens[i]?.tokenType === TokenLevelState.operator && tokens[i].value === 'map') {
+			i++;
+		}
+		if (tokens[i]?.charType === CharLevelState.dSep && tokens[i].value === '{}') {
+			return i;
+		}
+		return tokens[i]?.charType === CharLevelState.lBr ? RecordTypes.closingTokenIndex(tokens, i) : -1;
+	}
+
+	// checks the value of each typed let binding, e.g. let $p as person := { ... } - a map constructor against a record type,
+	// and a string literal against an enumeration type
+	public static checkLetBindings(tokens: BaseToken[], typeText: (range: [number, number]) => string, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		tokens.forEach((t, i) => {
+			if (t.tokenType !== TokenLevelState.complexExpression || t.value !== ':=') {
+				return;
+			}
+			let typeRange: [number, number] | undefined;
+			for (let j = i - 2; j > -1 && j > i - 40 && !typeRange; j--) {
+				const range = tokens[j].tokenType === TokenLevelState.variable ? RecordTypes.xpathVariableTypeRange(tokens, j) : undefined;
+				typeRange = range && range[1] === i - 1 ? range : undefined;
+			}
+			const valueStart = RecordTypes.nextNonComment(tokens, i);
+			if (!typeRange || valueStart === -1) {
+				return;
+			}
+			const declaredType = typeText(typeRange);
+			const record = RecordTypes.resolve(declaredType, itemTypes);
+			const mapEnd = record ? RecordTypes.mapConstructorEnd(tokens, valueStart) : -1;
+			if (record && mapEnd > -1) {
+				RecordTypes.checkMapConstructor(tokens.slice(valueStart, mapEnd + 1), record, itemTypes, problemTokens);
+				return;
+			}
+			// a single string literal, e.g. let $c as colour := 'red' return ...
+			const enumValues = RecordTypes.resolveEnum(declaredType, itemTypes);
+			const after = tokens[RecordTypes.nextNonComment(tokens, valueStart)];
+			const isSingleValue = !after || (after.tokenType === TokenLevelState.complexExpression && after.value === 'return') || (after.charType === CharLevelState.sep && after.value === ',');
+			if (enumValues && isSingleValue) {
+				RecordTypes.checkEnumValue([tokens[valueStart]], enumValues, declaredType, problemTokens);
+			}
+		});
+	}
+
 	private static nextNonComment(tokens: BaseToken[], index: number) {
 		for (let i = index + 1; i < tokens.length; i++) {
 			if (tokens[i].tokenType !== TokenLevelState.comment) {

@@ -50,6 +50,8 @@ const cases: [string, string, string][] = [
 		`<xsl:variable name="p" as="person" select="map { 'name': __TODO.name, 'address': { 'city': __TODO.city } }"/>`],
 	['a nested map constructor', `<xsl:variable name="p" as="person" select="{ 'name': 'Ann', 'address': { 'zip': 'Z1' } }"/>`,
 		`<xsl:variable name="p" as="person" select="{ 'name': 'Ann', 'address': { 'zip': 'Z1', 'city': __TODO.city } }"/>`],
+	['the value of a typed let binding', `<xsl:variable name="p" select="let $p as person := { 'name': 'Ann' } return $p"/>`,
+		`<xsl:variable name="p" select="let $p as person := { 'name': 'Ann', 'address': { 'city': __TODO.city } } return $p"/>`],
 	['an attribute in apostrophes', `<xsl:variable name="p" as="person" select='{ "address": { "city": "x" } }'/>`,
 		`<xsl:variable name="p" as="person" select='{ "address": { "city": "x" }, "name": __TODO.name }'/>`],
 ];
