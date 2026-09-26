@@ -78,16 +78,6 @@ suite('Extract record type', () => {
 		assert.equal(await apply('Use record type \'point\''), stylesheet(`${existing}\n  <xsl:variable name="p" as="point" select="{ 'x': 1, 'y': 2 }"/>`));
 	});
 
-	test('use an existing record type: listed with the extract refactorings', async () => {
-		const text = stylesheet(`<xsl:item-type name="originType" as="record(x as xs:integer, y as xs:integer, z as record(r as xs:integer, c as xs:string))"/>
-  <xsl:variable name="origin" select="map { 'x': 0, 'y': 0, 'z': {'r': 2, 'c': 'blue'} }"/>`);
-		const document = await vscode.workspace.openTextDocument({ content: text, language: 'xslt' });
-		await vscode.window.showTextDocument(document);
-		const range = new vscode.Range(document.positionAt(text.indexOf('map {')), document.positionAt(text.indexOf('} }') + 3));
-		const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>('vscode.executeCodeActionProvider', document.uri, range, vscode.CodeActionKind.RefactorExtract.value);
-		assert.includeMembers((actions ?? []).map((a) => a.title), ['Extract record type', 'Use record type \'originType\'']);
-	});
-
 	test('before the first top-level element when there are no imports', async () => {
 		const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="4.0">\n  <xsl:variable name="p" select="«{ 'r': 1 }»"/>\n</xsl:stylesheet>`;
 		const { apply } = await actionsFor(marked);
@@ -106,6 +96,68 @@ suite('Extract record type', () => {
 	notOffered.forEach(([label, marked]) => {
 		test(`not offered: ${label}`, async () => {
 			assert.deepEqual((await actionsFor(marked)).titles, []);
+		});
+	});
+});
+
+suite('Extract record type: at the cursor', () => {
+	// the code actions for the cursor, marked by '¦'
+	async function actionsAt(marked: string) {
+		const offset = marked.indexOf('¦');
+		const document = await vscode.workspace.openTextDocument({ content: marked.replace('¦', ''), language: 'xslt' });
+		const provider = new XSLTCodeActions();
+		const position = document.positionAt(offset);
+		const actions = provider.provideCodeActions(document, new vscode.Range(position, position), { diagnostics: [], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		const recordActions = actions.filter((a) => a.title === 'Extract record type' || a.title.startsWith('Use record type'));
+		const apply = async (title: string) => {
+			const action = recordActions.find((a) => a.title === title);
+			assert.isDefined(action, `action: ${title}`);
+			const resolved = await provider.resolveCodeAction(action!, new vscode.CancellationTokenSource().token);
+			assert.isTrue(await vscode.workspace.applyEdit(resolved.edit!));
+			return document.getText();
+		};
+		return { titles: recordActions.map((a) => a.title), apply };
+	}
+
+	const itemType = (recordType: string) => `${importLine}\n  <xsl:item-type name="record-type" as="${recordType}"/>`;
+
+	const cases: [string, string, string, string][] = [
+		['on the name of an xsl:variable with a select', `<xsl:variable na¦me="p" select="map { 'r': 1 }"/>`, `<xsl:variable name="p" as="record-type" select="map { 'r': 1 }"/>`, 'record(r as xs:integer)'],
+		['on the element name, replacing map(xs:string, item()*)', `<xsl:v¦ariable name="p" as="map(xs:string, item()*)" select="{ 'r': 'a' }"/>`, `<xsl:variable name="p" as="record-type" select="{ 'r': 'a' }"/>`, 'record(r as xs:string)'],
+		['on the as value', `<xsl:variable name="p" as="map(*)¦?" select="{ 'r': 'a' }"/>`, `<xsl:variable name="p" as="record-type?" select="{ 'r': 'a' }"/>`, 'record(r as xs:string)'],
+		['an xsl:param with an xsl:map', `<xsl:param name="p"¦>\n    <xsl:map><xsl:map-entry key="'a'" select="1"/></xsl:map>\n  </xsl:param>`, `<xsl:param name="p" as="record-type">\n    <xsl:map><xsl:map-entry key="'a'" select="1"/></xsl:map>\n  </xsl:param>`, 'record(a as xs:integer)'],
+		['an xsl:variable with an xsl:select', `<xsl:variable ¦name="v"><xsl:select>{ 'r': true() }</xsl:select></xsl:variable>`, `<xsl:variable name="v" as="record-type"><xsl:select>{ 'r': true() }</xsl:select></xsl:variable>`, 'record(r as xs:boolean)'],
+		['an xsl:function with an xsl:sequence', `<xsl:function name="f:f" as="item()"¦><xsl:sequence select="{ 'r': 1 }"/></xsl:function>`, `<xsl:function name="f:f" as="record-type"><xsl:sequence select="{ 'r': 1 }"/></xsl:function>`, 'record(r as xs:integer)'],
+		['an xsl:sequence, with its own as', `<xsl:template name="t"><xsl:sequ¦ence select="{ 'r': 1 }"/></xsl:template>`, `<xsl:template name="t"><xsl:sequence as="record-type" select="{ 'r': 1 }"/></xsl:template>`, 'record(r as xs:integer)'],
+		['an xsl:select, with its own as', `<xsl:template name="t"><xsl:select¦>{ 'r': 1 }</xsl:select></xsl:template>`, `<xsl:template name="t"><xsl:select as="record-type">{ 'r': 1 }</xsl:select></xsl:template>`, 'record(r as xs:integer)'],
+	];
+	cases.forEach(([label, body, expected, recordType]) => {
+		test(label, async () => {
+			const { apply } = await actionsAt(stylesheet(body));
+			assert.equal(await apply('Extract record type'), stylesheet(expected).replace(importLine, itemType(recordType)));
+		});
+	});
+
+	test('use an existing record type', async () => {
+		const existing = `<xsl:item-type name="point" as="record(x, y)"/>`;
+		const { titles, apply } = await actionsAt(stylesheet(`${existing}\n  <xsl:variable name="p¦" select="{ 'x': 1, 'y': 2 }"/>`));
+		assert.deepEqual(titles, ['Extract record type', 'Use record type \'point\'']);
+		assert.equal(await apply('Use record type \'point\''), stylesheet(`${existing}\n  <xsl:variable name="p" as="point" select="{ 'x': 1, 'y': 2 }"/>`));
+	});
+
+	const notOffered: [string, string][] = [
+		['in the content, not the start tag', stylesheet(`<xsl:variable name="v">¦<xsl:select>{ 'r': 1 }</xsl:select></xsl:variable>`)],
+		['a specific as', stylesheet(`<xsl:variable na¦me="s" as="xs:string" select="{ 'r': 1 }"/>`)],
+		['a map type with keys that are not strings', stylesheet(`<xsl:variable na¦me="s" as="map(xs:integer, item())" select="{ 'r': 1 }"/>`)],
+		['a select that is not a map constructor', stylesheet(`<xsl:variable na¦me="s" select="{ 'r': 1 }, 2"/>`)],
+		['a key that is not a string literal', stylesheet(`<xsl:variable na¦me="s" select="{ $k: 1 }"/>`)],
+		['more than one child element', stylesheet(`<xsl:variable na¦me="s"><xsl:map/><xsl:map/></xsl:variable>`)],
+		['another element', stylesheet(`<xsl:template na¦me="t"><xsl:sequence select="{ 'r': 1 }"/></xsl:template>`)],
+		['XSLT 3.0', stylesheet(`<xsl:variable na¦me="p" select="map { 'r': 1 }"/>`, '3.0')],
+	];
+	notOffered.forEach(([label, marked]) => {
+		test(`not offered: ${label}`, async () => {
+			assert.deepEqual((await actionsAt(marked)).titles, []);
 		});
 	});
 });

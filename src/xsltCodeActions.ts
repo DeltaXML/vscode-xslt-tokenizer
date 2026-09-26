@@ -190,11 +190,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			codeActions[0].isPreferred = true;
 		}
 
-		// XPath 4.0: a selected map constructor or xsl:map, for 'Extract record type'
+		// XPath 4.0: 'Extract record type'
 		this.recordExtraction = null;
-		if (!range.isEmpty && /\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)))) {
+		if (/\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)))) {
+			// a selected map constructor or xsl:map, or the cursor on the start tag of a declaration whose value is one
 			const text = document.getText();
-			const plan = RecordExtraction.forSelection(text, document.offsetAt(range.start), document.offsetAt(range.end));
+			const plan = range.isEmpty ? RecordExtraction.forCursor(text, document.offsetAt(range.start)) :
+				RecordExtraction.forSelection(text, document.offsetAt(range.start), document.offsetAt(range.end));
 			if (plan) {
 				const existingTypes = XSLTCodeActions.matchingRecordTypes(text, plan.fieldNames);
 				this.recordExtraction = { document, plan, existingTypes };

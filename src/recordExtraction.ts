@@ -75,6 +75,82 @@ export class RecordExtraction {
 		return asEdit && itemTypeInsert ? { recordType: record.recordType, fieldNames: record.fieldNames, asEdit, itemTypeInsert } : undefined;
 	}
 
+	// the extraction for the start tag at the offset, of an xsl:variable, xsl:param, xsl:with-param, xsl:function,
+	// xsl:sequence or xsl:select whose value is a map constructor or xsl:map - undefined if it's not one, or if the element
+	// already has a more specific type
+	public static forCursor(text: string, offset: number): RecordExtractionPlan | undefined {
+		// the start tag the cursor is within, after its '<'
+		const tagStart = offset > 0 ? text.lastIndexOf('<', offset - 1) : -1;
+		// a quick check of the element name, before processing the whole document
+		const elementName = tagStart > -1 ? /^<([\w.:-]+)/.exec(text.substring(tagStart, tagStart + 30))?.[1] : undefined;
+		if (!elementName || !RecordExtraction.cursorElements.includes(elementName)) {
+			return undefined;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'y');
+		tagRgx.lastIndex = tagStart;
+		const tag = tagStart > -1 ? tagRgx.exec(markup) : null;
+		const name = tag?.[2];
+		// the cursor is within the start tag, before its '>'
+		if (!tag || tag[1] || !name || offset >= tagStart + tag[0].length || !RecordExtraction.cursorElements.includes(name)) {
+			return undefined;
+		}
+		let record: { recordType: string, fieldNames: string[] } | undefined;
+		const select = name === 'xsl:select' ? undefined : RecordTypes.attributeOfElementAt(text, tagStart + 1, 'select');
+		if (select !== undefined) {
+			record = RecordExtraction.xpathRecord(select);
+		} else if (!tag[3]) {
+			// the content: an xsl:select's XPath, or a single child element
+			const contentStart = tagStart + tag[0].length;
+			const contentEnd = RecordExtraction.elementEnd(markup, tagStart);
+			if (name === 'xsl:select') {
+				record = RecordExtraction.xpathRecord(text.substring(contentStart, text.lastIndexOf('<', contentEnd - 1)));
+			} else {
+				record = RecordExtraction.singleChildRecord(text, markup, contentStart, contentEnd);
+			}
+		}
+		if (!record || record.fieldNames.length === 0) {
+			return undefined;
+		}
+		const asEdit = RecordExtraction.asEdit(text, { name, offset: tagStart });
+		const itemTypeInsert = RecordExtraction.itemTypeInsertion(text, markup);
+		return asEdit && itemTypeInsert ? { recordType: record.recordType, fieldNames: record.fieldNames, asEdit, itemTypeInsert } : undefined;
+	}
+
+	private static readonly cursorElements = ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function', 'xsl:sequence', 'xsl:select'];
+
+	// the record type for XPath that is a single map constructor with string literal keys
+	private static xpathRecord(xpath: string) {
+		const tokens = RecordExtraction.xpathTokens(xpath.trim());
+		return tokens && RecordTypes.mapConstructorEnd(tokens, 0) === tokens.length - 1 ? RecordExtraction.mapConstructorRecord(tokens, 0, tokens.length - 1) : undefined;
+	}
+
+	// the record type for content that is a single element, with no other content: an xsl:map, an xsl:select, or an
+	// xsl:sequence with a select attribute
+	private static singleChildRecord(text: string, markup: string, contentStart: number, contentEnd: number) {
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		tagRgx.lastIndex = contentStart;
+		const child = tagRgx.exec(markup);
+		if (!child || child[1] || child.index >= contentEnd) {
+			return undefined;
+		}
+		const childEnd = RecordExtraction.elementEnd(markup, child.index);
+		const endTagStart = text.lastIndexOf('<', contentEnd - 1);
+		// only whitespace around the child element
+		if (markup.substring(contentStart, child.index).trim() !== '' || markup.substring(childEnd, endTagStart).trim() !== '') {
+			return undefined;
+		}
+		if (child[2] === 'xsl:map') {
+			return RecordExtraction.xslMapRecord(text, markup, child.index);
+		} else if (child[2] === 'xsl:select' && !child[3]) {
+			return RecordExtraction.xpathRecord(text.substring(child.index + child[0].length, text.lastIndexOf('<', childEnd - 1)));
+		} else if (child[2] === 'xsl:sequence') {
+			const select = RecordTypes.attributeOfElementAt(text, child.index + 1, 'select');
+			return select !== undefined ? RecordExtraction.xpathRecord(select) : undefined;
+		}
+		return undefined;
+	}
+
 	// a name for the new xsl:item-type that isn't used
 	public static newTypeName(existingNames: string[]) {
 		let name = 'record-type';
@@ -171,19 +247,18 @@ export class RecordExtraction {
 	private static asEdit(text: string, declaration: { name: string, offset: number }) {
 		const asValue = RecordTypes.attributeOfElementAt(text, declaration.offset + 1, 'as');
 		if (asValue !== undefined) {
-			const generic = /^\s*(?:map\s*\([^()]*\)|item\s*\(\s*\))\s*([?*+]?)\s*$/.exec(asValue);
+			// map(*), map(xs:string, ...) or item(), with any occurrence indicator
+			const generic = /^\s*(?:map\s*\(\s*(?:\*|xs:string\s*,[\s\S]*)\)|item\s*\(\s*\))\s*([?*+]?)\s*$/.exec(asValue);
 			const valueStart = RecordTypes.attributeValueOffset(text, declaration.offset + 1, 'as');
 			if (!generic || valueStart === undefined) {
 				return undefined;
 			}
 			return { start: valueStart, end: valueStart + text.substring(valueStart).search(/["']/), isInsert: false, occurrence: generic[1] };
 		}
+		// after the name attribute, or the element name, e.g. for xsl:sequence
 		const nameStart = RecordTypes.attributeValueOffset(text, declaration.offset + 1, 'name');
-		if (nameStart === undefined) {
-			return undefined;
-		}
-		const nameEnd = nameStart + text.substring(nameStart).search(/["']/) + 1;
-		return { start: nameEnd, end: nameEnd, isInsert: true, occurrence: '' };
+		const insertAt = nameStart !== undefined ? nameStart + text.substring(nameStart).search(/["']/) + 1 : declaration.offset + 1 + declaration.name.length;
+		return { start: insertAt, end: insertAt, isInsert: true, occurrence: '' };
 	}
 
 	// after the last top-level xsl:item-type, xsl:import, xsl:include or xsl:use-package - or before the first top-level
