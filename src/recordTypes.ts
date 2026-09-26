@@ -335,7 +335,7 @@ export class RecordTypes {
 
 	// checks the value starting at tokens[valueStart] against the type: a map constructor against a record type, or when the
 	// value is the single token tokens[singleEnd], a string literal against an enumeration type
-	private static checkValue(tokens: BaseToken[], valueStart: number, singleEnd: number, declaredType: string, itemTypes: Map<string, string>, problemTokens: BaseToken[], valueEnd?: number) {
+	public static checkValue(tokens: BaseToken[], valueStart: number, singleEnd: number, declaredType: string, itemTypes: Map<string, string>, problemTokens: BaseToken[], valueEnd?: number) {
 		const record = RecordTypes.resolve(declaredType, itemTypes);
 		const mapEnd = record ? RecordTypes.mapConstructorEnd(tokens, valueStart) : -1;
 		if (record && mapEnd > -1 && (valueEnd === undefined || mapEnd === valueEnd)) {
@@ -463,6 +463,26 @@ export class RecordTypes {
 		return ancestors;
 	}
 
+	// the open elements at each of the offsets, which must be in ascending order - as openElements, in one pass
+	public static openElementsAt(markup: string, offsets: number[]): { name: string, offset: number }[][] {
+		const result: { name: string, offset: number }[][] = [];
+		const ancestors: { name: string, offset: number }[] = [];
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		let match: RegExpExecArray | null = tagRgx.exec(markup);
+		for (const offset of offsets) {
+			while (match !== null && match.index < offset) {
+				if (match[1]) {
+					ancestors.pop();
+				} else if (!match[3]) {
+					ancestors.push({ name: match[2], offset: match.index });
+				}
+				match = tagRgx.exec(markup);
+			}
+			result.push(ancestors.slice());
+		}
+		return result;
+	}
+
 	// the string literal keys of the xsl:map-entry children of the xsl:map whose start tag is at mapOffset, e.g. 'a'
 	// for key="'a'", with the offsets of their start tags
 	public static mapEntryKeys(text: string, markup: string, mapOffset: number): { key: string, offset: number }[] {
@@ -497,23 +517,32 @@ export class RecordTypes {
 	// xsl:with-param or xsl:function containing it (within any xsl:if or xsl:choose etc.), or for an xsl:map within
 	// an xsl:map-entry of another xsl:map with a record type, the record type of that field
 	// - templateParamType gives the type of a named template's parameter, for an xsl:with-param without an 'as'
-	public static xslMapRecord(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType, depth = 0): RecordType | undefined {
+	public static xslMapRecord(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType): RecordType | undefined {
+		const declaredType = RecordTypes.contentType(text, ancestors, index, itemTypes, templateParamType);
+		return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
+	}
+
+	// the declared type of the value of the instruction at ancestors[index], e.g. an xsl:sequence, xsl:select or xsl:map,
+	// from the element containing it (within any xsl:if or xsl:choose etc.): the 'as' of an xsl:variable, xsl:param or
+	// xsl:function, the type of the parameter an xsl:with-param sets, or for an xsl:map-entry of an xsl:map with a record
+	// type, the type of its field
+	public static contentType(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType, depth = 0): string | undefined {
 		if (depth > 10) {
 			return undefined;
 		}
 		for (let i = index - 1; i > -1; i--) {
 			const { name, offset } = ancestors[i];
 			if (name === 'xsl:variable' || name === 'xsl:param' || name === 'xsl:with-param' || name === 'xsl:function') {
-				const declaredType = RecordTypes.attributeOfElementAt(text, offset + 1, 'as') ?? (name === 'xsl:with-param' ? RecordTypes.withParamType(text, ancestors, i, templateParamType) : undefined);
-				return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
+				return RecordTypes.attributeOfElementAt(text, offset + 1, 'as') ?? (name === 'xsl:with-param' ? RecordTypes.withParamType(text, ancestors, i, templateParamType) : undefined);
 			} else if (name === 'xsl:map-entry') {
 				const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, offset + 1, 'key') ?? '');
 				const parentMap = i - 1;
 				if (!key || parentMap < 0 || ancestors[parentMap].name !== 'xsl:map') {
 					return undefined;
 				}
-				const field = RecordTypes.xslMapRecord(text, ancestors, parentMap, itemTypes, templateParamType, depth + 1)?.fields.find((f) => f.name === key[2]);
-				return field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+				const mapType = RecordTypes.contentType(text, ancestors, parentMap, itemTypes, templateParamType, depth + 1);
+				const record = mapType ? RecordTypes.resolve(mapType, itemTypes) : undefined;
+				return record?.fields.find((f) => f.name === key[2])?.type;
 			} else if (!RecordTypes.conditionalInstructions.includes(name)) {
 				return undefined;
 			}

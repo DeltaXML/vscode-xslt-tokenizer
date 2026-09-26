@@ -2811,6 +2811,7 @@ export class XsltTokenDiagnostics {
 			const allGlobals = globalInstructionData.concat(importedInstructionData);
 			RecordTypes.checkFunctionArguments(xpathTokens, (name, arity, position, keyword) =>
 				XsltTokenDiagnostics.parameterType(allGlobals, GlobalInstructionType.Function, name, arity, position, keyword), itemTypeDeclarations, problemTokens);
+			XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
 		}
 		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
 		const reportedTokens = new Set(problemTokens);
@@ -4420,6 +4421,54 @@ export class XsltTokenDiagnostics {
 			severity: vscode.DiagnosticSeverity.Error,
 			source: '',
 		};
+	}
+
+	// XPath 4.0: checks the select of an xsl:sequence or xsl:map-entry, or the content of an xsl:select, when it's a map
+	// constructor or a single string literal, against the declared type of the value - from the containing instruction,
+	// e.g. an xsl:param with an 'as' - an xsl:sequence that is an xsl:function's result is checked separately
+	private static checkInstructionValues(document: vscode.TextDocument, allTokens: BaseToken[], globals: GlobalInstructionData[], itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const candidates: { tokens: BaseToken[], isLiteral: boolean, name: string, tagStart: number }[] = [];
+		let runStart = -1;
+		for (let i = 0; i <= allTokens.length; i++) {
+			const isXPath = i < allTokens.length && allTokens[i].tokenType < XsltTokenDiagnostics.xsltStartTokenNumber;
+			if (isXPath && runStart === -1) {
+				runStart = i;
+			} else if (!isXPath && runStart > -1) {
+				const run = allTokens.slice(runStart, i).filter((t) => t.tokenType !== TokenLevelState.comment);
+				runStart = -1;
+				const isLiteral = run.length === 1 && run[0].tokenType === TokenLevelState.string;
+				if (run.length === 0 || !(isLiteral || RecordTypes.mapConstructorEnd(run, 0) === run.length - 1)) {
+					continue;
+				}
+				const offset = document.offsetAt(new vscode.Position(run[0].line, run[0].startCharacter));
+				const tagStart = text.lastIndexOf('<', offset);
+				const tagText = text.substring(tagStart, offset);
+				const selectElement = /^<(xsl:sequence|xsl:map-entry)\s(?:[^<>]*\s)?select\s*=\s*["']\s*$/.exec(tagText)?.[1] ?? (/^<xsl:select(?:\s[^<>]*)?>\s*$/.test(tagText) ? 'xsl:select' : undefined);
+				if (selectElement) {
+					candidates.push({ tokens: run, isLiteral, name: selectElement, tagStart });
+				}
+			}
+		}
+		if (candidates.length === 0) {
+			return;
+		}
+		const templateParamType = (template: string, param: string) => XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Template, template, undefined, -1, param);
+		const openElements = RecordTypes.openElementsAt(RecordTypes.blankMarkup(text), candidates.map((c) => c.tagStart));
+		candidates.forEach((candidate, index) => {
+			const ancestors = openElements[index].concat([{ name: candidate.name, offset: candidate.tagStart }]);
+			if (candidate.name === 'xsl:sequence' && ancestors[ancestors.length - 2]?.name === 'xsl:function') {
+				return;
+			}
+			if (candidate.name === 'xsl:map-entry') {
+				// the type of the record field for the key - as for an instruction within the xsl:map-entry
+				ancestors.push({ name: 'xsl:sequence', offset: -1 });
+			}
+			const declaredType = RecordTypes.contentType(text, ancestors, ancestors.length - 1, itemTypes, templateParamType);
+			if (declaredType) {
+				RecordTypes.checkValue(candidate.tokens, 0, candidate.isLiteral ? 0 : -1, declaredType, itemTypes, problemTokens, candidate.tokens.length - 1);
+			}
+		});
 	}
 
 	// the declared type of a parameter of a user-defined function (with the arity) or a named template, by keyword or position
