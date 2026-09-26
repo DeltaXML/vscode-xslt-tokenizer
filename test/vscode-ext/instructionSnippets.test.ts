@@ -44,6 +44,16 @@ suite('Instruction snippets', () => {
 		assert.isFalse(result.has('xsl:template name'));
 	});
 
+	test('xsl:map-entry has key before select', async () => {
+		const result = await snippets('4.0', '<xsl:template name="t"><xsl:map><|</xsl:map></xsl:template>');
+		assert.equal(result.get('xsl:map-entry'), 'xsl:map-entry key="$1" select="$2"/>$0');
+	});
+
+	test('xsl:map has no select attribute', async () => {
+		const result = await snippets('4.0', '<xsl:template name="t"><|</xsl:template>');
+		assert.equal(result.get('xsl:map'), 'xsl:map>\n\t$0\n</xsl:map>');
+	});
+
 	test('xsl:array with select, or with xsl:array-member children', async () => {
 		const result = await snippets('4.0', '<xsl:template name="t"><|</xsl:template>');
 		assert.equal(result.get('xsl:array select'), 'xsl:array select="${1:$expr}"/>$0');

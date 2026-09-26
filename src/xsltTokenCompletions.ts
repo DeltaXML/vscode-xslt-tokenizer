@@ -1890,6 +1890,12 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('xsl:key name="${1:name}" match="${2:pattern}" use="${3:xpath}"/>$0');
 					completionItems.push(newItem);
+				} else if (tagName === 'xsl:map') {
+					// the select attribute is rarely used, so it's not included
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:map>\n\t$0\n</xsl:map>');
+					completionItems.push(newItem);
 				} else if (tagName === 'xsl:array') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName + ' select', vscode.CompletionItemKind.Struct);
@@ -2019,9 +2025,10 @@ export class XsltTokenCompletions {
 						attrText = ' ' + snippetAttrs[0] + '="$1"';
 						break;
 					default:
-						schemaQuery.soughtAttributes.forEach((attr, index) => {
+						let tabStop = 1;
+						schemaQuery.soughtAttributes.forEach((attr) => {
 							if (snippetAttrs.indexOf(attr) > -1) {
-								attrText += ` ${attr}="$${index + 1}"`;
+								attrText += ` ${attr}="$${tabStop++}"`;
 							}
 						});
 						break;
