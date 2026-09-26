@@ -1421,6 +1421,56 @@ export class XsltTokenCompletions {
 		});
 	}
 
+	// XPath 4.0 record types: where an xsl:map would have a record type, e.g. in an xsl:variable declared with one, an
+	// xsl:map with an xsl:map-entry for each field, for an element name after '<' - undefined if it's not such a position
+	public static getRecordMapElementCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameStart = /<([\w.:-]*)$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		if (!nameStart) {
+			return undefined;
+		}
+		const tagStart = offset - nameStart[0].length;
+		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart);
+		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
+		// the record type of an xsl:map at the cursor
+		const record = RecordTypes.xslMapRecord(text, ancestors.concat([{ name: 'xsl:map', offset: tagStart }]), ancestors.length, itemTypes);
+		if (!record || record.fields.length === 0) {
+			return undefined;
+		}
+		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		const hasOptional = record.fields.some((field) => field.optional);
+		return [false, true].filter((allFields) => !allFields || hasOptional).map((allFields) => {
+			const tabStop = { next: 1 };
+			const item = new vscode.CompletionItem(`xsl:map ${record.name}: ${allFields ? 'all fields' : 'required fields'}`, vscode.CompletionItemKind.Snippet);
+			item.insertText = new vscode.SnippetString(`xsl:map>\n${XsltTokenCompletions.recordMapEntryElements(record, itemTypes, allFields, tabStop, 0)}\n</xsl:map>$0`);
+			item.range = range;
+			item.filterText = `xsl:map ${record.name}`;
+			item.detail = 'xsl:map for the record type';
+			item.documentation = `Each select is a placeholder, e.g. __TODO.${record.fields[0].name}, to replace with a value for the field`;
+			// before other element completions
+			item.sortText = '!!' + (allFields ? '1' : '0');
+			item.preselect = !allFields;
+			return item;
+		});
+	}
+
+	// the xsl:map-entry elements of an xsl:map for the record type, each indented depth + 1 steps - a field with a record
+	// type has a nested xsl:map
+	private static recordMapEntryElements(record: RecordType, itemTypes: Map<string, string>, allFields: boolean, tabStop: { next: number }, depth: number): string {
+		const indent = '\t'.repeat(depth * 2 + 1);
+		return record.fields.filter((field) => allFields || !field.optional).map((field) => {
+			const key = XsltTokenCompletions.snippetEscape(`'${field.name}'`);
+			const fieldRecord = depth < 5 ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+			if (fieldRecord && fieldRecord.fields.length > 0) {
+				const nested = XsltTokenCompletions.recordMapEntryElements(fieldRecord, itemTypes, allFields, tabStop, depth + 1);
+				return `${indent}<xsl:map-entry key="${key}">\n${indent}\t<xsl:map>\n${nested}\n${indent}\t</xsl:map>\n${indent}</xsl:map-entry>`;
+			}
+			const placeholder = XsltTokenDiagnostics.placeholderPrefix + field.name.replace(/[^\w.]/g, '_');
+			return `${indent}<xsl:map-entry key="${key}" select="\${${tabStop.next++}:${XsltTokenCompletions.snippetEscape(placeholder)}}"/>`;
+		}).join('\n');
+	}
+
 	// XPath 4.0 record types: within the key attribute of an xsl:map-entry in an xsl:map whose result has a record type,
 	// the fields that aren't yet entries, as string literals - undefined if it's not such a position
 	public static getMapEntryKeyCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {

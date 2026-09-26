@@ -321,6 +321,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			if (mapEntryElements && mapEntryElements.length > 0) {
 				completions = mapEntryElements.concat(completions ?? []);
 			}
+			// an xsl:map for a record type, before the other element completions
+			const recordMaps = isXSLT40 ? XsltTokenCompletions.getRecordMapElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (recordMaps) {
+				completions = recordMaps.concat(completions ?? []);
+			}
 			// mark incomplete: these completions depend on surrounding code (variable scope, node
 			// context etc.), not just a static list to prefix-filter, so VS Code must call this
 			// provider again for every further keystroke rather than reusing/filtering this list.

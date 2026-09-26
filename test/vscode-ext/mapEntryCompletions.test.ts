@@ -83,3 +83,55 @@ suite('Record types: xsl:map-entry completions', () => {
 		assert.isTrue(items.some((item) => item.kind !== vscode.CompletionItemKind.Field), 'other element completions');
 	});
 });
+
+suite('Record types: xsl:map completions', () => {
+	async function snippets(body: string) {
+		const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cx="com.example.cx" version="4.0">
+	${declarations}
+	${body}
+</xsl:stylesheet>`;
+		const offset = marked.indexOf('|');
+		const document = await vscode.workspace.openTextDocument({ content: marked.substring(0, offset) + marked.substring(offset + 1), language: 'xslt' });
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		return items.filter((item) => item.kind === vscode.CompletionItemKind.Snippet && (item.label as string).startsWith('xsl:map ')).map((item) => [item.label as string, (item.insertText as vscode.SnippetString).value]);
+	}
+
+	test('an xsl:variable with a record type', async () => {
+		assert.deepEqual(await snippets(`<xsl:template name="t"><xsl:variable name="v" as="cx:complex"><|</xsl:variable></xsl:template>`), [
+			['xsl:map cx:complex: required fields', `xsl:map>\n\t<xsl:map-entry key="'r'" select="\${1:__TODO.r}"/>\n\t<xsl:map-entry key="'i'" select="\${2:__TODO.i}"/>\n</xsl:map>$0`]
+		]);
+	});
+
+	test('required fields and all fields, with a nested xsl:map for a record field', async () => {
+		const result = await snippets(`<xsl:template name="t"><xsl:variable name="v" as="person"><|</xsl:variable></xsl:template>`);
+		assert.deepEqual(result.map(([label]) => label), ['xsl:map person: required fields', 'xsl:map person: all fields']);
+		assert.equal(result[0][1], [
+			`xsl:map>`,
+			`\t<xsl:map-entry key="'name'" select="\${1:__TODO.name}"/>`,
+			`\t<xsl:map-entry key="'address'">`,
+			`\t\t<xsl:map>`,
+			`\t\t\t<xsl:map-entry key="'city'" select="\${2:__TODO.city}"/>`,
+			`\t\t</xsl:map>`,
+			`\t</xsl:map-entry>`,
+			`</xsl:map>$0`].join('\n'));
+	});
+
+	test('an xsl:function result within xsl:if', async () => {
+		const result = await snippets(`<xsl:function name="cx:new" as="cx:complex"><xsl:if test="true()"><|</xsl:if></xsl:function>`);
+		assert.deepEqual(result.map(([label]) => label), ['xsl:map cx:complex: required fields']);
+	});
+
+	test('an xsl:map-entry for a record field', async () => {
+		const result = await snippets(variableMap(`<xsl:map-entry key="'address'"><|</xsl:map-entry>`, 'person'));
+		assert.deepEqual(result.map(([label]) => label), ['xsl:map record(city as xs:string, zip? as xs:string): required fields', 'xsl:map record(city as xs:string, zip? as xs:string): all fields']);
+	});
+
+	test('not a record type', async () => {
+		assert.deepEqual(await snippets(`<xsl:template name="t"><xsl:variable name="v" as="map(*)"><|</xsl:variable></xsl:template>`), []);
+	});
+
+	test('within an xsl:map', async () => {
+		assert.deepEqual(await snippets(variableMap('<|')), []);
+	});
+});
