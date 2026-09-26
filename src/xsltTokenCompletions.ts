@@ -17,7 +17,7 @@ import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
-import { RecordType, RecordTypes } from './recordTypes';
+import { RecordType, RecordTypes, TemplateParamType } from './recordTypes';
 
 enum TagType {
 	XSLTstart,
@@ -1353,23 +1353,22 @@ export class XsltTokenCompletions {
 		}
 		const text = document.getText();
 		const attributeOffset = document.offsetAt(new vscode.Position(attributeNameToken!.line, attributeNameToken!.startCharacter));
-		let declaredType: string | undefined;
-		if (entryPosition.outerStart === 0) {
-			declaredType = XsltTokenCompletions.declaredTypeForSelect(text, attributeOffset);
-		} else {
-			// the value of a let binding with a type, e.g. let $p as person := {
-			const assignIndex = entryPosition.outerStart - 1;
-			for (let i = assignIndex - 2; i > -1 && i > assignIndex - 40; i--) {
-				const typeRange = xpathTokens[i].tokenType === TokenLevelState.variable ? RecordTypes.xpathVariableTypeRange(xpathTokens, i) : undefined;
-				if (typeRange && typeRange[1] === assignIndex - 1) {
-					const firstType = xpathTokens[typeRange[0]];
-					const lastType = xpathTokens[typeRange[1]];
-					declaredType = document.getText(new vscode.Range(firstType.line, firstType.startCharacter, lastType.line, lastType.startCharacter + lastType.length));
-					break;
-				}
-			}
-		}
 		const globals = globalInstructionData.concat(importedInstructionData);
+		let declaredType: string | undefined;
+		const beforeMap = xpathTokens[entryPosition.outerStart - 1];
+		const letTypeRange = beforeMap?.value === ':=' ? RecordTypes.letBindingTypeRange(xpathTokens, entryPosition.outerStart - 1) : undefined;
+		if (entryPosition.outerStart === 0) {
+			declaredType = XsltTokenCompletions.declaredTypeForSelect(text, attributeOffset, XsltTokenCompletions.templateParamTypes(globalInstructionData, importedInstructionData));
+		} else if (letTypeRange) {
+			// the value of a let binding with a type, e.g. let $p as person := {
+			const firstType = xpathTokens[letTypeRange[0]];
+			const lastType = xpathTokens[letTypeRange[1]];
+			declaredType = document.getText(new vscode.Range(firstType.line, firstType.startCharacter, lastType.line, lastType.startCharacter + lastType.length));
+		} else {
+			// a function argument, e.g. cx:area({ or cx:area(shape := {
+			const argument = RecordTypes.callArgument(xpathTokens, entryPosition.outerStart);
+			declaredType = argument ? XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Function, argument.name, argument.arity, argument.position, argument.keyword) : undefined;
+		}
 		const itemTypes = new Map<string, string>();
 		globals.filter((g) => g.type === GlobalInstructionType.ItemType && g.declaredType).forEach((g) => itemTypes.set(g.name, g.declaredType!));
 		let record = declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
@@ -1431,6 +1430,69 @@ export class XsltTokenCompletions {
 		}));
 	}
 
+	// XPath 4.0: for an argument of a user-defined function call, e.g. cx:fill(| or cx:fill('|, or the value of a typed let
+	// binding, e.g. let $c as colour := |, the values of its declared type, if that's an enumeration type or xs:boolean -
+	// with inString when the cursor is within a string literal - undefined if it's not such a position
+	public static getArgumentValueCompletions(document: vscode.TextDocument, allTokens: BaseToken[], position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): { items: vscode.CompletionItem[], inString: boolean } | undefined {
+		const isXPathToken = (t: BaseToken) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber;
+		const offset = document.offsetAt(position);
+		const text = document.getText();
+		const tokenStart = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter));
+		let cursorIndex = allTokens.findIndex((t) => tokenStart(t) + t.length > offset);
+		if (cursorIndex === -1) {
+			cursorIndex = allTokens.length;
+		}
+		const cursorToken = allTokens[cursorIndex];
+		// the cursor within a string literal, e.g. cx:fill('|')
+		const cursorString = cursorToken && isXPathToken(cursorToken) && cursorToken.tokenType === TokenLevelState.string && tokenStart(cursorToken) < offset ? cursorToken : undefined;
+		let first = cursorIndex;
+		while (first > 0 && isXPathToken(allTokens[first - 1])) {
+			first--;
+		}
+		let last = cursorIndex;
+		while (last < allTokens.length && isXPathToken(allTokens[last])) {
+			last++;
+		}
+		const xpathTokens = allTokens.slice(first, Math.max(last, cursorIndex + 1)).filter(isXPathToken);
+		const argStart = cursorIndex - first;
+		const previous = xpathTokens[argStart - 1];
+		// the empty argument list of a function call, e.g. cx:fill(|) - '()' is a single token
+		const isEmptyCall = cursorToken?.charType === CharLevelState.dSep && cursorToken.value === '()' && tokenStart(cursorToken) < offset && previous?.tokenType === TokenLevelState.function;
+		const isArgumentStart = previous && (previous.charType === CharLevelState.lB || previous.value === ':=' || (previous.charType === CharLevelState.sep && previous.value === ','));
+		if (!isArgumentStart && !isEmptyCall) {
+			return undefined;
+		}
+		const globals = globalInstructionData.concat(importedInstructionData);
+		let declaredType: string | undefined;
+		const letTypeRange = previous.value === ':=' && previous.tokenType === TokenLevelState.complexExpression ? RecordTypes.letBindingTypeRange(xpathTokens, argStart - 1) : undefined;
+		if (isEmptyCall) {
+			declaredType = XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Function, previous.value, 1, 0);
+		} else if (letTypeRange) {
+			const firstType = xpathTokens[letTypeRange[0]];
+			const lastType = xpathTokens[letTypeRange[1]];
+			declaredType = document.getText(new vscode.Range(firstType.line, firstType.startCharacter, lastType.line, lastType.startCharacter + lastType.length));
+		} else {
+			const argument = RecordTypes.callArgument(xpathTokens, argStart);
+			declaredType = argument ? XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Function, argument.name, argument.arity, argument.position, argument.keyword) : undefined;
+		}
+		if (!declaredType) {
+			return undefined;
+		}
+		let range: vscode.Range | undefined;
+		if (cursorString) {
+			// replace the string literal - an unclosed one up to the cursor
+			const isClosed = cursorString.value.length > 1 && cursorString.value.endsWith(cursorString.value.charAt(0));
+			range = new vscode.Range(cursorString.line, cursorString.startCharacter, isClosed ? cursorString.line : position.line, isClosed ? cursorString.startCharacter + cursorString.length : position.character);
+		}
+		const quote = cursorString ? cursorString.value.charAt(0) : XsltTokenCompletions.stringLiteralQuote(text, offset);
+		const charBefore = offset > 0 ? text.charAt(offset - 1) : '';
+		const prefix = charBefore === ',' || charBefore === '=' ? ' ' : '';
+		const items = XsltTokenCompletions.getTypeValueCompletions(declaredType, XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData), quote, prefix, range);
+		// before other completions
+		items.forEach((item) => item.sortText = '!' + (item.sortText ?? ''));
+		return items.length > 0 ? { items, inString: !!cursorString } : undefined;
+	}
+
 	// the quote character for a string literal in the attribute value at the offset: the one that isn't its delimiter
 	private static stringLiteralQuote(text: string, offset: number) {
 		const textBefore = text.substring(Math.max(0, offset - 2000), offset);
@@ -1486,10 +1548,10 @@ export class XsltTokenCompletions {
 			const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart);
 			const mapIndex = ancestors.length - 1;
 			const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, tagStart + 1, 'key') ?? '');
-			const record = mapIndex > -1 && ancestors[mapIndex].name === 'xsl:map' && key ? RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes) : undefined;
+			const record = mapIndex > -1 && ancestors[mapIndex].name === 'xsl:map' && key ? RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes, XsltTokenCompletions.templateParamTypes(globalInstructionData, importedInstructionData)) : undefined;
 			typeText = record?.fields.find((f) => f.name === key![2])?.type;
 		} else {
-			typeText = XsltTokenCompletions.declaredTypeForSelect(text, tagStart + 1);
+			typeText = XsltTokenCompletions.declaredTypeForSelect(text, tagStart + 1, XsltTokenCompletions.templateParamTypes(globalInstructionData, importedInstructionData));
 		}
 		let range: vscode.Range | undefined;
 		const stringQuote = emptySelect[3];
@@ -1539,7 +1601,7 @@ export class XsltTokenCompletions {
 			return undefined;
 		}
 		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
-		const record = RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes);
+		const record = RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes, XsltTokenCompletions.templateParamTypes(globalInstructionData, importedInstructionData));
 		if (!record) {
 			return undefined;
 		}
@@ -1575,7 +1637,7 @@ export class XsltTokenCompletions {
 		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart);
 		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
 		// the record type of an xsl:map at the cursor
-		const record = RecordTypes.xslMapRecord(text, ancestors.concat([{ name: 'xsl:map', offset: tagStart }]), ancestors.length, itemTypes);
+		const record = RecordTypes.xslMapRecord(text, ancestors.concat([{ name: 'xsl:map', offset: tagStart }]), ancestors.length, itemTypes, XsltTokenCompletions.templateParamTypes(globalInstructionData, importedInstructionData));
 		if (!record || record.fields.length === 0) {
 			return undefined;
 		}
@@ -1631,7 +1693,7 @@ export class XsltTokenCompletions {
 			return undefined;
 		}
 		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
-		const record = RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes);
+		const record = RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes, XsltTokenCompletions.templateParamTypes(globalInstructionData, importedInstructionData));
 		if (!record) {
 			return undefined;
 		}
@@ -1650,6 +1712,12 @@ export class XsltTokenCompletions {
 		});
 	}
 
+	// the declared type of a named template's parameter
+	private static templateParamTypes(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): TemplateParamType {
+		const globals = globalInstructionData.concat(importedInstructionData);
+		return (templateName, paramName) => XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Template, templateName, undefined, -1, paramName);
+	}
+
 	private static itemTypeDeclarations(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
 		const itemTypes = new Map<string, string>();
 		globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.ItemType && g.declaredType).forEach((g) => itemTypes.set(g.name, g.declaredType!));
@@ -1662,10 +1730,14 @@ export class XsltTokenCompletions {
 
 	// the 'as' for the select attribute at the offset: the element's own 'as', e.g. on xsl:variable, or for an xsl:sequence,
 	// the 'as' of the xsl:function whose result it is - within any xsl:if or xsl:choose etc.
-	private static declaredTypeForSelect(text: string, attributeOffset: number): string | undefined {
+	// - an xsl:with-param without an 'as', within an xsl:call-template, has the type of the called template's parameter
+	private static declaredTypeForSelect(text: string, attributeOffset: number, templateParamType?: TemplateParamType): string | undefined {
 		const tagStart = text.lastIndexOf('<', attributeOffset);
 		const elementName = /^<([\w.:-]+)/.exec(text.substring(tagStart, tagStart + 100))?.[1];
-		if (elementName === 'xsl:variable' || elementName === 'xsl:param' || elementName === 'xsl:with-param') {
+		if (elementName === 'xsl:with-param') {
+			const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart).concat([{ name: elementName, offset: tagStart }]);
+			return RecordTypes.attributeOfElementAt(text, attributeOffset, 'as') ?? RecordTypes.withParamType(text, ancestors, ancestors.length - 1, templateParamType);
+		} else if (elementName === 'xsl:variable' || elementName === 'xsl:param') {
 			return RecordTypes.attributeOfElementAt(text, attributeOffset, 'as');
 		} else if (elementName !== 'xsl:sequence') {
 			return undefined;

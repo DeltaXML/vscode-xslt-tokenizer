@@ -21,6 +21,8 @@ export interface RecordType {
 	fields: RecordField[];
 }
 
+export type TemplateParamType = (templateName: string, paramName: string) => string | undefined;
+
 interface MapEntry {
 	keyToken: BaseToken;
 	key: string;
@@ -171,7 +173,8 @@ export class RecordTypes {
 	// - or when tokens[cursor - 1] is the ':' after a string literal key, the valueKey, e.g. 'c' for { 'c': |
 	// - outerStart is the index of the outermost map constructor's first token: 0, or after the ':=' of a let binding
 	public static mapEntryPosition(tokens: BaseToken[], cursor: number): { keyPath: string[], usedKeys: string[], valueKey?: string, outerStart: number } | undefined {
-		interface Frame { isMap: boolean, parentKey?: string, key?: string, keys: string[], start: number }
+		// isRoot: an outermost map constructor - the whole expression, a let binding or keyword argument value, or a function argument
+		interface Frame { isMap: boolean, isRoot?: boolean, isCall?: boolean, parentKey?: string, key?: string, keys: string[], start: number }
 		const realTokens = tokens.filter((t, i) => t.tokenType !== TokenLevelState.comment || i >= cursor);
 		const cursorIndex = cursor - (tokens.length - realTokens.length);
 		const previous = realTokens[cursorIndex - 1];
@@ -192,11 +195,13 @@ export class RecordTypes {
 				// a map constructor starts the expression, e.g. { or map {, or is the value of an entry with a string literal key
 				const start = prev?.tokenType === TokenLevelState.operator && prev.value === 'map' ? i - 1 : i;
 				const before = realTokens[start - 1];
-				const isOuterMap = stack.length === 0 && (start === 0 || (before?.tokenType === TokenLevelState.complexExpression && before.value === ':='));
+				const isArgument = !!top?.isCall && (before?.charType === CharLevelState.lB || (before?.charType === CharLevelState.sep && before.value === ','));
+				// ':=' is a complexExpression token in a let binding and an operator in a keyword argument
+				const isRoot = (stack.length === 0 && start === 0) || before?.value === ':=' || isArgument;
 				const isEntryValue = !!top?.isMap && top.key !== undefined && before?.charType === CharLevelState.sep && before.value === ':';
-				stack.push({ isMap: isOuterMap || isEntryValue, parentKey: isEntryValue ? top.key : undefined, keys: [], start });
+				stack.push({ isMap: isRoot || isEntryValue, isRoot, parentKey: isEntryValue ? top.key : undefined, keys: [], start });
 			} else if (RecordTypes.isOpenBracket(t)) {
-				stack.push({ isMap: false, keys: [], start: i });
+				stack.push({ isMap: false, isCall: t.charType === CharLevelState.lB && prev?.tokenType === TokenLevelState.function, keys: [], start: i });
 			} else if (RecordTypes.isCloseBracket(t)) {
 				stack.pop();
 			} else if (top?.isMap && t.charType === CharLevelState.sep && t.value === ':') {
@@ -212,9 +217,13 @@ export class RecordTypes {
 		if (cursorIndex >= realTokens.length) {
 			cursorFrames = stack.slice();
 		}
-		if (!cursorFrames || cursorFrames.length === 0 || !cursorFrames.every((frame) => frame.isMap)) {
+		// the frames from the innermost outermost map constructor
+		const rootIndex = cursorFrames ? cursorFrames.map((frame) => !!frame.isRoot).lastIndexOf(true) : -1;
+		const mapFrames = cursorFrames && rootIndex > -1 ? cursorFrames.slice(rootIndex) : [];
+		if (mapFrames.length === 0 || !mapFrames.every((frame) => frame.isMap)) {
 			return undefined;
 		}
+		cursorFrames = mapFrames;
 		const keyPath = cursorFrames.slice(1).map((frame) => frame.parentKey!);
 		const outerStart = cursorFrames[0].start;
 		if (isValuePosition) {
@@ -295,6 +304,17 @@ export class RecordTypes {
 		return tokens[i]?.charType === CharLevelState.lBr ? RecordTypes.closingTokenIndex(tokens, i) : -1;
 	}
 
+	// the tokens of the type of a typed let binding whose ':=' is tokens[assignIndex], e.g. let $p as person :=
+	public static letBindingTypeRange(tokens: BaseToken[], assignIndex: number): [number, number] | undefined {
+		for (let j = assignIndex - 2; j > -1 && j > assignIndex - 40; j--) {
+			const range = tokens[j].tokenType === TokenLevelState.variable ? RecordTypes.xpathVariableTypeRange(tokens, j) : undefined;
+			if (range && range[1] === assignIndex - 1) {
+				return range;
+			}
+		}
+		return undefined;
+	}
+
 	// checks the value of each typed let binding, e.g. let $p as person := { ... } - a map constructor against a record type,
 	// and a string literal against an enumeration type
 	public static checkLetBindings(tokens: BaseToken[], typeText: (range: [number, number]) => string, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
@@ -302,29 +322,115 @@ export class RecordTypes {
 			if (t.tokenType !== TokenLevelState.complexExpression || t.value !== ':=') {
 				return;
 			}
-			let typeRange: [number, number] | undefined;
-			for (let j = i - 2; j > -1 && j > i - 40 && !typeRange; j--) {
-				const range = tokens[j].tokenType === TokenLevelState.variable ? RecordTypes.xpathVariableTypeRange(tokens, j) : undefined;
-				typeRange = range && range[1] === i - 1 ? range : undefined;
-			}
+			const typeRange = RecordTypes.letBindingTypeRange(tokens, i);
 			const valueStart = RecordTypes.nextNonComment(tokens, i);
 			if (!typeRange || valueStart === -1) {
 				return;
 			}
-			const declaredType = typeText(typeRange);
-			const record = RecordTypes.resolve(declaredType, itemTypes);
-			const mapEnd = record ? RecordTypes.mapConstructorEnd(tokens, valueStart) : -1;
-			if (record && mapEnd > -1) {
-				RecordTypes.checkMapConstructor(tokens.slice(valueStart, mapEnd + 1), record, itemTypes, problemTokens);
-				return;
-			}
-			// a single string literal, e.g. let $c as colour := 'red' return ...
-			const enumValues = RecordTypes.resolveEnum(declaredType, itemTypes);
 			const after = tokens[RecordTypes.nextNonComment(tokens, valueStart)];
 			const isSingleValue = !after || (after.tokenType === TokenLevelState.complexExpression && after.value === 'return') || (after.charType === CharLevelState.sep && after.value === ',');
-			if (enumValues && isSingleValue) {
-				RecordTypes.checkEnumValue([tokens[valueStart]], enumValues, declaredType, problemTokens);
+			RecordTypes.checkValue(tokens, valueStart, isSingleValue ? valueStart : -1, typeText(typeRange), itemTypes, problemTokens);
+		});
+	}
+
+	// checks the value starting at tokens[valueStart] against the type: a map constructor against a record type, or when the
+	// value is the single token tokens[singleEnd], a string literal against an enumeration type
+	private static checkValue(tokens: BaseToken[], valueStart: number, singleEnd: number, declaredType: string, itemTypes: Map<string, string>, problemTokens: BaseToken[], valueEnd?: number) {
+		const record = RecordTypes.resolve(declaredType, itemTypes);
+		const mapEnd = record ? RecordTypes.mapConstructorEnd(tokens, valueStart) : -1;
+		if (record && mapEnd > -1 && (valueEnd === undefined || mapEnd === valueEnd)) {
+			RecordTypes.checkMapConstructor(tokens.slice(valueStart, mapEnd + 1), record, itemTypes, problemTokens);
+			return;
+		}
+		const enumValues = RecordTypes.resolveEnum(declaredType, itemTypes);
+		if (enumValues && singleEnd === valueStart) {
+			RecordTypes.checkEnumValue([tokens[valueStart]], enumValues, declaredType, problemTokens);
+		}
+	}
+
+	// for the first token of a function call argument, e.g. the '{' in cx:area({ ... }) or cx:area(shape := { ... }):
+	// the function's name, the argument's position (from 0) or keyword, and the call's arity, if the call is closed
+	public static callArgument(tokens: BaseToken[], argStart: number): { name: string, position: number, keyword?: string, arity?: number } | undefined {
+		let begin = argStart;
+		let keyword: string | undefined;
+		if (tokens[argStart - 1]?.value === ':=' && tokens[argStart - 2]?.tokenType === TokenLevelState.mapKey) {
+			keyword = tokens[argStart - 2].value;
+			begin = argStart - 2;
+		}
+		let depth = 0;
+		let position = 0;
+		for (let i = begin - 1; i > -1; i--) {
+			const t = tokens[i];
+			if (RecordTypes.isCloseBracket(t)) {
+				depth++;
+			} else if (RecordTypes.isOpenBracket(t)) {
+				if (depth-- === 0) {
+					if (t.charType !== CharLevelState.lB || tokens[i - 1]?.tokenType !== TokenLevelState.function) {
+						return undefined;
+					}
+					const close = RecordTypes.closingTokenIndex(tokens, i);
+					let arity: number | undefined;
+					if (close > -1) {
+						arity = 1 + tokens.slice(i + 1, close).filter((a, k, all) => a.charType === CharLevelState.sep && a.value === ',' && RecordTypes.bracketDepth(all, k) === 0).length;
+					}
+					return { name: tokens[i - 1].value, position, keyword, arity };
+				}
+			} else if (depth === 0 && t.charType === CharLevelState.sep && t.value === ',') {
+				position++;
 			}
+		}
+		return undefined;
+	}
+
+	// the bracket depth before tokens[index]
+	private static bracketDepth(tokens: BaseToken[], index: number) {
+		let depth = 0;
+		for (let i = 0; i < index; i++) {
+			if (RecordTypes.isOpenBracket(tokens[i])) {
+				depth++;
+			} else if (RecordTypes.isCloseBracket(tokens[i])) {
+				depth--;
+			}
+		}
+		return depth;
+	}
+
+	// checks the arguments of each call of a user-defined function: a map constructor against a parameter with a record type,
+	// and a string literal against one with an enumeration type - paramType gives a parameter's declared type
+	public static checkFunctionArguments(tokens: BaseToken[], paramType: (name: string, arity: number, position: number, keyword?: string) => string | undefined, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		tokens.forEach((t, open) => {
+			if (t.charType !== CharLevelState.lB || tokens[open - 1]?.tokenType !== TokenLevelState.function) {
+				return;
+			}
+			const close = RecordTypes.closingTokenIndex(tokens, open);
+			if (close === -1) {
+				return;
+			}
+			// the arguments' token ranges
+			const args: [number, number][] = [];
+			let argStart = open + 1;
+			let depth = 0;
+			for (let i = open + 1; i <= close; i++) {
+				const a = tokens[i];
+				if (i === close || (depth === 0 && a.charType === CharLevelState.sep && a.value === ',')) {
+					if (i > argStart) {
+						args.push([argStart, i - 1]);
+					}
+					argStart = i + 1;
+				} else if (RecordTypes.isOpenBracket(a)) {
+					depth++;
+				} else if (RecordTypes.isCloseBracket(a)) {
+					depth--;
+				}
+			}
+			args.forEach(([start, end], position) => {
+				const hasKeyword = tokens[start].tokenType === TokenLevelState.mapKey && tokens[start + 1]?.value === ':=';
+				const valueStart = hasKeyword ? start + 2 : start;
+				const declaredType = valueStart <= end ? paramType(tokens[open - 1].value, args.length, position, hasKeyword ? tokens[start].value : undefined) : undefined;
+				if (declaredType) {
+					RecordTypes.checkValue(tokens, valueStart, end, declaredType, itemTypes, problemTokens, end);
+				}
+			});
 		});
 	}
 
@@ -390,14 +496,15 @@ export class RecordTypes {
 	// the record type of the result of the xsl:map at ancestors[index]: from the 'as' of the xsl:variable, xsl:param,
 	// xsl:with-param or xsl:function containing it (within any xsl:if or xsl:choose etc.), or for an xsl:map within
 	// an xsl:map-entry of another xsl:map with a record type, the record type of that field
-	public static xslMapRecord(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, depth = 0): RecordType | undefined {
+	// - templateParamType gives the type of a named template's parameter, for an xsl:with-param without an 'as'
+	public static xslMapRecord(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType, depth = 0): RecordType | undefined {
 		if (depth > 10) {
 			return undefined;
 		}
 		for (let i = index - 1; i > -1; i--) {
 			const { name, offset } = ancestors[i];
 			if (name === 'xsl:variable' || name === 'xsl:param' || name === 'xsl:with-param' || name === 'xsl:function') {
-				const declaredType = RecordTypes.attributeOfElementAt(text, offset + 1, 'as');
+				const declaredType = RecordTypes.attributeOfElementAt(text, offset + 1, 'as') ?? (name === 'xsl:with-param' ? RecordTypes.withParamType(text, ancestors, i, templateParamType) : undefined);
 				return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
 			} else if (name === 'xsl:map-entry') {
 				const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, offset + 1, 'key') ?? '');
@@ -405,13 +512,24 @@ export class RecordTypes {
 				if (!key || parentMap < 0 || ancestors[parentMap].name !== 'xsl:map') {
 					return undefined;
 				}
-				const field = RecordTypes.xslMapRecord(text, ancestors, parentMap, itemTypes, depth + 1)?.fields.find((f) => f.name === key[2]);
+				const field = RecordTypes.xslMapRecord(text, ancestors, parentMap, itemTypes, templateParamType, depth + 1)?.fields.find((f) => f.name === key[2]);
 				return field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
 			} else if (!RecordTypes.conditionalInstructions.includes(name)) {
 				return undefined;
 			}
 		}
 		return undefined;
+	}
+
+	// the type of the called template's parameter, for the xsl:with-param at ancestors[index] within an xsl:call-template
+	public static withParamType(text: string, ancestors: { name: string, offset: number }[], index: number, templateParamType?: TemplateParamType) {
+		const callTemplate = ancestors[index - 1];
+		if (!templateParamType || callTemplate?.name !== 'xsl:call-template') {
+			return undefined;
+		}
+		const templateName = RecordTypes.attributeOfElementAt(text, callTemplate.offset + 1, 'name');
+		const paramName = RecordTypes.attributeOfElementAt(text, ancestors[index].offset + 1, 'name');
+		return templateName && paramName ? templateParamType(templateName, paramName) : undefined;
 	}
 
 	public static readonly conditionalInstructions = ['xsl:if', 'xsl:choose', 'xsl:when', 'xsl:otherwise', 'xsl:try', 'xsl:catch'];

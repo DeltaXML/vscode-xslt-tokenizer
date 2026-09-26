@@ -307,9 +307,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			const isXSLT40 = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT;
 			// an empty select, for an enumeration type or xs:boolean
 			const selectValues = !recordEntries && isXSLT40 ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
-			if (recordEntries || selectValues || isCommaTrigger) {
-				// triggered by a ',', '{', ':' or quote: only these completions
-				const items = recordEntries ?? selectValues;
+			// an argument of a user-defined function, or the value of a typed let binding, for an enumeration type or xs:boolean
+			const argumentValues = !recordEntries && !selectValues && isXSLT40 ? XsltTokenCompletions.getArgumentValueCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (recordEntries || selectValues || isCommaTrigger || argumentValues?.inString) {
+				// triggered by a ',', '{', ':' or quote, or within a string literal: only these completions
+				const items = recordEntries ?? selectValues ?? argumentValues?.items;
 				resolve(items && items.length > 0 ? new vscode.CompletionList(items, true) : undefined);
 				return;
 			}
@@ -324,6 +326,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			const mapEntryElements = isXSLT40 ? XsltTokenCompletions.getMapEntryElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (mapEntryElements && mapEntryElements.length > 0) {
 				completions = mapEntryElements.concat(completions ?? []);
+			}
+			if (argumentValues) {
+				completions = argumentValues.items.concat(completions ?? []);
 			}
 			// an xsl:map for a record type, before the other element completions
 			const recordMaps = isXSLT40 ? XsltTokenCompletions.getRecordMapElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;

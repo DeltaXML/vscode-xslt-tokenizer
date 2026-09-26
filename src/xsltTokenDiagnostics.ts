@@ -853,9 +853,13 @@ export class XsltTokenDiagnostics {
 
 								if (XsltTokenDiagnostics.isXPath40(docType)) {
 									// XPath 4.0 record types: check a map constructor against the declared record type
-									const asText = tagAsRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, tagAsRange) : undefined;
-									const record = asText && ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function'].includes(tagElementName) ? RecordTypes.resolve(asText, itemTypeDeclarations) : undefined;
 									const parentName = elementStack.length > 0 ? elementStack[elementStack.length - 1].symbolName : '';
+									let asText = tagAsRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, tagAsRange) : undefined;
+									if (!asText && tagElementName === 'xsl:with-param' && parentName === 'xsl:call-template') {
+										// the type of the called template's parameter
+										asText = XsltTokenDiagnostics.parameterType(globalInstructionData.concat(importedInstructionData), GlobalInstructionType.Template, elementStack[elementStack.length - 1].symbolID, undefined, -1, tagIdentifierName);
+									}
+									const record = asText && ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function'].includes(tagElementName) ? RecordTypes.resolve(asText, itemTypeDeclarations) : undefined;
 									if (tagElementName === 'xsl:function') {
 										functionResult = { record, select: null };
 									} else if (functionResult && parentName === 'xsl:function' && tagElementName !== 'xsl:param') {
@@ -2798,6 +2802,10 @@ export class XsltTokenDiagnostics {
 			// XPath 4.0: the value of a typed let binding, e.g. let $p as person := { ... }
 			const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
 			RecordTypes.checkLetBindings(xpathTokens, (range) => XsltTokenDiagnostics.textForTokenRange(document, xpathTokens, range), itemTypeDeclarations, problemTokens);
+			// the arguments of calls of user-defined functions, e.g. cx:area({ ... }) or cx:area(shape := { ... })
+			const allGlobals = globalInstructionData.concat(importedInstructionData);
+			RecordTypes.checkFunctionArguments(xpathTokens, (name, arity, position, keyword) =>
+				XsltTokenDiagnostics.parameterType(allGlobals, GlobalInstructionType.Function, name, arity, position, keyword), itemTypeDeclarations, problemTokens);
 		}
 		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
 		const reportedTokens = new Set(problemTokens);
@@ -4407,6 +4415,13 @@ export class XsltTokenDiagnostics {
 			severity: vscode.DiagnosticSeverity.Error,
 			source: '',
 		};
+	}
+
+	// the declared type of a parameter of a user-defined function (with the arity) or a named template, by keyword or position
+	public static parameterType(globals: GlobalInstructionData[], type: GlobalInstructionType, name: string, arity: number | undefined, position: number, keyword?: string) {
+		const declaration = globals.find((g) => g.type === type && g.name === name && (arity === undefined || type !== GlobalInstructionType.Function || XslLexer.functionArityMatches(g, arity)));
+		const index = keyword !== undefined ? declaration?.memberNames?.indexOf(keyword) ?? -1 : position;
+		return index > -1 ? declaration?.memberTypes?.[index] : undefined;
 	}
 
 	// a placeholder for a value, e.g. __TODO.city - inserted by the completion for a map constructor with a record type
