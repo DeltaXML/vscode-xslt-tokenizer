@@ -41,6 +41,8 @@ async function completions(body: string, kind: vscode.CompletionItemKind) {
 const sequence = (select: string) => `<xsl:sequence select="${select}"/>`;
 const callDraw = (withParam: string) => `<xsl:call-template name="draw">${withParam}</xsl:call-template>`;
 const Field = vscode.CompletionItemKind.Field;
+const iterate = (withParam: string) => `<xsl:iterate select="1 to 3"><xsl:param name="acc" as="cx:complex" select="{ 'r': 0, 'i': 0 }"/><xsl:param name="c" as="colour" select="'red'"/>` +
+	`<xsl:next-iteration>${withParam}</xsl:next-iteration></xsl:iterate>`;
 
 const completionCases: [string, string, vscode.CompletionItemKind, string[]][] = [
 	['a positional argument', sequence('cx:area({¦})'), Field, ['\'name\'', '\'address\'', '\'age\'']],
@@ -60,6 +62,10 @@ const completionCases: [string, string, vscode.CompletionItemKind, string[]][] =
 	['a typed let binding value', sequence('let $c as colour := ¦ return $c'), vscode.CompletionItemKind.EnumMember, ['\'red\'', '\'green\'']],
 	['an argument that is not an enumeration type', sequence(`cx:paint(¦)`), vscode.CompletionItemKind.EnumMember, []],
 	['a built-in function argument', sequence(`concat(¦)`), vscode.CompletionItemKind.EnumMember, []],
+	['an xsl:next-iteration xsl:with-param select', iterate(`<xsl:with-param name="acc" select="{¦}"/>`), Field, ['\'r\'', '\'i\'']],
+	['an xsl:next-iteration xsl:with-param enumeration value', iterate(`<xsl:with-param name="c" select="¦"/>`), vscode.CompletionItemKind.EnumMember, ['\'red\'', '\'green\'']],
+	['an xsl:map in an xsl:next-iteration xsl:with-param', iterate(`<xsl:with-param name="acc"><¦</xsl:with-param>`), vscode.CompletionItemKind.Snippet, ['xsl:map cx:complex: required fields']],
+	['an xsl:apply-templates xsl:with-param', `<xsl:apply-templates select="."><xsl:with-param name="shape" select="{¦}"/></xsl:apply-templates>`, Field, []],
 	['an xsl:map in an xsl:with-param', callDraw(`<xsl:with-param name="shape"><¦</xsl:with-param>`), vscode.CompletionItemKind.Snippet, ['xsl:map cx:complex: required fields']],
 ];
 
@@ -87,6 +93,8 @@ const lintCases: [string, string, string[][]][] = [
 	['the wrong arity', sequence(`cx:mix({ 'r': 1 })`), [[`XPath: Function: 'cx:mix' with 1 arguments not found`, 'cx:mix']]],
 	['a built-in function argument', sequence(`map:merge({ 'r': 1 })`), []],
 	['an xsl:with-param select: a missing field', callDraw(`<xsl:with-param name="shape" select="{ 'r': 1 }"/><xsl:with-param name="c" select="'red'"/>`), [missing('i', 'cx:complex')]],
+	['an xsl:next-iteration xsl:with-param: a missing field', iterate(`<xsl:with-param name="acc" select="{ 'r': 1 }"/>`), [missing('i', 'cx:complex')]],
+	['an xsl:next-iteration xsl:with-param: not a value', iterate(`<xsl:with-param name="c" select="'blue'"/>`), [notAValue('blue')]],
 	['an xsl:with-param select: not a value', callDraw(`<xsl:with-param name="shape" select="{ 'r': 1, 'i': 2 }"/><xsl:with-param name="c" select="'blue'"/>`), [notAValue('blue')]],
 ];
 

@@ -855,9 +855,14 @@ export class XsltTokenDiagnostics {
 									// XPath 4.0 record types: check a map constructor against the declared record type
 									const parentName = elementStack.length > 0 ? elementStack[elementStack.length - 1].symbolName : '';
 									let asText = tagAsRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, tagAsRange) : undefined;
-									if (!asText && tagElementName === 'xsl:with-param' && parentName === 'xsl:call-template') {
-										// the type of the called template's parameter
-										asText = XsltTokenDiagnostics.parameterType(globalInstructionData.concat(importedInstructionData), GlobalInstructionType.Template, elementStack[elementStack.length - 1].symbolID, undefined, -1, tagIdentifierName);
+									if (!asText && tagElementName === 'xsl:with-param' && startTagToken && (parentName === 'xsl:call-template' || parentName === 'xsl:next-iteration')) {
+										// the type of the parameter it sets: of the called template, or the enclosing xsl:iterate
+										const text = document.getText();
+										const tagStart = document.offsetAt(new vscode.Position(startTagToken.line, startTagToken.startCharacter)) - 1;
+										const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart).concat([{ name: tagElementName, offset: tagStart }]);
+										const allGlobals = globalInstructionData.concat(importedInstructionData);
+										asText = RecordTypes.withParamType(text, ancestors, ancestors.length - 1, (template, param) =>
+											XsltTokenDiagnostics.parameterType(allGlobals, GlobalInstructionType.Template, template, undefined, -1, param));
 									}
 									const record = asText && ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function'].includes(tagElementName) ? RecordTypes.resolve(asText, itemTypeDeclarations) : undefined;
 									if (tagElementName === 'xsl:function') {

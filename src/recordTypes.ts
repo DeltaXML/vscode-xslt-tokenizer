@@ -521,15 +521,50 @@ export class RecordTypes {
 		return undefined;
 	}
 
-	// the type of the called template's parameter, for the xsl:with-param at ancestors[index] within an xsl:call-template
+	// for the xsl:with-param at ancestors[index], without an 'as': the type of the parameter it sets - of the called
+	// template for xsl:call-template, or of the enclosing xsl:iterate for xsl:next-iteration
 	public static withParamType(text: string, ancestors: { name: string, offset: number }[], index: number, templateParamType?: TemplateParamType) {
-		const callTemplate = ancestors[index - 1];
-		if (!templateParamType || callTemplate?.name !== 'xsl:call-template') {
+		const parent = ancestors[index - 1];
+		const paramName = RecordTypes.attributeOfElementAt(text, ancestors[index].offset + 1, 'name');
+		if (!paramName || !parent) {
 			return undefined;
 		}
-		const templateName = RecordTypes.attributeOfElementAt(text, callTemplate.offset + 1, 'name');
-		const paramName = RecordTypes.attributeOfElementAt(text, ancestors[index].offset + 1, 'name');
-		return templateName && paramName ? templateParamType(templateName, paramName) : undefined;
+		if (parent.name === 'xsl:call-template') {
+			const templateName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name');
+			return templateName && templateParamType ? templateParamType(templateName, paramName) : undefined;
+		} else if (parent.name === 'xsl:next-iteration') {
+			const iterate = [...ancestors.slice(0, index - 1)].reverse().find((a) => a.name === 'xsl:iterate');
+			const param = iterate ? RecordTypes.childElements(text, RecordTypes.blankMarkup(text), iterate.offset, 'xsl:param')
+				.find((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'name') === paramName) : undefined;
+			return param !== undefined ? RecordTypes.attributeOfElementAt(text, param + 1, 'as') : undefined;
+		}
+		return undefined;
+	}
+
+	// the offsets of the start tags of the child elements with the name, of the element whose start tag is at offset
+	public static childElements(text: string, markup: string, offset: number, name: string): number[] {
+		const children: number[] = [];
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		tagRgx.lastIndex = offset;
+		let depth = 0;
+		let match: RegExpExecArray | null;
+		while ((match = tagRgx.exec(markup)) !== null) {
+			if (match[1]) {
+				if (--depth === 0) {
+					break;
+				}
+			} else {
+				if (depth === 1 && match[2] === name) {
+					children.push(match.index);
+				}
+				if (!match[3]) {
+					depth++;
+				} else if (depth === 0) {
+					break;
+				}
+			}
+		}
+		return children;
 	}
 
 	public static readonly conditionalInstructions = ['xsl:if', 'xsl:choose', 'xsl:when', 'xsl:otherwise', 'xsl:try', 'xsl:catch'];
