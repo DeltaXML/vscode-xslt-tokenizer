@@ -1682,6 +1682,7 @@ export enum ErrorType {
     QNameLiteralRequiresXPath40,
     EnclosedModeName,
     XPathLessThanInAttribute,
+    Placeholder,
     XPathLessThanTagStart,
     EnclosedTemplateAttribute,
     EnclosedTemplateMatch,

@@ -1335,16 +1335,48 @@ export class XsltTokenCompletions {
 		}
 		const charBefore = offset > 0 ? text.charAt(offset - 1) : '';
 		const leadingSpace = charBefore === ',' || charBefore === '{' ? ' ' : '';
-		return record.fields.filter((field) => !entryPosition.usedKeys.includes(field.name)).map((field, index) => {
+		// an empty map constructor: the whole map, with a placeholder for each value
+		const wholeMaps: vscode.CompletionItem[] = [];
+		const isEmptyMap = xpathTokens[xpathCursor - 1]?.charType === CharLevelState.lBr && xpathTokens[xpathCursor]?.charType === CharLevelState.rBr;
+		if (isEmptyMap && record.fields.length > 0) {
+			const trailingSpace = text.charAt(offset) === '}' ? ' ' : '';
+			const hasOptional = record.fields.some((field) => field.optional);
+			[false, true].filter((allFields) => !allFields || hasOptional).forEach((allFields) => {
+				const tabStop = { next: 1 };
+				const entries = XsltTokenCompletions.recordMapEntries(record!, itemTypes, allFields, tabStop, 0);
+				const item = new vscode.CompletionItem(`${record!.name}: ${allFields ? 'all fields' : 'required fields'}`, vscode.CompletionItemKind.Snippet);
+				item.insertText = new vscode.SnippetString(`${leadingSpace}${entries}${trailingSpace}`);
+				item.detail = 'map constructor for the record type';
+				item.documentation = `Each value is a placeholder, e.g. __TODO.${record!.fields[0].name}, to replace with a value for the field`;
+				item.sortText = '!' + (allFields ? '1' : '0');
+				item.preselect = !allFields;
+				wholeMaps.push(item);
+			});
+		}
+		return wholeMaps.concat(record.fields.filter((field) => !entryPosition.usedKeys.includes(field.name)).map((field, index) => {
 			const item = new vscode.CompletionItem(`'${field.name}'`, vscode.CompletionItemKind.Field);
 			item.insertText = new vscode.SnippetString(`${leadingSpace}'${field.name.replace(/[$}\\]/g, '\\$&')}': $0`);
 			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
 			item.documentation = `Field of the record type: ${record!.name}`;
 			// required fields first, in declaration order
 			item.sortText = (field.optional ? '1' : '0') + String(index).padStart(4, '0');
-			item.preselect = index === 0;
+			item.preselect = index === 0 && wholeMaps.length === 0;
 			return item;
-		});
+		}));
+	}
+
+	// the entries of a map constructor for the record type, e.g. 'r': ${1:__TODO.r}, 'i': ${2:__TODO.i} - a field with
+	// a record type has a nested map constructor
+	private static recordMapEntries(record: RecordType, itemTypes: Map<string, string>, allFields: boolean, tabStop: { next: number }, depth: number): string {
+		return record.fields.filter((field) => allFields || !field.optional).map((field) => {
+			const key = XsltTokenCompletions.snippetEscape(`'${field.name}'`);
+			const fieldRecord = depth < 5 ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+			if (fieldRecord && fieldRecord.fields.length > 0) {
+				return `${key}: { ${XsltTokenCompletions.recordMapEntries(fieldRecord, itemTypes, allFields, tabStop, depth + 1)} }`;
+			}
+			const placeholder = XsltTokenDiagnostics.placeholderPrefix + field.name.replace(/[^\w.]/g, '_');
+			return `${key}: \${${tabStop.next++}:${XsltTokenCompletions.snippetEscape(placeholder)}}`;
+		}).join(', ');
 	}
 
 	// XPath 4.0 record types: within an xsl:map whose result has a record type, an xsl:map-entry for each field that

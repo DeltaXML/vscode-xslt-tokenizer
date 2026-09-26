@@ -1513,7 +1513,9 @@ export class XsltTokenDiagnostics {
 						stackItem.anonFnSyntaxErrorReported = true;
 					}
 				}
-				if (isTypeError) {
+				// a placeholder is lexically a name test, but it's not reported as needing a context item
+				const isPlaceholder = xpathTokenType === TokenLevelState.nodeNameTest && token.value.startsWith(XsltTokenDiagnostics.placeholderPrefix);
+				if (isTypeError || isPlaceholder) {
 				} else if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
@@ -2529,7 +2531,10 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
 					case TokenLevelState.mapNameLookup:
-						if (token.error && token.error !== ErrorType.XPathIfAwaitingThen) {
+						if (isPlaceholder) {
+							token.error = ErrorType.Placeholder;
+							problemTokens.push(token);
+						} else if (token.error && token.error !== ErrorType.XPathIfAwaitingThen) {
 							problemTokens.push(token);
 						} else {
 							let tokenValue;
@@ -4069,6 +4074,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.ExtensibleRecordType:
 					msg = `XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead`;
 					break;
+				case ErrorType.Placeholder:
+					msg = `XPath: Placeholder '${tokenValue}' - replace it with a value for '${tokenValue.substring(XsltTokenDiagnostics.placeholderPrefix.length)}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
 				case ErrorType.XPathLessThanInAttribute:
 					msg = `XML: A '<' character is not allowed in an attribute value - use '&lt;' instead: '${tokenValue}'`;
 					break;
@@ -4365,6 +4374,9 @@ export class XsltTokenDiagnostics {
 			source: '',
 		};
 	}
+
+	// a placeholder for a value, e.g. __TODO.city - inserted by the completion for a map constructor with a record type
+	public static readonly placeholderPrefix = '__TODO.';
 
 	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken, includeOrImport: boolean): vscode.Diagnostic {
 		let line = token.line;
