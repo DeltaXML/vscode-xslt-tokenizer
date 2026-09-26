@@ -309,6 +309,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				return;
 			}
 			const isXSLT40 = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT;
+			// an empty select, for an enumeration type or xs:boolean
+			const selectValues = isXSLT40 ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (selectValues) {
+				resolve(new vscode.CompletionList(selectValues, true));
+				return;
+			}
 			// the key attribute of an xsl:map-entry for a record type
 			const mapEntryKeys = isXSLT40 ? XsltTokenCompletions.getMapEntryKeyCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (mapEntryKeys) {

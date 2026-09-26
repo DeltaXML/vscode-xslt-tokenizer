@@ -129,7 +129,8 @@ export enum DiagnosticCode {
 	rootOnlyWithNoContextItem,
 	instrWithNoContextItem,
 	noContextItem,
-	regexNoContextItem
+	regexNoContextItem,
+	recordFieldMissing
 }
 
 export class XsltTokenDiagnostics {
@@ -863,6 +864,11 @@ export class XsltTokenDiagnostics {
 									}
 									if (record && tagSelectRange && tagElementName !== 'xsl:function') {
 										RecordTypes.checkMapConstructor(allTokens.slice(tagSelectRange[0], tagSelectRange[1] + 1), record, itemTypeDeclarations, problemTokens);
+									}
+									// XPath 4.0 enumeration types: a string literal must be one of the values, e.g. as="enum('a', 'b')" select="'a'"
+									const enumValues = asText && tagSelectRange && ['xsl:variable', 'xsl:param', 'xsl:with-param'].includes(tagElementName) ? RecordTypes.resolveEnum(asText, itemTypeDeclarations) : undefined;
+									if (enumValues) {
+										RecordTypes.checkEnumValue(allTokens.slice(tagSelectRange![0], tagSelectRange![1] + 1), enumValues, asText!, problemTokens);
 									}
 									if (record && variableData) {
 										variableData.recordType = record;
@@ -2788,6 +2794,15 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
+		// the quick fixes for missing record fields
+		const recordFixes = new Map<string, { line: number, character: number, text: string }>();
+		problemTokens.forEach((token) => {
+			if (token.recordFix) {
+				allDiagnostics.filter((d) => d.code === DiagnosticCode.recordFieldMissing && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
+			}
+		});
+		XsltTokenDiagnostics.recordFixes.set(document.uri.toString(), recordFixes);
 		return allDiagnostics;
 	};
 
@@ -4049,12 +4064,18 @@ export class XsltTokenDiagnostics {
 				case ErrorType.RecordFieldMissing: {
 					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XPath: Record field '${field}' is missing - it's required by the record type: ${recordName}`;
+					errCode = DiagnosticCode.recordFieldMissing;
 					break;
 				}
 				case ErrorType.RecordFieldUnknown: {
 					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XPath: '${field}' is not a field of the record type: ${recordName}`;
 					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.EnumValueUnknown: {
+					const [value, typeText] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: '${value}' is not one of the values of the enumeration type: ${typeText}`;
 					break;
 				}
 				case ErrorType.RecordFieldValueType: {
@@ -4376,7 +4397,13 @@ export class XsltTokenDiagnostics {
 	}
 
 	// a placeholder for a value, e.g. __TODO.city - inserted by the completion for a map constructor with a record type
-	public static readonly placeholderPrefix = '__TODO.';
+	public static readonly placeholderPrefix = RecordTypes.placeholderPrefix;
+	// XPath 4.0 record types: the quick fixes for missing fields, for each document - by the diagnostic's position and message
+	public static readonly recordFixes = new Map<string, Map<string, { line: number, character: number, text: string }>>();
+
+	public static recordFixKey(range: vscode.Range, message: string) {
+		return `${range.start.line}:${range.start.character}:${message}`;
+	}
 
 	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken, includeOrImport: boolean): vscode.Diagnostic {
 		let line = token.line;

@@ -1334,7 +1334,22 @@ export class XsltTokenCompletions {
 			return undefined;
 		}
 		const charBefore = offset > 0 ? text.charAt(offset - 1) : '';
+		// the cursor within a string literal, e.g. '|' after typing a quote that's auto-closed: the completion replaces the string literal
+		const cursorTokenStart = cursorToken ? document.offsetAt(new vscode.Position(cursorToken.line, cursorToken.startCharacter)) : offset;
+		const cursorString = cursorToken && (cursorToken.tokenType === TokenLevelState.string || cursorToken.tokenType === TokenLevelState.mapKey) && cursorTokenStart < offset ? cursorToken : undefined;
+		// an unclosed string literal is replaced up to the cursor
+		const isClosedString = !!cursorString && cursorString.value.length > 1 && cursorString.value.endsWith(cursorString.value.charAt(0));
+		const stringRange = cursorString ? new vscode.Range(cursorString.line, cursorString.startCharacter, isClosedString ? cursorString.line : position.line, isClosedString ? cursorString.startCharacter + cursorString.length : position.character) : undefined;
+		const quote = cursorString ? cursorString.value.charAt(0) : XsltTokenCompletions.stringLiteralQuote(text, offset);
+		if (entryPosition.valueKey !== undefined) {
+			// the value of an entry, e.g. { 'colour': |
+			const field = record.fields.find((f) => f.name === entryPosition.valueKey);
+			const values = field?.type ? XsltTokenCompletions.getTypeValueCompletions(field.type, itemTypes, quote, charBefore === ':' ? ' ' : '', stringRange) : [];
+			return values.length > 0 ? values : undefined;
+		}
 		const leadingSpace = charBefore === ',' || charBefore === '{' ? ' ' : '';
+		// a key that already has its ':'
+		const hasColon = !!cursorString && xpathTokens[xpathCursor + 1]?.charType === CharLevelState.sep && xpathTokens[xpathCursor + 1].value === ':';
 		// an empty map constructor: the whole map, with a placeholder for each value
 		const wholeMaps: vscode.CompletionItem[] = [];
 		const isEmptyMap = xpathTokens[xpathCursor - 1]?.charType === CharLevelState.lBr && xpathTokens[xpathCursor]?.charType === CharLevelState.rBr;
@@ -1354,8 +1369,12 @@ export class XsltTokenCompletions {
 			});
 		}
 		return wholeMaps.concat(record.fields.filter((field) => !entryPosition.usedKeys.includes(field.name)).map((field, index) => {
-			const item = new vscode.CompletionItem(`'${field.name}'`, vscode.CompletionItemKind.Field);
-			item.insertText = new vscode.SnippetString(`${leadingSpace}'${field.name.replace(/[$}\\]/g, '\\$&')}': $0`);
+			const item = new vscode.CompletionItem(`${quote}${field.name}${quote}`, vscode.CompletionItemKind.Field);
+			const key = `${quote}${field.name.replace(/[$}\\]/g, '\\$&')}${quote}`;
+			item.insertText = new vscode.SnippetString(stringRange ? (hasColon ? key : `${key}: $0`) : `${leadingSpace}${key}: $0`);
+			if (stringRange) {
+				item.range = stringRange;
+			}
 			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
 			item.documentation = `Field of the record type: ${record!.name}`;
 			// required fields first, in declaration order
@@ -1363,6 +1382,81 @@ export class XsltTokenCompletions {
 			item.preselect = index === 0 && wholeMaps.length === 0;
 			return item;
 		}));
+	}
+
+	// the quote character for a string literal in the attribute value at the offset: the one that isn't its delimiter
+	private static stringLiteralQuote(text: string, offset: number) {
+		const textBefore = text.substring(Math.max(0, offset - 2000), offset);
+		return textBefore.lastIndexOf('=\'') > textBefore.lastIndexOf('="') ? '"' : '\'';
+	}
+
+	// the values of an enumeration type, e.g. 'red' and 'green' for enum('red', 'green'), or true() and false() for xs:boolean
+	// - a range, for a string literal the cursor is within, is replaced by the completion
+	private static getTypeValueCompletions(typeText: string, itemTypes: Map<string, string>, quote: string, prefix: string, range?: vscode.Range): vscode.CompletionItem[] {
+		const enumValues = RecordTypes.resolveEnum(typeText, itemTypes);
+		if (enumValues) {
+			return enumValues.map((value, index) => {
+				const literal = `${quote}${value.split(quote).join(quote + quote)}${quote}`;
+				const item = new vscode.CompletionItem(literal, vscode.CompletionItemKind.EnumMember);
+				item.insertText = range ? literal : prefix + literal;
+				if (range) {
+					item.range = range;
+				}
+				item.filterText = literal;
+				item.detail = typeText.trim();
+				item.sortText = String(index).padStart(4, '0');
+				return item;
+			});
+		}
+		const atomicType = typeText.trim().replace(/[?*+]$/, '').trim();
+		const booleanType = atomicType === 'xs:boolean' || RecordTypes.resolveNamedType(atomicType, itemTypes) === 'xs:boolean';
+		return booleanType ? ['true()', 'false()'].map((value) => {
+			const item = new vscode.CompletionItem(value, vscode.CompletionItemKind.Value);
+			item.insertText = range ? value : prefix + value;
+			if (range) {
+				item.range = range;
+			}
+			item.filterText = value;
+			item.detail = 'xs:boolean';
+			return item;
+		}) : [];
+	}
+
+	// in an empty select attribute: the values for its declared type, if that's an enumeration type or xs:boolean - of an
+	// xsl:variable etc., an xsl:sequence that is an xsl:function result, or an xsl:map-entry for a record field
+	public static getSelectValueCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset - 1);
+		// an empty select, or one with a string literal being typed, e.g. select="'|'" - [3] is the string literal's quote
+		const emptySelect = /^<([\w.:-]+)\s(?:[^<>]*\s)?select\s*=\s*(["'])\s*(?:(?!\2)(['"])[^'"<>]*)?$/.exec(text.substring(tagStart, offset));
+		if (tagStart < 0 || !emptySelect) {
+			return undefined;
+		}
+		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
+		let typeText: string | undefined;
+		if (emptySelect[1] === 'xsl:map-entry') {
+			const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart);
+			const mapIndex = ancestors.length - 1;
+			const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, tagStart + 1, 'key') ?? '');
+			const record = mapIndex > -1 && ancestors[mapIndex].name === 'xsl:map' && key ? RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes) : undefined;
+			typeText = record?.fields.find((f) => f.name === key![2])?.type;
+		} else {
+			typeText = XsltTokenCompletions.declaredTypeForSelect(text, tagStart + 1);
+		}
+		let range: vscode.Range | undefined;
+		const stringQuote = emptySelect[3];
+		if (stringQuote) {
+			// replace the string literal, up to and including any closing quote before the end of the attribute value
+			const stringStart = text.lastIndexOf(stringQuote, offset - 1);
+			const closing = text.indexOf(stringQuote, offset);
+			const attributeEnd = text.indexOf(emptySelect[2], offset);
+			const stringEnd = closing > -1 && (attributeEnd === -1 || closing < attributeEnd) ? closing + 1 : offset;
+			range = new vscode.Range(document.positionAt(stringStart), document.positionAt(stringEnd));
+		}
+		const quote = stringQuote ?? (emptySelect[2] === '"' ? '\'' : '"');
+		const values = typeText ? XsltTokenCompletions.getTypeValueCompletions(typeText, itemTypes, quote, '', range) : [];
+		return values.length > 0 ? values : undefined;
 	}
 
 	// the entries of a map constructor for the record type, e.g. 'r': ${1:__TODO.r}, 'i': ${2:__TODO.i} - a field with

@@ -61,6 +61,7 @@ enum XsltCodeActionKind {
 	copyXdmViewToWorkspace = 'copy xdm-view library into workspace',
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
+	addMissingRecordFields = 'Add missing record fields',
 }
 
 enum ExtractFunctionParams {
@@ -95,6 +96,19 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private actionProps: ActionProps | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
+	private static createRecordFieldsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string }) {
+		const position = new vscode.Position(fix.line, fix.character);
+		// the string literal keys use the quote character that isn't the attribute value's delimiter
+		const textBefore = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
+		const isApostropheAttribute = textBefore.lastIndexOf('=\'') > textBefore.lastIndexOf('="');
+		const text = isApostropheAttribute ? fix.text.replace(/'/g, '"') : fix.text;
+		const action = new vscode.CodeAction(XsltCodeActionKind.addMissingRecordFields, vscode.CodeActionKind.QuickFix);
+		action.diagnostics = [diagnostic];
+		action.edit = new vscode.WorkspaceEdit();
+		action.edit.insert(document.uri, position, text);
+		return action;
+	}
+
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
 		let codeActions: vscode.CodeAction[] = [];
 
@@ -113,6 +127,18 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				} else {
 					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix));
 					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix));
+				}
+			});
+		// XPath 4.0 record types: one fix adds all the missing fields of a map constructor
+		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
+		const addedFixes = new Set<object>();
+		context.diagnostics
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing)
+			.forEach(diagnostic => {
+				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
+				if (fix && !addedFixes.has(fix)) {
+					addedFixes.add(fix);
+					codeActions.push(XSLTCodeActions.createRecordFieldsAction(document, diagnostic, fix));
 				}
 			});
 		if (codeActions.length > 0) {

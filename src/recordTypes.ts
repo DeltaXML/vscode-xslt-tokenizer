@@ -68,6 +68,67 @@ export class RecordTypes {
 		return undefined;
 	}
 
+	// the type that a named item type is declared as, following named item types, e.g. 'xs:boolean' for 'flag'
+	public static resolveNamedType(typeText: string, itemTypes: Map<string, string>, depth = 0): string | undefined {
+		const declared = itemTypes.get(typeText.trim());
+		if (!declared || depth > 10) {
+			return undefined;
+		}
+		return RecordTypes.resolveNamedType(declared, itemTypes, depth + 1) ?? declared.trim();
+	}
+
+	// the values of an enumeration type, e.g. ['red', 'green'] for enum('red', 'green'), a named item type declared as one,
+	// or a choice of them - undefined if it's not an enumeration type
+	public static resolveEnum(typeText: string, itemTypes: Map<string, string>, depth = 0): string[] | undefined {
+		let text = typeText.trim();
+		if (depth > 10 || text.length === 0) {
+			return undefined;
+		}
+		if ('?*+'.includes(text.charAt(text.length - 1))) {
+			text = text.substring(0, text.length - 1).trim();
+		}
+		if (text.startsWith('(') && RecordTypes.closingIndex(text, 0) === text.length - 1) {
+			// a parenthesized item type, or a choice item type, e.g. (enum('a') | enum('b'))
+			const choices = RecordTypes.splitTopLevel(text.substring(1, text.length - 1), '|').map((choice) => RecordTypes.resolveEnum(choice, itemTypes, depth + 1));
+			return choices.every((values) => values !== undefined) ? choices.flat() as string[] : undefined;
+		}
+		const enumMatch = /^enum\s*\(/.exec(text);
+		if (enumMatch) {
+			const openIndex = enumMatch[0].length - 1;
+			if (RecordTypes.closingIndex(text, openIndex) !== text.length - 1) {
+				return undefined;
+			}
+			const values: string[] = [];
+			for (const valueText of RecordTypes.splitTopLevel(text.substring(openIndex + 1, text.length - 1), ',')) {
+				const match = /^\s*(['"])([\s\S]*)\1\s*$/.exec(valueText);
+				if (!match) {
+					return undefined;
+				}
+				values.push(match[2].split(match[1] + match[1]).join(match[1]));
+			}
+			return values;
+		}
+		if (/^[\w.-]+(:[\w.-]+)?$/.test(text)) {
+			const declared = itemTypes.get(text);
+			return declared ? RecordTypes.resolveEnum(declared, itemTypes, depth + 1) : undefined;
+		}
+		return undefined;
+	}
+
+	// a problem token if the tokens of an expression are a single string literal that isn't one of the values of an
+	// enumeration type, e.g. 'blue' for enum('red', 'green')
+	public static checkEnumValue(tokens: BaseToken[], enumValues: string[], typeText: string, problemTokens: BaseToken[]) {
+		const realTokens = tokens.filter((t) => t.tokenType !== TokenLevelState.comment);
+		const token = realTokens.length === 1 ? realTokens[0] : undefined;
+		if (token && token.tokenType === TokenLevelState.string && /^(['"]).*\1$/.test(token.value)) {
+			const quote = token.value.charAt(0);
+			const value = token.value.substring(1, token.value.length - 1).split(quote + quote).join(quote);
+			if (!enumValues.includes(value)) {
+				problemTokens.push(RecordTypes.problemToken(token, ErrorType.EnumValueUnknown, value, typeText.trim()));
+			}
+		}
+	}
+
 	// the record type of a field's value, e.g. for record(a as record(b as xs:integer))
 	public static fieldRecord(field: RecordField, itemTypes: Map<string, string>) {
 		return field.type ? RecordTypes.resolve(field.type, itemTypes) : undefined;
@@ -107,12 +168,14 @@ export class RecordTypes {
 	// the keys of the entries that contain it, from the outermost map constructor, e.g. ['address'] for { 'address': { |
 	// and the keys the map constructor already has, before or after the cursor - undefined if the outermost map
 	// constructor isn't the whole expression, or a containing map constructor isn't the value of a string literal key
-	public static mapEntryPosition(tokens: BaseToken[], cursor: number): { keyPath: string[], usedKeys: string[] } | undefined {
+	// - or when tokens[cursor - 1] is the ':' after a string literal key, the valueKey, e.g. 'c' for { 'c': |
+	public static mapEntryPosition(tokens: BaseToken[], cursor: number): { keyPath: string[], usedKeys: string[], valueKey?: string } | undefined {
 		interface Frame { isMap: boolean, parentKey?: string, key?: string, keys: string[] }
 		const realTokens = tokens.filter((t, i) => t.tokenType !== TokenLevelState.comment || i >= cursor);
 		const cursorIndex = cursor - (tokens.length - realTokens.length);
 		const previous = realTokens[cursorIndex - 1];
-		if (!previous || !(previous.charType === CharLevelState.lBr || (previous.charType === CharLevelState.sep && previous.value === ','))) {
+		const isValuePosition = previous?.charType === CharLevelState.sep && previous.value === ':';
+		if (!previous || !(isValuePosition || previous.charType === CharLevelState.lBr || (previous.charType === CharLevelState.sep && previous.value === ','))) {
 			return undefined;
 		}
 		const stack: Frame[] = [];
@@ -151,7 +214,14 @@ export class RecordTypes {
 		if (!cursorFrames || cursorFrames.length === 0 || !cursorFrames.every((frame) => frame.isMap)) {
 			return undefined;
 		}
-		return { keyPath: cursorFrames.slice(1).map((frame) => frame.parentKey!), usedKeys: cursorFrames[cursorFrames.length - 1].keys };
+		const keyPath = cursorFrames.slice(1).map((frame) => frame.parentKey!);
+		if (isValuePosition) {
+			// the string literal key before the ':'
+			const keyToken = realTokens[cursorIndex - 2];
+			const isStringKey = keyToken && (keyToken.tokenType === TokenLevelState.mapKey || keyToken.tokenType === TokenLevelState.string) && /^(['"]).*\1$/.test(keyToken.value);
+			return isStringKey ? { keyPath, usedKeys: [], valueKey: keyToken.value.substring(1, keyToken.value.length - 1) } : undefined;
+		}
+		return { keyPath, usedKeys: cursorFrames[cursorFrames.length - 1].keys };
 	}
 
 	// the text with comments, CDATA sections and processing instructions blanked out, keeping offsets
@@ -245,11 +315,13 @@ export class RecordTypes {
 			return;
 		}
 		const keys = map.entries.map((e) => e.key);
-		record.fields.forEach((field) => {
-			if (!field.optional && !keys.includes(field.name)) {
-				problemTokens.push(RecordTypes.problemToken(map.startToken, ErrorType.RecordFieldMissing, field.name, record.name));
-			}
-		});
+		const missingFields = record.fields.filter((field) => !field.optional && !keys.includes(field.name));
+		if (missingFields.length > 0) {
+			const recordFix = RecordTypes.missingFieldsFix(tokens, end, map.entries.length > 0, missingFields, itemTypes);
+			missingFields.forEach((field) => {
+				problemTokens.push({ ...RecordTypes.problemToken(map.startToken, ErrorType.RecordFieldMissing, field.name, record.name), recordFix });
+			});
+		}
 		map.entries.forEach((entry) => {
 			const field = record.fields.find((f) => f.name === entry.key);
 			if (!field) {
@@ -257,12 +329,45 @@ export class RecordTypes {
 				return;
 			}
 			const nestedRecord = RecordTypes.fieldRecord(field, itemTypes);
+			const enumValues = field.type ? RecordTypes.resolveEnum(field.type, itemTypes) : undefined;
 			if (nestedRecord) {
 				RecordTypes.checkMapTokens(tokens, entry.valueStart, entry.valueEnd, nestedRecord, itemTypes, problemTokens);
+			} else if (enumValues && entry.valueStart === entry.valueEnd && tokens[entry.valueStart].tokenType === TokenLevelState.string) {
+				RecordTypes.checkEnumValue([tokens[entry.valueStart]], enumValues, field.type!, problemTokens);
 			} else if (entry.valueStart === entry.valueEnd && field.type && !RecordTypes.isLiteralAllowed(tokens[entry.valueStart], field.type)) {
 				problemTokens.push(RecordTypes.problemToken(tokens[entry.valueStart], ErrorType.RecordFieldValueType, field.name, field.type.trim()));
 			}
 		});
+	}
+
+	// a placeholder for a value, e.g. __TODO.city
+	public static readonly placeholderPrefix = '__TODO.';
+
+	// the entries for the fields, e.g. 'r': __TODO.r, 'i': __TODO.i - a field with a record type has a map constructor
+	// with its required fields
+	public static fieldEntriesText(fields: RecordField[], itemTypes: Map<string, string>, depth = 0): string {
+		return fields.map((field) => {
+			const quote = field.name.includes('\'') ? '"' : '\'';
+			const key = `${quote}${field.name}${quote}`;
+			const fieldRecord = depth < 5 ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+			if (fieldRecord) {
+				const requiredFields = fieldRecord.fields.filter((f) => !f.optional);
+				return requiredFields.length > 0 ? `${key}: { ${RecordTypes.fieldEntriesText(requiredFields, itemTypes, depth + 1)} }` : `${key}: {}`;
+			}
+			return `${key}: ${RecordTypes.placeholderPrefix}${field.name.replace(/[^\w.]/g, '_')}`;
+		}).join(', ');
+	}
+
+	// where and what to insert to add the fields to the map constructor ending with tokens[end]
+	private static missingFieldsFix(tokens: BaseToken[], end: number, hasEntries: boolean, fields: RecordField[], itemTypes: Map<string, string>) {
+		const entries = RecordTypes.fieldEntriesText(fields, itemTypes);
+		const closeToken = tokens[end];
+		if (closeToken.value === '{}') {
+			return { line: closeToken.line, character: closeToken.startCharacter + 1, text: ` ${entries} ` };
+		}
+		// after the last entry, or after the '{' of an empty map constructor
+		const previous = tokens[end - 1];
+		return { line: previous.line, character: previous.startCharacter + previous.length, text: hasEntries ? `, ${entries}` : ` ${entries}` };
 	}
 
 	// false if the literal value can't match the field's atomic type, e.g. a string literal for xs:double

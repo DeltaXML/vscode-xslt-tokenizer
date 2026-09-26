@@ -1703,6 +1703,7 @@ export enum ErrorType {
     OptionalParamRequiresXSLT40,
     RequiredParamAfterOptional,
     RecordFieldMissing,
+    EnumValueUnknown,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,
@@ -1744,6 +1745,8 @@ export interface BaseToken {
     tagElementId?: number;
     // XPath 4.0: the '|' separating the item types of a choice item type, e.g. (xs:date | xs:time)
     choiceSeparator?: boolean;
+    // XPath 4.0 record types: for a quick fix, the text that adds the missing fields to a map constructor
+    recordFix?: { line: number, character: number, text: string };
 }
 
 export interface Token extends BaseToken {
