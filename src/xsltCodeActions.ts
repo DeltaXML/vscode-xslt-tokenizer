@@ -150,7 +150,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		action.edit = new vscode.WorkspaceEdit();
 		const position = new vscode.Position(fix.line, fix.character);
 		const end = fix.end ? new vscode.Position(fix.end.line, fix.end.character) : position.translate(0, fix.replaceLength ?? 0);
-		action.edit.replace(document.uri, new vscode.Range(position, end), text);
+		// a snippet, for the cursor position after the edit: within the first select, or the first xsl:when's content
+		const snippetText = text.replace(/[$}\\]/g, '\\$&');
+		const withCursor = snippetText.replace(/select=""/, 'select="$0"') !== snippetText ? snippetText.replace(/select=""/, 'select="$0"') :
+			snippetText.replace(/(<xsl:when test="[^"]*">(?:\n[ \t]*)?)/, '$1$$0');
+		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, end), new vscode.SnippetString(withCursor));
+		// the text already has the indentation
+		snippetEdit.keepWhitespace = true;
+		action.edit.set(document.uri, [snippetEdit]);
 		return action;
 	}
 

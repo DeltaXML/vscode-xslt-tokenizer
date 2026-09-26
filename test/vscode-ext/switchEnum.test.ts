@@ -132,6 +132,31 @@ suite('xsl:switch on an enumeration type', () => {
 		});
 	});
 
+	// the text at the cursor after applying the quick fix in an editor: the line up to the cursor, and after it
+	async function cursorAfterFix(body: string, title: string) {
+		const document = await vscode.workspace.openTextDocument({ content: stylesheet(body), language: 'xslt' });
+		const editor = await vscode.window.showTextDocument(document);
+		const diagnostics = await lint(document);
+		const actions = new XSLTCodeActions().provideCodeActions(document, diagnostics[0].range, { diagnostics, triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		assert.isTrue(await vscode.workspace.applyEdit(actions.find((a) => a.title === title)!.edit!));
+		const cursor = editor.selection.active;
+		const line = document.lineAt(cursor.line).text;
+		return [line.substring(0, cursor.character), line.substring(cursor.character)];
+	}
+
+	test('cursor: within the first select', async () => {
+		assert.deepEqual(await cursorAfterFix(oneWhen, withSelect), [`      <xsl:when test="'green'" select="`, `"/>`]);
+	});
+
+	test('cursor: within the first xsl:when content, indented', async () => {
+		assert.deepEqual(await cursorAfterFix(oneWhen, withContent), ['        ', '']);
+	});
+
+	test('cursor: the content of the first xsl:when, with no xsl:when before', async () => {
+		const [before] = await cursorAfterFix(`<xsl:switch select="$c">\n    </xsl:switch>`, withContent);
+		assert.equal(before, '        ');
+	});
+
 	completionCases.forEach(([label, body, expected]) => {
 		test(`completion: ${label}`, async () => {
 			assert.deepEqual(await completionLabels(body), expected);
