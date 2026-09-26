@@ -38,7 +38,8 @@ const elementCases: [string, string, string[]][] = [
 	['a nested record field', variableMap(`<xsl:map-entry key="'address'"><xsl:map><xsl:map-entry key="'city'" select="'x'"/><|</xsl:map></xsl:map-entry>`, 'person'), ['xsl:map-entry \'zip\'']],
 	['an xsl:function result within xsl:choose', `<xsl:function name="cx:new" as="cx:complex"><xsl:choose><xsl:when test="true()"><xsl:map><|</xsl:map></xsl:when></xsl:choose></xsl:function>`, ['xsl:map-entry \'r\'', 'xsl:map-entry \'i\'']],
 	['not a record type', variableMap('<|', 'map(*)'), []],
-	['an xsl:map within another instruction', `<xsl:template name="t"><xsl:variable name="v" as="cx:complex"><xsl:sequence><xsl:map><|</xsl:map></xsl:sequence></xsl:variable></xsl:template>`, []],
+	['an xsl:map within an xsl:sequence', `<xsl:template name="t"><xsl:variable name="v" as="cx:complex"><xsl:sequence><xsl:map><|</xsl:map></xsl:sequence></xsl:variable></xsl:template>`, ['xsl:map-entry \'r\'', 'xsl:map-entry \'i\'']],
+	['an xsl:map within another instruction', `<xsl:template name="t"><xsl:variable name="v" as="cx:complex"><xsl:for-each select="1"><xsl:map><|</xsl:map></xsl:for-each></xsl:variable></xsl:template>`, []],
 	['within an xsl:map-entry', variableMap(`<xsl:map-entry key="'r'"><|</xsl:map-entry>`), []],
 ];
 

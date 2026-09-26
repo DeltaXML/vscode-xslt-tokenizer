@@ -52,6 +52,11 @@ const lintCases: [string, string, string[][]][] = [
 	['an xsl:select that is an xsl:function result', `<xsl:function name="cx:f" as="cx:complex"><xsl:select>{ 'r': 1 }</xsl:select></xsl:function>`, [missing('i', 'cx:complex')]],
 	['an xsl:map-entry select', template(`<xsl:variable name="s" as="shape"><xsl:map><xsl:map-entry key="'fill'" select="'blue'"/></xsl:map></xsl:variable>`), [notAValue('blue')]],
 	['an xsl:sequence in an xsl:map-entry', template(`<xsl:variable name="s" as="shape"><xsl:map><xsl:map-entry key="'fill'" select="'red'"/><xsl:map-entry key="'centre'"><xsl:sequence select="{ 'r': 1 }"/></xsl:map-entry></xsl:map></xsl:variable>`), [missing('i', 'cx:complex')]],
+	['an xsl:select with its own as', template(`<xsl:select as="cx:complex">{ 'r': 1 }</xsl:select>`), [missing('i', 'cx:complex')]],
+	['an xsl:sequence with its own as', template(`<xsl:sequence as="cx:complex" select="{ 'i': 1 }"/>`), [missing('r', 'cx:complex')]],
+	['an xsl:select as instead of the xsl:variable as', template(`<xsl:variable name="v" as="map(*)"><xsl:select as="cx:complex">{ 'r': 1 }</xsl:select></xsl:variable>`), [missing('i', 'cx:complex')]],
+	['an xsl:sequence as with an enumeration type', template(`<xsl:sequence as="colour" select="'blue'"/>`), [notAValue('blue')]],
+	['an xsl:sequence as in an xsl:function', `<xsl:function name="cx:f" as="item()*"><xsl:sequence as="colour" select="'blue'"/></xsl:function>`, [notAValue('blue')]],
 	['an xsl:variable without an as', template(`<xsl:variable name="v"><xsl:sequence select="{ 'r': 1 }"/></xsl:variable>`), []],
 	['an xsl:sequence in another instruction', template(`<xsl:variable name="v" as="cx:complex"><xsl:for-each select="1"><xsl:sequence select="{ 'r': 1 }"/></xsl:for-each></xsl:variable>`), []],
 ];
@@ -75,6 +80,10 @@ const completionCases: [string, string, vscode.CompletionItemKind, string[]][] =
 	['an empty xsl:select with an enumeration type', template(`<xsl:variable name="c" as="colour"><xsl:select>¦</xsl:select></xsl:variable>`), EnumMember, ['\'red\'', '\'green\'']],
 	['an xsl:sequence in an xsl:variable with an enumeration type', template(`<xsl:variable name="c" as="colour"><xsl:sequence select="¦"/></xsl:variable>`), EnumMember, ['\'red\'', '\'green\'']],
 	['an xsl:sequence in an xsl:map-entry', template(`<xsl:variable name="s" as="shape"><xsl:map><xsl:map-entry key="'fill'"><xsl:sequence select="¦"/></xsl:map-entry></xsl:map></xsl:variable>`), EnumMember, ['\'red\'', '\'green\'']],
+	['an xsl:select with its own as', template(`<xsl:select as="cx:complex">{¦}</xsl:select>`), Field, ['\'r\'', '\'i\'']],
+	['an xsl:sequence with its own as', template(`<xsl:sequence as="colour" select="¦"/>`), EnumMember, ['\'red\'', '\'green\'']],
+	['an xsl:map in an xsl:sequence with its own as', template(`<xsl:sequence as="cx:complex"><¦</xsl:sequence>`), vscode.CompletionItemKind.Snippet, ['xsl:map cx:complex: required fields']],
+	['an xsl:map in an xsl:sequence in an xsl:variable', template(`<xsl:variable name="v" as="cx:complex"><xsl:sequence><¦</xsl:sequence></xsl:variable>`), vscode.CompletionItemKind.Snippet, ['xsl:map cx:complex: required fields']],
 ];
 
 suite('Record and enumeration types of instruction values', () => {

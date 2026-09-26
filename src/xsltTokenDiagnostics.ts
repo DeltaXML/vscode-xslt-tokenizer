@@ -4457,14 +4457,15 @@ export class XsltTokenDiagnostics {
 		const openElements = RecordTypes.openElementsAt(RecordTypes.blankMarkup(text), candidates.map((c) => c.tagStart));
 		candidates.forEach((candidate, index) => {
 			const ancestors = openElements[index].concat([{ name: candidate.name, offset: candidate.tagStart }]);
-			if (candidate.name === 'xsl:sequence' && ancestors[ancestors.length - 2]?.name === 'xsl:function') {
+			const ownType = candidate.name === 'xsl:map-entry' ? undefined : RecordTypes.attributeOfElementAt(text, candidate.tagStart + 1, 'as');
+			if (!ownType && candidate.name === 'xsl:sequence' && ancestors[ancestors.length - 2]?.name === 'xsl:function') {
 				return;
 			}
 			if (candidate.name === 'xsl:map-entry') {
 				// the type of the record field for the key - as for an instruction within the xsl:map-entry
 				ancestors.push({ name: 'xsl:sequence', offset: -1 });
 			}
-			const declaredType = RecordTypes.contentType(text, ancestors, ancestors.length - 1, itemTypes, templateParamType);
+			const declaredType = ownType ?? RecordTypes.contentType(text, ancestors, ancestors.length - 1, itemTypes, templateParamType);
 			if (declaredType) {
 				RecordTypes.checkValue(candidate.tokens, 0, candidate.isLiteral ? 0 : -1, declaredType, itemTypes, problemTokens, candidate.tokens.length - 1);
 			}

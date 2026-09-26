@@ -526,6 +526,7 @@ export class RecordTypes {
 	// from the element containing it (within any xsl:if or xsl:choose etc.): the 'as' of an xsl:variable, xsl:param or
 	// xsl:function, the type of the parameter an xsl:with-param sets, or for an xsl:map-entry of an xsl:map with a record
 	// type, the type of its field
+	// - an xsl:sequence or xsl:select with its own 'as' has that type: see instructionType
 	public static contentType(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType, depth = 0): string | undefined {
 		if (depth > 10) {
 			return undefined;
@@ -534,6 +535,12 @@ export class RecordTypes {
 			const { name, offset } = ancestors[i];
 			if (name === 'xsl:variable' || name === 'xsl:param' || name === 'xsl:with-param' || name === 'xsl:function') {
 				return RecordTypes.attributeOfElementAt(text, offset + 1, 'as') ?? (name === 'xsl:with-param' ? RecordTypes.withParamType(text, ancestors, i, templateParamType) : undefined);
+			} else if (name === 'xsl:sequence') {
+				// XSLT 4.0: an xsl:sequence with content - its value is the content's value, with its own 'as' if it has one
+				const ownType = RecordTypes.attributeOfElementAt(text, offset + 1, 'as');
+				if (ownType) {
+					return ownType;
+				}
 			} else if (name === 'xsl:map-entry') {
 				const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, offset + 1, 'key') ?? '');
 				const parentMap = i - 1;
@@ -548,6 +555,14 @@ export class RecordTypes {
 			}
 		}
 		return undefined;
+	}
+
+	// the declared type of the value of the xsl:sequence or xsl:select at ancestors[index]: its own 'as' (XSLT 4.0), or
+	// otherwise the type from the element containing it
+	public static instructionType(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType): string | undefined {
+		const offset = ancestors[index].offset;
+		const ownType = offset > -1 ? RecordTypes.attributeOfElementAt(text, offset + 1, 'as') : undefined;
+		return ownType ?? RecordTypes.contentType(text, ancestors, index, itemTypes, templateParamType);
 	}
 
 	// for the xsl:with-param at ancestors[index], without an 'as': the type of the parameter it sets - of the called

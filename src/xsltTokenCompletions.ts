@@ -1743,9 +1743,9 @@ export class XsltTokenCompletions {
 			const elements = ancestors();
 			return RecordTypes.withParamType(text, elements, elements.length - 1, templateParamType);
 		} else if (elementName === 'xsl:sequence' || elementName === 'xsl:select') {
-			// the value of the containing instruction, e.g. an xsl:param or xsl:function
+			// its own 'as', or the type of the value of the containing instruction, e.g. an xsl:param or xsl:function
 			const elements = ancestors();
-			return RecordTypes.contentType(text, elements, elements.length - 1, itemTypes, templateParamType);
+			return RecordTypes.instructionType(text, elements, elements.length - 1, itemTypes, templateParamType);
 		} else if (elementName === 'xsl:map-entry') {
 			// the type of the record field for the key - as for an instruction within the xsl:map-entry
 			const elements = ancestors().concat([{ name: 'xsl:sequence', offset: -1 }]);
