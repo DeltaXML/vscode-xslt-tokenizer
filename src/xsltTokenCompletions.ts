@@ -2177,6 +2177,16 @@ export class XsltTokenCompletions {
 			stackPos--;
 		}
 		expectedTags = xsltParent ? schemaQuery.getExpected(xsltParent).elements : [];
+		if (expectedTags.some((tag) => tag[0] === 'xsl:select')) {
+			// XSLT 4.0: xsl:select is an alternative to a select attribute, so it's not for an element that has one
+			const text = document.getText();
+			const tagStart = text.lastIndexOf('<', document.offsetAt(pos) - 1);
+			const ancestors = tagStart > -1 ? RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart) : [];
+			const parent = ancestors[ancestors.length - 1];
+			if (parent && RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'select') !== undefined) {
+				expectedTags = expectedTags.filter((tag) => tag[0] !== 'xsl:select');
+			}
+		}
 
 		let completionItems: vscode.CompletionItem[] = [];
 		if (isWithinXslIterate) {
@@ -2249,6 +2259,18 @@ export class XsltTokenCompletions {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('xsl:key name="${1:name}" match="${2:pattern}" use="${3:xpath}"/>$0');
+					completionItems.push(newItem);
+				} else if (tagName === 'xsl:sequence') {
+					// the 'as' attribute (XSLT 4.0) is rarely used, so it's not included
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:sequence select="$1"/>$0');
+					completionItems.push(newItem);
+				} else if (tagName === 'xsl:select') {
+					// the 'as' attribute is normally redundant, so it's not included - the XPath expression is the content
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:select>$1</xsl:select>$0');
 					completionItems.push(newItem);
 				} else if (tagName === 'xsl:map') {
 					// the select attribute is rarely used, so it's not included

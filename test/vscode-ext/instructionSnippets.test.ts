@@ -49,6 +49,20 @@ suite('Instruction snippets', () => {
 		assert.equal(result.get('xsl:map-entry'), 'xsl:map-entry key="$1" select="$2"/>$0');
 	});
 
+	test('xsl:sequence has a select attribute but no as attribute', async () => {
+		const result = await snippets('4.0', '<xsl:template name="t"><|</xsl:template>');
+		assert.equal(result.get('xsl:sequence'), 'xsl:sequence select="$1"/>$0');
+	});
+
+	test('xsl:select is offered within an element without a select attribute, with no as attribute', async () => {
+		const result = await snippets('4.0', '<xsl:template name="t"><xsl:variable name="v"><|</xsl:variable></xsl:template>');
+		assert.equal(result.get('xsl:select'), 'xsl:select>$1</xsl:select>$0');
+	});
+
+	test('xsl:select is not offered within an element with a select attribute', async () => {
+		assert.isFalse((await snippets('4.0', '<xsl:template name="t"><xsl:variable name="v" select="1"><|</xsl:variable></xsl:template>')).has('xsl:select'));
+	});
+
 	test('xsl:map has no select attribute', async () => {
 		const result = await snippets('4.0', '<xsl:template name="t"><|</xsl:template>');
 		assert.equal(result.get('xsl:map'), 'xsl:map>\n\t$0\n</xsl:map>');
