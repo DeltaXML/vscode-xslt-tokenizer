@@ -111,8 +111,11 @@ export class DocumentChangeHandler {
 			triggerSuggest = /\$[\w.:-]+(\?[\w.-]+)*$/.test(textBefore);
 		}
 		// the start of a map constructor or of an entry's key, or of an entry's value - after a string literal key, e.g. 'a':
-		const isValueStart = activeChange.text === ':' && /['"]\s*$/.test(e.document.lineAt(activeChange.range.start.line).text.substring(0, activeChange.range.start.character));
-		const isMapEntryStart = activeChange.text === ',' || activeChange.text === '{' || activeChange.text === '{}' || isValueStart;
+		const lineBefore = e.document.lineAt(activeChange.range.start.line).text.substring(0, activeChange.range.start.character);
+		const isValueStart = activeChange.text === ':' && /['"]\s*$/.test(lineBefore);
+		// a quote, or an auto-closed pair, starting a string literal key or value, e.g. { 'a': ' or select="'
+		const isStringStart = ['\'', '"', '\'\'', '""'].includes(activeChange.text) && /(?:[:,{]|=\s*["'])\s*$/.test(lineBefore);
+		const isMapEntryStart = activeChange.text === ',' || activeChange.text === '{' || activeChange.text === '{}' || isValueStart || isStringStart;
 		if (!triggerSuggest && !skipTrigger && isMapEntryStart && e.document.languageId === 'xslt' && /\sversion\s*=\s*["']4\.0["']/.test(e.document.getText(new vscode.Range(0, 0, 50, 0)))) {
 			// XPath 4.0 record types: the next entry of a map constructor, or the whole map constructor
 			triggerSuggest = true;

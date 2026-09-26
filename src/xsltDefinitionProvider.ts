@@ -304,15 +304,13 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			// XPath 4.0 record types: the next entry of a map constructor
 			const recordEntries = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT ?
 				XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
-			if (recordEntries || isCommaTrigger) {
-				resolve(recordEntries && recordEntries.length > 0 ? new vscode.CompletionList(recordEntries, true) : undefined);
-				return;
-			}
 			const isXSLT40 = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT;
 			// an empty select, for an enumeration type or xs:boolean
-			const selectValues = isXSLT40 ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
-			if (selectValues) {
-				resolve(new vscode.CompletionList(selectValues, true));
+			const selectValues = !recordEntries && isXSLT40 ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (recordEntries || selectValues || isCommaTrigger) {
+				// triggered by a ',', '{', ':' or quote: only these completions
+				const items = recordEntries ?? selectValues;
+				resolve(items && items.length > 0 ? new vscode.CompletionList(items, true) : undefined);
 				return;
 			}
 			// the key attribute of an xsl:map-entry for a record type

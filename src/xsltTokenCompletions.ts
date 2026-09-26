@@ -110,7 +110,23 @@ export class XsltTokenCompletions {
 	private static atomicItemTypeNames: string[] = [];
 
 	private static sequenceTypesFor(docType: DocumentTypes) {
-		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? XsltTokenCompletions.itemTypeNames.concat(XsltTokenCompletions.sequenceTypes) : XsltTokenCompletions.sequenceTypes31;
+		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? XsltTokenCompletions.itemTypeNames.concat(XsltTokenCompletions.sequenceTypes, ['record()', 'enum()']) : XsltTokenCompletions.sequenceTypes31;
+	}
+
+	// the quote character for string literals in the XPath at the completion position - set for each getCompletions call
+	private static stringQuote = '\'';
+
+	// XPath 4.0 item types inserted as snippets, with placeholders within the brackets
+	private static typeSnippet(name: string): vscode.SnippetString | undefined {
+		const q = XsltTokenCompletions.stringQuote;
+		switch (name) {
+			case 'record()':
+				return new vscode.SnippetString('record(${1:field1} as ${2:xs:string}, ${3:field2} as ${4:xs:string})');
+			case 'enum()':
+				return new vscode.SnippetString(`enum(${q}\${1:value1}${q}, ${q}\${2:value2}${q})`);
+			default:
+				return undefined;
+		}
 	}
 
 	private static setItemTypeNames(docType: DocumentTypes, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
@@ -160,6 +176,7 @@ export class XsltTokenCompletions {
 		let attNameText: string = '';
 		XsltTokenCompletions.useIxslFunctions = false;
 		XsltTokenCompletions.setItemTypeNames(docType, globalInstructionData, importedInstructionData);
+		XsltTokenCompletions.stringQuote = XsltTokenCompletions.stringLiteralQuote(document.getText(), document.offsetAt(position));
 
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
 		let requiredLine = position.line;
@@ -1188,7 +1205,8 @@ export class XsltTokenCompletions {
 							xpathCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 						}
 						if (!xpathCompletions) {
-							let completionStrings = isSimpleType ? XsltTokenCompletions.atomicItemTypeNames.concat(FunctionData.simpleTypes) : XsltTokenCompletions.sequenceTypesFor(docType);
+							const atomicTypes40 = docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? XsltTokenCompletions.atomicItemTypeNames.concat(['enum()']) : [];
+							let completionStrings = isSimpleType ? atomicTypes40.concat(FunctionData.simpleTypes) : XsltTokenCompletions.sequenceTypesFor(docType);
 							xpathCompletions = XsltTokenCompletions.getNormalCompletions(position, completionStrings, vscode.CompletionItemKind.TypeParameter);
 						}
 						break;
@@ -1933,7 +1951,13 @@ export class XsltTokenCompletions {
 			if (!excludeChar || name !== excludeChar) {
 				const varName = name;
 				const newItem = new vscode.CompletionItem(varName, kind);
-				newItem.textEdit = vscode.TextEdit.insert(pos, varName);
+				const snippet = XsltTokenCompletions.typeSnippet(name);
+				if (snippet) {
+					newItem.insertText = snippet;
+					newItem.range = new vscode.Range(pos, pos);
+				} else {
+					newItem.textEdit = vscode.TextEdit.insert(pos, varName);
+				}
 				completionItems.push(newItem);
 			}
 		});
@@ -1946,6 +1970,7 @@ export class XsltTokenCompletions {
 			if (!excludeChar || name !== excludeChar) {
 				const varName = name;
 				const newItem = new vscode.CompletionItem(varName, kind);
+				newItem.insertText = XsltTokenCompletions.typeSnippet(name);
 				completionItems.push(newItem);
 			}
 		});
@@ -1958,6 +1983,7 @@ export class XsltTokenCompletions {
 			if (!excludeChar || name !== excludeChar) {
 				const varName = name;
 				const newItem = new vscode.CompletionItem(varName, kind);
+				newItem.insertText = XsltTokenCompletions.typeSnippet(name);
 				if (range) {
 					newItem.range = range;
 				}

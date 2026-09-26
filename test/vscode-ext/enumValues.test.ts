@@ -12,6 +12,7 @@ import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
+import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 
 const declarations = `<xsl:item-type name="colour" as="enum('red', 'green')"/>
 	<xsl:item-type name="flag" as="xs:boolean"/>
@@ -96,12 +97,16 @@ suite('Enumeration types', () => {
 });
 
 suite('Completions within a string literal replace it', () => {
-	// the select attribute's text after applying the first completion with the label
-	async function apply(body: string, label: string) {
+	// the select attribute's text after applying the first completion with the label - with isTyped, as when triggered
+	// by typing a quote
+	async function apply(body: string, label: string, isTyped = false) {
 		const marked = stylesheet(body);
 		const offset = marked.indexOf('¦');
 		const document = await vscode.workspace.openTextDocument({ content: marked.substring(0, offset) + marked.substring(offset + 1), language: 'xslt' });
 		const position = document.positionAt(offset);
+		if (isTyped) {
+			(DocumentChangeHandler as unknown as { commaTriggerPending: boolean }).commaTriggerPending = true;
+		}
 		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, position, new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
 		const items = Array.isArray(result) ? result : result?.items ?? [];
 		const item = items.find((i) => i.label === label);
@@ -135,6 +140,22 @@ suite('Completions within a string literal replace it', () => {
 
 	test('a select within quotes', async () => {
 		assert.equal(await apply(`<xsl:variable name="c" as="colour" select="'¦'"/>`, '\'red\''), `'red'`);
+	});
+
+	test('typing a quote for an enumeration value', async () => {
+		assert.equal(await apply(shapeVariable(`{ 'fill': '¦ }`), '\'red\'', true), `{ 'fill': 'red' }`);
+	});
+
+	test('typing a quote for a key', async () => {
+		assert.equal(await apply(shapeVariable(`{ '¦ }`), '\'fill\'', true), `{ 'fill':  }`);
+	});
+
+	test('typing a quote in a select', async () => {
+		assert.equal(await apply(`<xsl:variable name="c" as="colour" select="'¦"/>`, '\'green\'', true), `'green'`);
+	});
+
+	test('typing a quote for an auto-closed pair in a select', async () => {
+		assert.equal(await apply(`<xsl:variable name="c" as="colour" select="'¦'"/>`, '\'green\'', true), `'green'`);
 	});
 
 	test('a partly typed select', async () => {
