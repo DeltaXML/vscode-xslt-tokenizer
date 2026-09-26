@@ -36,6 +36,8 @@ export class XslLexerLight extends XslLexer {
         let contextGlobalInstructionType = GlobalInstructionType.Unknown;
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
+        // default-mode: templates without a mode attribute are in this mode
+        let isDefaultModeAttribute = false;
         let isGlobalParameterName = false;
         let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
@@ -139,7 +141,9 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lAn:
                             if ((xmlElementStack === 1 && tagGlobalInstructionType !== GlobalInstructionType.Unknown) ||
                                 xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage ||
-                                (xmlElementStack === 1 && isNativeElement)) {
+                                (xmlElementStack === 1 && isNativeElement) ||
+                                // the root element: it isn't known to be native until its xmlns attributes are read
+                                (xmlElementStack === 0 && !xmlnsPrefixesOnly)) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             } else if (xmlElementStack < 3 && xmlnsPrefixesOnly) {
@@ -151,6 +155,7 @@ export class XslLexerLight extends XslLexer {
                             attName = tokenChars.join('');
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
+                            isDefaultModeAttribute = (isNativeElement || xmlElementStack === 0) && attName === 'default-mode';
                             isGlobalParameterName = false;
                             isParamRequiredAttribute = false;
                             isUseAccumulatorsAttribute = false;
@@ -211,6 +216,20 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.rDq:
                         case XMLCharState.escDqAvt:
                         case XMLCharState.escSqAvt:
+                            if (isDefaultModeAttribute) {
+                                const defaultMode = tokenChars.join('').trim();
+                                if (defaultMode !== '' && defaultMode !== '#unnamed') {
+                                    const defaultModeToken: BaseToken = {
+                                        line: lineNumber,
+                                        length: defaultMode.length,
+                                        startCharacter: lineNumberChar - (defaultMode.length + 1),
+                                        value: defaultMode,
+                                        tokenType: XSLTokenLevelState.attributeValue
+                                    };
+                                    this.globalModeData.push({type: GlobalInstructionType.ModeTemplate, name: defaultMode, token: defaultModeToken, idNumber: 0, isDefaultMode: true});
+                                }
+                                isDefaultModeAttribute = false;
+                            }
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');
                                 const modeNames = attValue.split(/\s+/);
@@ -335,7 +354,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage
-                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute || isUseAccumulatorsAttribute) {
+                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute || isUseAccumulatorsAttribute || isDefaultModeAttribute) {
                                 storeToken = true;
                             }
                            break;

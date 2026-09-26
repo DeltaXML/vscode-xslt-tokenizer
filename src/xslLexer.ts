@@ -148,6 +148,8 @@ export interface GlobalInstructionData {
     memberTypes?: (string|undefined)[];
     // XSLT 4.0: xsl:function parameters with required="no", in parameter order
     memberOptional?: boolean[];
+    // a mode named by a [xsl:]default-mode attribute, for templates without a mode attribute
+    isDefaultMode?: boolean;
     href?: string;
     version?: string;
     returnType?: string;
@@ -734,6 +736,8 @@ export class XslLexer {
         let isExpandTextAttribute = false;
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
+        // [xsl:]default-mode: templates without a mode attribute are in this mode
+        let isDefaultModeAttribute = false;
         let isGlobalParameterName = false;
         let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
@@ -945,6 +949,7 @@ export class XslLexer {
                             isGlobalUsePackageVersion = false;
                             isGlobalVersion = false;
                             attName = tokenChars.join('');
+                            isDefaultModeAttribute = isNativeElement ? attName === 'default-mode' : attName === 'xsl:default-mode';
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
                                 if (attName === 'as') {
@@ -1052,6 +1057,13 @@ export class XslLexer {
                                 xpathEnded = false;
                             }
                             let newToken = this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
+                            if (isDefaultModeAttribute) {
+                                const defaultMode = tokenChars.join('').trim();
+                                if (defaultMode !== '' && defaultMode !== '#unnamed') {
+                                    XslLexer.tokensInsideToken(newToken, tokenChars.join('')).forEach((modeToken) => this.globalModeData.push({type: GlobalInstructionType.ModeTemplate, name: modeToken.value, token: modeToken, idNumber: 0, isDefaultMode: true}));
+                                }
+                                isDefaultModeAttribute = false;
+                            }
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');                               
                                 let newTokenCopy = Object.assign({}, newToken);
@@ -1134,7 +1146,7 @@ export class XslLexer {
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage || tagGlobalInstructionType === GlobalInstructionType.RootXSLT) {
                                 storeToken = true;
                             }
-                            if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode || isUseAccumulatorsAttribute) {
+                            if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode || isUseAccumulatorsAttribute || isDefaultModeAttribute) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
                                 this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeValue, result, nextState);

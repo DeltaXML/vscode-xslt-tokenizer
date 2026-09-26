@@ -38,6 +38,8 @@ export enum AttributeType {
 	UseAttributeSets,
 	// a list of accumulator names, e.g. on xsl:mode or xsl:source-document
 	UseAccumulators,
+	// [xsl:]default-mode: the mode for templates without a mode attribute
+	DefaultMode,
 	ExcludeResultPrefixes,
 	XPath
 }
@@ -432,7 +434,7 @@ export class XsltTokenDiagnostics {
 		let dtdStarted = false;
 		let dtdEnded = false;
 		let namedTemplates: Map<string, string[]> = new Map();
-		let globalModes: string[] = ['#current', '#default'];
+		let globalModes: string[] = ['#current', '#default', '#unnamed'];
 		let globalKeys: string[] = [];
 		// names declared with xsl:item-type
 		let globalItemTypeNames: string[] = [];

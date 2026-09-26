@@ -455,9 +455,11 @@ export class XsltTokenDefinitions {
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 									} else {
 										resultInputToken = { token: token, type: GlobalInstructionType.Mode };
+										// an xsl:mode declaration, then a template with this mode, then a default-mode that names it
 										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeInstruction);
 										if (!instruction) {
-											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeTemplate);
+											const modeTemplates = globalInstructionData.concat(importedInstructionData).filter((global) => global.type === GlobalInstructionType.ModeTemplate && global.name === seekName);
+											instruction = modeTemplates.find((global) => !global.isDefaultMode) ?? modeTemplates[0];
 										}
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 									}

@@ -487,6 +487,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								attType = AttributeType.InstructionName;
 							} else if (attNameText === XsltTokenDiagnostics.xslModeAtt) {
 								attType = AttributeType.InstructionMode;
+							} else if (attNameText === 'default-mode') {
+								attType = AttributeType.DefaultMode;
 							} else if (attNameText === XsltTokenDiagnostics.useAttSet) {
 								attType = AttributeType.UseAttributeSets;
 							} else if (attNameText === 'use-accumulators') {
@@ -498,6 +500,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 							}
 						} else if (attNameText === XsltTokenDiagnostics.xslUseAttSet) {
 							attType = AttributeType.UseAttributeSets;
+						} else if (attNameText === 'xsl:default-mode') {
+							attType = AttributeType.DefaultMode;
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
@@ -591,6 +595,16 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 											referenceTokens.push(token);
 										}
 									}
+								}
+								break;
+							case AttributeType.DefaultMode:
+								if (seekInstruction.type === GlobalInstructionType.Mode || seekInstruction.type === GlobalInstructionType.ModeInstruction || seekInstruction.type === GlobalInstructionType.ModeTemplate) {
+									XslLexer.tokensInsideToken(token, variableName).forEach((modeToken) => {
+										const isSeekToken = seekInstruction.token.startCharacter === modeToken.startCharacter && seekInstruction.token.line === modeToken.line;
+										if (modeToken.value === seekInstruction.name && (seekInstruction.type === GlobalInstructionType.ModeInstruction || !isSeekToken)) {
+											referenceTokens.push(modeToken);
+										}
+									});
 								}
 								break;
 							case AttributeType.UseAttributeSets:
