@@ -1262,11 +1262,25 @@ export class XsltTokenCompletions {
 			// a lookup can't follow a path step, e.g. jtree($p)/address?city is a syntax error
 			return undefined;
 		}
+		const functionCall = !isChildStep && operand ? RecordTypes.functionCallAt(allTokens, lookupIndex - 1) : undefined;
+		if (functionCall) {
+			// the result of a user-defined function with a record type, e.g. cx:new(1, 2)?
+			const fn = globals.find((g) => g.type === GlobalInstructionType.Function && g.name === functionCall.name && XslLexer.functionArityMatches(g, functionCall.arity));
+			return fn?.returnType ? RecordTypes.resolve(fn.returnType, itemTypes) : undefined;
+		}
 		if (operand?.tokenType === TokenLevelState.variable) {
 			const name = operand.value.substring(1);
-			if (inScopeXPathVariablesList.some((v) => v.name === name) || xpathStack.some((x) => x.variables.some((v) => v.name === name))) {
-				// a variable declared in the XPath expression, e.g. by 'let', has no declared type
-				return undefined;
+			// a variable declared in the XPath expression, e.g. let $p as person := ..., or function($p as person) - the innermost one
+			const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList);
+			const xpathVariable = [...xpathVariables].reverse().find((v) => v.name === name);
+			if (xpathVariable) {
+				const typeRange = RecordTypes.xpathVariableTypeRange(allTokens, xpathVariable.index);
+				if (!typeRange) {
+					return undefined;
+				}
+				const first = allTokens[typeRange[0]];
+				const last = allTokens[typeRange[1]];
+				return RecordTypes.resolve(document.getText(new vscode.Range(first.line, first.startCharacter, last.line, last.startCharacter + last.length)), itemTypes);
 			}
 			const findIn = (list: VariableData[]) => [...list].reverse().find((v) => v.name === name);
 			let localVariable = findIn(inScopeVariablesList);
@@ -1339,7 +1353,22 @@ export class XsltTokenCompletions {
 		}
 		const text = document.getText();
 		const attributeOffset = document.offsetAt(new vscode.Position(attributeNameToken!.line, attributeNameToken!.startCharacter));
-		const declaredType = XsltTokenCompletions.declaredTypeForSelect(text, attributeOffset);
+		let declaredType: string | undefined;
+		if (entryPosition.outerStart === 0) {
+			declaredType = XsltTokenCompletions.declaredTypeForSelect(text, attributeOffset);
+		} else {
+			// the value of a let binding with a type, e.g. let $p as person := {
+			const assignIndex = entryPosition.outerStart - 1;
+			for (let i = assignIndex - 2; i > -1 && i > assignIndex - 40; i--) {
+				const typeRange = xpathTokens[i].tokenType === TokenLevelState.variable ? RecordTypes.xpathVariableTypeRange(xpathTokens, i) : undefined;
+				if (typeRange && typeRange[1] === assignIndex - 1) {
+					const firstType = xpathTokens[typeRange[0]];
+					const lastType = xpathTokens[typeRange[1]];
+					declaredType = document.getText(new vscode.Range(firstType.line, firstType.startCharacter, lastType.line, lastType.startCharacter + lastType.length));
+					break;
+				}
+			}
+		}
 		const globals = globalInstructionData.concat(importedInstructionData);
 		const itemTypes = new Map<string, string>();
 		globals.filter((g) => g.type === GlobalInstructionType.ItemType && g.declaredType).forEach((g) => itemTypes.set(g.name, g.declaredType!));

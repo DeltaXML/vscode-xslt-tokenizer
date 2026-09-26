@@ -1386,9 +1386,12 @@ export class XsltTokenDiagnostics {
 					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r, or a child step on a JNode for one, e.g. jtree($c)/r
 					const variableRecord = (variableToken: BaseToken) => {
 						const variableName = variableToken.value.substring(1);
-						const isXPathVariable = inScopeXPathVariablesList.some((v) => v.name === variableName) || xpathStack.some((x) => x.variables.some((v) => v.name === variableName));
-						if (isXPathVariable) {
-							return undefined;
+						// a variable declared in the XPath expression, e.g. let $p as person := ..., or function($p as person) - the innermost one
+						const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList, anonymousFunctionParamList);
+						const xpathVariable = [...xpathVariables].reverse().find((v) => v.name === variableName);
+						if (xpathVariable) {
+							const typeRange = RecordTypes.xpathVariableTypeRange(allTokens, allTokens.indexOf(xpathVariable.token));
+							return typeRange ? RecordTypes.resolve(XsltTokenDiagnostics.textForTokenRange(document, allTokens, typeRange), itemTypeDeclarations) : undefined;
 						}
 						const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
 						const globalType = globalVariableTypes.get(variableName);
@@ -1397,7 +1400,12 @@ export class XsltTokenDiagnostics {
 					const operandIndex = index - 2;
 					const operand = operandIndex > -1 ? allTokens[operandIndex] : undefined;
 					let operandRecord: { record: RecordType | undefined, isJNode: boolean } | undefined;
-					if (operand?.tokenType === TokenLevelState.variable) {
+					const functionCall = !isRecordStep && operand ? RecordTypes.functionCallAt(allTokens, operandIndex) : undefined;
+					if (functionCall) {
+						// the result of a user-defined function with a record type, e.g. cx:new(1, 2)?
+						const fn = globalInstructionData.concat(importedInstructionData).find((g) => g.type === GlobalInstructionType.Function && g.name === functionCall.name && XslLexer.functionArityMatches(g, functionCall.arity));
+						operandRecord = { record: fn?.returnType ? RecordTypes.resolve(fn.returnType, itemTypeDeclarations) : undefined, isJNode: false };
+					} else if (operand?.tokenType === TokenLevelState.variable) {
 						operandRecord = { record: variableRecord(operand), isJNode: false };
 					} else if (operand?.charType === CharLevelState.rB && operandIndex > 2 && allTokens[operandIndex - 1].tokenType === TokenLevelState.variable &&
 						allTokens[operandIndex - 2].charType === CharLevelState.lB && allTokens[operandIndex - 3].value === 'jtree') {

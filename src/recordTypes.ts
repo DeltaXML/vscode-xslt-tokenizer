@@ -169,8 +169,9 @@ export class RecordTypes {
 	// and the keys the map constructor already has, before or after the cursor - undefined if the outermost map
 	// constructor isn't the whole expression, or a containing map constructor isn't the value of a string literal key
 	// - or when tokens[cursor - 1] is the ':' after a string literal key, the valueKey, e.g. 'c' for { 'c': |
-	public static mapEntryPosition(tokens: BaseToken[], cursor: number): { keyPath: string[], usedKeys: string[], valueKey?: string } | undefined {
-		interface Frame { isMap: boolean, parentKey?: string, key?: string, keys: string[] }
+	// - outerStart is the index of the outermost map constructor's first token: 0, or after the ':=' of a let binding
+	public static mapEntryPosition(tokens: BaseToken[], cursor: number): { keyPath: string[], usedKeys: string[], valueKey?: string, outerStart: number } | undefined {
+		interface Frame { isMap: boolean, parentKey?: string, key?: string, keys: string[], start: number }
 		const realTokens = tokens.filter((t, i) => t.tokenType !== TokenLevelState.comment || i >= cursor);
 		const cursorIndex = cursor - (tokens.length - realTokens.length);
 		const previous = realTokens[cursorIndex - 1];
@@ -191,11 +192,11 @@ export class RecordTypes {
 				// a map constructor starts the expression, e.g. { or map {, or is the value of an entry with a string literal key
 				const start = prev?.tokenType === TokenLevelState.operator && prev.value === 'map' ? i - 1 : i;
 				const before = realTokens[start - 1];
-				const isOuterMap = stack.length === 0 && start === 0;
+				const isOuterMap = stack.length === 0 && (start === 0 || (before?.tokenType === TokenLevelState.complexExpression && before.value === ':='));
 				const isEntryValue = !!top?.isMap && top.key !== undefined && before?.charType === CharLevelState.sep && before.value === ':';
-				stack.push({ isMap: isOuterMap || isEntryValue, parentKey: isEntryValue ? top.key : undefined, keys: [] });
+				stack.push({ isMap: isOuterMap || isEntryValue, parentKey: isEntryValue ? top.key : undefined, keys: [], start });
 			} else if (RecordTypes.isOpenBracket(t)) {
-				stack.push({ isMap: false, keys: [] });
+				stack.push({ isMap: false, keys: [], start: i });
 			} else if (RecordTypes.isCloseBracket(t)) {
 				stack.pop();
 			} else if (top?.isMap && t.charType === CharLevelState.sep && t.value === ':') {
@@ -215,13 +216,79 @@ export class RecordTypes {
 			return undefined;
 		}
 		const keyPath = cursorFrames.slice(1).map((frame) => frame.parentKey!);
+		const outerStart = cursorFrames[0].start;
 		if (isValuePosition) {
 			// the string literal key before the ':'
 			const keyToken = realTokens[cursorIndex - 2];
 			const isStringKey = keyToken && (keyToken.tokenType === TokenLevelState.mapKey || keyToken.tokenType === TokenLevelState.string) && /^(['"]).*\1$/.test(keyToken.value);
-			return isStringKey ? { keyPath, usedKeys: [], valueKey: keyToken.value.substring(1, keyToken.value.length - 1) } : undefined;
+			return isStringKey ? { keyPath, usedKeys: [], valueKey: keyToken.value.substring(1, keyToken.value.length - 1), outerStart } : undefined;
 		}
-		return { keyPath, usedKeys: cursorFrames[cursorFrames.length - 1].keys };
+		return { keyPath, usedKeys: cursorFrames[cursorFrames.length - 1].keys, outerStart };
+	}
+
+	// the tokens of the type declared for the variable at tokens[varIndex] in XPath, e.g. [first, last] for 'person' in
+	// let $p as person := ..., for $p as person in ..., or function($p as person) - undefined if it has no type
+	public static xpathVariableTypeRange(tokens: BaseToken[], varIndex: number): [number, number] | undefined {
+		const asIndex = RecordTypes.nextNonComment(tokens, varIndex);
+		if (asIndex === -1 || tokens[asIndex].value !== 'as') {
+			return undefined;
+		}
+		let depth = 0;
+		let last = -1;
+		for (let i = asIndex + 1; i < tokens.length; i++) {
+			const t = tokens[i];
+			if (t.tokenType === TokenLevelState.comment) {
+				continue;
+			}
+			if (depth === 0 && (t.tokenType === TokenLevelState.complexExpression || (t.charType === CharLevelState.sep && t.value === ',') ||
+				RecordTypes.isCloseBracket(t) || t.charType === CharLevelState.lBr)) {
+				break;
+			}
+			if (RecordTypes.isOpenBracket(t)) {
+				depth++;
+			} else if (RecordTypes.isCloseBracket(t)) {
+				depth--;
+			}
+			last = i;
+		}
+		return last > asIndex ? [RecordTypes.nextNonComment(tokens, asIndex), last] : undefined;
+	}
+
+	// for the ')' at tokens[closeIndex] that ends a function call, e.g. cx:new(1, 2), its name and arity
+	public static functionCallAt(tokens: BaseToken[], closeIndex: number): { name: string, arity: number } | undefined {
+		const close = tokens[closeIndex];
+		if (close?.charType === CharLevelState.dSep && close.value === '()') {
+			const fn = tokens[closeIndex - 1];
+			return fn?.tokenType === TokenLevelState.function ? { name: fn.value, arity: 0 } : undefined;
+		}
+		if (close?.charType !== CharLevelState.rB) {
+			return undefined;
+		}
+		let depth = 0;
+		let arity = 1;
+		for (let i = closeIndex; i > -1; i--) {
+			const t = tokens[i];
+			if (RecordTypes.isCloseBracket(t)) {
+				depth++;
+			} else if (RecordTypes.isOpenBracket(t)) {
+				if (--depth === 0) {
+					const fn = tokens[i - 1];
+					return fn?.tokenType === TokenLevelState.function && t.charType === CharLevelState.lB ? { name: fn.value, arity } : undefined;
+				}
+			} else if (depth === 1 && t.charType === CharLevelState.sep && t.value === ',') {
+				arity++;
+			}
+		}
+		return undefined;
+	}
+
+	private static nextNonComment(tokens: BaseToken[], index: number) {
+		for (let i = index + 1; i < tokens.length; i++) {
+			if (tokens[i].tokenType !== TokenLevelState.comment) {
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	// the text with comments, CDATA sections and processing instructions blanked out, keeping offsets
