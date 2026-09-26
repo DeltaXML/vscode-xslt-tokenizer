@@ -1539,6 +1539,53 @@ export class XsltTokenCompletions {
 		}) : [];
 	}
 
+	// XSLT 4.0: in the test of an xsl:when in an xsl:switch whose select has an enumeration type, the values that no
+	// xsl:when of the switch tests yet - for an empty test, a string literal being typed, or after a ',' in a sequence
+	public static getSwitchCaseCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset - 1);
+		const test = /^<xsl:when\s(?:[^<>]*\s)?test\s*=\s*(["'])((?:(?!\1)[^<>])*)$/.exec(text.substring(tagStart, offset));
+		if (tagStart < 0 || !test) {
+			return undefined;
+		}
+		// the value so far: string literals separated by ',', then an empty value or a string literal being typed
+		const valueSoFar = test[2];
+		const lastComma = valueSoFar.lastIndexOf(',');
+		const partial = valueSoFar.substring(lastComma + 1).trimStart();
+		const stringQuote = /^(['"])[^'"]*$/.exec(partial)?.[1];
+		if (partial !== '' && !stringQuote) {
+			return undefined;
+		}
+		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart);
+		const switchElement = ancestors[ancestors.length - 1];
+		const declaredType = switchElement?.name === 'xsl:switch' ? XsltTokenDiagnostics.switchTypes.get(document.uri.toString())?.get(switchElement.offset) : undefined;
+		if (!declaredType) {
+			return undefined;
+		}
+		// the values tested by the other xsl:when elements, and earlier in this one
+		const literals = (value: string) => [...value.matchAll(/(['"])((?:(?!\1).)*)\1/g)].map((m) => m[2].split(m[1] + m[1]).join(m[1]));
+		const markup = RecordTypes.blankMarkup(text);
+		const used = RecordTypes.childElements(text, markup, switchElement.offset, 'xsl:when').filter((when) => when !== tagStart)
+			.flatMap((when) => literals(RecordTypes.attributeOfElementAt(text, when + 1, 'test') ?? '')).concat(literals(valueSoFar.substring(0, lastComma + 1)));
+		let range: vscode.Range | undefined;
+		if (stringQuote) {
+			// replace the string literal, up to and including any closing quote before the end of the attribute value
+			const stringStart = offset - partial.length;
+			const closing = text.indexOf(stringQuote, offset);
+			const attributeEnd = text.indexOf(test[1], offset);
+			const stringEnd = closing > -1 && (attributeEnd === -1 || closing < attributeEnd) ? closing + 1 : offset;
+			range = new vscode.Range(document.positionAt(stringStart), document.positionAt(stringEnd));
+		}
+		const quote = stringQuote ?? (test[1] === '\'' ? '"' : '\'');
+		const prefix = valueSoFar.trimEnd().endsWith(',') && !valueSoFar.endsWith(' ') ? ' ' : '';
+		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
+		const enumValues = RecordTypes.resolveEnum(declaredType, itemTypes) ?? [];
+		const items = XsltTokenCompletions.getTypeValueCompletions(declaredType, itemTypes, quote, prefix, range)
+			.filter((item, index) => !used.includes(enumValues[index]));
+		return items.length > 0 ? items : undefined;
+	}
+
 	// in an empty select attribute: the values for its declared type, if that's an enumeration type or xs:boolean - of an
 	// xsl:variable etc., an xsl:sequence that is an xsl:function result, or an xsl:map-entry for a record field
 	public static getSelectValueCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
@@ -2194,7 +2241,9 @@ export class XsltTokenCompletions {
 				} else if (tagName === 'xsl:switch') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
-					newItem.insertText = new vscode.SnippetString('xsl:switch select="${1:$expr}">\n\t<xsl:when test="${2:value}">\n\t\t$3\n\t</xsl:when>\n</xsl:switch>');
+					// an empty string literal test, for the most likely select: a value with an enumeration type - the values are
+					// completed within the quotes (a placeholder name would be selected, and filter out the values)
+					newItem.insertText = new vscode.SnippetString('xsl:switch select="${1:$expr}">\n\t<xsl:when test="\'$2\'">\n\t\t$3\n\t</xsl:when>\n</xsl:switch>');
 					completionItems.push(newItem);
 				} else if (tagName === 'xsl:key') {
 					useCurrent = false;

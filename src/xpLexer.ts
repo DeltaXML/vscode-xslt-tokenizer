@@ -1705,6 +1705,10 @@ export enum ErrorType {
     RecordFieldMissing,
     EnumValueUnknown,
     ArgumentTypeMismatch,
+    SwitchCaseNotEnumValue,
+    SwitchCaseDuplicate,
+    SwitchCasesMissing,
+    SwitchWithoutWhen,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,
@@ -1747,7 +1751,7 @@ export interface BaseToken {
     // XPath 4.0: the '|' separating the item types of a choice item type, e.g. (xs:date | xs:time)
     choiceSeparator?: boolean;
     // XPath 4.0 record types: for a quick fix, the text that adds the missing fields to a map constructor
-    recordFix?: { line: number, character: number, text: string };
+    recordFix?: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } };
 }
 
 export interface Token extends BaseToken {

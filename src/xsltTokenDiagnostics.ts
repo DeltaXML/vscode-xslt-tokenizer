@@ -14,6 +14,7 @@ import { XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { RecordType, RecordTypes, FieldReference } from './recordTypes';
+import { RecordExtraction } from './recordExtraction';
 
 enum HasCharacteristic {
 	unknown,
@@ -130,7 +131,8 @@ export enum DiagnosticCode {
 	instrWithNoContextItem,
 	noContextItem,
 	regexNoContextItem,
-	recordFieldMissing
+	recordFieldMissing,
+	switchCasesMissing
 }
 
 export class XsltTokenDiagnostics {
@@ -1701,7 +1703,9 @@ export class XsltTokenDiagnostics {
 							}
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 							const nextValue = allTokens[index + 1]?.value;
-							if (XsltTokenDiagnostics.isXPath40(docType) && (nextValue === ')' || nextValue === ',' || nextValue === '=>' || nextValue === '=!>')) {
+							// or the whole attribute value, e.g. the select of an xsl:switch
+							const isWholeValue = (!allTokens[index + 1] || allTokens[index + 1].tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber) && !!prevToken && prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+							if (XsltTokenDiagnostics.isXPath40(docType) && (isWholeValue || nextValue === ')' || nextValue === ',' || nextValue === '=>' || nextValue === '=!>')) {
 								// XPath 4.0: the declared type of a variable that may be a function call argument, for checking against the parameter type
 								const variableName = token.value.substring(1);
 								const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList, anonymousFunctionParamList);
@@ -2850,6 +2854,7 @@ export class XsltTokenDiagnostics {
 				returnType: (name, arity) => allGlobals.find((g) => g.type === GlobalInstructionType.Function && g.name === name && XslLexer.functionArityMatches(g, arity))?.returnType
 			}, itemTypeDeclarations, problemTokens);
 			XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
+			XsltTokenDiagnostics.checkSwitches(document, allTokens, argumentVariableTypes, allGlobals, itemTypeDeclarations, problemTokens);
 		}
 		// the record field references, for hover and go to definition - the offsets only apply to this document
 		XsltTokenDiagnostics.recordFieldReferences.set(document.uri.toString(), RecordTypes.fieldReferences);
@@ -2864,10 +2869,10 @@ export class XsltTokenDiagnostics {
 		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		// the quick fixes for missing record fields
-		const recordFixes = new Map<string, { line: number, character: number, text: string }>();
+		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
 		problemTokens.forEach((token) => {
 			if (token.recordFix) {
-				allDiagnostics.filter((d) => d.code === DiagnosticCode.recordFieldMissing && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
 					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
 			}
 		});
@@ -4142,6 +4147,24 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				}
+				case ErrorType.SwitchCaseNotEnumValue: {
+					const [value, typeText] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: '${value}' is not one of the values of the enumeration type ${typeText}, so this xsl:when never matches it`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.SwitchCaseDuplicate:
+					msg = `XPath: '${tokenValue}' is also tested by an earlier xsl:when, so this xsl:when never matches it`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.SwitchWithoutWhen:
+					msg = `XSLT: xsl:switch must contain at least one xsl:when`;
+					break;
+				case ErrorType.SwitchCasesMissing:
+					msg = `XSLT: xsl:switch has no xsl:when or xsl:otherwise for the enumeration values: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Information;
+					errCode = DiagnosticCode.switchCasesMissing;
+					break;
 				case ErrorType.ArgumentTypeMismatch: {
 					const [argument, argType, paramType, reason] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XPath: The type of '${argument}', ${argType}, doesn't match the parameter type ${paramType} - ${reason}`;
@@ -4470,6 +4493,148 @@ export class XsltTokenDiagnostics {
 		};
 	}
 
+	// XSLT 4.0: for each xsl:switch whose select has an enumeration type, the declared type, by the offset of its start tag
+	public static readonly switchTypes = new Map<string, Map<number, string>>();
+
+	// XSLT 4.0: checks each xsl:switch whose select has an enumeration type - a variable, function call or record field
+	// lookup with a declared type: an xsl:when test with a string literal that isn't one of the values, or that's also
+	// in an earlier xsl:when, never matches - and without an xsl:otherwise, the values that no xsl:when tests are reported
+	private static checkSwitches(document: vscode.TextDocument, allTokens: BaseToken[], variableTypes: Map<BaseToken, string>, globals: GlobalInstructionData[], itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const switchTypes = new Map<number, string>();
+		XsltTokenDiagnostics.switchTypes.set(document.uri.toString(), switchTypes);
+		const switchStarts = [...text.matchAll(/<xsl:switch[\s>]/g)].map((match) => match.index!);
+		if (switchStarts.length === 0) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const tokenOffset = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter));
+		// the XPath tokens of the attribute value starting at the offset
+		const valueTokens = (valueStart: number) => {
+			const first = allTokens.findIndex((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && tokenOffset(t) >= valueStart);
+			const tokens: BaseToken[] = [];
+			for (let i = first; i > -1 && i < allTokens.length && allTokens[i].tokenType < XsltTokenDiagnostics.xsltStartTokenNumber; i++) {
+				if (allTokens[i].tokenType !== TokenLevelState.comment) {
+					tokens.push(allTokens[i]);
+				}
+			}
+			return first > -1 && text.substring(valueStart, tokenOffset(allTokens[first])).trim() === '' ? tokens : [];
+		};
+		switchStarts.forEach((switchStart) => {
+			if (RecordTypes.childElements(text, markup, switchStart, 'xsl:when').length === 0) {
+				// Saxon 13: XTSE0010
+				const namePosition = document.positionAt(switchStart + 1);
+				problemTokens.push({ line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:switch'.length, value: '', tokenType: 0, error: ErrorType.SwitchWithoutWhen });
+			}
+			const selectStart = RecordTypes.attributeValueOffset(text, switchStart + 1, 'select');
+			const select = selectStart !== undefined ? valueTokens(selectStart) : [];
+			// the declared type of the select: a variable, a user-defined function call or a record field lookup
+			let declaredType: string | undefined;
+			if (select.length === 1 && select[0].tokenType === TokenLevelState.variable) {
+				declaredType = variableTypes.get(select[0]);
+			} else if (select.length > 1 && select[0].tokenType === TokenLevelState.function) {
+				const call = RecordTypes.functionCallAt(select, select.length - 1);
+				declaredType = call && call.name === select[0].value ? globals.find((g) => g.type === GlobalInstructionType.Function && g.name === call.name && XslLexer.functionArityMatches(g, call.arity))?.returnType : undefined;
+			} else if (select.length > 2) {
+				declaredType = RecordTypes.fieldReferences.find((ref) => ref.token === select[select.length - 1])?.field.type;
+			}
+			const enumValues = declaredType ? RecordTypes.resolveEnum(declaredType, itemTypes) : undefined;
+			if (!enumValues) {
+				return;
+			}
+			switchTypes.set(switchStart, declaredType!);
+			const tested: string[] = [];
+			let allLiterals = true;
+			let lastWhen = -1;
+			RecordTypes.childElements(text, markup, switchStart, 'xsl:when').forEach((whenStart) => {
+				lastWhen = whenStart;
+				const testStart = RecordTypes.attributeValueOffset(text, whenStart + 1, 'test');
+				const test = testStart !== undefined ? valueTokens(testStart) : [];
+				// a string literal, or a sequence of them, e.g. 'red', 'green'
+				const literals = test.filter((t, i) => i % 2 === 0);
+				const isLiteralSequence = test.length > 0 && literals.every((t) => t.tokenType === TokenLevelState.string) && test.every((t, i) => i % 2 === 0 || (t.charType === CharLevelState.sep && t.value === ','));
+				if (!isLiteralSequence) {
+					allLiterals = false;
+					return;
+				}
+				literals.forEach((literal) => {
+					const quote = literal.value.charAt(0);
+					const value = literal.value.substring(1, literal.value.length - 1).split(quote + quote).join(quote);
+					if (!enumValues.includes(value)) {
+						problemTokens.push(RecordTypes.problemToken(literal, ErrorType.SwitchCaseNotEnumValue, value, declaredType!.trim()));
+					} else if (tested.includes(value)) {
+						problemTokens.push(RecordTypes.problemToken(literal, ErrorType.SwitchCaseDuplicate, value));
+					} else {
+						tested.push(value);
+					}
+				});
+			});
+			const hasOtherwise = RecordTypes.childElements(text, markup, switchStart, 'xsl:otherwise').length > 0;
+			const missing = enumValues.filter((value) => !tested.includes(value));
+			if (allLiterals && !hasOtherwise && missing.length > 0) {
+				// on the element name, with a quick fix that adds an xsl:when for each value after the last one
+				const namePosition = document.positionAt(switchStart + 1);
+				const token: BaseToken = { line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:switch'.length, value: '', tokenType: 0 };
+				// two forms of fix, with the same edit position: xsl:when elements with a select attribute, or with content
+				let recordFix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } } | undefined;
+				const lineIndent = (offset: number) => {
+					const lineStart = text.lastIndexOf('\n', offset) + 1;
+					return /^[ \t]*$/.test(text.substring(lineStart, offset)) ? text.substring(lineStart, offset) : undefined;
+				};
+				const switchIndent = lineIndent(switchStart) ?? '';
+				// the indentation step: from an xsl:when's line and the xsl:switch's, or the xsl:switch's and its parent's
+				const stepFrom = (inner: string | undefined, outer: string | undefined) => inner !== undefined && outer !== undefined && inner.length > outer.length && inner.startsWith(outer) ? inner.substring(outer.length) : undefined;
+				const ancestors = RecordTypes.openElements(markup, switchStart);
+				const parentIndent = ancestors.length > 0 ? lineIndent(ancestors[ancestors.length - 1].offset) : undefined;
+				const lastWhenIndent = lastWhen > -1 ? lineIndent(lastWhen) : undefined;
+				const step = stepFrom(lastWhenIndent, switchIndent) ?? stepFrom(switchIndent, parentIndent) ?? (switchIndent.includes('\t') ? '\t' : '  ');
+				// the xsl:when elements' indentation, undefined if they're on the same line as the previous one
+				const whenIndent = lastWhen > -1 ? lastWhenIndent : switchIndent + step;
+				const whenFor = (value: string, withSelect: boolean) => {
+					const startTag = `<xsl:when test="'${value.replace(/'/g, '\'\'')}'"`;
+					return withSelect ? `${startTag} select=""/>` : whenIndent !== undefined ? `${startTag}>\n${whenIndent}${step}\n${whenIndent}</xsl:when>` : `${startTag}></xsl:when>`;
+				};
+				const whens = (withSelect: boolean) => missing.map((value) => `${whenIndent !== undefined ? '\n' + whenIndent : ''}${whenFor(value, withSelect)}`).join('');
+				// replaces whitespace up to the end tag, so no empty line is left before it
+				const endTagStart = text.lastIndexOf('<', RecordExtraction.elementEnd(markup, switchStart) - 1);
+				const toEndTag = (from: number, withSelect: boolean) => {
+					const between = text.substring(from, endTagStart);
+					const isWhitespace = endTagStart > from && between.trim() === '';
+					const endTagLine = whenIndent !== undefined || between.includes('\n') ? `\n${switchIndent}` : between;
+					return isWhitespace ? { text: whens(withSelect) + endTagLine, end: document.positionAt(endTagStart) } : { text: whens(withSelect), end: undefined };
+				};
+				if (lastWhen > -1) {
+					// after the last xsl:when
+					const whenEnd = RecordExtraction.elementEnd(markup, lastWhen);
+					const fixPosition = document.positionAt(whenEnd);
+					const withSelect = toEndTag(whenEnd, true);
+					recordFix = { line: fixPosition.line, character: fixPosition.character, text: withSelect.text, altText: toEndTag(whenEnd, false).text, end: withSelect.end };
+				} else {
+					// no xsl:when: after the start tag, indented one step more than the xsl:switch
+					const tagRgx = new RegExp(RecordTypes.tagPattern, 'y');
+					tagRgx.lastIndex = switchStart;
+					const tag = tagRgx.exec(markup)!;
+					const tagEnd = switchStart + tag[0].length;
+					if (tag[3]) {
+						// an empty element, e.g. <xsl:switch select="$c"/>: replace '/>' with the xsl:when elements and an end tag
+						const fixPosition = document.positionAt(tagEnd - 2);
+						const withEndTag = (withSelect: boolean) => `>${whens(withSelect)}\n${switchIndent}</xsl:switch>`;
+						recordFix = { line: fixPosition.line, character: fixPosition.character, text: withEndTag(true), altText: withEndTag(false), replaceLength: 2 };
+					} else {
+						// with the end tag on its own line
+						const fixPosition = document.positionAt(tagEnd);
+						const between = text.substring(tagEnd, endTagStart);
+						const isWhitespace = between.trim() === '';
+						const endTagLine = `\n${switchIndent}`;
+						recordFix = { line: fixPosition.line, character: fixPosition.character, text: whens(true) + endTagLine, altText: whens(false) + endTagLine,
+							end: isWhitespace ? document.positionAt(endTagStart) : undefined };
+					}
+				}
+				problemTokens.push({ ...RecordTypes.problemToken(token, ErrorType.SwitchCasesMissing, missing.map((value) => `'${value}'`).join(', ')), recordFix });
+			}
+		});
+	}
+
 	// XPath 4.0: checks the select of an xsl:sequence or xsl:map-entry, or the content of an xsl:select, when it's a map
 	// constructor or a single string literal, against the declared type of the value - from the containing instruction,
 	// e.g. an xsl:param with an 'as' - an xsl:sequence that is an xsl:function's result is checked separately
@@ -4543,7 +4708,7 @@ export class XsltTokenDiagnostics {
 	// a placeholder for a value, e.g. __TODO.city - inserted by the completion for a map constructor with a record type
 	public static readonly placeholderPrefix = RecordTypes.placeholderPrefix;
 	// XPath 4.0 record types: the quick fixes for missing fields, for each document - by the diagnostic's position and message
-	public static readonly recordFixes = new Map<string, Map<string, { line: number, character: number, text: string }>>();
+	public static readonly recordFixes = new Map<string, Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>>();
 
 	// XPath 4.0 record types: the tokens that refer to record fields, for each document
 	public static readonly recordFieldReferences = new Map<string, FieldReference[]>();

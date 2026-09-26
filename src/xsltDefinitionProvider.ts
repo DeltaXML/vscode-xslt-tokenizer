@@ -326,7 +326,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
 			const isXSLT40 = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT;
 			// an empty select, for an enumeration type or xs:boolean
-			const selectValues = !recordEntries && isXSLT40 ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			// or the test of an xsl:when in an xsl:switch on an enumeration type
+			const selectValues = !recordEntries && isXSLT40 ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) ??
+				XsltTokenCompletions.getSwitchCaseCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			// an argument of a user-defined function, or the value of a typed let binding, for an enumeration type or xs:boolean
 			const argumentValues = !recordEntries && !selectValues && isXSLT40 ? XsltTokenCompletions.getArgumentValueCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (recordEntries || selectValues || isCommaTrigger || argumentValues?.inString) {

@@ -35,7 +35,7 @@ suite('Instruction snippets', () => {
 
 	test('xsl:switch has a select attribute and an xsl:when', async () => {
 		const result = await snippets('4.0', '<xsl:template name="t"><|</xsl:template>');
-		assert.equal(result.get('xsl:switch'), 'xsl:switch select="${1:$expr}">\n\t<xsl:when test="${2:value}">\n\t\t$3\n\t</xsl:when>\n</xsl:switch>');
+		assert.equal(result.get('xsl:switch'), 'xsl:switch select="${1:$expr}">\n\t<xsl:when test="\'$2\'">\n\t\t$3\n\t</xsl:when>\n</xsl:switch>');
 	});
 
 	test('xsl:template within xsl:mode has only a match attribute', async () => {

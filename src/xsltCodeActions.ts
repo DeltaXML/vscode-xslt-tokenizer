@@ -64,6 +64,8 @@ enum XsltCodeActionKind {
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
 	addMissingRecordFields = 'Add missing record fields',
+	addMissingSwitchCasesWithSelect = 'Add missing xsl:when cases with select',
+	addMissingSwitchCasesWithContent = 'Add missing xsl:when cases with content',
 	extractRecordType = 'Extract record type',
 }
 
@@ -141,7 +143,18 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private static createRecordFieldsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string }) {
+	// XSLT 4.0: adds an xsl:when for each enumeration value that an xsl:switch doesn't test
+	private static createSwitchCasesAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }, title: string, text: string) {
+		const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+		action.diagnostics = [diagnostic];
+		action.edit = new vscode.WorkspaceEdit();
+		const position = new vscode.Position(fix.line, fix.character);
+		const end = fix.end ? new vscode.Position(fix.end.line, fix.end.character) : position.translate(0, fix.replaceLength ?? 0);
+		action.edit.replace(document.uri, new vscode.Range(position, end), text);
+		return action;
+	}
+
+	private static createRecordFieldsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }) {
 		const position = new vscode.Position(fix.line, fix.character);
 		// the string literal keys use the quote character that isn't the attribute value's delimiter
 		const textBefore = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
@@ -178,12 +191,19 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();
 		context.diagnostics
-			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing)
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing)
 			.forEach(diagnostic => {
 				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
 				if (fix && !addedFixes.has(fix)) {
 					addedFixes.add(fix);
-					codeActions.push(XSLTCodeActions.createRecordFieldsAction(document, diagnostic, fix));
+					if (diagnostic.code === DiagnosticCode.switchCasesMissing) {
+						codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithSelect, fix.text));
+						if (fix.altText !== undefined) {
+							codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithContent, fix.altText));
+						}
+					} else {
+						codeActions.push(XSLTCodeActions.createRecordFieldsAction(document, diagnostic, fix));
+					}
 				}
 			});
 		if (codeActions.length > 0) {
