@@ -95,14 +95,14 @@ suite('Record types: completion of a whole map constructor', () => {
 
 	test('an empty map constructor: the record fields, with placeholder values', async () => {
 		assert.deepEqual(await wholeMaps(variable('{|}')), [
-			['cx:complex: required fields', ` 'r': \${1:__TODO.r}, 'i': \${2:__TODO.i} `]
+			['cx:complex: required fields', `\n\t'r': \${1:__TODO.r},\n\t'i': \${2:__TODO.i}\n`]
 		]);
 	});
 
 	test('required fields and all fields, with a nested map constructor for a record field', async () => {
 		assert.deepEqual(await wholeMaps(variable('map {|}', 'person')), [
-			['person: required fields', ` 'name': \${1:__TODO.name}, 'address': { 'city': \${2:__TODO.city} } `],
-			['person: all fields', ` 'name': \${1:__TODO.name}, 'age': \${2:__TODO.age}, 'address': { 'city': \${3:__TODO.city}, 'zip': \${4:__TODO.zip} } `]
+			['person: required fields', `\n\t'name': \${1:__TODO.name},\n\t'address': {\n\t\t'city': \${2:__TODO.city}\n\t}\n`],
+			['person: all fields', `\n\t'name': \${1:__TODO.name},\n\t'age': \${2:__TODO.age},\n\t'address': {\n\t\t'city': \${3:__TODO.city},\n\t\t'zip': \${4:__TODO.zip}\n\t}\n`]
 		]);
 	});
 
