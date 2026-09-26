@@ -1333,6 +1333,94 @@ export class XsltTokenCompletions {
 		});
 	}
 
+	// XPath 4.0 record types: within an xsl:map whose result has a record type, an xsl:map-entry for each field that
+	// isn't yet an entry - for an element name after '<', e.g. <xsl:map><| - undefined if it's not such a position
+	public static getMapEntryElementCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameStart = /<([\w.:-]*)$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		if (!nameStart) {
+			return undefined;
+		}
+		const tagStart = offset - nameStart[0].length;
+		const markup = RecordTypes.blankMarkup(text);
+		const ancestors = RecordTypes.openElements(markup, tagStart);
+		const mapIndex = ancestors.length - 1;
+		if (mapIndex < 0 || ancestors[mapIndex].name !== 'xsl:map') {
+			return undefined;
+		}
+		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
+		const record = RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes);
+		if (!record) {
+			return undefined;
+		}
+		const usedKeys = RecordTypes.mapEntryKeys(text, markup, ancestors[mapIndex].offset).map((k) => k.key);
+		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		return record.fields.filter((field) => !usedKeys.includes(field.name)).map((field, index) => {
+			const key = XsltTokenCompletions.snippetEscape(`'${field.name}'`);
+			const item = new vscode.CompletionItem(`xsl:map-entry '${field.name}'`, vscode.CompletionItemKind.Field);
+			// a field with a record type gets an xsl:map for its value
+			item.insertText = new vscode.SnippetString(RecordTypes.fieldRecord(field, itemTypes) ?
+				`xsl:map-entry key="${key}">\n\t<xsl:map>\n\t\t$0\n\t</xsl:map>\n</xsl:map-entry>` :
+				`xsl:map-entry key="${key}" select="$1"/>$0`);
+			item.range = range;
+			item.filterText = `xsl:map-entry ${field.name}`;
+			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
+			item.documentation = `Field of the record type: ${record.name}`;
+			// before other element completions: required fields first, in declaration order
+			item.sortText = '!' + (field.optional ? '1' : '0') + String(index).padStart(4, '0');
+			return item;
+		});
+	}
+
+	// XPath 4.0 record types: within the key attribute of an xsl:map-entry in an xsl:map whose result has a record type,
+	// the fields that aren't yet entries, as string literals - undefined if it's not such a position
+	public static getMapEntryKeyCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset - 1);
+		const tagText = text.substring(tagStart, offset);
+		// the attribute value typed so far may be the start of a string literal, e.g. key="'na
+		const keyValue = /^<xsl:map-entry\s(?:[^<>]*\s)?key\s*=\s*(["'])((?:(?!\1)[^<>])*)$/.exec(tagText);
+		if (tagStart < 0 || !keyValue) {
+			return undefined;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const ancestors = RecordTypes.openElements(markup, tagStart);
+		const mapIndex = ancestors.length - 1;
+		if (mapIndex < 0 || ancestors[mapIndex].name !== 'xsl:map') {
+			return undefined;
+		}
+		const itemTypes = XsltTokenCompletions.itemTypeDeclarations(globalInstructionData, importedInstructionData);
+		const record = RecordTypes.xslMapRecord(text, ancestors, mapIndex, itemTypes);
+		if (!record) {
+			return undefined;
+		}
+		// the keys of the other xsl:map-entry elements
+		const usedKeys = RecordTypes.mapEntryKeys(text, markup, ancestors[mapIndex].offset).filter((k) => k.offset !== tagStart).map((k) => k.key);
+		// the string literal's quote is the other quote character from the attribute's
+		const quote = keyValue[1] === '"' ? '\'' : '"';
+		const range = new vscode.Range(document.positionAt(offset - keyValue[2].length), position);
+		return record.fields.filter((field) => !usedKeys.includes(field.name)).map((field, index) => {
+			const item = new vscode.CompletionItem(`${quote}${field.name}${quote}`, vscode.CompletionItemKind.Field);
+			item.range = range;
+			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
+			item.documentation = `Field of the record type: ${record.name}`;
+			item.sortText = (field.optional ? '1' : '0') + String(index).padStart(4, '0');
+			return item;
+		});
+	}
+
+	private static itemTypeDeclarations(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
+		const itemTypes = new Map<string, string>();
+		globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.ItemType && g.declaredType).forEach((g) => itemTypes.set(g.name, g.declaredType!));
+		return itemTypes;
+	}
+
+	private static snippetEscape(text: string) {
+		return text.replace(/[$}\\]/g, '\\$&');
+	}
+
 	// the 'as' for the select attribute at the offset: the element's own 'as', e.g. on xsl:variable, or for an xsl:sequence,
 	// the 'as' of the xsl:function whose result it is - within any xsl:if or xsl:choose etc.
 	private static declaredTypeForSelect(text: string, attributeOffset: number): string | undefined {
@@ -1343,23 +1431,11 @@ export class XsltTokenCompletions {
 		} else if (elementName !== 'xsl:sequence') {
 			return undefined;
 		}
-		// the ancestors of the xsl:sequence - comments, CDATA sections and processing instructions are blanked out
-		const markup = text.substring(0, tagStart).replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g, (m) => ' '.repeat(m.length));
-		const tagRgx = /<(\/?)([\w.:-]+)(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*(\/?)>/g;
-		const ancestors: { name: string, offset: number }[] = [];
-		let match: RegExpExecArray | null;
-		while ((match = tagRgx.exec(markup)) !== null) {
-			if (match[1]) {
-				ancestors.pop();
-			} else if (!match[3]) {
-				ancestors.push({ name: match[2], offset: match.index });
-			}
-		}
-		const conditionals = ['xsl:if', 'xsl:choose', 'xsl:when', 'xsl:otherwise', 'xsl:try', 'xsl:catch'];
+		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart);
 		for (let i = ancestors.length - 1; i > -1; i--) {
 			if (ancestors[i].name === 'xsl:function') {
 				return RecordTypes.attributeOfElementAt(text, ancestors[i].offset + 1, 'as');
-			} else if (!conditionals.includes(ancestors[i].name)) {
+			} else if (!RecordTypes.conditionalInstructions.includes(ancestors[i].name)) {
 				return undefined;
 			}
 		}

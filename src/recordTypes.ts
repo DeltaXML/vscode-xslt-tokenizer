@@ -154,6 +154,87 @@ export class RecordTypes {
 		return { keyPath: cursorFrames.slice(1).map((frame) => frame.parentKey!), usedKeys: cursorFrames[cursorFrames.length - 1].keys };
 	}
 
+	// the text with comments, CDATA sections and processing instructions blanked out, keeping offsets
+	public static blankMarkup(text: string) {
+		return text.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g, (m) => ' '.repeat(m.length));
+	}
+
+	// the elements whose start tags are before the offset and are not yet closed there, outermost first
+	public static openElements(markup: string, end: number): { name: string, offset: number }[] {
+		const ancestors: { name: string, offset: number }[] = [];
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		let match: RegExpExecArray | null;
+		while ((match = tagRgx.exec(markup)) !== null && match.index < end) {
+			if (match[1]) {
+				ancestors.pop();
+			} else if (!match[3]) {
+				ancestors.push({ name: match[2], offset: match.index });
+			}
+		}
+		return ancestors;
+	}
+
+	// the string literal keys of the xsl:map-entry children of the xsl:map whose start tag is at mapOffset, e.g. 'a'
+	// for key="'a'", with the offsets of their start tags
+	public static mapEntryKeys(text: string, markup: string, mapOffset: number): { key: string, offset: number }[] {
+		const keys: { key: string, offset: number }[] = [];
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		tagRgx.lastIndex = mapOffset;
+		let depth = 0;
+		let match: RegExpExecArray | null;
+		while ((match = tagRgx.exec(markup)) !== null) {
+			if (match[1]) {
+				if (--depth === 0) {
+					break;
+				}
+			} else {
+				if (depth === 1 && match[2] === 'xsl:map-entry') {
+					const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, match.index + 1, 'key') ?? '');
+					if (key) {
+						keys.push({ key: key[2], offset: match.index });
+					}
+				}
+				if (!match[3]) {
+					depth++;
+				} else if (depth === 0) {
+					break; // <xsl:map/>
+				}
+			}
+		}
+		return keys;
+	}
+
+	// the record type of the result of the xsl:map at ancestors[index]: from the 'as' of the xsl:variable, xsl:param,
+	// xsl:with-param or xsl:function containing it (within any xsl:if or xsl:choose etc.), or for an xsl:map within
+	// an xsl:map-entry of another xsl:map with a record type, the record type of that field
+	public static xslMapRecord(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, depth = 0): RecordType | undefined {
+		if (depth > 10) {
+			return undefined;
+		}
+		for (let i = index - 1; i > -1; i--) {
+			const { name, offset } = ancestors[i];
+			if (name === 'xsl:variable' || name === 'xsl:param' || name === 'xsl:with-param' || name === 'xsl:function') {
+				const declaredType = RecordTypes.attributeOfElementAt(text, offset + 1, 'as');
+				return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
+			} else if (name === 'xsl:map-entry') {
+				const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, offset + 1, 'key') ?? '');
+				const parentMap = i - 1;
+				if (!key || parentMap < 0 || ancestors[parentMap].name !== 'xsl:map') {
+					return undefined;
+				}
+				const field = RecordTypes.xslMapRecord(text, ancestors, parentMap, itemTypes, depth + 1)?.fields.find((f) => f.name === key[2]);
+				return field ? RecordTypes.fieldRecord(field, itemTypes) : undefined;
+			} else if (!RecordTypes.conditionalInstructions.includes(name)) {
+				return undefined;
+			}
+		}
+		return undefined;
+	}
+
+	public static readonly conditionalInstructions = ['xsl:if', 'xsl:choose', 'xsl:when', 'xsl:otherwise', 'xsl:try', 'xsl:catch'];
+	// a start tag, end tag or empty element tag: [1] is '/' for an end tag, [2] the name, [3] '/' for an empty element
+	private static readonly tagPattern = /<(\/?)([\w.:-]+)(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*(\/?)>/.source;
+
 	public static problemToken(token: BaseToken, error: ErrorType, ...parts: string[]): BaseToken {
 		return { ...token, error, value: parts.join(RecordTypes.valueSeparator) };
 	}

@@ -308,7 +308,19 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				resolve(recordEntries && recordEntries.length > 0 ? new vscode.CompletionList(recordEntries, true) : undefined);
 				return;
 			}
+			const isXSLT40 = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT;
+			// the key attribute of an xsl:map-entry for a record type
+			const mapEntryKeys = isXSLT40 ? XsltTokenCompletions.getMapEntryKeyCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (mapEntryKeys) {
+				resolve(mapEntryKeys.length > 0 ? new vscode.CompletionList(mapEntryKeys, true) : undefined);
+				return;
+			}
 			completions= XsltTokenCompletions.getCompletions(localLanguageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			// xsl:map-entry elements for a record type, before the other element completions
+			const mapEntryElements = isXSLT40 ? XsltTokenCompletions.getMapEntryElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (mapEntryElements && mapEntryElements.length > 0) {
+				completions = mapEntryElements.concat(completions ?? []);
+			}
 			// mark incomplete: these completions depend on surrounding code (variable scope, node
 			// context etc.), not just a static list to prefix-filter, so VS Code must call this
 			// provider again for every further keystroke rather than reusing/filtering this list.
