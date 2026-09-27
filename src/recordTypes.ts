@@ -577,6 +577,60 @@ export class RecordTypes {
 		}
 	}
 
+	// XPath 4.0: a duplicate field name in a record type - a static error, also for a quoted name, e.g. record(a, 'a') -
+	// or a duplicate value in an enumeration type, e.g. enum('red', 'red'), which Saxon allows but is likely a mistake
+	public static checkTypeDuplicates(tokens: BaseToken[], problemTokens: BaseToken[]) {
+		tokens.forEach((token, index) => {
+			if (token.tokenType !== TokenLevelState.simpleType || (token.value !== 'record' && token.value !== 'enum')) {
+				return;
+			}
+			const openIndex = RecordTypes.nextNonComment(tokens, index);
+			const closeIndex = openIndex > -1 && tokens[openIndex].charType === CharLevelState.lB ? RecordTypes.closingTokenIndex(tokens, openIndex) : -1;
+			if (closeIndex < 0) {
+				return;
+			}
+			const isRecord = token.value === 'record';
+			const names = new Set<string>();
+			let depth = 0;
+			let separator: BaseToken | undefined;
+			let isEntryStart = true;
+			for (let i = openIndex + 1; i < closeIndex; i++) {
+				const t = tokens[i];
+				if (t.tokenType === TokenLevelState.comment) {
+					continue;
+				}
+				if (depth === 0 && t.charType === CharLevelState.sep && t.value === ',') {
+					separator = t;
+					isEntryStart = true;
+					continue;
+				}
+				if (isEntryStart && depth === 0) {
+					// the quotes may be entity references, e.g. &quot;x&quot; in an attribute delimited by '"'
+					const quoted = t.tokenType === TokenLevelState.string ? /^(['"]|&quot;|&apos;)(.*)\1$/.exec(t.value) : null;
+					const name = quoted ? quoted[2].split(quoted[1] + quoted[1]).join(quoted[1]) :
+						isRecord && t.tokenType === TokenLevelState.nodeNameTest ? t.value : undefined;
+					if (name !== undefined && names.has(name) && !t.error) {
+						if (isRecord) {
+							problemTokens.push(RecordTypes.problemToken(t, ErrorType.RecordFieldDuplicate, name));
+						} else if (separator) {
+							// the fix removes the value and its preceding comma
+							const recordFix = { line: separator.line, character: separator.startCharacter, text: '', end: { line: t.line, character: t.startCharacter + t.length } };
+							problemTokens.push({ ...RecordTypes.problemToken(t, ErrorType.EnumValueDuplicate, name), recordFix });
+						}
+					} else if (name !== undefined) {
+						names.add(name);
+					}
+				}
+				isEntryStart = false;
+				if (RecordTypes.isOpenBracket(t)) {
+					depth++;
+				} else if (RecordTypes.isCloseBracket(t)) {
+					depth--;
+				}
+			}
+		});
+	}
+
 	private static nextNonComment(tokens: BaseToken[], index: number) {
 		for (let i = index + 1; i < tokens.length; i++) {
 			if (tokens[i].tokenType !== TokenLevelState.comment) {

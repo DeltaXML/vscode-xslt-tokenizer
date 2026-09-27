@@ -134,7 +134,8 @@ export enum DiagnosticCode {
 	regexNoContextItem,
 	recordFieldMissing,
 	switchCasesMissing,
-	noteParamsMissing
+	noteParamsMissing,
+	enumValueDuplicate
 }
 
 export class XsltTokenDiagnostics {
@@ -2861,6 +2862,8 @@ export class XsltTokenDiagnostics {
 			}, itemTypeDeclarations, problemTokens);
 			XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
 			XsltTokenDiagnostics.checkSwitches(document, allTokens, argumentVariableTypes, allGlobals, itemTypeDeclarations, problemTokens);
+			// duplicate record field names and enumeration values
+			RecordTypes.checkTypeDuplicates(xpathTokens, problemTokens);
 		}
 		// the record field references, for hover and go to definition - the offsets only apply to this document
 		XsltTokenDiagnostics.recordFieldReferences.set(document.uri.toString(), RecordTypes.fieldReferences);
@@ -2878,7 +2881,7 @@ export class XsltTokenDiagnostics {
 		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
 		problemTokens.forEach((token) => {
 			if (token.recordFix) {
-				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
 					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
 			}
 		});
@@ -4221,6 +4224,14 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.ExtensibleRecordType:
 					msg = `XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead`;
+					break;
+				case ErrorType.RecordFieldDuplicate:
+					msg = `XPath: Duplicate field name in the record type: '${tokenValue}'`;
+					break;
+				case ErrorType.EnumValueDuplicate:
+					msg = `XPath: Duplicate value in the enumeration type: '${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.enumValueDuplicate;
 					break;
 				case ErrorType.Placeholder:
 					msg = `XPath: Placeholder '${tokenValue}' - replace it with a value for '${tokenValue.substring(XsltTokenDiagnostics.placeholderPrefix.length)}'`;

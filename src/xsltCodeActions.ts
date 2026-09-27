@@ -70,6 +70,7 @@ enum XsltCodeActionKind {
 	extractRecordType = 'Extract record type',
 	addDocumentationNote = 'Add documentation note',
 	addMissingNoteParams = 'Add missing @param',
+	removeDuplicateEnumValue = 'Remove duplicate enum value',
 }
 
 enum ExtractFunctionParams {
@@ -217,12 +218,18 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();
 		context.diagnostics
-			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing)
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.enumValueDuplicate)
 			.forEach(diagnostic => {
 				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
 				if (fix && !addedFixes.has(fix)) {
 					addedFixes.add(fix);
-					if (diagnostic.code === DiagnosticCode.noteParamsMissing) {
+					if (diagnostic.code === DiagnosticCode.enumValueDuplicate) {
+						const action = new vscode.CodeAction(XsltCodeActionKind.removeDuplicateEnumValue, vscode.CodeActionKind.QuickFix);
+						action.diagnostics = [diagnostic];
+						action.edit = new vscode.WorkspaceEdit();
+						action.edit.delete(document.uri, new vscode.Range(fix.line, fix.character, fix.end!.line, fix.end!.character));
+						codeActions.push(action);
+					} else if (diagnostic.code === DiagnosticCode.noteParamsMissing) {
 						codeActions.push(XSLTCodeActions.createNoteParamsAction(document, diagnostic, fix));
 					} else if (diagnostic.code === DiagnosticCode.switchCasesMissing) {
 						codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithSelect, fix.text));

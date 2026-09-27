@@ -1690,6 +1690,8 @@ export enum ErrorType {
     ChoiceTypeRequiresXPath40,
     ObsoleteItemType,
     ExtensibleRecordType,
+    RecordFieldDuplicate,
+    EnumValueDuplicate,
     UndeclaredItemType,
     InlineFunctionFnRequiresXPath40,
     FocusFunctionRequiresXPath40,
