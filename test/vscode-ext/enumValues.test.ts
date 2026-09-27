@@ -105,7 +105,7 @@ suite('Completions within a string literal replace it', () => {
 		const document = await vscode.workspace.openTextDocument({ content: marked.substring(0, offset) + marked.substring(offset + 1), language: 'xslt' });
 		const position = document.positionAt(offset);
 		if (isTyped) {
-			(DocumentChangeHandler as unknown as { commaTriggerPending: boolean }).commaTriggerPending = true;
+			DocumentChangeHandler.setCommaTrigger(document, offset);
 		}
 		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, position, new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
 		const items = Array.isArray(result) ? result : result?.items ?? [];

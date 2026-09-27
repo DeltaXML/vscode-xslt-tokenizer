@@ -249,7 +249,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let attNames: string[] = [];
 		let nodeNames: string[] = [];
 		let localLanguageConfig = this.languageConfig;
-		const isCommaTrigger = DocumentChangeHandler.consumeCommaTrigger();
+		const isCommaTrigger = DocumentChangeHandler.consumeCommaTrigger(document, position);
 		if (this.docType === DocumentTypes.XPath) {
 			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();

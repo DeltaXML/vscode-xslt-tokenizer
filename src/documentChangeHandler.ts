@@ -25,12 +25,18 @@ export class DocumentChangeHandler {
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 	// set when completions are triggered by typing ',' in an XSLT 4.0 stylesheet: the completion provider then only
 	// offers the entries of a map constructor for a record type, and otherwise no completions
-	private static commaTriggerPending = false;
+	// - for the cursor position after the typed character: a completion request for any other position, e.g. after a
+	// further character was typed before the triggered request, doesn't use it
+	private static commaTriggerPending: { uri: string, offset: number } | null = null;
 
-	public static consumeCommaTrigger(): boolean {
+	public static setCommaTrigger(document: vscode.TextDocument, offset: number) {
+		DocumentChangeHandler.commaTriggerPending = { uri: document.uri.toString(), offset };
+	}
+
+	public static consumeCommaTrigger(document: vscode.TextDocument, position: vscode.Position): boolean {
 		const pending = DocumentChangeHandler.commaTriggerPending;
-		DocumentChangeHandler.commaTriggerPending = false;
-		return pending;
+		DocumentChangeHandler.commaTriggerPending = null;
+		return !!pending && pending.uri === document.uri.toString() && pending.offset === document.offsetAt(position);
 	}
 	public static isWindowsOS: boolean | undefined;
 
@@ -115,11 +121,17 @@ export class DocumentChangeHandler {
 		const isValueStart = activeChange.text === ':' && /['"]\s*$/.test(lineBefore);
 		// a quote, or an auto-closed pair, starting a string literal key or value, e.g. { 'a': ' or select="'
 		const isStringStart = ['\'', '"', '\'\'', '""'].includes(activeChange.text) && /(?:[:,{(]|:=|=\s*["'])\s*$/.test(lineBefore);
+		// the name of an xsl:with-param or xsl:call-template: the parameter or template names, as the value's quote is typed
+		const isNameStart = ['"', '\'', '""', '\'\''].includes(activeChange.text) && /<xsl:(?:with-param|call-template)\s(?:[^<>]*\s)?name\s*=\s*$/.test(lineBefore);
+		if (!triggerSuggest && !skipTrigger && isNameStart) {
+			triggerSuggest = true;
+		}
 		const isMapEntryStart = activeChange.text === ',' || activeChange.text === '{' || activeChange.text === '{}' || isValueStart || isStringStart;
 		if (!triggerSuggest && !skipTrigger && isMapEntryStart && e.document.languageId === 'xslt' && /\sversion\s*=\s*["']4\.0["']/.test(e.document.getText(new vscode.Range(0, 0, 50, 0)))) {
 			// XPath 4.0 record types: the next entry of a map constructor, or the whole map constructor
 			triggerSuggest = true;
-			DocumentChangeHandler.commaTriggerPending = true;
+			// the cursor is after the first typed character - also between an auto-closed pair, e.g. {}
+			DocumentChangeHandler.setCommaTrigger(e.document, activeChange.rangeOffset + 1);
 		}
 		if (!triggerSuggest && !skipTrigger && activeChange.text === '@' && e.document.languageId === 'xslt') {
 			// a tag within a documentation note, an xsl:note with format="xdoc-md"

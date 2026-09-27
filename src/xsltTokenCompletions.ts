@@ -144,7 +144,7 @@ export class XsltTokenCompletions {
 		let schemaQuery: SchemaQuery | undefined;
 		let lineNumber = -1;
 		let docType = languageConfig.isVersion4 ? DocumentTypes.XSLT40 : languageConfig.docType;
-		let isXSLT = docType === DocumentTypes.XSLT;
+		let isXSLT = docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40;
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;

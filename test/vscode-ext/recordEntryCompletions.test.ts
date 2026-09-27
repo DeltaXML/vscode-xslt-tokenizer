@@ -30,7 +30,7 @@ async function completions(body: string, isCommaTrigger = false) {
 	const document = await vscode.workspace.openTextDocument({ content: text, language: 'xslt' });
 	const provider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
 	if (isCommaTrigger) {
-		(DocumentChangeHandler as unknown as { commaTriggerPending: boolean }).commaTriggerPending = true;
+		DocumentChangeHandler.setCommaTrigger(document, offset);
 	}
 	const result = await provider.provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
 	return Array.isArray(result) ? result : result?.items ?? [];
