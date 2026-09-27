@@ -272,16 +272,21 @@
 						"variable.other.constant"
 					],
 					"xqdocText": [
-						"comment.block.documentation"
+						"comment.block.documentation",
+						"comment"
 					],
 					"xqdocTag": [
-						"storage.type.class.jsdoc"
+						"storage.type.class.jsdoc",
+						"keyword"
 					],
 					"xqdocParam": [
-						"variable.other.jsdoc"
+						"variable.other.jsdoc",
+						"variable.parameter"
 					],
 					"xqdocCode": [
-						"markup.inline.raw"
+						"markup.inline.raw",
+						"markup.inline.raw.string.markdown",
+						"string"
 					],
 					"xqdocBold": [
 						"markup.bold"
@@ -290,10 +295,13 @@
 						"markup.italic"
 					],
 					"xqdocHeading": [
-						"markup.heading"
+						"markup.heading",
+						"heading.1.markdown",
+						"markup.heading.markdown"
 					],
 					"xqdocLink": [
-						"markup.underline.link"
+						"markup.underline.link",
+						"string.other.link"
 					],
 					"xqdocCdata": [
 						"punctuation.definition.tag.xml"
