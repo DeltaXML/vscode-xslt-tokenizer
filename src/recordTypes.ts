@@ -91,6 +91,30 @@ export class RecordTypes {
 		return undefined;
 	}
 
+	// XPath 4.0: the record type of the content of a JNode type, e.g. 'point' in jnode(*, point), or a named item type
+	// declared as one - a value with this type can be used with '/' for the record's fields, e.g. $v/x - undefined if
+	// it's not such a type
+	public static resolveJNode(typeText: string, itemTypes: Map<string, string>, depth = 0): RecordType | undefined {
+		let text = typeText.trim();
+		if ('?*+'.includes(text.charAt(text.length - 1))) {
+			text = text.substring(0, text.length - 1).trim();
+		}
+		if (depth > 10) {
+			return undefined;
+		}
+		if (/^[\w.-]+(:[\w.-]+)?$/.test(text)) {
+			const declared = itemTypes.get(text);
+			return declared ? RecordTypes.resolveJNode(declared, itemTypes, depth + 1) : undefined;
+		}
+		const jnodeMatch = /^jnode\s*\(/.exec(text);
+		const openIndex = jnodeMatch ? jnodeMatch[0].length - 1 : -1;
+		if (!jnodeMatch || RecordTypes.closingIndex(text, openIndex) !== text.length - 1) {
+			return undefined;
+		}
+		const args = RecordTypes.splitTopLevel(text.substring(openIndex + 1, text.length - 1), ',');
+		return args.length === 2 ? RecordTypes.resolve(args[1], itemTypes, depth + 1) : undefined;
+	}
+
 	// the document offsets of the 'as' values of the xsl:item-type declarations in the document being processed - set
 	// for each linter run, for the offsets of record fields
 	public static itemTypeOffsets = new Map<string, number>();

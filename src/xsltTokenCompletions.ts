@@ -1249,7 +1249,8 @@ export class XsltTokenCompletions {
 
 	// the record type for the value before the '?' or '/' at lookupIndex: a variable declared with a record type, e.g. $c?,
 	// or a lookup of a field whose type is a record, e.g. $p?address? - for a child step ('/') the value must be a JNode:
-	// jtree($c)/ or a child step, e.g. jtree($p)/address/ (Saxon 13 reports XPTY0019 for $c/ when $c has a record type)
+	// jtree($c)/, a variable declared as a JNode for a record type, e.g. jnode(*, point), or a child step, e.g.
+	// jtree($p)/address/ (Saxon 13 reports XPTY0019 for $c/ when $c has a record type)
 	private static lookupRecordType(document: vscode.TextDocument, allTokens: BaseToken[], lookupIndex: number, inScopeXPathVariablesList: VariableData[], xpathStack: XPathData[],
 		inScopeVariablesList: VariableData[], elementStack: ElementData[], globalVariableData: VariableData[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): RecordType | undefined {
 		const globals = globalInstructionData.concat(importedInstructionData);
@@ -1262,7 +1263,7 @@ export class XsltTokenCompletions {
 		if (isJtree) {
 			// jtree($c)
 			operand = allTokens[lookupIndex - 2];
-		} else if (isChildStep && !(operand?.tokenType === TokenLevelState.nodeNameTest && allTokens[lookupIndex - 2]?.value === '/')) {
+		} else if (isChildStep && operand?.tokenType !== TokenLevelState.variable && !(operand?.tokenType === TokenLevelState.nodeNameTest && allTokens[lookupIndex - 2]?.value === '/')) {
 			// not a JNode
 			return undefined;
 		} else if (!isChildStep && operand?.tokenType === TokenLevelState.nodeNameTest) {
@@ -1276,6 +1277,9 @@ export class XsltTokenCompletions {
 			return fn?.returnType ? RecordTypes.resolve(fn.returnType, itemTypes) : undefined;
 		}
 		if (operand?.tokenType === TokenLevelState.variable) {
+			// a JNode type for a record, e.g. jnode(*, point), is for either '/' or '?' - a record type only for '?', or jtree($c)/
+			const recordFor = (typeText: string) => (isJtree ? undefined : RecordTypes.resolveJNode(typeText, itemTypes)) ??
+				(isChildStep && !isJtree ? undefined : RecordTypes.resolve(typeText, itemTypes));
 			const name = operand.value.substring(1);
 			// a variable declared in the XPath expression, e.g. let $p as person := ..., or function($p as person) - the innermost one
 			const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList);
@@ -1287,7 +1291,7 @@ export class XsltTokenCompletions {
 				}
 				const first = allTokens[typeRange[0]];
 				const last = allTokens[typeRange[1]];
-				return RecordTypes.resolve(document.getText(new vscode.Range(first.line, first.startCharacter, last.line, last.startCharacter + last.length)), itemTypes);
+				return recordFor(document.getText(new vscode.Range(first.line, first.startCharacter, last.line, last.startCharacter + last.length)));
 			}
 			const findIn = (list: VariableData[]) => [...list].reverse().find((v) => v.name === name);
 			let localVariable = findIn(inScopeVariablesList);
@@ -1303,7 +1307,7 @@ export class XsltTokenCompletions {
 			} else {
 				declaredType = globals.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === name)?.declaredType;
 			}
-			return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
+			return declaredType ? recordFor(declaredType) : undefined;
 		} else if ((operand?.tokenType === TokenLevelState.mapNameLookup && allTokens[lookupIndex - 2]?.value === '?') ||
 			(operand?.tokenType === TokenLevelState.nodeNameTest && allTokens[lookupIndex - 2]?.value === '/')) {
 			// e.g. $p?address? or jtree($p)/address/ for record(address as record(...))

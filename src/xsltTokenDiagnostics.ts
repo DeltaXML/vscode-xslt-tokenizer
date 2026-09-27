@@ -96,6 +96,8 @@ export interface VariableData {
 	name: string;
 	// XPath 4.0: the record type from the declaration's 'as' attribute, for checking lookups such as $c?r
 	recordType?: RecordType;
+	// XPath 4.0: the 'as' attribute is a JNode type for the record type, e.g. jnode(*, point), for child steps such as $c/r
+	isJNode?: boolean;
 }
 
 enum NameValidationError {
@@ -898,6 +900,13 @@ export class XsltTokenDiagnostics {
 									}
 									if (record && variableData) {
 										variableData.recordType = record;
+									} else if (asText && variableData && ['xsl:variable', 'xsl:param', 'xsl:with-param'].includes(tagElementName)) {
+										// a JNode for a record, e.g. as="jnode(*, point)" select="jtree(...)"
+										const jnodeRecord = RecordTypes.resolveJNode(asText, itemTypeDeclarations);
+										if (jnodeRecord) {
+											variableData.recordType = jnodeRecord;
+											variableData.isJNode = true;
+										}
 									}
 								}
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
@@ -1410,21 +1419,27 @@ export class XsltTokenDiagnostics {
 				const isRecordStep = xpathTokenType === TokenLevelState.nodeNameTest && prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/';
 				if ((isRecordStep || (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?')) && XsltTokenDiagnostics.isXPath40(docType)) {
 					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r, or a child step on a JNode for one, e.g. jtree($c)/r
-					const variableRecord = (variableToken: BaseToken) => {
+					// the record type of a variable, and whether it's declared as a JNode for one, e.g. jnode(*, point)
+					const variableRecord = (variableToken: BaseToken): { record: RecordType | undefined, isJNode: boolean } => {
+						const fromType = (typeText: string, offset?: number) => {
+							const record = RecordTypes.resolve(typeText, itemTypeDeclarations, 0, offset);
+							const jnodeRecord = record ? undefined : RecordTypes.resolveJNode(typeText, itemTypeDeclarations);
+							return { record: record ?? jnodeRecord, isJNode: !!jnodeRecord };
+						};
 						const variableName = variableToken.value.substring(1);
 						// a variable declared in the XPath expression, e.g. let $p as person := ..., or function($p as person) - the innermost one
 						const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList, anonymousFunctionParamList);
 						const xpathVariable = [...xpathVariables].reverse().find((v) => v.name === variableName);
 						if (xpathVariable) {
 							const typeRange = RecordTypes.xpathVariableTypeRange(allTokens, allTokens.indexOf(xpathVariable.token));
-							return typeRange ? RecordTypes.resolve(XsltTokenDiagnostics.textForTokenRange(document, allTokens, typeRange), itemTypeDeclarations) : undefined;
+							return typeRange ? fromType(XsltTokenDiagnostics.textForTokenRange(document, allTokens, typeRange)) : { record: undefined, isJNode: false };
 						}
 						const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
 						const globalType = globalVariableTypes.get(variableName);
 						// the offset of a global variable's 'as' in this document, for the offsets of an inline record type's fields
 						const globalDeclaration = globalType ? globalInstructionData.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === variableName) : undefined;
 						const globalTypeOffset = globalDeclaration ? RecordTypes.attributeValueOffset(documentText, document.offsetAt(new vscode.Position(globalDeclaration.token.line, globalDeclaration.token.startCharacter)), 'as') : undefined;
-						return localVariable ? localVariable.recordType : globalType ? RecordTypes.resolve(globalType, itemTypeDeclarations, 0, globalTypeOffset) : undefined;
+						return localVariable ? { record: localVariable.recordType, isJNode: !!localVariable.isJNode } : globalType ? fromType(globalType, globalTypeOffset) : { record: undefined, isJNode: false };
 					};
 					const operandIndex = index - 2;
 					const operand = operandIndex > -1 ? allTokens[operandIndex] : undefined;
@@ -1435,11 +1450,11 @@ export class XsltTokenDiagnostics {
 						const fn = globalInstructionData.concat(importedInstructionData).find((g) => g.type === GlobalInstructionType.Function && g.name === functionCall.name && XslLexer.functionArityMatches(g, functionCall.arity));
 						operandRecord = { record: fn?.returnType ? RecordTypes.resolve(fn.returnType, itemTypeDeclarations) : undefined, isJNode: false };
 					} else if (operand?.tokenType === TokenLevelState.variable) {
-						operandRecord = { record: variableRecord(operand), isJNode: false };
+						operandRecord = variableRecord(operand);
 					} else if (operand?.charType === CharLevelState.rB && operandIndex > 2 && allTokens[operandIndex - 1].tokenType === TokenLevelState.variable &&
 						allTokens[operandIndex - 2].charType === CharLevelState.lB && allTokens[operandIndex - 3].value === 'jtree') {
 						// jtree($c)
-						operandRecord = { record: variableRecord(allTokens[operandIndex - 1]), isJNode: true };
+						operandRecord = { record: variableRecord(allTokens[operandIndex - 1]).record, isJNode: true };
 					} else if (operand) {
 						operandRecord = lookupRecords.get(operand);
 					}
