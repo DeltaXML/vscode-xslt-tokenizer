@@ -53,4 +53,56 @@ suite('xsl:with-param name completions', () => {
 		assert.deepEqual(await labels(body, '4.0', 0), []);
 		assert.deepEqual(await labels(body, '4.0'), ['colour', 'size']);
 	});
+
+	['3.0', '4.0'].forEach((version) => {
+		test(`an xsl:with-param element for each parameter (XSLT ${version})`, async () => {
+			const items = await labels(`<xsl:call-template name="draw">\n      <¦\n    </xsl:call-template>`, version);
+			assert.deepEqual(items.slice(0, 2), ['xsl:with-param colour', 'xsl:with-param size']);
+			assert.include(items, 'xsl:with-param');
+		});
+	});
+
+	test('an xsl:with-param element only for the parameters not passed', async () => {
+		const items = await labels(`<xsl:call-template name="draw">\n      <xsl:with-param name="colour" select="'red'"/>\n      <¦\n    </xsl:call-template>`, '4.0');
+		assert.include(items, 'xsl:with-param size');
+		assert.notInclude(items, 'xsl:with-param colour');
+	});
+
+	test('no xsl:with-param elements for another parent', async () => {
+		const items = await labels(`<xsl:call-template name="draw">\n      <xsl:with-param name="colour">\n        <¦\n      </xsl:with-param>\n    </xsl:call-template>`, '4.0');
+		assert.notInclude(items, 'xsl:with-param size');
+	});
+
+	const iterate = (content: string) => `<xsl:iterate select="1 to 5">
+      <xsl:param name="total" as="xs:integer" select="0"/>
+      <xsl:param name="count" select="0"/>
+      <xsl:next-iteration>
+        ${content}
+      </xsl:next-iteration>
+    </xsl:iterate>`;
+
+	test('an xsl:with-param element for each xsl:iterate parameter in xsl:next-iteration', async () => {
+		const items = await labels(iterate('<¦'), '3.0');
+		assert.deepEqual(items.slice(0, 2), ['xsl:with-param total', 'xsl:with-param count']);
+	});
+
+	test('an xsl:with-param element only for the xsl:iterate parameters not passed', async () => {
+		const items = await labels(iterate(`<xsl:with-param name="total" select="$total + ."/>\n        <¦`), '4.0');
+		assert.include(items, 'xsl:with-param count');
+		assert.notInclude(items, 'xsl:with-param total');
+	});
+
+	test("the xsl:iterate parameter's type", async () => {
+		const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:template name="t">
+    ${iterate('<¦')}
+  </xsl:template>
+</xsl:stylesheet>`;
+		const offset = marked.indexOf('¦');
+		const doc = await vscode.workspace.openTextDocument({ content: marked.replace('¦', ''), language: 'xslt' });
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(doc, doc.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		assert.deepEqual(items.slice(0, 2).map((item) => item.detail), ['xs:integer', 'item()*']);
+		assert.equal((items[0].insertText as vscode.SnippetString).value, 'xsl:with-param name="total" select="$1"/>$0');
+	});
 });

@@ -1727,6 +1727,65 @@ export class XsltTokenCompletions {
 		});
 	}
 
+	// an xsl:with-param for each parameter not already passed, for an element name after '<' in an xsl:call-template - the
+	// called template's parameters - or in an xsl:next-iteration - the xsl:iterate's parameters - undefined if it's not such
+	// a position
+	public static getWithParamElementCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameStart = /<([\w.:-]*)$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		if (!nameStart) {
+			return undefined;
+		}
+		const tagStart = offset - nameStart[0].length;
+		const markup = RecordTypes.blankMarkup(text);
+		const ancestors = RecordTypes.openElements(markup, tagStart);
+		const parent = ancestors[ancestors.length - 1];
+		let params: { name: string, type?: string, text?: string }[];
+		let owner: string;
+		if (parent?.name === 'xsl:call-template') {
+			const templateName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name');
+			const isTemplate = (data: GlobalInstructionData) => data.type === GlobalInstructionType.Template && data.name === templateName;
+			const template = globalInstructionData.find(isTemplate) ?? importedInstructionData.find(isTemplate);
+			if (!template?.memberNames) {
+				return undefined;
+			}
+			const note = XdocNotes.forGlobal(template, text);
+			params = template.memberNames.map((name, index) => ({ name, type: template.memberTypes?.[index], text: note ? XdocNotes.paramText(note, name) : undefined }));
+			owner = `the template: ${templateName}`;
+		} else if (parent?.name === 'xsl:next-iteration') {
+			const iterate = ancestors.slice(0, -1).reverse().find((ancestor) => ancestor.name === 'xsl:iterate');
+			if (!iterate) {
+				return undefined;
+			}
+			params = RecordTypes.childElements(text, markup, iterate.offset, 'xsl:param').map((paramOffset) => ({
+				name: RecordTypes.attributeOfElementAt(text, paramOffset + 1, 'name') ?? '',
+				type: RecordTypes.attributeOfElementAt(text, paramOffset + 1, 'as')
+			})).filter((param) => param.name !== '');
+			owner = 'the xsl:iterate';
+		} else {
+			return undefined;
+		}
+		const passed = RecordTypes.childElements(text, markup, parent.offset, 'xsl:with-param')
+			.map((childOffset) => RecordTypes.attributeOfElementAt(text, childOffset + 1, 'name'));
+		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		const items: vscode.CompletionItem[] = [];
+		params.forEach((param, index) => {
+			if (passed.includes(param.name)) {
+				return;
+			}
+			const item = new vscode.CompletionItem(`xsl:with-param ${param.name}`, vscode.CompletionItemKind.Variable);
+			item.insertText = new vscode.SnippetString(`xsl:with-param name="${param.name}" select="$1"/>$0`);
+			item.range = range;
+			item.detail = param.type ?? 'item()*';
+			item.documentation = new vscode.MarkdownString(`Parameter of ${owner}` + (param.text ? `\n\n${param.text}` : ''));
+			// before other element completions, in declaration order
+			item.sortText = '!' + String(index).padStart(4, '0');
+			items.push(item);
+		});
+		return items;
+	}
+
 	// XPath 4.0 record types: where an xsl:map would have a record type, e.g. in an xsl:variable declared with one, an
 	// xsl:map with an xsl:map-entry for each field, for an element name after '<' - undefined if it's not such a position
 	public static getRecordMapElementCompletions(document: vscode.TextDocument, position: vscode.Position, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
