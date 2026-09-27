@@ -2847,6 +2847,7 @@ export class XsltTokenDiagnostics {
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
+			XsltTokenDiagnostics.checkPatternOperators(document, allTokens, problemTokens);
 			XsltTokenDiagnostics.checkDocumentationNotes(document, problemTokens);
 		}
 		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
@@ -4236,6 +4237,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.RecordFieldDuplicate:
 					msg = `XPath: Duplicate field name in the record type: '${tokenValue}'`;
 					break;
+				case ErrorType.PatternOperator:
+					msg = `XSLT: '${tokenValue}' is not allowed in a pattern, except within a predicate or function call - for either of two patterns, use '|'`;
+					break;
 				case ErrorType.MapKeyDuplicate:
 					msg = `XPath: Duplicate key in the map constructor: ${tokenValue}`;
 					break;
@@ -4598,6 +4602,58 @@ export class XsltTokenDiagnostics {
 	// the children of an xsl:iterate are any xsl:param elements, then an optional xsl:on-completion, then the rest -
 	// Saxon 13 reports XTSE0010 for an xsl:param or xsl:on-completion out of order (comments are ignored, and so are
 	// elements with use-when, as they may be excluded)
+	// the attributes whose values are patterns, for each XSLT element
+	private static readonly patternAttributes = new Map<string, string[]>([
+		['xsl:template', ['match']], ['xsl:key', ['match']], ['xsl:accumulator-rule', ['match']],
+		['xsl:number', ['count', 'from']], ['xsl:for-each-group', ['group-starting-with', 'group-ending-with']]
+	]);
+
+	// the operators - other than ',' - that are only allowed in a pattern within a predicate etc.: the lexer distinguishes
+	// them from element names with the same name, e.g. match="and/eq"
+	private static readonly patternOperators = ['or', 'and', 'eq'];
+
+	// a pattern is a union of paths, so 'or', 'and', 'eq' and ',' are only allowed within a predicate, the arguments of a
+	// function call or the parentheses of a type, e.g. ~record(a, b) - not at the top level or within other parentheses -
+	// as in Saxon 13, XTSE0340 - a common mistake is match="a or b", or match="a, b", for match="a | b"
+	private static checkPatternOperators(document: vscode.TextDocument, allTokens: BaseToken[], problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const markup = RecordTypes.blankMarkup(text);
+		const ranges: [number, number][] = [];
+		for (const match of markup.matchAll(/<(xsl:template|xsl:key|xsl:accumulator-rule|xsl:number|xsl:for-each-group)[\s>\/]/g)) {
+			XsltTokenDiagnostics.patternAttributes.get(match[1])!.forEach((attributeName) => {
+				const start = RecordTypes.attributeValueOffset(text, match.index! + 1, attributeName);
+				if (start !== undefined) {
+					ranges.push([start, text.indexOf(text.charAt(start - 1), start)]);
+				}
+			});
+		}
+		if (ranges.length === 0) {
+			return;
+		}
+		const tokenOffset = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter));
+		const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && t.tokenType !== TokenLevelState.comment);
+		ranges.forEach(([start, end]) => {
+			// for each open bracket, whether 'or' and ',' are allowed within it
+			const allowed: boolean[] = [];
+			let previous: BaseToken | undefined;
+			xpathTokens.filter((t) => tokenOffset(t) >= start && tokenOffset(t) < end).forEach((t) => {
+				const isOpen = t.charType === CharLevelState.lB || t.charType === CharLevelState.lPr || t.charType === CharLevelState.lBr;
+				const isClose = t.charType === CharLevelState.rB || t.charType === CharLevelState.rPr || t.charType === CharLevelState.rBr;
+				if (isOpen) {
+					const isCallOrType = t.charType !== CharLevelState.lB || (!!previous && (previous.tokenType === TokenLevelState.function ||
+						previous.tokenType === TokenLevelState.nodeType || previous.tokenType === TokenLevelState.simpleType));
+					allowed.push(isCallOrType);
+				} else if (isClose) {
+					allowed.pop();
+				} else if (!t.error && !allowed.includes(true) && ((t.tokenType === TokenLevelState.operator && XsltTokenDiagnostics.patternOperators.includes(t.value)) ||
+					(t.charType === CharLevelState.sep && t.value === ','))) {
+					problemTokens.push({ ...t, error: ErrorType.PatternOperator });
+				}
+				previous = t;
+			});
+		});
+	}
+
 	private static checkIterateOrder(document: vscode.TextDocument, problemTokens: BaseToken[]) {
 		const text = document.getText();
 		const iterateStarts = [...text.matchAll(/<xsl:iterate[\s>]/g)].map((match) => match.index!);

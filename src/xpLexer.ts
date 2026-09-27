@@ -1694,6 +1694,7 @@ export enum ErrorType {
     EnumValueDuplicate,
     MapKeyDuplicate,
     MapEntryKeyDuplicate,
+    PatternOperator,
     UndeclaredItemType,
     InlineFunctionFnRequiresXPath40,
     FocusFunctionRequiresXPath40,

@@ -1141,7 +1141,8 @@ export class XsltTokenCompletions {
 	}
 
 	// 'instance of' and 'castable as' are valid after any completed value (a variable/node-name
-	// reference, a literal, or a closed predicate/argument-list/parenthesized-expression) -
+	// reference, a lookup, a named function reference, a literal, or a closed predicate/argument-list/
+	// parenthesized-expression) -
 	// 'return' and 'satisfies' are ALSO only valid there, but additionally only when we're still
 	// inside the bound expression of a for/let (-> return) or some/every (-> satisfies) binding.
 	private static isValueCompletingToken(token: BaseToken | null): boolean {
@@ -1151,12 +1152,17 @@ export class XsltTokenCompletions {
 		switch (<TokenLevelState>token.tokenType) {
 			case TokenLevelState.variable:
 			case TokenLevelState.nodeNameTest:
+			case TokenLevelState.attributeNameTest:
 			case TokenLevelState.nodeType:
+			case TokenLevelState.mapNameLookup:
+			case TokenLevelState.functionNameTest:
 			case TokenLevelState.string:
 			case TokenLevelState.number:
 				return true;
 			case TokenLevelState.operator:
-				return token.charType === CharLevelState.rB || token.charType === CharLevelState.rBr || token.charType === CharLevelState.rPr;
+				// '()' is the empty sequence, or the end of a function call without arguments, e.g. true()
+				return token.charType === CharLevelState.rB || token.charType === CharLevelState.rBr || token.charType === CharLevelState.rPr ||
+					(token.charType === CharLevelState.dSep && token.value === '()');
 			default:
 				return false;
 		}
@@ -1725,6 +1731,72 @@ export class XsltTokenCompletions {
 			item.sortText = '!' + (field.optional ? '1' : '0') + String(index).padStart(4, '0');
 			return item;
 		});
+	}
+
+	// keyword operators after an operand, e.g. '1 |' or '$a c|' - operators of 3 characters or fewer, e.g. 'and', 'eq' or
+	// 'div', are quicker to type than to choose, so they're not included
+	private static readonly operatorKeywords = ['cast as', 'castable as', 'instance of', 'treat as', 'idiv', 'union', 'intersect', 'except'];
+	private static readonly operatorKeywords40 = ['otherwise'];
+	// snippets for the expressions with several parts, at the start of an expression
+	private static readonly expressionSnippets: [string, string][] = [
+		['for $x in … return …', 'for $${1:x} in ${2} return ${0}'],
+		['let $x := … return …', 'let $${1:x} := ${2} return ${0}'],
+		['some $x in … satisfies …', 'some $${1:x} in ${2} satisfies ${0}'],
+		['every $x in … satisfies …', 'every $${1:x} in ${2} satisfies ${0}'],
+		['if (…) then … else …', 'if (${1}) then ${2} else ${0}'],
+		['map { … }', 'map { ${0} }'],
+		['array { … }', 'array { ${0} }']
+	];
+	private static readonly expressionSnippets40: [string, string][] = [
+		['if (…) { … }', 'if (${1}) { ${0} }']
+	];
+
+	// the XPath completions adjusted for the position: after an operand, only keyword operators - including 'return' or
+	// 'satisfies' where the completions have them - or at the start of an expression, where the completions include the
+	// built-in functions, snippets for the expressions with several parts as well
+	public static adjustExpressionCompletions(document: vscode.TextDocument, allTokens: BaseToken[], position: vscode.Position, isVersion4: boolean, completions: vscode.CompletionItem[]): vscode.CompletionItem[] {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const wordStart = offset - /[\w.:-]*$/.exec(text.substring(Math.max(0, offset - 100), offset))![0].length;
+		const range = new vscode.Range(document.positionAt(wordStart), position);
+		const tokenEnd = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter + t.length));
+		let previous: BaseToken | undefined;
+		for (const t of allTokens) {
+			if (tokenEnd(t) > wordStart) {
+				break;
+			}
+			previous = t;
+		}
+		// only whitespace between the operand and the word - not e.g. the end of the attribute value
+		const isOperatorPosition = !!previous && previous.tokenType < XsltTokenCompletions.xsltStartTokenNumber &&
+			XsltTokenCompletions.isValueCompletingToken(previous) && /^\s+$/.test(text.substring(tokenEnd(previous), wordStart));
+		if (isOperatorPosition) {
+			const keywords = completions.filter((item) => item.kind === vscode.CompletionItemKind.Keyword);
+			const labels = keywords.map((item) => (typeof item.label === 'string' ? item.label : item.label.label).trim());
+			XsltTokenCompletions.operatorKeywords.concat(isVersion4 ? XsltTokenCompletions.operatorKeywords40 : []).forEach((keyword) => {
+				if (!labels.includes(keyword)) {
+					const item = new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
+					item.insertText = keyword + ' ';
+					item.range = range;
+					keywords.push(item);
+				}
+			});
+			return keywords;
+		}
+		const isExpressionStart = completions.some((item) => item.kind === vscode.CompletionItemKind.Function && item.label === 'count');
+		if (!isExpressionStart) {
+			return completions;
+		}
+		const snippets = XsltTokenCompletions.expressionSnippets.concat(isVersion4 ? XsltTokenCompletions.expressionSnippets40 : []).map(([label, snippet], index) => {
+			const item = new vscode.CompletionItem(label, vscode.CompletionItemKind.Snippet);
+			item.insertText = new vscode.SnippetString(snippet);
+			item.filterText = label.split(' ')[0];
+			item.range = range;
+			// after the other completions, until the start of the keyword is typed
+			item.sortText = '~' + String(index).padStart(2, '0');
+			return item;
+		});
+		return completions.concat(snippets);
 	}
 
 	// an xsl:with-param for each parameter not already passed, for an element name after '<' in an xsl:call-template - the

@@ -350,6 +350,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				return;
 			}
 			completions= XsltTokenCompletions.getCompletions(localLanguageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			if (completions && (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XPath)) {
+				// after an operand, only keyword operators - or at the start of an expression, snippets for 'for', 'let' etc. too
+				completions = XsltTokenCompletions.adjustExpressionCompletions(document, allTokens, position, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath, completions);
+			}
 			// xsl:map-entry elements for a record type, before the other element completions
 			const mapEntryElements = isXSLT40 ? XsltTokenCompletions.getMapEntryElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (mapEntryElements && mapEntryElements.length > 0) {

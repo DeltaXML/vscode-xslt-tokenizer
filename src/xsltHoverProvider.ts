@@ -58,7 +58,8 @@ export class XSLTHoverProvider implements HoverProvider {
 		});
 
 		if (matchingData) {
-			return this.createHover(matchingData.signature, matchingData.description);
+			const link = this.specificationLink(builtinLookupName);
+			return this.createHover(matchingData.signature, matchingData.description + (link ? `\n\n${link}` : ''));
 		}
 
 		if (this.definitionProvider) {
@@ -150,6 +151,25 @@ export class XSLTHoverProvider implements HoverProvider {
 		const params = (template.memberNames ?? []).map((paramName, i) => template.memberTypes?.[i] ? `$${paramName} as ${template.memberTypes[i]}` : `$${paramName}`).join(', ');
 		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
 		return this.createHover(`template ${templateName}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+	}
+
+	// XPath 4.0: 'current' is in the functions specification, and these aren't in either 4.0 specification
+	private static readonly functions40 = ['current'];
+	private static readonly unspecified40 = ['function-identity', 'jposition'];
+
+	// a link to the definition of a built-in function in the specification for the version: the W3C recommendations for
+	// XPath 3.1 and XSLT 3.0, or the drafts for 4.0 - undefined for other functions, e.g. ixsl:page() or xs:integer()
+	private specificationLink(name: string) {
+		const isVersion4 = this.languageConfiguration?.docType === DocumentTypes.XPath || !!this.languageConfiguration?.isVersion4;
+		const parts = /^(?:(math|map|array):)?([\w-]+)$/.exec(name);
+		if (!parts || (isVersion4 && XSLTHoverProvider.unspecified40.includes(name))) {
+			return undefined;
+		}
+		const isXSLT = XPathFunctionDetails.xsltData.some((item) => item.name === name) && !(isVersion4 && XSLTHoverProvider.functions40.includes(name));
+		const [title, url] = isXSLT ?
+			(isVersion4 ? ['XSLT 4.0', 'https://qt4cg.org/specifications/xslt-40/Overview.html'] : ['XSLT 3.0', 'https://www.w3.org/TR/xslt-30/']) :
+			(isVersion4 ? ['XPath Functions 4.0', 'https://qt4cg.org/specifications/xpath-functions-40/Overview.html'] : ['XPath Functions 3.1', 'https://www.w3.org/TR/xpath-functions-31/']);
+		return `[${title} specification](${url}#func-${parts[1] ? parts[1] + '-' : ''}${parts[2]})`;
 	}
 
 	private createHover(signature: string, description: string) {
