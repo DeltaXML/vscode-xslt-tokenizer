@@ -15,6 +15,7 @@ import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { RecordType, RecordTypes, FieldReference } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
+import { XqdocNotes } from './xqdocNote';
 
 enum HasCharacteristic {
 	unknown,
@@ -2844,6 +2845,7 @@ export class XsltTokenDiagnostics {
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
 		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
+			XsltTokenDiagnostics.checkDocumentationNotes(document, problemTokens);
 		}
 		if (XsltTokenDiagnostics.isXPath40(docType)) {
 			// XPath 4.0: the value of a typed let binding, e.g. let $p as person := { ... }
@@ -4160,6 +4162,12 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: '${tokenValue}' is also tested by an earlier xsl:when, so this xsl:when never matches it`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
+				case ErrorType.NoteParamUnknown: {
+					const [paramName, declarationName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: The documentation note's @param '$${paramName}' is not a parameter of this ${declarationName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
 				case ErrorType.IterateTailPosition:
 					msg = `XSLT: ${tokenValue} must be the last instruction of xsl:iterate - or of an xsl:if, xsl:when, xsl:otherwise, xsl:try or xsl:catch in that position`;
 					break;
@@ -4503,6 +4511,31 @@ export class XsltTokenDiagnostics {
 			severity: vscode.DiagnosticSeverity.Error,
 			source: '',
 		};
+	}
+
+	// XSLT 4.0 documentation notes - an xsl:note with format="xqdoc" - of an xsl:function or xsl:template: each @param
+	// must name one of its parameters
+	private static checkDocumentationNotes(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const noteOffsets = XqdocNotes.noteOffsets(text);
+		if (noteOffsets.length === 0) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const openElements = RecordTypes.openElementsAt(markup, noteOffsets);
+		noteOffsets.forEach((noteOffset, index) => {
+			const declaration = openElements[index][openElements[index].length - 1];
+			if (!declaration || !(declaration.name === 'xsl:function' || declaration.name === 'xsl:template')) {
+				return;
+			}
+			const paramNames = XqdocNotes.paramNames(text, markup, declaration.offset);
+			XqdocNotes.parseNote(text, markup, noteOffset)?.tags.forEach((tag) => {
+				if (tag.name === 'param' && tag.paramName && tag.paramOffset !== undefined && !paramNames.includes(tag.paramName)) {
+					const position = document.positionAt(tag.paramOffset);
+					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.paramName.length, value: tag.paramName + RecordTypes.valueSeparator + declaration.name, tokenType: 0, error: ErrorType.NoteParamUnknown });
+				}
+			});
+		});
 	}
 
 	// the children of an xsl:iterate are any xsl:param elements, then an optional xsl:on-completion, then the rest -

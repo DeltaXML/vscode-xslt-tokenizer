@@ -868,6 +868,11 @@ export class XslLexer {
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;
                             tagElementName = elementProperties.nativeName;
+                            if (nextState === XMLCharState.rStNoAtt && isNativeElement && tagElementName === 'note' && xmlElementStack.length > 0) {
+                                // <xsl:note> - its content is ignored, so it has no text value templates
+                                xmlElementStack[xmlElementStack.length - 1].expandText = false;
+                                expandTextValue = false;
+                            }
                             tagInstructionNameAdded = false;
                             tagMatchToken = null;
                             collectParamName = false;
@@ -1026,7 +1031,8 @@ export class XslLexer {
                             if (tagGlobalInstructionType === GlobalInstructionType.Template && !tagInstructionNameAdded && tagMatchToken) {
                                 this.globalInstructionData.push({type: GlobalInstructionType.TemplateMatch, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
                             }
-                            expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
+                            // the content of xsl:note (XSLT 4.0) is ignored, so it has no text value templates
+                            expandTextValue = this.addToElementStack(isNativeElement && tagElementName === 'note' ? false : expandTextValue, xmlElementStack);
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             storeToken = false;
                             tokenChars = [];

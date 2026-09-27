@@ -1,7 +1,8 @@
 import { CancellationToken, MarkdownString, ParameterInformation, Position, ProviderResult, SignatureHelp, SignatureHelpProvider, SignatureInformation, TextDocument } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from "./xpLexer";
-import { DocumentTypes, LanguageConfiguration, XslLexer } from "./xslLexer";
+import { DocumentTypes, GlobalInstructionType, LanguageConfiguration, XslLexer } from "./xslLexer";
+import { XqdocNotes } from "./xqdocNote";
 
 interface EnclosingCall {
 	functionName: string;
@@ -37,11 +38,11 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		fnName = fnName.startsWith('fn:') ? fnName.substring(3) : fnName;
 
 		const matchingData = this.getFunctionData().find((item) => item.name === fnName);
-		if (!matchingData) {
+		const signatureInfo = matchingData ? this.getSignatureInformation(matchingData.name, matchingData.signature, matchingData.description) :
+			this.userFunctionSignature(document, enclosingCall.functionName);
+		if (!signatureInfo) {
 			return undefined;
 		}
-
-		const signatureInfo = this.getSignatureInformation(matchingData.name, matchingData.signature, matchingData.description);
 		const help = new SignatureHelp();
 		help.signatures = [signatureInfo];
 		help.activeSignature = 0;
@@ -49,6 +50,27 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		const keywordIndex = enclosingCall.keyword ? signatureInfo.parameters.findIndex((p) => typeof p.label === 'string' && (p.label === '$' + enclosingCall.keyword || p.label.startsWith('$' + enclosingCall.keyword + ' '))) : -1;
 		help.activeParameter = keywordIndex > -1 ? keywordIndex : paramCount === 0 ? 0 : Math.min(enclosingCall.activeParameter, paramCount - 1);
 		return help;
+	}
+
+	// a user-defined function declared in this stylesheet, with the descriptions from its documentation note, if any -
+	// an xsl:note with format="xqdoc" - preferring the declaration with the most parameters
+	private userFunctionSignature(document: TextDocument, fnName: string): SignatureInformation | undefined {
+		const candidates = (this.xslLexer?.globalInstructionData ?? []).filter((g) => g.type === GlobalInstructionType.Function && g.name === fnName);
+		if (candidates.length === 0) {
+			return undefined;
+		}
+		const declaration = candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
+		const text = document.getText();
+		const tagStart = text.lastIndexOf('<', document.offsetAt(new Position(declaration.token.line, declaration.token.startCharacter)));
+		const note = tagStart > -1 ? XqdocNotes.forDeclaration(text, tagStart) : undefined;
+		const paramLabels = (declaration.memberNames ?? []).map((name, i) => declaration.memberTypes?.[i] ? `$${name} as ${declaration.memberTypes[i]}` : `$${name}`);
+		const signature = `${declaration.name}(${paramLabels.join(', ')})${declaration.returnType ? ' as ' + declaration.returnType : ''}`;
+		const info = new SignatureInformation(signature, note ? new MarkdownString(XqdocNotes.toMarkdown(note, false)) : undefined);
+		info.parameters = paramLabels.map((label, i) => {
+			const paramText = note ? XqdocNotes.paramText(note, declaration.memberNames![i]) : undefined;
+			return new ParameterInformation(label, paramText ? new MarkdownString(paramText) : undefined);
+		});
+		return info;
 	}
 
 	private getSignatureInformation(name: string, signature: string, description: string): SignatureInformation {

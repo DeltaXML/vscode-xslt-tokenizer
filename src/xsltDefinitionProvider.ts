@@ -321,6 +321,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			let xslVariable = ['xsl:variable', 'xsl:param'];
 
 			let completions: vscode.CompletionItem[]|undefined;
+			// XSLT 4.0: within a documentation note - an xsl:note with format="xqdoc" - only its tags and parameter names
+			const noteCompletions = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getNoteCompletions(document, position) : undefined;
+			if (noteCompletions) {
+				resolve(noteCompletions.length > 0 ? new vscode.CompletionList(noteCompletions, false) : undefined);
+				return;
+			}
 			// XPath 4.0 record types: the next entry of a map constructor
 			const recordEntries = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT ?
 				XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;

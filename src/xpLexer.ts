@@ -1712,6 +1712,7 @@ export enum ErrorType {
     IterateParamOrder,
     IterateOnCompletionOrder,
     IterateTailPosition,
+    NoteParamUnknown,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,

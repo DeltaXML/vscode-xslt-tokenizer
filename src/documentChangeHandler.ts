@@ -121,6 +121,12 @@ export class DocumentChangeHandler {
 			triggerSuggest = true;
 			DocumentChangeHandler.commaTriggerPending = true;
 		}
+		if (!triggerSuggest && !skipTrigger && activeChange.text === '@' && e.document.languageId === 'xslt') {
+			// a tag within a documentation note, an xsl:note with format="xqdoc"
+			const textBefore = e.document.getText(new vscode.Range(new vscode.Position(0, 0), activeChange.range.start));
+			const noteStart = textBefore.lastIndexOf('<xsl:note');
+			triggerSuggest = noteStart > -1 && textBefore.lastIndexOf('<') === noteStart && /^<xsl:note\s[^>]*format\s*=\s*["']xqdoc["'][^>]*>/.test(textBefore.substring(noteStart));
+		}
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<' || activeChange.text.endsWith('::')) {
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {

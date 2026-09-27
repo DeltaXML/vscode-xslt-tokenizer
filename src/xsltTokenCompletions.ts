@@ -18,6 +18,7 @@ import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { RecordType, RecordTypes, TemplateParamType } from './recordTypes';
+import { XqdocNotes } from './xqdocNote';
 
 enum TagType {
 	XSLTstart,
@@ -1537,6 +1538,59 @@ export class XsltTokenCompletions {
 			item.detail = 'xs:boolean';
 			return item;
 		}) : [];
+	}
+
+	// XSLT 4.0: within the content of a documentation note - an xsl:note with format="xqdoc" - the tag names after '@',
+	// and after '@param', the names of the parameters that aren't documented yet - otherwise there are no completions -
+	// undefined if the position isn't within a documentation note
+	public static getNoteCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const noteStart = offset > 0 ? text.lastIndexOf('<xsl:note', offset - 1) : -1;
+		const startTagEnd = noteStart > -1 ? text.indexOf('>', noteStart) : -1;
+		// the cursor is after the note's start tag, with no other markup since
+		if (startTagEnd === -1 || startTagEnd >= offset || text.lastIndexOf('<', offset - 1) !== noteStart ||
+			RecordTypes.attributeOfElementAt(text, noteStart + 1, 'format') !== XqdocNotes.format) {
+			return undefined;
+		}
+		const lineBefore = document.lineAt(position.line).text.substring(0, position.character);
+		const param = /@param\s+(\$?[\w.-]*)$/.exec(lineBefore);
+		if (param) {
+			const markup = RecordTypes.blankMarkup(text);
+			const ancestors = RecordTypes.openElements(markup, noteStart);
+			const declaration = ancestors[ancestors.length - 1];
+			if (!declaration) {
+				return [];
+			}
+			const note = XqdocNotes.parseNote(text, markup, noteStart);
+			const documented = (note?.tags ?? []).filter((tag) => tag.name === 'param').map((tag) => tag.paramName);
+			const range = new vscode.Range(position.translate(0, -param[1].length), position);
+			return XqdocNotes.paramNames(text, markup, declaration.offset).filter((name) => !documented.includes(name)).map((name, index) => {
+				const item = new vscode.CompletionItem('$' + name, vscode.CompletionItemKind.Variable);
+				item.insertText = `$${name} `;
+				item.range = range;
+				item.sortText = String(index).padStart(4, '0');
+				return item;
+			});
+		}
+		const tag = /@([\w-]*)$/.exec(lineBefore);
+		if (tag) {
+			const range = new vscode.Range(position.translate(0, -tag[1].length), position);
+			return XqdocNotes.tagNames.map((name, index) => {
+				const item = new vscode.CompletionItem('@' + name, vscode.CompletionItemKind.Keyword);
+				item.insertText = name + ' ';
+				item.filterText = name;
+				item.range = range;
+				item.detail = XqdocNotes.tagDescriptions[name];
+				item.sortText = String(index).padStart(4, '0');
+				if (name === 'param') {
+					// then the parameter names
+					item.command = { command: 'editor.action.triggerSuggest', title: 'parameter names' };
+				}
+				return item;
+			});
+		}
+		return [];
 	}
 
 	// XSLT 4.0: in the test of an xsl:when in an xsl:switch whose select has an enumeration type, the values that no

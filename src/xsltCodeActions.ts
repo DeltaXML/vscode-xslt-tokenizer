@@ -9,6 +9,7 @@ import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSym
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { RecordExtraction, RecordExtractionPlan } from './recordExtraction';
+import { XqdocNotes } from './xqdocNote';
 import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
 import * as path from 'path';
@@ -67,6 +68,7 @@ enum XsltCodeActionKind {
 	addMissingSwitchCasesWithSelect = 'Add missing xsl:when cases with select',
 	addMissingSwitchCasesWithContent = 'Add missing xsl:when cases with content',
 	extractRecordType = 'Extract record type',
+	addDocumentationNote = 'Add documentation note',
 }
 
 enum ExtractFunctionParams {
@@ -229,6 +231,21 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				this.recordExtraction = { document, plan, existingTypes };
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractRecordType, vscode.CodeActionKind.RefactorExtract));
 				existingTypes.forEach((name) => codeActions.push(new vscode.CodeAction(XSLTCodeActions.useRecordTypeTitle(name), vscode.CodeActionKind.RefactorRewrite)));
+			}
+		}
+
+		// XSLT 4.0: a documentation note for the xsl:function or xsl:template at the cursor
+		if (range.isEmpty && /\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)))) {
+			const note = XqdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start));
+			if (note) {
+				const action = new vscode.CodeAction(XsltCodeActionKind.addDocumentationNote, vscode.CodeActionKind.RefactorRewrite);
+				action.edit = new vscode.WorkspaceEdit();
+				const position = document.positionAt(note.insertOffset);
+				const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, position), new vscode.SnippetString(note.snippet));
+				// the snippet has the indentation
+				snippetEdit.keepWhitespace = true;
+				action.edit.set(document.uri, [snippetEdit]);
+				codeActions.push(action);
 			}
 		}
 

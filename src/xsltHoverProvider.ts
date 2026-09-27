@@ -5,6 +5,9 @@ import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration } from "./xslLexer";
 import { LexPosition } from "./xpLexer";
 import { XsltTokenDiagnostics } from "./xsltTokenDiagnostics";
+import { XqdocNotes } from "./xqdocNote";
+import { RecordTypes } from "./recordTypes";
+import * as fs from 'fs';
 
 enum CharType {
 	none,
@@ -44,7 +47,8 @@ export class XSLTHoverProvider implements HoverProvider {
 		const rawFnName = this.getFunctionName(line.text, position.character);
 
 		if (!rawFnName) {
-			return undefined;
+			// XSLT 4.0: the name of a called template, or of a parameter it's passed - with its documentation note
+			return this.definitionProvider ? this.findTemplateHover(document, position, token) : undefined;
 		}
 
 		const trimmedFnName = rawFnName.trimRight();
@@ -93,7 +97,67 @@ export class XSLTHoverProvider implements HoverProvider {
 		const returnType = bestMatch.returnType ? ` as ${bestMatch.returnType}` : '';
 		const signature = `${bestMatch.name}(${paramList})${returnType}`;
 		const description = bestMatch.href ? `User-defined function, declared in ${path.basename(bestMatch.href)}` : 'User-defined function, declared in this stylesheet';
-		return this.createHover(signature, description);
+		const note = XSLTHoverProvider.declarationNote(document, bestMatch);
+		return this.createHover(signature, note ? `${XqdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+	}
+
+	// the documentation note - an xsl:note with format="xqdoc" - of a function or template declaration, in this document
+	// or the module declaring it
+	public static declarationNote(document: TextDocument, declaration: GlobalInstructionData) {
+		let text: string;
+		try {
+			text = declaration.href ? fs.readFileSync(declaration.href, 'utf8') : document.getText();
+		} catch {
+			return undefined;
+		}
+		const tagStart = text.lastIndexOf('<', XqdocNotes.offsetAt(text, declaration.token.line, declaration.token.startCharacter));
+		return tagStart > -1 ? XqdocNotes.forDeclaration(text, tagStart) : undefined;
+	}
+
+	// for the name of an xsl:call-template, the template's signature and documentation note - or for the name of an
+	// xsl:with-param within it, the parameter's documentation
+	private async findTemplateHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset);
+		const element = /^<(xsl:call-template|xsl:with-param)\s/.exec(text.substring(tagStart, tagStart + 20))?.[1];
+		const nameStart = element ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'name') : undefined;
+		const name = element ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') : undefined;
+		if (nameStart === undefined || !name || offset < nameStart || offset > nameStart + name.length) {
+			return undefined;
+		}
+		let templateName = name;
+		if (element === 'xsl:with-param') {
+			const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart);
+			const callTemplate = ancestors[ancestors.length - 1];
+			const calledName = callTemplate?.name === 'xsl:call-template' ? RecordTypes.attributeOfElementAt(text, callTemplate.offset + 1, 'name') : undefined;
+			if (!calledName) {
+				return undefined;
+			}
+			templateName = calledName;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider!.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+		const template = globalInstructionData.concat(allImportedGlobals).find((g) => g.type === GlobalInstructionType.Template && g.name === templateName);
+		if (!template) {
+			return undefined;
+		}
+		const note = XSLTHoverProvider.declarationNote(document, template);
+		if (element === 'xsl:with-param') {
+			const paramIndex = template.memberNames?.indexOf(name) ?? -1;
+			const paramType = paramIndex > -1 ? template.memberTypes?.[paramIndex] : undefined;
+			const paramText = note ? XqdocNotes.paramText(note, name) : undefined;
+			if (paramIndex === -1) {
+				return undefined;
+			}
+			return this.createHover(`$${name}${paramType ? ' as ' + paramType : ''}`, `${paramText ? paramText + '\n\n---\n' : ''}Parameter of the template: \`${templateName}\``);
+		}
+		const params = (template.memberNames ?? []).map((paramName, i) => template.memberTypes?.[i] ? `$${paramName} as ${template.memberTypes[i]}` : `$${paramName}`).join(', ');
+		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
+		return this.createHover(`template ${templateName}(${params})`, note ? `${XqdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
 	private createHover(signature: string, description: string) {
