@@ -1,5 +1,5 @@
 /**
- * Test suite for XSLT 4.0 documentation notes: an xsl:note with format="xqdoc", as the first child of an xsl:function
+ * Test suite for XSLT 4.0 documentation notes: an xsl:note with format="xdoc-md", as the first child of an xsl:function
  * or xsl:template, with Markdown text and xqDoc-style tags such as @param $name and @return:
  * - hover on a function call, an xsl:call-template name, or an xsl:with-param name shows the documentation
  * - signature help for a user-defined function has the descriptions of the function and its parameters
@@ -20,7 +20,7 @@ import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 
 const areaFunction = `<xsl:function name="cx:area" as="xs:double">
-    <xsl:note format="xqdoc">
+    <xsl:note format="xdoc-md">
       Returns the area of a shape, **scaled** when \`$scale &gt; 1\`.
 
       @param $shape the shape
@@ -33,7 +33,7 @@ const areaFunction = `<xsl:function name="cx:area" as="xs:double">
   </xsl:function>`;
 
 const drawTemplate = `<xsl:template name="draw">
-    <xsl:note format="xqdoc">
+    <xsl:note format="xdoc-md">
       Draws a shape.
 
       @param $colour the fill colour
@@ -121,7 +121,7 @@ suite('Documentation notes', () => {
 		assert.isDefined(action);
 		assert.isTrue(await vscode.workspace.applyEdit(action!.edit!));
 		assert.equal(document.getText(), stylesheet(`<xsl:function name="cx:mag" as="xs:double">
-    <xsl:note format="xqdoc">
+    <xsl:note format="xdoc-md">
       description
 
       @param $c description
@@ -147,7 +147,7 @@ suite('Documentation notes', () => {
 		});
 	});
 
-	const noteBody = (content: string) => `<xsl:function name="cx:mag" as="xs:double">\n    <xsl:note format="xqdoc">\n      ${content}\n    </xsl:note>\n    <xsl:param name="c"/>\n    <xsl:param name="k"/>\n    <xsl:sequence select="1"/>\n  </xsl:function>`;
+	const noteBody = (content: string) => `<xsl:function name="cx:mag" as="xs:double">\n    <xsl:note format="xdoc-md">\n      ${content}\n    </xsl:note>\n    <xsl:param name="c"/>\n    <xsl:param name="k"/>\n    <xsl:sequence select="1"/>\n  </xsl:function>`;
 
 	test('completion: tag names after @', async () => {
 		assert.deepEqual(await completionLabels(stylesheet(noteBody('Magnitude.\n      @¦'))), ['@param', '@return', '@see', '@since', '@deprecated', '@error']);
@@ -168,7 +168,7 @@ suite('Documentation notes', () => {
 	});
 
 	test('hover: a note that is a CDATA section', async () => {
-		const body = `<xsl:function name="cx:cd" as="xs:boolean">\n    <xsl:note format="xqdoc"><![CDATA[\n      True if $a < $b, e.g. <code>, not &lt;.\n\n      @param $a the first\n    ]]></xsl:note>\n    <xsl:param name="a"/>\n    <xsl:sequence select="true()"/>\n  </xsl:function>\n  ${call('cx:c¦d(1)')}`;
+		const body = `<xsl:function name="cx:cd" as="xs:boolean">\n    <xsl:note format="xdoc-md"><![CDATA[\n      True if $a < $b, e.g. <code>, not &lt;.\n\n      @param $a the first\n    ]]></xsl:note>\n    <xsl:param name="a"/>\n    <xsl:sequence select="true()"/>\n  </xsl:function>\n  ${call('cx:c¦d(1)')}`;
 		const text = await hoverText(body);
 		// escaped for Markdown, so that it's shown as written: 'True if $a < $b, e.g. <code>, not &lt;.'
 		assert.include(text, 'True if $a &lt; $b, e.g. &lt;code>, not &amp;lt;.');
@@ -178,7 +178,7 @@ suite('Documentation notes', () => {
 	});
 
 	test('hover: text before a CDATA section that spans the tags', async () => {
-		const body = `<xsl:function name="cx:cd" as="xs:boolean">\n    <xsl:note format="xqdoc">\n      Intro &amp; more.\n      <![CDATA[With <b>code</b>.\n      @param $a the first]]>\n    </xsl:note>\n    <xsl:param name="a"/>\n    <xsl:sequence select="true()"/>\n  </xsl:function>\n  ${call('cx:c¦d(1)')}`;
+		const body = `<xsl:function name="cx:cd" as="xs:boolean">\n    <xsl:note format="xdoc-md">\n      Intro &amp; more.\n      <![CDATA[With <b>code</b>.\n      @param $a the first]]>\n    </xsl:note>\n    <xsl:param name="a"/>\n    <xsl:sequence select="true()"/>\n  </xsl:function>\n  ${call('cx:c¦d(1)')}`;
 		const text = await hoverText(body);
 		// 'Intro & more.' - the entity reference is decoded - then the CDATA section's text as written
 		assert.include(text, 'Intro &amp; more.\nWith &lt;b>code&lt;/b>.');
@@ -198,11 +198,11 @@ suite('Documentation notes', () => {
 	});
 
 	test('linter: braces in the text of a note are not text value templates', async () => {
-		const xslt = stylesheet(`<xsl:template name="t2" expand-text="yes">\n    <xsl:note format="xqdoc">\n      Uses { 'a': 1 } or {not xpath\n    </xsl:note>\n    <xsl:note>{also not xpath <b>{x</b></xsl:note>\n    <xsl:sequence select="1"/>\n  </xsl:template>`);
+		const xslt = stylesheet(`<xsl:template name="t2" expand-text="yes">\n    <xsl:note format="xdoc-md">\n      Uses { 'a': 1 } or {not xpath\n    </xsl:note>\n    <xsl:note>{also not xpath <b>{x</b></xsl:note>\n    <xsl:sequence select="1"/>\n  </xsl:template>`);
 		assert.deepEqual(await lint(xslt), []);
 	});
 
 	test('linter: parameters documented without a $, in a template', async () => {
-		assert.deepEqual(await lint(stylesheet(`<xsl:template name="t2">\n    <xsl:note format="xqdoc">\n      @param p the value\n    </xsl:note>\n    <xsl:param name="p"/>\n  </xsl:template>`)), []);
+		assert.deepEqual(await lint(stylesheet(`<xsl:template name="t2">\n    <xsl:note format="xdoc-md">\n      @param p the value\n    </xsl:note>\n    <xsl:param name="p"/>\n  </xsl:template>`)), []);
 	});
 });

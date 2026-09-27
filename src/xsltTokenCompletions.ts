@@ -18,7 +18,7 @@ import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { RecordType, RecordTypes, TemplateParamType } from './recordTypes';
-import { XqdocNotes } from './xqdocNote';
+import { XdocNotes } from './xdocNote';
 
 enum TagType {
 	XSLTstart,
@@ -1540,7 +1540,7 @@ export class XsltTokenCompletions {
 		}) : [];
 	}
 
-	// XSLT 4.0: within the content of a documentation note - an xsl:note with format="xqdoc" - the tag names after '@',
+	// XSLT 4.0: within the content of a documentation note - an xsl:note with format="xdoc-md" - the tag names after '@',
 	// and after '@param', the names of the parameters that aren't documented yet - otherwise there are no completions -
 	// undefined if the position isn't within a documentation note
 	public static getNoteCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
@@ -1550,7 +1550,7 @@ export class XsltTokenCompletions {
 		const startTagEnd = noteStart > -1 ? text.indexOf('>', noteStart) : -1;
 		// the cursor is after the note's start tag, with no other markup since, except CDATA sections - and it may be in one
 		const contentBefore = startTagEnd > -1 && startTagEnd < offset ? text.substring(startTagEnd + 1, offset).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '') : '<';
-		if (contentBefore.includes('<') || RecordTypes.attributeOfElementAt(text, noteStart + 1, 'format') !== XqdocNotes.format) {
+		if (contentBefore.includes('<') || RecordTypes.attributeOfElementAt(text, noteStart + 1, 'format') !== XdocNotes.format) {
 			return undefined;
 		}
 		const lineBefore = document.lineAt(position.line).text.substring(0, position.character);
@@ -1562,10 +1562,10 @@ export class XsltTokenCompletions {
 			if (!declaration) {
 				return [];
 			}
-			const note = XqdocNotes.parseNote(text, markup, noteStart);
+			const note = XdocNotes.parseNote(text, markup, noteStart);
 			const documented = (note?.tags ?? []).filter((tag) => tag.name === 'param').map((tag) => tag.paramName);
 			const range = new vscode.Range(position.translate(0, -param[1].length), position);
-			return XqdocNotes.paramNames(text, markup, declaration.offset).filter((name) => !documented.includes(name)).map((name, index) => {
+			return XdocNotes.paramNames(text, markup, declaration.offset).filter((name) => !documented.includes(name)).map((name, index) => {
 				const item = new vscode.CompletionItem('$' + name, vscode.CompletionItemKind.Variable);
 				item.insertText = `$${name} `;
 				item.range = range;
@@ -1576,12 +1576,12 @@ export class XsltTokenCompletions {
 		const tag = /@([\w-]*)$/.exec(lineBefore);
 		if (tag) {
 			const range = new vscode.Range(position.translate(0, -tag[1].length), position);
-			return XqdocNotes.tagNames.map((name, index) => {
+			return XdocNotes.tagNames.map((name, index) => {
 				const item = new vscode.CompletionItem('@' + name, vscode.CompletionItemKind.Keyword);
 				item.insertText = name + ' ';
 				item.filterText = name;
 				item.range = range;
-				item.detail = XqdocNotes.tagDescriptions[name];
+				item.detail = XdocNotes.tagDescriptions[name];
 				item.sortText = String(index).padStart(4, '0');
 				if (name === 'param') {
 					// then the parameter names

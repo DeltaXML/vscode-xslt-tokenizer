@@ -8,7 +8,7 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
-import { XqdocNotes } from './xqdocNote';
+import { XdocNotes } from './xdocNote';
 import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider, QuickRunTaskType } from './saxonTaskProvider';
@@ -41,7 +41,7 @@ const tokenModifiers = new Map<string, number>();
 
 const legend = (function () {
 	// the XSLT lexer's token types, then those for documentation notes
-	const tokenTypesLegend = XslLexer.getTextmateTypeLegend().concat(XqdocNotes.tokenTypes);
+	const tokenTypesLegend = XslLexer.getTextmateTypeLegend().concat(XdocNotes.tokenTypes);
 
 	const tokenModifiersLegend = [
 		'declaration', 'documentation', 'member', 'static', 'abstract', 'deprecated',
@@ -796,7 +796,7 @@ export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokens
 		const allTokens = this.xslLexer.analyse(text);
 		const builder = new vscode.SemanticTokensBuilder();
 		// XSLT 4.0 documentation notes: their tokens replace the lexer's tokens within their content
-		const notes = text.includes('xqdoc') ? XqdocNotes.highlight(text) : { tokens: [], ranges: [] };
+		const notes = text.includes('xdoc-md') ? XdocNotes.highlight(text) : { tokens: [], ranges: [] };
 		if (notes.ranges.length === 0) {
 			allTokens.forEach((token) => {
 				builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);

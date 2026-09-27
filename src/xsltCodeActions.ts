@@ -9,7 +9,7 @@ import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSym
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { RecordExtraction, RecordExtractionPlan } from './recordExtraction';
-import { XqdocNotes } from './xqdocNote';
+import { XdocNotes } from './xdocNote';
 import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
 import * as path from 'path';
@@ -236,7 +236,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		// XSLT 4.0: a documentation note for the xsl:function or xsl:template at the cursor
 		if (range.isEmpty && /\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)))) {
-			const note = XqdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start));
+			const note = XdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start));
 			if (note) {
 				const action = new vscode.CodeAction(XsltCodeActionKind.addDocumentationNote, vscode.CodeActionKind.RefactorRewrite);
 				action.edit = new vscode.WorkspaceEdit();

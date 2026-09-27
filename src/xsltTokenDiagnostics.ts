@@ -15,7 +15,7 @@ import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { RecordType, RecordTypes, FieldReference } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
-import { XqdocNotes } from './xqdocNote';
+import { XdocNotes } from './xdocNote';
 
 enum HasCharacteristic {
 	unknown,
@@ -4513,11 +4513,11 @@ export class XsltTokenDiagnostics {
 		};
 	}
 
-	// XSLT 4.0 documentation notes - an xsl:note with format="xqdoc" - of an xsl:function or xsl:template: each @param
+	// XSLT 4.0 documentation notes - an xsl:note with format="xdoc-md" - of an xsl:function or xsl:template: each @param
 	// must name one of its parameters
 	private static checkDocumentationNotes(document: vscode.TextDocument, problemTokens: BaseToken[]) {
 		const text = document.getText();
-		const noteOffsets = XqdocNotes.noteOffsets(text);
+		const noteOffsets = XdocNotes.noteOffsets(text);
 		if (noteOffsets.length === 0) {
 			return;
 		}
@@ -4528,8 +4528,8 @@ export class XsltTokenDiagnostics {
 			if (!declaration || !(declaration.name === 'xsl:function' || declaration.name === 'xsl:template')) {
 				return;
 			}
-			const paramNames = XqdocNotes.paramNames(text, markup, declaration.offset);
-			XqdocNotes.parseNote(text, markup, noteOffset)?.tags.forEach((tag) => {
+			const paramNames = XdocNotes.paramNames(text, markup, declaration.offset);
+			XdocNotes.parseNote(text, markup, noteOffset)?.tags.forEach((tag) => {
 				if (tag.name === 'param' && tag.paramName && tag.paramOffset !== undefined && !paramNames.includes(tag.paramName)) {
 					const position = document.positionAt(tag.paramOffset);
 					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.paramName.length, value: tag.paramName + RecordTypes.valueSeparator + declaration.name, tokenType: 0, error: ErrorType.NoteParamUnknown });

@@ -5,7 +5,7 @@ import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration } from "./xslLexer";
 import { LexPosition } from "./xpLexer";
 import { XsltTokenDiagnostics } from "./xsltTokenDiagnostics";
-import { XqdocNotes } from "./xqdocNote";
+import { XdocNotes } from "./xdocNote";
 import { RecordTypes } from "./recordTypes";
 import * as fs from 'fs';
 
@@ -98,10 +98,10 @@ export class XSLTHoverProvider implements HoverProvider {
 		const signature = `${bestMatch.name}(${paramList})${returnType}`;
 		const description = bestMatch.href ? `User-defined function, declared in ${path.basename(bestMatch.href)}` : 'User-defined function, declared in this stylesheet';
 		const note = XSLTHoverProvider.declarationNote(document, bestMatch);
-		return this.createHover(signature, note ? `${XqdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+		return this.createHover(signature, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
-	// the documentation note - an xsl:note with format="xqdoc" - of a function or template declaration, in this document
+	// the documentation note - an xsl:note with format="xdoc-md" - of a function or template declaration, in this document
 	// or the module declaring it
 	public static declarationNote(document: TextDocument, declaration: GlobalInstructionData) {
 		let text: string;
@@ -110,8 +110,8 @@ export class XSLTHoverProvider implements HoverProvider {
 		} catch {
 			return undefined;
 		}
-		const tagStart = text.lastIndexOf('<', XqdocNotes.offsetAt(text, declaration.token.line, declaration.token.startCharacter));
-		return tagStart > -1 ? XqdocNotes.forDeclaration(text, tagStart) : undefined;
+		const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, declaration.token.line, declaration.token.startCharacter));
+		return tagStart > -1 ? XdocNotes.forDeclaration(text, tagStart) : undefined;
 	}
 
 	// for the name of an xsl:call-template, the template's signature and documentation note - or for the name of an
@@ -149,7 +149,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (element === 'xsl:with-param') {
 			const paramIndex = template.memberNames?.indexOf(name) ?? -1;
 			const paramType = paramIndex > -1 ? template.memberTypes?.[paramIndex] : undefined;
-			const paramText = note ? XqdocNotes.paramText(note, name) : undefined;
+			const paramText = note ? XdocNotes.paramText(note, name) : undefined;
 			if (paramIndex === -1) {
 				return undefined;
 			}
@@ -157,7 +157,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		}
 		const params = (template.memberNames ?? []).map((paramName, i) => template.memberTypes?.[i] ? `$${paramName} as ${template.memberTypes[i]}` : `$${paramName}`).join(', ');
 		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
-		return this.createHover(`template ${templateName}(${params})`, note ? `${XqdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+		return this.createHover(`template ${templateName}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
 	private createHover(signature: string, description: string) {

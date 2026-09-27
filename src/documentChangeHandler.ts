@@ -122,10 +122,10 @@ export class DocumentChangeHandler {
 			DocumentChangeHandler.commaTriggerPending = true;
 		}
 		if (!triggerSuggest && !skipTrigger && activeChange.text === '@' && e.document.languageId === 'xslt') {
-			// a tag within a documentation note, an xsl:note with format="xqdoc"
+			// a tag within a documentation note, an xsl:note with format="xdoc-md"
 			const textBefore = e.document.getText(new vscode.Range(new vscode.Position(0, 0), activeChange.range.start));
 			const noteStart = textBefore.lastIndexOf('<xsl:note');
-			const noteTag = noteStart > -1 ? /^<xsl:note\s[^>]*format\s*=\s*["']xqdoc["'][^>]*>/.exec(textBefore.substring(noteStart)) : null;
+			const noteTag = noteStart > -1 ? /^<xsl:note\s[^>]*format\s*=\s*["']xdoc-md["'][^>]*>/.exec(textBefore.substring(noteStart)) : null;
 			// no other markup after the note's start tag, except CDATA sections
 			triggerSuggest = !!noteTag && !textBefore.substring(noteStart + noteTag[0].length).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '').includes('<');
 		}

@@ -1,16 +1,16 @@
 /**
- * Test suite for the semantic tokens of documentation notes - an xsl:note with format="xqdoc": tags such as @param,
+ * Test suite for the semantic tokens of documentation notes - an xsl:note with format="xdoc-md": tags such as @param,
  * parameter names, headings, bold and italic text, code spans, links and CDATA markers each have a token type, and the
- * rest of the text is xqdocText - they replace the lexer's tokens within the note, with no overlaps
+ * rest of the text is xdocText - they replace the lexer's tokens within the note, with no overlaps
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { XslLexer } from '../../src/xslLexer';
-import { XqdocNotes } from '../../src/xqdocNote';
+import { XdocNotes } from '../../src/xdocNote';
 import { XsltSemanticTokensProvider } from '../../src/extension';
 
-const legend = XslLexer.getTextmateTypeLegend().concat(XqdocNotes.tokenTypes);
+const legend = XslLexer.getTextmateTypeLegend().concat(XdocNotes.tokenTypes);
 
 // the tokens as [line, character, text, type]
 async function semanticTokens(xslt: string) {
@@ -37,33 +37,33 @@ function stylesheet(note: string) {
 </xsl:stylesheet>`;
 }
 
-const xqdocTokens = async (note: string) => (await semanticTokens(stylesheet(note))).filter((t) => t[3].startsWith('xqdoc')).map((t) => [t[2], t[3]]);
+const xdocTokens = async (note: string) => (await semanticTokens(stylesheet(note))).filter((t) => t[3].startsWith('xdoc')).map((t) => [t[2], t[3]]);
 
 suite('Documentation notes: semantic tokens', () => {
 	test('tags, a parameter name and inline Markdown', async () => {
-		assert.deepEqual(await xqdocTokens(`<xsl:note format="xqdoc">
+		assert.deepEqual(await xdocTokens(`<xsl:note format="xdoc-md">
       # Area
       Returns the **area**, *scaled*, see [docs](http://example.com) and \`$a * 2\`.
 
       @param $a the _first_
     </xsl:note>`), [
-			['# Area', 'xqdocHeading'],
-			['Returns the ', 'xqdocText'], ['**area**', 'xqdocBold'], [', ', 'xqdocText'], ['*scaled*', 'xqdocItalic'], [', see ', 'xqdocText'],
-			['[docs](http://example.com)', 'xqdocLink'], [' and ', 'xqdocText'], ['`$a * 2`', 'xqdocCode'], ['.', 'xqdocText'],
-			['@param', 'xqdocTag'], [' ', 'xqdocText'], ['$a', 'xqdocParam'], [' the ', 'xqdocText'], ['_first_', 'xqdocItalic']
+			['# Area', 'xdocHeading'],
+			['Returns the ', 'xdocText'], ['**area**', 'xdocBold'], [', ', 'xdocText'], ['*scaled*', 'xdocItalic'], [', see ', 'xdocText'],
+			['[docs](http://example.com)', 'xdocLink'], [' and ', 'xdocText'], ['`$a * 2`', 'xdocCode'], ['.', 'xdocText'],
+			['@param', 'xdocTag'], [' ', 'xdocText'], ['$a', 'xdocParam'], [' the ', 'xdocText'], ['_first_', 'xdocItalic']
 		]);
 	});
 
 	test('CDATA markers, with the text within classified', async () => {
-		assert.deepEqual(await xqdocTokens(`<xsl:note format="xqdoc"><![CDATA[Uses <b> & more.
+		assert.deepEqual(await xdocTokens(`<xsl:note format="xdoc-md"><![CDATA[Uses <b> & more.
       @param $a the first]]></xsl:note>`), [
-			['<![CDATA[', 'xqdocCdata'], ['Uses <b> & more.', 'xqdocText'],
-			['@param', 'xqdocTag'], [' ', 'xqdocText'], ['$a', 'xqdocParam'], [' the first', 'xqdocText'], [']]>', 'xqdocCdata']
+			['<![CDATA[', 'xdocCdata'], ['Uses <b> & more.', 'xdocText'],
+			['@param', 'xdocTag'], [' ', 'xdocText'], ['$a', 'xdocParam'], [' the first', 'xdocText'], [']]>', 'xdocCdata']
 		]);
 	});
 
 	test('no overlapping tokens', async () => {
-		const tokens = await semanticTokens(stylesheet(`<xsl:note format="xqdoc">Some &amp; text.\n      @return the **result**</xsl:note>`));
+		const tokens = await semanticTokens(stylesheet(`<xsl:note format="xdoc-md">Some &amp; text.\n      @return the **result**</xsl:note>`));
 		for (let i = 1; i < tokens.length; i++) {
 			const [line, character] = tokens[i];
 			const [previousLine, previousCharacter, previousText] = tokens[i - 1];
@@ -71,11 +71,11 @@ suite('Documentation notes: semantic tokens', () => {
 		}
 	});
 
-	test('a note without format="xqdoc" keeps the lexer tokens', async () => {
-		assert.deepEqual(await xqdocTokens(`<xsl:note>@param $a **not** highlighted</xsl:note>`), []);
+	test('a note without format="xdoc-md" keeps the lexer tokens', async () => {
+		assert.deepEqual(await xdocTokens(`<xsl:note>@param $a **not** highlighted</xsl:note>`), []);
 	});
 
 	test('a note with child elements keeps the lexer tokens', async () => {
-		assert.deepEqual(await xqdocTokens(`<xsl:note format="xqdoc">Uses <b>bold</b> markup</xsl:note>`), []);
+		assert.deepEqual(await xdocTokens(`<xsl:note format="xdoc-md">Uses <b>bold</b> markup</xsl:note>`), []);
 	});
 });

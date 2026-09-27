@@ -271,39 +271,39 @@
 					"anonymousFunction": [
 						"variable.other.constant"
 					],
-					"xqdocText": [
+					"xdocText": [
 						"comment.block.documentation",
 						"comment"
 					],
-					"xqdocTag": [
+					"xdocTag": [
 						"storage.type.class.jsdoc",
 						"keyword"
 					],
-					"xqdocParam": [
+					"xdocParam": [
 						"variable.other.jsdoc",
 						"variable.parameter"
 					],
-					"xqdocCode": [
+					"xdocCode": [
 						"markup.inline.raw",
 						"markup.inline.raw.string.markdown",
 						"string"
 					],
-					"xqdocBold": [
+					"xdocBold": [
 						"markup.bold"
 					],
-					"xqdocItalic": [
+					"xdocItalic": [
 						"markup.italic"
 					],
-					"xqdocHeading": [
+					"xdocHeading": [
 						"markup.heading",
 						"heading.1.markdown",
 						"markup.heading.markdown"
 					],
-					"xqdocLink": [
+					"xdocLink": [
 						"markup.underline.link",
 						"string.other.link"
 					],
-					"xqdocCdata": [
+					"xdocCdata": [
 						"punctuation.definition.tag.xml"
 					]
 				}
@@ -1071,47 +1071,47 @@
 		],
 		"semanticTokenTypes": [
 			{
-				"id": "xqdocText",
+				"id": "xdocText",
 				"superType": "comment",
-				"description": "The text of a documentation note: an xsl:note with format=\"xqdoc\""
+				"description": "The text of a documentation note: an xsl:note with format=\"xdoc-md\""
 			},
 			{
-				"id": "xqdocTag",
+				"id": "xdocTag",
 				"superType": "keyword",
 				"description": "A tag in a documentation note, e.g. @param"
 			},
 			{
-				"id": "xqdocParam",
+				"id": "xdocParam",
 				"superType": "parameter",
 				"description": "A parameter name in a documentation note, after @param"
 			},
 			{
-				"id": "xqdocCode",
+				"id": "xdocCode",
 				"superType": "string",
 				"description": "A code span in a documentation note, e.g. `code`"
 			},
 			{
-				"id": "xqdocBold",
+				"id": "xdocBold",
 				"superType": "comment",
 				"description": "Bold text in a documentation note, e.g. **bold**"
 			},
 			{
-				"id": "xqdocItalic",
+				"id": "xdocItalic",
 				"superType": "comment",
 				"description": "Italic text in a documentation note, e.g. *italic*"
 			},
 			{
-				"id": "xqdocHeading",
+				"id": "xdocHeading",
 				"superType": "comment",
 				"description": "A heading in a documentation note, e.g. # Heading"
 			},
 			{
-				"id": "xqdocLink",
+				"id": "xdocLink",
 				"superType": "string",
 				"description": "A link in a documentation note, e.g. [text](url)"
 			},
 			{
-				"id": "xqdocCdata",
+				"id": "xdocCdata",
 				"superType": "operator",
 				"description": "The start or end of a CDATA section in a documentation note"
 			},

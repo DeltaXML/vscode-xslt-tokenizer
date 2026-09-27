@@ -2,7 +2,7 @@ import { CancellationToken, MarkdownString, ParameterInformation, Position, Prov
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from "./xpLexer";
 import { DocumentTypes, GlobalInstructionType, LanguageConfiguration, XslLexer } from "./xslLexer";
-import { XqdocNotes } from "./xqdocNote";
+import { XdocNotes } from "./xdocNote";
 
 interface EnclosingCall {
 	functionName: string;
@@ -53,7 +53,7 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 	}
 
 	// a user-defined function declared in this stylesheet, with the descriptions from its documentation note, if any -
-	// an xsl:note with format="xqdoc" - preferring the declaration with the most parameters
+	// an xsl:note with format="xdoc-md" - preferring the declaration with the most parameters
 	private userFunctionSignature(document: TextDocument, fnName: string): SignatureInformation | undefined {
 		const candidates = (this.xslLexer?.globalInstructionData ?? []).filter((g) => g.type === GlobalInstructionType.Function && g.name === fnName);
 		if (candidates.length === 0) {
@@ -62,12 +62,12 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		const declaration = candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
 		const text = document.getText();
 		const tagStart = text.lastIndexOf('<', document.offsetAt(new Position(declaration.token.line, declaration.token.startCharacter)));
-		const note = tagStart > -1 ? XqdocNotes.forDeclaration(text, tagStart) : undefined;
+		const note = tagStart > -1 ? XdocNotes.forDeclaration(text, tagStart) : undefined;
 		const paramLabels = (declaration.memberNames ?? []).map((name, i) => declaration.memberTypes?.[i] ? `$${name} as ${declaration.memberTypes[i]}` : `$${name}`);
 		const signature = `${declaration.name}(${paramLabels.join(', ')})${declaration.returnType ? ' as ' + declaration.returnType : ''}`;
-		const info = new SignatureInformation(signature, note ? new MarkdownString(XqdocNotes.toMarkdown(note, false)) : undefined);
+		const info = new SignatureInformation(signature, note ? new MarkdownString(XdocNotes.toMarkdown(note, false)) : undefined);
 		info.parameters = paramLabels.map((label, i) => {
-			const paramText = note ? XqdocNotes.paramText(note, declaration.memberNames![i]) : undefined;
+			const paramText = note ? XdocNotes.paramText(note, declaration.memberNames![i]) : undefined;
 			return new ParameterInformation(label, paramText ? new MarkdownString(paramText) : undefined);
 		});
 		return info;
