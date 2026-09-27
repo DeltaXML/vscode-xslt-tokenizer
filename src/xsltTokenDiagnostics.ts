@@ -133,7 +133,8 @@ export enum DiagnosticCode {
 	noContextItem,
 	regexNoContextItem,
 	recordFieldMissing,
-	switchCasesMissing
+	switchCasesMissing,
+	noteParamsMissing
 }
 
 export class XsltTokenDiagnostics {
@@ -2877,7 +2878,7 @@ export class XsltTokenDiagnostics {
 		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
 		problemTokens.forEach((token) => {
 			if (token.recordFix) {
-				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
 					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
 			}
 		});
@@ -4162,6 +4163,15 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: '${tokenValue}' is also tested by an earlier xsl:when, so this xsl:when never matches it`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
+				case ErrorType.NoteParamDuplicate:
+					msg = `XSLT: The documentation note already has an @param for '$${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteParamsMissing:
+					msg = `XSLT: The documentation note has no @param for: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Information;
+					errCode = DiagnosticCode.noteParamsMissing;
+					break;
 				case ErrorType.NoteParamUnknown: {
 					const [paramName, declarationName] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XSLT: The documentation note's @param '$${paramName}' is not a parameter of this ${declarationName}`;
@@ -4529,12 +4539,34 @@ export class XsltTokenDiagnostics {
 				return;
 			}
 			const paramNames = XdocNotes.paramNames(text, markup, declaration.offset);
-			XdocNotes.parseNote(text, markup, noteOffset)?.tags.forEach((tag) => {
-				if (tag.name === 'param' && tag.paramName && tag.paramOffset !== undefined && !paramNames.includes(tag.paramName)) {
-					const position = document.positionAt(tag.paramOffset);
-					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.paramName.length, value: tag.paramName + RecordTypes.valueSeparator + declaration.name, tokenType: 0, error: ErrorType.NoteParamUnknown });
+			const note = XdocNotes.parseNote(text, markup, noteOffset);
+			const documented: string[] = [];
+			note?.tags.forEach((tag) => {
+				if (tag.name !== 'param' || !tag.paramName || tag.paramOffset === undefined) {
+					return;
 				}
+				const position = document.positionAt(tag.paramOffset);
+				if (!paramNames.includes(tag.paramName)) {
+					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.paramName.length, value: tag.paramName + RecordTypes.valueSeparator + declaration.name, tokenType: 0, error: ErrorType.NoteParamUnknown });
+				} else if (documented.includes(tag.paramName)) {
+					// the first @param for the name is the one used, e.g. for hover
+					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.paramName.length, value: tag.paramName, tokenType: 0, error: ErrorType.NoteParamDuplicate });
+				}
+				documented.push(tag.paramName);
 			});
+			// parameters without an @param, when the note has one for any parameter - with a fix that adds them after the last
+			const paramTags = note?.tags.filter((tag) => tag.name === 'param' && tag.paramName) ?? [];
+			const missing = paramNames.filter((name) => !paramTags.some((tag) => tag.paramName === name));
+			if (paramTags.length > 0 && missing.length > 0) {
+				const lastParam = paramTags[paramTags.length - 1];
+				const lineStart = text.lastIndexOf('\n', lastParam.offset - 1) + 1;
+				const indent = /^[ \t]*$/.test(text.substring(lineStart, lastParam.offset)) ? text.substring(lineStart, lastParam.offset) : '';
+				const fixPosition = document.positionAt(lastParam.endOffset);
+				const lines = missing.map((name) => `\n${indent}@param $${name} description`).join('');
+				const namePosition = document.positionAt(noteOffset + 1);
+				problemTokens.push({ line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:note'.length, value: missing.map((name) => '$' + name).join(', '), tokenType: 0,
+					error: ErrorType.NoteParamsMissing, recordFix: { line: fixPosition.line, character: fixPosition.character, text: lines } });
+			}
 		});
 	}
 

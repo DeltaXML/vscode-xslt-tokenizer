@@ -163,7 +163,8 @@ suite('Documentation notes', () => {
 
 	test('linter: an @param that is not a parameter', async () => {
 		assert.deepEqual(await lint(stylesheet(noteBody('Magnitude.\n      @param $c the value\n      @param $x the other'))), [
-			[`XSLT: The documentation note's @param '$x' is not a parameter of this xsl:function`, 'x']
+			[`XSLT: The documentation note's @param '$x' is not a parameter of this xsl:function`, 'x'],
+			['XSLT: The documentation note has no @param for: $k', 'xsl:note']
 		]);
 	});
 
@@ -193,8 +194,51 @@ suite('Documentation notes', () => {
 
 	test('linter: an @param within a CDATA section that is not a parameter', async () => {
 		assert.deepEqual(await lint(stylesheet(noteBody('<![CDATA[Magnitude.\n      @param $c the value\n      @param $x the other]]>'))), [
-			[`XSLT: The documentation note's @param '$x' is not a parameter of this xsl:function`, 'x']
+			[`XSLT: The documentation note's @param '$x' is not a parameter of this xsl:function`, 'x'],
+			['XSLT: The documentation note has no @param for: $k', 'xsl:note']
 		]);
+	});
+
+	test('linter: no message for parameters when the note has no @param', async () => {
+		assert.deepEqual(await lint(stylesheet(noteBody('Magnitude only.'))), []);
+	});
+
+	test('linter: a duplicate @param', async () => {
+		assert.deepEqual(await lint(stylesheet(noteBody('Magnitude.\n      @param $c the value\n      @param $k the factor\n      @param c the value again'))), [
+			[`XSLT: The documentation note already has an @param for '$c'`, 'c']
+		]);
+	});
+
+	test('linter: all parameters documented', async () => {
+		assert.deepEqual(await lint(stylesheet(noteBody('Magnitude.\n      @param $c the value\n      @param $k the factor'))), []);
+	});
+
+	// the note after applying 'Add missing @param' in an editor
+	async function addMissingParams(content: string) {
+		const document = await vscode.workspace.openTextDocument({ content: stylesheet(noteBody(content)), language: 'xslt' });
+		await vscode.window.showTextDocument(document);
+		const xslLexer = new XslLexer(XSLTConfiguration.configuration);
+		xslLexer.provideCharLevelState = true;
+		const diagnostics = XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: true }, DocumentTypes.XSLT40, document, xslLexer.analyse(document.getText()), xslLexer.globalInstructionData, [], []);
+		const missing = diagnostics.find((d) => d.message.startsWith('XSLT: The documentation note has no @param'));
+		assert.isDefined(missing);
+		const actions = new XSLTCodeActions().provideCodeActions(document, missing!.range, { diagnostics, triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		const fix = actions.find((a) => a.title === 'Add missing @param');
+		assert.isDefined(fix);
+		assert.isTrue(await vscode.workspace.applyEdit(fix!.edit!));
+		const text = document.getText();
+		const noteStart = text.indexOf('<xsl:note', text.indexOf('cx:mag'));
+		return text.substring(noteStart, text.indexOf('</xsl:note>', noteStart));
+	}
+
+	test('quick fix: add missing @param after the last one', async () => {
+		assert.equal(await addMissingParams('Magnitude.\n      @param $c the value\n        on two lines\n      @return the magnitude'),
+			'<xsl:note format="xdoc-md">\n      Magnitude.\n      @param $c the value\n        on two lines\n      @param $k description\n      @return the magnitude\n    ');
+	});
+
+	test('quick fix: add missing @param within a CDATA section', async () => {
+		assert.equal(await addMissingParams('<![CDATA[Magnitude.\n      @param $k the factor]]>'),
+			'<xsl:note format="xdoc-md">\n      <![CDATA[Magnitude.\n      @param $k the factor\n      @param $c description]]>\n    ');
 	});
 
 	test('linter: braces in the text of a note are not text value templates', async () => {

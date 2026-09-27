@@ -69,6 +69,7 @@ enum XsltCodeActionKind {
 	addMissingSwitchCasesWithContent = 'Add missing xsl:when cases with content',
 	extractRecordType = 'Extract record type',
 	addDocumentationNote = 'Add documentation note',
+	addMissingNoteParams = 'Add missing @param',
 }
 
 enum ExtractFunctionParams {
@@ -145,6 +146,22 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
+	// XSLT 4.0: adds an @param to a documentation note for each parameter without one - as a snippet, with a placeholder
+	// for each description
+	private static createNoteParamsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string }) {
+		const action = new vscode.CodeAction(XsltCodeActionKind.addMissingNoteParams, vscode.CodeActionKind.QuickFix);
+		action.diagnostics = [diagnostic];
+		action.edit = new vscode.WorkspaceEdit();
+		let tabStop = 1;
+		const snippet = fix.text.replace(/[$}\\]/g, '\\$&').replace(/ description(?=\n|$)/g, () => ` \${${tabStop++}:description}`);
+		const position = new vscode.Position(fix.line, fix.character);
+		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, position), new vscode.SnippetString(snippet));
+		// the lines have the indentation
+		snippetEdit.keepWhitespace = true;
+		action.edit.set(document.uri, [snippetEdit]);
+		return action;
+	}
+
 	// XSLT 4.0: adds an xsl:when for each enumeration value that an xsl:switch doesn't test
 	private static createSwitchCasesAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }, title: string, text: string) {
 		const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
@@ -200,12 +217,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();
 		context.diagnostics
-			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing)
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing)
 			.forEach(diagnostic => {
 				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
 				if (fix && !addedFixes.has(fix)) {
 					addedFixes.add(fix);
-					if (diagnostic.code === DiagnosticCode.switchCasesMissing) {
+					if (diagnostic.code === DiagnosticCode.noteParamsMissing) {
+						codeActions.push(XSLTCodeActions.createNoteParamsAction(document, diagnostic, fix));
+					} else if (diagnostic.code === DiagnosticCode.switchCasesMissing) {
 						codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithSelect, fix.text));
 						if (fix.altText !== undefined) {
 							codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithContent, fix.altText));

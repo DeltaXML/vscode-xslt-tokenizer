@@ -24,6 +24,8 @@ export interface XdocTag {
 	// the document offset of the '@', and of the parameter name
 	offset: number;
 	paramOffset?: number;
+	// the document offset after the last character of the tag's text, which may be on a following line
+	endOffset: number;
 }
 
 export interface XdocNote {
@@ -217,12 +219,16 @@ export class XdocNotes {
 					paramName: isParam ? tag[4] : undefined,
 					text: line.substring(textStart).trim(),
 					offset: documentOffset(lineStart + tag[1].length),
-					paramOffset: isParam ? documentOffset(lineStart + tag[0].length - tag[4].length) : undefined
+					paramOffset: isParam ? documentOffset(lineStart + tag[0].length - tag[4].length) : undefined,
+					endOffset: documentOffset(lineStart + line.trimEnd().length - 1) + 1
 				});
 			} else if (tags.length > 0) {
 				// the continuation of the last tag's text
 				const last = tags[tags.length - 1];
 				last.text = (last.text + '\n' + line.trim()).trim();
+				if (line.trim() !== '') {
+					last.endOffset = documentOffset(lineStart + line.trimEnd().length - 1) + 1;
+				}
 			} else {
 				descriptionLines.push(line);
 			}
