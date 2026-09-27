@@ -270,6 +270,33 @@
 					],
 					"anonymousFunction": [
 						"variable.other.constant"
+					],
+					"xqdocText": [
+						"comment.block.documentation"
+					],
+					"xqdocTag": [
+						"storage.type.class.jsdoc"
+					],
+					"xqdocParam": [
+						"variable.other.jsdoc"
+					],
+					"xqdocCode": [
+						"markup.inline.raw"
+					],
+					"xqdocBold": [
+						"markup.bold"
+					],
+					"xqdocItalic": [
+						"markup.italic"
+					],
+					"xqdocHeading": [
+						"markup.heading"
+					],
+					"xqdocLink": [
+						"markup.underline.link"
+					],
+					"xqdocCdata": [
+						"punctuation.definition.tag.xml"
 					]
 				}
 			}
@@ -1035,6 +1062,51 @@
 			}
 		],
 		"semanticTokenTypes": [
+			{
+				"id": "xqdocText",
+				"superType": "comment",
+				"description": "The text of a documentation note: an xsl:note with format=\"xqdoc\""
+			},
+			{
+				"id": "xqdocTag",
+				"superType": "keyword",
+				"description": "A tag in a documentation note, e.g. @param"
+			},
+			{
+				"id": "xqdocParam",
+				"superType": "parameter",
+				"description": "A parameter name in a documentation note, after @param"
+			},
+			{
+				"id": "xqdocCode",
+				"superType": "string",
+				"description": "A code span in a documentation note, e.g. `code`"
+			},
+			{
+				"id": "xqdocBold",
+				"superType": "comment",
+				"description": "Bold text in a documentation note, e.g. **bold**"
+			},
+			{
+				"id": "xqdocItalic",
+				"superType": "comment",
+				"description": "Italic text in a documentation note, e.g. *italic*"
+			},
+			{
+				"id": "xqdocHeading",
+				"superType": "comment",
+				"description": "A heading in a documentation note, e.g. # Heading"
+			},
+			{
+				"id": "xqdocLink",
+				"superType": "string",
+				"description": "A link in a documentation note, e.g. [text](url)"
+			},
+			{
+				"id": "xqdocCdata",
+				"superType": "operator",
+				"description": "The start or end of a CDATA section in a documentation note"
+			},
 			{
 				"id": "attributeNameTest",
 				"superType": "struct",

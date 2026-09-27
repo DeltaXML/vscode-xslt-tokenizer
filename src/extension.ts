@@ -8,6 +8,7 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
+import { XqdocNotes } from './xqdocNote';
 import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider, QuickRunTaskType } from './saxonTaskProvider';
@@ -39,7 +40,8 @@ import { FileSelection } from './fileSelection';
 const tokenModifiers = new Map<string, number>();
 
 const legend = (function () {
-	const tokenTypesLegend = XslLexer.getTextmateTypeLegend();
+	// the XSLT lexer's token types, then those for documentation notes
+	const tokenTypesLegend = XslLexer.getTextmateTypeLegend().concat(XqdocNotes.tokenTypes);
 
 	const tokenModifiersLegend = [
 		'declaration', 'documentation', 'member', 'static', 'abstract', 'deprecated',
@@ -790,11 +792,30 @@ export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokens
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		// console.log('provideDocumentSemanticTokens');
-		const allTokens = this.xslLexer.analyse(document.getText());
+		const text = document.getText();
+		const allTokens = this.xslLexer.analyse(text);
 		const builder = new vscode.SemanticTokensBuilder();
-		allTokens.forEach((token) => {
-			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
-		});
+		// XSLT 4.0 documentation notes: their tokens replace the lexer's tokens within their content
+		const notes = text.includes('xqdoc') ? XqdocNotes.highlight(text) : { tokens: [], ranges: [] };
+		if (notes.ranges.length === 0) {
+			allTokens.forEach((token) => {
+				builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
+			});
+			return builder.build();
+		}
+		const lineRanges = notes.ranges.map(([start, end]) => [document.positionAt(start).line, document.positionAt(end).line]);
+		const isInNote = (token: BaseToken) => lineRanges.some(([startLine, endLine], i) => token.line >= startLine && token.line <= endLine && (() => {
+			const offset = document.offsetAt(new vscode.Position(token.line, token.startCharacter));
+			return offset < notes.ranges[i][1] && offset + token.length > notes.ranges[i][0];
+		})());
+		const noteTypeStart = XslLexer.getTextmateTypeLegend().length;
+		const merged = allTokens.filter((token) => !isInNote(token)).map((token) => ({ line: token.line, character: token.startCharacter, length: token.length, type: token.tokenType }))
+			.concat(notes.tokens.map((token) => {
+				const position = document.positionAt(token.offset);
+				return { line: position.line, character: position.character, length: token.length, type: noteTypeStart + token.type };
+			}))
+			.sort((a, b) => a.line - b.line || a.character - b.character);
+		merged.forEach((token) => builder.push(token.line, token.character, token.length, token.type, 0));
 		return builder.build();
 	}
 }

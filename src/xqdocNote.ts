@@ -35,7 +35,133 @@ export interface XqdocNote {
 	contentEnd: number;
 }
 
+// a highlighting token within a documentation note: a document offset and length on one line, and its type, an index in
+// XqdocNotes.tokenTypes
+export interface XqdocToken {
+	offset: number;
+	length: number;
+	type: number;
+}
+
 export class XqdocNotes {
+	// the semantic token types for documentation notes, after those of the XSLT lexer
+	public static readonly tokenTypes = ['xqdocText', 'xqdocTag', 'xqdocParam', 'xqdocCode', 'xqdocBold', 'xqdocItalic', 'xqdocHeading', 'xqdocLink', 'xqdocCdata'];
+	private static readonly textType = 0;
+	private static readonly tagType = 1;
+	private static readonly paramType = 2;
+	private static readonly codeType = 3;
+	private static readonly boldType = 4;
+	private static readonly italicType = 5;
+	private static readonly headingType = 6;
+	private static readonly linkType = 7;
+	private static readonly cdataType = 8;
+
+	// the highlighting tokens for the content of each documentation note - an xsl:note with format="xqdoc" - with the
+	// content ranges they replace: notes with child elements are not included, as their markup has its own highlighting
+	public static highlight(text: string): { tokens: XqdocToken[], ranges: [number, number][] } {
+		const tokens: XqdocToken[] = [];
+		const ranges: [number, number][] = [];
+		const noteOffsets = XqdocNotes.noteOffsets(text);
+		if (noteOffsets.length === 0) {
+			return { tokens, ranges };
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		for (const noteOffset of noteOffsets) {
+			const tagRgx = new RegExp(RecordTypes.tagPattern, 'y');
+			tagRgx.lastIndex = noteOffset;
+			const startTag = tagRgx.exec(markup);
+			if (!startTag || startTag[3]) {
+				continue;
+			}
+			const contentStart = noteOffset + startTag[0].length;
+			const contentEnd = text.lastIndexOf('<', RecordExtraction.elementEnd(markup, noteOffset) - 1);
+			// only text and CDATA sections - comments are blanked out in the markup, so are left as they are
+			if (contentEnd < contentStart || markup.substring(contentStart, contentEnd).includes('<') ||
+				text.substring(contentStart, contentEnd).replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '').includes('<')) {
+				continue;
+			}
+			ranges.push([contentStart, contentEnd]);
+			let lineStart = contentStart;
+			let inCdata = false;
+			while (lineStart < contentEnd) {
+				const newLine = text.indexOf('\n', lineStart);
+				const lineEnd = newLine === -1 || newLine > contentEnd ? contentEnd : newLine;
+				inCdata = XqdocNotes.highlightLine(text, lineStart, lineEnd, inCdata, tokens);
+				lineStart = lineEnd + 1;
+			}
+		}
+		return { tokens, ranges };
+	}
+
+	// adds the tokens for a line of a note: CDATA markers are tokens of their own, and the text is classified as if they
+	// weren't there - returns true if the line ends within a CDATA section
+	private static highlightLine(text: string, lineStart: number, lineEnd: number, inCdata: boolean, tokens: XqdocToken[]): boolean {
+		// the line's text without CDATA markers, with the document offset of each of its characters
+		const chars: string[] = [];
+		const offsets: number[] = [];
+		let i = lineStart;
+		while (i < lineEnd) {
+			const marker = !inCdata && text.startsWith('<![CDATA[', i) ? '<![CDATA[' : inCdata && text.startsWith(']]>', i) ? ']]>' : undefined;
+			if (marker) {
+				tokens.push({ offset: i, length: Math.min(marker.length, lineEnd - i), type: XqdocNotes.cdataType });
+				inCdata = marker === '<![CDATA[';
+				i += marker.length;
+			} else {
+				chars.push(text.charAt(i));
+				offsets.push(i);
+				i++;
+			}
+		}
+		const line = chars.join('');
+		// the ranges [start, end) of the line's text, by type - later ones override earlier ones where they overlap
+		const typed: { start: number, end: number, type: number }[] = [];
+		const firstChar = line.search(/\S/);
+		if (firstChar === -1) {
+			return inCdata;
+		}
+		typed.push({ start: firstChar, end: line.trimEnd().length, type: XqdocNotes.textType });
+		const tag = /^(\s*)(@([\w-]+))(?:(\s+)(\$?[\w.:-]+))?/.exec(line);
+		const heading = /^\s*#{1,6}\s/.test(line);
+		if (heading) {
+			typed.push({ start: firstChar, end: line.trimEnd().length, type: XqdocNotes.headingType });
+		} else {
+			if (tag && XqdocNotes.tagNames.includes(tag[3])) {
+				const tagEnd = tag[1].length + tag[2].length;
+				typed.push({ start: tag[1].length, end: tagEnd, type: XqdocNotes.tagType });
+				if (tag[3] === 'param' && tag[5]) {
+					const paramStart = tagEnd + tag[4].length;
+					typed.push({ start: paramStart, end: paramStart + tag[5].length, type: XqdocNotes.paramType });
+				}
+			}
+			// inline Markdown: code spans, links, bold and italic - code spans are last, as their content isn't Markdown
+			const inline: [RegExp, number][] = [
+				[/\[[^\]\n]*\]\([^)\s]*\)/g, XqdocNotes.linkType],
+				[/(\*\*|__)(?=\S)[^*_\n]*?\S\1/g, XqdocNotes.boldType],
+				[/(?<![*\w])(\*|_)(?=[^\s*_])[^*_\n]*?[^\s*_]\1(?![*\w])/g, XqdocNotes.italicType],
+				[/(`+)[^`\n]*?\1/g, XqdocNotes.codeType]
+			];
+			for (const [rgx, type] of inline) {
+				for (const match of line.matchAll(rgx)) {
+					typed.push({ start: match.index!, end: match.index! + match[0].length, type });
+				}
+			}
+		}
+		// the type of each character, the last range for it winning
+		const types = new Array<number>(line.length).fill(-1);
+		typed.forEach((range) => types.fill(range.type, range.start, range.end));
+		// a token for each run of characters of the same type, split where a CDATA marker was removed
+		let runStart = 0;
+		for (let c = 1; c <= line.length; c++) {
+			const isRunEnd = c === line.length || types[c] !== types[runStart] || offsets[c] !== offsets[c - 1] + 1;
+			if (isRunEnd) {
+				if (types[runStart] > -1) {
+					tokens.push({ offset: offsets[runStart], length: offsets[c - 1] - offsets[runStart] + 1, type: types[runStart] });
+				}
+				runStart = c;
+			}
+		}
+		return inCdata;
+	}
 	public static readonly format = 'xqdoc';
 	public static readonly tagNames = ['param', 'return', 'see', 'since', 'deprecated', 'error'];
 	public static readonly tagDescriptions: { [name: string]: string } = {
