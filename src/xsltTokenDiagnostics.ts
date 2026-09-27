@@ -2103,10 +2103,11 @@ export class XsltTokenDiagnostics {
 							} else if (tv === '{' && (prevToken.charType === CharLevelState.lBt || prevToken.charType === CharLevelState.mBt)) {
 								// string template variable part
 							} else if (!isXPathError && prevToken?.tokenType === TokenLevelState.string) {
-								// check operator is permitted to follow a string - not a node or numeric operator:
+								// check operator is permitted to follow a string - not a node or numeric operator - a predicate is
+								// permitted, as for any primary expression, e.g. 'a'[$show]
 								switch (tv.length) {
 									case 1:
-										isXPathError = (tv === '(' || tv === '[' || tv === '{' || tv === '-' || tv === '+' || tv === '|' || tv === '?' || tv === '*' || tv === '.');
+										isXPathError = (tv === '(' || tv === '{' || tv === '-' || tv === '+' || tv === '|' || tv === '?' || tv === '*' || tv === '.');
 										break;
 									case 2:
 										isXPathError = (tv === 'as' || tv === 'of' || tv === '//' || tv === '{}' || tv === '[]' || tv === '()' || tv === '*:' || tv === '::' || tv === '<<' || tv === '>>');
@@ -4683,13 +4684,28 @@ export class XsltTokenDiagnostics {
 		if (ranges.length === 0) {
 			return;
 		}
-		const tokenOffset = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter));
 		const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && t.tokenType !== TokenLevelState.comment);
+		// the tokens' document offsets, in document order - for a binary search for the first token of each pattern
+		const offsets = xpathTokens.map((t) => document.offsetAt(new vscode.Position(t.line, t.startCharacter)));
 		ranges.forEach(([start, end]) => {
 			// for each open bracket, whether 'or' and ',' are allowed within it
 			const allowed: boolean[] = [];
 			let previous: BaseToken | undefined;
-			xpathTokens.filter((t) => tokenOffset(t) >= start && tokenOffset(t) < end).forEach((t) => {
+			let low = 0;
+			let high = offsets.length;
+			while (low < high) {
+				const mid = (low + high) >> 1;
+				if (offsets[mid] < start) {
+					low = mid + 1;
+				} else {
+					high = mid;
+				}
+			}
+			const patternTokens: BaseToken[] = [];
+			for (let i = low; i < offsets.length && offsets[i] < end; i++) {
+				patternTokens.push(xpathTokens[i]);
+			}
+			patternTokens.forEach((t) => {
 				const isOpen = t.charType === CharLevelState.lB || t.charType === CharLevelState.lPr || t.charType === CharLevelState.lBr;
 				const isClose = t.charType === CharLevelState.rB || t.charType === CharLevelState.rPr || t.charType === CharLevelState.rBr;
 				if (isOpen) {
