@@ -73,8 +73,11 @@ export class XqdocNotes {
 		return XqdocNotes.parse(text.substring(contentStart, contentEnd), contentStart);
 	}
 
-	// parses the content of a note, at the document offset
-	public static parse(content: string, contentStart = 0): XqdocNote {
+	// parses the content of a note, at the document offset - CDATA sections and entity references are decoded first, as
+	// either may span the description and the tags
+	public static parse(rawContent: string, contentStart = 0): XqdocNote {
+		const { text: content, offsets } = XqdocNotes.decode(rawContent);
+		const documentOffset = (index: number) => contentStart + offsets[index];
 		const descriptionLines: string[] = [];
 		const tags: XqdocTag[] = [];
 		let lineStart = 0;
@@ -87,8 +90,8 @@ export class XqdocNotes {
 					name: tag[2],
 					paramName: isParam ? tag[4] : undefined,
 					text: line.substring(textStart).trim(),
-					offset: contentStart + lineStart + tag[1].length,
-					paramOffset: isParam ? contentStart + lineStart + tag[0].length - tag[4].length : undefined
+					offset: documentOffset(lineStart + tag[1].length),
+					paramOffset: isParam ? documentOffset(lineStart + tag[0].length - tag[4].length) : undefined
 				});
 			} else if (tags.length > 0) {
 				// the continuation of the last tag's text
@@ -99,18 +102,53 @@ export class XqdocNotes {
 			}
 			lineStart += line.length + 1;
 		}
-		return { description: XqdocNotes.dedent(descriptionLines), tags, contentStart, contentEnd: contentStart + content.length };
+		return { description: XqdocNotes.dedent(descriptionLines), tags, contentStart, contentEnd: contentStart + rawContent.length };
+	}
+
+	// the text of the content: the text within CDATA sections, without their '<![CDATA[' and ']]>', and elsewhere with
+	// entity and character references replaced - with the offset in the content of each character of the text
+	public static decode(content: string): { text: string, offsets: number[] } {
+		const chars: string[] = [];
+		const offsets: number[] = [];
+		const entities: { [name: string]: string } = { lt: '<', gt: '>', amp: '&', quot: '"', apos: '\'' };
+		let i = 0;
+		while (i < content.length) {
+			if (content.startsWith('<![CDATA[', i)) {
+				const end = content.indexOf(']]>', i + 9);
+				const cdataEnd = end === -1 ? content.length : end;
+				for (let j = i + 9; j < cdataEnd; j++) {
+					chars.push(content.charAt(j));
+					offsets.push(j);
+				}
+				i = end === -1 ? content.length : end + 3;
+				continue;
+			}
+			const reference = content.charAt(i) === '&' ? /^&(#x[0-9a-fA-F]+|#[0-9]+|lt|gt|amp|quot|apos);/.exec(content.substring(i, i + 12)) : null;
+			if (reference) {
+				const name = reference[1];
+				chars.push(name.startsWith('#x') ? String.fromCodePoint(parseInt(name.substring(2), 16)) : name.startsWith('#') ? String.fromCodePoint(parseInt(name.substring(1), 10)) : entities[name]);
+				offsets.push(i);
+				i += reference[0].length;
+				continue;
+			}
+			chars.push(content.charAt(i));
+			offsets.push(i);
+			i++;
+		}
+		// the offset after the last character
+		offsets.push(content.length);
+		return { text: chars.join(''), offsets };
 	}
 
 	// Markdown for the note, e.g. for a hover - with the parameters, unless they're shown elsewhere
 	public static toMarkdown(note: XqdocNote, includeParams = true): string {
 		const parts: string[] = [];
-		const description = XqdocNotes.unescape(note.description);
+		const description = XqdocNotes.markdownText(note.description);
 		if (description) {
 			parts.push(description);
 		}
 		const tagLines = note.tags.filter((tag) => includeParams || tag.name !== 'param').map((tag) => {
-			const text = XqdocNotes.unescape(tag.text);
+			const text = XqdocNotes.markdownText(tag.text);
 			switch (tag.name) {
 				case 'param':
 					return `*@param* \`$${tag.paramName ?? ''}\`${text ? ' — ' + text : ''}`;
@@ -130,7 +168,7 @@ export class XqdocNotes {
 	// the text of the @param tag for the parameter
 	public static paramText(note: XqdocNote, paramName: string): string | undefined {
 		const tag = note.tags.find((t) => t.name === 'param' && t.paramName === paramName);
-		return tag ? XqdocNotes.unescape(tag.text) : undefined;
+		return tag ? XqdocNotes.markdownText(tag.text) : undefined;
 	}
 
 	// the declaration's parameter names, from its xsl:param children
@@ -193,13 +231,10 @@ export class XqdocNotes {
 		return offset + character;
 	}
 
-	// the text of CDATA sections, and with entity and character references replaced
-	private static unescape(text: string) {
-		return text.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (m, cdata) => cdata.replace(/&/g, '\u0000'))
-			.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, '\'')
-			.replace(/&#x([0-9a-fA-F]+);/g, (m, hex) => String.fromCodePoint(parseInt(hex, 16)))
-			.replace(/&#([0-9]+);/g, (m, dec) => String.fromCodePoint(parseInt(dec, 10)))
-			.replace(/&amp;/g, '&').replace(/\u0000/g, '&');
+	// Markdown for decoded text, e.g. from a CDATA section: '&' and '<' outside a code span are escaped, so that the text
+	// is shown as written - e.g. '&lt;' in a CDATA section, and '<b>', which would otherwise be removed as raw HTML
+	private static markdownText(text: string) {
+		return text.split(/(`+[\s\S]*?`+)/).map((part, index) => index % 2 === 1 ? part : part.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('');
 	}
 
 	// the lines without their common indentation, and without leading and trailing empty lines

@@ -167,6 +167,36 @@ suite('Documentation notes', () => {
 		]);
 	});
 
+	test('hover: a note that is a CDATA section', async () => {
+		const body = `<xsl:function name="cx:cd" as="xs:boolean">\n    <xsl:note format="xqdoc"><![CDATA[\n      True if $a < $b, e.g. <code>, not &lt;.\n\n      @param $a the first\n    ]]></xsl:note>\n    <xsl:param name="a"/>\n    <xsl:sequence select="true()"/>\n  </xsl:function>\n  ${call('cx:c¦d(1)')}`;
+		const text = await hoverText(body);
+		// escaped for Markdown, so that it's shown as written: 'True if $a < $b, e.g. <code>, not &lt;.'
+		assert.include(text, 'True if $a &lt; $b, e.g. &lt;code>, not &amp;lt;.');
+		assert.include(text, '*@param* `$a` — the first');
+		assert.notInclude(text, 'CDATA');
+		assert.notInclude(text, ']]>');
+	});
+
+	test('hover: text before a CDATA section that spans the tags', async () => {
+		const body = `<xsl:function name="cx:cd" as="xs:boolean">\n    <xsl:note format="xqdoc">\n      Intro &amp; more.\n      <![CDATA[With <b>code</b>.\n      @param $a the first]]>\n    </xsl:note>\n    <xsl:param name="a"/>\n    <xsl:sequence select="true()"/>\n  </xsl:function>\n  ${call('cx:c¦d(1)')}`;
+		const text = await hoverText(body);
+		// 'Intro & more.' - the entity reference is decoded - then the CDATA section's text as written
+		assert.include(text, 'Intro &amp; more.\nWith &lt;b>code&lt;/b>.');
+		assert.include(text, '*@param* `$a` — the first');
+		assert.notInclude(text, 'CDATA');
+		assert.notInclude(text, ']]>');
+	});
+
+	test('completion: tag names within a CDATA section', async () => {
+		assert.deepEqual(await completionLabels(stylesheet(noteBody('<![CDATA[Magnitude with a < b.\n      @¦]]>'))), ['@param', '@return', '@see', '@since', '@deprecated', '@error']);
+	});
+
+	test('linter: an @param within a CDATA section that is not a parameter', async () => {
+		assert.deepEqual(await lint(stylesheet(noteBody('<![CDATA[Magnitude.\n      @param $c the value\n      @param $x the other]]>'))), [
+			[`XSLT: The documentation note's @param '$x' is not a parameter of this xsl:function`, 'x']
+		]);
+	});
+
 	test('linter: braces in the text of a note are not text value templates', async () => {
 		const xslt = stylesheet(`<xsl:template name="t2" expand-text="yes">\n    <xsl:note format="xqdoc">\n      Uses { 'a': 1 } or {not xpath\n    </xsl:note>\n    <xsl:note>{also not xpath <b>{x</b></xsl:note>\n    <xsl:sequence select="1"/>\n  </xsl:template>`);
 		assert.deepEqual(await lint(xslt), []);

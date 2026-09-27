@@ -125,7 +125,9 @@ export class DocumentChangeHandler {
 			// a tag within a documentation note, an xsl:note with format="xqdoc"
 			const textBefore = e.document.getText(new vscode.Range(new vscode.Position(0, 0), activeChange.range.start));
 			const noteStart = textBefore.lastIndexOf('<xsl:note');
-			triggerSuggest = noteStart > -1 && textBefore.lastIndexOf('<') === noteStart && /^<xsl:note\s[^>]*format\s*=\s*["']xqdoc["'][^>]*>/.test(textBefore.substring(noteStart));
+			const noteTag = noteStart > -1 ? /^<xsl:note\s[^>]*format\s*=\s*["']xqdoc["'][^>]*>/.exec(textBefore.substring(noteStart)) : null;
+			// no other markup after the note's start tag, except CDATA sections
+			triggerSuggest = !!noteTag && !textBefore.substring(noteStart + noteTag[0].length).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '').includes('<');
 		}
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<' || activeChange.text.endsWith('::')) {
 			let isCloseTagFeature = false;

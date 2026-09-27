@@ -1548,9 +1548,9 @@ export class XsltTokenCompletions {
 		const offset = document.offsetAt(position);
 		const noteStart = offset > 0 ? text.lastIndexOf('<xsl:note', offset - 1) : -1;
 		const startTagEnd = noteStart > -1 ? text.indexOf('>', noteStart) : -1;
-		// the cursor is after the note's start tag, with no other markup since
-		if (startTagEnd === -1 || startTagEnd >= offset || text.lastIndexOf('<', offset - 1) !== noteStart ||
-			RecordTypes.attributeOfElementAt(text, noteStart + 1, 'format') !== XqdocNotes.format) {
+		// the cursor is after the note's start tag, with no other markup since, except CDATA sections - and it may be in one
+		const contentBefore = startTagEnd > -1 && startTagEnd < offset ? text.substring(startTagEnd + 1, offset).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '') : '<';
+		if (contentBefore.includes('<') || RecordTypes.attributeOfElementAt(text, noteStart + 1, 'format') !== XqdocNotes.format) {
 			return undefined;
 		}
 		const lineBefore = document.lineAt(position.line).text.substring(0, position.character);
