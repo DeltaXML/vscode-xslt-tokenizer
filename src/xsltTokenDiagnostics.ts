@@ -2849,6 +2849,14 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
 			XsltTokenDiagnostics.checkDocumentationNotes(document, problemTokens);
 		}
+		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
+		RecordTypes.checkMapConstructorKeys(allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber), problemTokens);
+		if (documentText.includes('<xsl:map')) {
+			RecordTypes.duplicateMapEntryKeys(documentText, RecordTypes.blankMarkup(documentText)).forEach((duplicate) => {
+				const position = document.positionAt(duplicate.offset);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: duplicate.key.length, value: duplicate.key, tokenType: 0, error: ErrorType.MapEntryKeyDuplicate });
+			});
+		}
 		if (XsltTokenDiagnostics.isXPath40(docType)) {
 			// XPath 4.0: the value of a typed let binding, e.g. let $p as person := { ... }
 			const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
@@ -4227,6 +4235,12 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.RecordFieldDuplicate:
 					msg = `XPath: Duplicate field name in the record type: '${tokenValue}'`;
+					break;
+				case ErrorType.MapKeyDuplicate:
+					msg = `XPath: Duplicate key in the map constructor: ${tokenValue}`;
+					break;
+				case ErrorType.MapEntryKeyDuplicate:
+					msg = `XSLT: Duplicate key in the xsl:map - an xsl:map-entry has the same key: ${tokenValue}`;
 					break;
 				case ErrorType.EnumValueDuplicate:
 					msg = `XPath: Duplicate value in the enumeration type: '${tokenValue}'`;

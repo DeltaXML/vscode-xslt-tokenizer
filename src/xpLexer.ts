@@ -1692,6 +1692,8 @@ export enum ErrorType {
     ExtensibleRecordType,
     RecordFieldDuplicate,
     EnumValueDuplicate,
+    MapKeyDuplicate,
+    MapEntryKeyDuplicate,
     UndeclaredItemType,
     InlineFunctionFnRequiresXPath40,
     FocusFunctionRequiresXPath40,

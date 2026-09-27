@@ -631,6 +631,83 @@ export class RecordTypes {
 		});
 	}
 
+	// the identity of a literal map key, for finding duplicates - the same for 'a' and "a", and for 1 and 1.0, but not for
+	// 1 and '1' - undefined if it's not a literal
+	public static literalKeyIdentity(keyText: string): string | undefined {
+		// the quotes may be entity references, e.g. &quot;a&quot; in an attribute delimited by '"'
+		const quoted = /^(['"]|&quot;|&apos;)([\s\S]*)\1$/.exec(keyText);
+		if (quoted) {
+			return 's' + quoted[2].split(quoted[1] + quoted[1]).join(quoted[1]);
+		}
+		return /^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(keyText) ? 'n' + Number(keyText) : undefined;
+	}
+
+	// a duplicate literal key in a map constructor, e.g. map { 'a': 1, 'a': 2 } - as in Saxon, a static error XQDY0137
+	public static checkMapConstructorKeys(tokens: BaseToken[], problemTokens: BaseToken[]) {
+		tokens.forEach((token, index) => {
+			if (token.charType !== CharLevelState.lBr) {
+				return;
+			}
+			const closeIndex = RecordTypes.closingTokenIndex(tokens, index);
+			if (closeIndex < 0) {
+				return;
+			}
+			const keys = new Set<string>();
+			let depth = 0;
+			let isEntryStart = true;
+			for (let i = index + 1; i < closeIndex; i++) {
+				const t = tokens[i];
+				if (t.tokenType === TokenLevelState.comment) {
+					continue;
+				}
+				if (depth === 0 && t.charType === CharLevelState.sep && t.value === ',') {
+					isEntryStart = true;
+					continue;
+				}
+				if (isEntryStart && depth === 0) {
+					// a key is a single token followed by ':' - which also excludes braces that aren't a map constructor
+					const next = RecordTypes.nextNonComment(tokens, i);
+					const isKey = next > -1 && next < closeIndex && tokens[next].charType === CharLevelState.sep && tokens[next].value === ':';
+					const isLiteral = t.tokenType === TokenLevelState.mapKey || t.tokenType === TokenLevelState.string || t.tokenType === TokenLevelState.number;
+					const identity = isKey && isLiteral ? RecordTypes.literalKeyIdentity(t.value) : undefined;
+					if (identity !== undefined && keys.has(identity) && !t.error) {
+						problemTokens.push(RecordTypes.problemToken(t, ErrorType.MapKeyDuplicate, t.value));
+					} else if (identity !== undefined) {
+						keys.add(identity);
+					}
+				}
+				isEntryStart = false;
+				if (RecordTypes.isOpenBracket(t)) {
+					depth++;
+				} else if (RecordTypes.isCloseBracket(t)) {
+					depth--;
+				}
+			}
+		});
+	}
+
+	// the xsl:map-entry children of each xsl:map with a literal key that's the same as that of an earlier one - as in
+	// Saxon, a dynamic error XTDE3365 - excluding xsl:map-entry elements within xsl:if etc. and those with use-when
+	public static duplicateMapEntryKeys(text: string, markup: string): { key: string, offset: number }[] {
+		const duplicates: { key: string, offset: number }[] = [];
+		[...markup.matchAll(/<xsl:map[\s>]/g)].forEach((mapMatch) => {
+			const keys = new Set<string>();
+			RecordTypes.childElements(text, markup, mapMatch.index!, 'xsl:map-entry').forEach((entryOffset) => {
+				const valueOffset = RecordTypes.attributeValueOffset(text, entryOffset + 1, 'key');
+				const key = RecordTypes.attributeOfElementAt(text, entryOffset + 1, 'key')?.trim();
+				const identity = key !== undefined ? RecordTypes.literalKeyIdentity(key) : undefined;
+				if (identity === undefined || valueOffset === undefined || RecordTypes.attributeOfElementAt(text, entryOffset + 1, 'use-when') !== undefined) {
+					return;
+				}
+				if (keys.has(identity)) {
+					duplicates.push({ key: key!, offset: valueOffset + text.substring(valueOffset).search(/\S/) });
+				}
+				keys.add(identity);
+			});
+		});
+		return duplicates;
+	}
+
 	private static nextNonComment(tokens: BaseToken[], index: number) {
 		for (let i = index + 1; i < tokens.length; i++) {
 			if (tokens[i].tokenType !== TokenLevelState.comment) {
