@@ -16,8 +16,8 @@
   <xsl:variable name="expression8" select="(1, 2, 3) != 4"/>
   <xsl:variable name="expression9" select="5 > 2"/>
   <xsl:variable name="expression10" select="5 >= 5"/>
-  <xsl:variable name="expression11" select="2 < 3"/>
-  <xsl:variable name="expression12" select="2 <= 2"/>
+  <xsl:variable name="expression11" select="2 &lt; 3"/>
+  <xsl:variable name="expression12" select="2 &lt;= 2"/>
   <xsl:variable name="expression13" select="true() and false()"/>
   <xsl:variable name="expression14" select="true() or false()"/>
   <xsl:variable name="expression15" select="(1, 2) union (2, 3)"/>

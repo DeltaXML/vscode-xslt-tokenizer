@@ -5,7 +5,7 @@
   "attributeName": "select",
   "metadata": {
     "moduleName": "xpLexerTestGen.js",
-    "version": "1.7.0"
+    "version": "1.7.2"
   },
   "tests": [
     {

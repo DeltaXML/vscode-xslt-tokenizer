@@ -5,7 +5,7 @@
   "attributeName": "select",
   "metadata": {
     "moduleName": "xpLexerTestGen.js",
-    "version": "1.7.0"
+    "version": "1.7.2"
   },
   "tests": [
     {
@@ -250,14 +250,14 @@
     },
     {
       "label": "expression11",
-      "xpath": "2 < 3",
+      "xpath": "2 &lt; 3",
       "tokens": [
         [
           "2",
           "number"
         ],
         [
-          "<",
+          "&lt;",
           "operator"
         ],
         [
@@ -268,14 +268,18 @@
     },
     {
       "label": "expression12",
-      "xpath": "2 <= 2",
+      "xpath": "2 &lt;= 2",
       "tokens": [
         [
           "2",
           "number"
         ],
         [
-          "<=",
+          "&lt;",
+          "operator"
+        ],
+        [
+          "=",
           "operator"
         ],
         [

@@ -15,8 +15,8 @@
   <xsl:variable name="expressionErr7" select="(1, 2, 3) !!= 2"/>
   <xsl:variable name="expressionErr8" select="(1, 2, 3 != 4"/>
   <xsl:variable name="expressionErr10" select="5 >= 5"/>
-  <xsl:variable name="expressionErr11" select="2 < 3"/>
-  <xsl:variable name="expressionErr12" select="2 <= 2"/>
+  <xsl:variable name="expressionErr11" select="2 &lt; 3"/>
+  <xsl:variable name="expressionErr12" select="2 &lt;= 2"/>
   <xsl:variable name="expressionErr13" select="true(j) and false()"/>
   <xsl:variable name="expressionErr14" select="true() or fals()"/>
   <xsl:variable name="expressionErr15" select="(1, 2) unon (2, 3)"/>

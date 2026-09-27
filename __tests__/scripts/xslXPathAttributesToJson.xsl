@@ -10,16 +10,12 @@
                 expand-text="yes"
                 version="3.0">
   
-  <xsl:include href="../../xslt-resources/xpath-result-serializer/xpath-result-serializer-color.xsl"/>
   <xsl:param name="testSourceURL" as="xs:string" select="'test'"/>
   <xsl:output method="json" indent="yes"/>
   
   <xsl:template name="initial">
     <xsl:variable name="testSourceTest" as="xs:string" select="unparsed-text($testSourceURL)"/>
-    <xsl:message expand-text="yes">
-      ==== Watch: initial ====
-      testSourceTest:   {ext:print($testSourceURL,10,'  ')}
-    </xsl:message>
+
     <xsl:variable name="escapedSourceTest" as="xs:string" select="replace($testSourceTest, '&amp;', '&amp;amp;')"/>
     <xsl:variable name="parsedSourceTest" as="node()" select="parse-xml($escapedSourceTest)"/>
     <xsl:apply-templates select="$parsedSourceTest"/>
@@ -47,23 +43,14 @@
         </xsl:map-entry>
       </xsl:map>
     </xsl:variable>
-    <xsl:message expand-text="yes">
-      ==== XSLT: {tokenize(static-base-uri(), '/')[last()]} ====
-      xslt in:   {ext:print($sourceFileName)}
-      xslt attr: {ext:print($nameOfAttribute)}
-      json out:  {ext:print($result,6,'  ')}
-    </xsl:message>
+
     <xsl:sequence select="$result"/>
   </xsl:template>
   
   <xsl:template match="xsl:variable[@name]" mode="#default">
     <xsl:param name="nameOfAttribute" as="xs:string"/>
     <xsl:variable name="rawXPath" as="xs:string" select="string(@*[name() = $nameOfAttribute])"/>
-    <xsl:message expand-text="yes">
-      ==== xsl:variable ====
-      .           {ext:print(.)}
-      rawXPath:   {ext:print($rawXPath,7,'  ')}
-    </xsl:message>
+
     <xsl:sequence select="[string(@name), $rawXPath]"/>
   </xsl:template>
   
