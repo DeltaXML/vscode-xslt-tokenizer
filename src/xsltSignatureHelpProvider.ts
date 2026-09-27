@@ -1,7 +1,9 @@
 import { CancellationToken, MarkdownString, ParameterInformation, Position, ProviderResult, SignatureHelp, SignatureHelpProvider, SignatureInformation, TextDocument } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from "./xpLexer";
-import { DocumentTypes, GlobalInstructionType, LanguageConfiguration, XslLexer } from "./xslLexer";
+import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XslLexer } from "./xslLexer";
+import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
+import { RecordTypes } from "./recordTypes";
 import { XdocNotes } from "./xdocNote";
 
 interface EnclosingCall {
@@ -18,7 +20,8 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 	private readonly isXPath: boolean;
 	private readonly xslLexer: XslLexer | undefined;
 
-	constructor(languageConfiguration: LanguageConfiguration) {
+	// for the global instruction data of imported modules
+	constructor(languageConfiguration: LanguageConfiguration, private definitionProvider?: XsltDefinitionProvider) {
 		this.isXPath = languageConfiguration.docType === DocumentTypes.XPath;
 		if (!this.isXPath) {
 			this.xslLexer = new XslLexer(languageConfiguration);
@@ -27,11 +30,14 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		}
 	}
 
-	provideSignatureHelp(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<SignatureHelp> {
+	async provideSignatureHelp(document: TextDocument, position: Position, token: CancellationToken): Promise<SignatureHelp | undefined> {
 		const tokens = this.getTokens(document);
+		// the declarations in this stylesheet, captured before any await, as the lexer is shared
+		const localGlobals = this.xslLexer ? this.xslLexer.globalInstructionData.slice() : [];
 		const enclosingCall = XSLTSignatureHelpProvider.findEnclosingCall(tokens, position);
 		if (!enclosingCall) {
-			return undefined;
+			// a named template, for an xsl:call-template at the position
+			return this.isXPath ? undefined : this.templateSignatureHelp(document, position, localGlobals, token);
 		}
 
 		let fnName = enclosingCall.functionName;
@@ -39,8 +45,8 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 
 		const matchingData = this.getFunctionData().find((item) => item.name === fnName);
 		const signatureInfo = matchingData ? this.getSignatureInformation(matchingData.name, matchingData.signature, matchingData.description) :
-			this.userFunctionSignature(document, enclosingCall.functionName);
-		if (!signatureInfo) {
+			this.userFunctionSignature(document, enclosingCall.functionName, await this.allGlobals(document, localGlobals, token));
+		if (!signatureInfo || token.isCancellationRequested) {
 			return undefined;
 		}
 		const help = new SignatureHelp();
@@ -52,25 +58,86 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 		return help;
 	}
 
-	// a user-defined function declared in this stylesheet, with the descriptions from its documentation note, if any -
-	// an xsl:note with format="xdoc-md" - preferring the declaration with the most parameters
-	private userFunctionSignature(document: TextDocument, fnName: string): SignatureInformation | undefined {
-		const candidates = (this.xslLexer?.globalInstructionData ?? []).filter((g) => g.type === GlobalInstructionType.Function && g.name === fnName);
+	// the declarations in this stylesheet and in the modules it imports or includes
+	private async allGlobals(document: TextDocument, localGlobals: GlobalInstructionData[], token: CancellationToken): Promise<GlobalInstructionData[]> {
+		if (!this.definitionProvider) {
+			return localGlobals;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+		return token.isCancellationRequested ? localGlobals : globalInstructionData.concat(allImportedGlobals);
+	}
+
+	// a user-defined function, declared in this stylesheet or an imported module, with the descriptions from its
+	// documentation note, if any - an xsl:note with format="xdoc-md" - preferring the declaration with the most parameters
+	private userFunctionSignature(document: TextDocument, fnName: string, globals: GlobalInstructionData[]): SignatureInformation | undefined {
+		const candidates = globals.filter((g) => g.type === GlobalInstructionType.Function && g.name === fnName);
 		if (candidates.length === 0) {
 			return undefined;
 		}
 		const declaration = candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
-		const text = document.getText();
-		const tagStart = text.lastIndexOf('<', document.offsetAt(new Position(declaration.token.line, declaration.token.startCharacter)));
-		const note = tagStart > -1 ? XdocNotes.forDeclaration(text, tagStart) : undefined;
+		const signature = (paramList: string) => `${declaration.name}(${paramList})${declaration.returnType ? ' as ' + declaration.returnType : ''}`;
+		return XSLTSignatureHelpProvider.declarationSignature(document, declaration, signature);
+	}
+
+	// the signature for a function or template declaration, with the descriptions from its documentation note, if any
+	private static declarationSignature(document: TextDocument, declaration: GlobalInstructionData, signature: (paramList: string) => string): SignatureInformation {
+		const note = XdocNotes.forGlobal(declaration, document.getText());
 		const paramLabels = (declaration.memberNames ?? []).map((name, i) => declaration.memberTypes?.[i] ? `$${name} as ${declaration.memberTypes[i]}` : `$${name}`);
-		const signature = `${declaration.name}(${paramLabels.join(', ')})${declaration.returnType ? ' as ' + declaration.returnType : ''}`;
-		const info = new SignatureInformation(signature, note ? new MarkdownString(XdocNotes.toMarkdown(note, false)) : undefined);
+		const info = new SignatureInformation(signature(paramLabels.join(', ')), note ? new MarkdownString(XdocNotes.toMarkdown(note, false)) : undefined);
 		info.parameters = paramLabels.map((label, i) => {
 			const paramText = note ? XdocNotes.paramText(note, declaration.memberNames![i]) : undefined;
 			return new ParameterInformation(label, paramText ? new MarkdownString(paramText) : undefined);
 		});
 		return info;
+	}
+
+	// for a position within an xsl:call-template - its start tag, its content, or an xsl:with-param within it - the called
+	// template's signature: the active parameter is the one for the xsl:with-param at the position, or otherwise the first
+	// that no xsl:with-param sets
+	private async templateSignatureHelp(document: TextDocument, position: Position, localGlobals: GlobalInstructionData[], token: CancellationToken): Promise<SignatureHelp | undefined> {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = offset > 0 ? text.lastIndexOf('<', offset - 1) : -1;
+		// within a start tag, if the tag isn't closed before the position
+		const tagEnd = tagStart > -1 ? text.indexOf('>', tagStart) : -1;
+		const isInTag = tagStart > -1 && (tagEnd === -1 || tagEnd >= offset) && text.charAt(tagStart + 1) !== '/';
+		const tagName = isInTag ? /^<([\w.:-]+)/.exec(text.substring(tagStart, tagStart + 30))?.[1] : undefined;
+		const contextOffset = isInTag ? tagStart : offset;
+		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, contextOffset)), contextOffset);
+		const parent = ancestors[ancestors.length - 1];
+		let callTemplate: number | undefined;
+		let withParam: number | undefined;
+		if (tagName === 'xsl:call-template') {
+			callTemplate = tagStart;
+		} else if (tagName === 'xsl:with-param' && parent?.name === 'xsl:call-template') {
+			callTemplate = parent.offset;
+			withParam = tagStart;
+		} else if (!isInTag && parent?.name === 'xsl:call-template') {
+			callTemplate = parent.offset;
+		} else if (!isInTag && parent?.name === 'xsl:with-param' && ancestors[ancestors.length - 2]?.name === 'xsl:call-template') {
+			callTemplate = ancestors[ancestors.length - 2].offset;
+			withParam = parent.offset;
+		}
+		const templateName = callTemplate !== undefined ? RecordTypes.attributeOfElementAt(text, callTemplate + 1, 'name') : undefined;
+		if (callTemplate === undefined || !templateName) {
+			return undefined;
+		}
+		const globals = await this.allGlobals(document, localGlobals, token);
+		const template = globals.find((g) => g.type === GlobalInstructionType.Template && g.name === templateName);
+		if (!template || token.isCancellationRequested) {
+			return undefined;
+		}
+		const info = XSLTSignatureHelpProvider.declarationSignature(document, template, (paramList) => `template ${templateName}(${paramList})`);
+		const paramNames = template.memberNames ?? [];
+		const withParamName = withParam !== undefined ? RecordTypes.attributeOfElementAt(text, withParam + 1, 'name') : undefined;
+		const passed = RecordTypes.childElements(text, RecordTypes.blankMarkup(text), callTemplate, 'xsl:with-param').map((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'name'));
+		const withParamIndex = withParamName ? paramNames.indexOf(withParamName) : -1;
+		const help = new SignatureHelp();
+		help.signatures = [info];
+		help.activeSignature = 0;
+		help.activeParameter = withParamIndex > -1 ? withParamIndex : Math.max(0, paramNames.findIndex((name) => !passed.includes(name)));
+		return help;
 	}
 
 	private getSignatureInformation(name: string, signature: string, description: string): SignatureInformation {

@@ -13,6 +13,7 @@
  * The tags are @param $name, @return, @see, @since, @deprecated and @error - each starts a line, and continues on the
  * following lines up to the next tag.
  */
+import * as fs from 'fs';
 import { RecordTypes } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 
@@ -178,6 +179,19 @@ export class XdocNotes {
 	// the xsl:note elements with format="xdoc-md" in the markup, by the offset of their start tags
 	public static noteOffsets(text: string): number[] {
 		return [...text.matchAll(/<xsl:note\s[^<>]*format\s*=\s*["']xdoc-md["']/g)].map((match) => match.index!);
+	}
+
+	// the documentation note of a function or template declaration, from its global instruction data: in the document's
+	// text, or in the module declaring it (its href)
+	public static forGlobal(declaration: { href?: string, token: { line: number, startCharacter: number } }, documentText: string): XdocNote | undefined {
+		let text: string;
+		try {
+			text = declaration.href ? fs.readFileSync(declaration.href, 'utf8') : documentText;
+		} catch {
+			return undefined;
+		}
+		const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, declaration.token.line, declaration.token.startCharacter));
+		return tagStart > -1 ? XdocNotes.forDeclaration(text, tagStart) : undefined;
 	}
 
 	// the documentation note of the declaration whose start tag is at declarationOffset: its first xsl:note child with

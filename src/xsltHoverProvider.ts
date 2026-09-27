@@ -7,7 +7,6 @@ import { LexPosition } from "./xpLexer";
 import { XsltTokenDiagnostics } from "./xsltTokenDiagnostics";
 import { XdocNotes } from "./xdocNote";
 import { RecordTypes } from "./recordTypes";
-import * as fs from 'fs';
 
 enum CharType {
 	none,
@@ -104,14 +103,7 @@ export class XSLTHoverProvider implements HoverProvider {
 	// the documentation note - an xsl:note with format="xdoc-md" - of a function or template declaration, in this document
 	// or the module declaring it
 	public static declarationNote(document: TextDocument, declaration: GlobalInstructionData) {
-		let text: string;
-		try {
-			text = declaration.href ? fs.readFileSync(declaration.href, 'utf8') : document.getText();
-		} catch {
-			return undefined;
-		}
-		const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, declaration.token.line, declaration.token.startCharacter));
-		return tagStart > -1 ? XdocNotes.forDeclaration(text, tagStart) : undefined;
+		return XdocNotes.forGlobal(declaration, document.getText());
 	}
 
 	// for the name of an xsl:call-template, the template's signature and documentation note - or for the name of an
