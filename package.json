@@ -83,15 +83,21 @@
 		"keybindings": [
 			{
 				"command": "xslt-xpath.selectCurrentElement",
-				"key": "Shift+Cmd+0"
+				"key": "ctrl+shift+0",
+				"mac": "shift+cmd+0",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectParentElement",
-				"key": "Shift+Cmd+9"
+				"key": "ctrl+shift+9",
+				"mac": "shift+cmd+9",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectFirstChildElement",
-				"key": "Shift+Cmd+8"
+				"key": "ctrl+shift+8",
+				"mac": "shift+cmd+8",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.quickRunXslt",
@@ -107,11 +113,21 @@
 			},
 			{
 				"command": "xslt-xpath.selectFollowingElement",
-				"key": "Shift+Cmd+7"
+				"key": "ctrl+shift+7",
+				"mac": "shift+cmd+7",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectPrecedingElement",
-				"key": "Shift+Cmd+6"
+				"key": "ctrl+shift+6",
+				"mac": "shift+cmd+6",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+			},
+			{
+				"command": "xslt-xpath.xmlSelectionPick",
+				"key": "ctrl+shift+2",
+				"mac": "shift+cmd+2",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			}
 		],
 		"commands": [
@@ -138,6 +154,11 @@
 			{
 				"command": "xslt-xpath.selectPrecedingElement",
 				"title": "Select preceding element",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.xmlSelectionPick",
+				"title": "Select Element...",
 				"category": "XML"
 			},
 			{
@@ -192,7 +213,46 @@
 				"icon": "$(arrow-swap)"
 			}
 		],
+		"submenus": [
+			{
+				"id": "xslt-xpath.xmlSelection",
+				"label": "XML Selection"
+			}
+		],
 		"menus": {
+			"editor/context": [
+				{
+					"submenu": "xslt-xpath.xmlSelection",
+					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/",
+					"group": "2_xml@1"
+				}
+			],
+			"xslt-xpath.xmlSelection": [
+				{
+					"command": "xslt-xpath.selectCurrentElement",
+					"group": "1_select@1"
+				},
+				{
+					"command": "xslt-xpath.selectParentElement",
+					"group": "1_select@2"
+				},
+				{
+					"command": "xslt-xpath.selectFirstChildElement",
+					"group": "1_select@3"
+				},
+				{
+					"command": "xslt-xpath.selectPrecedingElement",
+					"group": "1_select@4"
+				},
+				{
+					"command": "xslt-xpath.selectFollowingElement",
+					"group": "1_select@5"
+				},
+				{
+					"command": "xslt-xpath.gotoXPath",
+					"group": "2_goto@1"
+				}
+			],
 			"editor/title": [
 				{
 					"command": "xslt-xpath.quickRunXml",

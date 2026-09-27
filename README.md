@@ -72,14 +72,18 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 |||
 
 # XML Commands
-| Command  | Key-Binding | Details |
+
+The XML selection commands are also in the **XML Selection** submenu of the editor's context menu (right-click), and in the **XML: Select Element...** quick pick (`⇧⌘2` / `Ctrl+Shift+2`) - both show their key-bindings.
+
+| Command  | Key-Binding (macOS / Windows, Linux) | Details |
 | ------- | ------- | --------- |
 | XML: Goto XPath |  | Initially shows current XPath at the text prompt  |
-| XML: Select current element | ⇧⌘0 | Includes start/end tags |
-| XML: Select parent element | ⇧⌘9 | Includes start/end tags |
-| XML: Select child element | ⇧⌘8 | Includes start/end tags |
-| XML: Select following element | ⇧⌘7 | Includes start/end tags |
-| XML: Select preceding element | ⇧⌘6 | Includes start/end tags |
+| XML: Select Element... | ⇧⌘2 / Ctrl+Shift+2 | Quick pick of the XML selection commands, and Goto XPath |
+| XML: Select current element | ⇧⌘0 / Ctrl+Shift+0 | Includes start/end tags |
+| XML: Select parent element | ⇧⌘9 / Ctrl+Shift+9 | Includes start/end tags |
+| XML: Select first child element | ⇧⌘8 / Ctrl+Shift+8 | Includes start/end tags |
+| XML: Select following element | ⇧⌘7 / Ctrl+Shift+7 | Includes start/end tags |
+| XML: Select preceding element | ⇧⌘6 / Ctrl+Shift+6 | Includes start/end tags |
 | XSLT: Add XSLT Inputs to Tasks File ||For file-selection prompt when running XSLT|
 | New XPath Notebook | - | DeltaXignia's [XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook) is required
 

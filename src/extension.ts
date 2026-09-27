@@ -150,6 +150,24 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
+	// the XML selection commands in a quick pick, with their default keyboard shortcuts - a keyboard-friendly alternative
+	// to the XML Selection submenu of the editor's context menu
+	async function showXMLSelectionPick() {
+		const shortcut = (digit: string) => (process.platform === 'darwin' ? '⇧⌘' : 'Ctrl+Shift+') + digit;
+		const items = [
+			{ label: 'Select current element', description: shortcut('0'), command: 'xslt-xpath.selectCurrentElement' },
+			{ label: 'Select parent element', description: shortcut('9'), command: 'xslt-xpath.selectParentElement' },
+			{ label: 'Select first child element', description: shortcut('8'), command: 'xslt-xpath.selectFirstChildElement' },
+			{ label: 'Select preceding element', description: shortcut('6'), command: 'xslt-xpath.selectPrecedingElement' },
+			{ label: 'Select following element', description: shortcut('7'), command: 'xslt-xpath.selectFollowingElement' },
+			{ label: 'Goto XPath', description: '', command: 'xslt-xpath.gotoXPath' }
+		];
+		const picked = await vscode.window.showQuickPick(items, { placeHolder: 'XML selection' });
+		if (picked) {
+			await vscode.commands.executeCommand(picked.command);
+		}
+	}
+
 	async function showGotoXPathInputBox() {
 		let symbol: vscode.DocumentSymbol|undefined;
 		const xpath = XsltSymbolProvider.getXPathFromSelection();
@@ -371,6 +389,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setVariableNames', (...args) => XPathSemanticTokensProvider.setVariableNames(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xmlSelectionPick', () => showXMLSelectionPick()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectCurrentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Current)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectPrecedingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Previous)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFollowingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Next)));
