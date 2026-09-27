@@ -130,7 +130,7 @@
 
   <!-- document(), collection(), doc-available() -->
   <xsl:variable name="doc1" select="document('somefile.xml')/root"/>
-  <xsl:variable name="coll1-PENDING" select="collection()[1]"/>
+  <xsl:variable name="coll1" select="collection()[1]"/>
   <xsl:variable name="docAvail1" select="doc-available('somefile.xml')"/>
 
   <!-- let/for/if inside map/array constructors -->
@@ -169,7 +169,7 @@
   
   <!-- Maps including functions -->
   <xsl:variable name="mapFn1" select="map {'m1': function($a) {$a + 1}}"/>
-  <xsl:variable name="mapFnDupeKey-PENDING" select="map {'m1': function($a) {$a + 1}, 'm1': 'book'}"/>
+  <xsl:variable name="mapFnDupeKey" select="map {'m1': function($a) {$a + 1}, 'm1': 'book'}"/>
   <xsl:variable name="mapFn2" select="map {'m1': function($a) {$a + 1}, 'm2': function($a) {$a + 1}}"/>
   <xsl:variable name="mapFn3" select="map {'m1': function($a) as xs:integer {$a + 1}}"/>
   <xsl:variable name="mapFn4" select="map {'m1': function($a) as function(*) {count#1}}"/>

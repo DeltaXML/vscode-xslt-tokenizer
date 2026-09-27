@@ -459,14 +459,9 @@
       "problems": []
     },
     {
-      "label": "coll1-PENDING",
+      "label": "coll1",
       "xpath": "collection()[1]",
-      "problems": [
-        [
-          "pending msg",
-          "pending tkn"
-        ]
-      ]
+      "problems": []
     },
     {
       "label": "docAvail1",
@@ -571,6 +566,56 @@
     {
       "label": "fnVar2",
       "xpath": "string-length#1",
+      "problems": []
+    },
+    {
+      "label": "mapFn1",
+      "xpath": "map {'m1': function($a) {$a + 1}}",
+      "problems": []
+    },
+    {
+      "label": "mapFnDupeKey",
+      "xpath": "map {'m1': function($a) {$a + 1}, 'm1': 'book'}",
+      "problems": [
+        [
+          "XPath: Duplicate key in the map constructor: 'm1'",
+          "'m1'"
+        ]
+      ]
+    },
+    {
+      "label": "mapFn2",
+      "xpath": "map {'m1': function($a) {$a + 1}, 'm2': function($a) {$a + 1}}",
+      "problems": []
+    },
+    {
+      "label": "mapFn3",
+      "xpath": "map {'m1': function($a) as xs:integer {$a + 1}}",
+      "problems": []
+    },
+    {
+      "label": "mapFn4",
+      "xpath": "map {'m1': function($a) as function(*) {count#1}}",
+      "problems": [
+        [
+          "variable is unused",
+          "$a"
+        ]
+      ]
+    },
+    {
+      "label": "mapFn5",
+      "xpath": "function() { 22 }",
+      "problems": []
+    },
+    {
+      "label": "mapFn6",
+      "xpath": "function($a as xs:integer) as function(xs:integer) as xs:integer { function($b) as xs:integer { $a + $b + 1 } }",
+      "problems": []
+    },
+    {
+      "label": "mapFnNoError7",
+      "xpath": "function($a as xs:integer) as function() as xs:integer { function() as xs:integer { $a + 1 } }",
       "problems": []
     }
   ]

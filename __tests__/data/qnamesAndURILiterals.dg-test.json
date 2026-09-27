@@ -79,22 +79,22 @@
       "problems": []
     },
     {
-      "label": "bracedURILiteral3-PENDING",
+      "label": "bracedURILiteral3",
       "xpath": "Q{name",
       "problems": [
         [
-          "pending msg",
-          "pending tkn"
+          "XPath: The braced URI literal has no closing '}': Q{name",
+          "Q{name"
         ]
       ]
     },
     {
-      "label": "bracedURILiteral4-PENDING",
+      "label": "bracedURILiteral4",
       "xpath": "Q{name}",
       "problems": [
         [
-          "pending msg",
-          "pending tkn"
+          "XPath: A local name must follow the braced URI literal, with no space between: Q{name}",
+          "Q{name}"
         ]
       ]
     },
@@ -109,52 +109,52 @@
       ]
     },
     {
-      "label": "bracedURILiteral6-PENDING",
+      "label": "bracedURILiteral6",
       "xpath": "Q{urn:com.example}ct:name",
       "problems": [
         [
-          "pending msg",
-          "pending tkn"
+          "XPath: The local name after a braced URI literal cannot have a prefix: ct:name",
+          "ct:name"
         ]
       ]
     },
     {
-      "label": "bracedURILiteral7-PENDING",
+      "label": "bracedURILiteral7",
       "xpath": "Q{name} name",
       "problems": [
         [
-          "pending msg",
-          "pending tkn"
+          "XPath: A local name must follow the braced URI literal, with no space between: Q{name}",
+          "Q{name}"
         ]
       ]
     },
     {
-      "label": "bracedURILiteral8-PENDING",
+      "label": "bracedURILiteral8",
       "xpath": "9 Q{name}name",
       "problems": [
         [
-          "pending msg",
-          "pending tkn"
+          "XPath: Expression context - unexpected token here: Q{name} ",
+          "Q{name}"
         ]
       ]
     },
     {
-      "label": "bracedURILiteral9-PENDING",
+      "label": "bracedURILiteral9",
       "xpath": "9Q{name}name",
       "problems": [
         [
-          "pending msg",
-          "pending tkn"
+          "XPath: Expression context - unexpected token here: Q{name} ",
+          "Q{name}"
         ]
       ]
     },
     {
-      "label": "bracedURILiteral10-PENDING",
+      "label": "bracedURILiteral10",
       "xpath": "book Q{name}name",
       "problems": [
         [
-          "pending msg",
-          "pending tkn"
+          "XPath: Expression context - unexpected token here: Q{name} ",
+          "Q{name}"
         ]
       ]
     }

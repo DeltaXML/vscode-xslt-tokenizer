@@ -467,7 +467,7 @@ export class FunctionData {
 		["http://exslt.org/strings", XSLTnamespaces.ExsltStrings],
 	]);
 
-	public static readonly contextFunctions = ['base-uri', 'collection', 'copy-of', 'current', 'document-uri', 'generate-id', 'last', 'local-name', 'has-children', 'name', 'namespace-uri', 'node-name', 'normalize-space', 'path', 'position', 'root', 'snapshot', 'uri-collection'];
+	public static readonly contextFunctions = ['base-uri', 'copy-of', 'current', 'document-uri', 'generate-id', 'last', 'local-name', 'has-children', 'name', 'namespace-uri', 'node-name', 'normalize-space', 'path', 'position', 'root', 'snapshot'];
 	public static readonly contextGroupingFunctions = ['current-group', 'current-grouping-key'];
 
 	public static readonly ixslEventName = [

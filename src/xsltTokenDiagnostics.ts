@@ -2851,7 +2851,9 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkDocumentationNotes(document, problemTokens);
 		}
 		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
-		RecordTypes.checkMapConstructorKeys(allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber), problemTokens);
+		const allXPathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
+		RecordTypes.checkMapConstructorKeys(allXPathTokens, problemTokens);
+		XsltTokenDiagnostics.checkBracedURILiterals(allXPathTokens, problemTokens);
 		if (documentText.includes('<xsl:map')) {
 			RecordTypes.duplicateMapEntryKeys(documentText, RecordTypes.blankMarkup(documentText)).forEach((duplicate) => {
 				const position = document.positionAt(duplicate.offset);
@@ -3069,9 +3071,10 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static isAnonymousFunctionParams(item: XPathData | undefined): item is XPathData {
-		// within the parameter list of an inline function: function($a, $b) or fn($a, $b)
+		// within the parameter list of an inline function: function($a, $b) or fn($a, $b) - not a function type, e.g.
+		// function(*) in function($a) as function(*) { ... }
 		const ctx = item?.token.context;
-		return !!ctx && item?.token.charType === CharLevelState.lB && (ctx.value === 'function' || (ctx.value === 'fn' && ctx.tokenType === TokenLevelState.anonymousFunction));
+		return !!ctx && item?.token.charType === CharLevelState.lB && (ctx.value === 'function' || ctx.value === 'fn') && ctx.tokenType === TokenLevelState.anonymousFunction;
 	}
 
 	private static functionNamesWithArity(instruction: GlobalInstructionData) {
@@ -4237,6 +4240,15 @@ export class XsltTokenDiagnostics {
 				case ErrorType.RecordFieldDuplicate:
 					msg = `XPath: Duplicate field name in the record type: '${tokenValue}'`;
 					break;
+				case ErrorType.UriLiteralUnclosed:
+					msg = `XPath: The braced URI literal has no closing '}': ${tokenValue}`;
+					break;
+				case ErrorType.UriLiteralLocalName:
+					msg = `XPath: A local name must follow the braced URI literal, with no space between: ${tokenValue}`;
+					break;
+				case ErrorType.UriLiteralPrefix:
+					msg = `XPath: The local name after a braced URI literal cannot have a prefix: ${tokenValue}`;
+					break;
 				case ErrorType.PatternOperator:
 					msg = `XSLT: '${tokenValue}' is not allowed in a pattern, except within a predicate or function call - for either of two patterns, use '|'`;
 					break;
@@ -4602,6 +4614,32 @@ export class XsltTokenDiagnostics {
 	// the children of an xsl:iterate are any xsl:param elements, then an optional xsl:on-completion, then the rest -
 	// Saxon 13 reports XTSE0010 for an xsl:param or xsl:on-completion out of order (comments are ignored, and so are
 	// elements with use-when, as they may be excluded)
+	// the braced URI literal of an EQName, e.g. Q{http://example.com}name: as in Saxon 13, XPST0003 if it's not closed, if
+	// a local name without a prefix doesn't follow it immediately, or if it follows an operand, e.g. 'book Q{urn:x}name'
+	private static checkBracedURILiterals(xpathTokens: BaseToken[], problemTokens: BaseToken[]) {
+		xpathTokens.forEach((token, index) => {
+			if (token.tokenType !== TokenLevelState.uriLiteral || token.error) {
+				return;
+			}
+			const next = xpathTokens[index + 1];
+			const previous = xpathTokens[index - 1];
+			const isAdjacentName = !!next && next.line === token.line && next.startCharacter === token.startCharacter + token.length &&
+				/^[A-Za-z_\u00C0-\uFFFF]/.test(next.value);
+			const previousIsOperand = !!previous && !previous.error && (previous.tokenType === TokenLevelState.number || previous.tokenType === TokenLevelState.string ||
+				previous.tokenType === TokenLevelState.variable || previous.tokenType === TokenLevelState.nodeNameTest || previous.tokenType === TokenLevelState.attributeNameTest ||
+				previous.charType === CharLevelState.rB || previous.charType === CharLevelState.rPr || previous.charType === CharLevelState.rBr);
+			if (!token.value.endsWith('}')) {
+				problemTokens.push({ ...token, error: ErrorType.UriLiteralUnclosed });
+			} else if (!isAdjacentName) {
+				problemTokens.push({ ...token, error: ErrorType.UriLiteralLocalName });
+			} else if (/^[^:(]*:/.test(next.value) && !next.error) {
+				problemTokens.push({ ...next, error: ErrorType.UriLiteralPrefix });
+			} else if (previousIsOperand) {
+				problemTokens.push({ ...token, error: ErrorType.XPathUnexpected });
+			}
+		});
+	}
+
 	// the attributes whose values are patterns, for each XSLT element
 	private static readonly patternAttributes = new Map<string, string[]>([
 		['xsl:template', ['match']], ['xsl:key', ['match']], ['xsl:accumulator-rule', ['match']],

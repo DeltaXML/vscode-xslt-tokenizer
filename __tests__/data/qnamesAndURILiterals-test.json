@@ -151,7 +151,7 @@
       ]
     },
     {
-      "label": "bracedURILiteral3-PENDING",
+      "label": "bracedURILiteral3",
       "xpath": "Q{name",
       "tokens": [
         [
@@ -161,7 +161,7 @@
       ]
     },
     {
-      "label": "bracedURILiteral4-PENDING",
+      "label": "bracedURILiteral4",
       "xpath": "Q{name}",
       "tokens": [
         [
@@ -193,7 +193,7 @@
       ]
     },
     {
-      "label": "bracedURILiteral6-PENDING",
+      "label": "bracedURILiteral6",
       "xpath": "Q{urn:com.example}ct:name",
       "tokens": [
         [
@@ -207,7 +207,7 @@
       ]
     },
     {
-      "label": "bracedURILiteral7-PENDING",
+      "label": "bracedURILiteral7",
       "xpath": "Q{name} name",
       "tokens": [
         [
@@ -221,7 +221,7 @@
       ]
     },
     {
-      "label": "bracedURILiteral8-PENDING",
+      "label": "bracedURILiteral8",
       "xpath": "9 Q{name}name",
       "tokens": [
         [
@@ -239,7 +239,7 @@
       ]
     },
     {
-      "label": "bracedURILiteral9-PENDING",
+      "label": "bracedURILiteral9",
       "xpath": "9Q{name}name",
       "tokens": [
         [
@@ -257,7 +257,7 @@
       ]
     },
     {
-      "label": "bracedURILiteral10-PENDING",
+      "label": "bracedURILiteral10",
       "xpath": "book Q{name}name",
       "tokens": [
         [
