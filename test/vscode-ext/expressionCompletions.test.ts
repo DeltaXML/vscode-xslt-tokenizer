@@ -91,4 +91,25 @@ suite('XPath keyword completions', () => {
 			assert.sameMembers((await labels(select(`${operand} ¦`))).map((l) => l.trim()), operators);
 		});
 	});
+
+	const templateText: [string, string][] = [
+		['after an enclosed expression', '`a {$a} te¦`'],
+		['after an enclosed expression, before more text', '`a {$a} te¦ xt`'],
+		['between enclosed expressions, before a brace', '`{$a} x¦{$a}`'],
+		['on a new line', '`{$a}\n        te¦`']
+	];
+	templateText.forEach(([name, expression]) => {
+		test(`none within the text of a string template, ${name}`, async () => {
+			assert.deepEqual(await labels(select(expression), '4.0'), []);
+		});
+	});
+
+	test('keyword operators after a string template or a string literal', async () => {
+		assert.includeMembers((await labels(select('`a {1}` ¦'), '4.0')).map((l) => l.trim()), ['cast as', 'instance of']);
+		assert.includeMembers((await labels(select("'a' ¦"))).map((l) => l.trim()), ['cast as', 'instance of']);
+	});
+
+	test('the expression snippets within the enclosed expression of a string template', async () => {
+		assert.include(await labels(select('`a {¦}`'), '4.0'), 'let $x := … return …');
+	});
 });

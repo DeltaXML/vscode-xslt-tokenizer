@@ -331,6 +331,10 @@ export class XsltTokenCompletions {
 								if (!XsltTokenCompletions.isKindType(resultCompletions)) {
 									resultCompletions = resultCompletions.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 								}
+							} else if (XsltTokenCompletions.isInEmptyBraces(document, position) && XsltTokenCompletions.isExpandText(document, position)) {
+								// the lexer has no tokens for an empty text value template, e.g. <p>{|}</p>
+								resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData)
+									.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 							}
 						}
 						break;
@@ -581,6 +585,10 @@ export class XsltTokenCompletions {
 									} else if (languageConfig.docType === DocumentTypes.DCP && languageConfig.propertyNames && tagElementName === 'property') {
 										let varCompletionStrings = languageConfig.propertyNames;
 										resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
+									} else if (XsltTokenCompletions.isInEmptyBraces(document, position)) {
+										// an empty attribute value template, e.g. xsl:element name="{|}"
+										resultCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData)
+											.concat(XsltTokenCompletions.getVariableCompletions(position, null, elementStack, xpathStack, token, globalInstructionData, importedInstructionData, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList, inScopeVariablesList));
 									} else {
 										resultCompletions = [];
 									}
@@ -649,7 +657,11 @@ export class XsltTokenCompletions {
 											resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(varCompletionStrings, vscode.CompletionItemKind.Variable);
 										} else if (
 											(languageConfig.expressionAtts && languageConfig.expressionAtts.indexOf(attName) !== -1 && !(attName === 'use' && (tagElementName === 'xsl:context-item' || tagElementName === 'xsl:global-context-item'))) ||
-											(fullVariableName.startsWith('}') && (prevToken?.value.endsWith('{') || (prevToken && prevToken?.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber)))) {
+											// an attribute value template: the cursor is at its closing '}', after an expression
+											(fullVariableName.startsWith('}') && prevToken && prevToken?.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber) ||
+											// or within empty braces, which have no tokens - in the attribute of a literal result element, or an
+											// attribute value template attribute of an XSLT instruction
+											((tagType === TagType.XMLstart || !!languageConfig.avtAtts?.includes(attName)) && XsltTokenCompletions.isInEmptyBraces(document, position))) {
 											// this is the closing quote of the attribute's value, i.e. we're right at
 											// the end of the XPath expression - xpathStack was already reset to []
 											// a few lines up (it's an XML-classified token), so use the preserved
@@ -1182,6 +1194,30 @@ export class XsltTokenCompletions {
 		return keywords;
 	}
 
+	// the cursor is within an empty enclosed expression, e.g. {|} or { | } - not escaped braces, e.g. {{|}}
+	private static isInEmptyBraces(document: vscode.TextDocument, position: vscode.Position) {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const before = /\{\s*$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		const isBraceAfter = /^\s*\}/.test(text.substring(offset, offset + 100));
+		return !!before && isBraceAfter && text.charAt(offset - before[0].length - 1) !== '{';
+	}
+
+	// text value templates are enabled at the position: by the expand-text attribute of the innermost XSLT element that
+	// has one, or the xsl:expand-text attribute of a literal result element
+	private static isExpandText(document: vscode.TextDocument, position: vscode.Position) {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, offset)), offset);
+		for (let i = ancestors.length - 1; i > -1; i--) {
+			const value = RecordTypes.attributeOfElementAt(text, ancestors[i].offset + 1, ancestors[i].name.startsWith('xsl:') ? 'expand-text' : 'xsl:expand-text');
+			if (value !== undefined) {
+				return ['yes', 'true', '1'].includes(value.trim());
+			}
+		}
+		return false;
+	}
+
 	private static getXPathCompletions(docType: DocumentTypes, previous2Token: BaseToken | null, previousToken: BaseToken | null, position: vscode.Position, elementNameTests: string[], attNameTests: string[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], xpathStack: XPathData[]) {
 		if (!previousToken || previousToken.tokenType >= XsltTokenCompletions.xsltStartTokenNumber) {
 			return XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
@@ -1200,6 +1236,9 @@ export class XsltTokenCompletions {
 					// rB/rBr/rPr (closing ')'/']'/'}') are handled by the isValueCompletingToken
 					// check above, before this switch is reached
 					case CharLevelState.lBr:
+						// an expression starts after '{': the enclosed expression of a string template, a map key, or the body
+						// of an inline function or braced 'if'
+						xpathCompletions = XsltTokenCompletions.getAllCompletions(docType, position, elementNameTests, attNameTests, globalInstructionData, importedInstructionData);
 						break;
 					default:
 						let pValue = previousToken.value;
@@ -1763,7 +1802,15 @@ export class XsltTokenCompletions {
 		const offset = document.offsetAt(position);
 		const wordStart = offset - /[\w.:-]*$/.exec(text.substring(Math.max(0, offset - 100), offset))![0].length;
 		const range = new vscode.Range(document.positionAt(wordStart), position);
+		const tokenStart = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter));
 		const tokenEnd = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter + t.length));
+		// within the text of a string - e.g. the text of a string template after an enclosed expression, `{$a} te|` - the
+		// completions are left as they are: none. The text part of a template before a '{' ends at the '{'
+		const withinString = allTokens.some((t) => t.tokenType === TokenLevelState.string && tokenStart(t) < offset &&
+			(offset < tokenEnd(t) || (offset === tokenEnd(t) && (t.charType === CharLevelState.lBt || t.charType === CharLevelState.mBt))));
+		if (withinString) {
+			return completions;
+		}
 		let previous: BaseToken | undefined;
 		for (const t of allTokens) {
 			if (tokenEnd(t) > wordStart) {
