@@ -124,6 +124,12 @@
 				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			},
 			{
+				"command": "xslt-xpath.wrapWith",
+				"key": "alt+shift+w",
+				"mac": "alt+shift+w",
+				"when": "editorTextFocus && editorLangId == xslt"
+			},
+			{
 				"command": "xslt-xpath.xmlSelectionPick",
 				"key": "ctrl+shift+2",
 				"mac": "shift+cmd+2",
@@ -160,6 +166,11 @@
 				"command": "xslt-xpath.xmlSelectionPick",
 				"title": "Select Element...",
 				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.wrapWith",
+				"title": "Wrap with...",
+				"category": "XSLT"
 			},
 			{
 				"command": "xslt-xpath.selectFollowingElement",
@@ -280,6 +291,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "xslt-xpath.wrapWith",
+					"when": "editorLangId == xslt"
+				},
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonJ",
 					"when": "false"

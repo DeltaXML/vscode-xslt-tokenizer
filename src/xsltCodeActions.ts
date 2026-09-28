@@ -13,6 +13,7 @@ import { XdocNotes } from './xdocNote';
 import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
 import * as path from 'path';
+import { wrapTarget } from './xsltWrap';
 
 
 enum ElementSelectionType {
@@ -71,6 +72,7 @@ enum XsltCodeActionKind {
 	addDocumentationNote = 'Add documentation note',
 	addMissingNoteParams = 'Add missing @param',
 	removeDuplicateEnumValue = 'Remove duplicate enum value',
+	wrapWith = 'Wrap with...',
 }
 
 enum ExtractFunctionParams {
@@ -258,6 +260,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractRecordType, vscode.CodeActionKind.RefactorExtract));
 				existingTypes.forEach((name) => codeActions.push(new vscode.CodeAction(XSLTCodeActions.useRecordTypeTitle(name), vscode.CodeActionKind.RefactorRewrite)));
 			}
+		}
+
+		// 'Wrap with...': for selected instructions, or the element whose start tag is at the cursor - the command shows a
+		// quick pick of the instructions that can wrap it - not for the root element
+		const wrapText = document.getText();
+		const wrap = wrapTarget(wrapText, document.offsetAt(range.start), document.offsetAt(range.end));
+		if (wrap && !/^<xsl:(stylesheet|transform|package)[\s>]/.test(wrapText.substring(wrap.start, wrap.start + 20))) {
+			const action = new vscode.CodeAction(XsltCodeActionKind.wrapWith, vscode.CodeActionKind.RefactorRewrite);
+			action.command = { command: 'xslt-xpath.wrapWith', title: XsltCodeActionKind.wrapWith, arguments: [document.uri, document.offsetAt(range.start), document.offsetAt(range.end)] };
+			codeActions.push(action);
 		}
 
 		// XSLT 4.0: a documentation note for the xsl:function or xsl:template at the cursor

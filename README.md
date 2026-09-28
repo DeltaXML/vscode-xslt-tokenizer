@@ -36,6 +36,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Extract xsl:function**  | Refactors selected XSLT instructions or XPath expression passing fn args as required
 | **Extract xsl:template**  | Refactors selected XSLT instructions passing xsl:params as required
 | **Extract xsl:variable**  | Refactors selected XPath expression as an XSLT variable
+| **Wrap with...**          | Wraps selected XSLT instructions in an instruction like `xsl:if` or `xsl:for-each`, chosen from those allowed at that point (`⌥⇧W` / `Alt+Shift+W`)
 | **Extract record type**   | XSLT 4.0: creates an `xsl:item-type` record type from a map constructor or `xsl:map`
 | **Rename Symbol**         | All in-scope usages of the symbol will be renamed - across all imported stylesheet modules 
 | **Goto Symbol**           | Quick access via filterable list of code symbols
