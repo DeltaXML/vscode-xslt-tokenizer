@@ -1,0 +1,28 @@
+{ xdoc-md documentation notes, as used in xsl:note format="xdoc-md": a Markdown description, then @param, @return,
+  @see, @since, @deprecated and @error fields - each field starts a line, and continues on the following lines up to
+  the next field. The input is the note's string value, with a line break appended. }
+
+note: description, -field*, -ws.
+
+description: (line; -blank)*.
+line: -ws, -first, -rest, -nl.
+-first: ~["@"; " "; #9; #a; #d].
+-rest: ~[#a; #d]*.
+-blank: -ws, -nl.
+
+-field: param; return; see; since; deprecated; error.
+param: -ws, -"@param", -sp, -"$"?, @name, (-sp, -text)?, -nl, -more*.
+return: -ws, -"@return", (-sp, -text)?, -nl, -more*.
+see: -ws, -"@see", (-sp, -text)?, -nl, -more*.
+since: -ws, -"@since", (-sp, -text)?, -nl, -more*.
+deprecated: -ws, -"@deprecated", (-sp, -text)?, -nl, -more*.
+error: -ws, -"@error", (-sp, -text)?, -nl, -more*.
+
+name: [L; Nd; "_"; "."; "-"]+.
+-text: -first, -rest.
+-more: line; -blank.
+
+{ whitespace and line breaks are omitted from the output: '-' on a terminal drops its characters }
+-sp: -[" "; #9]+.
+-ws: -[" "; #9]*.
+-nl: -#d?, -#a.
