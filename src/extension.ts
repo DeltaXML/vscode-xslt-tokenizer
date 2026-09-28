@@ -396,12 +396,62 @@ export function activate(context: vscode.ExtensionContext) {
 	// when the index of the workspace's XSLT modules is first built, check the open modules again, for references to
 	// declarations in the stylesheets that import or include them
 	context.subscriptions.push({ dispose: () => ImportIndex.instance.dispose() });
-	const onIndexBuilt = ImportIndex.instance.onDidChange(() => {
-		onIndexBuilt.dispose();
-		vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'xslt' && doc.uri.scheme === 'file').forEach((doc) => {
-			XsltSymbolProvider.instanceForXSLT?.getDocumentSymbols(doc, false);
-		});
+	const relintXsltModules = () => vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'xslt' && doc.uri.scheme === 'file').forEach((doc) => {
+		XsltSymbolProvider.instanceForXSLT?.getDocumentSymbols(doc, false);
 	});
+	const onIndexBuilt = ImportIndex.instance.onDidChange(() => {
+		if (ImportIndex.instance.built) {
+			onIndexBuilt.dispose();
+			relintXsltModules();
+		}
+	});
+	// the top-level stylesheets chosen for modules, saved for the workspace
+	const topLevelChoicesKey = 'xslt-xpath.topLevelStylesheetChoices';
+	ImportIndex.instance.setChoices(context.workspaceState.get(topLevelChoicesKey));
+	const saveTopLevelChoices = async () => {
+		await context.workspaceState.update(topLevelChoicesKey, ImportIndex.instance.choices);
+		relintXsltModules();
+	};
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.chooseTopLevelStylesheet', async () => {
+		const document = vscode.window.activeTextEditor?.document;
+		if (!document || document.languageId !== 'xslt' || document.uri.scheme !== 'file') {
+			vscode.window.showErrorMessage('Choose Top-Level Stylesheet: open an XSLT module in the active editor first.');
+			return;
+		}
+		const index = ImportIndex.instance;
+		await index.whenBuilt();
+		const module = document.fileName;
+		const current = index.masterFor(module);
+		const isChosen = index.isChosen(module);
+		type Item = vscode.QuickPickItem & { stylesheet?: string, action?: 'automatic' | 'browse' };
+		const items: Item[] = index.topLevelCandidates(module).map((stylesheet) => ({
+			label: path.basename(stylesheet),
+			description: vscode.workspace.asRelativePath(path.dirname(stylesheet)) + (stylesheet === current ? (isChosen ? ' · chosen' : ' · automatic') : ''),
+			stylesheet
+		}));
+		items.push({ label: 'Automatic (nearest folder)', description: isChosen ? '' : 'current', action: 'automatic' }, { label: 'Browse...', action: 'browse' });
+		const picked = await vscode.window.showQuickPick(items, { placeHolder: `The top-level stylesheet for ${path.basename(module)}` });
+		if (!picked) {
+			return;
+		}
+		if (picked.stylesheet) {
+			index.chooseTopLevel(picked.stylesheet, module);
+		} else if (picked.action === 'automatic') {
+			index.clearChoice(module);
+		} else {
+			const uris = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'XSLT': ['xsl', 'xslt'] }, defaultUri: vscode.Uri.file(path.dirname(module)), openLabel: 'Choose' });
+			if (!uris || uris.length === 0) {
+				return;
+			}
+			index.chooseForModule(module, uris[0].fsPath);
+		}
+		await saveTopLevelChoices();
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.resetTopLevelStylesheets', async () => {
+		const count = ImportIndex.instance.resetChoices();
+		await saveTopLevelChoices();
+		vscode.window.showInformationMessage(count === 0 ? 'There are no top-level stylesheet choices to clear.' : `Cleared ${count} top-level stylesheet choice${count === 1 ? '' : 's'}.`);
+	}));
 	// Quick Run for a module in the 'XSLT Imports' view, e.g. the top-level stylesheet
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunModule', async (node?: { path: string }) => {
 		if (node?.path) {

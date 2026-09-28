@@ -173,6 +173,17 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.chooseTopLevelStylesheet",
+				"title": "Choose Top-Level Stylesheet...",
+				"category": "XSLT",
+				"icon": "$(list-selection)"
+			},
+			{
+				"command": "xslt-xpath.resetTopLevelStylesheets",
+				"title": "Reset Top-Level Stylesheet Choices",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.quickRunModule",
 				"title": "Quick Run",
 				"category": "XSLT",
@@ -306,6 +317,13 @@
 					"group": "navigation"
 				}
 			],
+			"view/title": [
+				{
+					"command": "xslt-xpath.chooseTopLevelStylesheet",
+					"when": "view == xslt-xpath.imports",
+					"group": "navigation"
+				}
+			],
 			"view/item/context": [
 				{
 					"command": "xslt-xpath.quickRunModule",
@@ -317,6 +335,10 @@
 				{
 					"command": "xslt-xpath.quickRunModule",
 					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.chooseTopLevelStylesheet",
+					"when": "editorLangId == xslt"
 				},
 				{
 					"command": "xslt-xpath.wrapWith",

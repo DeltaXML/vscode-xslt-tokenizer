@@ -85,7 +85,7 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 			notes.push('current');
 		}
 		if (node.ancestors.length === 0 && chain.length > 1) {
-			notes.push('inferred top-level stylesheet');
+			notes.push(current && index.isChosen(current.fileName) ? 'chosen top-level stylesheet' : 'inferred top-level stylesheet');
 		}
 		if (isCycle) {
 			notes.push('cycle');

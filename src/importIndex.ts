@@ -34,6 +34,10 @@ export class ImportIndex {
 	private building: Promise<void> | undefined;
 	private isBuilt = false;
 	private watcher: vscode.FileSystemWatcher | undefined;
+	// the top-level stylesheets chosen for their trees, most recent first - and for a module, a stylesheet chosen for
+	// it alone, e.g. one the index has no link from
+	private preferred: string[] = [];
+	private moduleChoices = new Map<string, string>();
 	private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
 	// fired when the index is built, and when it's updated for a changed file
 	public readonly onDidChange = this.onDidChangeEmitter.event;
@@ -155,29 +159,118 @@ export class ImportIndex {
 	}
 
 	// the chain of modules from the top-level stylesheet that imports or includes the module, directly or indirectly,
-	// down to the module - just the module if nothing imports it. Where a module has more than one importer, the one
-	// in the nearest folder is used, then the first by path - and a cycle of imports stops the chain
+	// down to the module - just the module if nothing imports it. A stylesheet chosen for the module is used, or else
+	// the route to a chosen top-level stylesheet - otherwise, where a module has more than one importer, the one in the
+	// nearest folder is used, then the first by path. A cycle of imports stops the chain
 	public importChain(file: string): string[] {
+		const moduleChoice = this.moduleChoices.get(file);
+		if (moduleChoice) {
+			return [moduleChoice, file];
+		}
+		const candidates = this.topLevelCandidates(file);
+		const target = this.preferred.find((stylesheet) => candidates.includes(stylesheet));
 		const chain = [file];
 		let current = file;
 		for (;;) {
-			const candidates = this.importersOf(current).filter((importer) => !chain.includes(importer));
-			if (candidates.length === 0) {
+			let importers = this.importersOf(current).filter((importer) => !chain.includes(importer));
+			if (target && importers.some((importer) => this.reaches(importer, target, chain))) {
+				importers = importers.filter((importer) => this.reaches(importer, target, chain));
+			}
+			if (importers.length === 0) {
 				return chain;
 			}
 			const distance = (importer: string) => path.relative(path.dirname(current), path.dirname(importer)).split(path.sep).filter((part) => part !== '').length;
-			current = candidates.reduce((best, candidate) => distance(candidate) < distance(best) ? candidate : best);
+			current = importers.reduce((best, candidate) => distance(candidate) < distance(best) ? candidate : best);
 			chain.unshift(current);
 		}
+	}
+
+	// the top-level stylesheets that import or include the module, directly or indirectly - those that nothing imports
+	public topLevelCandidates(file: string): string[] {
+		const result = new Set<string>();
+		const visited = new Set<string>([file]);
+		const visit = (module: string) => {
+			const importers = this.importersOf(module).filter((importer) => !visited.has(importer));
+			if (importers.length === 0 && module !== file) {
+				result.add(module);
+			}
+			importers.forEach((importer) => {
+				visited.add(importer);
+				visit(importer);
+			});
+		};
+		visit(file);
+		return [...result].sort();
+	}
+
+	// the module is the stylesheet, or is imported or included by it, directly or indirectly, other than through the
+	// modules to skip
+	private reaches(module: string, stylesheet: string, skip: string[]): boolean {
+		const visited = new Set<string>(skip);
+		const visit = (current: string): boolean => {
+			if (current === stylesheet) {
+				return true;
+			}
+			visited.add(current);
+			return this.importersOf(current).some((importer) => !visited.has(importer) && visit(importer));
+		};
+		return visit(module);
 	}
 
 	// the top-level stylesheet that imports or includes the module, directly or indirectly - undefined if there isn't
 	// one, or the index isn't built yet
 	public masterFor(file: string): string | undefined {
-		if (!this.isBuilt) {
+		if (!this.isBuilt && !this.moduleChoices.has(file)) {
 			return undefined;
 		}
 		const chain = this.importChain(file);
 		return chain.length > 1 ? chain[0] : undefined;
+	}
+
+	// the top-level stylesheet for the module is a choice, not the default
+	public isChosen(file: string) {
+		const chain = this.importChain(file);
+		return this.moduleChoices.has(file) || (chain.length > 1 && this.preferred.includes(chain[0]));
+	}
+
+	// the choices, for saving - and restoring them
+	public get choices(): { preferred: string[], modules: [string, string][] } {
+		return { preferred: [...this.preferred], modules: [...this.moduleChoices.entries()] };
+	}
+
+	public setChoices(choices: { preferred?: string[], modules?: [string, string][] } | undefined) {
+		this.preferred = choices?.preferred ?? [];
+		this.moduleChoices = new Map(choices?.modules ?? []);
+		this.onDidChangeEmitter.fire();
+	}
+
+	// chooses a top-level stylesheet for its tree - it's used for the modules it imports or includes
+	public chooseTopLevel(stylesheet: string, file: string) {
+		this.moduleChoices.delete(file);
+		this.preferred = [stylesheet].concat(this.preferred.filter((p) => p !== stylesheet));
+		this.onDidChangeEmitter.fire();
+	}
+
+	// chooses a stylesheet for the module alone
+	public chooseForModule(file: string, stylesheet: string) {
+		this.moduleChoices.set(file, stylesheet);
+		this.onDidChangeEmitter.fire();
+	}
+
+	// the default for the module: no choice for it, and none for the top-level stylesheets that import it
+	public clearChoice(file: string) {
+		const candidates = this.topLevelCandidates(file);
+		this.moduleChoices.delete(file);
+		this.preferred = this.preferred.filter((p) => !candidates.includes(p));
+		this.onDidChangeEmitter.fire();
+	}
+
+	// clears all the choices, returning how many there were
+	public resetChoices(): number {
+		const count = this.preferred.length + this.moduleChoices.size;
+		this.preferred = [];
+		this.moduleChoices.clear();
+		this.onDidChangeEmitter.fire();
+		return count;
 	}
 }

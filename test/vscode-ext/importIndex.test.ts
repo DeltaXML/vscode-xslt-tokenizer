@@ -79,6 +79,61 @@ suite('Import index', () => {
 		assert.deepEqual(new ImportTreeProvider(() => undefined).getChildren(), []);
 	});
 
+	test('the import tree marks a chosen top-level stylesheet', async () => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('lib/b.xsl')));
+		const provider = new ImportTreeProvider(() => document);
+		ImportIndex.instance.chooseTopLevel(file('master.xsl'), file('lib/b.xsl'));
+		assert.equal(provider.getTreeItem(provider.getChildren()[0]).description, 'chosen top-level stylesheet');
+		ImportIndex.instance.resetChoices();
+		assert.equal(provider.getTreeItem(provider.getChildren()[0]).description, 'inferred top-level stylesheet');
+	});
+
+	suite('choosing the top-level stylesheet', () => {
+		const index = new ImportIndex();
+		// m.xsl is imported by a stylesheet in its folder, and by one further away - and it imports n.xsl
+		index.setReferences('/q/v4/master.xsl', [{ path: '/q/v4/m.xsl', isInclude: false }]);
+		index.setReferences('/q/other/master-s10.xsl', [{ path: '/q/v4/m.xsl', isInclude: false }]);
+		index.setReferences('/q/v4/m.xsl', [{ path: '/q/v4/n.xsl', isInclude: true }]);
+
+		test('the candidates, and the stylesheet in the nearest folder by default', () => {
+			assert.deepEqual(index.topLevelCandidates('/q/v4/n.xsl'), ['/q/other/master-s10.xsl', '/q/v4/master.xsl']);
+			assert.deepEqual(index.importChain('/q/v4/n.xsl'), ['/q/v4/master.xsl', '/q/v4/m.xsl', '/q/v4/n.xsl']);
+			assert.isFalse(index.isChosen('/q/v4/n.xsl'));
+		});
+
+		test('a chosen stylesheet is used for its tree', () => {
+			index.chooseTopLevel('/q/other/master-s10.xsl', '/q/v4/m.xsl');
+			assert.deepEqual(index.importChain('/q/v4/m.xsl'), ['/q/other/master-s10.xsl', '/q/v4/m.xsl']);
+			// and for the modules of its tree
+			assert.deepEqual(index.importChain('/q/v4/n.xsl'), ['/q/other/master-s10.xsl', '/q/v4/m.xsl', '/q/v4/n.xsl']);
+			assert.isTrue(index.isChosen('/q/v4/n.xsl'));
+		});
+
+		test('automatic, the default again', () => {
+			index.clearChoice('/q/v4/n.xsl');
+			assert.deepEqual(index.importChain('/q/v4/n.xsl')[0], '/q/v4/master.xsl');
+			assert.deepEqual(index.choices, { preferred: [], modules: [] });
+		});
+
+		test('a stylesheet chosen for a module alone', () => {
+			index.chooseForModule('/q/v4/m.xsl', '/elsewhere/main.xsl');
+			assert.deepEqual(index.importChain('/q/v4/m.xsl'), ['/elsewhere/main.xsl', '/q/v4/m.xsl']);
+			assert.equal(index.masterFor('/q/v4/m.xsl'), '/elsewhere/main.xsl');
+			// not for the other modules
+			assert.equal(index.importChain('/q/v4/n.xsl')[0], '/q/v4/master.xsl');
+		});
+
+		test('saving, restoring and resetting the choices', () => {
+			index.chooseTopLevel('/q/other/master-s10.xsl', '/q/v4/n.xsl');
+			const saved = index.choices;
+			assert.equal(index.resetChoices(), 2);
+			assert.equal(index.importChain('/q/v4/m.xsl')[0], '/q/v4/master.xsl');
+			index.setChoices(saved);
+			assert.equal(index.importChain('/q/v4/m.xsl')[0], '/elsewhere/main.xsl');
+			assert.equal(index.importChain('/q/v4/n.xsl')[0], '/q/other/master-s10.xsl');
+		});
+	});
+
 	suite('references in a module', () => {
 		const references = (text: string) => ImportIndex.moduleReferences(text, '/a/b/main.xsl').map((r) => [r.path, r.isInclude]);
 
