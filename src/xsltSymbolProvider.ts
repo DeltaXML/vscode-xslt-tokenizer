@@ -10,6 +10,8 @@ import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState,
 import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
 import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
 import { ImportIndex } from './importIndex';
+import { XSLTConfiguration } from './languageConfigurations';
+import * as fs from 'fs';
 
 interface ImportedGlobals {
 	href: string;
@@ -237,9 +239,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return this.internalDiagnostics;
 	}	
 
-	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
-		let matchingParent = this.findMatchingParent(localImportedHrefs, document.fileName);
-		if (!matchingParent && document.uri.scheme === 'file' && ImportIndex.isEnabled()) {
+	// the parent imported with the module: true for the top-level stylesheet importing or including it, directly or
+	// indirectly - one opened recently, or from the index of the workspace's modules - false for none, or a path
+	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[], parent: boolean | string = true) {
+		const inferParent = parent === true;
+		let matchingParent = typeof parent === 'string' ? parent : inferParent ? this.findMatchingParent(localImportedHrefs, document.fileName) : undefined;
+		if (inferParent && !matchingParent && document.uri.scheme === 'file' && ImportIndex.isEnabled()) {
 			// the top-level stylesheet importing or including the module, from an index of the workspace's modules - built
 			// in the background the first time it's needed, when the open XSLT modules are checked again
 			matchingParent = ImportIndex.instance.masterFor(document.fileName);
@@ -284,6 +289,61 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 
 		return { importedGlobals1, accumulatedHrefs };
+	}
+
+	// the top-level stylesheet that the module depends on, to be run: one importing or including it, directly or
+	// indirectly, that declares something used by the module or a module it imports or includes - undefined if it can be
+	// run on its own. Each module of the tree is linted with the top-level stylesheet, and as it would be when the module
+	// is run: for the module, on its own, and for the modules it imports or includes, with the module as their parent - a
+	// problem reported only in the second case is for a reference that the top-level stylesheet resolves
+	public static async parentDependency(document: vscode.TextDocument): Promise<string | undefined> {
+		const topLevel = ImportIndex.isEnabled() ? ImportIndex.instance.masterFor(document.fileName) : undefined;
+		if (!topLevel) {
+			return undefined;
+		}
+		const key = (d: vscode.Diagnostic) => `${d.range.start.line}:${d.range.start.character}:${d.message}`;
+		const dependsOnTopLevel = async (doc: vscode.TextDocument, parentWhenRun: string | false) => {
+			const withTopLevel = new Set((await XsltSymbolProvider.moduleDiagnostics(doc, topLevel)).map(key));
+			return (await XsltSymbolProvider.moduleDiagnostics(doc, parentWhenRun)).some((d) => !withTopLevel.has(key(d)));
+		};
+		if (await dependsOnTopLevel(document, false)) {
+			return topLevel;
+		}
+		// the modules the module imports or includes, directly or indirectly
+		const tree = new Set<string>();
+		const addReferences = (file: string) => ImportIndex.instance.referencesOf(file).forEach((reference) => {
+			if (reference.path !== document.fileName && !tree.has(reference.path) && fs.existsSync(reference.path)) {
+				tree.add(reference.path);
+				addReferences(reference.path);
+			}
+		});
+		addReferences(document.fileName);
+		for (const file of tree) {
+			if (await dependsOnTopLevel(await vscode.workspace.openTextDocument(vscode.Uri.file(file)), document.fileName)) {
+				return topLevel;
+			}
+		}
+		return undefined;
+	}
+
+	// the diagnostics of the module, with its imports and includes, and the parent (see processTopLevelImports)
+	private static async moduleDiagnostics(document: vscode.TextDocument, parent: boolean | string): Promise<vscode.Diagnostic[]> {
+		const xslLexer = new XslLexer(XSLTConfiguration.configuration);
+		xslLexer.provideCharLevelState = true;
+		const allTokens = xslLexer.analyse(document.getText());
+		const globalInstructionData = xslLexer.globalInstructionData;
+		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const { importedGlobals1, accumulatedHrefs } = await XsltSymbolProvider.processTopLevelImports(false, xslLexer, XsltSymbolProvider.importSymbolHrefs, document, globalInstructionData, xsltPackages, parent);
+		let summary: GlobalsSummary = { globals: importedGlobals1, hrefs: accumulatedHrefs };
+		for (let level = 0; summary.hrefs.length > 0 && level < 20; level++) {
+			summary = await XsltSymbolProvider.processImportedGlobals(xsltPackages, summary.globals, accumulatedHrefs, level === 0);
+		}
+		const importedGlobals: GlobalInstructionData[] = [];
+		summary.globals.filter((globals) => !globals.error).forEach((globals) => globals.data.forEach((global) => {
+			global['href'] = globals.href;
+			importedGlobals.push(global);
+		}));
+		return XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, importedGlobals, []);
 	}
 
 	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol | undefined) {

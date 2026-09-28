@@ -402,6 +402,13 @@ export function activate(context: vscode.ExtensionContext) {
 			XsltSymbolProvider.instanceForXSLT?.getDocumentSymbols(doc, false);
 		});
 	});
+	// Quick Run for a module in the 'XSLT Imports' view, e.g. the top-level stylesheet
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunModule', async (node?: { path: string }) => {
+		if (node?.path) {
+			await quickRunDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(node.path)));
+		}
+	}));
+
 	// the 'XSLT Imports' view, for the active XSLT module
 	const importTreeProvider = new ImportTreeProvider();
 	importTreeProvider.view = vscode.window.createTreeView('xslt-xpath.imports', { treeDataProvider: importTreeProvider, showCollapseAll: true });
@@ -557,13 +564,46 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	};
 
+	// for a module that depends on declarations in the top-level stylesheet importing it, the choice to run that
+	// stylesheet or the module - for the rest of the session
+	const parentRunChoices = new Map<string, 'parent' | 'module'>();
+
+	// the stylesheet to run for the module: the module, or for a module that depends on declarations in its top-level
+	// stylesheet - so it can't be compiled on its own - that stylesheet, if chosen - undefined if the run is cancelled
+	const stylesheetToRun = async (document: vscode.TextDocument): Promise<vscode.TextDocument | undefined> => {
+		const parent = await XsltSymbolProvider.parentDependency(document);
+		if (!parent) {
+			return document;
+		}
+		let choice = parentRunChoices.get(document.fileName);
+		if (!choice) {
+			const runParent = `Run ${path.basename(parent)}`;
+			const runModule = 'Run Anyway';
+			const picked = await vscode.window.showWarningMessage(`Quick Run XSLT: ${path.basename(document.fileName)} uses declarations from ${path.basename(parent)}, which imports it, so it can't be run on its own.`, runParent, runModule);
+			if (!picked) {
+				return undefined;
+			}
+			choice = picked === runParent ? 'parent' : 'module';
+			parentRunChoices.set(document.fileName, choice);
+		}
+		return choice === 'parent' ? vscode.workspace.openTextDocument(vscode.Uri.file(parent)) : document;
+	};
+
 	const quickRunXslt = async () => {
 		const activeEditor = vscode.window.activeTextEditor;
 		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
 			vscode.window.showErrorMessage('Quick Run XSLT: open an XSLT stylesheet in the active editor first.');
 			return;
 		}
-		const taskType = getRunnableQuickRunTaskType(activeEditor.document.uri);
+		const document = await stylesheetToRun(activeEditor.document);
+		if (document) {
+			await quickRunDocument(document);
+		}
+	};
+
+	// runs the stylesheet with the XML context file, with the selected Quick Run processor
+	const quickRunDocument = async (xsltDocument: vscode.TextDocument) => {
+		const taskType = getRunnableQuickRunTaskType(xsltDocument.uri);
 		if (!taskType) {
 			return;
 		}
@@ -583,12 +623,12 @@ export function activate(context: vscode.ExtensionContext) {
 				offerContextFilePick('Quick Run XSLT: no XML context file is set - open an XML source file, or pick one (or \'None\', to start from xsl:initial-template) from the status bar.');
 				return;
 			}
-			if (!await SaxonTaskProvider.declaresInitialTemplate(activeEditor.document, xsltDefintiionProvider)) {
+			if (!await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
 				offerContextFilePick('Quick Run XSLT: the XML context file is \'None\', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.');
 				return;
 			}
 		}
-		await runQuickRunTask(taskType, activeEditor.document, xmlSourceFsPath);
+		await runQuickRunTask(taskType, xsltDocument, xmlSourceFsPath);
 	};
 	// the processor-specific variants exist only so the editor title play button's tooltip names the processor
 	for (const command of ['xslt-xpath.quickRunXslt', 'xslt-xpath.quickRunXsltSaxonJ', 'xslt-xpath.quickRunXsltSaxonJS', 'xslt-xpath.quickRunXsltSaxonC']) {

@@ -48,6 +48,25 @@ suite('Import index', () => {
 		assert.include(provider.getTreeItem(provider.getChildren(children[0])[0]).tooltip as string, 'xsl:include');
 	});
 
+	test('a module that depends on its top-level stylesheet, directly or through a module it includes, to be run', async function () {
+		this.timeout(10000);
+		const dependency = async (name: string) => XsltSymbolProvider.parentDependency(await vscode.workspace.openTextDocument(vscode.Uri.file(file(name))));
+		// b.xsl uses ex:util, from util.xsl, which master.xsl imports - and a.xsl includes b.xsl
+		assert.equal(await dependency('lib/b.xsl'), file('master.xsl'));
+		assert.equal(await dependency('lib/a.xsl'), file('master.xsl'));
+		// util.xsl, which master.xsl imports, can be run on its own - as can master.xsl
+		assert.isUndefined(await dependency('util.xsl'));
+		assert.isUndefined(await dependency('master.xsl'));
+	});
+
+	test('the Quick Run action is for the top-level stylesheet of the tree', async () => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('lib/b.xsl')));
+		const provider = new ImportTreeProvider(() => document);
+		const [root] = provider.getChildren();
+		assert.equal(provider.getTreeItem(root).contextValue, 'topLevel');
+		assert.equal(provider.getTreeItem(provider.getChildren(root)[0]).contextValue, 'module');
+	});
+
 	test('the import tree for a top-level stylesheet', async () => {
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('master.xsl')));
 		const provider = new ImportTreeProvider(() => document);

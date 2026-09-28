@@ -173,6 +173,12 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.quickRunModule",
+				"title": "Quick Run",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
 				"command": "xslt-xpath.selectFollowingElement",
 				"title": "Select following element",
 				"category": "XML"
@@ -300,7 +306,18 @@
 					"group": "navigation"
 				}
 			],
+			"view/item/context": [
+				{
+					"command": "xslt-xpath.quickRunModule",
+					"when": "view == xslt-xpath.imports && viewItem == topLevel",
+					"group": "inline"
+				}
+			],
 			"commandPalette": [
+				{
+					"command": "xslt-xpath.quickRunModule",
+					"when": "false"
+				},
 				{
 					"command": "xslt-xpath.wrapWith",
 					"when": "editorLangId == xslt"
