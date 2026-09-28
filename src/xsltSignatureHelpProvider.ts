@@ -5,6 +5,7 @@ import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageCo
 import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
 import { RecordTypes } from "./recordTypes";
 import { XdocNotes } from "./xdocNote";
+import { declarationParamLabels } from "./declarationParams";
 
 interface EnclosingCall {
 	functionName: string;
@@ -83,7 +84,8 @@ export class XSLTSignatureHelpProvider implements SignatureHelpProvider {
 	// the signature for a function or template declaration, with the descriptions from its documentation note, if any
 	private static declarationSignature(document: TextDocument, declaration: GlobalInstructionData, signature: (paramList: string) => string): SignatureInformation {
 		const note = XdocNotes.forGlobal(declaration, document.getText());
-		const paramLabels = (declaration.memberNames ?? []).map((name, i) => declaration.memberTypes?.[i] ? `$${name} as ${declaration.memberTypes[i]}` : `$${name}`);
+		// with the defaults of optional parameters, e.g. $scale as xs:double := 1
+		const paramLabels = declarationParamLabels(declaration, document.getText());
 		const info = new SignatureInformation(signature(paramLabels.join(', ')), note ? new MarkdownString(XdocNotes.toMarkdown(note, false)) : undefined);
 		info.parameters = paramLabels.map((label, i) => {
 			const paramText = note ? XdocNotes.paramText(note, declaration.memberNames![i]) : undefined;

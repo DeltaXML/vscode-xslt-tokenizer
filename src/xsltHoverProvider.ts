@@ -7,6 +7,7 @@ import { LexPosition } from "./xpLexer";
 import { XsltTokenDiagnostics } from "./xsltTokenDiagnostics";
 import { XdocNotes } from "./xdocNote";
 import { RecordTypes } from "./recordTypes";
+import { declarationParamLabels } from "./declarationParams";
 
 enum CharType {
 	none,
@@ -90,10 +91,8 @@ export class XSLTHoverProvider implements HoverProvider {
 
 		// functions with the same name can be declared with different arities (overloads) - prefer the richest one
 		const bestMatch = candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
-		const paramList = (bestMatch.memberNames ?? []).map((paramName, i) => {
-			const paramType = bestMatch.memberTypes?.[i];
-			return paramType ? `$${paramName} as ${paramType}` : `$${paramName}`;
-		}).join(', ');
+		// with the defaults of optional parameters, e.g. $scale as xs:double := 1
+		const paramList = declarationParamLabels(bestMatch, document.getText()).join(', ');
 		const returnType = bestMatch.returnType ? ` as ${bestMatch.returnType}` : '';
 		const signature = `${bestMatch.name}(${paramList})${returnType}`;
 		const description = bestMatch.href ? `User-defined function, declared in ${path.basename(bestMatch.href)}` : 'User-defined function, declared in this stylesheet';
@@ -141,14 +140,13 @@ export class XSLTHoverProvider implements HoverProvider {
 		const note = XSLTHoverProvider.declarationNote(document, template);
 		if (element === 'xsl:with-param') {
 			const paramIndex = template.memberNames?.indexOf(name) ?? -1;
-			const paramType = paramIndex > -1 ? template.memberTypes?.[paramIndex] : undefined;
 			const paramText = note ? XdocNotes.paramText(note, name) : undefined;
 			if (paramIndex === -1) {
 				return undefined;
 			}
-			return this.createHover(`$${name}${paramType ? ' as ' + paramType : ''}`, `${paramText ? paramText + '\n\n---\n' : ''}Parameter of the template: \`${templateName}\``);
+			return this.createHover(declarationParamLabels(template, document.getText())[paramIndex], `${paramText ? paramText + '\n\n---\n' : ''}Parameter of the template: \`${templateName}\``);
 		}
-		const params = (template.memberNames ?? []).map((paramName, i) => template.memberTypes?.[i] ? `$${paramName} as ${template.memberTypes[i]}` : `$${paramName}`).join(', ');
+		const params = declarationParamLabels(template, document.getText()).join(', ');
 		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
 		return this.createHover(`template ${templateName}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
