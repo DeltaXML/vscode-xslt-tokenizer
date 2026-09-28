@@ -1776,6 +1776,149 @@ export class XsltTokenCompletions {
 		});
 	}
 
+	// XPath 4.0 keyword arguments: at the start of a function call argument, e.g. ex:area(2, |) or ex:area(2, sc|), an
+	// item 'name := ' for each parameter of the called function not already supplied, by position or keyword - for
+	// user-defined functions, and built-in functions, from their signatures. keywordsOnly is true after a keyword
+	// argument, as a positional argument can't follow one - undefined if it's not such a position
+	public static getKeywordArgumentCompletions(document: vscode.TextDocument, allTokens: BaseToken[], position: vscode.Position, isXPathDocument: boolean,
+		globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): { items: vscode.CompletionItem[], keywordsOnly: boolean } | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const wordStart = offset - /[\w.-]*$/.exec(text.substring(Math.max(0, offset - 100), offset))![0].length;
+		const tokenStart = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter));
+		const tokenEnd = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter + t.length));
+		const tokens = allTokens.filter((t) => t.tokenType < XsltTokenCompletions.xsltStartTokenNumber && t.tokenType !== TokenLevelState.comment);
+		const isOpen = (t: BaseToken) => t.charType === CharLevelState.lB || t.charType === CharLevelState.lPr || t.charType === CharLevelState.lBr;
+		const isClose = (t: BaseToken) => t.charType === CharLevelState.rB || t.charType === CharLevelState.rPr || t.charType === CharLevelState.rBr;
+		let openIndex = -1;
+		let currentIndex = -1;
+		// an empty argument list, e.g. ex:area(|), is a single '()' token
+		const emptyCall = tokens.findIndex((t) => t.value === '()' && tokenStart(t) < offset && offset < tokenEnd(t));
+		if (emptyCall > 0 && tokens[emptyCall - 1].tokenType === TokenLevelState.function) {
+			openIndex = emptyCall;
+		} else {
+			let previousIndex = -1;
+			for (let i = 0; i < tokens.length && tokenEnd(tokens[i]) <= wordStart; i++) {
+				previousIndex = i;
+			}
+			const previous = tokens[previousIndex];
+			const isArgumentStart = !!previous && (previous.charType === CharLevelState.lB || (previous.charType === CharLevelState.sep && previous.value === ','));
+			if (!isArgumentStart || !/^\s*$/.test(text.substring(tokenEnd(previous), wordStart))) {
+				return undefined;
+			}
+			// the '(' of the enclosing call
+			let depth = 0;
+			for (let i = previousIndex; i > -1 && openIndex === -1; i--) {
+				if (isClose(tokens[i])) {
+					depth++;
+				} else if (isOpen(tokens[i])) {
+					if (depth-- === 0) {
+						openIndex = tokens[i].charType === CharLevelState.lB && tokens[i - 1]?.tokenType === TokenLevelState.function ? i : -2;
+					}
+				}
+			}
+			currentIndex = previousIndex + 1;
+		}
+		if (openIndex < 0) {
+			return undefined;
+		}
+		// the other arguments of the call: positional, or keyword arguments by name
+		let positionalCount = 0;
+		let keywordsBefore = false;
+		const usedKeywords: string[] = [];
+		if (currentIndex > -1) {
+			let depth = 0;
+			let argStart = openIndex + 1;
+			for (let i = openIndex + 1; i <= tokens.length; i++) {
+				const t = tokens[i];
+				const isEnd = !t || (depth === 0 && (isClose(t) || (t.charType === CharLevelState.sep && t.value === ',')));
+				if (isEnd) {
+					const isKeyword = tokens[argStart]?.tokenType === TokenLevelState.mapKey && tokens[argStart + 1]?.value === ':=';
+					if (argStart !== currentIndex && argStart < i) {
+						if (isKeyword) {
+							usedKeywords.push(tokens[argStart].value);
+							keywordsBefore = keywordsBefore || argStart < currentIndex;
+						} else if (argStart < currentIndex) {
+							positionalCount++;
+						}
+					}
+					if (!t || isClose(t)) {
+						break;
+					}
+					argStart = i + 1;
+				} else if (isOpen(t)) {
+					depth++;
+				} else if (isClose(t)) {
+					depth--;
+				}
+			}
+		}
+		if (tokens[openIndex - 2]?.value === '=>' || tokens[openIndex - 2]?.value === '=!>') {
+			// the first argument is the left-hand side of the arrow operator
+			positionalCount++;
+		}
+		// the parameters of the called function
+		const functionName = tokens[openIndex - 1].value;
+		const globals = globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.Function && g.name === functionName && g.memberNames);
+		const declaration = globals.reduce<GlobalInstructionData | undefined>((best, g) => !best || g.idNumber > best.idNumber ? g : best, undefined);
+		let params: { name: string, type?: string, text?: string }[] = [];
+		if (declaration) {
+			const note = XdocNotes.forGlobal(declaration, text);
+			params = declaration.memberNames!.map((name, i) => ({ name, type: declaration.memberTypes?.[i], text: note ? XdocNotes.paramText(note, name) : undefined }));
+		} else {
+			const builtinName = functionName.startsWith('fn:') ? functionName.substring(3) : functionName;
+			const builtin = (isXPathDocument ? XPathFunctionDetails.xpathDataPlus40 : XPathFunctionDetails.dataPlus40).find((f) => f.name === builtinName);
+			params = builtin ? XsltTokenCompletions.signatureParams(builtin.signature) : [];
+		}
+		const range = new vscode.Range(document.positionAt(wordStart), position);
+		const items = params.slice(positionalCount).filter((param) => !usedKeywords.includes(param.name)).map((param, index) => {
+			const item = new vscode.CompletionItem(`${param.name} :=`, vscode.CompletionItemKind.Property);
+			item.insertText = `${param.name} := `;
+			item.filterText = param.name;
+			item.range = range;
+			item.detail = param.type ?? 'item()*';
+			if (param.text) {
+				item.documentation = new vscode.MarkdownString(param.text);
+			}
+			// before other completions, in declaration order
+			item.sortText = '!' + String(index).padStart(3, '0');
+			return item;
+		});
+		return { items, keywordsOnly: keywordsBefore };
+	}
+
+	// the parameters in an XPath 4.0 function signature, e.g. 'format-number($value as xs:numeric?, $picture as
+	// xs:string, $options as (xs:string | map(*))? := {}) as xs:string'
+	private static signatureParams(signature: string): { name: string, type?: string }[] {
+		const open = signature.indexOf('(');
+		let depth = 0;
+		let close = -1;
+		for (let i = open; i < signature.length && close === -1; i++) {
+			if ('([{'.includes(signature[i])) {
+				depth++;
+			} else if (')]}'.includes(signature[i]) && --depth === 0) {
+				close = i;
+			}
+		}
+		const params: { name: string, type?: string }[] = [];
+		let partStart = open + 1;
+		depth = 0;
+		for (let i = open + 1; open > -1 && i <= close; i++) {
+			if (i === close || (signature[i] === ',' && depth === 0)) {
+				const param = /^\s*\$([\w.-]+)(?:\s+as\s+([\s\S]*?))?(?:\s*(?:\.\.\.)?\s*:=[\s\S]*)?\s*$/.exec(signature.substring(partStart, i));
+				if (param) {
+					params.push({ name: param[1], type: param[2]?.replace(/\s*\.\.\.$/, '') });
+				}
+				partStart = i + 1;
+			} else if ('([{'.includes(signature[i])) {
+				depth++;
+			} else if (')]}'.includes(signature[i])) {
+				depth--;
+			}
+		}
+		return params;
+	}
+
 	// keyword operators after an operand, e.g. '1 |' or '$a c|' - operators of 3 characters or fewer, e.g. 'and', 'eq' or
 	// 'div', are quicker to type than to choose, so they're not included
 	private static readonly operatorKeywords = ['cast as', 'castable as', 'instance of', 'treat as', 'idiv', 'union', 'intersect', 'except'];

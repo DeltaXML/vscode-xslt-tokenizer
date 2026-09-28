@@ -337,9 +337,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				XsltTokenCompletions.getSwitchCaseCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			// an argument of a user-defined function, or the value of a typed let binding, for an enumeration type or xs:boolean
 			const argumentValues = !recordEntries && !selectValues && isXSLT40 ? XsltTokenCompletions.getArgumentValueCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
+			// XPath 4.0 keyword arguments, e.g. ex:area(2, scale := 2) - the names of the called function's parameters
+			const keywordArguments = (isXSLT40 || this.docType === DocumentTypes.XPath) && !recordEntries && !argumentValues?.inString ?
+				XsltTokenCompletions.getKeywordArgumentCompletions(document, allTokens, position, this.docType === DocumentTypes.XPath, globalInstructionData, allImportedGlobals) : undefined;
 			if (recordEntries || selectValues || isCommaTrigger || argumentValues?.inString) {
 				// triggered by a ',', '{', ':' or quote, or within a string literal: only these completions
-				const items = recordEntries ?? selectValues ?? argumentValues?.items;
+				const items = recordEntries ?? selectValues ?? (argumentValues?.items ?? []).concat(keywordArguments?.items ?? []);
 				resolve(items && items.length > 0 ? new vscode.CompletionList(items, true) : undefined);
 				return;
 			}
@@ -366,6 +369,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			if (argumentValues) {
 				completions = argumentValues.items.concat(completions ?? []);
+			}
+			if (keywordArguments && keywordArguments.items.length > 0) {
+				// after a keyword argument, only keyword arguments can follow
+				completions = keywordArguments.keywordsOnly ? keywordArguments.items : keywordArguments.items.concat(completions ?? []);
 			}
 			// an xsl:map for a record type, before the other element completions
 			const recordMaps = isXSLT40 ? XsltTokenCompletions.getRecordMapElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
