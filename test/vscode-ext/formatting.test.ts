@@ -4,6 +4,8 @@
  *   formatting, after Enter, which is indented
  * - the content of an xsl:note is indented as a block, keeping each line's indentation relative to the least indented
  *   line, as indentation is significant in Markdown - the content of xsl:text is kept as it is
+ * - the continuation lines of a multi-line string literal or string template are kept as they are, as their
+ *   indentation is part of the string's value - in an attribute, each whitespace character becomes a space
  * - no edits for lines already indented, and none for a cancelled request
  */
 import * as vscode from 'vscode';
@@ -101,6 +103,37 @@ suite('Formatting', () => {
 		test('a CDATA section within a note is indented with the block', async () => {
 			const { lines } = await format(note(['<![CDATA[', '  <a> & b', ']]>'], ''));
 			assert.deepEqual(lines.slice(3, 6), ['      <![CDATA[', '        <a> & b', '      ]]>']);
+		});
+	});
+
+	suite('multi-line strings', () => {
+		const template = (body: string[]) => stylesheet(['  <xsl:template match="/">', '    <xsl:param name="a" select="1"/>', ...body, '  </xsl:template>']);
+		const cases: [string, string[]][] = [
+			['a string literal', [`<xsl:sequence select="'first line`, `        second line'"/>`]],
+			['a closing quote at the start of a line', [`<xsl:sequence select="'first line`, `'"/>`]],
+			['a whitespace-only line within a string', [`<xsl:sequence select="'first line`, `      `, `  last line'"/>`]],
+			['a string template', ['<xsl:sequence select="`Hello {$a},', '        next line {$a}', '        last`"/>']],
+			['a string template, after an enclosed expression', ['<xsl:sequence select="`x {$a}', 'y', '`"/>']],
+			['a string delimited by entities', ['<xsl:sequence select="&quot;first', '        second&quot;"/>']]
+		];
+		cases.forEach(([name, body]) => {
+			test(`the continuation lines of ${name} are kept`, async () => {
+				// the first line of the body is mis-indented, and is indented as usual
+				const { lines } = await format(template(body));
+				assert.equal(lines[3], '    ' + body[0]);
+				assert.deepEqual(lines.slice(4, 3 + body.length), body.slice(1));
+			});
+		});
+
+		test('the continuation lines of a string template in xsl:select are kept', async () => {
+			// the template's first line is indented, as its indentation isn't part of the string
+			const { lines } = await format(template(['<xsl:select>', '`Hello {$a},', '        next line`', '</xsl:select>']));
+			assert.deepEqual(lines.slice(3, 7), ['    <xsl:select>', '      `Hello {$a},', '        next line`', '    </xsl:select>']);
+		});
+
+		test('lines after a multi-line string are indented as usual', async () => {
+			const { lines } = await format(template([`<xsl:sequence select="'a`, `        b'"/>`, `<a/>`]));
+			assert.deepEqual(lines.slice(3, 6), [`    <xsl:sequence select="'a`, `        b'"/>`, `    <a/>`]);
 		});
 	});
 });

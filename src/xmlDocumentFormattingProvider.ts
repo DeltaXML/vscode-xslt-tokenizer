@@ -28,6 +28,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	// for on-type formatting, the line to indent - the new line after Enter, which may be empty
 	private onTypeLine = -1;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	// the parts of a string template, or of a string delimited by entities, that can't start a string
+	private static readonly stringContinuationCharTypes = [CharLevelState.mBt, CharLevelState.rBt, CharLevelState.rDqEnt, CharLevelState.rSqEnt,
+		CharLevelState.rLiteralDqEnt, CharLevelState.rLiteralSqEnt];
 	public static currentIndentString: string = '';
 	private isCloseTag = false;
 	private closeTagLine: vscode.TextLine | null = null;
@@ -188,6 +191,14 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
 			isNoteEndTag = false;
+			// the continuation of a string literal or string template on a new line: the lexer splits a string at line
+			// breaks, so the continuation starts at the start of the line - it's the middle or right part of a template
+			// or a string delimited by entities, or it follows the string's previous part - the lines since the previous
+			// token are within the string, so their indentation is part of its value (in an attribute, the XML parser
+			// replaces each whitespace character with a space, but doesn't collapse them)
+			const isStringContinuation = token.tokenType === TokenLevelState.string && token.startCharacter === 0 &&
+				(XMLDocumentFormattingProvider.stringContinuationCharTypes.includes(<CharLevelState>token.charType) ||
+					(!!prevToken && prevToken.tokenType === TokenLevelState.string && prevToken.line < token.line));
 			let stackLength = xmlSpacePreserveStack.length;
 			let addNewLine = false;
 
@@ -506,7 +517,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 				}
 			} else if ((!withinCDATA || withinNote) && lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
-				for (let i = lineNumberDiff - 1; i > -1; i--) {
+				for (let i = lineNumberDiff - 1; i > -1 && !isStringContinuation; i--) {
 					let loopLineNumber = lineNumber - i;
 					const currentLine = document.lineAt(loopLineNumber);
 					// token may not be at start of line
