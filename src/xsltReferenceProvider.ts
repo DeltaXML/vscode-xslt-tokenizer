@@ -8,6 +8,8 @@ import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
 import { AttributeType, TagType, XSLTToken, XsltTokenDiagnostics, ElementData, XPathData, VariableData, ValidationType, CurlyBraceType } from './xsltTokenDiagnostics';
 import * as url from 'url';
+import { RecordTypes } from './recordTypes';
+import { XdocNotes } from './xdocNote';
 
 export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.RenameProvider {
 
@@ -115,6 +117,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
 				locations = refLocations;
 				locations.push(this.definition);
+				// for a parameter of a function or template: its @param in a documentation note, and keyword arguments
+				const hrefs = [document.fileName].concat(eid.accumulatedHrefs.filter((href) => href !== document.fileName));
+				const parameterLocations = await this.parameterReferences(this.definition, document, eid.allTokens, hrefs);
+				locations = locations.concat(parameterLocations.filter((p) => !locations.some((l) => l.uri.toString() === p.uri.toString() && l.range.isEqual(p.range))));
 				for (let index = 0; index < eid.accumulatedHrefs.length; index++) {
 					const currentHref = eid.accumulatedHrefs[index];
 					if (currentHref === document.fileName) {
@@ -138,6 +144,57 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			this.refLocations = locations;
 			resolve(locations);
 		});
+	}
+
+	// XSLT 4.0: for a parameter of an xsl:function or xsl:template, the name in its @param in the declaration's
+	// documentation note - and for a function parameter, keyword arguments for it in calls of the function, e.g.
+	// scale := 2 in ex:area(2, 3, scale := 2) - in the document and the modules it includes or imports (hrefs)
+	private async parameterReferences(definition: vscode.Location, document: vscode.TextDocument, documentTokens: BaseToken[], hrefs: string[]): Promise<vscode.Location[]> {
+		const declarationDocument = definition.uri.toString() === document.uri.toString() ? document : await vscode.workspace.openTextDocument(definition.uri);
+		const text = declarationDocument.getText();
+		const tagStart = text.lastIndexOf('<', declarationDocument.offsetAt(definition.range.start));
+		const paramName = tagStart > -1 && /^<xsl:param\s/.test(text.substring(tagStart, tagStart + 11)) ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') : undefined;
+		const markup = RecordTypes.blankMarkup(text);
+		const ancestors = paramName ? RecordTypes.openElements(markup, tagStart) : [];
+		const parent = ancestors[ancestors.length - 1];
+		if (!paramName || !parent || (parent.name !== 'xsl:function' && parent.name !== 'xsl:template')) {
+			return [];
+		}
+		const locations: vscode.Location[] = [];
+		const nameLocation = (doc: vscode.TextDocument, offset: number) => {
+			const start = doc.positionAt(offset);
+			return new vscode.Location(doc.uri, new vscode.Range(start, start.translate(0, paramName.length)));
+		};
+		XdocNotes.forDeclaration(text, parent.offset, markup)?.tags
+			.filter((tag) => tag.name === 'param' && tag.paramName === paramName && tag.paramOffset !== undefined)
+			.forEach((tag) => locations.push(nameLocation(declarationDocument, tag.paramOffset!)));
+		if (parent.name !== 'xsl:function') {
+			return locations;
+		}
+		// the calls of the function that its arity allows - the parameters with required="no" are optional, and the
+		// arity of a call with an arrow operator doesn't include the implicit first argument
+		const functionName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name');
+		const params = RecordTypes.childElements(text, markup, parent.offset, 'xsl:param');
+		const requiredCount = params.filter((offset) => !['no', 'false', '0'].includes((RecordTypes.attributeOfElementAt(text, offset + 1, 'required') ?? '').trim())).length;
+		for (const href of hrefs) {
+			let doc: vscode.TextDocument;
+			try {
+				doc = href === document.fileName ? document : await vscode.workspace.openTextDocument(vscode.Uri.parse(url.pathToFileURL(href).toString()));
+			} catch (error) {
+				continue;
+			}
+			const tokens = (doc === document ? documentTokens : this.xslLexer.analyse(doc.getText())).filter((t) => t.tokenType < XsltTokenDefinitions.xsltStartTokenNumber);
+			tokens.forEach((t, index) => {
+				if (t.tokenType !== TokenLevelState.mapKey || t.value !== paramName || tokens[index + 1]?.value !== ':=') {
+					return;
+				}
+				const call = RecordTypes.callArgument(tokens, index + 2);
+				if (call && call.name === functionName && (call.arity === undefined || (call.arity <= params.length && call.arity + 1 >= requiredCount))) {
+					locations.push(XsltTokenDefinitions.createLocationFromToken(t, doc));
+				}
+			});
+		}
+		return locations;
 	}
 
 	public static calculateReferences = (seekInstruction: GlobalInstructionData, languageConfig: LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): BaseToken[] => {
