@@ -343,10 +343,13 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 			fileSelector.pickedValues.clear();
 			if (resultUri) {
-				const openAction = 'Open';
-				vscode.window.showInformationMessage(message, openAction).then((choice) => {
-					if (choice === openAction) {
+				// for an HTML result, also 'Open in Browser' - VS Code's integrated browser
+				const actions = SaxonTaskProvider.resultActions(resultUri.fsPath, await vscode.commands.getCommands(true));
+				vscode.window.showInformationMessage(message, ...actions).then((choice) => {
+					if (choice === SaxonTaskProvider.openResultAction) {
 						vscode.commands.executeCommand('vscode.open', resultUri);
+					} else if (choice === SaxonTaskProvider.openResultInBrowserAction) {
+						vscode.commands.executeCommand(SaxonTaskProvider.integratedBrowserOpenFile, resultUri);
 					}
 				});
 			} else if (failed) {

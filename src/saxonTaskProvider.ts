@@ -52,6 +52,20 @@ interface XSLTParameter {
 }
 
 export class SaxonTaskProvider implements vscode.TaskProvider {
+    // the command that opens a file in VS Code's integrated browser - the 'Open in Integrated Browser' menu item for an
+    // HTML file. It isn't documented, so it's only used if VS Code has it
+    public static readonly integratedBrowserOpenFile = 'workbench.action.browser.openFile';
+    public static readonly openResultAction = 'Open';
+    public static readonly openResultInBrowserAction = 'Open in Browser';
+
+    // the actions for the notification when a task writes a result file: 'Open', and for an HTML result, 'Open in
+    // Browser' - if the integrated browser's command is one of the available commands
+    public static resultActions(resultFsPath: string, availableCommands: string[]): string[] {
+        const isHtml = /\.(html?|xhtml)$/i.test(resultFsPath);
+        return isHtml && availableCommands.includes(SaxonTaskProvider.integratedBrowserOpenFile) ?
+            [SaxonTaskProvider.openResultAction, SaxonTaskProvider.openResultInBrowserAction] : [SaxonTaskProvider.openResultAction];
+    }
+
     static SaxonBuildScriptType: string = 'xslt';
     templateTaskLabel = 'Saxon Transform (New)';
     templateTaskFound = false;
