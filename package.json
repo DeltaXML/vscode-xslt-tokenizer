@@ -224,6 +224,16 @@
 				"icon": "$(arrow-swap)"
 			}
 		],
+		"views": {
+			"explorer": [
+				{
+					"id": "xslt-xpath.imports",
+					"name": "XSLT Imports",
+					"when": "resourceLangId == xslt",
+					"visibility": "collapsed"
+				}
+			]
+		},
 		"submenus": [
 			{
 				"id": "xslt-xpath.xmlSelection",
@@ -440,6 +450,11 @@
 					"default": "xslt",
 					"scope": "resource",
 					"markdownDescription": "The XSLT processor (task type) used by the **Quick Run** command. Quick Run persists a separate task in `.vscode/tasks.json` for each processor used with a given XSLT/XML pair"
+				},
+				"XSLT.resources.inferParentFromWorkspace": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "For an XSLT module that another stylesheet imports or includes, find the top-level stylesheet from the workspace's XSLT files - so that references to its declarations are resolved without it being opened first. The files are scanned in the background, once, and kept up to date as they change"
 				},
 				"XSLT.resources.useSourceFile": {
 					"description": "Control how completion-list for XPath node names is populated",

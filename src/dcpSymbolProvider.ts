@@ -56,7 +56,8 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 			if (allDiagnostics.length > 0) {
 				this.collection.set(document.uri, allDiagnostics);
 			} else {
-				this.collection.clear();
+				// only this document's problems - not those of other documents
+				this.collection.delete(document.uri);
 			}
 			resolve(symbols);
 		});

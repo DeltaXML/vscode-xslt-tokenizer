@@ -34,6 +34,8 @@ import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTReferenceProvider } from './xsltReferenceProvider';
 import { XSLTCodeActions } from './xsltCodeActions';
 import { wrapWith } from './xsltWrap';
+import { ImportIndex } from './importIndex';
+import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
 
 
@@ -391,6 +393,22 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xmlSelectionPick', () => showXMLSelectionPick()));
+	// when the index of the workspace's XSLT modules is first built, check the open modules again, for references to
+	// declarations in the stylesheets that import or include them
+	context.subscriptions.push({ dispose: () => ImportIndex.instance.dispose() });
+	const onIndexBuilt = ImportIndex.instance.onDidChange(() => {
+		onIndexBuilt.dispose();
+		vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'xslt' && doc.uri.scheme === 'file').forEach((doc) => {
+			XsltSymbolProvider.instanceForXSLT?.getDocumentSymbols(doc, false);
+		});
+	});
+	// the 'XSLT Imports' view, for the active XSLT module
+	const importTreeProvider = new ImportTreeProvider();
+	importTreeProvider.view = vscode.window.createTreeView('xslt-xpath.imports', { treeDataProvider: importTreeProvider, showCollapseAll: true });
+	context.subscriptions.push(importTreeProvider.view);
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => importTreeProvider.refresh()));
+	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => doc.languageId === 'xslt' && importTreeProvider.refresh()));
+	context.subscriptions.push(ImportIndex.instance.onDidChange(() => importTreeProvider.refresh()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.wrapWith', (uri?: vscode.Uri, start?: number, end?: number) => wrapWith(uri, start, end)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectCurrentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Current)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectPrecedingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Previous)));
@@ -797,7 +815,8 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
 			} else {
-				this.collection.clear();
+				// only this document's problems - not those of other documents
+				this.collection.delete(document.uri);
 			};
 		}
 	}

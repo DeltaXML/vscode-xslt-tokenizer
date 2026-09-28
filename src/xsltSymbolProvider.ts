@@ -9,6 +9,7 @@ import * as url from 'url';
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
 import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
 import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
+import { ImportIndex } from './importIndex';
 
 interface ImportedGlobals {
 	href: string;
@@ -211,7 +212,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					if (allDiagnostics.length > 0) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
-						this.collection.clear();
+						// only this document's problems - not those of other documents
+						this.collection.delete(document.uri);
 					};
 				}
 				this.internalDiagnostics = diagnostics;
@@ -236,7 +238,15 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}	
 
 	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
-		const matchingParent = this.findMatchingParent(localImportedHrefs, document.fileName);
+		let matchingParent = this.findMatchingParent(localImportedHrefs, document.fileName);
+		if (!matchingParent && document.uri.scheme === 'file' && ImportIndex.isEnabled()) {
+			// the top-level stylesheet importing or including the module, from an index of the workspace's modules - built
+			// in the background the first time it's needed, when the open XSLT modules are checked again
+			matchingParent = ImportIndex.instance.masterFor(document.fileName);
+			if (!ImportIndex.instance.built) {
+				ImportIndex.instance.whenBuilt();
+			}
+		}
 		let importedGlobals1: ImportedGlobals[] = [];
 		let accumulatedHrefs: string[];
 		if (matchingParent) {

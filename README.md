@@ -28,7 +28,8 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 | **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names *(uses last XML opened in VS Code)*, snippets for XPath expressions, and `xsl:with-param` for each parameter of a called template
 | **XPath Tester**          | Support for companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension for XML Analysis or XPath Testing
 | **Color Theme Support**   | Tested with most popular color themes ([Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) must be enabled in settings) 
-| **Inferred xsl:import**   | Open the 'master' XSLT module first. Now all subsequent XSLT modules opened infer 'missing' imports using the 'master'
+| **Inferred xsl:import**   | For a module that another stylesheet imports or includes, the top-level ('master') stylesheet is found from the workspace's XSLT files, so references to its declarations resolve without it being opened first (setting: `XSLT.resources.inferParentFromWorkspace`)
+| **XSLT Imports view**     | In the Explorer: the active module's top-level stylesheet, with its tree of `xsl:import` and `xsl:include` modules
 | **Code Folding**          | Either uses indentation or `region` XML processing-instructions
 | **Snippets**              | Set of snippets accessed via auto-completion
 | **Symbol Outline**        | Tree-view of XSLT instructions *- this can be shown in the 'Side Panel' or 'Side Bar'*
