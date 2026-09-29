@@ -7,6 +7,8 @@
  * - 'Add documentation note' adds a note with the parameters
  * - completions of the tags, and of the parameter names after @param, within a note
  * - the linter reports an @param that isn't a parameter
+ * - @field name documents a field of an xsl:item-type's record type: shown in hovers of the type and of the field, with
+ *   completions, checks and fixes like those of @param
  *
  * The cursor position is marked by '¦'.
  */
@@ -46,6 +48,8 @@ const pointType = `<xsl:item-type name="cx:point" as="record(x as xs:double, y a
     <xsl:note format="xdoc-md">
       A point on a **plane**.
 
+      @field x the horizontal position
+      @field y the vertical position
       @since 2.0
     </xsl:note>
   </xsl:item-type>
@@ -68,6 +72,17 @@ async function open(marked: string) {
 
 async function hoverText(body: string) {
 	const { document, position } = await open(stylesheet(body));
+	const hover = await new XSLTHoverProvider(new XsltDefinitionProvider(XSLTConfiguration.configuration), XSLTConfiguration.configuration).provideHover(document, position, new vscode.CancellationTokenSource().token);
+	return (hover?.contents as vscode.MarkdownString[] | undefined)?.map((c) => c.value).join('\n');
+}
+
+// the hover after the linter has recorded the record field references
+async function fieldHoverText(body: string) {
+	const { document, position } = await open(stylesheet(body));
+	const xslLexer = new XslLexer(XSLTConfiguration.configuration);
+	xslLexer.provideCharLevelState = true;
+	const allTokens = xslLexer.analyse(document.getText());
+	XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: true }, DocumentTypes.XSLT40, document, allTokens, xslLexer.globalInstructionData, [], []);
 	const hover = await new XSLTHoverProvider(new XsltDefinitionProvider(XSLTConfiguration.configuration), XSLTConfiguration.configuration).provideHover(document, position, new vscode.CancellationTokenSource().token);
 	return (hover?.contents as vscode.MarkdownString[] | undefined)?.map((c) => c.value).join('\n');
 }
@@ -115,6 +130,7 @@ suite('Documentation notes', () => {
 		const text = await hoverText(`<xsl:variable name="p" as="cx:po¦int?" select="()"/>`);
 		assert.include(text, 'type cx:point as record(x as xs:double, y as xs:double)');
 		assert.include(text, 'A point on a **plane**.');
+		assert.include(text, '*@field* `x` — the horizontal position');
 		assert.include(text, '*@since* — 2.0');
 		assert.include(text, 'Named item type, declared in this stylesheet');
 	});
@@ -308,5 +324,92 @@ suite('Documentation notes', () => {
 
 	test('linter: parameters documented without a $, in a template', async () => {
 		assert.deepEqual(await lint(stylesheet(`<xsl:template name="t2">\n    <xsl:note format="xdoc-md">\n      @param p the value\n    </xsl:note>\n    <xsl:param name="p"/>\n  </xsl:template>`)), []);
+	});
+	// an xsl:item-type with a documentation note - the cursor, if any, is marked in the note's content
+	const itemTypeNote = (asText: string, content: string) => `<xsl:item-type name="cx:size" as="${asText}">\n    <xsl:note format="xdoc-md">\n      ${content}\n    </xsl:note>\n  </xsl:item-type>`;
+	const sizeRecord = `record(w as xs:double, h as xs:double, 'unit name'? as xs:string)`;
+
+	test('hover: a record field, with its @field text', async () => {
+		const text = await fieldHoverText(`<xsl:variable name="p" as="cx:point" select="{ 'x': 1, 'y': 2 }"/>\n  ${call('$p?¦y')}`);
+		assert.include(text, 'y as xs:double');
+		assert.include(text, 'the vertical position');
+		assert.include(text, 'Field of the record type: `cx:point`');
+	});
+
+	test('hover: a record field of an item type declared as another', async () => {
+		const text = await fieldHoverText(`<xsl:item-type name="cx:location" as="cx:point"/>\n  <xsl:variable name="p" as="cx:location" select="{ 'x': 1, 'y': 2 }"/>\n  ${call('$p?¦x')}`);
+		assert.include(text, 'the horizontal position');
+	});
+
+	test('hover: a record field without an @field', async () => {
+		const text = await fieldHoverText(`<xsl:variable name="q" as="record(r as xs:double)" select="{ 'r': 1 }"/>\n  ${call('$q?¦r')}`);
+		assert.include(text, 'Field of the record type');
+		assert.notInclude(text, '---');
+	});
+
+	test('add documentation note: an xsl:item-type with a record type has an @field for each field', async () => {
+		const { document } = await open(stylesheet(`<xsl:item-type name="cx:size" as="${sizeRecord}"/>`));
+		await vscode.window.showTextDocument(document);
+		const position = document.positionAt(document.getText().indexOf('cx:size'));
+		const actions = new XSLTCodeActions().provideCodeActions(document, new vscode.Range(position, position), { diagnostics: [], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		const action = actions.find((a) => a.title === 'Add documentation note');
+		assert.isDefined(action);
+		assert.isTrue(await vscode.workspace.applyEdit(action!.edit!));
+		assert.equal(document.getText(), stylesheet(itemTypeNote(sizeRecord, `description\n\n      @field w description\n      @field h description\n      @field 'unit name' description`)));
+	});
+
+	test('completion: tag names for an xsl:item-type', async () => {
+		assert.deepEqual(await completionLabels(stylesheet(itemTypeNote(sizeRecord, 'A size.\n      @¦'))), ['@field', '@see', '@since', '@deprecated']);
+	});
+
+	test('completion: no @field for a function', async () => {
+		assert.notInclude(await completionLabels(stylesheet(noteBody('Magnitude.\n      @¦'))), '@field');
+	});
+
+	test('completion: the fields that are not documented, after @field', async () => {
+		assert.deepEqual(await completionLabels(stylesheet(itemTypeNote(sizeRecord, 'A size.\n      @field w the width\n      @field ¦'))), ['h', `'unit name'`]);
+	});
+
+	test('linter: all fields documented, one with a quoted name', async () => {
+		assert.deepEqual(await lint(stylesheet(itemTypeNote(sizeRecord, `A size.\n      @field w the width\n      @field h the height\n      @field 'unit name' e.g. cm`))), []);
+	});
+
+	test('linter: no message for fields when the note has no @field', async () => {
+		assert.deepEqual(await lint(stylesheet(itemTypeNote(sizeRecord, 'A size.'))), []);
+	});
+
+	test('linter: an unknown, a duplicate and missing @field', async () => {
+		assert.deepEqual(await lint(stylesheet(itemTypeNote(sizeRecord, 'A size.\n      @field w the width\n      @field d the depth\n      @field w again'))), [
+			[`XSLT: The documentation note's @field 'd' is not a field of the record type cx:size`, 'd'],
+			[`XSLT: The documentation note already has an @field for 'w'`, 'w'],
+			[`XSLT: The documentation note has no @field for: h, 'unit name'`, 'xsl:note']
+		]);
+	});
+
+	test('linter: @field for an item type that is not a record type', async () => {
+		assert.deepEqual(await lint(stylesheet(itemTypeNote(`enum('s', 'm')`, 'A size.\n      @field s small'))), [
+			['XSLT: @field is for the fields of a record type, declared with xsl:item-type - not for the item type cx:size, which is not a record type', '@field']
+		]);
+	});
+
+	test('linter: @field in the note of a function', async () => {
+		assert.deepEqual(await lint(stylesheet(noteBody('Magnitude.\n      @field c the value'))), [
+			['XSLT: @field is for the fields of a record type, declared with xsl:item-type - not for an xsl:function', '@field']
+		]);
+	});
+
+	test('quick fix: add missing @field after the last one', async () => {
+		const document = await vscode.workspace.openTextDocument({ content: stylesheet(itemTypeNote(sizeRecord, 'A size.\n      @field h the height\n      @since 2.0')), language: 'xslt' });
+		await vscode.window.showTextDocument(document);
+		const xslLexer = new XslLexer(XSLTConfiguration.configuration);
+		xslLexer.provideCharLevelState = true;
+		const diagnostics = XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: true }, DocumentTypes.XSLT40, document, xslLexer.analyse(document.getText()), xslLexer.globalInstructionData, [], []);
+		const missing = diagnostics.find((d) => d.message.startsWith('XSLT: The documentation note has no @field'));
+		assert.isDefined(missing);
+		const actions = new XSLTCodeActions().provideCodeActions(document, missing!.range, { diagnostics, triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		const fix = actions.find((a) => a.title === 'Add missing @field');
+		assert.isDefined(fix);
+		assert.isTrue(await vscode.workspace.applyEdit(fix!.edit!));
+		assert.equal(document.getText(), stylesheet(itemTypeNote(sizeRecord, `A size.\n      @field h the height\n      @field w description\n      @field 'unit name' description\n      @since 2.0`)));
 	});
 });

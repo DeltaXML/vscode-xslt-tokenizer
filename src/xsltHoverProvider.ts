@@ -41,7 +41,8 @@ export class XSLTHoverProvider implements HoverProvider {
 			const declaration = `${quotedName}${field.optional ? '?' : ''}${field.type ? ' as ' + field.type : ''}`;
 			const markdown = new MarkdownString();
 			markdown.appendCodeblock(declaration, 'xpath');
-			markdown.appendMarkdown(`${field.optional ? 'Optional field' : 'Field'} of the record type: \`${record.name}\``);
+			const fieldText = await this.recordFieldText(document, record.name, field.name, token);
+			markdown.appendMarkdown(`${fieldText ? fieldText + '\n\n---\n' : ''}${field.optional ? 'Optional field' : 'Field'} of the record type: \`${record.name}\``);
 			return new Hover(markdown);
 		}
 		const line = document.lineAt(position.line);
@@ -154,6 +155,34 @@ export class XSLTHoverProvider implements HoverProvider {
 		const params = declarationParamLabels(template, document.getText()).join(', ');
 		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
 		return this.createHover(`template ${templateName}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+	}
+
+	// XSLT 4.0: the text of the @field tag for a field in the documentation note of the named item type declaring the
+	// record type - or of the one it's declared as, e.g. cx:point for <xsl:item-type name="cx:location" as="cx:point"/>
+	private async recordFieldText(document: TextDocument, typeName: string, fieldName: string, token: CancellationToken): Promise<string | undefined> {
+		if (!this.definitionProvider || /^record\s*\(/.test(typeName)) {
+			return undefined;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+		const itemTypes = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType);
+		let name: string | undefined = typeName;
+		for (let depth = 0; name && depth < 10; depth++) {
+			const itemType = itemTypes.find((g) => g.name === name);
+			if (!itemType) {
+				return undefined;
+			}
+			const note = XSLTHoverProvider.declarationNote(document, itemType);
+			const text = note ? XdocNotes.fieldText(note, fieldName) : undefined;
+			if (text) {
+				return text;
+			}
+			name = itemType.declaredType?.trim();
+		}
+		return undefined;
 	}
 
 	// XSLT 4.0: for the name of a named item type where it's used, e.g. cx:point in as="cx:point?", its declaration and

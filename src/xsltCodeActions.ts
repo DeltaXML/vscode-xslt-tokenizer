@@ -71,6 +71,7 @@ enum XsltCodeActionKind {
 	extractRecordType = 'Extract record type',
 	addDocumentationNote = 'Add documentation note',
 	addMissingNoteParams = 'Add missing @param',
+	addMissingNoteFields = 'Add missing @field',
 	removeDuplicateEnumValue = 'Remove duplicate enum value',
 	wrapWith = 'Wrap with...',
 }
@@ -149,10 +150,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	// XSLT 4.0: adds an @param to a documentation note for each parameter without one - as a snippet, with a placeholder
-	// for each description
-	private static createNoteParamsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string }) {
-		const action = new vscode.CodeAction(XsltCodeActionKind.addMissingNoteParams, vscode.CodeActionKind.QuickFix);
+	// XSLT 4.0: adds an @param to a documentation note for each parameter without one, or an @field for each field - as a
+	// snippet, with a placeholder for each description
+	private static createNoteParamsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string }, title: string) {
+		const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
 		action.diagnostics = [diagnostic];
 		action.edit = new vscode.WorkspaceEdit();
 		let tabStop = 1;
@@ -220,7 +221,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();
 		context.diagnostics
-			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.enumValueDuplicate)
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.enumValueDuplicate)
 			.forEach(diagnostic => {
 				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
 				if (fix && !addedFixes.has(fix)) {
@@ -231,8 +232,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						action.edit = new vscode.WorkspaceEdit();
 						action.edit.delete(document.uri, new vscode.Range(fix.line, fix.character, fix.end!.line, fix.end!.character));
 						codeActions.push(action);
-					} else if (diagnostic.code === DiagnosticCode.noteParamsMissing) {
-						codeActions.push(XSLTCodeActions.createNoteParamsAction(document, diagnostic, fix));
+					} else if (diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing) {
+						codeActions.push(XSLTCodeActions.createNoteParamsAction(document, diagnostic, fix,
+							diagnostic.code === DiagnosticCode.noteParamsMissing ? XsltCodeActionKind.addMissingNoteParams : XsltCodeActionKind.addMissingNoteFields));
 					} else if (diagnostic.code === DiagnosticCode.switchCasesMissing) {
 						codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithSelect, fix.text));
 						if (fix.altText !== undefined) {

@@ -54,6 +54,16 @@ suite('Documentation notes: semantic tokens', () => {
 		]);
 	});
 
+	test('field names after @field, one quoted', async () => {
+		assert.deepEqual(await xdocTokens(`<xsl:note format="xdoc-md">
+      @field w the width
+      @field 'unit name' the unit
+    </xsl:note>`), [
+			['@field', 'xdocTag'], [' ', 'xdocText'], ['w', 'xdocParam'], [' the width', 'xdocText'],
+			['@field', 'xdocTag'], [' ', 'xdocText'], [`'unit name'`, 'xdocParam'], [' the unit', 'xdocText']
+		]);
+	});
+
 	test('CDATA markers, with the text within classified', async () => {
 		assert.deepEqual(await xdocTokens(`<xsl:note format="xdoc-md"><![CDATA[Uses <b> & more.
       @param $a the first]]></xsl:note>`), [

@@ -1590,7 +1590,7 @@ export class XsltTokenCompletions {
 	}
 
 	// XSLT 4.0: within the content of a documentation note - an xsl:note with format="xdoc-md" - the tag names after '@',
-	// and after '@param', the names of the parameters that aren't documented yet - otherwise there are no completions -
+	// and after '@param' or '@field', the names of the parameters or record fields that aren't documented yet - otherwise there are no completions -
 	// undefined if the position isn't within a documentation note
 	public static getNoteCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
 		const text = document.getText();
@@ -1603,11 +1603,11 @@ export class XsltTokenCompletions {
 			return undefined;
 		}
 		const lineBefore = document.lineAt(position.line).text.substring(0, position.character);
+		const markup = RecordTypes.blankMarkup(text);
+		const ancestors = RecordTypes.openElements(markup, noteStart);
+		const declaration = ancestors[ancestors.length - 1];
 		const param = /@param\s+(\$?[\w.-]*)$/.exec(lineBefore);
 		if (param) {
-			const markup = RecordTypes.blankMarkup(text);
-			const ancestors = RecordTypes.openElements(markup, noteStart);
-			const declaration = ancestors[ancestors.length - 1];
 			if (!declaration) {
 				return [];
 			}
@@ -1622,19 +1622,37 @@ export class XsltTokenCompletions {
 				return item;
 			});
 		}
+		// after @field, the fields of an xsl:item-type's record type - quoted if they're not NCNames
+		const field = /@field\s+((?:'[^']*|"[^"]*|[\w.-]*))$/.exec(lineBefore);
+		if (field) {
+			if (declaration?.name !== 'xsl:item-type') {
+				return [];
+			}
+			const note = XdocNotes.parseNote(text, markup, noteStart);
+			const documented = (note?.tags ?? []).filter((tag) => tag.name === 'field').map((tag) => tag.fieldName);
+			const range = new vscode.Range(position.translate(0, -field[1].length), position);
+			return (XdocNotes.declarationFieldNames(text, declaration.offset) ?? []).filter((name) => !documented.includes(name)).map((name, index) => {
+				const label = XdocNotes.fieldLabel(name);
+				const item = new vscode.CompletionItem(label, vscode.CompletionItemKind.Field);
+				item.insertText = `${label} `;
+				item.range = range;
+				item.sortText = String(index).padStart(4, '0');
+				return item;
+			});
+		}
 		const tag = /@([\w-]*)$/.exec(lineBefore);
 		if (tag) {
 			const range = new vscode.Range(position.translate(0, -tag[1].length), position);
-			return XdocNotes.tagNames.map((name, index) => {
+			return XdocNotes.tagNamesFor(declaration?.name).map((name, index) => {
 				const item = new vscode.CompletionItem('@' + name, vscode.CompletionItemKind.Keyword);
 				item.insertText = name + ' ';
 				item.filterText = name;
 				item.range = range;
 				item.detail = XdocNotes.tagDescriptions[name];
 				item.sortText = String(index).padStart(4, '0');
-				if (name === 'param') {
-					// then the parameter names
-					item.command = { command: 'editor.action.triggerSuggest', title: 'parameter names' };
+				if (name === 'param' || name === 'field') {
+					// then the parameter or field names
+					item.command = { command: 'editor.action.triggerSuggest', title: name === 'param' ? 'parameter names' : 'field names' };
 				}
 				return item;
 			});

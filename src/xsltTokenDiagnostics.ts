@@ -15,7 +15,7 @@ import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { RecordType, RecordTypes, FieldReference } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
-import { XdocNotes } from './xdocNote';
+import { XdocNotes, XdocTag } from './xdocNote';
 
 enum HasCharacteristic {
 	unknown,
@@ -137,6 +137,7 @@ export enum DiagnosticCode {
 	recordFieldMissing,
 	switchCasesMissing,
 	noteParamsMissing,
+	noteFieldsMissing,
 	enumValueDuplicate
 }
 
@@ -2864,7 +2865,7 @@ export class XsltTokenDiagnostics {
 		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
 			XsltTokenDiagnostics.checkPatternOperators(document, allTokens, problemTokens);
-			XsltTokenDiagnostics.checkDocumentationNotes(document, problemTokens);
+			XsltTokenDiagnostics.checkDocumentationNotes(document, itemTypeDeclarations, problemTokens);
 		}
 		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
 		const allXPathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
@@ -2908,7 +2909,7 @@ export class XsltTokenDiagnostics {
 		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
 		problemTokens.forEach((token) => {
 			if (token.recordFix) {
-				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
 					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
 			}
 		});
@@ -4203,6 +4204,25 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Information;
 					errCode = DiagnosticCode.noteParamsMissing;
 					break;
+				case ErrorType.NoteFieldDuplicate:
+					msg = `XSLT: The documentation note already has an @field for '${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteFieldsMissing:
+					msg = `XSLT: The documentation note has no @field for: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Information;
+					errCode = DiagnosticCode.noteFieldsMissing;
+					break;
+				case ErrorType.NoteFieldUnknown: {
+					const [fieldName, typeName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: The documentation note's @field '${fieldName}' is not a field of the record type ${typeName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.NoteFieldNotApplicable:
+					msg = `XSLT: @field is for the fields of a record type, declared with xsl:item-type - not for ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
 				case ErrorType.NoteParamUnknown: {
 					const [paramName, declarationName] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XSLT: The documentation note's @param '$${paramName}' is not a parameter of this ${declarationName}`;
@@ -4581,8 +4601,9 @@ export class XsltTokenDiagnostics {
 	}
 
 	// XSLT 4.0 documentation notes - an xsl:note with format="xdoc-md" - of an xsl:function, xsl:template or
-	// xsl:item-type: each @param must name one of its parameters, so an item type's note has none
-	private static checkDocumentationNotes(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+	// xsl:item-type: each @param must name one of its parameters, so an item type's note has none - and each @field one
+	// of the fields of an item type's record type
+	private static checkDocumentationNotes(document: vscode.TextDocument, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
 		const text = document.getText();
 		const noteOffsets = XdocNotes.noteOffsets(text);
 		if (noteOffsets.length === 0) {
@@ -4595,36 +4616,67 @@ export class XsltTokenDiagnostics {
 			if (!declaration || !['xsl:function', 'xsl:template', 'xsl:item-type'].includes(declaration.name)) {
 				return;
 			}
-			const paramNames = XdocNotes.paramNames(text, markup, declaration.offset);
 			const note = XdocNotes.parseNote(text, markup, noteOffset);
-			const documented: string[] = [];
-			note?.tags.forEach((tag) => {
-				if (tag.name !== 'param' || !tag.paramName || tag.paramOffset === undefined) {
-					return;
-				}
-				const position = document.positionAt(tag.paramOffset);
-				if (!paramNames.includes(tag.paramName)) {
-					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.paramName.length, value: tag.paramName + RecordTypes.valueSeparator + declaration.name, tokenType: 0, error: ErrorType.NoteParamUnknown });
-				} else if (documented.includes(tag.paramName)) {
-					// the first @param for the name is the one used, e.g. for hover
-					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.paramName.length, value: tag.paramName, tokenType: 0, error: ErrorType.NoteParamDuplicate });
-				}
-				documented.push(tag.paramName);
-			});
-			// parameters without an @param, when the note has one for any parameter - with a fix that adds them after the last
-			const paramTags = note?.tags.filter((tag) => tag.name === 'param' && tag.paramName) ?? [];
-			const missing = paramNames.filter((name) => !paramTags.some((tag) => tag.paramName === name));
-			if (paramTags.length > 0 && missing.length > 0) {
-				const lastParam = paramTags[paramTags.length - 1];
-				const lineStart = text.lastIndexOf('\n', lastParam.offset - 1) + 1;
-				const indent = /^[ \t]*$/.test(text.substring(lineStart, lastParam.offset)) ? text.substring(lineStart, lastParam.offset) : '';
-				const fixPosition = document.positionAt(lastParam.endOffset);
-				const lines = missing.map((name) => `\n${indent}@param $${name} description`).join('');
-				const namePosition = document.positionAt(noteOffset + 1);
-				problemTokens.push({ line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:note'.length, value: missing.map((name) => '$' + name).join(', '), tokenType: 0,
-					error: ErrorType.NoteParamsMissing, recordFix: { line: fixPosition.line, character: fixPosition.character, text: lines } });
+			if (!note) {
+				return;
 			}
+			XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, note.tags.filter((tag) => tag.name === 'param' && tag.paramName && tag.paramOffset !== undefined)
+				.map((tag) => ({ tag, name: tag.paramName!, offset: tag.paramOffset! })), XdocNotes.paramNames(text, markup, declaration.offset), {
+				unknown: (name) => ({ value: name + RecordTypes.valueSeparator + declaration.name, error: ErrorType.NoteParamUnknown }),
+				duplicate: ErrorType.NoteParamDuplicate, missing: ErrorType.NoteParamsMissing, label: (name) => '$' + name, line: (name) => `@param $${name} description`
+			}, problemTokens);
+			const fieldTags = note.tags.filter((tag) => tag.name === 'field' && tag.fieldName !== undefined && tag.fieldOffset !== undefined);
+			if (fieldTags.length === 0) {
+				return;
+			}
+			const typeName = RecordTypes.attributeOfElementAt(text, declaration.offset + 1, 'name') ?? '';
+			const asText = RecordTypes.attributeOfElementAt(text, declaration.offset + 1, 'as') ?? '';
+			const fieldNames = declaration.name === 'xsl:item-type' ? XdocNotes.declarationFieldNames(text, declaration.offset, itemTypes) : undefined;
+			if (!fieldNames) {
+				// not a record type - unless it's one that isn't recognised here, e.g. a choice of record types
+				if (declaration.name !== 'xsl:item-type' || !/\brecord\s*\(/.test(asText)) {
+					const target = declaration.name === 'xsl:item-type' ? `the item type ${typeName}, which is not a record type` : `an ${declaration.name}`;
+					fieldTags.forEach((tag) => {
+						const tagPosition = document.positionAt(tag.offset);
+						problemTokens.push({ line: tagPosition.line, startCharacter: tagPosition.character, length: '@field'.length, value: target, tokenType: 0, error: ErrorType.NoteFieldNotApplicable });
+					});
+				}
+				return;
+			}
+			XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, fieldTags.map((tag) => ({ tag, name: tag.fieldName!, offset: tag.fieldOffset! })), fieldNames, {
+				unknown: (name) => ({ value: name + RecordTypes.valueSeparator + typeName, error: ErrorType.NoteFieldUnknown }),
+				duplicate: ErrorType.NoteFieldDuplicate, missing: ErrorType.NoteFieldsMissing, label: XdocNotes.fieldLabel, line: (name) => `@field ${XdocNotes.fieldLabel(name)} description`
+			}, problemTokens);
 		});
+	}
+
+	// the parameter or field names of a note's @param or @field tags: each must be one of the names, and not a duplicate -
+	// and when there are any, the names without one are reported, with a fix that adds them after the last
+	private static checkNoteNames(document: vscode.TextDocument, text: string, noteOffset: number, named: { tag: XdocTag, name: string, offset: number }[], names: string[],
+		errors: { unknown: (name: string) => { value: string, error: ErrorType }, duplicate: ErrorType, missing: ErrorType, label: (name: string) => string, line: (name: string) => string }, problemTokens: BaseToken[]) {
+		const documented: string[] = [];
+		named.forEach(({ name, offset }) => {
+			const position = document.positionAt(offset);
+			if (!names.includes(name)) {
+				const { value, error } = errors.unknown(name);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: name.length, value, tokenType: 0, error });
+			} else if (documented.includes(name)) {
+				// the first tag for the name is the one used, e.g. for hover
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: name.length, value: name, tokenType: 0, error: errors.duplicate });
+			}
+			documented.push(name);
+		});
+		const missing = names.filter((name) => !documented.includes(name));
+		if (named.length > 0 && missing.length > 0) {
+			const last = named[named.length - 1].tag;
+			const lineStart = text.lastIndexOf('\n', last.offset - 1) + 1;
+			const indent = /^[ \t]*$/.test(text.substring(lineStart, last.offset)) ? text.substring(lineStart, last.offset) : '';
+			const fixPosition = document.positionAt(last.endOffset);
+			const lines = missing.map((name) => `\n${indent}${errors.line(name)}`).join('');
+			const namePosition = document.positionAt(noteOffset + 1);
+			problemTokens.push({ line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:note'.length, value: missing.map(errors.label).join(', '), tokenType: 0,
+				error: errors.missing, recordFix: { line: fixPosition.line, character: fixPosition.character, text: lines } });
+		}
 	}
 
 	// the children of an xsl:iterate are any xsl:param elements, then an optional xsl:on-completion, then the rest -

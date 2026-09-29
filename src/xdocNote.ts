@@ -11,7 +11,8 @@
  *   </xsl:note>
  *
  * The tags are @param $name, @return, @see, @since, @deprecated and @error - each starts a line, and continues on the
- * following lines up to the next tag.
+ * following lines up to the next tag. For an xsl:item-type that's a record type, @field name documents a field - not an
+ * xqDoc tag, but in the same style - with the name quoted if it's not an NCName, e.g. @field 'nick name'.
  */
 import * as fs from 'fs';
 import { RecordTypes } from './recordTypes';
@@ -21,10 +22,13 @@ export interface XdocTag {
 	name: string;
 	// for @param, the parameter name, without the '$'
 	paramName?: string;
+	// for @field, the field name, without any quotes
+	fieldName?: string;
 	text: string;
-	// the document offset of the '@', and of the parameter name
+	// the document offset of the '@', and of the parameter or field name - within any quotes
 	offset: number;
 	paramOffset?: number;
+	fieldOffset?: number;
 	// the document offset after the last character of the tag's text, which may be on a following line
 	endOffset: number;
 }
@@ -123,7 +127,7 @@ export class XdocNotes {
 			return inCdata;
 		}
 		typed.push({ start: firstChar, end: line.trimEnd().length, type: XdocNotes.textType });
-		const tag = /^(\s*)(@([\w-]+))(?:(\s+)(\$?[\w.:-]+))?/.exec(line);
+		const tag = /^(\s*)(@([\w-]+))(?:(\s+)(\$?[\w.:-]+|'[^']*'|"[^"]*"))?/.exec(line);
 		const heading = /^\s*#{1,6}\s/.test(line);
 		if (heading) {
 			typed.push({ start: firstChar, end: line.trimEnd().length, type: XdocNotes.headingType });
@@ -131,7 +135,7 @@ export class XdocNotes {
 			if (tag && XdocNotes.tagNames.includes(tag[3])) {
 				const tagEnd = tag[1].length + tag[2].length;
 				typed.push({ start: tag[1].length, end: tagEnd, type: XdocNotes.tagType });
-				if (tag[3] === 'param' && tag[5]) {
+				if ((tag[3] === 'param' || tag[3] === 'field') && tag[5]) {
 					const paramStart = tagEnd + tag[4].length;
 					typed.push({ start: paramStart, end: paramStart + tag[5].length, type: XdocNotes.paramType });
 				}
@@ -166,15 +170,23 @@ export class XdocNotes {
 		return inCdata;
 	}
 	public static readonly format = 'xdoc-md';
-	public static readonly tagNames = ['param', 'return', 'see', 'since', 'deprecated', 'error'];
+	public static readonly tagNames = ['param', 'field', 'return', 'see', 'since', 'deprecated', 'error'];
 	public static readonly tagDescriptions: { [name: string]: string } = {
 		param: 'a parameter: @param $name description',
+		field: 'a field of the record type: @field name description',
 		return: 'the result',
 		see: 'a related function, template or URI',
 		since: 'the version it was added in',
 		deprecated: 'why it should no longer be used, and what to use instead',
 		error: 'an error it may raise'
 	};
+
+	// the tags that apply to a declaration, e.g. 'xsl:item-type' - @field is only for an item type, which has no
+	// parameters or result
+	public static tagNamesFor(declarationName: string | undefined) {
+		return declarationName === 'xsl:item-type' ? XdocNotes.tagNames.filter((name) => name !== 'param' && name !== 'return' && name !== 'error') :
+			XdocNotes.tagNames.filter((name) => name !== 'field');
+	}
 
 	// the xsl:note elements with format="xdoc-md" in the markup, by the offset of their start tags
 	public static noteOffsets(text: string): number[] {
@@ -225,7 +237,19 @@ export class XdocNotes {
 		let lineStart = 0;
 		for (const line of content.split('\n')) {
 			const tag = /^(\s*)@([\w-]+)(?:\s+(\$?)([\w.:-]+))?/.exec(line);
-			if (tag && XdocNotes.tagNames.includes(tag[2])) {
+			const field = /^(\s*)@field(?:\s+(?:'([^']*)'|"([^"]*)"|([\w.-]+)))?(?![\w.:-])/.exec(line);
+			if (field) {
+				const fieldName = field[2] ?? field[3] ?? field[4];
+				const isQuoted = field[4] === undefined;
+				tags.push({
+					name: 'field',
+					fieldName,
+					text: line.substring(field[0].length).trim(),
+					offset: documentOffset(lineStart + field[1].length),
+					fieldOffset: fieldName !== undefined ? documentOffset(lineStart + field[0].length - fieldName.length - (isQuoted ? 1 : 0)) : undefined,
+					endOffset: documentOffset(lineStart + line.trimEnd().length - 1) + 1
+				});
+			} else if (tag && XdocNotes.tagNames.includes(tag[2]) && tag[2] !== 'field') {
 				const isParam = tag[2] === 'param' && tag[4] !== undefined;
 				const textStart = isParam ? tag[0].length : tag[1].length + 1 + tag[2].length;
 				tags.push({
@@ -298,6 +322,8 @@ export class XdocNotes {
 			switch (tag.name) {
 				case 'param':
 					return `*@param* \`$${tag.paramName ?? ''}\`${text ? ' — ' + text : ''}`;
+				case 'field':
+					return `*@field* \`${tag.fieldName ?? ''}\`${text ? ' — ' + text : ''}`;
 				case 'deprecated':
 					return `**Deprecated**${text ? ' — ' + text : ''}`;
 				default:
@@ -315,6 +341,37 @@ export class XdocNotes {
 	public static paramText(note: XdocNote, paramName: string): string | undefined {
 		const tag = note.tags.find((t) => t.name === 'param' && t.paramName === paramName);
 		return tag ? XdocNotes.markdownText(tag.text) : undefined;
+	}
+
+	// the text of the @field tag for the field
+	public static fieldText(note: XdocNote, fieldName: string): string | undefined {
+		const tag = note.tags.find((t) => t.name === 'field' && t.fieldName === fieldName);
+		return tag ? XdocNotes.markdownText(tag.text) : undefined;
+	}
+
+	// a field name as written after @field: quoted if it's not an NCName
+	public static fieldLabel(name: string) {
+		return /^[A-Za-z_][\w.-]*$/.test(name) ? name : name.includes('\'') ? `"${name}"` : `'${name}'`;
+	}
+
+	// the field names of the record type of an xsl:item-type declaration, from its 'as' - using the named item types for
+	// one that's declared as another - undefined if it's not a record type
+	public static declarationFieldNames(text: string, declarationOffset: number, itemTypes = XdocNotes.itemTypes(text)): string[] | undefined {
+		const asText = RecordTypes.attributeOfElementAt(text, declarationOffset + 1, 'as');
+		return asText ? RecordTypes.resolve(asText, itemTypes)?.fields.map((field) => field.name) : undefined;
+	}
+
+	// the named item types declared in the text, with their 'as' values
+	public static itemTypes(text: string): Map<string, string> {
+		const itemTypes = new Map<string, string>();
+		for (const match of RecordTypes.blankMarkup(text).matchAll(/<xsl:item-type\s/g)) {
+			const name = RecordTypes.attributeOfElementAt(text, match.index! + 1, 'name');
+			const asText = RecordTypes.attributeOfElementAt(text, match.index! + 1, 'as');
+			if (name && asText) {
+				itemTypes.set(name, asText);
+			}
+		}
+		return itemTypes;
 	}
 
 	// the declaration's parameter names, from its xsl:param children
@@ -361,6 +418,9 @@ export class XdocNotes {
 		const hasReturn = elementName === 'xsl:function' || (elementName === 'xsl:template' && RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as') !== undefined);
 		let tabStop = 2;
 		const tagLines = XdocNotes.paramNames(text, markup, tagStart).map((name) => `\n${indent}${step}@param \\$${name.replace(/[$}\\]/g, '\\$&')} \${${tabStop++}:description}`);
+		if (elementName === 'xsl:item-type') {
+			(XdocNotes.declarationFieldNames(text, tagStart) ?? []).forEach((name) => tagLines.push(`\n${indent}${step}@field ${XdocNotes.fieldLabel(name).replace(/[$}\\]/g, '\\$&')} \${${tabStop++}:description}`));
+		}
 		if (hasReturn) {
 			tagLines.push(`\n${indent}${step}@return \${${tabStop++}:description}`);
 		}
