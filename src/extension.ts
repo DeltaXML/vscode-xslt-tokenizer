@@ -57,15 +57,13 @@ const legend = (function () {
 	return new vscode.SemanticTokensLegend(tokenTypesLegend, tokenModifiersLegend);
 })();
 
-// true if the stylesheet's root element (xsl:stylesheet, xsl:transform or xsl:package) has version="4.0"
-async function isXSLT40File(fsPath: string) {
+// why the stylesheet needs Saxon's syntax extensions: it's XSLT 4.0, or it uses item types or notes (see ItemTypeSupport)
+async function syntaxExtensionsReason(fsPath: string) {
 	try {
 		const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fsPath));
-		const text = doc.getText().substring(0, 8000).replace(/<!--[\s\S]*?-->/g, '');
-		const rootTag = /<([\w.-]+:)?(stylesheet|transform|package)\b[^>]*>/.exec(text);
-		return !!rootTag && /\sversion\s*=\s*["']4\.0["']/.test(rootTag[0]);
+		return ItemTypeSupport.syntaxExtensionsReason(doc.getText());
 	} catch {
-		return false;
+		return undefined;
 	}
 }
 
@@ -297,7 +295,8 @@ export function activate(context: vscode.ExtensionContext) {
 	};
 
 	// an XSLT 4.0 stylesheet run with "allowSyntaxExtensions40": "off" fails on any XPath 4.0 syntax, with Saxon errors
-	// that don't mention the setting - so warn once per task (Saxon-HE is excluded, as it has no XPath 4.0 syntax support)
+	// that don't mention the setting - as does an XSLT 3.0 one with item types or notes, when the extension allows them -
+	// so warn once per task (Saxon-HE is excluded, as it has no XPath 4.0 syntax support)
 	const warnedSyntaxExtensionTasks = new Set<string>();
 	context.subscriptions.push(vscode.tasks.onDidStartTaskProcess(async (event) => {
 		const t = event.execution.task;
@@ -309,12 +308,15 @@ export function activate(context: vscode.ExtensionContext) {
 		const saxonPath = t.definition[saxonPathSetting] === '${config:XSLT.tasks.' + saxonPathSetting + '}' ?
 			vscode.workspace.getConfiguration('XSLT.tasks').get<string>(saxonPathSetting) : t.definition[saxonPathSetting];
 		const xsltFsPath = await resolveTaskPath(t, 'xsltFile');
-		if (SaxonTaskProvider.isSaxonHE(saxonPath) || !xsltFsPath || !(await isXSLT40File(xsltFsPath))) {
+		const reason = xsltFsPath ? await syntaxExtensionsReason(xsltFsPath) : undefined;
+		if (SaxonTaskProvider.isSaxonHE(saxonPath) || !xsltFsPath || !reason) {
 			return;
 		}
 		warnedSyntaxExtensionTasks.add(t.name);
 		const openAction = 'Open tasks.json';
-		const message = `Task '${t.name}': the XSLT 4.0 stylesheet '${path.basename(xsltFsPath)}' is run with "allowSyntaxExtensions40": "off", so Saxon will report any XPath 4.0 syntax as an error. Set it to "auto" or "on" in tasks.json.`;
+		const message = reason === 'xslt40' ?
+			`Task '${t.name}': the XSLT 4.0 stylesheet '${path.basename(xsltFsPath)}' is run with "allowSyntaxExtensions40": "off", so Saxon will report any XPath 4.0 syntax as an error. Set it to "auto" or "on" in tasks.json.` :
+			`Task '${t.name}': the stylesheet '${path.basename(xsltFsPath)}' uses XSLT 4.0 item types or notes, and is run with "allowSyntaxExtensions40": "off", so Saxon will report them as errors. Set it to "auto" or "on" in tasks.json.`;
 		vscode.window.showWarningMessage(message, openAction).then(async (choice) => {
 			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 			if (choice === openAction && workspaceFolder) {

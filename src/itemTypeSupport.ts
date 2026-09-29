@@ -45,6 +45,18 @@ export class ItemTypeSupport {
 		return ItemTypeSupport.isEnabled(ItemTypeSupport.isVersion4Text(text));
 	}
 
+	// why the stylesheet needs Saxon's syntax extensions to run: it's XSLT 4.0 - or, before 4.0 with the setting, it uses
+	// xsl:item-type, record or enumeration types in an 'as' attribute, or xsl:note - undefined if it doesn't need them
+	public static syntaxExtensionsReason(text: string): 'xslt40' | 'itemTypes' | undefined {
+		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
+		const rootTag = /<([\w.-]+:)?(stylesheet|transform|package)\b[^>]*>/.exec(withoutComments.substring(0, 8000));
+		if (rootTag && /\sversion\s*=\s*["']4\.0["']/.test(rootTag[0])) {
+			return 'xslt40';
+		}
+		const usesItemTypes = /<xsl:(item-type|note)[\s/>]/.test(withoutComments) || /\sas\s*=\s*(["'])[^"']*(?<![\w.:-])(record|enum)\s*\(/.test(withoutComments);
+		return usesItemTypes && ItemTypeSupport.isEnabledBefore40() ? 'itemTypes' : undefined;
+	}
+
 	// the XSLT 3.0 schema, with xsl:item-type as a declaration - for a stylesheet before XSLT 4.0 with the setting
 	public static schemaData30(): SchemaData {
 		if (!ItemTypeSupport.schema30) {

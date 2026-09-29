@@ -200,4 +200,21 @@ suite('XSLT 3.0 with item types and notes', () => {
 		assert.include(text, `map { 't': 0, 'l': 0, 'bottom': 4, 'r': 6 }`);
 		assert.include(text, '($bounds?bottom - $bounds?t)');
 	});
+	// for the warning when a task runs a stylesheet with "allowSyntaxExtensions40": "off"
+	test('syntax extensions: needed for an XSLT 3.0 stylesheet with item types, record types or notes', () => {
+		const xslt30 = (body: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">\n  ${body}\n</xsl:stylesheet>`;
+		assert.equal(ItemTypeSupport.syntaxExtensionsReason(stylesheet('', '4.0')), 'xslt40');
+		assert.equal(ItemTypeSupport.syntaxExtensionsReason(stylesheet()), 'itemTypes');
+		assert.equal(ItemTypeSupport.syntaxExtensionsReason(xslt30('<xsl:variable name="v" as="record(a as xs:string)" select="()"/>')), 'itemTypes');
+		assert.equal(ItemTypeSupport.syntaxExtensionsReason(xslt30('<xsl:template name="t"><xsl:note>n</xsl:note></xsl:template>')), 'itemTypes');
+		assert.isUndefined(ItemTypeSupport.syntaxExtensionsReason(xslt30('<xsl:variable name="v" as="xs:string" select="record(1)"/>')));
+		assert.isUndefined(ItemTypeSupport.syntaxExtensionsReason(xslt30('<!-- <xsl:item-type name="t" as="xs:string"/> -->')));
+		ItemTypeSupport.before40Override = false;
+		try {
+			// without the setting, the linter reports them instead
+			assert.isUndefined(ItemTypeSupport.syntaxExtensionsReason(stylesheet()));
+		} finally {
+			ItemTypeSupport.before40Override = true;
+		}
+	});
 });
