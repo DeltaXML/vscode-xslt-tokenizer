@@ -149,11 +149,14 @@ export class Data {
     public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||', '!!', '??'];
     public static tripleSeps = ['=!>'];
     public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!', '*', '+', ',', '-', '.', '?', '['];
+    // XPath 4.0 node comparisons, as well as 'is', '<<' and '>>' - operators after an operand
+    public static nodeComparisons40 = ["is-not", "precedes", "follows", "precedes-or-is", "follows-or-is"];
+
     public static triggerWords = ["and", "andAlso", "array", "as", "div",
         "else", "eq", "except",
         "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "union", "&lt;", "&gt;"];
+        "then", "to", "union", "&lt;", "&gt;"].concat(Data.nodeComparisons40);
 
 
     // axes added in XPath 4.0:
@@ -183,7 +186,7 @@ export class Data {
         "else", "eq", "except",
         "function", "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "map", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "treat", "union", "&lt;", "&gt;"];
+        "then", "to", "treat", "union", "&lt;", "&gt;"].concat(Data.nodeComparisons40);
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
     // 'key' and 'value' are for XPath 4.0 map bindings: for key $k value $v in map-expression
@@ -1731,6 +1734,7 @@ export enum ErrorType {
     NoteVariableDuplicate,
     NoteRequiresXSLT40,
     SaxonTypeAlias,
+    NodeComparisonRequiresXPath40,
     KindTestNameRequiresXPath40,
     FixedNamespacesToken,
     RecordFieldUnknown,

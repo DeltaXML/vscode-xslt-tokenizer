@@ -2093,7 +2093,7 @@ export class XsltTokenCompletions {
 	// keyword operators after an operand, e.g. '1 |' or '$a c|' - operators of 3 characters or fewer, e.g. 'and', 'eq' or
 	// 'div', are quicker to type than to choose, so they're not included
 	private static readonly operatorKeywords = ['cast as', 'castable as', 'instance of', 'treat as', 'idiv', 'union', 'intersect', 'except'];
-	private static readonly operatorKeywords40 = ['otherwise'];
+	private static readonly operatorKeywords40 = ['otherwise'].concat(Data.nodeComparisons40);
 	// snippets for the expressions with several parts, at the start of an expression
 	private static readonly expressionSnippets: [string, string][] = [
 		['for $x in … return …', 'for $${1:x} in ${2} return ${0}'],

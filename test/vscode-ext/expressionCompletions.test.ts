@@ -37,8 +37,8 @@ suite('XPath keyword completions', () => {
 		assert.sameMembers((await labels(select('array { 1 } ca¦'))).map((l) => l.trim()), operators);
 	});
 
-	test("in XPath 4.0, 'otherwise' too", async () => {
-		assert.sameMembers((await labels(select('1 ¦'), '4.0')).map((l) => l.trim()), operators.concat('otherwise'));
+	test("in XPath 4.0, 'otherwise' and the node comparisons too", async () => {
+		assert.sameMembers((await labels(select('1 ¦'), '4.0')).map((l) => l.trim()), operators.concat('otherwise', 'is-not', 'precedes', 'follows', 'precedes-or-is', 'follows-or-is'));
 	});
 
 	test("after the bound expression of a 'for', 'return' too", async () => {

@@ -159,7 +159,7 @@ export class XsltTokenDiagnostics {
 	static pathExprOps = new Set(['/', '//', '!', '?', '::', '()', '[]', '{}', '*:', '..']);
 	// binary operators with lower precedence than the pipeline operator '->', these end the pipeline's right-hand operand
 	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>', '&lt;', '&lt;=', '&gt;', '&gt;=', '&lt;&lt;', '&gt;&gt;',
-		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance']);
+		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance'].concat(Data.nodeComparisons40));
 	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
 		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber ||
 			token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
@@ -1984,6 +1984,11 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.operator:
 						let isXPathError = false;
 						let tv = token.value;
+						// the XPath 4.0 node comparisons, e.g. is-not, precedes and follows-or-is
+						if (!XsltTokenDiagnostics.isXPath40(docType) && Data.nodeComparisons40.includes(tv) && !token.error) {
+							token.error = ErrorType.NodeComparisonRequiresXPath40;
+							problemTokens.push(token);
+						}
 
 						// start checks
 						let latestStackItem = stackItem;
@@ -4442,6 +4447,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.NumberRequiresXPath40:
 					msg = `XPath: Hexadecimal and binary numeric literals, and '_' digit separators, require XPath 4.0: '${tokenValue}'`;
+					break;
+				case ErrorType.NodeComparisonRequiresXPath40:
+					msg = `XPath: The '${tokenValue}' operator requires XPath 4.0`;
 					break;
 				case ErrorType.AxisRequiresXPath40:
 					msg = `XPath: The axis '${tokenValue}' requires XPath 4.0`;
