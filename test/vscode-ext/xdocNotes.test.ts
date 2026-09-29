@@ -472,4 +472,53 @@ suite('Documentation notes', () => {
 			assert.include(entry![1], 'Field of the record type: `cx:point`');
 		});
 	});
+	// the hover on the name of an item type, where it's used in an 'as' attribute
+	const enumHover = (declarations: string, typeName: string) => hoverText(`${declarations}\n  <xsl:variable name="e" as="${typeName.replace(/^(.{3})/, '$1¦')}" select="()"/>`);
+
+	test('hover: the values of an enumeration type, on one line', async () => {
+		const text = await enumHover('', 'cx:colour');
+		assert.include(text, "Values: `'red'`, `'green'`\n\n---\nNamed item type, declared in this stylesheet");
+	});
+
+	test('hover: the values of an enumeration type, as a list', async () => {
+		const text = await enumHover(`<xsl:item-type name="cx:size" as="enum('xs', 's', 'm', 'l', 'xl')"/>`, 'cx:size');
+		assert.include(text, "Values:\n\n- `'xs'`\n- `'s'`\n- `'m'`\n- `'l'`\n- `'xl'`");
+	});
+
+	test('hover: the values of an item type declared as an enumeration type', async () => {
+		const text = await enumHover(`<xsl:item-type name="cx:shade" as="cx:colour"/>`, 'cx:shade');
+		assert.include(text, 'type cx:shade as cx:colour');
+		assert.include(text, "Values: `'red'`, `'green'`");
+	});
+
+	test('hover: the values of a choice of enumeration types, without duplicates', async () => {
+		const text = await enumHover(`<xsl:item-type name="cx:paint" as="(cx:colour | enum('none', 'red'))"/>`, 'cx:paint');
+		assert.include(text, "Values: `'red'`, `'green'`, `'none'`");
+	});
+
+	test('hover: an enumeration value with a quote', async () => {
+		const text = await enumHover(`<xsl:item-type name="cx:word" as="enum('it''s', 'is')"/>`, 'cx:word');
+		assert.include(text, 'Values: `"it\'s"`, `\'is\'`');
+	});
+
+	test('hover: the values of an enumeration type, with its documentation note', async () => {
+		const text = await enumHover(`<xsl:item-type name="cx:mode" as="enum('on', 'off')">\n    <xsl:note format="xdoc-md">\n      A switch.\n    </xsl:note>\n  </xsl:item-type>`, 'cx:mode');
+		assert.include(text, "A switch.\n\nValues: `'on'`, `'off'`\n\n---\n");
+	});
+
+	test('hover: the values of an enumeration type, on the name of its declaration', async () => {
+		const { document, position } = await open(stylesheet('').replace('name="cx:colour"', 'name="cx:col¦our"'));
+		const hover = await new XSLTHoverProvider(new XsltDefinitionProvider(XSLTConfiguration.configuration), XSLTConfiguration.configuration).provideHover(document, position, new vscode.CancellationTokenSource().token);
+		assert.include((hover?.contents as vscode.MarkdownString[]).map((c) => c.value).join('\n'), "Values: `'red'`, `'green'`");
+	});
+
+	test('hover: no values for a record type', async () => {
+		assert.notInclude(await enumHover('', 'cx:point'), 'Values:');
+	});
+
+	test('hover: the values of a record field with an enumeration type', async () => {
+		const text = await fieldHoverText(`<xsl:item-type name="cx:pen" as="record(colour as cx:colour, width as xs:double)"/>\n  <xsl:variable name="pen" as="cx:pen" select="{ 'colour': 'red', 'width': 1 }"/>\n  ${call('$pen?col¦our')}`);
+		assert.include(text, 'colour as cx:colour');
+		assert.include(text, "Values: `'red'`, `'green'`\n\n---\nField of the record type: `cx:pen`");
+	});
 });

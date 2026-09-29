@@ -153,7 +153,7 @@ export class RecordTypes {
 			}
 			const values: string[] = [];
 			for (const valueText of RecordTypes.splitTopLevel(text.substring(openIndex + 1, text.length - 1), ',')) {
-				const match = /^\s*(['"])([\s\S]*)\1\s*$/.exec(valueText);
+				const match = /^\s*(['"])([\s\S]*)\1\s*$/.exec(RecordTypes.decodeReferences(valueText).text);
 				if (!match) {
 					return undefined;
 				}
@@ -1102,19 +1102,23 @@ export class RecordTypes {
 		}
 		let partStart = 0;
 		for (const fieldText of RecordTypes.splitTopLevel(fieldsText, ',')) {
-			const match = /^(\s*)(?:'([^']*)'|"([^"]*)"|([\w.-]+))(\s*\??\s*)(?:as(\s+)([\s\S]+))?$/.exec(fieldText);
+			// the field is matched with its references replaced, e.g. a name quoted with &quot; - the type is the text as
+			// written, so that the offsets within it are those of the document
+			const { text: decoded, offsets } = RecordTypes.decodeReferences(fieldText);
+			const match = /^(\s*)(?:'([^']*)'|"([^"]*)"|([\w.-]+))(\s*\??\s*)(?:as(\s+)([\s\S]+))?$/.exec(decoded);
 			if (!match) {
 				return undefined;
 			}
 			const name = match[2] ?? match[3] ?? match[4];
-			const field: RecordField = { name, optional: match[5].includes('?'), type: match[7]?.trim() };
+			const typeStart = match[7] !== undefined ? offsets[decoded.length - match[7].length] : undefined;
+			const field: RecordField = { name, optional: match[5].includes('?'), type: typeStart !== undefined ? fieldText.substring(typeStart).trim() : undefined };
 			if (offset !== undefined) {
-				// the name, within any quotes, and the type after 'as'
-				const isQuoted = match[4] === undefined;
-				const nameStart = offset + partStart + match[1].length;
-				field.nameOffset = isQuoted ? nameStart + 1 : nameStart;
-				const afterName = nameStart + name.length + (isQuoted ? 2 : 0);
-				field.typeOffset = match[7] !== undefined ? afterName + match[5].length + 2 + match[6].length : undefined;
+				// the name, within any quotes - unless it has a reference, e.g. 'a&amp;b', as its length isn't that of
+				// the text - and the type after 'as'
+				const nameIndex = match[1].length + (match[4] === undefined ? 1 : 0);
+				const nameStart = offsets[nameIndex];
+				field.nameOffset = fieldText.substring(nameStart, offsets[nameIndex + name.length]) === name ? offset + partStart + nameStart : undefined;
+				field.typeOffset = typeStart !== undefined ? offset + partStart + typeStart : undefined;
 			}
 			fields.push(field);
 			partStart += fieldText.length + 1;
@@ -1122,6 +1126,49 @@ export class RecordTypes {
 		return fields;
 	}
 
+	// the character of an XML character or entity reference at the index, e.g. '"' for &quot; or &#34; - with the
+	// reference's length - undefined if there isn't one
+	private static referenceAt(text: string, index: number): { char: string, length: number } | undefined {
+		if (text.charAt(index) !== '&') {
+			return undefined;
+		}
+		const reference = /^&(#x[0-9a-fA-F]+|#[0-9]+|lt|gt|amp|quot|apos);/.exec(text.substring(index, index + 12));
+		if (!reference) {
+			return undefined;
+		}
+		const name = reference[1];
+		const entities: { [name: string]: string } = { lt: '<', gt: '>', amp: '&', quot: '"', apos: '\'' };
+		const char = name.startsWith('#x') ? String.fromCodePoint(parseInt(name.substring(2), 16)) : name.startsWith('#') ? String.fromCodePoint(parseInt(name.substring(1), 10)) : entities[name];
+		return { char, length: reference[0].length };
+	}
+
+	// a quote character at the index, written as itself or as a reference, e.g. &quot; or &apos;
+	private static quoteAt(text: string, index: number): { char: string, length: number } | undefined {
+		const ch = text.charAt(index);
+		if (ch === '\'' || ch === '"') {
+			return { char: ch, length: 1 };
+		}
+		const reference = RecordTypes.referenceAt(text, index);
+		return reference && (reference.char === '\'' || reference.char === '"') ? reference : undefined;
+	}
+
+	// the text of an attribute value, e.g. a SequenceType, with its character and entity references replaced - and the
+	// index in the text of each character, and of the end
+	public static decodeReferences(text: string): { text: string, offsets: number[] } {
+		const chars: string[] = [];
+		const offsets: number[] = [];
+		for (let i = 0; i < text.length;) {
+			const reference = RecordTypes.referenceAt(text, i);
+			chars.push(reference ? reference.char : text.charAt(i));
+			offsets.push(i);
+			i += reference ? reference.length : 1;
+		}
+		offsets.push(text.length);
+		return { text: chars.join(''), offsets };
+	}
+
+	// the parts of the text separated by the separator, outside brackets and string literals - the text may be an
+	// attribute value, with quotes written as references, e.g. enum(&quot;it's&quot;)
 	private static splitTopLevel(text: string, separator: string) {
 		const parts: string[] = [];
 		let depth = 0;
@@ -1129,10 +1176,12 @@ export class RecordTypes {
 		let partStart = 0;
 		for (let i = 0; i < text.length; i++) {
 			const ch = text.charAt(i);
-			if (quote) {
-				if (ch === quote) quote = '';
-			} else if (ch === '\'' || ch === '"') {
-				quote = ch;
+			const quoteChar = RecordTypes.quoteAt(text, i);
+			if (quoteChar) {
+				quote = !quote ? quoteChar.char : quote === quoteChar.char ? '' : quote;
+				i += quoteChar.length - 1;
+			} else if (quote) {
+				// within a string literal
 			} else if (ch === '(' || ch === '[' || ch === '{') {
 				depth++;
 			} else if (ch === ')' || ch === ']' || ch === '}') {
@@ -1151,10 +1200,12 @@ export class RecordTypes {
 		let quote = '';
 		for (let i = openIndex; i < text.length; i++) {
 			const ch = text.charAt(i);
-			if (quote) {
-				if (ch === quote) quote = '';
-			} else if (ch === '\'' || ch === '"') {
-				quote = ch;
+			const quoteChar = RecordTypes.quoteAt(text, i);
+			if (quoteChar) {
+				quote = !quote ? quoteChar.char : quote === quoteChar.char ? '' : quote;
+				i += quoteChar.length - 1;
+			} else if (quote) {
+				// within a string literal
 			} else if (ch === '(') {
 				depth++;
 			} else if (ch === ')' && --depth === 0) {

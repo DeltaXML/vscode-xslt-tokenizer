@@ -38,11 +38,16 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (fieldReference) {
 			const { field, record } = fieldReference;
 			const quotedName = /^[A-Za-z_][\w.-]*$/.test(field.name) ? field.name : `'${field.name}'`;
-			const declaration = `${quotedName}${field.optional ? '?' : ''}${field.type ? ' as ' + field.type : ''}`;
+			// the type as written in an attribute value, with its references replaced, e.g. &quot;
+			const declaration = `${quotedName}${field.optional ? '?' : ''}${field.type ? ' as ' + RecordTypes.decodeReferences(field.type).text : ''}`;
 			const markdown = new MarkdownString();
 			markdown.appendCodeblock(declaration, 'xpath');
-			const fieldText = await this.recordFieldText(document, record.name, field.name, token);
-			markdown.appendMarkdown(`${fieldText ? fieldText + '\n\n---\n' : ''}${field.optional ? 'Optional field' : 'Field'} of the record type: \`${record.name}\``);
+			const itemTypes = await this.itemTypeGlobals(document, token);
+			const fieldText = /^record\s*\(/.test(record.name) ? undefined : XdocNotes.recordFieldTexts(record.name, itemTypes, document.getText())(field.name);
+			// the values of a field with an enumeration type
+			const enumValues = field.type ? RecordTypes.resolveEnum(field.type, XSLTHoverProvider.itemTypeMap(itemTypes)) : undefined;
+			const details = [fieldText, enumValues ? XSLTHoverProvider.enumValuesMarkdown(enumValues) : undefined].filter((part) => !!part).join('\n\n');
+			markdown.appendMarkdown(`${details ? details + '\n\n---\n' : ''}${field.optional ? 'Optional field' : 'Field'} of the record type: \`${record.name}\``);
 			return new Hover(markdown);
 		}
 		const line = document.lineAt(position.line);
@@ -132,11 +137,47 @@ export class XSLTHoverProvider implements HoverProvider {
 		return this.createHover(declarationParamLabels(declaration, document.getText())[paramIndex], `${paramText ? paramText + '\n\n---\n' : ''}Parameter of the ${kind}: \`${declaration.name}\``);
 	}
 
-	// a named item type's declaration and documentation note
-	private itemTypeHover(document: TextDocument, itemType: GlobalInstructionData) {
+	// a named item type's declaration and documentation note - and for an enumeration type, its values, resolved from
+	// the item types, e.g. for one declared as another, or as a choice of enumeration types
+	private itemTypeHover(document: TextDocument, itemType: GlobalInstructionData, itemTypes: GlobalInstructionData[]) {
 		const note = XSLTHoverProvider.declarationNote(document, itemType);
+		const enumValues = itemType.declaredType ? RecordTypes.resolveEnum(itemType.declaredType, XSLTHoverProvider.itemTypeMap(itemTypes)) : undefined;
+		const details = [note ? XdocNotes.toMarkdown(note) : undefined, enumValues ? XSLTHoverProvider.enumValuesMarkdown(enumValues) : undefined].filter((part) => !!part).join('\n\n');
 		const description = itemType.href ? `Named item type, declared in ${path.basename(itemType.href)}` : 'Named item type, declared in this stylesheet';
-		return this.createHover(`type ${itemType.name}${itemType.declaredType ? ' as ' + itemType.declaredType : ''}`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+		const declaredType = itemType.declaredType ? RecordTypes.decodeReferences(itemType.declaredType).text : undefined;
+		return this.createHover(`type ${itemType.name}${declaredType ? ' as ' + declaredType : ''}`, details ? `${details}\n\n---\n${description}` : description);
+	}
+
+	// the values of an enumeration type, as XPath string literals in their declaration order, without duplicates: on one
+	// line for a few values, otherwise as a list - not numbered, as the order has no meaning
+	public static enumValuesMarkdown(values: string[]) {
+		const literals = [...new Set(values)].map((value) => {
+			const literal = value.includes('\'') && !value.includes('"') ? `"${value}"` : `'${value.replace(/'/g, "''")}'`;
+			// a code span with a backtick in it is delimited by two
+			return literal.includes('`') ? `\`\` ${literal} \`\`` : `\`${literal}\``;
+		});
+		if (literals.length === 0) {
+			return 'Values: none';
+		}
+		return literals.length < XSLTHoverProvider.enumListThreshold ? `Values: ${literals.join(', ')}` : `Values:\n\n${literals.map((literal) => `- ${literal}`).join('\n')}`;
+	}
+
+	// the number of enumeration values from which they're shown as a list
+	private static readonly enumListThreshold = 5;
+
+	// the xsl:item-type declarations, by name, with their 'as' values
+	private static itemTypeMap(itemTypes: GlobalInstructionData[]) {
+		return new Map(itemTypes.filter((g) => g.declaredType).map((g) => [g.name, g.declaredType!]));
+	}
+
+	// the xsl:item-type declarations of the document and the modules it includes or imports
+	private async itemTypeGlobals(document: TextDocument, token: CancellationToken): Promise<GlobalInstructionData[]> {
+		if (!this.definitionProvider) {
+			return [];
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+		return token.isCancellationRequested ? [] : globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType);
 	}
 
 	// for the name of a declaration - an xsl:function, a named xsl:template or an xsl:item-type - its signature and
@@ -168,7 +209,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			declarationName = parentName;
 		}
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-		const { globalInstructionData } = await this.definitionProvider!.getImportedGlobals(document, lexPosition);
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider!.getImportedGlobals(document, lexPosition);
 		if (token.isCancellationRequested) {
 			return undefined;
 		}
@@ -182,7 +223,8 @@ export class XSLTHoverProvider implements HoverProvider {
 			return this.paramHover(document, declaration, own.name);
 		}
 		return declaration.type === GlobalInstructionType.Function ? this.functionHover(document, declaration) :
-			declaration.type === GlobalInstructionType.Template ? this.templateHover(document, declaration) : this.itemTypeHover(document, declaration);
+			declaration.type === GlobalInstructionType.Template ? this.templateHover(document, declaration) :
+			this.itemTypeHover(document, declaration, globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType));
 	}
 
 	// the documentation note - an xsl:note with format="xdoc-md" - of a function, template or item type declaration, in
@@ -225,20 +267,6 @@ export class XSLTHoverProvider implements HoverProvider {
 		return element === 'xsl:with-param' ? this.paramHover(document, template, name) : this.templateHover(document, template);
 	}
 
-	// XSLT 4.0: the text of the @field tag for a field of a named record type
-	private async recordFieldText(document: TextDocument, typeName: string, fieldName: string, token: CancellationToken): Promise<string | undefined> {
-		if (!this.definitionProvider || /^record\s*\(/.test(typeName)) {
-			return undefined;
-		}
-		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
-		if (token.isCancellationRequested) {
-			return undefined;
-		}
-		const itemTypes = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType);
-		return XdocNotes.recordFieldTexts(typeName, itemTypes, document.getText())(fieldName);
-	}
-
 	// XSLT 4.0: for the name of a named item type where it's used, e.g. cx:point in as="cx:point?", its declaration and
 	// documentation note
 	private async findItemTypeHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
@@ -255,7 +283,8 @@ export class XSLTHoverProvider implements HoverProvider {
 		}
 		const isXSLT = this.languageConfiguration?.docType !== DocumentTypes.XPath;
 		const itemType = XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position).definitionLocation?.instruction;
-		return itemType?.type === GlobalInstructionType.ItemType ? this.itemTypeHover(document, itemType) : undefined;
+		return itemType?.type === GlobalInstructionType.ItemType ?
+			this.itemTypeHover(document, itemType, globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType)) : undefined;
 	}
 
 	// XPath 4.0: 'current' is in the functions specification, and these aren't in either 4.0 specification
