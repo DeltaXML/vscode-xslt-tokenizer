@@ -153,10 +153,10 @@ suite('Saxon type aliases', () => {
 		const diagnostics = XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: false }, DocumentTypes.XSLT, document, xslLexer.analyse(text), xslLexer.globalInstructionData, [], []);
 		const warnings = diagnostics.filter((d) => d.message.includes('type-alias'));
 		assert.deepEqual(warnings.map((d) => [d.message, document.getText(d.range)]), [
-			[`XSLT: saxon:type-alias is ignored by Saxon 12.8 and later - use xsl:item-type, e.g. with the command 'XSLT: Convert Saxon Type Aliases to xsl:item-type'`, 'saxon:type-alias']
+			[`XSLT: saxon:type-alias is ignored by Saxon 12.8 and later - use xsl:item-type: one quick fix converts the type aliases in all the workspace's files`, 'saxon:type-alias']
 		]);
 		const actions = new XSLTCodeActions().provideCodeActions(document, warnings[0].range, { diagnostics: warnings, triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
-		const fix = actions.find((a) => a.title === 'Convert Saxon type aliases to xsl:item-type...');
+		const fix = actions.find((a) => a.title === 'Convert all Saxon type aliases in the workspace to xsl:item-type...');
 		assert.equal(fix?.command?.command, 'xslt-xpath.convertSaxonTypeAliases');
 	});
 

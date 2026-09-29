@@ -75,7 +75,7 @@ enum XsltCodeActionKind {
 	addMissingNoteFields = 'Add missing @field',
 	addMissingNoteVariables = 'Add missing @variable',
 	excludeNote = 'Exclude with use-when="false()"',
-	convertSaxonTypeAliases = 'Convert Saxon type aliases to xsl:item-type...',
+	convertSaxonTypeAliases = 'Convert all Saxon type aliases in the workspace to xsl:item-type...',
 	removeDuplicateEnumValue = 'Remove duplicate enum value',
 	wrapWith = 'Wrap with...',
 }

@@ -4261,7 +4261,7 @@ export class XsltTokenDiagnostics {
 					break;
 				}
 				case ErrorType.SaxonTypeAlias:
-					msg = `XSLT: ${tokenValue} is ignored by Saxon 12.8 and later - use xsl:item-type, e.g. with the command 'XSLT: Convert Saxon Type Aliases to xsl:item-type'`;
+					msg = `XSLT: ${tokenValue} is ignored by Saxon 12.8 and later - use xsl:item-type: one quick fix converts the type aliases in all the workspace's files`;
 					severity = vscode.DiagnosticSeverity.Warning;
 					errCode = DiagnosticCode.saxonTypeAlias;
 					break;
