@@ -1730,6 +1730,7 @@ export enum ErrorType {
     NoteVariablesMissing,
     NoteVariableDuplicate,
     NoteRequiresXSLT40,
+    SaxonTypeAlias,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,

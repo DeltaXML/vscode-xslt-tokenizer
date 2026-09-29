@@ -17,6 +17,7 @@ import { RecordType, RecordTypes, FieldReference } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
 import { ItemTypeSupport } from './itemTypeSupport';
+import { SaxonTypeAliases } from './saxonTypeAliases';
 
 enum HasCharacteristic {
 	unknown,
@@ -141,6 +142,7 @@ export enum DiagnosticCode {
 	noteFieldsMissing,
 	noteVariablesMissing,
 	noteRequiresXSLT40,
+	saxonTypeAlias,
 	enumValueDuplicate
 }
 
@@ -2886,6 +2888,9 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkNotesBeforeXSLT40(document, problemTokens);
 		}
 		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
+			XsltTokenDiagnostics.checkSaxonTypeAliases(document, problemTokens);
+		}
+		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
 			XsltTokenDiagnostics.checkPatternOperators(document, allTokens, problemTokens);
 			XsltTokenDiagnostics.checkDocumentationNotes(document, itemTypeDeclarations, problemTokens);
@@ -4255,6 +4260,11 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				}
+				case ErrorType.SaxonTypeAlias:
+					msg = `XSLT: ${tokenValue} is ignored by Saxon 12.8 and later - use xsl:item-type, e.g. with the command 'XSLT: Convert Saxon Type Aliases to xsl:item-type'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.saxonTypeAlias;
+					break;
 				case ErrorType.NoteRequiresXSLT40:
 					msg = 'XSLT: xsl:note is XSLT 4.0 - an XSLT 3.0 processor reports XTSE0010 for it. Use version="4.0", or exclude it with use-when="false()"';
 					severity = vscode.DiagnosticSeverity.Warning;
@@ -4731,6 +4741,23 @@ export class XsltTokenDiagnostics {
 				unknown: (name) => ({ value: name + RecordTypes.valueSeparator + typeName, error: ErrorType.NoteFieldUnknown }),
 				duplicate: ErrorType.NoteFieldDuplicate, missing: ErrorType.NoteFieldsMissing, label: XdocNotes.fieldLabel, line: (name) => `@field ${XdocNotes.fieldLabel(name)} description`
 			}, problemTokens);
+		});
+	}
+
+	// a saxon:type-alias declaration - Saxon's earlier syntax for named types, ignored by Saxon 12.8 and 13, which only
+	// report its uses, e.g. as="~dfx:bounds" - with a fix that converts the workspace's type aliases to xsl:item-type
+	private static checkSaxonTypeAliases(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		if (!text.includes(':type-alias')) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		SaxonTypeAliases.saxonPrefixes(text).forEach((prefix) => {
+			const elementName = `${prefix}:type-alias`;
+			for (const match of markup.matchAll(new RegExp(`<${elementName.replace(/\./g, '\\.')}[\\s/>]`, 'g'))) {
+				const position = document.positionAt(match.index! + 1);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: elementName.length, value: elementName, tokenType: 0, error: ErrorType.SaxonTypeAlias });
+			}
 		});
 	}
 

@@ -75,6 +75,7 @@ enum XsltCodeActionKind {
 	addMissingNoteFields = 'Add missing @field',
 	addMissingNoteVariables = 'Add missing @variable',
 	excludeNote = 'Exclude with use-when="false()"',
+	convertSaxonTypeAliases = 'Convert Saxon type aliases to xsl:item-type...',
 	removeDuplicateEnumValue = 'Remove duplicate enum value',
 	wrapWith = 'Wrap with...',
 }
@@ -220,6 +221,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix));
 				}
 			});
+		// Saxon type aliases: a fix that runs the command to convert them in the workspace
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.saxonTypeAlias).slice(0, 1).forEach((diagnostic) => {
+			const action = new vscode.CodeAction(XsltCodeActionKind.convertSaxonTypeAliases, vscode.CodeActionKind.QuickFix);
+			action.diagnostics = [diagnostic];
+			action.command = { command: 'xslt-xpath.convertSaxonTypeAliases', title: XsltCodeActionKind.convertSaxonTypeAliases };
+			codeActions.push(action);
+		});
 		// XPath 4.0 record types: one fix adds all the missing fields of a map constructor
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();

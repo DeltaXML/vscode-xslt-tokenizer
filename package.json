@@ -173,6 +173,11 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.convertSaxonTypeAliases",
+				"title": "Convert Saxon Type Aliases to xsl:item-type",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.chooseTopLevelStylesheet",
 				"title": "Choose Top-Level Stylesheet...",
 				"category": "XSLT",
