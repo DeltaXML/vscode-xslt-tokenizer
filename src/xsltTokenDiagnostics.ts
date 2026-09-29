@@ -1529,7 +1529,8 @@ export class XsltTokenDiagnostics {
 					}
 				}
 				let isTypeError = false;
-				if (token.choiceSeparator && !XsltTokenDiagnostics.isXPath40(docType)) {
+				// a '|' within element(...) or attribute(...) is a union of names - see checkKindTestNames
+				if (token.choiceSeparator && !XsltTokenDiagnostics.isXPath40(docType) && XsltTokenDiagnostics.kindTestPart(allTokens, index) !== 'name') {
 					token.error = ErrorType.ChoiceTypeRequiresXPath40;
 					problemTokens.push(token);
 				}
@@ -1546,7 +1547,9 @@ export class XsltTokenDiagnostics {
 							const isValidXPath4SpecialArg = (typeName === 'enum' && tType === TokenLevelState.string) ||
 								(isRecord && (tType === TokenLevelState.nodeNameTest || tType === TokenLevelState.string)) ||
 								(isRecord && XsltTokenDiagnostics.isOptionalFieldMarker(token, prevToken)) ||
-								(token.value === '()' && prevToken?.value === 'record') || !!token.choiceSeparator;
+								(token.value === '()' && prevToken?.value === 'record') || !!token.choiceSeparator ||
+								// an EQName, e.g. Q{urn:x}para in element(Q{urn:x}para) - see checkBracedURILiterals
+								tType === TokenLevelState.uriLiteral;
 							if (!isValidXPath4SpecialArg) {
 								token['error'] = ErrorType.XPathUnexpected;
 								problemTokens.push(token);
@@ -2706,14 +2709,16 @@ export class XsltTokenDiagnostics {
 						let tValue = token.value;
 						let tParts = tValue.split(':');
 						let isValidType = false;
-						let isNodeName = false;
-						if (withinTypeDeclarationAttr && prevToken?.charType === CharLevelState.lB && index > 1) {
-							const prevToken2 = allTokens[index - 2];
-							isNodeName = prevToken2.tokenType === TokenLevelState.nodeType && (prevToken2.value === 'element' || prevToken2.value === 'attribute');
-						}
+						// in an 'as' attribute, the name test of element(...) or attribute(...) - a name, a wildcard such as my:* or
+						// *:para, or a union of them - or its type annotation, after a comma, e.g. xs:untyped in element(*, xs:untyped)
+						const kindTestPart = withinTypeDeclarationAttr ? XsltTokenDiagnostics.kindTestPart(allTokens, index) : undefined;
+						const isNodeName = kindTestPart === 'name';
 						if (isNodeName) {
 							isValidType = true;
-							let validationError = XsltTokenDiagnostics.validateName(tValue, ValidationType.Name, docType, inheritedPrefixes, undefined);
+							// the prefix of a wildcard, e.g. my:*, must be declared - there's none for *:para, or a local name after Q{...}
+							const wildcardPrefix = /^([\w.-]+):\*$/.exec(tValue);
+							const nameToCheck = /^\*:[\w.-]+$/.test(tValue) ? tValue.substring(2) : wildcardPrefix ? wildcardPrefix[1] + ':x' : tValue;
+							let validationError = XsltTokenDiagnostics.validateName(nameToCheck, ValidationType.Name, docType, inheritedPrefixes, undefined);
 							if (validationError !== NameValidationError.None) {
 								token['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
 								token['value'] = tValue;
@@ -2727,6 +2732,9 @@ export class XsltTokenDiagnostics {
 							isValidType = tValue === '?' || !(typeOperator === 'cast' || typeOperator === 'castable');
 						} else if ((withinTypeDeclarationAttr || XsltTokenDiagnostics.isAnonymousFunctionParams(stackItem)) && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
 							// e.g. xs:integer* don't check name - also valid for an anonymous function's inline 'as' type declaration, e.g. function($i as xs:integer*) {...}
+							isValidType = true;
+						} else if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
+							// the local name of an EQName, e.g. Q{http://www.w3.org/2001/XMLSchema}string - not checked
 							isValidType = true;
 						} else if (tParts.length === 1) {
 							let nextToken = allTokens.length > index + 1 ? allTokens[index + 1] : null;
@@ -2750,6 +2758,9 @@ export class XsltTokenDiagnostics {
 								if (nsType === XSLTnamespaces.XMLSchema) {
 									const part2 = tParts[1];
 									if (part2 === 'numeric' || part2 === 'anyAtomicType') {
+										isValidType = true;
+									} else if (kindTestPart === 'type' && (part2 === 'untyped' || part2 === 'anyType' || part2 === 'anySimpleType')) {
+										// the type annotation of an element or attribute, e.g. element(*, xs:untyped)
 										isValidType = true;
 									} else {
 										isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
@@ -2899,6 +2910,9 @@ export class XsltTokenDiagnostics {
 		const allXPathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
 		RecordTypes.checkMapConstructorKeys(allXPathTokens, problemTokens);
 		XsltTokenDiagnostics.checkBracedURILiterals(allXPathTokens, problemTokens);
+		if (!XsltTokenDiagnostics.isXPath40(docType)) {
+			XsltTokenDiagnostics.checkKindTestNames(allXPathTokens, problemTokens);
+		}
 		if (documentText.includes('<xsl:map')) {
 			RecordTypes.duplicateMapEntryKeys(documentText, RecordTypes.blankMarkup(documentText)).forEach((duplicate) => {
 				const position = document.positionAt(duplicate.offset);
@@ -3452,8 +3466,9 @@ export class XsltTokenDiagnostics {
 				let isXPathError = false;
 				if (prevToken.tokenType === TokenLevelState.complexExpression || prevToken.tokenType === TokenLevelState.entityRef) {
 					// no error
-				} else if (prevToken.tokenType === TokenLevelState.uriLiteral && tokenType !== TokenLevelState.nodeNameTest) {
-					isXPathError = true;
+				} else if (prevToken.tokenType === TokenLevelState.uriLiteral) {
+					// a name test after a braced URI literal - a local name, or '*' for a wildcard, e.g. Q{urn:x}*
+					isXPathError = tokenType !== TokenLevelState.nodeNameTest && !(token.value === '*' && tokenType === TokenLevelState.nodeType);
 				} else if (prevToken.tokenType === TokenLevelState.nodeType) {
 					if (token.value === '()') {
 						isXPathError = prevToken.value.charAt(0) === '.';
@@ -4104,6 +4119,12 @@ export class XsltTokenDiagnostics {
 				case ErrorType.OperatorNotSupported:
 					msg = `XPath: The '${tokenValue}' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...`;
 					break;
+				case ErrorType.KindTestNameRequiresXPath40: {
+					const [kind, text, reason] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = reason === 'union' ? `XPath: A union of names in ${kind}(...), e.g. ${kind}(a | b), requires XPath 4.0` :
+						`XPath: The wildcard '${text}' in ${kind}(...) requires XPath 4.0 - before it, only a name or '*' is allowed`;
+					break;
+				}
 				case ErrorType.NodeTestRequiresXPath40:
 					msg = `XPath: The '${tokenValue}(...)' node test requires XPath 4.0`;
 					break;
@@ -4816,6 +4837,66 @@ export class XsltTokenDiagnostics {
 	// the children of an xsl:iterate are any xsl:param elements, then an optional xsl:on-completion, then the rest -
 	// Saxon 13 reports XTSE0010 for an xsl:param or xsl:on-completion out of order (comments are ignored, and so are
 	// elements with use-when, as they may be excluded)
+	// for a token within element(...) or attribute(...): 'name' if it's in the name test - a name, a wildcard such as
+	// my:*, *:para or Q{urn:x}*, or a union of them - or 'type' if it's in the type annotation, after the comma, e.g.
+	// xs:untyped in element(*, xs:untyped) - undefined if it's not within one
+	public static kindTestPart(tokens: BaseToken[], index: number): 'name' | 'type' | undefined {
+		let depth = 0;
+		let isAfterComma = false;
+		for (let i = index - 1; i > -1 && i > index - 60; i--) {
+			const t = tokens[i];
+			if (t.charType === CharLevelState.rB || t.charType === CharLevelState.rPr || t.charType === CharLevelState.rBr) {
+				depth++;
+			} else if (t.charType === CharLevelState.lB || t.charType === CharLevelState.lPr || t.charType === CharLevelState.lBr) {
+				if (depth === 0) {
+					const kind = tokens[i - 1];
+					const isKindTest = t.charType === CharLevelState.lB && !!kind && kind.tokenType === TokenLevelState.nodeType && (kind.value === 'element' || kind.value === 'attribute');
+					return isKindTest ? (isAfterComma ? 'type' : 'name') : undefined;
+				}
+				depth--;
+			} else if (depth === 0 && t.value === ',') {
+				isAfterComma = true;
+			}
+		}
+		return undefined;
+	}
+
+	// before XPath 4.0: the name test of element(...) or attribute(...) can only be a name or '*' - a wildcard such as
+	// my:*, *:para or Q{urn:x}*, or a union of names, e.g. element(a | b), requires XPath 4.0 - as in an 'as' attribute,
+	// an expression, e.g. after 'instance of', or a pattern
+	private static checkKindTestNames(xpathTokens: BaseToken[], problemTokens: BaseToken[]) {
+		xpathTokens.forEach((token, index) => {
+			if (token.tokenType !== TokenLevelState.nodeType || (token.value !== 'element' && token.value !== 'attribute') || xpathTokens[index + 1]?.charType !== CharLevelState.lB) {
+				return;
+			}
+			let depth = 0;
+			for (let i = index + 2; i < xpathTokens.length; i++) {
+				const t = xpathTokens[i];
+				if (t.charType === CharLevelState.lB || t.charType === CharLevelState.lPr || t.charType === CharLevelState.lBr) {
+					depth++;
+				} else if (t.charType === CharLevelState.rB || t.charType === CharLevelState.rPr || t.charType === CharLevelState.rBr) {
+					if (depth === 0) {
+						break;
+					}
+					depth--;
+				}
+				if (depth > 0 || t.error) {
+					continue;
+				}
+				if (t.value === ',') {
+					break;
+				}
+				const isWildcard = /^[\w.-]+:\*$|^\*:[\w.-]+$/.test(t.value) || (t.value === '*' && xpathTokens[i - 1]?.tokenType === TokenLevelState.uriLiteral);
+				const isUnion = t.value === '|';
+				if (isWildcard || isUnion) {
+					const text = isWildcard && t.value === '*' ? xpathTokens[i - 1].value + '*' : t.value;
+					problemTokens.push({ ...t, error: ErrorType.KindTestNameRequiresXPath40, value: [token.value, text, isUnion ? 'union' : 'wildcard'].join(RecordTypes.valueSeparator) });
+					break;
+				}
+			}
+		});
+	}
+
 	// the braced URI literal of an EQName, e.g. Q{http://example.com}name: as in Saxon 13, XPST0003 if it's not closed, if
 	// a local name without a prefix doesn't follow it immediately, or if it follows an operand, e.g. 'book Q{urn:x}name'
 	private static checkBracedURILiterals(xpathTokens: BaseToken[], problemTokens: BaseToken[]) {
@@ -4825,8 +4906,9 @@ export class XsltTokenDiagnostics {
 			}
 			const next = xpathTokens[index + 1];
 			const previous = xpathTokens[index - 1];
+			// a local name - or '*', for a wildcard, e.g. Q{urn:x}*
 			const isAdjacentName = !!next && next.line === token.line && next.startCharacter === token.startCharacter + token.length &&
-				/^[A-Za-z_\u00C0-\uFFFF]/.test(next.value);
+				(/^[A-Za-z_\u00C0-\uFFFF]/.test(next.value) || next.value === '*');
 			const previousIsOperand = !!previous && !previous.error && (previous.tokenType === TokenLevelState.number || previous.tokenType === TokenLevelState.string ||
 				previous.tokenType === TokenLevelState.variable || previous.tokenType === TokenLevelState.nodeNameTest || previous.tokenType === TokenLevelState.attributeNameTest ||
 				previous.charType === CharLevelState.rB || previous.charType === CharLevelState.rPr || previous.charType === CharLevelState.rBr);

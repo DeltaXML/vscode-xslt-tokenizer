@@ -1731,6 +1731,7 @@ export enum ErrorType {
     NoteVariableDuplicate,
     NoteRequiresXSLT40,
     SaxonTypeAlias,
+    KindTestNameRequiresXPath40,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,
