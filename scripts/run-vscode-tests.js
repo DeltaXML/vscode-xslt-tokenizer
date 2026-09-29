@@ -11,7 +11,13 @@ const path = require('path');
 const readline = require('readline');
 
 const bin = path.join(__dirname, '..', 'node_modules', '.bin', process.platform === 'win32' ? 'vscode-test.cmd' : 'vscode-test');
-const child = spawn(bin, process.argv.slice(2), { stdio: ['inherit', 'pipe', 'pipe'], shell: process.platform === 'win32' });
+// the output is piped through this script, so the test runner would see no terminal and not color it - colors are
+// forced when this script's output is a terminal, unless NO_COLOR or FORCE_COLOR is set
+const env = { ...process.env };
+if (process.stdout.isTTY && env.NO_COLOR === undefined && env.FORCE_COLOR === undefined) {
+	env.FORCE_COLOR = '1';
+}
+const child = spawn(bin, process.argv.slice(2), { stdio: ['inherit', 'pipe', 'pipe'], shell: process.platform === 'win32', env });
 const showWarnings = !!process.env.SHOW_LEAK_WARNINGS;
 let hidden = 0;
 
