@@ -349,6 +349,26 @@ export class XdocNotes {
 		return tag ? XdocNotes.markdownText(tag.text) : undefined;
 	}
 
+	// for a named record type, the text of each field's @field tag, if any: in the documentation note of the xsl:item-type
+	// declaring it - or of the one it's declared as, e.g. cx:point for <xsl:item-type name="cx:location" as="cx:point"/> -
+	// from the item type declarations, in the document's text or the modules declaring them
+	public static recordFieldTexts(typeName: string, itemTypes: { name: string, declaredType?: string, href?: string, token: { line: number, startCharacter: number } }[], documentText: string): (fieldName: string) => string | undefined {
+		const notes: XdocNote[] = [];
+		let name: string | undefined = typeName;
+		for (let depth = 0; name && depth < 10; depth++) {
+			const itemType = itemTypes.find((g) => g.name === name);
+			if (!itemType) {
+				break;
+			}
+			const note = XdocNotes.forGlobal(itemType, documentText);
+			if (note) {
+				notes.push(note);
+			}
+			name = itemType.declaredType?.trim();
+		}
+		return (fieldName) => notes.map((note) => XdocNotes.fieldText(note, fieldName)).find((text) => !!text);
+	}
+
 	// a field name as written after @field: quoted if it's not an NCName
 	public static fieldLabel(name: string) {
 		return /^[A-Za-z_][\w.-]*$/.test(name) ? name : name.includes('\'') ? `"${name}"` : `'${name}'`;

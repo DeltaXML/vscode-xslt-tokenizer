@@ -412,4 +412,37 @@ suite('Documentation notes', () => {
 		assert.isTrue(await vscode.workspace.applyEdit(fix!.edit!));
 		assert.equal(document.getText(), stylesheet(itemTypeNote(sizeRecord, `A size.\n      @field h the height\n      @field w description\n      @field 'unit name' description\n      @since 2.0`)));
 	});
+	test('linter: @return and @error in the note of an xsl:item-type', async () => {
+		assert.deepEqual(await lint(stylesheet(itemTypeNote(sizeRecord, 'A size.\n      @return a size\n      @error none\n      @since 2.0'))), [
+			['XSLT: @return is not for an xsl:item-type, which is a type, not a function or template', '@return'],
+			['XSLT: @error is not for an xsl:item-type, which is a type, not a function or template', '@error']
+		]);
+	});
+
+	// the documentation of each completion
+	async function completionDocs(marked: string) {
+		const { document, position } = await open(marked);
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, position, new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		return new Map(items.map((item) => [item.label as string, (item.documentation as vscode.MarkdownString | undefined)?.value ?? String(item.documentation)]));
+	}
+
+	const pointVariable = `<xsl:variable name="p" as="cx:point" select="{ 'x': 1, 'y': 2 }"/>`;
+	const fieldCompletionCases: [string, string][] = [
+		['a lookup', `${pointVariable}\n  ${call('$p?¦')}`],
+		['a partly typed lookup', `${pointVariable}\n  ${call('$p?y¦')}`],
+		['a child step on a JNode', `${pointVariable}\n  ${call('jtree($p)/¦')}`],
+		['a map constructor key', `<xsl:variable name="q" as="cx:point" select="{ ¦ }"/>`],
+		['an xsl:map-entry element', `<xsl:variable name="q" as="cx:point"><xsl:map><¦</xsl:map></xsl:variable>`],
+		['an xsl:map-entry key', `<xsl:variable name="q" as="cx:point"><xsl:map><xsl:map-entry key="¦" select="1"/></xsl:map></xsl:variable>`],
+	];
+	fieldCompletionCases.forEach(([label, body]) => {
+		test(`completion: field documentation with its @field text, for ${label}`, async () => {
+			const docs = await completionDocs(stylesheet(body));
+			const entry = [...docs.entries()].find(([name]) => /\by\b/.test(name));
+			assert.isDefined(entry, `completions: ${[...docs.keys()].join(', ')}`);
+			assert.include(entry![1], 'the vertical position');
+			assert.include(entry![1], 'Field of the record type: `cx:point`');
+		});
+	});
 });

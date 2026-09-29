@@ -4219,6 +4219,10 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				}
+				case ErrorType.NoteTagNotApplicable:
+					msg = `XSLT: @${tokenValue} is not for an xsl:item-type, which is a type, not a function or template`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
 				case ErrorType.NoteFieldNotApplicable:
 					msg = `XSLT: @field is for the fields of a record type, declared with xsl:item-type - not for ${tokenValue}`;
 					severity = vscode.DiagnosticSeverity.Warning;
@@ -4619,6 +4623,13 @@ export class XsltTokenDiagnostics {
 			const note = XdocNotes.parseNote(text, markup, noteOffset);
 			if (!note) {
 				return;
+			}
+			if (declaration.name === 'xsl:item-type') {
+				// an item type has no result, and raises no errors
+				note.tags.filter((tag) => tag.name === 'return' || tag.name === 'error').forEach((tag) => {
+					const position = document.positionAt(tag.offset);
+					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.name.length + 1, value: tag.name, tokenType: 0, error: ErrorType.NoteTagNotApplicable });
+				});
 			}
 			XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, note.tags.filter((tag) => tag.name === 'param' && tag.paramName && tag.paramOffset !== undefined)
 				.map((tag) => ({ tag, name: tag.paramName!, offset: tag.paramOffset! })), XdocNotes.paramNames(text, markup, declaration.offset), {

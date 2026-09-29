@@ -157,8 +157,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		return this.createHover(`template ${templateName}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
-	// XSLT 4.0: the text of the @field tag for a field in the documentation note of the named item type declaring the
-	// record type - or of the one it's declared as, e.g. cx:point for <xsl:item-type name="cx:location" as="cx:point"/>
+	// XSLT 4.0: the text of the @field tag for a field of a named record type
 	private async recordFieldText(document: TextDocument, typeName: string, fieldName: string, token: CancellationToken): Promise<string | undefined> {
 		if (!this.definitionProvider || /^record\s*\(/.test(typeName)) {
 			return undefined;
@@ -169,20 +168,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			return undefined;
 		}
 		const itemTypes = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType);
-		let name: string | undefined = typeName;
-		for (let depth = 0; name && depth < 10; depth++) {
-			const itemType = itemTypes.find((g) => g.name === name);
-			if (!itemType) {
-				return undefined;
-			}
-			const note = XSLTHoverProvider.declarationNote(document, itemType);
-			const text = note ? XdocNotes.fieldText(note, fieldName) : undefined;
-			if (text) {
-				return text;
-			}
-			name = itemType.declaredType?.trim();
-		}
-		return undefined;
+		return XdocNotes.recordFieldTexts(typeName, itemTypes, document.getText())(fieldName);
 	}
 
 	// XSLT 4.0: for the name of a named item type where it's used, e.g. cx:point in as="cx:point?", its declaration and

@@ -17,7 +17,7 @@ import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
-import { RecordType, RecordTypes, TemplateParamType } from './recordTypes';
+import { RecordField, RecordType, RecordTypes, TemplateParamType } from './recordTypes';
 import { XdocNotes } from './xdocNote';
 
 enum TagType {
@@ -811,7 +811,7 @@ export class XsltTokenCompletions {
 							// XPath 4.0: the fields of a record, for a partly typed lookup, e.g. $c?r
 							const record = XsltTokenCompletions.lookupRecordType(document, allTokens, index - 1, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
 							if (record) {
-								resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(record);
+								resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(record, XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData));
 							}
 						}
 						break;
@@ -822,7 +822,7 @@ export class XsltTokenCompletions {
 								XsltTokenCompletions.lookupRecordType(document, allTokens, index - 1, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData) : undefined;
 							if (stepRecord) {
 								// XPath 4.0: a partly typed child step on a value with a record type, e.g. $c/r
-								resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(stepRecord, true);
+								resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(stepRecord, XsltTokenCompletions.fieldDocumentation(document, stepRecord, globalInstructionData, importedInstructionData), true);
 							} else if (prevToken && (prevToken.tokenType === TokenLevelState.operator && ['/', '//', '::'].indexOf(prevToken.value) !== -1)) {
 								resultCompletions = XsltTokenCompletions.getTokenPathCompletions(docType, token, elementNames, attrNames, globalInstructionData, importedInstructionData);
 								let axes = XsltTokenCompletions.axisCompletionNames(docType);
@@ -962,7 +962,7 @@ export class XsltTokenCompletions {
 										// XPath 4.0: a child step on a value with a record type, e.g. $c/ - a JNode for each field
 										const record = XsltTokenCompletions.isXPath40(docType) && requiredChar === token.startCharacter + 1 ?
 											XsltTokenCompletions.lookupRecordType(document, allTokens, index, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData) : undefined;
-										resultCompletions = record ? XsltTokenCompletions.getRecordFieldCompletions(record, true) :
+										resultCompletions = record ? XsltTokenCompletions.getRecordFieldCompletions(record, XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData), true) :
 											XsltTokenCompletions.getPathCompletions(docType, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
 									} else if (token.value === '!') {
 										let fnCompletions = XsltTokenCompletions.getFnCompletions(position, XsltTokenCompletions.internalFunctionCompletions(docType));
@@ -972,7 +972,7 @@ export class XsltTokenCompletions {
 										// XPath 4.0: the fields of a record, for a lookup on a variable declared with a record type, e.g. $c?
 										const record = XsltTokenCompletions.lookupRecordType(document, allTokens, index, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
 										if (record) {
-											resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(record);
+											resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(record, XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData));
 										}
 									}
 								}
@@ -1472,6 +1472,7 @@ export class XsltTokenCompletions {
 				wholeMaps.push(item);
 			});
 		}
+		const documentation = XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData);
 		return wholeMaps.concat(record.fields.filter((field) => !entryPosition.usedKeys.includes(field.name)).map((field, index) => {
 			const item = new vscode.CompletionItem(`${quote}${field.name}${quote}`, vscode.CompletionItemKind.Field);
 			const key = `${quote}${field.name.replace(/[$}\\]/g, '\\$&')}${quote}`;
@@ -1480,7 +1481,7 @@ export class XsltTokenCompletions {
 				item.range = stringRange;
 			}
 			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
-			item.documentation = `Field of the record type: ${record!.name}`;
+			item.documentation = documentation(field);
 			// required fields first, in declaration order
 			item.sortText = (field.optional ? '1' : '0') + String(index).padStart(4, '0');
 			item.preselect = index === 0 && wholeMaps.length === 0;
@@ -1777,6 +1778,7 @@ export class XsltTokenCompletions {
 		}
 		const usedKeys = RecordTypes.mapEntryKeys(text, markup, ancestors[mapIndex].offset).map((k) => k.key);
 		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		const documentation = XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData);
 		return record.fields.filter((field) => !usedKeys.includes(field.name)).map((field, index) => {
 			const key = XsltTokenCompletions.snippetEscape(`'${field.name}'`);
 			const item = new vscode.CompletionItem(`xsl:map-entry '${field.name}'`, vscode.CompletionItemKind.Field);
@@ -1787,7 +1789,7 @@ export class XsltTokenCompletions {
 			item.range = range;
 			item.filterText = `xsl:map-entry ${field.name}`;
 			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
-			item.documentation = `Field of the record type: ${record.name}`;
+			item.documentation = documentation(field);
 			// before other element completions: required fields first, in declaration order
 			item.sortText = '!' + (field.optional ? '1' : '0') + String(index).padStart(4, '0');
 			return item;
@@ -2148,11 +2150,12 @@ export class XsltTokenCompletions {
 		// the string literal's quote is the other quote character from the attribute's
 		const quote = keyValue[1] === '"' ? '\'' : '"';
 		const range = new vscode.Range(document.positionAt(offset - keyValue[2].length), position);
+		const documentation = XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData);
 		return record.fields.filter((field) => !usedKeys.includes(field.name)).map((field, index) => {
 			const item = new vscode.CompletionItem(`${quote}${field.name}${quote}`, vscode.CompletionItemKind.Field);
 			item.range = range;
 			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
-			item.documentation = `Field of the record type: ${record.name}`;
+			item.documentation = documentation(field);
 			item.sortText = (field.optional ? '1' : '0') + String(index).padStart(4, '0');
 			return item;
 		});
@@ -2207,14 +2210,25 @@ export class XsltTokenCompletions {
 		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
 	}
 
-	private static getRecordFieldCompletions(record: RecordType, isChildStep = false): vscode.CompletionItem[] {
+	// XSLT 4.0: the documentation of each field of a record type, for its completion - with the text of its @field tag in
+	// the documentation note of a named record type
+	private static fieldDocumentation(document: vscode.TextDocument, record: RecordType, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): (field: RecordField) => vscode.MarkdownString {
+		const itemTypes = globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.ItemType);
+		const fieldText = /^record\s*\(/.test(record.name) || itemTypes.length === 0 ? () => undefined : XdocNotes.recordFieldTexts(record.name, itemTypes, document.getText());
+		return (field) => {
+			const text = fieldText(field.name);
+			return new vscode.MarkdownString(`${text ? text + '\n\n---\n' : ''}Field of the record type: \`${record.name}\``);
+		};
+	}
+
+	private static getRecordFieldCompletions(record: RecordType, documentation: (field: RecordField) => vscode.MarkdownString, isChildStep = false): vscode.CompletionItem[] {
 		return record.fields.map((field, index) => {
 			// a field name that isn't an NCName is looked up with a string literal, e.g. $p?'first name', or in a child step with get(), e.g. $p/get('first name')
 			const isNCName = /^[A-Za-z_][\w.-]*$/.test(field.name);
 			const label = isNCName ? field.name : isChildStep ? `get('${field.name}')` : `'${field.name}'`;
 			const item = new vscode.CompletionItem(label, vscode.CompletionItemKind.Field);
 			item.detail = (field.type ?? 'item()*') + (field.optional ? ' (optional)' : '');
-			item.documentation = `Field of the record type: ${record.name}`;
+			item.documentation = documentation(field);
 			// keep the declaration order
 			item.sortText = String(index).padStart(4, '0');
 			return item;

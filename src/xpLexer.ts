@@ -1727,6 +1727,7 @@ export enum ErrorType {
     NoteFieldsMissing,
     NoteFieldDuplicate,
     NoteFieldNotApplicable,
+    NoteTagNotApplicable,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,
