@@ -138,9 +138,10 @@ suite('Instruction snippets', () => {
 		assert.deepEqual(diagnostics.map((d) => d.message), []);
 	});
 
-	test('xsl:note is not offered in XSLT 3.0', async () => {
-		const result = await snippets('3.0', '<xsl:template name="t"><|</xsl:template>');
-		assert.isFalse(result.has('xsl:note'));
+	test('XSLT 3.0: xsl:note and xsl:note xdoc-md are offered excluded with use-when', async () => {
+		const result = await snippets('3.0', '<xsl:function name="f:f" xmlns:f="f"><|</xsl:function>');
+		assert.equal(result.get('xsl:note'), 'xsl:note use-when="false()">$1</xsl:note>$0');
+		assert.equal(result.get('xsl:note xdoc-md'), 'xsl:note use-when="false()" format="xdoc-md">\n\t$0\n</xsl:note>');
 	});
 
 	test('xsl:note is not offered within an xsl:note', async () => {

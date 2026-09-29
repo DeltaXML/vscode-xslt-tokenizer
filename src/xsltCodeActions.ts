@@ -286,9 +286,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			codeActions.push(action);
 		}
 
-		// XSLT 4.0: a documentation note for the xsl:function, xsl:template or xsl:item-type at the cursor
-		if (range.isEmpty && /\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)))) {
-			const note = XdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start));
+		// XSLT 4.0: a documentation note for the declaration at the cursor - before 4.0, excluded with use-when
+		if (range.isEmpty) {
+			const isVersion4 = /\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)));
+			const note = XdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start), !isVersion4);
 			if (note) {
 				const action = new vscode.CodeAction(XsltCodeActionKind.addDocumentationNote, vscode.CodeActionKind.RefactorRewrite);
 				action.edit = new vscode.WorkspaceEdit();

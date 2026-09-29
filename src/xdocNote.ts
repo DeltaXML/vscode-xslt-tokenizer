@@ -174,6 +174,8 @@ export class XdocNotes {
 		return inCdata;
 	}
 	public static readonly format = 'xdoc-md';
+	// before XSLT 4.0, a note is excluded, so the processor doesn't report it as an unknown XSLT element
+	public static readonly excludedAttribute = 'use-when="false()"';
 	public static readonly tagNames = ['param', 'variable', 'field', 'return', 'see', 'since', 'deprecated', 'error', 'author', 'version'];
 	public static readonly rootNames = ['xsl:stylesheet', 'xsl:transform', 'xsl:package'];
 	public static readonly tagDescriptions: { [name: string]: string } = {
@@ -480,11 +482,16 @@ export class XdocNotes {
 	// xsl:param or xsl:variable, without an xsl:note child, the snippet for a new note as its first child - with an
 	// @param for each xsl:param, and @return for a function or a template with an 'as' - for a module note, an @param
 	// or @variable for each global parameter or variable without a note of its own - and where to insert it: after the
-	// start tag, or replacing the '/>' of an empty element
-	public static noteSnippetAt(text: string, offset: number): { insertOffset: number, replaceLength: number, snippet: string } | undefined {
+	// start tag, or replacing the '/>' of an empty element - before XSLT 4.0, the note is excluded with use-when, as
+	// xsl:note is an unknown XSLT element for the processor
+	public static noteSnippetAt(text: string, offset: number, isExcluded = false): { insertOffset: number, replaceLength: number, snippet: string } | undefined {
 		const tagStart = offset > 0 ? text.lastIndexOf('<', offset - 1) : -1;
 		const elementName = tagStart > -1 ? /^<(xsl:function|xsl:template|xsl:item-type|xsl:stylesheet|xsl:transform|xsl:package|xsl:param|xsl:variable)[\s/>]/.exec(text.substring(tagStart, tagStart + 16))?.[1] : undefined;
 		if (!elementName) {
+			return undefined;
+		}
+		// before XSLT 4.0, there's no xsl:item-type
+		if (isExcluded && elementName === 'xsl:item-type') {
 			return undefined;
 		}
 		const markup = RecordTypes.blankMarkup(text);
@@ -532,7 +539,7 @@ export class XdocNotes {
 			tagLines.push(`\n${indent}${step}@return \${${tabStop++}:description}`);
 		}
 		const tags = tagLines.length > 0 ? `\n${tagLines.join('')}` : '';
-		const note = `\n${indent}<xsl:note format="${XdocNotes.format}">\n${indent}${step}\${1:description}${tags}\n${indent}</xsl:note>`;
+		const note = `\n${indent}<xsl:note ${isExcluded ? XdocNotes.excludedAttribute + ' ' : ''}format="${XdocNotes.format}">\n${indent}${step}\${1:description}${tags}\n${indent}</xsl:note>`;
 		return isEmpty ?
 			{ insertOffset, replaceLength: tagEnd - insertOffset, snippet: `>${note}\n${declarationIndent}</${elementName}>` } :
 			{ insertOffset, replaceLength: 0, snippet: note };

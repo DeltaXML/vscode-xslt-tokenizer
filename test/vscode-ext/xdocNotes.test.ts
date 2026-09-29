@@ -244,7 +244,6 @@ suite('Documentation notes', () => {
 		['an xsl:item-type with no note, in XSLT 3.0', stylesheet(`<xsl:item-type na¦me="cx:size" as="xs:string"/>`, '3.0')],
 		['another element', stylesheet(`<xsl:template name="t2"><xsl:sequence se¦lect="1"/></xsl:template>`)],
 		['a local xsl:variable', stylesheet(`<xsl:template name="t2"><xsl:variable na¦me="v" select="1"/></xsl:template>`)],
-		['XSLT 3.0', stylesheet(`<xsl:template na¦me="t2"><xsl:sequence select="1"/></xsl:template>`, '3.0')],
 	];
 	noAction.forEach(([label, marked]) => {
 		test(`add documentation note: not offered for ${label}`, async () => {
@@ -548,6 +547,22 @@ suite('Documentation notes', () => {
 
 	test('linter: XSLT 3.0 - an xsl:note excluded with use-when', async () => {
 		assert.deepEqual(await lint30(xslt30(`<xsl:note use-when="false()" format="xdoc-md">A note.</xsl:note>\n  <xsl:note _use-when="false()">Another.</xsl:note>`)), []);
+	});
+
+	test('add documentation note: XSLT 3.0 - excluded with use-when', async () => {
+		const body = `<xsl:function name="cx:mag" as="xs:double">\n    <xsl:param name="c"/>\n    <xsl:sequence select="1"/>\n  </xsl:function>`;
+		const { document } = await open(stylesheet(body, '3.0'));
+		await vscode.window.showTextDocument(document);
+		// the stylesheet's other notes aren't excluded
+		const warnings = async () => (await lint30(document.getText())).filter((d) => d[0] === requires40).length;
+		const before = await warnings();
+		const position = document.positionAt(document.getText().indexOf('cx:mag'));
+		const actions = new XSLTCodeActions().provideCodeActions(document, new vscode.Range(position, position), { diagnostics: [], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		const action = actions.find((a) => a.title === 'Add documentation note');
+		assert.isDefined(action);
+		assert.isTrue(await vscode.workspace.applyEdit(action!.edit!));
+		assert.include(document.getText(), `<xsl:function name="cx:mag" as="xs:double">\n    <xsl:note use-when="false()" format="xdoc-md">\n      description\n\n      @param $c description\n      @return description\n    </xsl:note>`);
+		assert.equal(await warnings(), before);
 	});
 
 	test('linter: XSLT 4.0 - an xsl:note', async () => {

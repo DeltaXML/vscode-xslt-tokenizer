@@ -2618,8 +2618,9 @@ export class XsltTokenCompletions {
 		}
 
 		// XSLT 4.0: xsl:note is permitted anywhere - as in Saxon 13, also within an element that's otherwise empty, and a
-		// literal result element - but not within another xsl:note, as its content is ignored
-		if (docType === DocumentTypes.XSLT40 && xsltParent && !elementStack.some((element) => element.symbolName === 'xsl:note') && !expectedTags.some((tag) => tag[0] === 'xsl:note')) {
+		// literal result element - but not within another xsl:note, as its content is ignored - and before 4.0, it's
+		// offered excluded with use-when
+		if ((docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XSLT) && xsltParent && !elementStack.some((element) => element.symbolName === 'xsl:note') && !expectedTags.some((tag) => tag[0] === 'xsl:note')) {
 			expectedTags = expectedTags.concat([['xsl:note', '']]);
 		}
 
@@ -2700,7 +2701,9 @@ export class XsltTokenCompletions {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.documentation = 'a note, whose content is ignored';
-					newItem.insertText = new vscode.SnippetString('xsl:note>$1</xsl:note>$0');
+					// before XSLT 4.0, excluded with use-when, as the processor would report it
+					const excluded = docType === DocumentTypes.XSLT40 ? '' : ' ' + XdocNotes.excludedAttribute;
+					newItem.insertText = new vscode.SnippetString(`xsl:note${excluded}>$1</xsl:note>$0`);
 					completionItems.push(newItem);
 					// a documentation note only where it's used, e.g. in an xsl:function without one - see XdocNotes
 					const text = document.getText();
@@ -2709,7 +2712,7 @@ export class XsltTokenCompletions {
 						// preselected, and before the note, as it's the one that's likely to be wanted
 						const docItem = new vscode.CompletionItem(tagName + ' xdoc-md', vscode.CompletionItemKind.Struct);
 						docItem.documentation = 'a documentation note, with Markdown text and tags such as @param, shown in hovers';
-						docItem.insertText = new vscode.SnippetString('xsl:note format="xdoc-md">\n\t$0\n</xsl:note>');
+						docItem.insertText = new vscode.SnippetString(`xsl:note${excluded} format="xdoc-md">\n\t$0\n</xsl:note>`);
 						docItem.sortText = tagName;
 						docItem.preselect = true;
 						newItem.sortText = tagName + '!';
