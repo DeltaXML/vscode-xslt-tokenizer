@@ -146,7 +146,7 @@ export class RecordFieldReferences {
 		// the name of a field in a record type, in an 'as' attribute
 		const tagStart = text.lastIndexOf('<', offset);
 		const asOffset = tagStart > -1 ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'as') : undefined;
-		const asText = tagStart > -1 ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as') : undefined;
+		const asText = tagStart > -1 ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as', true) : undefined;
 		if (asOffset !== undefined && asText !== undefined && offset >= asOffset && offset <= asOffset + asText.length) {
 			const field = RecordTypes.recordFieldDeclarations(asText, asOffset).find((f) => f.nameOffset !== undefined && within(f.nameOffset, f.name));
 			return field ? result(field.name, { uri: document.uri.toString(), offset: field.nameOffset! }, field.nameOffset!) : undefined;
@@ -191,7 +191,7 @@ export class RecordFieldReferences {
 			}
 			const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, itemType.token.line, itemType.token.startCharacter));
 			const asOffset = tagStart > -1 ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'as') : undefined;
-			const asText = tagStart > -1 ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as') : undefined;
+			const asText = tagStart > -1 ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as', true) : undefined;
 			if (asOffset === undefined || asText === undefined) {
 				return undefined;
 			}

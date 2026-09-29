@@ -237,6 +237,45 @@ export class XPathLexer {
     public debug: boolean = false;
     public timerOn: boolean = false;
     public entityRefOn: boolean = true;
+    // the characters of a reference that may end a string literal started with one, e.g. '&#3' of &#39;
+    private closingReference = '';
+
+    // the quote of a reference to one in an attribute value - '"' for &quot;, &#34; or &#x22;, and "'" for &apos;, &#39;
+    // or &#x27;, with any leading zeros - undefined for another reference - XML only allows a lower-case 'x'
+    public static quoteReference(reference: string): string | undefined {
+        if (reference === '&quot;') {
+            return '"';
+        } else if (reference === '&apos;') {
+            return '\'';
+        }
+        const numeric = /^&#(?:x([0-9a-fA-F]+)|([0-9]+));$/.exec(reference);
+        const code = numeric ? (numeric[1] !== undefined ? parseInt(numeric[1], 16) : parseInt(numeric[2], 10)) : undefined;
+        return code === 34 ? '"' : code === 39 ? '\'' : undefined;
+    }
+
+    // the text so far of a reference may be the start of one to the quote
+    private static isQuoteReferencePrefix(text: string, quote: string): boolean {
+        if ((quote === '"' ? '&quot;' : '&apos;').startsWith(text)) {
+            return true;
+        }
+        const numeric = /^&#(?:(x)0*([0-9a-fA-F]*)|0*([0-9]*))$/.exec(text);
+        if (!numeric) {
+            return false;
+        }
+        const digits = numeric[1] !== undefined ? numeric[2].toLowerCase() : numeric[3];
+        return (numeric[1] !== undefined ? (quote === '"' ? '22' : '27') : (quote === '"' ? '34' : '39')).startsWith(digits);
+    }
+
+    // the quote of a reference to one at the start, or at the end, of a token's text, e.g. &quot;a&quot;
+    public static startQuoteReference(text: string): string | undefined {
+        const reference = /^&(?:quot|apos|#x[0-9a-fA-F]+|#[0-9]+);/.exec(text);
+        return reference ? XPathLexer.quoteReference(reference[0]) : undefined;
+    }
+
+    public static endQuoteReference(text: string): string | undefined {
+        const reference = /&(?:quot|apos|#x[0-9a-fA-F]+|#[0-9]+);$/.exec(text);
+        return reference ? XPathLexer.quoteReference(reference[0]) : undefined;
+    }
     public documentText: string = '';
     public documentTokens: BaseToken[] = [];
     // set by the XSLT lexer for XPath within XML
@@ -329,71 +368,21 @@ export class XPathLexer {
                 rv = CharLevelState.lNl;
                 break;
             case CharLevelState.rDqEnt:
-                rv = existing;
-                switch (nesting) {
-                    case 0:
-                    case 2:
-                        nesting++;
-                        break;
-                    case 1:
-                        if (char === 'u' && nextChar === 'o') {
-                            nesting++;
-                        } else {
-                            nesting = 0;
-                            rv = CharLevelState.lDqEnt;
-                        }
-                        break;
-                    case 3:
-                        if (char === 't') {
-                            nesting++;
-                        } else {
-                            rv = CharLevelState.lDqEnt;
-                            nesting = 0;
-                        }
-                        break;
-                    case 4:
-                        if (char === ';') {
-                            rv = CharLevelState.rDq;
-                        } else {
-                            rv = CharLevelState.lDqEnt;
-                        }
-                        nesting = 0;
-                        break;
+            case CharLevelState.rSqEnt: {
+                // a reference that may end a string literal started with a reference to the same quote, e.g. &quot; or
+                // &#34; - otherwise the string literal continues
+                const quote = existing === CharLevelState.rDqEnt ? '"' : '\'';
+                this.closingReference += char;
+                if (char === ';' && XPathLexer.quoteReference(this.closingReference) === quote) {
+                    rv = quote === '"' ? CharLevelState.rDq : CharLevelState.rSq;
+                } else if (XPathLexer.isQuoteReferencePrefix(this.closingReference, quote)) {
+                    rv = existing;
+                } else {
+                    rv = quote === '"' ? CharLevelState.lDqEnt : CharLevelState.lSqEnt;
                 }
+                nesting = 0;
                 break;
-            case CharLevelState.rSqEnt:
-                rv = existing;
-                switch (nesting) {
-                    case 0:
-                    case 2:
-                        nesting++;
-                        break;
-                    case 1:
-                        if (char === 'p' && nextChar === 'o') {
-                            nesting++;
-                        } else {
-                            nesting = 0;
-                            rv = CharLevelState.lSqEnt;
-                        }
-                        break;
-                    case 3:
-                        if (char === 's') {
-                            nesting++;
-                        } else {
-                            rv = CharLevelState.lSqEnt;
-                            nesting = 0;
-                        }
-                        break;
-                    case 4:
-                        if (char === ';') {
-                            rv = CharLevelState.rSq;
-                        } else {
-                            rv = CharLevelState.lSqEnt;
-                        }
-                        nesting = 0;
-                        break;
-                }
-                break;
+            }
             case CharLevelState.lWs:
                 if (char === ' ' || char === '\t') {
                     rv = existing;
@@ -450,10 +439,14 @@ export class XPathLexer {
                 rv = (char === '}') ? CharLevelState.rUri : existing;
                 break;
             case CharLevelState.lSqEnt:
-                rv = (char === '&' && nextChar === 'a') ? CharLevelState.rSqEnt : existing;
-                break;
             case CharLevelState.lDqEnt:
-                rv = (char === '&' && nextChar === 'q') ? CharLevelState.rDqEnt : existing;
+                // the start of a reference that may end the string literal, e.g. &apos; or &#39;
+                if (char === '&' && (nextChar === (existing === CharLevelState.lSqEnt ? 'a' : 'q') || nextChar === '#')) {
+                    rv = existing === CharLevelState.lSqEnt ? CharLevelState.rSqEnt : CharLevelState.rDqEnt;
+                    this.closingReference = '&';
+                } else {
+                    rv = existing;
+                }
                 break;
             case CharLevelState.lSq:
             case CharLevelState.rLiteralSqEnt:
@@ -665,7 +658,7 @@ export class XPathLexer {
                             if (result.length > 1) {
                                 const nextLastToken = result[result.length - 2];
                                 if (nextLastToken.tokenType === TokenLevelState.string) {
-                                    if (!lastToken.value.endsWith('&quot;') && !lastToken.value.startsWith('&apos;')) {
+                                    if (XPathLexer.endQuoteReference(lastToken.value) !== '"' && XPathLexer.startQuoteReference(lastToken.value) !== '\'') {
                                         lastToken['error'] = ErrorType.XPathStringLiteral;
                                     }
                                 }
@@ -798,9 +791,10 @@ export class XPathLexer {
                         case CharLevelState.rEnt:
                             tokenChars.push(currentChar);
                             let ent = tokenChars.join('');
-                            if (ent === '&quot;') {
+                            const entQuote = XPathLexer.quoteReference(ent);
+                            if (entQuote === '"') {
                                 nextState = [CharLevelState.lDqEnt, 0];
-                            } else if (ent === '&apos;') {
+                            } else if (entQuote === '\'') {
                                 nextState = [CharLevelState.lSqEnt, 0];
                             } else {
                                 let entToken: Token = new BasicToken(ent, CharLevelState.lName);
@@ -874,7 +868,7 @@ export class XPathLexer {
         if (followsEntityRef) {
             let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
             const lastCharIsSingleQuote = lastChar === "'";
-            if (lastChar !== '"' && !lastCharIsSingleQuote && !lastToken.value.endsWith('&quot;') && !lastToken.value.startsWith('&apos;')) {
+            if (lastChar !== '"' && !lastCharIsSingleQuote && XPathLexer.endQuoteReference(lastToken.value) !== '"' && XPathLexer.startQuoteReference(lastToken.value) !== '\'') {
                 lastToken['error'] = ErrorType.XPathStringLiteral;
             } else if (lastChar === '"' || lastChar === "'" && lastToken.length > 1) {
                 const mod2Chars = [...lastToken.value].filter(l => l === lastChar).length % 2;
@@ -911,8 +905,12 @@ export class XPathLexer {
         }
         let lastChar = lastToken.value.charAt(lastToken.value.length - 1);
         let firstChar = lastToken.value.charAt(0);
-        if (!((lastChar === firstChar && lastToken.value.length > 1) || (lastToken.value.length > 6 &&
-            (lastToken.value.startsWith('&quot;') && lastToken.value.endsWith('&quot;')) || (lastToken.value.startsWith('&apos;') && lastToken.value.endsWith('&apos;'))))) {
+        // a string literal may start and end with references to the same quote, e.g. &quot; or &#34;
+        const startReference = /^&(?:quot|apos|#x[0-9a-fA-F]+|#[0-9]+);/.exec(lastToken.value)?.[0];
+        const endReference = /&(?:quot|apos|#x[0-9a-fA-F]+|#[0-9]+);$/.exec(lastToken.value)?.[0];
+        const isReferenceQuoted = !!startReference && !!endReference && startReference.length + endReference.length <= lastToken.value.length &&
+            XPathLexer.quoteReference(startReference) !== undefined && XPathLexer.quoteReference(startReference) === XPathLexer.quoteReference(endReference);
+        if (!((lastChar === firstChar && lastToken.value.length > 1) || isReferenceQuoted)) {
             lastToken['error'] = ErrorType.XPathStringLiteral;
         } else if (lastToken.value.match(`[^'](('')|(''''))$`)) {
             lastToken['error'] = ErrorType.XPathStringLiteral;

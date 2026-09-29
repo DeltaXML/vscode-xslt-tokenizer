@@ -173,9 +173,11 @@ export class RecordTypes {
 	public static checkEnumValue(tokens: BaseToken[], enumValues: string[], typeText: string, problemTokens: BaseToken[]) {
 		const realTokens = tokens.filter((t) => t.tokenType !== TokenLevelState.comment);
 		const token = realTokens.length === 1 ? realTokens[0] : undefined;
-		if (token && token.tokenType === TokenLevelState.string && /^(['"]).*\1$/.test(token.value)) {
-			const quote = token.value.charAt(0);
-			const value = token.value.substring(1, token.value.length - 1).split(quote + quote).join(quote);
+		// the quotes may be references, e.g. &quot;red&quot; or &#39;red&#39; in an attribute
+		const literal = token ? RecordTypes.decodeReferences(token.value).text : '';
+		if (token && token.tokenType === TokenLevelState.string && /^(['"]).*\1$/.test(literal)) {
+			const quote = literal.charAt(0);
+			const value = literal.substring(1, literal.length - 1).split(quote + quote).join(quote);
 			if (!enumValues.includes(value)) {
 				problemTokens.push(RecordTypes.problemToken(token, ErrorType.EnumValueUnknown, value, typeText.trim()));
 			}
@@ -214,7 +216,8 @@ export class RecordTypes {
 
 	// the value of an attribute on the element whose start tag contains the offset, e.g. the 'as' of an xsl:variable
 	// from the position of its 'name' attribute value - attribute values may contain '>'
-	public static attributeOfElementAt(text: string, offset: number, attributeName: string): string | undefined {
+	// - with its references replaced, unless raw is true, e.g. for the offsets of the value's parts
+	public static attributeOfElementAt(text: string, offset: number, attributeName: string, raw = false): string | undefined {
 		const tagStart = text.lastIndexOf('<', offset);
 		if (tagStart < 0) {
 			return undefined;
@@ -230,7 +233,7 @@ export class RecordTypes {
 		while ((match = attributeRgx.exec(text)) !== null) {
 			if (match[1] === attributeName) {
 				const value = match[2].substring(1, match[2].length - 1);
-				return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, '\'').replace(/&amp;/g, '&');
+				return raw ? value : RecordTypes.decodeReferences(value).text;
 			}
 		}
 		return undefined;
@@ -629,8 +632,8 @@ export class RecordTypes {
 					continue;
 				}
 				if (isEntryStart && depth === 0) {
-					// the quotes may be entity references, e.g. &quot;x&quot; in an attribute delimited by '"'
-					const quoted = t.tokenType === TokenLevelState.string ? /^(['"]|&quot;|&apos;)(.*)\1$/.exec(t.value) : null;
+					// the quotes may be references, e.g. &quot;x&quot; or &#39;x&#39; in an attribute
+					const quoted = t.tokenType === TokenLevelState.string ? /^(['"])(.*)\1$/.exec(RecordTypes.decodeReferences(t.value).text) : null;
 					const name = quoted ? quoted[2].split(quoted[1] + quoted[1]).join(quoted[1]) :
 						isRecord && t.tokenType === TokenLevelState.nodeNameTest ? t.value : undefined;
 					if (name !== undefined && names.has(name) && !t.error) {
@@ -658,8 +661,8 @@ export class RecordTypes {
 	// the identity of a literal map key, for finding duplicates - the same for 'a' and "a", and for 1 and 1.0, but not for
 	// 1 and '1' - undefined if it's not a literal
 	public static literalKeyIdentity(keyText: string): string | undefined {
-		// the quotes may be entity references, e.g. &quot;a&quot; in an attribute delimited by '"'
-		const quoted = /^(['"]|&quot;|&apos;)([\s\S]*)\1$/.exec(keyText);
+		// the quotes may be references, e.g. &quot;a&quot; or &#39;a&#39; in an attribute
+		const quoted = /^(['"])([\s\S]*)\1$/.exec(RecordTypes.decodeReferences(keyText).text);
 		if (quoted) {
 			return 's' + quoted[2].split(quoted[1] + quoted[1]).join(quoted[1]);
 		}

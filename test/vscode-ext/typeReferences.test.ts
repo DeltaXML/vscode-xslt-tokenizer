@@ -2,8 +2,8 @@
  * Test suite for XPath 4.0 types in attribute values with quotes written as references, e.g.
  * as="enum(&quot;it's&quot;, 'is')" or as="record(&quot;nick name&quot; as xs:string)" - Saxon 13 replaces the references
  * before parsing the type, so the extension does too: for the values of an enumeration type, the fields of a record type,
- * and the hover, while go to definition and rename use the offsets of the text as written. Character references, e.g.
- * &#39;, are replaced in types too - though the XPath lexer doesn't yet treat them as quotes elsewhere in an attribute.
+ * and the hover, while go to definition and rename use the offsets of the text as written. Character references for
+ * quotes, e.g. &#39; or &#x22;, are string delimiters for the XPath lexer too, as &apos; and &quot; are.
  *
  * The cursor position is marked by '¦'.
  */
@@ -18,7 +18,7 @@ import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 import { RecordTypes } from '../../src/recordTypes';
 
 const declarations = `<xsl:item-type name="cx:word" as="enum(&quot;it's&quot;, 'is', &quot;a, b&quot;)"/>
-  <xsl:item-type name="cx:person" as="record(&quot;nick name&quot; as xs:string, mood as enum(&apos;glad&apos;, &apos;sad&apos;), age as xs:integer)"/>`;
+  <xsl:item-type name="cx:person" as="record(&quot;nick name&quot; as xs:string, mood as enum(&apos;glad&apos;, &#39;sad&#39;), age as xs:integer)"/>`;
 
 function stylesheet(body: string) {
 	return `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cx="cx" version="4.0">
@@ -98,7 +98,7 @@ suite('Types with quotes written as references', () => {
 		const edit = await provider.provideRenameEdits(document, position, 'alias', token);
 		assert.isTrue(await vscode.workspace.applyEdit(edit!));
 		const text = document.getText();
-		assert.include(text, `as="record(&quot;alias&quot; as xs:string, mood as enum(&apos;glad&apos;, &apos;sad&apos;), age as xs:integer)"`);
+		assert.include(text, `as="record(&quot;alias&quot; as xs:string, mood as enum(&apos;glad&apos;, &#39;sad&#39;), age as xs:integer)"`);
 		assert.include(text, `{ 'alias': 'Al', 'mood': 'glad', 'age': 3 }`);
 		assert.include(text, `select="$p?'alias'"`);
 	});
@@ -106,5 +106,28 @@ suite('Types with quotes written as references', () => {
 		assert.deepEqual(RecordTypes.resolveEnum(`enum(&#39;a&#39;, &#x22;b, c&#x22;, &quot;d&apos;s&quot;)`, new Map()), ['a', 'b, c', "d's"]);
 		const record = RecordTypes.resolve(`record(&#34;nick name&#34; as xs:string, age as xs:integer)`, new Map(), 0, 100);
 		assert.deepEqual(record?.fields.map((f) => [f.name, f.nameOffset, f.type]), [['nick name', 112, 'xs:string'], ['age', 141, 'xs:integer']]);
+	});
+	const lexerCases: [string, string][] = [
+		['decimal references', `<xsl:variable name="v" select="&#39;red&#39;"/>`],
+		['hexadecimal references', `<xsl:variable name="v" select="&#x22;red&#x0022;"/>`],
+		['a leading zero', `<xsl:variable name="v" select="&#039;red&#039;"/>`],
+		['references of both kinds for the same quote', `<xsl:variable name="v" select="&#39;red&apos;, &apos;blue&#39;"/>`],
+		['another reference within the string literal', `<xsl:variable name="v" select="&#39;&#169; &#34;me&#34; &amp; &#x27;&#x27; you&#39;"/>`],
+		['a reference-quoted string in a function call', `<xsl:variable name="v" select="concat(&#39;a&#39;, &#x22;b&#x22;)"/>`],
+	];
+	lexerCases.forEach(([label, body]) => {
+		test(`lexer: string literals quoted with ${label}`, async () => {
+			assert.deepEqual(await lint(body), []);
+		});
+	});
+
+	test('lexer: an unterminated string literal quoted with a reference', async () => {
+		assert.isNotEmpty(await lint(`<xsl:variable name="v" select="&#39;red"/>`));
+	});
+
+	test('linter: a value quoted with references that is not one of the values', async () => {
+		assert.deepEqual(await lint(`<xsl:variable name="w" as="cx:word" select="&#39;nope&#39;"/><xsl:variable name="w2" as="cx:word" select="&#39;is&#39;"/>`), [
+			`XPath: 'nope' is not one of the values of the enumeration type: cx:word`
+		]);
 	});
 });
