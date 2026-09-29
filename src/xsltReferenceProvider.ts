@@ -11,6 +11,7 @@ import * as url from 'url';
 import * as fs from 'fs';
 import { RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
+import { FieldLocations, RecordFieldReferences } from './recordFieldReferences';
 
 export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.RenameProvider {
 
@@ -18,6 +19,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 	private definition: DefinitionLocation | undefined = undefined;
 	private definitionData: DefinitionData | undefined = undefined;
 	private refLocations: vscode.Location[] = [];
+	// XPath 4.0: the record field being renamed
+	private fieldLocations: FieldLocations | undefined = undefined;
 	public constructor() {
 		this.xslLexer = new XslLexer(XSLTConfiguration.configuration);
 		this.xslLexer.provideCharLevelState = true;
@@ -25,6 +28,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 
 	async prepareRename(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Range | undefined> {
 		let wse: vscode.WorkspaceEdit | undefined;
+		// XPath 4.0: a record field
+		this.fieldLocations = await RecordFieldReferences.find(document, position, token);
+		if (this.fieldLocations) {
+			return this.fieldLocations.range;
+		}
 
 		const refContext = { includeDeclaration: true };
 		// this call also sets this.definition + this.definitionData:
@@ -65,6 +73,15 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 	}
 
 	async provideRenameEdits(document: vscode.TextDocument, position: vscode.Position, newName: string, token: vscode.CancellationToken): Promise<vscode.WorkspaceEdit | undefined> {
+		if (this.fieldLocations) {
+			const invalid = RecordFieldReferences.invalidName(this.fieldLocations.name, newName);
+			if (invalid) {
+				return new Promise((resolve, reject) => reject(invalid));
+			}
+			const fieldEdit = new vscode.WorkspaceEdit();
+			this.fieldLocations.locations.forEach((location) => fieldEdit.replace(location.uri, location.range, newName));
+			return fieldEdit;
+		}
 		// check that name is valid
 		let newNameIsValid = XsltTokenDiagnostics.validateSimpleName(newName);
 		if (!newNameIsValid || !this.definition) {
@@ -103,6 +120,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 	}
 
 	async provideReferences(document: vscode.TextDocument, position: vscode.Position, context: vscode.ReferenceContext, token: vscode.CancellationToken): Promise<vscode.Location[] | null | undefined> {
+		// XPath 4.0: a record field - its declaration, references and @field tags
+		const field = await RecordFieldReferences.find(document, position, token);
+		if (field) {
+			return field.locations;
+		}
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		const langConfig = XSLTConfiguration.configuration;
 		// TODO: first check if position is on a definition already

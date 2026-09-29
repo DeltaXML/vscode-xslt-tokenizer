@@ -1081,6 +1081,20 @@ export class RecordTypes {
 	}
 
 	// fields of record(...), e.g. "r as xs:double, 'first name', b? as xs:integer" - undefined for record(*)
+	// the fields declared in the record types within a SequenceType at the document offset, e.g. both fields of
+	// 'record(a as record(b))' - with the offsets of their names, e.g. for renaming a field
+	public static recordFieldDeclarations(typeText: string, offset: number): RecordField[] {
+		const fields: RecordField[] = [];
+		for (const match of typeText.matchAll(/(?<![\w.:-])record\s*\(/g)) {
+			const openIndex = match.index! + match[0].length - 1;
+			const closeIndex = RecordTypes.closingIndex(typeText, openIndex);
+			if (closeIndex > -1) {
+				fields.push(...(RecordTypes.parseFields(typeText.substring(openIndex + 1, closeIndex), offset + openIndex + 1) ?? []));
+			}
+		}
+		return fields;
+	}
+
 	private static parseFields(fieldsText: string, offset?: number): RecordField[] | undefined {
 		const fields: RecordField[] = [];
 		if (fieldsText.trim().length === 0) {

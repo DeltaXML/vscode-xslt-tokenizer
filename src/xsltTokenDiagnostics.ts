@@ -1418,7 +1418,9 @@ export class XsltTokenDiagnostics {
 					}
 				}
 				const isRecordStep = xpathTokenType === TokenLevelState.nodeNameTest && prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/';
-				if ((isRecordStep || (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?')) && XsltTokenDiagnostics.isXPath40(docType)) {
+				// a lookup with a string literal, e.g. $c?'first name'
+				const isStringLookup = xpathTokenType === TokenLevelState.string && prevToken?.value === '?' && token.value.length > 1;
+				if ((isRecordStep || isStringLookup || (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?')) && XsltTokenDiagnostics.isXPath40(docType)) {
 					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r, or a child step on a JNode for one, e.g. jtree($c)/r
 					// the record type of a variable, and whether it's declared as a JNode for one, e.g. jnode(*, point)
 					const variableRecord = (variableToken: BaseToken): { record: RecordType | undefined, isJNode: boolean } => {
@@ -1463,6 +1465,16 @@ export class XsltTokenDiagnostics {
 					if (record && isRecordStep && !operandRecord!.isJNode) {
 						// Saxon 13 requires a node on the left of '/' when the static type is a record type (XPTY0019)
 						problemTokens.push(RecordTypes.problemToken(prevToken!, ErrorType.RecordStepNeedsJtree, record.name));
+					} else if (record && isStringLookup) {
+						// only recorded for the field, e.g. for rename - a string key isn't checked
+						const field = record.fields.find((f) => f.name === token.value.substring(1, token.value.length - 1));
+						if (field) {
+							RecordTypes.fieldReferences.push({ token, field, record });
+							const fieldRecord = RecordTypes.fieldRecord(field, itemTypeDeclarations);
+							if (fieldRecord) {
+								lookupRecords.set(token, { record: fieldRecord, isJNode: false });
+							}
+						}
 					} else if (record && /^[\w.-]+$/.test(token.value) && !/^\d+$/.test(token.value)) {
 						const field = record.fields.find((f) => f.name === token.value);
 						if (!field) {
