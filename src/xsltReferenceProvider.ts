@@ -8,6 +8,7 @@ import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
 import { AttributeType, TagType, XSLTToken, XsltTokenDiagnostics, ElementData, XPathData, VariableData, ValidationType, CurlyBraceType } from './xsltTokenDiagnostics';
 import * as url from 'url';
+import * as fs from 'fs';
 import { RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
 
@@ -123,7 +124,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				locations = locations.concat(parameterLocations.filter((p) => !locations.some((l) => l.uri.toString() === p.uri.toString() && l.range.isEqual(p.range))));
 				for (let index = 0; index < eid.accumulatedHrefs.length; index++) {
 					const currentHref = eid.accumulatedHrefs[index];
-					if (currentHref === document.fileName) {
+					// not a missing module, e.g. an import that isn't found - VS Code logs an error for it
+					if (currentHref === document.fileName || !fs.existsSync(currentHref)) {
 						continue;
 					}
 					try {
@@ -177,6 +179,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		const params = RecordTypes.childElements(text, markup, parent.offset, 'xsl:param');
 		const requiredCount = params.filter((offset) => !['no', 'false', '0'].includes((RecordTypes.attributeOfElementAt(text, offset + 1, 'required') ?? '').trim())).length;
 		for (const href of hrefs) {
+			if (href !== document.fileName && !fs.existsSync(href)) {
+				continue;
+			}
 			let doc: vscode.TextDocument;
 			try {
 				doc = href === document.fileName ? document : await vscode.workspace.openTextDocument(vscode.Uri.parse(url.pathToFileURL(href).toString()));
