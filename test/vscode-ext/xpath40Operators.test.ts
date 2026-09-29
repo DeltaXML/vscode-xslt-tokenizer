@@ -2,11 +2,15 @@
  * Test suite for XPath 4.0's operators: the method call '=?>', e.g. $r =?> area() - whose name is a key of the map, not
  * a function - the multiplication and division signs '×' and '÷', and the positional variable of a for clause, e.g.
  * for $x at $i in $seq. Saxon 13 supports them all; Saxon 12.8 only '×' and '÷', with syntax extensions - so all are
- * reported before XPath 4.0.
+ * reported before XPath 4.0. Completion offers the fields of a record after '=?>', as after '?', and the positional
+ * variable in the return clause.
+ *
+ * The cursor position for completion is marked by '¦'.
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
+import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 import { TokenLevelState } from '../../src/xpLexer';
@@ -83,5 +87,37 @@ suite('XPath 4.0 operators', () => {
 		const { messages, types } = await analyse('count(at), at/x', '4.0');
 		assert.deepEqual(messages, []);
 		assert.deepEqual(types.filter((t) => t.startsWith('at:')), ['at:nodeNameTest', 'at:nodeNameTest']);
+	});
+
+	suite('completion', () => {
+		const withRecord = (select: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="4.0">
+<xsl:item-type name="shape" as="record(w as xs:integer, area as function(*))"/>
+<xsl:template match="/"><xsl:variable name="s" as="shape" select="{'w': 2, 'area': fn($m) { $m?w }}"/><xsl:sequence select="${select}"/><xsl:sequence select="$s"/></xsl:template>
+</xsl:stylesheet>`;
+		async function labels(select: string) {
+			const text = withRecord(select);
+			const offset = text.indexOf('¦');
+			const document = await vscode.workspace.openTextDocument({ content: text.replace('¦', ''), language: 'xslt' });
+			const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+			return (Array.isArray(result) ? result : result?.items ?? []).map((item) => typeof item.label === 'string' ? item.label : item.label.label);
+		}
+
+		const fieldCases = ['$s =?>¦', '$s =?> ¦', '$s =?> ¦, 1', '$s =?> a¦', '$s=?>a¦'];
+		fieldCases.forEach((select) => {
+			test(`the fields of the record: ${select}`, async () => {
+				assert.deepEqual(await labels(select), ['w', 'area']);
+			});
+		});
+
+		const variableCases: [string, string[]][] = [
+			['for $x at $i in (1, 2) return $¦', ['$x', '$i', '$s']],
+			['for $x as xs:integer at $i in (1, 2), $y at $j in (3) return $x + $¦', ['$x', '$i', '$y', '$j', '$s']],
+			[`for key $k value $v in {'a': 1} return $¦`, ['$k', '$v', '$s']],
+		];
+		variableCases.forEach(([select, expected]) => {
+			test(`the variables: ${select}`, async () => {
+				assert.deepEqual(await labels(select), expected);
+			});
+		});
 	});
 });

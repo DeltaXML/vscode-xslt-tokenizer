@@ -275,6 +275,15 @@ export class XsltTokenCompletions {
 			// 	console.log('tokenValue ' + token.value + ' type: ' + TokenLevelState[token.tokenType]);
 			// }
 			let isXMLToken = token.tokenType >= XsltTokenCompletions.xsltStartTokenNumber;
+			if (!isXMLToken && token.tokenType === TokenLevelState.operator && token.value === '=?>' && isOnRequiredLine && requiredChar >= token.startCharacter + token.length &&
+				/^\s*$/.test(document.lineAt(lineNumber).text.substring(token.startCharacter + token.length, requiredChar)) &&
+				(XsltTokenCompletions.isXPath40(docType) || XsltTokenCompletions.hasItemTypes(docType))) {
+				// XPath 4.0: the fields of a record, for a method call on a value declared with a record type, e.g. $c =?>
+				const record = XsltTokenCompletions.lookupRecordType(document, allTokens, index, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
+				if (record) {
+					return XsltTokenCompletions.getRecordFieldCompletions(record, XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData));
+				}
+			}
 			if (!isXMLToken && awaitingSelectExprStart) {
 				// first embedded-XPath token of the select attribute's value
 				pendingSelectExprIndex = index;
@@ -795,6 +804,16 @@ export class XsltTokenCompletions {
 								xpathVariableCurrentlyBeingDefined = false;
 								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true, rangeVarKeyword: valueText });
 								break;
+							case 'key':
+							case 'value':
+							case 'at':
+								// XPath 4.0: the variable after 'value', in for key $k value $v in map-expression, is a new binding, as is
+								// the positional variable after 'at', e.g. for $x at $i in $seq
+								if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].isRangeVar) {
+									preXPathVariable = xpathStack[xpathStack.length - 1].preXPathVariable;
+								}
+								xpathVariableCurrentlyBeingDefined = false;
+								break;
 							case 'then':
 								xpathStack.push({ awaitingArity: false, token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined });
 								inScopeXPathVariablesList = [];
@@ -823,8 +842,8 @@ export class XsltTokenCompletions {
 						}
 						break;
 					case TokenLevelState.mapNameLookup:
-						if (isOnRequiredToken && requiredChar > token.startCharacter && prevToken?.value === '?') {
-							// XPath 4.0: the fields of a record, for a partly typed lookup, e.g. $c?r
+						if (isOnRequiredToken && requiredChar > token.startCharacter && (prevToken?.value === '?' || prevToken?.value === '=?>')) {
+							// XPath 4.0: the fields of a record, for a partly typed lookup, e.g. $c?r, or method call, e.g. $c =?> ar
 							const record = XsltTokenCompletions.lookupRecordType(document, allTokens, index - 1, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData);
 							if (record) {
 								resultCompletions = XsltTokenCompletions.getRecordFieldCompletions(record, XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData));
@@ -2105,7 +2124,9 @@ export class XsltTokenCompletions {
 		['array { … }', 'array { ${0} }']
 	];
 	private static readonly expressionSnippets40: [string, string][] = [
-		['if (…) { … }', 'if (${1}) { ${0} }']
+		['if (…) { … }', 'if (${1}) { ${0} }'],
+		['for $x at $i in … return …', 'for $${1:x} at $${2:i} in ${3} return ${0}'],
+		['for key $k value $v in … return …', 'for key $${1:k} value $${2:v} in ${3} return ${0}']
 	];
 
 	// the XPath completions adjusted for the position: after an operand, only keyword operators - including 'return' or

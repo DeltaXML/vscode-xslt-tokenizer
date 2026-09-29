@@ -49,6 +49,8 @@ suite('XPath keyword completions', () => {
 		const items = await labels(select('(1, ¦'));
 		assert.includeMembers(items, snippets.concat('count'));
 		assert.notInclude(items, 'if (…) { … }');
+		assert.notInclude(items, 'for $x at $i in … return …');
+		assert.notInclude(items, 'for key $k value $v in … return …');
 	});
 
 	test('a partly typed keyword at the start of the attribute value', async () => {
@@ -61,6 +63,20 @@ suite('XPath keyword completions', () => {
 
 	test("in XPath 4.0, the braced 'if' too", async () => {
 		assert.include(await labels(select('(1, ¦'), '4.0'), 'if (…) { … }');
+	});
+
+	const snippets40: [string, string, string][] = [
+		['a positional variable', 'for $x at $i in … return …', 'for $${1:x} at $${2:i} in ${3} return ${0}'],
+		['map bindings', 'for key $k value $v in … return …', 'for key $${1:k} value $${2:v} in ${3} return ${0}'],
+	];
+	snippets40.forEach(([description, label, snippet]) => {
+		test(`in XPath 4.0, 'for' with ${description} too`, async () => {
+			const items = await completions(select('fo¦'), '4.0');
+			const item = items.find((i) => i.label === label);
+			assert.isDefined(item);
+			assert.equal((item!.insertText as vscode.SnippetString).value, snippet);
+			assert.equal(item!.filterText, 'for');
+		});
 	});
 
 	test('no keywords or snippets in a path step', async () => {
