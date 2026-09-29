@@ -2,7 +2,7 @@
  * Test suite for XSLT 4.0 documentation notes: an xsl:note with format="xdoc-md", as the first child of an xsl:function
  * xsl:template or xsl:item-type, with Markdown text and xqDoc-style tags such as @param $name and @return:
  * - hover on a function call, an xsl:call-template name, an xsl:with-param name, or the name of an xsl:item-type where
- *   it's used shows the documentation
+ *   it's used shows the documentation - as does hover on the name of the declaration itself, or of one of its xsl:params
  * - signature help for a user-defined function has the descriptions of the function and its parameters
  * - 'Add documentation note' adds a note with the parameters
  * - completions of the tags, and of the parameter names after @param, within a note
@@ -149,6 +149,33 @@ suite('Documentation notes', () => {
 
 	test('hover: nothing for an element name matching a named item type', async () => {
 		assert.isUndefined(await hoverText(call('cx:po¦int')));
+	});
+
+	const declarationHovers: [string, string, string[]][] = [
+		['an xsl:function', stylesheet('').replace('name="cx:area"', 'name="cx:ar¦ea"'),
+			['cx:area($shape, $scale) as xs:double', 'Returns the area of a shape', '*@param* `$shape` — the shape', 'User-defined function, declared in this stylesheet']],
+		['a named xsl:template', stylesheet('').replace('name="draw"', 'name="dr¦aw"'), ['template draw($colour)', 'Draws a shape.', 'Named template, declared in this stylesheet']],
+		['an xsl:item-type', stylesheet('').replace('name="cx:point"', 'name="cx:po¦int"'),
+			['type cx:point as record(x as xs:double, y as xs:double)', 'A point on a **plane**.', '*@field* `x` — the horizontal position']],
+		['an xsl:item-type without a note', stylesheet('').replace('name="cx:colour"', 'name="cx:col¦our"'), [`type cx:colour as enum('red', 'green')`]],
+		['an xsl:param of a function', stylesheet('').replace('name="scale"', 'name="sc¦ale"'), ['$scale', 'the scale factor', 'Parameter of the function: `cx:area`']],
+		['an xsl:param of a template', stylesheet('').replace('name="colour"', 'name="col¦our"'), ['$colour', 'the fill colour', 'Parameter of the template: `draw`']],
+	];
+	declarationHovers.forEach(([label, marked, expected]) => {
+		test(`hover: the name of ${label}`, async () => {
+			const { document, position } = await open(marked);
+			const hover = await new XSLTHoverProvider(new XsltDefinitionProvider(XSLTConfiguration.configuration), XSLTConfiguration.configuration).provideHover(document, position, new vscode.CancellationTokenSource().token);
+			const text = (hover?.contents as vscode.MarkdownString[] | undefined)?.map((c) => c.value).join('\n');
+			expected.forEach((part) => assert.include(text, part));
+		});
+	});
+
+	test('hover: nothing for the name of a global xsl:param', async () => {
+		assert.isUndefined(await hoverText(`<xsl:param name="¦g" select="1"/>`));
+	});
+
+	test('hover: nothing for the name of an xsl:variable', async () => {
+		assert.isUndefined(await hoverText(`<xsl:variable name="v¦v" select="1"/>`));
 	});
 
 	test('signature help: the descriptions of the function and its parameters', async () => {

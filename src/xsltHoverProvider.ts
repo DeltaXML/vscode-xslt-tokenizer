@@ -54,7 +54,8 @@ export class XSLTHoverProvider implements HoverProvider {
 			if (!this.definitionProvider) {
 				return undefined;
 			}
-			return await this.findTemplateHover(document, position, token) ?? await this.findItemTypeHover(document, position, token);
+			return await this.findDeclarationHover(document, position, token) ?? await this.findTemplateHover(document, position, token) ??
+				await this.findItemTypeHover(document, position, token);
 		}
 
 		const trimmedFnName = rawFnName.trimRight();
@@ -97,13 +98,91 @@ export class XSLTHoverProvider implements HoverProvider {
 
 		// functions with the same name can be declared with different arities (overloads) - prefer the richest one
 		const bestMatch = candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
+		return this.functionHover(document, bestMatch);
+	}
+
+	// a user-defined function's signature and documentation note
+	private functionHover(document: TextDocument, fn: GlobalInstructionData) {
 		// with the defaults of optional parameters, e.g. $scale as xs:double := 1
-		const paramList = declarationParamLabels(bestMatch, document.getText()).join(', ');
-		const returnType = bestMatch.returnType ? ` as ${bestMatch.returnType}` : '';
-		const signature = `${bestMatch.name}(${paramList})${returnType}`;
-		const description = bestMatch.href ? `User-defined function, declared in ${path.basename(bestMatch.href)}` : 'User-defined function, declared in this stylesheet';
-		const note = XSLTHoverProvider.declarationNote(document, bestMatch);
+		const paramList = declarationParamLabels(fn, document.getText()).join(', ');
+		const returnType = fn.returnType ? ` as ${fn.returnType}` : '';
+		const signature = `${fn.name}(${paramList})${returnType}`;
+		const description = fn.href ? `User-defined function, declared in ${path.basename(fn.href)}` : 'User-defined function, declared in this stylesheet';
+		const note = XSLTHoverProvider.declarationNote(document, fn);
 		return this.createHover(signature, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+	}
+
+	// a named template's signature and documentation note
+	private templateHover(document: TextDocument, template: GlobalInstructionData) {
+		const note = XSLTHoverProvider.declarationNote(document, template);
+		const params = declarationParamLabels(template, document.getText()).join(', ');
+		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
+		return this.createHover(`template ${template.name}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+	}
+
+	// a parameter of a function or template, with the text of its @param tag - undefined if it's not one of its parameters
+	private paramHover(document: TextDocument, declaration: GlobalInstructionData, paramName: string) {
+		const paramIndex = declaration.memberNames?.indexOf(paramName) ?? -1;
+		if (paramIndex === -1) {
+			return undefined;
+		}
+		const note = XSLTHoverProvider.declarationNote(document, declaration);
+		const paramText = note ? XdocNotes.paramText(note, paramName) : undefined;
+		const kind = declaration.type === GlobalInstructionType.Function ? 'function' : 'template';
+		return this.createHover(declarationParamLabels(declaration, document.getText())[paramIndex], `${paramText ? paramText + '\n\n---\n' : ''}Parameter of the ${kind}: \`${declaration.name}\``);
+	}
+
+	// a named item type's declaration and documentation note
+	private itemTypeHover(document: TextDocument, itemType: GlobalInstructionData) {
+		const note = XSLTHoverProvider.declarationNote(document, itemType);
+		const description = itemType.href ? `Named item type, declared in ${path.basename(itemType.href)}` : 'Named item type, declared in this stylesheet';
+		return this.createHover(`type ${itemType.name}${itemType.declaredType ? ' as ' + itemType.declaredType : ''}`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+	}
+
+	// for the name of a declaration - an xsl:function, a named xsl:template or an xsl:item-type - its signature and
+	// documentation note, as for a use of it - or for the name of an xsl:param of a function or template, the parameter's
+	// documentation
+	private async findDeclarationHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameAt = (tagStart: number) => {
+			const nameStart = RecordTypes.attributeValueOffset(text, tagStart + 1, 'name');
+			const name = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name');
+			return nameStart !== undefined && name ? { nameStart, name } : undefined;
+		};
+		const tagStart = text.lastIndexOf('<', offset);
+		const element = /^<(xsl:function|xsl:template|xsl:item-type|xsl:param)\s/.exec(text.substring(tagStart, tagStart + 16))?.[1];
+		const own = element ? nameAt(tagStart) : undefined;
+		if (!own || offset < own.nameStart || offset > own.nameStart + own.name.length) {
+			return undefined;
+		}
+		// for an xsl:param, the function or template declaring it
+		let declarationName = own;
+		if (element === 'xsl:param') {
+			const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart);
+			const parent = ancestors[ancestors.length - 1];
+			const parentName = parent && (parent.name === 'xsl:function' || parent.name === 'xsl:template') ? nameAt(parent.offset) : undefined;
+			if (!parentName) {
+				return undefined;
+			}
+			declarationName = parentName;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData } = await this.definitionProvider!.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+		// the declaration in this document whose name is at that position
+		const namePosition = document.positionAt(declarationName.nameStart);
+		const declaration = globalInstructionData.find((g) => (g.type === GlobalInstructionType.Function || g.type === GlobalInstructionType.Template || g.type === GlobalInstructionType.ItemType) &&
+			g.name === declarationName.name && g.token.line === namePosition.line && namePosition.character >= g.token.startCharacter && namePosition.character <= g.token.startCharacter + g.token.length);
+		if (!declaration) {
+			return undefined;
+		} else if (element === 'xsl:param') {
+			return this.paramHover(document, declaration, own.name);
+		}
+		return declaration.type === GlobalInstructionType.Function ? this.functionHover(document, declaration) :
+			declaration.type === GlobalInstructionType.Template ? this.templateHover(document, declaration) : this.itemTypeHover(document, declaration);
 	}
 
 	// the documentation note - an xsl:note with format="xdoc-md" - of a function, template or item type declaration, in
@@ -143,18 +222,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (!template) {
 			return undefined;
 		}
-		const note = XSLTHoverProvider.declarationNote(document, template);
-		if (element === 'xsl:with-param') {
-			const paramIndex = template.memberNames?.indexOf(name) ?? -1;
-			const paramText = note ? XdocNotes.paramText(note, name) : undefined;
-			if (paramIndex === -1) {
-				return undefined;
-			}
-			return this.createHover(declarationParamLabels(template, document.getText())[paramIndex], `${paramText ? paramText + '\n\n---\n' : ''}Parameter of the template: \`${templateName}\``);
-		}
-		const params = declarationParamLabels(template, document.getText()).join(', ');
-		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
-		return this.createHover(`template ${templateName}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+		return element === 'xsl:with-param' ? this.paramHover(document, template, name) : this.templateHover(document, template);
 	}
 
 	// XSLT 4.0: the text of the @field tag for a field of a named record type
@@ -187,12 +255,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		}
 		const isXSLT = this.languageConfiguration?.docType !== DocumentTypes.XPath;
 		const itemType = XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position).definitionLocation?.instruction;
-		if (itemType?.type !== GlobalInstructionType.ItemType) {
-			return undefined;
-		}
-		const note = XSLTHoverProvider.declarationNote(document, itemType);
-		const description = itemType.href ? `Named item type, declared in ${path.basename(itemType.href)}` : 'Named item type, declared in this stylesheet';
-		return this.createHover(`type ${itemType.name}${itemType.declaredType ? ' as ' + itemType.declaredType : ''}`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+		return itemType?.type === GlobalInstructionType.ItemType ? this.itemTypeHover(document, itemType) : undefined;
 	}
 
 	// XPath 4.0: 'current' is in the functions specification, and these aren't in either 4.0 specification
