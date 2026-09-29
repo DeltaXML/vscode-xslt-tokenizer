@@ -1729,6 +1729,7 @@ export enum ErrorType {
     NoteVariableUnknown,
     NoteVariablesMissing,
     NoteVariableDuplicate,
+    NoteRequiresXSLT40,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,

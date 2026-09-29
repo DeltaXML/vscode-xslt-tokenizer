@@ -73,6 +73,7 @@ enum XsltCodeActionKind {
 	addMissingNoteParams = 'Add missing @param',
 	addMissingNoteFields = 'Add missing @field',
 	addMissingNoteVariables = 'Add missing @variable',
+	excludeNote = 'Exclude with use-when="false()"',
 	removeDuplicateEnumValue = 'Remove duplicate enum value',
 	wrapWith = 'Wrap with...',
 }
@@ -222,12 +223,19 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();
 		context.diagnostics
-			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing || diagnostic.code === DiagnosticCode.enumValueDuplicate)
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing || diagnostic.code === DiagnosticCode.noteRequiresXSLT40 || diagnostic.code === DiagnosticCode.enumValueDuplicate)
 			.forEach(diagnostic => {
 				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
 				if (fix && !addedFixes.has(fix)) {
 					addedFixes.add(fix);
-					if (diagnostic.code === DiagnosticCode.enumValueDuplicate) {
+					if (diagnostic.code === DiagnosticCode.noteRequiresXSLT40) {
+						// before XSLT 4.0: the note is excluded, so the processor doesn't see it
+						const action = new vscode.CodeAction(XsltCodeActionKind.excludeNote, vscode.CodeActionKind.QuickFix);
+						action.diagnostics = [diagnostic];
+						action.edit = new vscode.WorkspaceEdit();
+						action.edit.insert(document.uri, new vscode.Position(fix.line, fix.character), fix.text);
+						codeActions.push(action);
+					} else if (diagnostic.code === DiagnosticCode.enumValueDuplicate) {
 						const action = new vscode.CodeAction(XsltCodeActionKind.removeDuplicateEnumValue, vscode.CodeActionKind.QuickFix);
 						action.diagnostics = [diagnostic];
 						action.edit = new vscode.WorkspaceEdit();

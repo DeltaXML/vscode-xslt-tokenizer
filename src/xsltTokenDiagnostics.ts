@@ -139,6 +139,7 @@ export enum DiagnosticCode {
 	noteParamsMissing,
 	noteFieldsMissing,
 	noteVariablesMissing,
+	noteRequiresXSLT40,
 	enumValueDuplicate
 }
 
@@ -844,7 +845,9 @@ export class XsltTokenDiagnostics {
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
 										problemTokens.push(startTagToken);
 									}
-									else if (xsltAttsWithNameErrors.length > 0) {
+									// an xsl:note may have any attributes, and its content isn't checked - also before XSLT 4.0,
+									// as a note is excluded with use-when, or else reported itself
+									else if (xsltAttsWithNameErrors.length > 0 && tagElementName !== 'xsl:note' && !elementStack.some((element) => element.symbolName === 'xsl:note')) {
 										startTagToken['error'] = ErrorType.XSLTAttrUnexpected;
 										startTagToken['value'] = tagElementName + '\': \'' + xsltAttsWithNameErrors.join('\', ');
 										problemTokens.push(startTagToken);
@@ -2875,6 +2878,9 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
+		if (docType === DocumentTypes.XSLT) {
+			XsltTokenDiagnostics.checkNotesBeforeXSLT40(document, problemTokens);
+		}
 		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
 			XsltTokenDiagnostics.checkPatternOperators(document, allTokens, problemTokens);
@@ -2922,7 +2928,7 @@ export class XsltTokenDiagnostics {
 		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
 		problemTokens.forEach((token) => {
 			if (token.recordFix) {
-				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.noteVariablesMissing || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.noteVariablesMissing || d.code === DiagnosticCode.noteRequiresXSLT40 || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
 					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
 			}
 		});
@@ -4238,6 +4244,11 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				}
+				case ErrorType.NoteRequiresXSLT40:
+					msg = 'XSLT: xsl:note is XSLT 4.0 - an XSLT 3.0 processor reports XTSE0010 for it. Use version="4.0", or exclude it with use-when="false()"';
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.noteRequiresXSLT40;
+					break;
 				case ErrorType.NoteVariableUnknown:
 					msg = `XSLT: The module note's @variable '$${tokenValue}' is not a global variable of this module`;
 					severity = vscode.DiagnosticSeverity.Warning;
@@ -4709,6 +4720,28 @@ export class XsltTokenDiagnostics {
 				unknown: (name) => ({ value: name + RecordTypes.valueSeparator + typeName, error: ErrorType.NoteFieldUnknown }),
 				duplicate: ErrorType.NoteFieldDuplicate, missing: ErrorType.NoteFieldsMissing, label: XdocNotes.fieldLabel, line: (name) => `@field ${XdocNotes.fieldLabel(name)} description`
 			}, problemTokens);
+		});
+	}
+
+	// before XSLT 4.0, e.g. with version="3.0": an xsl:note - not within another one, as its content is ignored - that
+	// isn't excluded with a use-when attribute, e.g. use-when="false()" - a processor for XSLT 3.0, or Saxon 13 without
+	// XPath 4.0 syntax extensions, reports XTSE0010 for it - with a fix that adds use-when="false()"
+	private static checkNotesBeforeXSLT40(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		if (!text.includes('<xsl:note')) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const noteOffsets = [...markup.matchAll(/<xsl:note[\s/>]/g)].map((match) => match.index!);
+		const openElements = RecordTypes.openElementsAt(markup, noteOffsets);
+		noteOffsets.forEach((noteOffset, index) => {
+			const isExcluded = RecordTypes.attributeOfElementAt(text, noteOffset + 1, 'use-when') !== undefined || RecordTypes.attributeOfElementAt(text, noteOffset + 1, '_use-when') !== undefined;
+			if (isExcluded || openElements[index].some((element) => element.name === 'xsl:note')) {
+				return;
+			}
+			const position = document.positionAt(noteOffset + 1);
+			problemTokens.push({ line: position.line, startCharacter: position.character, length: 'xsl:note'.length, value: '', tokenType: 0, error: ErrorType.NoteRequiresXSLT40,
+				recordFix: { line: position.line, character: position.character + 'xsl:note'.length, text: ' use-when="false()"' } });
 		});
 	}
 

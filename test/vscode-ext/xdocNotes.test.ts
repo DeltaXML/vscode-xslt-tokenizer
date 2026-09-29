@@ -525,4 +525,46 @@ suite('Documentation notes', () => {
 		assert.include(text, 'colour as cx:colour');
 		assert.include(text, "Values: `'red'`, `'green'`\n\n---\nField of the record type: `cx:pen`");
 	});
+	// before XSLT 4.0, xsl:note is an unknown XSLT element - unless it's excluded with use-when
+	const xslt30 = (body: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">\n  ${body}\n</xsl:stylesheet>`;
+	async function diagnostics30(xslt: string) {
+		const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'xslt' });
+		const xslLexer = new XslLexer(XSLTConfiguration.configuration);
+		xslLexer.provideCharLevelState = true;
+		const found = XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: false }, DocumentTypes.XSLT, document, xslLexer.analyse(xslt), xslLexer.globalInstructionData, [], []);
+		return { document, found };
+	}
+	const lint30 = async (xslt: string) => {
+		const { document, found } = await diagnostics30(xslt);
+		return found.map((d) => [d.message, document.getText(d.range)]);
+	};
+	const requires40 = 'XSLT: xsl:note is XSLT 4.0 - an XSLT 3.0 processor reports XTSE0010 for it. Use version="4.0", or exclude it with use-when="false()"';
+
+	test('linter: XSLT 3.0 - an xsl:note, with its content', async () => {
+		assert.deepEqual(await lint30(xslt30(`<xsl:template name="t"><xsl:note>A <xsl:bogus/> <xsl:value-of bad="1"/> note.<xsl:note>inner</xsl:note></xsl:note><xsl:sequence select="1"/></xsl:template>`)), [
+			[requires40, 'xsl:note']
+		]);
+	});
+
+	test('linter: XSLT 3.0 - an xsl:note excluded with use-when', async () => {
+		assert.deepEqual(await lint30(xslt30(`<xsl:note use-when="false()" format="xdoc-md">A note.</xsl:note>\n  <xsl:note _use-when="false()">Another.</xsl:note>`)), []);
+	});
+
+	test('linter: XSLT 4.0 - an xsl:note', async () => {
+		assert.deepEqual(await lint(stylesheet(`<xsl:note>A note.</xsl:note>`)), []);
+	});
+
+	test('quick fix: XSLT 3.0 - exclude an xsl:note with use-when', async () => {
+		const xslt = xslt30(`<xsl:note format="xdoc-md">A note.</xsl:note>`);
+		const { document, found } = await diagnostics30(xslt);
+		await vscode.window.showTextDocument(document);
+		const warning = found.find((d) => d.message === requires40);
+		assert.isDefined(warning);
+		const actions = new XSLTCodeActions().provideCodeActions(document, warning!.range, { diagnostics: found, triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		const fix = actions.find((a) => a.title === 'Exclude with use-when="false()"');
+		assert.isDefined(fix);
+		assert.isTrue(await vscode.workspace.applyEdit(fix!.edit!));
+		assert.include(document.getText(), '<xsl:note use-when="false()" format="xdoc-md">A note.</xsl:note>');
+		assert.deepEqual(await lint30(document.getText()), []);
+	});
 });
