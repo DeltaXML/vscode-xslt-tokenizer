@@ -19,6 +19,7 @@ import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
+import { XPathDocumentChangeHandler } from '../../src/xpathDocumentChangeHandler';
 
 const contextXml = '<books xmlns:lib="urn:lib"><book title="t" year="2000"><chapter lib:id="c1"/></book><lib:note/></books>';
 
@@ -63,6 +64,34 @@ suite('Kind tests: completions of names', () => {
 		test(label, async () => {
 			assert.deepEqual(await labels(body), expected);
 		});
+	});
+
+	test("after '*:', the local names of all the names", async () => {
+		const localNames = ['*:books', '*:book', '*:chapter', '*:note', '*:section'];
+		assert.deepEqual(await labels(asVariable('element(*:¦)')), localNames);
+		assert.deepEqual(await labels(asVariable('element(*:bo¦)')), localNames);
+		assert.deepEqual(await labels(`<xsl:template match="/"><xsl:sequence select=". instance of attribute(*:¦)"/></xsl:template>`), ['*:title', '*:year', '*:id', '*:level']);
+	});
+
+	test("after a typed '*', '*' and the wildcards for all the names", async () => {
+		assert.deepEqual(await labels(asVariable('element(*¦)')), ['*', '*:books', '*:book', '*:chapter', '*:note', '*:section', 'lib:*']);
+		assert.deepEqual(await labels(asVariable('attribute(*¦)')), ['*', '*:title', '*:year', '*:id', '*:level', 'lib:*']);
+	});
+
+	test("XSLT 3.0: after a typed '*', the names as before", async () => {
+		assert.deepEqual(await labels(asVariable('element(*¦)'), '3.0'), ['books', 'book', 'chapter', 'lib:note', 'section', '*']);
+	});
+
+	test("a typed '*' triggers completion at the start of a name, not elsewhere", () => {
+		const triggers = (lineBefore: string, text = '*') => XPathDocumentChangeHandler.isKindTestWildcardStart(text, lineBefore);
+		assert.isTrue(triggers('<xsl:variable name="v" as="element('));
+		assert.isTrue(triggers('select=". instance of attribute( '));
+		assert.isTrue(triggers('match="element(book | '));
+		assert.isFalse(triggers('select="$a '));
+		assert.isFalse(triggers('select="count(//'));
+		assert.isFalse(triggers('as="element(book, '));
+		assert.isFalse(triggers('select="my-element('));
+		assert.isFalse(triggers('as="element(', ':'));
 	});
 
 	test('XSLT 3.0: no wildcards for the prefixes', async () => {

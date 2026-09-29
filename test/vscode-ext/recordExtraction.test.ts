@@ -2,9 +2,11 @@
  * Test suite for the XSLT 4.0 'Extract record type' refactoring: for a selected map constructor or xsl:map that is the
  * value of a declaration, an xsl:item-type is added with a record type inferred from the keys and literal values, and
  * the declaration's 'as' is set to it - replacing a generic type such as map(*) - or 'Use record type' uses an existing
- * record type with the same field names
+ * record type with the same field names. A nested map has a nested record type, or uses an existing record type with the
+ * same field names. And for a record type within an 'as' attribute, e.g. a field's type, an xsl:item-type is added for it,
+ * named after the field.
  *
- * The selection is marked by '«' and '»'.
+ * The selection is marked by '«' and '»' - the cursor by '«»'.
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
@@ -76,6 +78,19 @@ suite('Extract record type', () => {
 		const { titles, apply } = await actionsFor(stylesheet(`${existing}\n  <xsl:variable name="p" as="map(*)" select="«{ 'x': 1, 'y': 2 }»"/>`));
 		assert.deepEqual(titles, ['Extract record type', 'Use record type \'point\'']);
 		assert.equal(await apply('Use record type \'point\''), stylesheet(`${existing}\n  <xsl:variable name="p" as="point" select="{ 'x': 1, 'y': 2 }"/>`));
+	});
+
+	test('a nested map uses an existing record type with the same field names', async () => {
+		const existing = `<xsl:item-type name="address" as="record(city as xs:string, zip)"/>`;
+		const { apply } = await actionsFor(stylesheet(`${existing}\n  <xsl:variable name="p" select="«{ 'name': 'Ann', 'address': { 'zip': 1, 'city': 'Oxford' }, 'work': { 'city': 'Leeds' } }»"/>`));
+		assert.equal(await apply('Extract record type'), stylesheet(`${existing}\n  <xsl:item-type name="record-type" as="record(name as xs:string, address as address, work as record(city as xs:string))"/>\n  <xsl:variable name="p" as="record-type" select="{ 'name': 'Ann', 'address': { 'zip': 1, 'city': 'Oxford' }, 'work': { 'city': 'Leeds' } }"/>`));
+	});
+
+	test('a nested xsl:map uses an existing record type with the same field names', async () => {
+		const existing = `<xsl:item-type name="point" as="record(x, y)"/>`;
+		const map = `<xsl:map><xsl:map-entry key="'at'"><xsl:map><xsl:map-entry key="'y'" select="1"/><xsl:map-entry key="'x'" select="2"/></xsl:map></xsl:map-entry></xsl:map>`;
+		const { apply } = await actionsFor(stylesheet(`${existing}\n  <xsl:variable name="p">«${map}»</xsl:variable>`));
+		assert.equal(await apply('Extract record type'), stylesheet(`${existing}\n  <xsl:item-type name="record-type" as="record(at as point)"/>\n  <xsl:variable name="p" as="record-type">${map}</xsl:variable>`));
 	});
 
 	test('before the first top-level element when there are no imports', async () => {
@@ -158,6 +173,49 @@ suite('Extract record type: at the cursor', () => {
 	notOffered.forEach(([label, marked]) => {
 		test(`not offered: ${label}`, async () => {
 			assert.deepEqual((await actionsAt(marked)).titles, []);
+		});
+	});
+});
+
+suite('Extract record type: a record type in an as attribute', () => {
+	const person = (address: string) => `<xsl:item-type name="person" as="record(name as xs:string, ${address})"/>`;
+
+	const cases: [string, string, string][] = [
+		['the type of a field of an xsl:item-type, before it', person('address as rec«»ord(city as xs:string)'),
+			`<xsl:item-type name="address" as="record(city as xs:string)"/>\n  ${person('address as address')}`],
+		['within the fields of the nested record type', person('address as record(ci«»ty as xs:string)*'),
+			`<xsl:item-type name="address" as="record(city as xs:string)"/>\n  ${person('address as address*')}`],
+		['the innermost record type', person('address as record(geo as record(lat, «»lon), city)'),
+			`<xsl:item-type name="geo" as="record(lat, lon)"/>\n  ${person('address as record(geo as geo, city)')}`],
+		['an optional field, with a quoted name', person(`'home address'? as record(«»city)`),
+			`<xsl:item-type name="home-address" as="record(city)"/>\n  ${person(`'home address'? as home-address`)}`],
+		['a name that is not used by another xsl:item-type', `<xsl:item-type name="address" as="xs:string"/>\n  ${person('address as record(«»city)')}`,
+			`<xsl:item-type name="address" as="xs:string"/>\n  <xsl:item-type name="address-2" as="record(city)"/>\n  ${person('address as address-2')}`],
+		['a selection within the record type', person('address as «record(city)»'),
+			`<xsl:item-type name="address" as="record(city)"/>\n  ${person('address as address')}`],
+	];
+	cases.forEach(([label, body, expected]) => {
+		test(label, async () => {
+			const { apply } = await actionsFor(stylesheet(body));
+			assert.equal(await apply('Extract record type'), stylesheet(expected));
+		});
+	});
+
+	test('the as of an xsl:variable, after the imports', async () => {
+		const { apply } = await actionsFor(stylesheet(`<xsl:variable name="p" as="map(xs:string, re«»cord(x, y))*" select="()"/>`));
+		assert.equal(await apply('Extract record type'), stylesheet(`<xsl:variable name="p" as="map(xs:string, record-type)*" select="()"/>`)
+			.replace(importLine, `${importLine}\n  <xsl:item-type name="record-type" as="record(x, y)"/>`));
+	});
+
+	const notOffered: [string, string][] = [
+		['the whole type of an xsl:item-type', stylesheet(person('addr«»ess as record(city)'))],
+		['outside the as attribute', stylesheet(`<xsl:item-type na«»me="person" as="record(a as record(b))"/>`)],
+		['a type without a record type', stylesheet(`<xsl:variable name="p" as="map(xs:string, xs:«»integer)" select="()"/>`)],
+		['XSLT 3.0', stylesheet(person('address as rec«»ord(city)'), '3.0')],
+	];
+	notOffered.forEach(([label, marked]) => {
+		test(`not offered: ${label}`, async () => {
+			assert.deepEqual((await actionsFor(marked)).titles, []);
 		});
 	});
 });

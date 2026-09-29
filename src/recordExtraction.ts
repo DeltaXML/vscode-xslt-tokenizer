@@ -3,10 +3,13 @@
  * keys, or a selected xsl:map with xsl:map-entry children with string literal keys, whose value is the value of an
  * xsl:variable, xsl:param, xsl:with-param or xsl:function (within any xsl:if or xsl:choose etc.):
  * - a record type is inferred from the keys, with field types from literal values, e.g. xs:string for 'a' - a nested map
- *   constructor or xsl:map has a nested record type, and other values have no field type
+ *   constructor or xsl:map has a nested record type - or an existing one with the same field names - and other values
+ *   have no field type
  * - an xsl:item-type declaration is added for it, and the declaration's 'as' is set to it - replacing a generic type,
  *   e.g. map(*) or item()*, keeping any occurrence indicator
  * - or instead of a new xsl:item-type, an existing one with the same field names is used
+ * And for a record type within the 'as' attribute of an XSLT element, e.g. a field's type, address as record(...), an
+ * xsl:item-type is added for it, named after the field, and the record type is replaced by its name.
  */
 import { BaseToken, ExitCondition, TokenLevelState, XPathLexer } from './xpLexer';
 import { RecordTypes } from './recordTypes';
@@ -22,6 +25,19 @@ export interface RecordExtractionPlan {
 	itemTypeInsert: { offset: number, indent: string, isAfter: boolean };
 }
 
+// 'Extract record type' for a record type within an 'as' attribute: the record type's text, its range [start, end) in
+// the document, the name for the new xsl:item-type, and where it's inserted
+export interface InlineRecordExtractionPlan {
+	recordType: string;
+	start: number;
+	end: number;
+	typeName: string;
+	itemTypeInsert: { offset: number, indent: string, isAfter: boolean };
+}
+
+// the name of an existing record type with the field names, for a nested map
+type NestedTypeMatcher = (fieldNames: string[]) => string | undefined;
+
 export class RecordExtraction {
 	private static readonly conditionals = RecordTypes.conditionalInstructions;
 	private static readonly declarations = ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function'];
@@ -36,6 +52,7 @@ export class RecordExtraction {
 			return undefined;
 		}
 		const markup = RecordTypes.blankMarkup(text);
+		const nested = RecordExtraction.nestedTypeMatcher(text);
 		let record: { recordType: string, fieldNames: string[] } | undefined;
 		let valueElement: { name: string, offset: number } | undefined;
 		let ancestors: { name: string, offset: number }[];
@@ -44,7 +61,7 @@ export class RecordExtraction {
 			if (RecordExtraction.elementEnd(markup, selectionStart) !== selectionEnd) {
 				return undefined;
 			}
-			record = RecordExtraction.xslMapRecord(text, markup, selectionStart);
+			record = RecordExtraction.xslMapRecord(text, markup, selectionStart, nested);
 			ancestors = RecordTypes.openElements(markup, selectionStart);
 		} else {
 			// the selection is one map constructor that is a whole select attribute value, or the content of an xsl:select
@@ -61,7 +78,7 @@ export class RecordExtraction {
 			if (!tokens || RecordTypes.mapConstructorEnd(tokens, 0) !== tokens.length - 1) {
 				return undefined;
 			}
-			record = RecordExtraction.mapConstructorRecord(tokens, 0, tokens.length - 1);
+			record = RecordExtraction.mapConstructorRecord(tokens, 0, tokens.length - 1, nested);
 			const elementName = attribute ? attribute[1] : 'xsl:select';
 			valueElement = { name: elementName, offset: tagStart };
 			ancestors = RecordTypes.openElements(markup, tagStart);
@@ -95,18 +112,19 @@ export class RecordExtraction {
 		if (!tag || tag[1] || !name || offset >= tagStart + tag[0].length || !RecordExtraction.cursorElements.includes(name)) {
 			return undefined;
 		}
+		const nested = RecordExtraction.nestedTypeMatcher(text);
 		let record: { recordType: string, fieldNames: string[] } | undefined;
 		const select = name === 'xsl:select' ? undefined : RecordTypes.attributeOfElementAt(text, tagStart + 1, 'select');
 		if (select !== undefined) {
-			record = RecordExtraction.xpathRecord(select);
+			record = RecordExtraction.xpathRecord(select, nested);
 		} else if (!tag[3]) {
 			// the content: an xsl:select's XPath, or a single child element
 			const contentStart = tagStart + tag[0].length;
 			const contentEnd = RecordExtraction.elementEnd(markup, tagStart);
 			if (name === 'xsl:select') {
-				record = RecordExtraction.xpathRecord(text.substring(contentStart, text.lastIndexOf('<', contentEnd - 1)));
+				record = RecordExtraction.xpathRecord(text.substring(contentStart, text.lastIndexOf('<', contentEnd - 1)), nested);
 			} else {
-				record = RecordExtraction.singleChildRecord(text, markup, contentStart, contentEnd);
+				record = RecordExtraction.singleChildRecord(text, markup, contentStart, contentEnd, nested);
 			}
 		}
 		if (!record || record.fieldNames.length === 0) {
@@ -117,17 +135,90 @@ export class RecordExtraction {
 		return asEdit && itemTypeInsert ? { recordType: record.recordType, fieldNames: record.fieldNames, asEdit, itemTypeInsert } : undefined;
 	}
 
+	// the extraction for a record type within the 'as' attribute of an XSLT element, e.g. the type of a field of an
+	// xsl:item-type's record type, or of an xsl:variable - the innermost record type containing the selection [start, end)
+	// - undefined if there's none, or if it's the whole type of an xsl:item-type
+	public static inlineRecordAt(text: string, start: number, end: number): InlineRecordExtractionPlan | undefined {
+		const tagStart = start > 0 ? text.lastIndexOf('<', start - 1) : -1;
+		if (tagStart < 0 || !text.startsWith('xsl:', tagStart + 1)) {
+			return undefined;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'y');
+		tagRgx.lastIndex = tagStart;
+		const tag = tagRgx.exec(markup);
+		if (!tag || tag[1] || end >= tagStart + tag[0].length) {
+			return undefined;
+		}
+		const valueStart = RecordTypes.attributeValueOffset(text, tagStart + 1, 'as');
+		const value = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as', true);
+		if (valueStart === undefined || value === undefined || start < valueStart || end > valueStart + value.length) {
+			return undefined;
+		}
+		const span = RecordExtraction.recordSpans(value).filter(([s, e]) => valueStart + s <= start && end <= valueStart + e)
+			.sort(([s1, e1], [s2, e2]) => (e1 - s1) - (e2 - s2))[0];
+		const isItemType = tag[2] === 'xsl:item-type';
+		if (!span || (isItemType && value.substring(0, span[0]).trim() === '' && value.substring(span[1]).trim() === '')) {
+			return undefined;
+		}
+		// the delimiter of the new 'as' is '"'
+		let recordType = value.substring(span[0], span[1]);
+		if (text.charAt(valueStart - 1) === '\'') {
+			recordType = recordType.replace(/"/g, '&quot;');
+		}
+		// the name of the field whose type it is, e.g. address for address as record(...), or 'home address'?
+		const field = /(?:^|[\s(,])([A-Za-z_][\w.-]*|'(?:[^']|'')*')\??\s+as\s+$/.exec(value.substring(0, span[0]));
+		const existingNames = [...text.matchAll(/<xsl:item-type\s[^>]*name\s*=\s*["']([^"']*)["']/g)].map((match) => match[1]);
+		const fieldName = field ? field[1].replace(/^'|'$/g, '').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') : '';
+		let typeName = RecordExtraction.newTypeName(existingNames);
+		if (/^[A-Za-z_]/.test(fieldName)) {
+			typeName = fieldName;
+			for (let i = 2; existingNames.includes(typeName); i++) {
+				typeName = `${fieldName}-${i}`;
+			}
+		}
+		// before a top-level xsl:item-type that has it - otherwise as for a map
+		const lineStart = text.lastIndexOf('\n', tagStart) + 1;
+		const indent = text.substring(lineStart, tagStart);
+		const isTopLevel = RecordTypes.openElements(markup, tagStart).length === 1;
+		const itemTypeInsert = isItemType && isTopLevel && /^[ \t]*$/.test(indent) ? { offset: lineStart, indent, isAfter: false } : RecordExtraction.itemTypeInsertion(text, markup);
+		return itemTypeInsert ? { recordType, start: valueStart + span[0], end: valueStart + span[1], typeName, itemTypeInsert } : undefined;
+	}
+
+	// the ranges [start, end) of the record types in the text of a sequence type, e.g. record(a, b as record(c))
+	private static recordSpans(type: string): [number, number][] {
+		const spans: [number, number][] = [];
+		const open: number[] = [];
+		for (let i = 0; i < type.length; i++) {
+			const c = type.charAt(i);
+			if (c === '\'' || c === '"') {
+				// a quoted field name, e.g. 'first name' - with '' for a '
+				const close = type.indexOf(c, i + 1);
+				i = close < 0 ? type.length : close;
+			} else if (c === '(') {
+				open.push(i);
+			} else if (c === ')') {
+				const openAt = open.pop();
+				const recordStart = openAt !== undefined ? /(?:^|[^\w.:-])(record)\s*$/.exec(type.substring(0, openAt)) : null;
+				if (recordStart) {
+					spans.push([recordStart.index + recordStart[0].indexOf('record'), i + 1]);
+				}
+			}
+		}
+		return spans;
+	}
+
 	private static readonly cursorElements = ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function', 'xsl:sequence', 'xsl:select'];
 
 	// the record type for XPath that is a single map constructor with string literal keys
-	private static xpathRecord(xpath: string) {
+	private static xpathRecord(xpath: string, nested: NestedTypeMatcher) {
 		const tokens = RecordExtraction.xpathTokens(xpath.trim());
-		return tokens && RecordTypes.mapConstructorEnd(tokens, 0) === tokens.length - 1 ? RecordExtraction.mapConstructorRecord(tokens, 0, tokens.length - 1) : undefined;
+		return tokens && RecordTypes.mapConstructorEnd(tokens, 0) === tokens.length - 1 ? RecordExtraction.mapConstructorRecord(tokens, 0, tokens.length - 1, nested) : undefined;
 	}
 
 	// the record type for content that is a single element, with no other content: an xsl:map, an xsl:select, or an
 	// xsl:sequence with a select attribute
-	private static singleChildRecord(text: string, markup: string, contentStart: number, contentEnd: number) {
+	private static singleChildRecord(text: string, markup: string, contentStart: number, contentEnd: number, nested: NestedTypeMatcher) {
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		tagRgx.lastIndex = contentStart;
 		const child = tagRgx.exec(markup);
@@ -141,14 +232,32 @@ export class RecordExtraction {
 			return undefined;
 		}
 		if (child[2] === 'xsl:map') {
-			return RecordExtraction.xslMapRecord(text, markup, child.index);
+			return RecordExtraction.xslMapRecord(text, markup, child.index, nested);
 		} else if (child[2] === 'xsl:select' && !child[3]) {
-			return RecordExtraction.xpathRecord(text.substring(child.index + child[0].length, text.lastIndexOf('<', childEnd - 1)));
+			return RecordExtraction.xpathRecord(text.substring(child.index + child[0].length, text.lastIndexOf('<', childEnd - 1)), nested);
 		} else if (child[2] === 'xsl:sequence') {
 			const select = RecordTypes.attributeOfElementAt(text, child.index + 1, 'select');
-			return select !== undefined ? RecordExtraction.xpathRecord(select) : undefined;
+			return select !== undefined ? RecordExtraction.xpathRecord(select, nested) : undefined;
 		}
 		return undefined;
+	}
+
+	// the xsl:item-type declarations in the document whose record types have the field names, in any order
+	public static matchingRecordTypes(text: string, fieldNames: string[]) {
+		const itemTypes = new Map<string, string>();
+		const declarations = [...text.matchAll(/<xsl:item-type\s/g)].map((match) => ({
+			name: RecordTypes.attributeOfElementAt(text, match.index! + 1, 'name'),
+			as: RecordTypes.attributeOfElementAt(text, match.index! + 1, 'as')
+		}));
+		declarations.forEach((d) => d.name && d.as && itemTypes.set(d.name, d.as));
+		const sortedNames = [...fieldNames].sort().join('\u0001');
+		return declarations.filter((d) => d.name && [...(RecordTypes.resolve(d.name, itemTypes)?.fields ?? []).map((f) => f.name)].sort().join('\u0001') === sortedNames)
+			.map((d) => d.name!);
+	}
+
+	// for a nested map, the first xsl:item-type in the document with the same field names
+	private static nestedTypeMatcher(text: string): NestedTypeMatcher {
+		return (fieldNames) => RecordExtraction.matchingRecordTypes(text, fieldNames)[0];
 	}
 
 	// a name for the new xsl:item-type that isn't used
@@ -168,17 +277,17 @@ export class RecordExtraction {
 	}
 
 	// the record type for a map constructor tokens[start..end] with string literal keys
-	private static mapConstructorRecord(tokens: BaseToken[], start: number, end: number): { recordType: string, fieldNames: string[] } | undefined {
+	private static mapConstructorRecord(tokens: BaseToken[], start: number, end: number, nested: NestedTypeMatcher): { recordType: string, fieldNames: string[] } | undefined {
 		const map = RecordTypes.parseMapConstructor(tokens, start, end);
 		if (!map) {
 			return undefined;
 		}
-		const fields = map.entries.map((entry) => ({ name: entry.key, type: RecordExtraction.valueType(tokens, entry.valueStart, entry.valueEnd) }));
+		const fields = map.entries.map((entry) => ({ name: entry.key, type: RecordExtraction.valueType(tokens, entry.valueStart, entry.valueEnd, nested) }));
 		return RecordExtraction.recordFromFields(fields);
 	}
 
 	// the record type for an xsl:map at mapOffset, from its xsl:map-entry children with string literal keys
-	private static xslMapRecord(text: string, markup: string, mapOffset: number): { recordType: string, fieldNames: string[] } | undefined {
+	private static xslMapRecord(text: string, markup: string, mapOffset: number, nested: NestedTypeMatcher): { recordType: string, fieldNames: string[] } | undefined {
 		const fields: { name: string, type?: string }[] = [];
 		for (const entryOffset of RecordTypes.childElements(text, markup, mapOffset, 'xsl:map-entry')) {
 			const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, entryOffset + 1, 'key') ?? '');
@@ -189,11 +298,12 @@ export class RecordExtraction {
 			let type: string | undefined;
 			if (select !== undefined) {
 				const tokens = RecordExtraction.xpathTokens(select);
-				type = tokens ? RecordExtraction.valueType(tokens, 0, tokens.length - 1) : undefined;
+				type = tokens ? RecordExtraction.valueType(tokens, 0, tokens.length - 1, nested) : undefined;
 			} else {
 				// a nested xsl:map
 				const nestedMap = RecordTypes.childElements(text, markup, entryOffset, 'xsl:map')[0];
-				type = nestedMap !== undefined ? RecordExtraction.xslMapRecord(text, markup, nestedMap)?.recordType : undefined;
+				const nestedRecord = nestedMap !== undefined ? RecordExtraction.xslMapRecord(text, markup, nestedMap, nested) : undefined;
+				type = nestedRecord ? nested(nestedRecord.fieldNames) ?? nestedRecord.recordType : undefined;
 			}
 			fields.push({ name: key[2], type });
 		}
@@ -209,7 +319,7 @@ export class RecordExtraction {
 	}
 
 	// the type of a value from its literal form: a string literal, a numeric literal, true() or false(), or a map constructor
-	private static valueType(tokens: BaseToken[], start: number, end: number): string | undefined {
+	private static valueType(tokens: BaseToken[], start: number, end: number, nested: NestedTypeMatcher): string | undefined {
 		const first = tokens[start];
 		if (start === end && first.tokenType === TokenLevelState.string) {
 			return 'xs:string';
@@ -218,7 +328,8 @@ export class RecordExtraction {
 		} else if (end === start + 1 && first.tokenType === TokenLevelState.function && (first.value === 'true' || first.value === 'false') && tokens[end].value === '()') {
 			return 'xs:boolean';
 		} else if (RecordTypes.mapConstructorEnd(tokens, start) === end) {
-			return RecordExtraction.mapConstructorRecord(tokens, start, end)?.recordType;
+			const record = RecordExtraction.mapConstructorRecord(tokens, start, end, nested);
+			return record ? nested(record.fieldNames) ?? record.recordType : undefined;
 		}
 		return undefined;
 	}

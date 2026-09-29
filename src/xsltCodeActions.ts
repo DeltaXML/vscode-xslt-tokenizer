@@ -8,7 +8,7 @@ import { Data, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
-import { RecordExtraction, RecordExtractionPlan } from './recordExtraction';
+import { InlineRecordExtractionPlan, RecordExtraction, RecordExtractionPlan } from './recordExtraction';
 import { XdocNotes } from './xdocNote';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { RecordTypes } from './recordTypes';
@@ -112,23 +112,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private actionProps: ActionProps | null = null;
 	// XPath 4.0: the 'Extract record type' refactoring for the selection, and the existing record types it could use instead
 	private recordExtraction: { document: vscode.TextDocument, plan: RecordExtractionPlan, existingTypes: string[] } | null = null;
+	// or for a record type within an 'as' attribute
+	private inlineRecordExtraction: { document: vscode.TextDocument, plan: InlineRecordExtractionPlan } | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
 	private static useRecordTypeTitle(name: string) {
 		return `Use record type '${name}'`;
-	}
-
-	// the xsl:item-type declarations in the document whose record types have the field names, in any order
-	private static matchingRecordTypes(text: string, fieldNames: string[]) {
-		const itemTypes = new Map<string, string>();
-		const declarations = [...text.matchAll(/<xsl:item-type\s/g)].map((match) => ({
-			name: RecordTypes.attributeOfElementAt(text, match.index! + 1, 'name'),
-			as: RecordTypes.attributeOfElementAt(text, match.index! + 1, 'as')
-		}));
-		declarations.forEach((d) => d.name && d.as && itemTypes.set(d.name, d.as));
-		const sortedNames = [...fieldNames].sort().join('\u0001');
-		return declarations.filter((d) => d.name && [...(RecordTypes.resolve(d.name, itemTypes)?.fields ?? []).map((f) => f.name)].sort().join('\u0001') === sortedNames)
-			.map((d) => d.name!);
 	}
 
 	// the edits for 'Extract record type', adding an xsl:item-type for the record type and setting the declaration's 'as',
@@ -144,14 +133,29 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const asRange = new vscode.Range(document.positionAt(asEdit.start), document.positionAt(asEdit.end));
 		codeAction.edit.replace(document.uri, asRange, asEdit.isInsert ? ` as="${typeName}"` : typeName + asEdit.occurrence);
 		if (isExtract) {
-			const declaration = `<xsl:item-type name="${typeName}" as="${plan.recordType}"/>`;
-			const insertPosition = document.positionAt(itemTypeInsert.offset);
-			codeAction.edit.insert(document.uri, insertPosition, itemTypeInsert.isAfter ? `\n${itemTypeInsert.indent}${declaration}` : `${itemTypeInsert.indent}${declaration}\n`);
-			// the new type's name, after the edit - the xsl:item-type is before the declaration's 'as'
-			const nameLine = insertPosition.line + (itemTypeInsert.isAfter ? 1 : 0);
-			this.executeRenameCommand(nameLine, itemTypeInsert.indent.length + '<xsl:item-type name="'.length, document.uri);
+			this.addItemTypeEdit(codeAction.edit, document, typeName, plan.recordType, itemTypeInsert);
 		}
 		return codeAction;
+	}
+
+	// the edits for 'Extract record type' for a record type within an 'as' attribute: adding an xsl:item-type for it and
+	// replacing it with the new type's name, then renaming the new type
+	private addInlineRecordTypeEdits(codeAction: vscode.CodeAction) {
+		const { document, plan } = this.inlineRecordExtraction!;
+		codeAction.edit = new vscode.WorkspaceEdit();
+		codeAction.edit.replace(document.uri, new vscode.Range(document.positionAt(plan.start), document.positionAt(plan.end)), plan.typeName);
+		this.addItemTypeEdit(codeAction.edit, document, plan.typeName, plan.recordType, plan.itemTypeInsert);
+		return codeAction;
+	}
+
+	// inserts the xsl:item-type declaration, then renames the new type
+	private addItemTypeEdit(edit: vscode.WorkspaceEdit, document: vscode.TextDocument, typeName: string, recordType: string, itemTypeInsert: { offset: number, indent: string, isAfter: boolean }) {
+		const declaration = `<xsl:item-type name="${typeName}" as="${recordType}"/>`;
+		const insertPosition = document.positionAt(itemTypeInsert.offset);
+		edit.insert(document.uri, insertPosition, itemTypeInsert.isAfter ? `\n${itemTypeInsert.indent}${declaration}` : `${itemTypeInsert.indent}${declaration}\n`);
+		// the new type's name, after the edit - the xsl:item-type is before the type's use
+		const nameLine = insertPosition.line + (itemTypeInsert.isAfter ? 1 : 0);
+		this.executeRenameCommand(nameLine, itemTypeInsert.indent.length + '<xsl:item-type name="'.length, document.uri);
 	}
 
 	// XSLT 4.0: adds an @param to a documentation note for each parameter without one, or an @field for each field - as a
@@ -270,16 +274,24 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		// XPath 4.0: 'Extract record type'
 		this.recordExtraction = null;
+		this.inlineRecordExtraction = null;
 		if (ItemTypeSupport.isEnabledForText(document.getText(new vscode.Range(0, 0, 50, 0)))) {
 			// a selected map constructor or xsl:map, or the cursor on the start tag of a declaration whose value is one
 			const text = document.getText();
 			const plan = range.isEmpty ? RecordExtraction.forCursor(text, document.offsetAt(range.start)) :
 				RecordExtraction.forSelection(text, document.offsetAt(range.start), document.offsetAt(range.end));
 			if (plan) {
-				const existingTypes = XSLTCodeActions.matchingRecordTypes(text, plan.fieldNames);
+				const existingTypes = RecordExtraction.matchingRecordTypes(text, plan.fieldNames);
 				this.recordExtraction = { document, plan, existingTypes };
 				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractRecordType, vscode.CodeActionKind.RefactorExtract));
 				existingTypes.forEach((name) => codeActions.push(new vscode.CodeAction(XSLTCodeActions.useRecordTypeTitle(name), vscode.CodeActionKind.RefactorRewrite)));
+			} else {
+				// or a record type within an 'as' attribute, e.g. the type of a field
+				const inlinePlan = RecordExtraction.inlineRecordAt(text, document.offsetAt(range.start), document.offsetAt(range.end));
+				if (inlinePlan) {
+					this.inlineRecordExtraction = { document, plan: inlinePlan };
+					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractRecordType, vscode.CodeActionKind.RefactorExtract));
+				}
 			}
 		}
 
@@ -353,6 +365,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	}
 
 	async resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): Promise<vscode.CodeAction> {
+		if (this.inlineRecordExtraction && codeAction.title === XsltCodeActionKind.extractRecordType) {
+			return this.addInlineRecordTypeEdits(codeAction);
+		}
 		if (this.recordExtraction && (codeAction.title === XsltCodeActionKind.extractRecordType || this.recordExtraction.existingTypes.some((name) => codeAction.title === XSLTCodeActions.useRecordTypeTitle(name)))) {
 			return this.addRecordTypeEdits(codeAction);
 		}

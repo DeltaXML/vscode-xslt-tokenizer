@@ -1687,8 +1687,8 @@ export class XsltTokenCompletions {
 
 	// within element(...) or attribute(...): the element or attribute names - those of the XML context file, then those
 	// used in the stylesheet's name tests - and '*', with, for XPath 4.0, wildcards for the prefixed names' local names and
-	// prefixes, e.g. *:note and lib:* for lib:note - or after
-	// the comma, the type annotations that don't need a schema, e.g. xs:untyped - undefined if the position isn't within
+	// prefixes, e.g. *:note and lib:* for lib:note - and after '*' or '*:', the local names of all the names - or after the comma,
+	// the type annotations that don't need a schema, e.g. xs:untyped - undefined if the position isn't within
 	// one of them
 	public static getKindTestNameCompletions(document: vscode.TextDocument, position: vscode.Position, contextSymbols: vscode.DocumentSymbol[], elementNameTests: string[], attributeNameTests: string[], isVersion4: boolean): vscode.CompletionItem[] | undefined {
 		const kindTest = XsltTokenCompletions.kindTestAt(document, position);
@@ -1727,6 +1727,19 @@ export class XsltTokenCompletions {
 		const stylesheetNames = [...new Set((isElement ? elementNameTests : attributeNameTests.map((name) => name.replace(/^@/, '')))
 			.filter((name) => /^[\w.-]+(:[\w.-]+)?$/.test(name) && !names.includes(name)))];
 		const what = isElement ? 'element' : 'attribute';
+		const wildcard = (localName: string, index: number) => item(`*:${localName}`, `${what} '${localName}' in any namespace`, '3', index, vscode.CompletionItemKind.Operator);
+		if (isVersion4 && (kindTest.typed === '*' || kindTest.typed.startsWith('*:'))) {
+			// XPath 4.0: after '*' or '*:', the local names of all the names, prefixed or not, e.g. *:book, and *:note for
+			// lib:note - the names themselves wouldn't match what's typed - and after '*', '*' and the prefixes too, e.g. lib:*
+			const allNames = names.concat(stylesheetNames);
+			const wildcards = [...new Set(allNames.map((name) => name.split(':').pop()!))].map(wildcard);
+			if (kindTest.typed.startsWith('*:')) {
+				return wildcards;
+			}
+			const prefixes = [...new Set(allNames.filter((name) => name.includes(':')).map((name) => name.split(':')[0]))];
+			return [item('*', `any ${what}`, '2', 0, vscode.CompletionItemKind.Operator)].concat(wildcards,
+				prefixes.map((prefix, index) => item(`${prefix}:*`, `any ${what} in the namespace for '${prefix}'`, '4', index, vscode.CompletionItemKind.Operator)));
+		}
 		const items = names.map((name, index) => item(name, `${what} in the XML context file`, '0', index))
 			.concat(stylesheetNames.map((name, index) => item(name, `${what} name in the stylesheet`, '1', index)));
 		items.push(item('*', `any ${what}`, '2', 0, vscode.CompletionItemKind.Operator));
@@ -1735,7 +1748,7 @@ export class XsltTokenCompletions {
 			// namespace, whatever prefix the stylesheet binds to it - and for their prefixes, e.g. lib:*
 			const prefixed = names.concat(stylesheetNames).filter((name) => name.includes(':'));
 			const localNames = [...new Set(prefixed.map((name) => name.split(':')[1]))];
-			localNames.forEach((localName, index) => items.push(item(`*:${localName}`, `${what} '${localName}' in any namespace`, '3', index, vscode.CompletionItemKind.Operator)));
+			localNames.forEach((localName, index) => items.push(wildcard(localName, index)));
 			const prefixes = [...new Set(prefixed.map((name) => name.split(':')[0]))];
 			prefixes.forEach((prefix, index) => items.push(item(`${prefix}:*`, `any ${what} in the namespace for '${prefix}'`, '4', index, vscode.CompletionItemKind.Operator)));
 		}

@@ -133,6 +133,10 @@ export class DocumentChangeHandler {
 			// the cursor is after the first typed character - also between an auto-closed pair, e.g. {}
 			DocumentChangeHandler.setCommaTrigger(e.document, activeChange.rangeOffset + 1);
 		}
+		if (!triggerSuggest && !skipTrigger && XPathDocumentChangeHandler.isKindTestWildcardStart(activeChange.text, lineBefore)) {
+			// the names in element(...) or attribute(...), e.g. *:book
+			triggerSuggest = true;
+		}
 		if (!triggerSuggest && !skipTrigger && activeChange.text === '@' && e.document.languageId === 'xslt') {
 			// a tag within a documentation note, an xsl:note with format="xdoc-md"
 			const textBefore = e.document.getText(new vscode.Range(new vscode.Position(0, 0), activeChange.range.start));
