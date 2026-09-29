@@ -1,7 +1,8 @@
 /**
  * Test suite for XSLT 4.0 documentation notes: an xsl:note with format="xdoc-md", as the first child of an xsl:function
- * or xsl:template, with Markdown text and xqDoc-style tags such as @param $name and @return:
- * - hover on a function call, an xsl:call-template name, or an xsl:with-param name shows the documentation
+ * xsl:template or xsl:item-type, with Markdown text and xqDoc-style tags such as @param $name and @return:
+ * - hover on a function call, an xsl:call-template name, an xsl:with-param name, or the name of an xsl:item-type where
+ *   it's used shows the documentation
  * - signature help for a user-defined function has the descriptions of the function and its parameters
  * - 'Add documentation note' adds a note with the parameters
  * - completions of the tags, and of the parameter names after @param, within a note
@@ -41,8 +42,18 @@ const drawTemplate = `<xsl:template name="draw">
     <xsl:param name="colour"/>
   </xsl:template>`;
 
+const pointType = `<xsl:item-type name="cx:point" as="record(x as xs:double, y as xs:double)">
+    <xsl:note format="xdoc-md">
+      A point on a **plane**.
+
+      @since 2.0
+    </xsl:note>
+  </xsl:item-type>
+  <xsl:item-type name="cx:colour" as="enum('red', 'green')"/>`;
+
 function stylesheet(body: string, version = '4.0') {
 	return `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cx="com.example.cx" version="${version}">
+  ${pointType}
   ${areaFunction}
   ${drawTemplate}
   ${body}
@@ -100,6 +111,30 @@ suite('Documentation notes', () => {
 		assert.include(text, 'the fill colour');
 	});
 
+	test('hover: a named item type in an as attribute', async () => {
+		const text = await hoverText(`<xsl:variable name="p" as="cx:po¦int?" select="()"/>`);
+		assert.include(text, 'type cx:point as record(x as xs:double, y as xs:double)');
+		assert.include(text, 'A point on a **plane**.');
+		assert.include(text, '*@since* — 2.0');
+		assert.include(text, 'Named item type, declared in this stylesheet');
+	});
+
+	test('hover: a named item type in an XPath expression', async () => {
+		const text = await hoverText(call('1 instance of cx:p¦oint'));
+		assert.include(text, 'type cx:point as record(x as xs:double, y as xs:double)');
+		assert.include(text, 'A point on a **plane**.');
+	});
+
+	test('hover: a named item type without a note', async () => {
+		const text = await hoverText(`<xsl:variable name="c" as="cx:col¦our" select="'red'"/>`);
+		assert.include(text, `type cx:colour as enum('red', 'green')`);
+		assert.include(text, 'Named item type, declared in this stylesheet');
+	});
+
+	test('hover: nothing for an element name matching a named item type', async () => {
+		assert.isUndefined(await hoverText(call('cx:po¦int')));
+	});
+
 	test('signature help: the descriptions of the function and its parameters', async () => {
 		const { document, position } = await open(stylesheet(call('cx:area(1, ¦)')));
 		const help = await new XSLTSignatureHelpProvider(XSLTConfiguration.configuration).provideSignatureHelp(document, position, new vscode.CancellationTokenSource().token) as vscode.SignatureHelp;
@@ -134,8 +169,30 @@ suite('Documentation notes', () => {
   </xsl:function>`));
 	});
 
+	test('add documentation note: an empty xsl:item-type', async () => {
+		const { document } = await open(stylesheet(`<xsl:item-type name="cx:size" as="enum('s', 'm')" />`));
+		await vscode.window.showTextDocument(document);
+		const position = document.positionAt(document.getText().indexOf('cx:size'));
+		const actions = new XSLTCodeActions().provideCodeActions(document, new vscode.Range(position, position), { diagnostics: [], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		const action = actions.find((a) => a.title === 'Add documentation note');
+		assert.isDefined(action);
+		assert.isTrue(await vscode.workspace.applyEdit(action!.edit!));
+		assert.equal(document.getText(), stylesheet(`<xsl:item-type name="cx:size" as="enum('s', 'm')">
+    <xsl:note format="xdoc-md">
+      description
+    </xsl:note>
+  </xsl:item-type>`));
+	});
+
+	test('linter: an @param in the note of an xsl:item-type', async () => {
+		assert.deepEqual(await lint(stylesheet(`<xsl:item-type name="cx:size" as="enum('s', 'm')">\n    <xsl:note format="xdoc-md">\n      A size.\n      @param $s small\n    </xsl:note>\n  </xsl:item-type>`)), [
+			[`XSLT: The documentation note's @param '$s' is not a parameter of this xsl:item-type`, 's']
+		]);
+	});
+
 	const noAction: [string, string][] = [
 		['a function with a documentation note', stylesheet('').replace('name="cx:area"', 'name="cx:ar¦ea"')],
+		['an xsl:item-type with a documentation note', stylesheet('').replace('name="cx:point"', 'name="cx:po¦int"')],
 		['another element', stylesheet(`<xsl:variable na¦me="v" select="1"/>`)],
 		['XSLT 3.0', stylesheet(`<xsl:template na¦me="t2"><xsl:sequence select="1"/></xsl:template>`, '3.0')],
 	];

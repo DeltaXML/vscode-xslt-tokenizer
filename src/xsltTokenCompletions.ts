@@ -2567,6 +2567,12 @@ export class XsltTokenCompletions {
 			}
 		}
 
+		// XSLT 4.0: xsl:note is permitted anywhere - as in Saxon 13, also within an element that's otherwise empty, and a
+		// literal result element - but not within another xsl:note, as its content is ignored
+		if (docType === DocumentTypes.XSLT40 && xsltParent && !elementStack.some((element) => element.symbolName === 'xsl:note') && !expectedTags.some((tag) => tag[0] === 'xsl:note')) {
+			expectedTags = expectedTags.concat([['xsl:note', '']]);
+		}
+
 		let completionItems: vscode.CompletionItem[] = [];
 		if (isWithinXslIterate) {
 			const newItem = new vscode.CompletionItem('xsl:next-iteration', vscode.CompletionItemKind.Struct);
@@ -2639,6 +2645,17 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.insertText = new vscode.SnippetString('xsl:key name="${1:name}" match="${2:pattern}" use="${3:xpath}"/>$0');
 					completionItems.push(newItem);
+				} else if (tagName === 'xsl:note') {
+					// a note with any content, and a documentation note, with Markdown text and tags such as @param
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.documentation = 'a note, whose content is ignored';
+					newItem.insertText = new vscode.SnippetString('xsl:note>$1</xsl:note>$0');
+					completionItems.push(newItem);
+					const docItem = new vscode.CompletionItem(tagName + ' xdoc-md', vscode.CompletionItemKind.Struct);
+					docItem.documentation = 'a documentation note, with Markdown text and tags such as @param, shown in hovers';
+					docItem.insertText = new vscode.SnippetString('xsl:note format="xdoc-md">\n\t$0\n</xsl:note>');
+					completionItems.push(docItem);
 				} else if (tagName === 'xsl:sequence') {
 					// the 'as' attribute (XSLT 4.0) is rarely used, so it's not included
 					useCurrent = false;

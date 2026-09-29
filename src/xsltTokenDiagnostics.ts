@@ -4580,8 +4580,8 @@ export class XsltTokenDiagnostics {
 		};
 	}
 
-	// XSLT 4.0 documentation notes - an xsl:note with format="xdoc-md" - of an xsl:function or xsl:template: each @param
-	// must name one of its parameters
+	// XSLT 4.0 documentation notes - an xsl:note with format="xdoc-md" - of an xsl:function, xsl:template or
+	// xsl:item-type: each @param must name one of its parameters, so an item type's note has none
 	private static checkDocumentationNotes(document: vscode.TextDocument, problemTokens: BaseToken[]) {
 		const text = document.getText();
 		const noteOffsets = XdocNotes.noteOffsets(text);
@@ -4592,7 +4592,7 @@ export class XsltTokenDiagnostics {
 		const openElements = RecordTypes.openElementsAt(markup, noteOffsets);
 		noteOffsets.forEach((noteOffset, index) => {
 			const declaration = openElements[index][openElements[index].length - 1];
-			if (!declaration || !(declaration.name === 'xsl:function' || declaration.name === 'xsl:template')) {
+			if (!declaration || !['xsl:function', 'xsl:template', 'xsl:item-type'].includes(declaration.name)) {
 				return;
 			}
 			const paramNames = XdocNotes.paramNames(text, markup, declaration.offset);

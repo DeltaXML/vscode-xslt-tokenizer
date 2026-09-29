@@ -1,6 +1,6 @@
 /**
- * XSLT 4.0 documentation notes: an xsl:note with format="xdoc-md", as the first child of an xsl:function, xsl:template
- * etc., with Markdown text followed by tags in the style of xqDoc (and Javadoc), e.g.
+ * XSLT 4.0 documentation notes: an xsl:note with format="xdoc-md", as the first child of an xsl:function, xsl:template,
+ * xsl:item-type etc., with Markdown text followed by tags in the style of xqDoc (and Javadoc), e.g.
  *
  *   <xsl:note format="xdoc-md">
  *     Returns the area of a shape, **scaled** by an optional factor.
@@ -181,7 +181,7 @@ export class XdocNotes {
 		return [...text.matchAll(/<xsl:note\s[^<>]*format\s*=\s*["']xdoc-md["']/g)].map((match) => match.index!);
 	}
 
-	// the documentation note of a function or template declaration, from its global instruction data: in the document's
+	// the documentation note of a function, template or item type declaration, from its global instruction data: in the document's
 	// text, or in the module declaring it (its href)
 	public static forGlobal(declaration: { href?: string, token: { line: number, startCharacter: number } }, documentText: string): XdocNote | undefined {
 		let text: string;
@@ -324,12 +324,12 @@ export class XdocNotes {
 			.filter((name): name is string => !!name);
 	}
 
-	// for the cursor in the start tag of an xsl:function or xsl:template without a documentation note, the snippet for
-	// a new note as its first child - with an @param for each xsl:param, and @return for a function or a template with
-	// an 'as' - and where to insert it: after the start tag
-	public static noteSnippetAt(text: string, offset: number): { insertOffset: number, snippet: string } | undefined {
+	// for the cursor in the start tag of an xsl:function, xsl:template or xsl:item-type without a documentation note,
+	// the snippet for a new note as its first child - with an @param for each xsl:param, and @return for a function or a
+	// template with an 'as' - and where to insert it: after the start tag, or replacing the '/>' of an empty xsl:item-type
+	public static noteSnippetAt(text: string, offset: number): { insertOffset: number, replaceLength: number, snippet: string } | undefined {
 		const tagStart = offset > 0 ? text.lastIndexOf('<', offset - 1) : -1;
-		const elementName = tagStart > -1 ? /^<(xsl:function|xsl:template)[\s>]/.exec(text.substring(tagStart, tagStart + 16))?.[1] : undefined;
+		const elementName = tagStart > -1 ? /^<(xsl:function|xsl:template|xsl:item-type)[\s/>]/.exec(text.substring(tagStart, tagStart + 16))?.[1] : undefined;
 		if (!elementName) {
 			return undefined;
 		}
@@ -337,10 +337,13 @@ export class XdocNotes {
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'y');
 		tagRgx.lastIndex = tagStart;
 		const startTag = tagRgx.exec(markup);
-		if (!startTag || startTag[3] || offset >= tagStart + startTag[0].length || XdocNotes.forDeclaration(text, tagStart, markup)) {
+		const isEmpty = !!startTag?.[3];
+		if (!startTag || (isEmpty && elementName !== 'xsl:item-type') || offset >= tagStart + startTag[0].length || XdocNotes.forDeclaration(text, tagStart, markup)) {
 			return undefined;
 		}
-		const insertOffset = tagStart + startTag[0].length;
+		const tagEnd = tagStart + startTag[0].length;
+		// for an empty element, the '/>' and any whitespace before it are replaced
+		const insertOffset = isEmpty ? tagStart + startTag[0].replace(/\s*\/>$/, '').length : tagEnd;
 		// the indentation of the first child element, or one step more than the declaration's
 		const lineIndent = (at: number) => {
 			const lineStart = text.lastIndexOf('\n', at - 1) + 1;
@@ -348,20 +351,23 @@ export class XdocNotes {
 		};
 		const declarationIndent = lineIndent(tagStart) ?? '';
 		const childRgx = new RegExp(RecordTypes.tagPattern, 'g');
-		childRgx.lastIndex = insertOffset;
-		const firstChild = childRgx.exec(markup);
+		childRgx.lastIndex = tagEnd;
+		const firstChild = isEmpty ? null : childRgx.exec(markup);
 		const firstChildIndent = firstChild && !firstChild[1] ? lineIndent(firstChild.index) : undefined;
 		const step = firstChildIndent !== undefined && firstChildIndent.length > declarationIndent.length && firstChildIndent.startsWith(declarationIndent) ?
 			firstChildIndent.substring(declarationIndent.length) : declarationIndent.includes('\t') ? '\t' : '  ';
 		const indent = declarationIndent + step;
-		const hasReturn = elementName === 'xsl:function' || RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as') !== undefined;
+		const hasReturn = elementName === 'xsl:function' || (elementName === 'xsl:template' && RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as') !== undefined);
 		let tabStop = 2;
 		const tagLines = XdocNotes.paramNames(text, markup, tagStart).map((name) => `\n${indent}${step}@param \\$${name.replace(/[$}\\]/g, '\\$&')} \${${tabStop++}:description}`);
 		if (hasReturn) {
 			tagLines.push(`\n${indent}${step}@return \${${tabStop++}:description}`);
 		}
 		const tags = tagLines.length > 0 ? `\n${tagLines.join('')}` : '';
-		return { insertOffset, snippet: `\n${indent}<xsl:note format="${XdocNotes.format}">\n${indent}${step}\${1:description}${tags}\n${indent}</xsl:note>` };
+		const note = `\n${indent}<xsl:note format="${XdocNotes.format}">\n${indent}${step}\${1:description}${tags}\n${indent}</xsl:note>`;
+		return isEmpty ?
+			{ insertOffset, replaceLength: tagEnd - insertOffset, snippet: `>${note}\n${declarationIndent}</${elementName}>` } :
+			{ insertOffset, replaceLength: 0, snippet: note };
 	}
 
 	// the document offset for a line and character position in the text, e.g. for a token in another file

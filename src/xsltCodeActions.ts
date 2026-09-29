@@ -272,14 +272,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			codeActions.push(action);
 		}
 
-		// XSLT 4.0: a documentation note for the xsl:function or xsl:template at the cursor
+		// XSLT 4.0: a documentation note for the xsl:function, xsl:template or xsl:item-type at the cursor
 		if (range.isEmpty && /\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)))) {
 			const note = XdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start));
 			if (note) {
 				const action = new vscode.CodeAction(XsltCodeActionKind.addDocumentationNote, vscode.CodeActionKind.RefactorRewrite);
 				action.edit = new vscode.WorkspaceEdit();
-				const position = document.positionAt(note.insertOffset);
-				const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, position), new vscode.SnippetString(note.snippet));
+				const noteRange = new vscode.Range(document.positionAt(note.insertOffset), document.positionAt(note.insertOffset + note.replaceLength));
+				const snippetEdit = new vscode.SnippetTextEdit(noteRange, new vscode.SnippetString(note.snippet));
 				// the snippet has the indentation
 				snippetEdit.keepWhitespace = true;
 				action.edit.set(document.uri, [snippetEdit]);

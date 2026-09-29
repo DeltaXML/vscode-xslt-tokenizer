@@ -8,6 +8,7 @@ import { XsltTokenDiagnostics } from "./xsltTokenDiagnostics";
 import { XdocNotes } from "./xdocNote";
 import { RecordTypes } from "./recordTypes";
 import { declarationParamLabels } from "./declarationParams";
+import { XsltTokenDefinitions } from "./xsltTokenDefintions";
 
 enum CharType {
 	none,
@@ -47,8 +48,12 @@ export class XSLTHoverProvider implements HoverProvider {
 		const rawFnName = this.getFunctionName(line.text, position.character);
 
 		if (!rawFnName) {
-			// XSLT 4.0: the name of a called template, or of a parameter it's passed - with its documentation note
-			return this.definitionProvider ? this.findTemplateHover(document, position, token) : undefined;
+			// XSLT 4.0: the name of a called template, or of a parameter it's passed, or of a named item type - with its
+			// documentation note
+			if (!this.definitionProvider) {
+				return undefined;
+			}
+			return await this.findTemplateHover(document, position, token) ?? await this.findItemTypeHover(document, position, token);
 		}
 
 		const trimmedFnName = rawFnName.trimRight();
@@ -100,8 +105,8 @@ export class XSLTHoverProvider implements HoverProvider {
 		return this.createHover(signature, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
-	// the documentation note - an xsl:note with format="xdoc-md" - of a function or template declaration, in this document
-	// or the module declaring it
+	// the documentation note - an xsl:note with format="xdoc-md" - of a function, template or item type declaration, in
+	// this document or the module declaring it
 	public static declarationNote(document: TextDocument, declaration: GlobalInstructionData) {
 		return XdocNotes.forGlobal(declaration, document.getText());
 	}
@@ -149,6 +154,30 @@ export class XSLTHoverProvider implements HoverProvider {
 		const params = declarationParamLabels(template, document.getText()).join(', ');
 		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
 		return this.createHover(`template ${templateName}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
+	}
+
+	// XSLT 4.0: for the name of a named item type where it's used, e.g. cx:point in as="cx:point?", its declaration and
+	// documentation note
+	private async findItemTypeHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		const wordRange = document.getWordRangeAtPosition(position, /[\w.:-]+/);
+		const word = wordRange ? document.getText(wordRange) : undefined;
+		if (!word) {
+			return undefined;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { allTokens, globalInstructionData, allImportedGlobals } = await this.definitionProvider!.getImportedGlobals(document, lexPosition);
+		// the tokens are only searched when an item type has a name that could be at the position
+		if (token.isCancellationRequested || !globalInstructionData.concat(allImportedGlobals).some((g) => g.type === GlobalInstructionType.ItemType && word.includes(g.name))) {
+			return undefined;
+		}
+		const isXSLT = this.languageConfiguration?.docType !== DocumentTypes.XPath;
+		const itemType = XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position).definitionLocation?.instruction;
+		if (itemType?.type !== GlobalInstructionType.ItemType) {
+			return undefined;
+		}
+		const note = XSLTHoverProvider.declarationNote(document, itemType);
+		const description = itemType.href ? `Named item type, declared in ${path.basename(itemType.href)}` : 'Named item type, declared in this stylesheet';
+		return this.createHover(`type ${itemType.name}${itemType.declaredType ? ' as ' + itemType.declaredType : ''}`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
 	// XPath 4.0: 'current' is in the functions specification, and these aren't in either 4.0 specification

@@ -73,4 +73,30 @@ suite('Instruction snippets', () => {
 		assert.equal(result.get('xsl:array select'), 'xsl:array select="${1:$expr}"/>$0');
 		assert.equal(result.get('xsl:array members'), 'xsl:array>\n\t<xsl:array-member select="${1:$expr}"/>$0\n</xsl:array>');
 	});
+	const noteSnippet = 'xsl:note>$1</xsl:note>$0';
+	const docNoteSnippet = 'xsl:note format="xdoc-md">\n\t$0\n</xsl:note>';
+	const notePlaces: [string, string][] = [
+		['xsl:item-type', '<xsl:item-type name="t" as="xs:string"><|</xsl:item-type>'],
+		['the top level', '<|'],
+		['xsl:function', '<xsl:function name="f:f" xmlns:f="f"><|</xsl:function>'],
+		['xsl:value-of, which is otherwise empty', '<xsl:template name="t"><xsl:value-of select="1"><|</xsl:value-of></xsl:template>'],
+		['a literal result element', '<xsl:template name="t"><out><|</out></xsl:template>'],
+	];
+	notePlaces.forEach(([label, body]) => {
+		test(`xsl:note is offered within ${label}`, async () => {
+			const result = await snippets('4.0', body);
+			assert.equal(result.get('xsl:note'), noteSnippet);
+			assert.equal(result.get('xsl:note xdoc-md'), docNoteSnippet);
+		});
+	});
+
+	test('xsl:note is not offered in XSLT 3.0', async () => {
+		const result = await snippets('3.0', '<xsl:template name="t"><|</xsl:template>');
+		assert.isFalse(result.has('xsl:note'));
+	});
+
+	test('xsl:note is not offered within an xsl:note', async () => {
+		const result = await snippets('4.0', '<xsl:template name="t"><xsl:note><|</xsl:note></xsl:template>');
+		assert.isFalse(result.has('xsl:note'));
+	});
 });
