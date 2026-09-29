@@ -193,6 +193,9 @@ suite('Documentation notes', () => {
 	const noAction: [string, string][] = [
 		['a function with a documentation note', stylesheet('').replace('name="cx:area"', 'name="cx:ar¦ea"')],
 		['an xsl:item-type with a documentation note', stylesheet('').replace('name="cx:point"', 'name="cx:po¦int"')],
+		['an xsl:item-type with a note that is not a documentation note', stylesheet(`<xsl:item-type na¦me="cx:size" as="xs:string">\n    <xsl:note>A size.</xsl:note>\n  </xsl:item-type>`)],
+		['a template with a note that is not a documentation note', stylesheet(`<xsl:template na¦me="t2">\n    <xsl:note>Internal.</xsl:note>\n    <xsl:sequence select="1"/>\n  </xsl:template>`)],
+		['an xsl:item-type with no note, in XSLT 3.0', stylesheet(`<xsl:item-type na¦me="cx:size" as="xs:string"/>`, '3.0')],
 		['another element', stylesheet(`<xsl:variable na¦me="v" select="1"/>`)],
 		['XSLT 3.0', stylesheet(`<xsl:template na¦me="t2"><xsl:sequence select="1"/></xsl:template>`, '3.0')],
 	];

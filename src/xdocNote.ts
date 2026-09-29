@@ -324,7 +324,7 @@ export class XdocNotes {
 			.filter((name): name is string => !!name);
 	}
 
-	// for the cursor in the start tag of an xsl:function, xsl:template or xsl:item-type without a documentation note,
+	// for the cursor in the start tag of an xsl:function, xsl:template or xsl:item-type without an xsl:note child,
 	// the snippet for a new note as its first child - with an @param for each xsl:param, and @return for a function or a
 	// template with an 'as' - and where to insert it: after the start tag, or replacing the '/>' of an empty xsl:item-type
 	public static noteSnippetAt(text: string, offset: number): { insertOffset: number, replaceLength: number, snippet: string } | undefined {
@@ -338,7 +338,8 @@ export class XdocNotes {
 		tagRgx.lastIndex = tagStart;
 		const startTag = tagRgx.exec(markup);
 		const isEmpty = !!startTag?.[3];
-		if (!startTag || (isEmpty && elementName !== 'xsl:item-type') || offset >= tagStart + startTag[0].length || XdocNotes.forDeclaration(text, tagStart, markup)) {
+		if (!startTag || (isEmpty && elementName !== 'xsl:item-type') || offset >= tagStart + startTag[0].length ||
+			RecordTypes.childElements(text, markup, tagStart, 'xsl:note').length > 0) {
 			return undefined;
 		}
 		const tagEnd = tagStart + startTag[0].length;
