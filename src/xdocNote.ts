@@ -442,6 +442,25 @@ export class XdocNotes {
 		return tag ? XdocNotes.markdownText(tag.text) : undefined;
 	}
 
+	// a documentation note at the offset, e.g. of a new element, would be used: its parent is an xsl:function, a named
+	// xsl:template, an xsl:item-type, the root element - for the module note - or a global xsl:param or xsl:variable,
+	// and it has no documentation note yet
+	public static isDocumentationNoteParent(text: string, offset: number): boolean {
+		const markup = RecordTypes.blankMarkup(text);
+		const ancestors = RecordTypes.openElements(markup, offset);
+		const parent = ancestors[ancestors.length - 1];
+		if (!parent) {
+			return false;
+		}
+		const isRoot = ancestors.length === 1 && XdocNotes.rootNames.includes(parent.name);
+		const isGlobalVariable = (parent.name === 'xsl:param' || parent.name === 'xsl:variable') && ancestors.length === 2 && XdocNotes.rootNames.includes(ancestors[0].name);
+		const isNamedTemplate = parent.name === 'xsl:template' && RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name') !== undefined;
+		if (!(isRoot || isGlobalVariable || isNamedTemplate || parent.name === 'xsl:function' || parent.name === 'xsl:item-type')) {
+			return false;
+		}
+		return !XdocNotes.forDeclaration(text, parent.offset, markup);
+	}
+
 	// the names of the global xsl:param (or xsl:variable) declarations of the module that have no note of their own
 	public static globalNamesWithoutNotes(text: string, markup: string, rootOffset: number, elementName: string): string[] {
 		return RecordTypes.childElements(text, markup, rootOffset, elementName)

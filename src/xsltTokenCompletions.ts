@@ -2702,10 +2702,15 @@ export class XsltTokenCompletions {
 					newItem.documentation = 'a note, whose content is ignored';
 					newItem.insertText = new vscode.SnippetString('xsl:note>$1</xsl:note>$0');
 					completionItems.push(newItem);
-					const docItem = new vscode.CompletionItem(tagName + ' xdoc-md', vscode.CompletionItemKind.Struct);
-					docItem.documentation = 'a documentation note, with Markdown text and tags such as @param, shown in hovers';
-					docItem.insertText = new vscode.SnippetString('xsl:note format="xdoc-md">\n\t$0\n</xsl:note>');
-					completionItems.push(docItem);
+					// a documentation note only where it's used, e.g. in an xsl:function without one - see XdocNotes
+					const text = document.getText();
+					const tagStart = text.lastIndexOf('<', document.offsetAt(pos) - 1);
+					if (tagStart > -1 && XdocNotes.isDocumentationNoteParent(text, tagStart)) {
+						const docItem = new vscode.CompletionItem(tagName + ' xdoc-md', vscode.CompletionItemKind.Struct);
+						docItem.documentation = 'a documentation note, with Markdown text and tags such as @param, shown in hovers';
+						docItem.insertText = new vscode.SnippetString('xsl:note format="xdoc-md">\n\t$0\n</xsl:note>');
+						completionItems.push(docItem);
+					}
 				} else if (tagName === 'xsl:sequence') {
 					// the 'as' attribute (XSLT 4.0) is rarely used, so it's not included
 					useCurrent = false;
@@ -2945,6 +2950,10 @@ export class XsltTokenCompletions {
 		let expectedAttrValues: [string, string][] = [];
 
 		expectedAttrValues = schemaQuery.getExpected(xsltParent, currentAttribute).attributeValues;
+		if (xsltParent === 'xsl:note' && currentAttribute === 'format') {
+			// XSLT 4.0: the format of documentation notes - offered, but not in the schema, as any format is allowed
+			expectedAttrValues = [[XdocNotes.format, 'a documentation note: Markdown text with tags such as @param, shown in hovers']];
+		}
 
 		let completionItems: vscode.CompletionItem[] = [];
 		expectedAttrValues.forEach((attrValueData) => {

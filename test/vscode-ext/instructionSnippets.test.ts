@@ -7,6 +7,8 @@ import * as vscode from 'vscode';
 import { assert } from 'chai';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
+import { DocumentTypes, XslLexer } from '../../src/xslLexer';
+import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 
 async function snippets(version: string, body: string) {
 	const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="${version}">
@@ -75,19 +77,44 @@ suite('Instruction snippets', () => {
 	});
 	const noteSnippet = 'xsl:note>$1</xsl:note>$0';
 	const docNoteSnippet = 'xsl:note format="xdoc-md">\n\t$0\n</xsl:note>';
-	const notePlaces: [string, string][] = [
-		['xsl:item-type', '<xsl:item-type name="t" as="xs:string"><|</xsl:item-type>'],
-		['the top level', '<|'],
-		['xsl:function', '<xsl:function name="f:f" xmlns:f="f"><|</xsl:function>'],
-		['xsl:value-of, which is otherwise empty', '<xsl:template name="t"><xsl:value-of select="1"><|</xsl:value-of></xsl:template>'],
-		['a literal result element', '<xsl:template name="t"><out><|</out></xsl:template>'],
+	// a documentation note is offered only where it's used, and where there isn't one yet - a note is offered anywhere
+	const notePlaces: [string, string, boolean][] = [
+		['xsl:item-type', '<xsl:item-type name="t" as="xs:string"><|</xsl:item-type>', true],
+		['the top level, for the module note', '<|', true],
+		['xsl:function', '<xsl:function name="f:f" xmlns:f="f"><|</xsl:function>', true],
+		['a named xsl:template', '<xsl:template name="t"><|</xsl:template>', true],
+		['a global xsl:param', '<xsl:param name="p"><|</xsl:param>', true],
+		['a global xsl:variable', '<xsl:variable name="v"><|</xsl:variable>', true],
+		['a template rule', '<xsl:template match="/"><|</xsl:template>', false],
+		['a local xsl:variable', '<xsl:template name="t"><xsl:variable name="v"><|</xsl:variable></xsl:template>', false],
+		['xsl:value-of, which is otherwise empty', '<xsl:template name="t"><xsl:value-of select="1"><|</xsl:value-of></xsl:template>', false],
+		['a literal result element', '<xsl:template name="t"><out><|</out></xsl:template>', false],
+		['an xsl:function that has a documentation note', '<xsl:function name="f:f" xmlns:f="f"><xsl:note format="xdoc-md">x</xsl:note><|</xsl:function>', false],
 	];
-	notePlaces.forEach(([label, body]) => {
-		test(`xsl:note is offered within ${label}`, async () => {
+	notePlaces.forEach(([label, body, isDocumented]) => {
+		test(`xsl:note ${isDocumented ? 'and xsl:note xdoc-md are' : 'but not xsl:note xdoc-md is'} offered within ${label}`, async () => {
 			const result = await snippets('4.0', body);
 			assert.equal(result.get('xsl:note'), noteSnippet);
-			assert.equal(result.get('xsl:note xdoc-md'), docNoteSnippet);
+			assert.equal(result.get('xsl:note xdoc-md'), isDocumented ? docNoteSnippet : undefined);
 		});
+	});
+
+	test('the format of an xsl:note: xdoc-md', async () => {
+		const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="4.0">\n  <xsl:function name="f:f" xmlns:f="f"><xsl:note format="|"/></xsl:function>\n</xsl:stylesheet>`;
+		const offset = marked.indexOf('|');
+		const document = await vscode.workspace.openTextDocument({ content: marked.replace('|', ''), language: 'xslt' });
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		assert.include(items.map((item) => typeof item.label === 'string' ? item.label : item.label.label), 'xdoc-md');
+	});
+
+	test('the format of an xsl:note: another format is not reported', async () => {
+		const xslt = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="4.0">\n  <xsl:function name="f:f" xmlns:f="f"><xsl:note format="other">x</xsl:note><xsl:sequence select="1"/></xsl:function>\n</xsl:stylesheet>`;
+		const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'xslt' });
+		const lexer = new XslLexer(XSLTConfiguration.configuration);
+		lexer.provideCharLevelState = true;
+		const diagnostics = XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: true }, DocumentTypes.XSLT40, document, lexer.analyse(xslt), lexer.globalInstructionData, [], []);
+		assert.deepEqual(diagnostics.map((d) => d.message), []);
 	});
 
 	test('xsl:note is not offered in XSLT 3.0', async () => {
