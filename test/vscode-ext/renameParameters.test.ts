@@ -3,9 +3,9 @@
  * @param for it in the declaration's documentation note (xsl:note format="xdoc-md") is renamed, and for a function
  * parameter, keyword arguments for it in calls of the function, e.g. greeting := 'Hi' - but not keyword arguments with
  * the same name in calls of other functions, or variables with the same name.
- * For a function or template in a library module, the keyword arguments and xsl:with-param names are also renamed in the
- * stylesheets that import it, found from the index of the workspace's modules - but not in a stylesheet tree that declares
- * a function or template with the same name, which may override it.
+ * For a function or template in a library module, its calls, keyword arguments and xsl:with-param names are also
+ * renamed in the stylesheets that import it, found from the index of the workspace's modules - but a rename is refused when
+ * another module declares a function (with an arity in common) or template with the same name, which may override it.
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
@@ -96,12 +96,13 @@ suite('Renaming parameters', () => {
 		const file = (name: string) => path.join(dir, name);
 		const stylesheet = (body: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:ex="ex" version="4.0">\n${body}\n</xsl:stylesheet>`;
 		const greeting = `  <xsl:function name="ex:greeting">\n    <xsl:param name="name"/>\n    <xsl:param name="greeting" required="no" select="'Hello'"/>\n    <xsl:sequence select="$greeting || $name"/>\n  </xsl:function>`;
-		const calls = `  <xsl:template name="main"><xsl:sequence select="ex:greeting('Ann', greeting := 'Hi')"/><xsl:call-template name="t"><xsl:with-param name="who" select="'Bob'"/></xsl:call-template></xsl:template>`;
+		const calls = `  <xsl:template name="main"><xsl:sequence select="ex:greeting('Ann', greeting := 'Hi'), ex:farewell('a')"/><xsl:call-template name="t"><xsl:with-param name="who" select="'Bob'"/></xsl:call-template></xsl:template>`;
+		const farewell = (params: number) => `  <xsl:function name="ex:farewell">${'<xsl:param name="p"/><xsl:param name="q"/>'.substring(0, params * 22)}<xsl:sequence select="1"/></xsl:function>`;
 		const files: { [name: string]: string } = {
-			'lib.xsl': stylesheet(`${greeting}\n  <xsl:template name="t"><xsl:param name="who"/><xsl:sequence select="$who"/></xsl:template>`),
+			'lib.xsl': stylesheet(`${greeting}\n${farewell(1)}\n  <xsl:template name="t"><xsl:param name="who"/><xsl:sequence select="$who"/></xsl:template>`),
 			'main1.xsl': stylesheet(`  <xsl:import href="lib.xsl"/>\n${calls}`),
-			// overrides ex:greeting - but not the template
-			'main2.xsl': stylesheet(`  <xsl:import href="lib.xsl"/>\n${greeting}\n${calls}`),
+			// overrides ex:greeting - and declares ex:farewell with another arity, which doesn't override it, and calls both
+			'main2.xsl': stylesheet(`  <xsl:import href="lib.xsl"/>\n${greeting}\n${farewell(2)}\n${calls}\n  <xsl:variable name="v" select="ex:farewell('a', 'b')"/>`),
 		};
 		const open = (name: string) => vscode.workspace.openTextDocument(vscode.Uri.file(file(name)));
 
@@ -131,6 +132,18 @@ suite('Renaming parameters', () => {
 			fs.rmSync(dir, { recursive: true, force: true });
 		});
 
+		// the rename at the text in the library, plus the delta, is refused - with the reason
+		async function refusedInLibrary(text: string, delta: number) {
+			const lib = await open('lib.xsl');
+			const position = lib.positionAt(lib.getText().indexOf(text) + delta);
+			try {
+				await new XSLTReferenceProvider().prepareRename(lib, position, new vscode.CancellationTokenSource().token);
+			} catch (reason) {
+				return String(reason);
+			}
+			assert.fail('the rename is not refused');
+		}
+
 		// the texts of the modules after renaming at the text in the library, plus the delta
 		async function renameInLibrary(text: string, delta: number, newName: string) {
 			const lib = await open('lib.xsl');
@@ -147,12 +160,30 @@ suite('Renaming parameters', () => {
 			return texts;
 		}
 
-		test('a function parameter: its keyword arguments, except where the function is overridden', async () => {
-			const texts = await renameInLibrary(`name="greeting" required`, 7, 'salutation');
-			assert.include(texts.get('lib.xsl'), '<xsl:param name="salutation" required="no"');
-			assert.include(texts.get('main1.xsl'), `ex:greeting('Ann', salutation := 'Hi')`);
-			assert.include(texts.get('main2.xsl'), `ex:greeting('Ann', greeting := 'Hi')`);
-			assert.include(texts.get('main2.xsl'), '<xsl:param name="greeting" required="no"');
+		test('a function parameter: refused, as the function may be overridden', async () => {
+			const reason = await refusedInLibrary(`name="greeting" required`, 7);
+			assert.equal(reason, 'XSLT: ex:greeting is also declared in main2.xsl, where it may override this function, or be overridden by it - so renaming a parameter of the function ex:greeting could change which function is called');
+		});
+
+		test('the function itself: refused, as it may be overridden', async () => {
+			assert.include(await refusedInLibrary(`name="ex:greeting"`, 9), 'so renaming the function ex:greeting could change which function is called');
+		});
+
+		test('refused too when the overriding stylesheet is the one inferred for the library', async () => {
+			ImportIndex.instance.chooseForModule(file('lib.xsl'), file('main2.xsl'));
+			try {
+				assert.include(await refusedInLibrary(`name="greeting" required`, 7), 'also declared in main2.xsl');
+			} finally {
+				ImportIndex.instance.clearChoice(file('lib.xsl'));
+			}
+		});
+
+		test('find all references for an overridden function parameter: not in the overriding stylesheet', async () => {
+			const lib = await open('lib.xsl');
+			const position = lib.positionAt(lib.getText().indexOf(`name="greeting" required`) + 7);
+			const locations = await new XSLTReferenceProvider().provideReferences(lib, position, { includeDeclaration: true }, new vscode.CancellationTokenSource().token) ?? [];
+			assert.isTrue(locations.some((l) => l.uri.fsPath === file('main1.xsl')));
+			assert.isFalse(locations.some((l) => l.uri.fsPath === file('main2.xsl')));
 		});
 
 		test('a template parameter: its xsl:with-param names in each stylesheet', async () => {
@@ -162,27 +193,21 @@ suite('Renaming parameters', () => {
 			assert.include(texts.get('main2.xsl'), `<xsl:with-param name="person" select="'Bob'"/>`);
 		});
 
-		test('the top-level stylesheet inferred for the library overrides the function', async () => {
-			ImportIndex.instance.chooseForModule(file('lib.xsl'), file('main2.xsl'));
-			try {
-				const params = await renameInLibrary(`name="greeting" required`, 7, 'salutation');
-				assert.include(params.get('main2.xsl'), `ex:greeting('Ann', greeting := 'Hi')`);
-				assert.include(params.get('main1.xsl'), `ex:greeting('Ann', salutation := 'Hi')`);
-			} finally {
-				ImportIndex.instance.clearChoice(file('lib.xsl'));
-			}
+		test('a template: its calls in each stylesheet', async () => {
+			const texts = await renameInLibrary(`name="t"`, 6, 'show');
+			assert.include(texts.get('lib.xsl'), '<xsl:template name="show">');
+			assert.include(texts.get('main1.xsl'), '<xsl:call-template name="show">');
+			assert.include(texts.get('main2.xsl'), '<xsl:call-template name="show">');
 		});
 
-		test('the function itself, with the overriding stylesheet inferred: its calls there are not renamed', async () => {
-			ImportIndex.instance.chooseForModule(file('lib.xsl'), file('main2.xsl'));
-			try {
-				const texts = await renameInLibrary(`name="ex:greeting"`, 9, 'ex:hello');
-				assert.include(texts.get('lib.xsl'), '<xsl:function name="ex:hello">');
-				assert.include(texts.get('main2.xsl'), `ex:greeting('Ann', greeting := 'Hi')`);
-				assert.include(texts.get('main2.xsl'), '<xsl:function name="ex:greeting">');
-			} finally {
-				ImportIndex.instance.clearChoice(file('lib.xsl'));
-			}
+		test('a function with another arity in a stylesheet: its calls with its arity in each stylesheet', async () => {
+			const texts = await renameInLibrary(`name="ex:farewell"`, 9, 'ex:bye');
+			assert.include(texts.get('lib.xsl'), '<xsl:function name="ex:bye">');
+			assert.include(texts.get('main1.xsl'), `ex:bye('a')`);
+			assert.include(texts.get('main2.xsl'), `ex:bye('a')`);
+			// the other function, with 2 parameters, and its call
+			assert.include(texts.get('main2.xsl'), '<xsl:function name="ex:farewell"><xsl:param name="p"/><xsl:param name="q"/>');
+			assert.include(texts.get('main2.xsl'), `ex:farewell('a', 'b')`);
 		});
 	});
 });
