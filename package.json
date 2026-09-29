@@ -490,6 +490,11 @@
 					"scope": "resource",
 					"markdownDescription": "The XSLT processor (task type) used by the **Quick Run** command. Quick Run persists a separate task in `.vscode/tasks.json` for each processor used with a given XSLT/XML pair"
 				},
+				"XSLT.validation.xslt30ItemTypesAndNotes": {
+					"type": "boolean",
+					"default": false,
+					"markdownDescription": "Allow XSLT 4.0 named item types (`xsl:item-type`, with `record(...)` and `enum(...)` types, also in `as` attributes) and `xsl:note` in stylesheets for XSLT 3.0 and earlier. Requires Saxon PE or EE 12.8 or later, run with syntax extensions (the `--allowSyntaxExtensions:on` option). Other XSLT 4.0 features still need `version=\"4.0\"`."
+				},
 				"XSLT.resources.inferParentFromWorkspace": {
 					"type": "boolean",
 					"default": true,

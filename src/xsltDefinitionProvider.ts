@@ -12,6 +12,7 @@ import { BaseToken, ExitCondition, LexPosition, XPathLexer } from './xpLexer';
 import { XPathSemanticTokensProvider } from './extension';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import { XMLConfiguration } from './languageConfigurations';
+import { ItemTypeSupport } from './itemTypeSupport';
 import * as url from 'url';
 
 interface ImportedGlobals {
@@ -327,16 +328,17 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				resolve(noteCompletions.length > 0 ? new vscode.CompletionList(noteCompletions, false) : undefined);
 				return;
 			}
-			// XPath 4.0 record types: the next entry of a map constructor
-			const recordEntries = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT ?
-				XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
 			const isXSLT40 = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT;
+			// record and enumeration types - also before XSLT 4.0, with the setting (see ItemTypeSupport)
+			const hasItemTypes = ItemTypeSupport.isEnabled(!!localLanguageConfig.isVersion4) && this.docType === DocumentTypes.XSLT;
+			// XPath 4.0 record types: the next entry of a map constructor
+			const recordEntries = hasItemTypes ? XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
 			// an empty select, for an enumeration type or xs:boolean
-			// or the test of an xsl:when in an xsl:switch on an enumeration type
-			const selectValues = !recordEntries && isXSLT40 ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) ??
-				XsltTokenCompletions.getSwitchCaseCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			// or the test of an xsl:when in an xsl:switch on an enumeration type - xsl:switch is XSLT 4.0
+			const selectValues = !recordEntries && hasItemTypes ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) ??
+				(isXSLT40 ? XsltTokenCompletions.getSwitchCaseCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined) : undefined;
 			// an argument of a user-defined function, or the value of a typed let binding, for an enumeration type or xs:boolean
-			const argumentValues = !recordEntries && !selectValues && isXSLT40 ? XsltTokenCompletions.getArgumentValueCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
+			const argumentValues = !recordEntries && !selectValues && hasItemTypes ? XsltTokenCompletions.getArgumentValueCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
 			// XPath 4.0 keyword arguments, e.g. ex:area(2, scale := 2) - the names of the called function's parameters
 			const keywordArguments = (isXSLT40 || this.docType === DocumentTypes.XPath) && !recordEntries && !argumentValues?.inString ?
 				XsltTokenCompletions.getKeywordArgumentCompletions(document, allTokens, position, this.docType === DocumentTypes.XPath, globalInstructionData, allImportedGlobals) : undefined;
@@ -347,7 +349,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				return;
 			}
 			// the key attribute of an xsl:map-entry for a record type
-			const mapEntryKeys = isXSLT40 ? XsltTokenCompletions.getMapEntryKeyCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			const mapEntryKeys = hasItemTypes ? XsltTokenCompletions.getMapEntryKeyCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (mapEntryKeys) {
 				resolve(mapEntryKeys.length > 0 ? new vscode.CompletionList(mapEntryKeys, true) : undefined);
 				return;
@@ -358,7 +360,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				completions = XsltTokenCompletions.adjustExpressionCompletions(document, allTokens, position, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath, completions);
 			}
 			// xsl:map-entry elements for a record type, before the other element completions
-			const mapEntryElements = isXSLT40 ? XsltTokenCompletions.getMapEntryElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			const mapEntryElements = hasItemTypes ? XsltTokenCompletions.getMapEntryElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (mapEntryElements && mapEntryElements.length > 0) {
 				completions = mapEntryElements.concat(completions ?? []);
 			}

@@ -34,6 +34,7 @@ import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTReferenceProvider } from './xsltReferenceProvider';
 import { XSLTCodeActions } from './xsltCodeActions';
 import { wrapWith } from './xsltWrap';
+import { ItemTypeSupport } from './itemTypeSupport';
 import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
@@ -509,6 +510,10 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
 		if (e.affectsConfiguration('XSLT.tasks.quickRunProcessor')) {
 			updateQuickRunProcessorIndicators();
+		}
+		// item types and notes before XSLT 4.0: check the open modules again
+		if (e.affectsConfiguration(`${ItemTypeSupport.section}.${ItemTypeSupport.setting}`)) {
+			relintXsltModules();
 		}
 	}));
 

@@ -10,6 +10,7 @@ import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { RecordExtraction, RecordExtractionPlan } from './recordExtraction';
 import { XdocNotes } from './xdocNote';
+import { ItemTypeSupport } from './itemTypeSupport';
 import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
 import * as path from 'path';
@@ -261,7 +262,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		// XPath 4.0: 'Extract record type'
 		this.recordExtraction = null;
-		if (/\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)))) {
+		if (ItemTypeSupport.isEnabledForText(document.getText(new vscode.Range(0, 0, 50, 0)))) {
 			// a selected map constructor or xsl:map, or the cursor on the start tag of a declaration whose value is one
 			const text = document.getText();
 			const plan = range.isEmpty ? RecordExtraction.forCursor(text, document.offsetAt(range.start)) :
@@ -288,8 +289,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		// XSLT 4.0: a documentation note for the declaration at the cursor - before 4.0, excluded with use-when
 		if (range.isEmpty) {
-			const isVersion4 = /\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)));
-			const note = XdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start), !isVersion4);
+			// before XSLT 4.0, the note is excluded with use-when - unless notes are available (see ItemTypeSupport)
+			const note = XdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start), !ItemTypeSupport.isEnabledForText(document.getText(new vscode.Range(0, 0, 50, 0))));
 			if (note) {
 				const action = new vscode.CodeAction(XsltCodeActionKind.addDocumentationNote, vscode.CodeActionKind.RefactorRewrite);
 				action.edit = new vscode.WorkspaceEdit();

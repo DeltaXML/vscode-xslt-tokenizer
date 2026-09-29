@@ -20,6 +20,7 @@ import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { FieldReference, RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
 import { ImportIndex } from './importIndex';
+import { ItemTypeSupport } from './itemTypeSupport';
 
 // a field's declaration: the document, and the offset of its name
 interface FieldDeclaration {
@@ -219,9 +220,9 @@ export class RecordFieldReferences {
 	}
 
 	// the document, with the item types declared in it and in the modules it includes or imports - undefined if it's not
-	// an XSLT 4.0 stylesheet module
+	// a stylesheet module with item types: XSLT 4.0, or an earlier version with the setting (see ItemTypeSupport)
 	private static async documentContext(definitionProvider: XsltDefinitionProvider, document: vscode.TextDocument): Promise<DocumentContext | undefined> {
-		if (!/\sversion\s*=\s*["']4\.0["']/.test(document.getText(new vscode.Range(0, 0, 50, 0)))) {
+		if (!ItemTypeSupport.isEnabledForText(document.getText(new vscode.Range(0, 0, 50, 0)))) {
 			return undefined;
 		}
 		const { globalInstructionData, allImportedGlobals } = await definitionProvider.getImportedGlobals(document, RecordFieldReferences.startPosition());
@@ -232,7 +233,8 @@ export class RecordFieldReferences {
 	// the record field references in a document, found by the linter
 	private static async fieldReferences(definitionProvider: XsltDefinitionProvider, context: DocumentContext): Promise<FieldReference[]> {
 		const { allTokens, globalInstructionData, allImportedGlobals } = await definitionProvider.getImportedGlobals(context.document, RecordFieldReferences.startPosition());
-		XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: true }, DocumentTypes.XSLT40, context.document, allTokens, globalInstructionData, allImportedGlobals, []);
+		const isVersion4 = ItemTypeSupport.isVersion4Text(context.document.getText());
+		XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4 }, isVersion4 ? DocumentTypes.XSLT40 : DocumentTypes.XSLT, context.document, allTokens, globalInstructionData, allImportedGlobals, []);
 		return XsltTokenDiagnostics.recordFieldReferences.get(context.document.uri.toString()) ?? [];
 	}
 }

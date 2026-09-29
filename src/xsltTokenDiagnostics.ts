@@ -16,6 +16,7 @@ import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { RecordType, RecordTypes, FieldReference } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
+import { ItemTypeSupport } from './itemTypeSupport';
 
 enum HasCharacteristic {
 	unknown,
@@ -483,8 +484,11 @@ export class XsltTokenDiagnostics {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
 			docType = DocumentTypes.XSLT40;
 		} else if (languageConfig.schemaData) {
-			schemaQuery = new SchemaQuery(languageConfig.schemaData);
+			// before XSLT 4.0, with the setting, the schema has xsl:item-type
+			schemaQuery = new SchemaQuery(docType === DocumentTypes.XSLT && ItemTypeSupport.isEnabledBefore40() ? ItemTypeSupport.schemaData30() : languageConfig.schemaData);
 		}
+		// XSLT 4.0 named item types, record and enumeration types, and xsl:note - also before 4.0, with the setting
+		const hasItemTypes = docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XSLT && ItemTypeSupport.isEnabledBefore40());
 
 		if (isSchematron && XSLTConfiguration.configuration.schemaData) {
 			xsltSchemaQuery = new SchemaQuery(XSLTConfiguration.configuration.schemaData);
@@ -873,7 +877,7 @@ export class XsltTokenDiagnostics {
 									}
 								}
 
-								if (XsltTokenDiagnostics.isXPath40(docType)) {
+								if (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes) {
 									// XPath 4.0 record types: check a map constructor against the declared record type
 									const parentName = elementStack.length > 0 ? elementStack[elementStack.length - 1].symbolName : '';
 									let asText = tagAsRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, tagAsRange) : undefined;
@@ -1424,7 +1428,7 @@ export class XsltTokenDiagnostics {
 				const isRecordStep = xpathTokenType === TokenLevelState.nodeNameTest && prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/';
 				// a lookup with a string literal, e.g. $c?'first name'
 				const isStringLookup = xpathTokenType === TokenLevelState.string && prevToken?.value === '?' && token.value.length > 1;
-				if ((isRecordStep || isStringLookup || (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?')) && XsltTokenDiagnostics.isXPath40(docType)) {
+				if ((isRecordStep || isStringLookup || (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?')) && (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes)) {
 					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r, or a child step on a JNode for one, e.g. jtree($c)/r
 					// the record type of a variable, and whether it's declared as a JNode for one, e.g. jnode(*, point)
 					const variableRecord = (variableToken: BaseToken): { record: RecordType | undefined, isJNode: boolean } => {
@@ -2586,7 +2590,7 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.nodeType:
-						if ((token.value === 'fn' || token.value === 'jnode') && XsltTokenDiagnostics.checkItemTypeVersion(token, docType)) {
+						if ((token.value === 'fn' || token.value === 'jnode') && XsltTokenDiagnostics.checkItemTypeVersion(token, docType, hasItemTypes)) {
 							problemTokens.push(token);
 						} else if (token.value === 'get' && !token.error && !XsltTokenDiagnostics.isXPath40(docType)) {
 							token.error = ErrorType.NodeTestRequiresXPath40;
@@ -2730,13 +2734,13 @@ export class XsltTokenDiagnostics {
 								if (!isValidType) {
 									isValidType = Data.nonFunctionTypes.indexOf(tParts[0]) > -1 || tParts[0] === 'fn';
 								}
-								if (isValidType && XsltTokenDiagnostics.checkItemTypeVersion(token, docType)) {
+								if (isValidType && XsltTokenDiagnostics.checkItemTypeVersion(token, docType, hasItemTypes)) {
 									problemTokens.push(token);
 									isTypeError = true;
 								}
 							} else {
 								// XPath 4.0 named item type, declared with xsl:item-type
-								isValidType = XsltTokenDiagnostics.isXPath40(docType) && globalItemTypeNames.includes(tValue);
+								isValidType = (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes) && globalItemTypeNames.includes(tValue);
 							}
 						} else if (tParts.length === 2) {
 							let nsType = xsltPrefixesToURIs.get(tParts[0]);
@@ -2753,7 +2757,7 @@ export class XsltTokenDiagnostics {
 								// the namespace prefix is declared: in XSLT 4.0 the type must be declared with xsl:item-type,
 								// except for the type annotation in element(*, my:type) - schema-aware processing is not supported
 								const isTypeAnnotation = ['element', 'attribute', 'schema-element', 'schema-attribute'].includes(XsltTokenDiagnostics.enclosingTypeName(xpathStack) ?? '');
-								isValidType = docType !== DocumentTypes.XSLT40 || isTypeAnnotation || globalItemTypeNames.includes(tValue);
+								isValidType = !hasItemTypes || isTypeAnnotation || globalItemTypeNames.includes(tValue);
 								if (!isValidType) {
 									token.error = ErrorType.UndeclaredItemType;
 									problemTokens.push(token);
@@ -2874,11 +2878,11 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		XsltTokenDiagnostics.checkAccumulatorsApplicable(globalInstructionData, importedInstructionData, problemTokens);
-		if (docType === DocumentTypes.XSLT40) {
+		if (hasItemTypes) {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
-		if (docType === DocumentTypes.XSLT) {
+		if (docType === DocumentTypes.XSLT && !hasItemTypes) {
 			XsltTokenDiagnostics.checkNotesBeforeXSLT40(document, problemTokens);
 		}
 		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
@@ -2896,10 +2900,13 @@ export class XsltTokenDiagnostics {
 				problemTokens.push({ line: position.line, startCharacter: position.character, length: duplicate.key.length, value: duplicate.key, tokenType: 0, error: ErrorType.MapEntryKeyDuplicate });
 			});
 		}
-		if (XsltTokenDiagnostics.isXPath40(docType)) {
-			// XPath 4.0: the value of a typed let binding, e.g. let $p as person := { ... }
+		// record and enumeration types - before XSLT 4.0 too, when item types are available
+		if (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes) {
 			const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
-			RecordTypes.checkLetBindings(xpathTokens, (range) => XsltTokenDiagnostics.textForTokenRange(document, xpathTokens, range), itemTypeDeclarations, problemTokens);
+			if (XsltTokenDiagnostics.isXPath40(docType)) {
+				// XPath 4.0: the value of a typed let binding, e.g. let $p as person := { ... }
+				RecordTypes.checkLetBindings(xpathTokens, (range) => XsltTokenDiagnostics.textForTokenRange(document, xpathTokens, range), itemTypeDeclarations, problemTokens);
+			}
 			// the arguments of calls of user-defined functions, e.g. cx:area({ ... }) or cx:area(shape := { ... })
 			const allGlobals = globalInstructionData.concat(importedInstructionData);
 			RecordTypes.checkFunctionArguments(xpathTokens, {
@@ -2908,7 +2915,10 @@ export class XsltTokenDiagnostics {
 				returnType: (name, arity) => allGlobals.find((g) => g.type === GlobalInstructionType.Function && g.name === name && XslLexer.functionArityMatches(g, arity))?.returnType
 			}, itemTypeDeclarations, problemTokens);
 			XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
-			XsltTokenDiagnostics.checkSwitches(document, allTokens, argumentVariableTypes, allGlobals, itemTypeDeclarations, problemTokens);
+			if (XsltTokenDiagnostics.isXPath40(docType)) {
+				// xsl:switch is XSLT 4.0
+				XsltTokenDiagnostics.checkSwitches(document, allTokens, argumentVariableTypes, allGlobals, itemTypeDeclarations, problemTokens);
+			}
 			// duplicate record field names and enumeration values
 			RecordTypes.checkTypeDuplicates(xpathTokens, problemTokens);
 		}
@@ -3240,11 +3250,12 @@ export class XsltTokenDiagnostics {
 		return token.value === '?' && !!prevToken && (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.string);
 	}
 
-	// sets an error on an XPath 4.0 item type used with XPath 3.1, or an obsolete Saxon item type, returning true if set
-	private static checkItemTypeVersion(token: BaseToken, docType: DocumentTypes) {
+	// sets an error on an XPath 4.0 item type used with XPath 3.1, or an obsolete Saxon item type, returning true if set -
+	// record and enumeration types are available before 4.0 when item types are (see ItemTypeSupport)
+	private static checkItemTypeVersion(token: BaseToken, docType: DocumentTypes, hasItemTypes = false) {
 		if (XsltTokenDiagnostics.obsoleteItemTypes.includes(token.value)) {
 			token.error = ErrorType.ObsoleteItemType;
-		} else if (XsltTokenDiagnostics.itemTypes40.includes(token.value) && !XsltTokenDiagnostics.isXPath40(docType)) {
+		} else if (XsltTokenDiagnostics.itemTypes40.includes(token.value) && !XsltTokenDiagnostics.isXPath40(docType) && !(hasItemTypes && (token.value === 'record' || token.value === 'enum'))) {
 			token.error = ErrorType.ItemTypeRequiresXPath40;
 		}
 		return !!token.error;

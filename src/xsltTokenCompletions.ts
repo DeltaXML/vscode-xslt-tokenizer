@@ -19,6 +19,7 @@ import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { RecordField, RecordType, RecordTypes, TemplateParamType } from './recordTypes';
 import { XdocNotes } from './xdocNote';
+import { ItemTypeSupport } from './itemTypeSupport';
 
 enum TagType {
 	XSLTstart,
@@ -111,7 +112,20 @@ export class XsltTokenCompletions {
 	private static atomicItemTypeNames: string[] = [];
 
 	private static sequenceTypesFor(docType: DocumentTypes) {
-		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath ? XsltTokenCompletions.itemTypeNames.concat(XsltTokenCompletions.sequenceTypes, ['record()', 'enum()']) : XsltTokenCompletions.sequenceTypes31;
+		if (docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath) {
+			return XsltTokenCompletions.itemTypeNames.concat(XsltTokenCompletions.sequenceTypes, ['record()', 'enum()']);
+		}
+		// before XSLT 4.0, with the setting: the named item types, and record and enumeration types
+		return XsltTokenCompletions.hasItemTypes(docType) ? XsltTokenCompletions.itemTypeNames.concat(XsltTokenCompletions.sequenceTypes31, ['record()', 'enum()']) : XsltTokenCompletions.sequenceTypes31;
+	}
+
+	private static isXSLTDocType(docType: DocumentTypes) {
+		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XSLT;
+	}
+
+	// XSLT 4.0 named item types, record and enumeration types, and xsl:note - also before 4.0, with the setting
+	private static hasItemTypes(docType: DocumentTypes) {
+		return docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XSLT && ItemTypeSupport.isEnabledBefore40());
 	}
 
 	// the quote character for string literals in the XPath at the completion position - set for each getCompletions call
@@ -131,7 +145,7 @@ export class XsltTokenCompletions {
 	}
 
 	private static setItemTypeNames(docType: DocumentTypes, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]) {
-		const itemTypes = docType === DocumentTypes.XSLT40 ? globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.ItemType) : [];
+		const itemTypes = XsltTokenCompletions.hasItemTypes(docType) ? globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.ItemType) : [];
 		const names = (list: GlobalInstructionData[]) => list.map((g) => g.name).filter((name, index, all) => all.indexOf(name) === index);
 		XsltTokenCompletions.itemTypeNames = names(itemTypes);
 		const nonAtomic = /^\s*\(?\s*(record|map|array|function|fn|element|attribute|document-node|node|item|text|comment|processing-instruction|namespace-node|jnode|gnode)\s*\(/;
@@ -199,7 +213,8 @@ export class XsltTokenCompletions {
 		if (languageConfig.isVersion4) {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
 		} else if (languageConfig.schemaData) {
-			schemaQuery = new SchemaQuery(languageConfig.schemaData);
+			// before XSLT 4.0, with the setting, the schema has xsl:item-type
+			schemaQuery = new SchemaQuery(docType === DocumentTypes.XSLT && ItemTypeSupport.isEnabledBefore40() ? ItemTypeSupport.schemaData30() : languageConfig.schemaData);
 		}
 		let index = -1;
 		for (let token of allTokens) {
@@ -818,7 +833,7 @@ export class XsltTokenCompletions {
 					case TokenLevelState.nodeNameTest:
 						if (isOnRequiredToken && requiredChar > token.startCharacter) {
 							const [elementNames, attrNames] = XsltSymbolProvider.getCompletionNodeNames(allTokens, allInstructionData, inScopeVariablesList, inScopeXPathVariablesList, index - 1, xpathStack, xpathDocSymbols, elementNameTests, attNameTests);
-							const stepRecord = prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/' && XsltTokenCompletions.isXPath40(docType) ?
+							const stepRecord = prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/' && (XsltTokenCompletions.isXPath40(docType) || XsltTokenCompletions.hasItemTypes(docType)) ?
 								XsltTokenCompletions.lookupRecordType(document, allTokens, index - 1, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData) : undefined;
 							if (stepRecord) {
 								// XPath 4.0: a partly typed child step on a value with a record type, e.g. $c/r
@@ -960,7 +975,7 @@ export class XsltTokenCompletions {
 										resultCompletions = resultCompletions.concat(XsltTokenCompletions.getXPathCompletions(docType, prev2Token, prevToken, position, elementNames, attrNames, globalInstructionData, importedInstructionData, xpathStack));
 									} else if (token.value === '/') {
 										// XPath 4.0: a child step on a value with a record type, e.g. $c/ - a JNode for each field
-										const record = XsltTokenCompletions.isXPath40(docType) && requiredChar === token.startCharacter + 1 ?
+										const record = (XsltTokenCompletions.isXPath40(docType) || XsltTokenCompletions.hasItemTypes(docType)) && requiredChar === token.startCharacter + 1 ?
 											XsltTokenCompletions.lookupRecordType(document, allTokens, index, inScopeXPathVariablesList, xpathStack, inScopeVariablesList, elementStack, globalVariableData, globalInstructionData, importedInstructionData) : undefined;
 										resultCompletions = record ? XsltTokenCompletions.getRecordFieldCompletions(record, XsltTokenCompletions.fieldDocumentation(document, record, globalInstructionData, importedInstructionData), true) :
 											XsltTokenCompletions.getPathCompletions(docType, position, elementNames, attrNames, globalInstructionData, importedInstructionData);
@@ -2620,7 +2635,7 @@ export class XsltTokenCompletions {
 		// XSLT 4.0: xsl:note is permitted anywhere - as in Saxon 13, also within an element that's otherwise empty, and a
 		// literal result element - but not within another xsl:note, as its content is ignored - and before 4.0, it's
 		// offered excluded with use-when
-		if ((docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XSLT) && xsltParent && !elementStack.some((element) => element.symbolName === 'xsl:note') && !expectedTags.some((tag) => tag[0] === 'xsl:note')) {
+		if (XsltTokenCompletions.isXSLTDocType(docType) && xsltParent && !elementStack.some((element) => element.symbolName === 'xsl:note') && !expectedTags.some((tag) => tag[0] === 'xsl:note')) {
 			expectedTags = expectedTags.concat([['xsl:note', '']]);
 		}
 
@@ -2702,7 +2717,7 @@ export class XsltTokenCompletions {
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
 					newItem.documentation = 'a note, whose content is ignored';
 					// before XSLT 4.0, excluded with use-when, as the processor would report it
-					const excluded = docType === DocumentTypes.XSLT40 ? '' : ' ' + XdocNotes.excludedAttribute;
+					const excluded = XsltTokenCompletions.hasItemTypes(docType) ? '' : ' ' + XdocNotes.excludedAttribute;
 					newItem.insertText = new vscode.SnippetString(`xsl:note${excluded}>$1</xsl:note>$0`);
 					completionItems.push(newItem);
 					// a documentation note only where it's used, e.g. in an xsl:function without one - see XdocNotes
