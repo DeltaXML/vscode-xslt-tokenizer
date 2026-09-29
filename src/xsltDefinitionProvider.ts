@@ -331,7 +331,20 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			const isXSLT40 = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT;
 			// record and enumeration types - also before XSLT 4.0, with the setting (see ItemTypeSupport)
 			const hasItemTypes = ItemTypeSupport.isEnabled(!!localLanguageConfig.isVersion4) && this.docType === DocumentTypes.XSLT;
-			// XPath 4.0 record types: the next entry of a map constructor
+			// XSLT 4.0: within the fixed-namespaces attribute, its tokens
+			const fixedNamespaceTokens = this.docType === DocumentTypes.XSLT && localLanguageConfig.isVersion4 ? XsltTokenCompletions.getFixedNamespacesCompletions(document, position) : undefined;
+			if (fixedNamespaceTokens) {
+				resolve(new vscode.CompletionList(fixedNamespaceTokens, false));
+				return;
+			}
+			// within element(...) or attribute(...): only the names, from the XML context file and the stylesheet
+			const kindTestNames = this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XPath ?
+				XsltTokenCompletions.getKindTestNameCompletions(document, position, symbolsForXPath, nodeNames, attNames, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath) : undefined;
+			if (kindTestNames) {
+				resolve(new vscode.CompletionList(kindTestNames, false));
+				return;
+			}
+						// XPath 4.0 record types: the next entry of a map constructor
 			const recordEntries = hasItemTypes ? XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
 			// an empty select, for an enumeration type or xs:boolean
 			// or the test of an xsl:when in an xsl:switch on an enumeration type - xsl:switch is XSLT 4.0

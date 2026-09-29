@@ -18,6 +18,7 @@ import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
+import { FixedNamespaces } from './fixedNamespaces';
 
 enum HasCharacteristic {
 	unknown,
@@ -495,6 +496,16 @@ export class XsltTokenDiagnostics {
 		if (isSchematron && XSLTConfiguration.configuration.schemaData) {
 			xsltSchemaQuery = new SchemaQuery(XSLTConfiguration.configuration.schemaData);
 		}
+		// XSLT 4.0: the fixed-namespaces attribute of the module's outermost element defines all the namespace bindings for
+		// XPath expressions, patterns and attributes with QNames - the in-scope namespaces still apply to element names
+		const fixedNamespaces = docType === DocumentTypes.XSLT40 ? FixedNamespaces.forModule(documentText, document.uri.scheme === 'file' ? document.fileName : undefined) : undefined;
+		const fixedPrefixes = fixedNamespaces ? [...fixedNamespaces.bindings.keys()].concat(['xml']) : undefined;
+		// the namespace prefixes for XPath and QNames: the fixed ones, or else the in-scope ones
+		const xpathPrefixes = () => fixedPrefixes ?? inheritedPrefixes;
+		fixedNamespaces?.problems.forEach((problem) => {
+			const position = document.positionAt(fixedNamespaces.valueOffset + problem.offset);
+			problemTokens.push({ line: position.line, startCharacter: position.character, length: problem.token.length, value: problem.token + RecordTypes.valueSeparator + problem.reason, tokenType: 0, error: ErrorType.FixedNamespacesToken });
+		});
 
 		globalInstructionData.concat(importedInstructionData).forEach((instruction) => {
 			if (instruction.declaredType && (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) && !globalVariableTypes.has(instruction.name)) {
@@ -789,6 +800,16 @@ export class XsltTokenDiagnostics {
 											startTagToken['error'] = ErrorType.XSLTNamesapce;
 											problemTokens.push(startTagToken);
 										}
+									}
+									if (fixedNamespaces) {
+										// the prefixes for the known namespaces, e.g. fn and xs, are those of the fixed bindings
+										xsltPrefixesToURIs = new Map();
+										fixedNamespaces.bindings.forEach((uri, pfx) => {
+											const xsltType = FunctionData.namespaces.get(uri);
+											if (xsltType !== undefined) {
+												xsltPrefixesToURIs.set(pfx, xsltType);
+											}
+										});
 									}
 								}
 								onRootStartTag = false;
@@ -1223,7 +1244,7 @@ export class XsltTokenDiagnostics {
 										if (!matchingNameAndDesc) {
 											const isNameTest = SimpleTypeNames.nametests === expectedSimpleType;
 											if (isNameTest) {
-												const invalidNames = XsltTokenDiagnostics.findInvalidNames(variableName, docType, inheritedPrefixes);
+												const invalidNames = XsltTokenDiagnostics.findInvalidNames(variableName, docType, xpathPrefixes());
 												if (invalidNames.length > 0) {
 													const quotedNames = invalidNames.map((uName) => '\'' + uName + '\'');
 													token['error'] = ErrorType.XMLNameList;
@@ -1316,7 +1337,7 @@ export class XsltTokenDiagnostics {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;
 								const nameToTest = tagElementName === "xsl:namespace" && variableName === '' ? 'empty' : variableName;
-								let validateResult = XsltTokenDiagnostics.validateName(nameToTest, vType, docType, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(nameToTest, vType, docType, xpathPrefixes());
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
 									token['value'] = variableName;
@@ -1722,7 +1743,7 @@ export class XsltTokenDiagnostics {
 							let prefixEnd = token.value.indexOf(':');
 							if (prefixEnd !== -1) {
 								let prefix = token.value.substring(1, prefixEnd);
-								if (inheritedPrefixes.indexOf(prefix) === -1) {
+								if (xpathPrefixes().indexOf(prefix) === -1) {
 									token['error'] = ErrorType.XPathPrefix;
 									problemTokens.push(token);
 								}
@@ -2451,7 +2472,7 @@ export class XsltTokenDiagnostics {
 												}
 											}
 											if (!(regexSpecial || withinTypeDeclarationAttr)) {
-												let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
+												let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
 												if (!isValid) {
 													poppedData.function['error'] = fErrorType;
 													poppedData.function['value'] = qFunctionName;
@@ -2521,7 +2542,7 @@ export class XsltTokenDiagnostics {
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity ? 1 : 0;
 									incrementFunctionArity = false;
-									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
+									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
 									if (!isValid) {
 										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
@@ -2618,7 +2639,7 @@ export class XsltTokenDiagnostics {
 							}
 						} else if (token.value === ':*' && prevToken && !prevToken.error) {
 							let pfx = prevToken.tokenType === TokenLevelState.attributeNameTest ? prevToken.value.substring(1) : prevToken.value;
-							if (inheritedPrefixes.indexOf(pfx) === -1 && pfx !== 'xml') {
+							if (xpathPrefixes().indexOf(pfx) === -1 && pfx !== 'xml') {
 								prevToken['error'] = ErrorType.XPathPrefix;
 								problemTokens.push(prevToken);
 							}
@@ -2657,7 +2678,7 @@ export class XsltTokenDiagnostics {
 							}
 							if (!skipValidation) skipValidation = xpathTokenType === TokenLevelState.mapNameLookup && xpathCharType === CharLevelState.sep; // for '*' lookup
 							if (!skipValidation) {
-								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, docType, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, docType, xpathPrefixes());
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XPathName : ErrorType.XPathPrefix;
 									token['value'] = token.value;
@@ -2676,7 +2697,7 @@ export class XsltTokenDiagnostics {
 							if (!XsltTokenDiagnostics.isXPath40(docType)) {
 								token.error = ErrorType.QNameLiteralRequiresXPath40;
 								problemTokens.push(token);
-							} else if (qNamePrefix !== '' && qNamePrefix !== 'xml' && inheritedPrefixes.indexOf(qNamePrefix) === -1) {
+							} else if (qNamePrefix !== '' && qNamePrefix !== 'xml' && xpathPrefixes().indexOf(qNamePrefix) === -1) {
 								token.error = ErrorType.XPathPrefix;
 								problemTokens.push(token);
 							} else {
@@ -2684,7 +2705,7 @@ export class XsltTokenDiagnostics {
 							}
 							break;
 						}
-						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, token, checkedGlobalFnNames);
+						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, token, checkedGlobalFnNames);
 						if (!isValid) {
 							token['error'] = fErrorType;
 							token['value'] = qFunctionName;
@@ -2718,7 +2739,7 @@ export class XsltTokenDiagnostics {
 							// the prefix of a wildcard, e.g. my:*, must be declared - there's none for *:para, or a local name after Q{...}
 							const wildcardPrefix = /^([\w.-]+):\*$/.exec(tValue);
 							const nameToCheck = /^\*:[\w.-]+$/.test(tValue) ? tValue.substring(2) : wildcardPrefix ? wildcardPrefix[1] + ':x' : tValue;
-							let validationError = XsltTokenDiagnostics.validateName(nameToCheck, ValidationType.Name, docType, inheritedPrefixes, undefined);
+							let validationError = XsltTokenDiagnostics.validateName(nameToCheck, ValidationType.Name, docType, xpathPrefixes(), undefined);
 							if (validationError !== NameValidationError.None) {
 								token['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
 								token['value'] = tValue;
@@ -2766,7 +2787,7 @@ export class XsltTokenDiagnostics {
 										isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
 									}
 								} 
-							} else if (inheritedPrefixes.indexOf(tParts[0]) !== -1) {
+							} else if (xpathPrefixes().indexOf(tParts[0]) !== -1) {
 								// the namespace prefix is declared: in XSLT 4.0 the type must be declared with xsl:item-type,
 								// except for the type annotation in element(*, my:type) - schema-aware processing is not supported
 								const isTypeAnnotation = ['element', 'attribute', 'schema-element', 'schema-attribute'].includes(XsltTokenDiagnostics.enclosingTypeName(xpathStack) ?? '');
@@ -4119,6 +4140,13 @@ export class XsltTokenDiagnostics {
 				case ErrorType.OperatorNotSupported:
 					msg = `XPath: The '${tokenValue}' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...`;
 					break;
+				case ErrorType.FixedNamespacesToken: {
+					const [fixedToken, reason] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = reason === 'xmlns' ? `XSLT: The prefix xmlns can't be bound in fixed-namespaces: '${fixedToken}' (XTSE0122)` :
+						reason === 'xml' ? `XSLT: The prefix xml can only be bound to the XML namespace, and no other prefix to it: '${fixedToken}' (XTSE0122)` :
+						`XSLT: The fixed-namespaces token '${fixedToken}' isn't #standard, a prefix declared on this element, a standard prefix or prefix=uri - and as a URI, the XML document it refers to can't be read (XTSE0122)`;
+					break;
+				}
 				case ErrorType.KindTestNameRequiresXPath40: {
 					const [kind, text, reason] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = reason === 'union' ? `XPath: A union of names in ${kind}(...), e.g. ${kind}(a | b), requires XPath 4.0` :

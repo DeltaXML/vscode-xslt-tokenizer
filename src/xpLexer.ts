@@ -1732,6 +1732,7 @@ export enum ErrorType {
     NoteRequiresXSLT40,
     SaxonTypeAlias,
     KindTestNameRequiresXPath40,
+    FixedNamespacesToken,
     RecordFieldUnknown,
     RecordFieldValueType,
     RecordLookupUnknown,

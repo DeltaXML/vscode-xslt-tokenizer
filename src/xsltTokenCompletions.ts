@@ -20,6 +20,7 @@ import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { RecordField, RecordType, RecordTypes, TemplateParamType } from './recordTypes';
 import { XdocNotes } from './xdocNote';
 import { ItemTypeSupport } from './itemTypeSupport';
+import { FixedNamespaces } from './fixedNamespaces';
 
 enum TagType {
 	XSLTstart,
@@ -1603,6 +1604,123 @@ export class XsltTokenCompletions {
 			item.detail = 'xs:boolean';
 			return item;
 		}) : [];
+	}
+
+	// XSLT 4.0: within the fixed-namespaces attribute of the outermost element: #standard, the standard prefixes, and the
+	// prefixes declared on the element - not the tokens already in the attribute - undefined if the position isn't there
+	public static getFixedNamespacesCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const root = FixedNamespaces.rootOffset(text);
+		const valueOffset = root !== undefined ? RecordTypes.attributeValueOffset(text, root + 1, 'fixed-namespaces') : undefined;
+		const value = root !== undefined ? RecordTypes.attributeOfElementAt(text, root + 1, 'fixed-namespaces', true) : undefined;
+		if (root === undefined || valueOffset === undefined || value === undefined || offset < valueOffset || offset > valueOffset + value.length) {
+			return undefined;
+		}
+		const typed = /[^\s"']*$/.exec(text.substring(valueOffset, offset))![0];
+		const used = value.split(/\s+/).filter((token) => token !== typed);
+		const range = new vscode.Range(position.translate(0, -typed.length), position);
+		const native = FixedNamespaces.declarations(text, root);
+		const candidates: [string, string][] = [['#standard', 'the prefixes xsl, xml, xs, xsi, fn, math, map, array and err']];
+		FixedNamespaces.standard.filter(([prefix]) => prefix !== 'xml').forEach(([prefix, uri]) => candidates.push([prefix, `standard prefix: ${native.get(prefix) ?? uri}`]));
+		native.forEach((uri, prefix) => {
+			if (!candidates.some(([name]) => name === prefix)) {
+				candidates.push([prefix, `declared on this element: ${uri}`]);
+			}
+		});
+		return candidates.filter(([name]) => !used.includes(name)).map(([name, detail], index) => {
+			const item = new vscode.CompletionItem(name, name === '#standard' ? vscode.CompletionItemKind.Keyword : vscode.CompletionItemKind.Module);
+			item.detail = detail;
+			item.range = range;
+			item.sortText = String(index).padStart(4, '0');
+			return item;
+		});
+	}
+
+	// within element(...) or attribute(...) - in an 'as' attribute, an expression, e.g. after 'instance of', or a pattern -
+	// the kind test at the position: 'element' or 'attribute', whether it's the type annotation, after the comma, and the
+	// partly typed name before the position - undefined if the position isn't within one
+	public static kindTestAt(document: vscode.TextDocument, position: vscode.Position): { kind: 'element' | 'attribute', isTypeAnnotation: boolean, typed: string } | undefined {
+		const offset = document.offsetAt(position);
+		const before = document.getText(new vscode.Range(document.positionAt(Math.max(0, offset - 400)), position));
+		const typed = /[\w.:*{}\/-]*$/.exec(before)![0];
+		let depth = 0;
+		let isTypeAnnotation = false;
+		for (let i = before.length - typed.length - 1; i > -1; i--) {
+			const ch = before.charAt(i);
+			if (ch === ')' || ch === ']') {
+				depth++;
+			} else if (ch === '(' || ch === '[') {
+				if (depth === 0) {
+					const kind = ch === '(' ? /(?<![\w.:-])(element|attribute)\s*$/.exec(before.substring(0, i))?.[1] : undefined;
+					return kind ? { kind: kind as 'element' | 'attribute', isTypeAnnotation, typed } : undefined;
+				}
+				depth--;
+			} else if (ch === ',' && depth === 0) {
+				isTypeAnnotation = true;
+			} else if (ch === '"' || ch === '\'' || ch === '<' || ch === '>') {
+				// the start of the attribute value, or a string literal: not within a kind test
+				return undefined;
+			}
+		}
+		return undefined;
+	}
+
+	// within element(...) or attribute(...): the element or attribute names - those of the XML context file, then those
+	// used in the stylesheet's name tests - and '*', with, for XPath 4.0, wildcards for the prefixed names' local names and
+	// prefixes, e.g. *:note and lib:* for lib:note - or after
+	// the comma, the type annotations that don't need a schema, e.g. xs:untyped - undefined if the position isn't within
+	// one of them
+	public static getKindTestNameCompletions(document: vscode.TextDocument, position: vscode.Position, contextSymbols: vscode.DocumentSymbol[], elementNameTests: string[], attributeNameTests: string[], isVersion4: boolean): vscode.CompletionItem[] | undefined {
+		const kindTest = XsltTokenCompletions.kindTestAt(document, position);
+		if (!kindTest) {
+			return undefined;
+		}
+		const range = new vscode.Range(position.translate(0, -kindTest.typed.length), position);
+		const item = (label: string, detail: string, sortPrefix: string, index: number, kind = vscode.CompletionItemKind.Unit) => {
+			const completion = new vscode.CompletionItem(label, kind);
+			completion.detail = detail;
+			completion.range = range;
+			completion.sortText = sortPrefix + String(index).padStart(4, '0');
+			return completion;
+		};
+		if (kindTest.isTypeAnnotation) {
+			const annotations = kindTest.kind === 'element' ? ['xs:untyped', 'xs:anyType'] : ['xs:untypedAtomic', 'xs:anySimpleType'];
+			return annotations.map((name, index) => item(name, 'type annotation', '0', index, vscode.CompletionItemKind.TypeParameter));
+		}
+		const isElement = kindTest.kind === 'element';
+		// the names in the context file, in document order
+		const contextNames: string[] = [];
+		const collect = (symbols: vscode.DocumentSymbol[]) => symbols.forEach((symbol) => {
+			if (symbol.kind === vscode.SymbolKind.Array && symbol.name === 'attributes') {
+				if (!isElement) {
+					symbol.children.forEach((attribute) => contextNames.push(attribute.name));
+				}
+			} else if (symbol.kind !== vscode.SymbolKind.Array) {
+				if (isElement) {
+					contextNames.push(symbol.name);
+				}
+				collect(symbol.children);
+			}
+		});
+		collect(contextSymbols);
+		const names = [...new Set(contextNames.filter((name) => /^[\w.-]+(:[\w.-]+)?$/.test(name) && !name.startsWith('xmlns')))];
+		const stylesheetNames = [...new Set((isElement ? elementNameTests : attributeNameTests.map((name) => name.replace(/^@/, '')))
+			.filter((name) => /^[\w.-]+(:[\w.-]+)?$/.test(name) && !names.includes(name)))];
+		const what = isElement ? 'element' : 'attribute';
+		const items = names.map((name, index) => item(name, `${what} in the XML context file`, '0', index))
+			.concat(stylesheetNames.map((name, index) => item(name, `${what} name in the stylesheet`, '1', index)));
+		items.push(item('*', `any ${what}`, '2', 0, vscode.CompletionItemKind.Operator));
+		if (isVersion4) {
+			// XPath 4.0 wildcards: for the local names of the prefixed names, e.g. *:note for lib:note - which matches in any
+			// namespace, whatever prefix the stylesheet binds to it - and for their prefixes, e.g. lib:*
+			const prefixed = names.concat(stylesheetNames).filter((name) => name.includes(':'));
+			const localNames = [...new Set(prefixed.map((name) => name.split(':')[1]))];
+			localNames.forEach((localName, index) => items.push(item(`*:${localName}`, `${what} '${localName}' in any namespace`, '3', index, vscode.CompletionItemKind.Operator)));
+			const prefixes = [...new Set(prefixed.map((name) => name.split(':')[0]))];
+			prefixes.forEach((prefix, index) => items.push(item(`${prefix}:*`, `any ${what} in the namespace for '${prefix}'`, '4', index, vscode.CompletionItemKind.Operator)));
+		}
+		return items;
 	}
 
 	// XSLT 4.0: within the content of a documentation note - an xsl:note with format="xdoc-md" - the tag names after '@',
