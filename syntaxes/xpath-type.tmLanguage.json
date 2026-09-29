@@ -1,0 +1,149 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "XPath SequenceType",
+	"scopeName": "source.xpath-type",
+	"comment": "XPath 4.0 SequenceTypes, for the hovers of the XSLT/XPath extension - included by source.xpath-signature after 'as': record(...) types with their field names, enum(...) types with their values, map, array and function types, named and built-in types, occurrence indicators and choices",
+	"patterns": [
+		{ "include": "#type" }
+	],
+	"repository": {
+		"type": {
+			"patterns": [
+				{
+					"comment": "before the named types, which 'as' would also match",
+					"match": "\\bas\\b",
+					"name": "keyword.other.as.xpath"
+				},
+				{ "include": "#record" },
+				{ "include": "#enum" },
+				{ "include": "#function-type" },
+				{ "include": "#constructor" },
+				{ "include": "#group" },
+				{ "include": "#builtin-type" },
+				{ "include": "#named-type" },
+				{ "include": "#string" },
+				{ "include": "#occurrence" },
+				{
+					"match": "\\|",
+					"name": "keyword.operator.choice.xpath"
+				},
+				{
+					"match": ",",
+					"name": "punctuation.separator.comma.xpath"
+				}
+			]
+		},
+		"record": {
+			"begin": "\\b(record)\\s*(\\()",
+			"beginCaptures": {
+				"1": { "name": "storage.type.record.xpath" },
+				"2": { "name": "punctuation.definition.parameters.begin.xpath" }
+			},
+			"end": "\\)",
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.parameters.end.xpath" }
+			},
+			"patterns": [
+				{
+					"comment": "a field name, at the start or after a comma - quoted if it isn't an NCName - and '?' for an optional field",
+					"match": "(?:(?<=\\()|(?<=,))\\s*('(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|[\\w.-]+)(\\?)?",
+					"captures": {
+						"1": { "name": "variable.other.property.xpath" },
+						"2": { "name": "keyword.operator.optional.xpath" }
+					}
+				},
+				{ "include": "#type" }
+			]
+		},
+		"enum": {
+			"begin": "\\b(enum)\\s*(\\()",
+			"beginCaptures": {
+				"1": { "name": "storage.type.enum.xpath" },
+				"2": { "name": "punctuation.definition.parameters.begin.xpath" }
+			},
+			"end": "\\)",
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.parameters.end.xpath" }
+			},
+			"patterns": [
+				{ "include": "#string" },
+				{
+					"match": ",",
+					"name": "punctuation.separator.comma.xpath"
+				}
+			]
+		},
+		"function-type": {
+			"comment": "a function type, e.g. fn(xs:string) as xs:integer, or function(*)",
+			"begin": "\\b(fn|function)\\s*(\\()",
+			"beginCaptures": {
+				"1": { "name": "storage.type.function.xpath" },
+				"2": { "name": "punctuation.definition.parameters.begin.xpath" }
+			},
+			"end": "\\)",
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.parameters.end.xpath" }
+			},
+			"patterns": [
+				{ "include": "#type" }
+			]
+		},
+		"constructor": {
+			"comment": "the item types written with brackets, e.g. map(xs:string, item()*), array(*), element(para), node()",
+			"begin": "\\b(map|array|item|node|element|attribute|document-node|schema-element|schema-attribute|empty-sequence|text|comment|processing-instruction|namespace-node|jnode|gnode|get)\\s*(\\()",
+			"beginCaptures": {
+				"1": { "name": "storage.type.xpath" },
+				"2": { "name": "punctuation.definition.parameters.begin.xpath" }
+			},
+			"end": "\\)",
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.parameters.end.xpath" }
+			},
+			"patterns": [
+				{ "include": "#type" }
+			]
+		},
+		"group": {
+			"comment": "a parenthesized item type, e.g. a choice (xs:string | xs:integer)",
+			"begin": "\\(",
+			"beginCaptures": {
+				"0": { "name": "punctuation.definition.group.begin.xpath" }
+			},
+			"end": "\\)",
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.group.end.xpath" }
+			},
+			"patterns": [
+				{ "include": "#type" }
+			]
+		},
+		"builtin-type": {
+			"comment": "a type in the XML Schema namespace, e.g. xs:string",
+			"match": "\\bxs:[\\w.-]+",
+			"name": "support.type.builtin.xpath"
+		},
+		"named-type": {
+			"comment": "a named item type, e.g. cx:point, declared with xsl:item-type",
+			"match": "(?<![\\w.$-])(?:[\\w.-]+:)?[A-Za-z_][\\w.-]*",
+			"name": "entity.name.type.xpath"
+		},
+		"string": {
+			"patterns": [
+				{
+					"begin": "'",
+					"end": "'(?!')",
+					"name": "string.quoted.single.xpath"
+				},
+				{
+					"begin": "\"",
+					"end": "\"(?!\")",
+					"name": "string.quoted.double.xpath"
+				}
+			]
+		},
+		"occurrence": {
+			"match": "[?*+]",
+			"name": "keyword.operator.occurrence.xpath"
+		}
+	}
+}

@@ -1509,6 +1509,23 @@
 					".xul",
 					".xoml"
 				]
+			},
+			{
+				"id": "xpath-signature",
+				"aliases": [
+					"XPath Signature"
+				]
+			}
+		],
+		"grammars": [
+			{
+				"language": "xpath-signature",
+				"scopeName": "source.xpath-signature",
+				"path": "./syntaxes/xpath-signature.tmLanguage.json"
+			},
+			{
+				"scopeName": "source.xpath-type",
+				"path": "./syntaxes/xpath-type.tmLanguage.json"
 			}
 		]
 	},

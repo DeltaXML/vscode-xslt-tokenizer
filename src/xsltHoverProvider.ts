@@ -42,7 +42,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			// the type as written in an attribute value, with its references replaced, e.g. &quot;
 			const declaration = `${quotedName}${field.optional ? '?' : ''}${field.type ? ' as ' + RecordTypes.decodeReferences(field.type).text : ''}`;
 			const markdown = new MarkdownString();
-			markdown.appendCodeblock(declaration, 'xpath');
+			markdown.appendCodeblock(declaration, XSLTHoverProvider.signatureLanguage);
 			const itemTypes = await this.itemTypeGlobals(document, token);
 			const fieldText = /^record\s*\(/.test(record.name) ? undefined : XdocNotes.recordFieldTexts(record.name, itemTypes, document.getText())(field.name);
 			// the values of a field with an enumeration type
@@ -432,8 +432,12 @@ export class XSLTHoverProvider implements HoverProvider {
 		return `[${title} specification](${url}#func-${parts[1] ? parts[1] + '-' : ''}${parts[2]})`;
 	}
 
+	// the language of the signatures' code blocks, for their highlighting: the grammar syntaxes/xpath-signature.tmLanguage.json,
+	// with the types from syntaxes/xpath-type.tmLanguage.json
+	public static readonly signatureLanguage = 'xpath-signature';
+
 	private createHover(signature: string, description: string) {
-		return new Hover(new MarkdownString().appendCodeblock(signature, 'ts').appendMarkdown('\n' + description));
+		return new Hover(new MarkdownString().appendCodeblock(signature, XSLTHoverProvider.signatureLanguage).appendMarkdown('\n' + description));
 	}
 
 	private getFunctionName(line: string, char: number) {

@@ -71,14 +71,14 @@ suite('Record fields: go to definition and hover', () => {
 	}
 
 	test('hover: a field with a record type', async () => {
-		assert.equal(await hoverText(at(4, '/address')), '\n```xpath\naddress as record(city as xs:string, zip? as xs:string)\n```\nField of the record type: `person`');
+		assert.equal(await hoverText(at(4, '/address')), '\n```xpath-signature\naddress as record(city as xs:string, zip? as xs:string)\n```\nField of the record type: `person`');
 	});
 
 	test('hover: an optional field', async () => {
-		assert.equal(await hoverText(at(4, '?age')), '\n```xpath\nage? as xs:integer\n```\nOptional field of the record type: `person`');
+		assert.equal(await hoverText(at(4, '?age')), '\n```xpath-signature\nage? as xs:integer\n```\nOptional field of the record type: `person`');
 	});
 
 	test('hover: a nested field', async () => {
-		assert.equal(await hoverText(at(4, '?city')), '\n```xpath\ncity as xs:string\n```\nField of the record type: `record(city as xs:string, zip? as xs:string)`');
+		assert.equal(await hoverText(at(4, '?city')), '\n```xpath-signature\ncity as xs:string\n```\nField of the record type: `record(city as xs:string, zip? as xs:string)`');
 	});
 });
