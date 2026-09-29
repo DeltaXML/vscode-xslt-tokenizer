@@ -148,9 +148,9 @@ export enum DiagnosticCode {
 }
 
 export class XsltTokenDiagnostics {
-	static oneCharOps = new Set([')', ']', '}', '-', '+', '|', '*', '.']);
+	static oneCharOps = new Set([')', ']', '}', '-', '+', '|', '*', '.', '×', '÷']);
 	static twoCharOps = new Set(['as', '//', '{}', '[]', '()', '*:', '::', '<<', '>>', '=>']);
-	static threeCharOps = new Set(['div', 'mod', '=!>']);
+	static threeCharOps = new Set(['div', 'mod', '=!>', '=?>']);
 	static otherOps = new Set(['idiv', 'union', 'except', 'intersect', '&lt;&lt;', '&gt;&gt;']);
 	static anonFunctionOps = new Set([')', '(', 'as', 'map', 'array', ',']);
 	static anonFunctionVarOps = new Set([')','as', ',']);
@@ -158,8 +158,9 @@ export class XsltTokenDiagnostics {
 	// operators within a path expression, all other binary operators end the right-hand operand of the simple map operator '!'
 	static pathExprOps = new Set(['/', '//', '!', '?', '::', '()', '[]', '{}', '*:', '..']);
 	// binary operators with lower precedence than the pipeline operator '->', these end the pipeline's right-hand operand
-	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>', '&lt;', '&lt;=', '&gt;', '&gt;=', '&lt;&lt;', '&gt;&gt;',
+	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '×', '÷', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>', '&lt;', '&lt;=', '&gt;', '&gt;=', '&lt;&lt;', '&gt;&gt;',
 		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance'].concat(Data.nodeComparisons40));
+	static operators40 = new Set(['×', '÷', '=?>'].concat(Data.nodeComparisons40));
 	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
 		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber ||
 			token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
@@ -1451,8 +1452,8 @@ export class XsltTokenDiagnostics {
 				const isRecordStep = xpathTokenType === TokenLevelState.nodeNameTest && prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/';
 				// a lookup with a string literal, e.g. $c?'first name'
 				const isStringLookup = xpathTokenType === TokenLevelState.string && prevToken?.value === '?' && token.value.length > 1;
-				if ((isRecordStep || isStringLookup || (xpathTokenType === TokenLevelState.mapNameLookup && prevToken?.value === '?')) && (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes)) {
-					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r, or a child step on a JNode for one, e.g. jtree($c)/r
+				if ((isRecordStep || isStringLookup || (xpathTokenType === TokenLevelState.mapNameLookup && (prevToken?.value === '?' || prevToken?.value === '=?>'))) && (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes)) {
+					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r, or a method call, e.g. $c =?> area(), or a child step on a JNode for one, e.g. jtree($c)/r
 					// the record type of a variable, and whether it's declared as a JNode for one, e.g. jnode(*, point)
 					const variableRecord = (variableToken: BaseToken): { record: RecordType | undefined, isJNode: boolean } => {
 						const fromType = (typeText: string, offset?: number) => {
@@ -1835,22 +1836,34 @@ export class XsltTokenDiagnostics {
 									} else if (!isForMember && !isForKeyValue) {
 										const opToken = allTokens[index + 2];
 										const expectedOp = valueText === 'let' ? ':=' : 'in';
+										// the index of the ':=' or 'in' after the variable, or -1 if it's not checked
+										let opIndex = index + 2;
 										if (opToken.value === 'as' && valueText !== 'member') {
 											// XPath 4.0 typed variable binding, e.g. let $x as xs:integer := 3
 											if (!XsltTokenDiagnostics.isXPath40(docType)) {
 												opToken.error = ErrorType.TypedBindingRequiresXPath40;
 												problemTokens.push(opToken);
+												opIndex = -1;
 											} else {
 												// the ':=' or 'in' follows the type
-												const afterType = allTokens.slice(index + 3).find((t) => t.tokenType === TokenLevelState.complexExpression);
-												if (afterType && afterType.value !== expectedOp) {
-													afterType['error'] = ErrorType.XPathExpectedComplex;
-													problemTokens.push(afterType);
-												}
+												opIndex = allTokens.findIndex((t, i) => i > index + 2 && t.tokenType === TokenLevelState.complexExpression);
 											}
-										} else if (opToken.value !== expectedOp) {
-											opToken['error'] = ErrorType.XPathExpectedComplex;
-											problemTokens.push(opToken);
+										}
+										const positionalToken = opIndex > -1 ? allTokens[opIndex] : undefined;
+										if (valueText === 'for' && positionalToken?.value === 'at' && positionalToken.tokenType === TokenLevelState.complexExpression) {
+											// XPath 4.0 positional variable, e.g. for $x at $i in $seq - the 'in' follows it
+											if (!XsltTokenDiagnostics.isXPath40(docType)) {
+												positionalToken.error = ErrorType.PositionalVariableRequiresXPath40;
+												problemTokens.push(positionalToken);
+												opIndex = -1;
+											} else {
+												opIndex += 2;
+											}
+										}
+										const afterBinding = opIndex > -1 ? allTokens[opIndex] : undefined;
+										if (afterBinding && afterBinding.value !== expectedOp) {
+											afterBinding['error'] = ErrorType.XPathExpectedComplex;
+											problemTokens.push(afterBinding);
 										}
 									}
 								}
@@ -1865,7 +1878,9 @@ export class XsltTokenDiagnostics {
 								break;
 							case 'key':
 							case 'value':
-								// XPath 4.0: for key $k value $v in map-expression - the variable after 'value' is a new binding
+							case 'at':
+								// XPath 4.0: for key $k value $v in map-expression - the variable after 'value' is a new binding, as is
+								// the positional variable after 'at', e.g. for $x at $i in $seq
 								if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].isRangeVar) {
 									preXPathVariable = xpathStack[xpathStack.length - 1].preXPathVariable;
 								}
@@ -1984,9 +1999,10 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.operator:
 						let isXPathError = false;
 						let tv = token.value;
-						// the XPath 4.0 node comparisons, e.g. is-not, precedes and follows-or-is
-						if (!XsltTokenDiagnostics.isXPath40(docType) && Data.nodeComparisons40.includes(tv) && !token.error) {
-							token.error = ErrorType.NodeComparisonRequiresXPath40;
+						// the XPath 4.0 operators: the node comparisons, e.g. is-not, precedes and follows-or-is, '×', '÷' and the
+						// method call '=?>'
+						if (!XsltTokenDiagnostics.isXPath40(docType) && XsltTokenDiagnostics.operators40.has(tv) && !token.error) {
+							token.error = ErrorType.OperatorRequiresXPath40;
 							problemTokens.push(token);
 						}
 
@@ -3472,7 +3488,7 @@ export class XsltTokenDiagnostics {
 		if (tokenType === TokenLevelState.number) {
 			errorSingleSeparators = ['|'];
 		} else if (tokenType === TokenLevelState.string) {
-			errorSingleSeparators = ['|', '+', '-', '*'];
+			errorSingleSeparators = ['|', '+', '-', '*', '×', '÷'];
 		} else {
 			errorSingleSeparators = [];
 		}
@@ -4448,7 +4464,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.NumberRequiresXPath40:
 					msg = `XPath: Hexadecimal and binary numeric literals, and '_' digit separators, require XPath 4.0: '${tokenValue}'`;
 					break;
-				case ErrorType.NodeComparisonRequiresXPath40:
+				case ErrorType.PositionalVariableRequiresXPath40:
+					msg = `XPath: A positional variable, 'at $var', in a for clause requires XPath 4.0`;
+					break;
+				case ErrorType.OperatorRequiresXPath40:
 					msg = `XPath: The '${tokenValue}' operator requires XPath 4.0`;
 					break;
 				case ErrorType.AxisRequiresXPath40:

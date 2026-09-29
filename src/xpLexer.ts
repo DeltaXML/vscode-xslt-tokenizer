@@ -140,14 +140,16 @@ export enum ModifierState {
 }
 
 export class Data {
-    // ';' ends an XPath 4.0 namespace declaration, e.g. declare namespace p = 'uri';
-    public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%', ';'];
+    // ';' ends an XPath 4.0 namespace declaration, e.g. declare namespace p = 'uri'; - '×' and '÷' are XPath 4.0's
+    // multiplication and division operators
+    public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%', ';', '×', '÷'];
     public static completionTriggers = ['"', '!', '*', '+', ',', '/', '=', '|', '(', '[', '{'];
     public static estimatorSeparators = Data.separators.concat(['(',')','[',']','{', '}','\'', '"']);
     public static readonly fnTypes = ['map', 'array', 'function', 'record'];
 
     public static doubleSeps = ['!=', '*:', '..', '//', '::', ':=', '->', '<<', '<=', '=>', '>=', '>>', '||', '!!', '??'];
-    public static tripleSeps = ['=!>'];
+    // the mapping arrow, and XPath 4.0's method call, e.g. $r =?> area()
+    public static tripleSeps = ['=!>', '=?>'];
     public static anySeps = ['=', ':', '.', '/', '=', '<', '>', '|', '!', '*', '+', ',', '-', '.', '?', '['];
     // XPath 4.0 node comparisons, as well as 'is', '<<' and '>>' - operators after an operand
     public static nodeComparisons40 = ["is-not", "precedes", "follows", "precedes-or-is", "follows-or-is"];
@@ -190,7 +192,8 @@ export class Data {
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
     // 'key' and 'value' are for XPath 4.0 map bindings: for key $k value $v in map-expression
-    public static rangeVars = ["every", "for", "let", "member", "some", "return", "key", "value"];
+    // 'at' is for a positional variable, e.g. for $x at $i in $seq
+    public static rangeVars = ["every", "for", "let", "member", "some", "return", "key", "value", "at"];
     public static firstParts = ["cast", "castable", "instance", "treat"];
     public static secondParts = ["as", "of"];
 
@@ -1397,6 +1400,9 @@ export class XPathLexer {
                     case CharLevelState.dSep:
                         if (prevToken.value === '()' || prevToken.value === '..' || prevToken.value === '[]' || prevToken.value === '{}') {
                             Data.setAsOperatorIfKeyword(currentToken);
+                        } else if (prevToken.value === '=?>') {
+                            // XPath 4.0 method call: the name is a key of the map, as after '?'
+                            currentToken.tokenType = TokenLevelState.mapNameLookup;
                         }
                         break;
                     default: // current token is an lName but previous token was not
@@ -1734,7 +1740,8 @@ export enum ErrorType {
     NoteVariableDuplicate,
     NoteRequiresXSLT40,
     SaxonTypeAlias,
-    NodeComparisonRequiresXPath40,
+    OperatorRequiresXPath40,
+    PositionalVariableRequiresXPath40,
     KindTestNameRequiresXPath40,
     FixedNamespacesToken,
     RecordFieldUnknown,
