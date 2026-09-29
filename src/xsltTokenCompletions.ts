@@ -2706,9 +2706,13 @@ export class XsltTokenCompletions {
 					const text = document.getText();
 					const tagStart = text.lastIndexOf('<', document.offsetAt(pos) - 1);
 					if (tagStart > -1 && XdocNotes.isDocumentationNoteParent(text, tagStart)) {
+						// preselected, and before the note, as it's the one that's likely to be wanted
 						const docItem = new vscode.CompletionItem(tagName + ' xdoc-md', vscode.CompletionItemKind.Struct);
 						docItem.documentation = 'a documentation note, with Markdown text and tags such as @param, shown in hovers';
 						docItem.insertText = new vscode.SnippetString('xsl:note format="xdoc-md">\n\t$0\n</xsl:note>');
+						docItem.sortText = tagName;
+						docItem.preselect = true;
+						newItem.sortText = tagName + '!';
 						completionItems.push(docItem);
 					}
 				} else if (tagName === 'xsl:sequence') {

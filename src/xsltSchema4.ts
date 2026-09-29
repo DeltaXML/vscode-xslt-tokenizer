@@ -1073,8 +1073,12 @@ export class XSLTSchema4 implements SchemaData {
         },
         "xsl:note": {
             base: 'xsl:versioned-element-type',
-            // permitted anywhere, with any attributes and content
-            anyAttribute: true
+            // permitted anywhere, with any attributes and content - 'format' isn't in the specification, but is offered
+            // for documentation notes, with format="xdoc-md" (see XdocNotes), with any value
+            anyAttribute: true,
+            attrs: {
+                'format': 'xs:string'
+            }
         },
         "xsl:non-matching-substring": { type: 'xsl:sequence-constructor-or-select' },
         "xsl:on-completion": { type: 'xsl:sequence-constructor-or-select' },

@@ -99,6 +99,27 @@ suite('Instruction snippets', () => {
 		});
 	});
 
+	test('xsl:note xdoc-md is preselected, and before xsl:note, where it is offered', async () => {
+		const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="4.0">\n  <xsl:function name="f:f" xmlns:f="f"><|</xsl:function>\n</xsl:stylesheet>`;
+		const offset = marked.indexOf('|');
+		const document = await vscode.workspace.openTextDocument({ content: marked.replace('|', ''), language: 'xslt' });
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.TriggerCharacter, triggerCharacter: '<' });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		const docItem = items.find((item) => item.label === 'xsl:note xdoc-md')!;
+		const noteItem = items.find((item) => item.label === 'xsl:note')!;
+		assert.isTrue(docItem.preselect);
+		assert.isTrue((docItem.sortText ?? '') < (noteItem.sortText ?? ''));
+	});
+
+	test('the attributes of an xsl:note: format', async () => {
+		const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="4.0">\n  <xsl:function name="f:f" xmlns:f="f"><xsl:note |>x</xsl:note></xsl:function>\n</xsl:stylesheet>`;
+		const offset = marked.indexOf('|');
+		const document = await vscode.workspace.openTextDocument({ content: marked.replace('|', ''), language: 'xslt' });
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		assert.include(items.map((item) => typeof item.label === 'string' ? item.label : item.label.label), 'format');
+	});
+
 	test('the format of an xsl:note: xdoc-md', async () => {
 		const marked = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="4.0">\n  <xsl:function name="f:f" xmlns:f="f"><xsl:note format="|"/></xsl:function>\n</xsl:stylesheet>`;
 		const offset = marked.indexOf('|');
