@@ -161,6 +161,21 @@ suite('Wrap with', () => {
 			assert.notInclude(await actions('    <a>[<b/>\n    </a>]'), 'Wrap with...');
 		});
 
+		test('not when no instruction can wrap the target: an xsl:param', async () => {
+			assert.notInclude(await actions('    <xsl:param na|me="p"/>'), 'Wrap with...');
+		});
+
+		test('not when no instruction can wrap the target: an xsl:when', async () => {
+			assert.notInclude(await actions('    <xsl:choose>\n      <xsl:when te|st="1"/>\n    </xsl:choose>'), 'Wrap with...');
+		});
+
+		test('not for a top-level declaration', async () => {
+			const document = await vscode.workspace.openTextDocument({ content: stylesheet('    <a/>'), language: 'xslt' });
+			const position = new vscode.Position(1, 18);
+			const titles = (new XSLTCodeActions().provideCodeActions(document, new vscode.Range(position, position), { diagnostics: [], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? []).map((a) => a.title);
+			assert.notInclude(titles, 'Wrap with...');
+		});
+
 		test('the command has a keybinding in XSLT editors', () => {
 			const contributes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).contributes;
 			const keybinding = contributes.keybindings.find((k: { command: string }) => k.command === 'xslt-xpath.wrapWith');

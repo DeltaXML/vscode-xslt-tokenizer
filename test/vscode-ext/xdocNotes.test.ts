@@ -170,12 +170,15 @@ suite('Documentation notes', () => {
 		});
 	});
 
-	test('hover: nothing for the name of a global xsl:param', async () => {
-		assert.isUndefined(await hoverText(`<xsl:param name="¦g" select="1"/>`));
+	// global parameters and variables are in moduleNotes.test.ts
+	test('hover: the name of a global xsl:param, without documentation', async () => {
+		const text = await hoverText(`<xsl:param name="¦g" select="1"/>`);
+		assert.include(text, '$g');
+		assert.include(text, 'Global parameter, declared in this stylesheet');
 	});
 
-	test('hover: nothing for the name of an xsl:variable', async () => {
-		assert.isUndefined(await hoverText(`<xsl:variable name="v¦v" select="1"/>`));
+	test('hover: nothing for the name of a local xsl:variable', async () => {
+		assert.isUndefined(await hoverText(`<xsl:template name="t2"><xsl:variable name="v¦v" select="1"/></xsl:template>`));
 	});
 
 	test('signature help: the descriptions of the function and its parameters', async () => {
@@ -239,7 +242,8 @@ suite('Documentation notes', () => {
 		['an xsl:item-type with a note that is not a documentation note', stylesheet(`<xsl:item-type na¦me="cx:size" as="xs:string">\n    <xsl:note>A size.</xsl:note>\n  </xsl:item-type>`)],
 		['a template with a note that is not a documentation note', stylesheet(`<xsl:template na¦me="t2">\n    <xsl:note>Internal.</xsl:note>\n    <xsl:sequence select="1"/>\n  </xsl:template>`)],
 		['an xsl:item-type with no note, in XSLT 3.0', stylesheet(`<xsl:item-type na¦me="cx:size" as="xs:string"/>`, '3.0')],
-		['another element', stylesheet(`<xsl:variable na¦me="v" select="1"/>`)],
+		['another element', stylesheet(`<xsl:template name="t2"><xsl:sequence se¦lect="1"/></xsl:template>`)],
+		['a local xsl:variable', stylesheet(`<xsl:template name="t2"><xsl:variable na¦me="v" select="1"/></xsl:template>`)],
 		['XSLT 3.0', stylesheet(`<xsl:template na¦me="t2"><xsl:sequence select="1"/></xsl:template>`, '3.0')],
 	];
 	noAction.forEach(([label, marked]) => {

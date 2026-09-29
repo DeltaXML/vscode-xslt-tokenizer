@@ -138,6 +138,7 @@ export enum DiagnosticCode {
 	switchCasesMissing,
 	noteParamsMissing,
 	noteFieldsMissing,
+	noteVariablesMissing,
 	enumValueDuplicate
 }
 
@@ -2921,7 +2922,7 @@ export class XsltTokenDiagnostics {
 		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
 		problemTokens.forEach((token) => {
 			if (token.recordFix) {
-				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.noteVariablesMissing || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
 					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
 			}
 		});
@@ -4231,9 +4232,24 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				}
-				case ErrorType.NoteTagNotApplicable:
-					msg = `XSLT: @${tokenValue} is not for an xsl:item-type, which is a type, not a function or template`;
+				case ErrorType.NoteTagNotApplicable: {
+					const [tagName, target] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: @${tagName} is not for ${target}`;
 					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.NoteVariableUnknown:
+					msg = `XSLT: The module note's @variable '$${tokenValue}' is not a global variable of this module`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteVariableDuplicate:
+					msg = `XSLT: The module note already has an @variable for '$${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteVariablesMissing:
+					msg = `XSLT: The module note has no @variable for: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Information;
+					errCode = DiagnosticCode.noteVariablesMissing;
 					break;
 				case ErrorType.NoteFieldNotApplicable:
 					msg = `XSLT: @field is for the fields of a record type, declared with xsl:item-type - not for ${tokenValue}`;
@@ -4628,26 +4644,49 @@ export class XsltTokenDiagnostics {
 		const markup = RecordTypes.blankMarkup(text);
 		const openElements = RecordTypes.openElementsAt(markup, noteOffsets);
 		noteOffsets.forEach((noteOffset, index) => {
-			const declaration = openElements[index][openElements[index].length - 1];
-			if (!declaration || !['xsl:function', 'xsl:template', 'xsl:item-type'].includes(declaration.name)) {
+			const ancestors = openElements[index];
+			const declaration = ancestors[ancestors.length - 1];
+			const isRoot = !!declaration && XdocNotes.rootNames.includes(declaration.name) && ancestors.length === 1;
+			const isGlobalVariable = !!declaration && (declaration.name === 'xsl:param' || declaration.name === 'xsl:variable') && ancestors.length === 2 && XdocNotes.rootNames.includes(ancestors[0].name);
+			if (!declaration || !(['xsl:function', 'xsl:template', 'xsl:item-type'].includes(declaration.name) || isRoot || isGlobalVariable)) {
+				return;
+			}
+			// for the module, only its note - the first child of the root element with format="xdoc-md" - not another one
+			if (isRoot && RecordTypes.childElements(text, markup, declaration.offset, 'xsl:note').find((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'format') === XdocNotes.format) !== noteOffset) {
 				return;
 			}
 			const note = XdocNotes.parseNote(text, markup, noteOffset);
 			if (!note) {
 				return;
 			}
-			if (declaration.name === 'xsl:item-type') {
-				// an item type has no result, and raises no errors
-				note.tags.filter((tag) => tag.name === 'return' || tag.name === 'error').forEach((tag) => {
-					const position = document.positionAt(tag.offset);
-					problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.name.length + 1, value: tag.name, tokenType: 0, error: ErrorType.NoteTagNotApplicable });
-				});
+			// the tags for another kind of declaration, e.g. @return for an item type, which has no result
+			const applicable = XdocNotes.tagNamesFor(declaration.name);
+			const target = () => declaration.name === 'xsl:item-type' ? 'an xsl:item-type, which is a type, not a function or template' :
+				isRoot ? `the module note of an ${declaration.name}, as a module isn't a function or template` :
+				isGlobalVariable ? `the note of a global ${declaration.name} - its own documentation is the note's text` :
+				`an ${declaration.name} - it is for a global variable, in the module note`;
+			note.tags.filter((tag) => ['return', 'error', 'variable'].concat(isGlobalVariable ? ['param'] : []).includes(tag.name) && !applicable.includes(tag.name)).forEach((tag) => {
+				const position = document.positionAt(tag.offset);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.name.length + 1, value: tag.name + RecordTypes.valueSeparator + target(), tokenType: 0, error: ErrorType.NoteTagNotApplicable });
+			});
+			const namedTags = (tagName: string) => note.tags.filter((tag) => tag.name === tagName && tag.paramName && tag.paramOffset !== undefined).map((tag) => ({ tag, name: tag.paramName!, offset: tag.paramOffset! }));
+			if (isRoot) {
+				// the global parameters and variables - those with notes of their own needn't be in the module note
+				XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, namedTags('param'), XdocNotes.paramNames(text, markup, declaration.offset), {
+					unknown: (name) => ({ value: name + RecordTypes.valueSeparator + 'module', error: ErrorType.NoteParamUnknown }),
+					duplicate: ErrorType.NoteParamDuplicate, missing: ErrorType.NoteParamsMissing, label: (name) => '$' + name, line: (name) => `@param $${name} description`
+				}, problemTokens, XdocNotes.globalNamesWithoutNotes(text, markup, declaration.offset, 'xsl:param'));
+				const variableNames = RecordTypes.childElements(text, markup, declaration.offset, 'xsl:variable').map((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'name')).filter((name): name is string => !!name);
+				XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, namedTags('variable'), variableNames, {
+					unknown: (name) => ({ value: name, error: ErrorType.NoteVariableUnknown }),
+					duplicate: ErrorType.NoteVariableDuplicate, missing: ErrorType.NoteVariablesMissing, label: (name) => '$' + name, line: (name) => `@variable $${name} description`
+				}, problemTokens, XdocNotes.globalNamesWithoutNotes(text, markup, declaration.offset, 'xsl:variable'));
+			} else if (!isGlobalVariable) {
+				XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, namedTags('param'), XdocNotes.paramNames(text, markup, declaration.offset), {
+					unknown: (name) => ({ value: name + RecordTypes.valueSeparator + declaration.name, error: ErrorType.NoteParamUnknown }),
+					duplicate: ErrorType.NoteParamDuplicate, missing: ErrorType.NoteParamsMissing, label: (name) => '$' + name, line: (name) => `@param $${name} description`
+				}, problemTokens);
 			}
-			XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, note.tags.filter((tag) => tag.name === 'param' && tag.paramName && tag.paramOffset !== undefined)
-				.map((tag) => ({ tag, name: tag.paramName!, offset: tag.paramOffset! })), XdocNotes.paramNames(text, markup, declaration.offset), {
-				unknown: (name) => ({ value: name + RecordTypes.valueSeparator + declaration.name, error: ErrorType.NoteParamUnknown }),
-				duplicate: ErrorType.NoteParamDuplicate, missing: ErrorType.NoteParamsMissing, label: (name) => '$' + name, line: (name) => `@param $${name} description`
-			}, problemTokens);
 			const fieldTags = note.tags.filter((tag) => tag.name === 'field' && tag.fieldName !== undefined && tag.fieldOffset !== undefined);
 			if (fieldTags.length === 0) {
 				return;
@@ -4674,9 +4713,10 @@ export class XsltTokenDiagnostics {
 	}
 
 	// the parameter or field names of a note's @param or @field tags: each must be one of the names, and not a duplicate -
-	// and when there are any, the names without one are reported, with a fix that adds them after the last
+	// and when there are any, the names without one are reported, with a fix that adds them after the last - of those
+	// that are required, e.g. not a global parameter with a note of its own
 	private static checkNoteNames(document: vscode.TextDocument, text: string, noteOffset: number, named: { tag: XdocTag, name: string, offset: number }[], names: string[],
-		errors: { unknown: (name: string) => { value: string, error: ErrorType }, duplicate: ErrorType, missing: ErrorType, label: (name: string) => string, line: (name: string) => string }, problemTokens: BaseToken[]) {
+		errors: { unknown: (name: string) => { value: string, error: ErrorType }, duplicate: ErrorType, missing: ErrorType, label: (name: string) => string, line: (name: string) => string }, problemTokens: BaseToken[], required = names) {
 		const documented: string[] = [];
 		named.forEach(({ name, offset }) => {
 			const position = document.positionAt(offset);
@@ -4689,7 +4729,7 @@ export class XsltTokenDiagnostics {
 			}
 			documented.push(name);
 		});
-		const missing = names.filter((name) => !documented.includes(name));
+		const missing = required.filter((name) => !documented.includes(name));
 		if (named.length > 0 && missing.length > 0) {
 			const last = named[named.length - 1].tag;
 			const lineStart = text.lastIndexOf('\n', last.offset - 1) + 1;

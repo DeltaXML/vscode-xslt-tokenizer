@@ -204,7 +204,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		});
 	}
 
-	// XSLT 4.0: for a parameter of an xsl:function or xsl:template, the name in its @param in the declaration's
+	// XSLT 4.0: for a global xsl:param or xsl:variable, the name in its @param or @variable in the module note - and for a
+	// parameter of an xsl:function or xsl:template, the name in its @param in the declaration's
 	// documentation note - and for a function parameter, keyword arguments for it in calls of the function, e.g.
 	// scale := 2 in ex:area(2, 3, scale := 2) - in the document and the modules it includes or imports (hrefs), and in the
 	// other stylesheets that use the declaration (see usingModules) - where, for a template parameter, the xsl:with-param
@@ -213,8 +214,18 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		const declarationDocument = definition.uri.toString() === document.uri.toString() ? document : await vscode.workspace.openTextDocument(definition.uri);
 		const text = declarationDocument.getText();
 		const tagStart = text.lastIndexOf('<', declarationDocument.offsetAt(definition.range.start));
-		const paramName = tagStart > -1 && /^<xsl:param\s/.test(text.substring(tagStart, tagStart + 11)) ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') : undefined;
 		const markup = RecordTypes.blankMarkup(text);
+		// a global xsl:param or xsl:variable: its @param or @variable in the module note
+		const globalElement = tagStart > -1 ? /^<(xsl:param|xsl:variable)\s/.exec(text.substring(tagStart, tagStart + 14))?.[1] : undefined;
+		if (globalElement && XdocNotes.isGlobal(markup, tagStart)) {
+			const globalName = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name');
+			const tagName = globalElement === 'xsl:param' ? 'param' : 'variable';
+			return (XdocNotes.moduleNote(text, markup)?.tags ?? []).filter((tag) => tag.name === tagName && tag.paramName === globalName && tag.paramOffset !== undefined).map((tag) => {
+				const start = declarationDocument.positionAt(tag.paramOffset!);
+				return new vscode.Location(declarationDocument.uri, new vscode.Range(start, start.translate(0, globalName!.length)));
+			});
+		}
+		const paramName = tagStart > -1 && /^<xsl:param\s/.test(text.substring(tagStart, tagStart + 11)) ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') : undefined;
 		const ancestors = paramName ? RecordTypes.openElements(markup, tagStart) : [];
 		const parent = ancestors[ancestors.length - 1];
 		if (!paramName || !parent || (parent.name !== 'xsl:function' && parent.name !== 'xsl:template')) {

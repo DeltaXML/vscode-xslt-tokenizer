@@ -54,6 +54,16 @@ suite('Documentation notes: semantic tokens', () => {
 		]);
 	});
 
+	test('names after @variable and @param, and the module tags', async () => {
+		assert.deepEqual(await xdocTokens(`<xsl:note format="xdoc-md">
+      @variable $origin the start
+      @author Ann
+    </xsl:note>`), [
+			['@variable', 'xdocTag'], [' ', 'xdocText'], ['$origin', 'xdocParam'], [' the start', 'xdocText'],
+			['@author', 'xdocTag'], [' Ann', 'xdocText']
+		]);
+	});
+
 	test('field names after @field, one quoted', async () => {
 		assert.deepEqual(await xdocTokens(`<xsl:note format="xdoc-md">
       @field w the width

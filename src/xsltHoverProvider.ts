@@ -1,5 +1,6 @@
 import * as path from "path";
-import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument } from "vscode";
+import * as fs from "fs";
+import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument, workspace } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration } from "./xslLexer";
@@ -59,7 +60,8 @@ export class XSLTHoverProvider implements HoverProvider {
 			if (!this.definitionProvider) {
 				return undefined;
 			}
-			return await this.findDeclarationHover(document, position, token) ?? await this.findTemplateHover(document, position, token) ??
+			return this.findModuleNoteHover(document, position) ?? await this.findVariableHover(document, position, token) ?? await this.findModuleHover(document, position) ??
+				await this.findDeclarationHover(document, position, token) ?? await this.findTemplateHover(document, position, token) ??
 				await this.findItemTypeHover(document, position, token);
 		}
 
@@ -137,6 +139,124 @@ export class XSLTHoverProvider implements HoverProvider {
 		return this.createHover(declarationParamLabels(declaration, document.getText())[paramIndex], `${paramText ? paramText + '\n\n---\n' : ''}Parameter of the ${kind}: \`${declaration.name}\``);
 	}
 
+	// XSLT 4.0: for a variable reference, e.g. $scale: for a global xsl:param or xsl:variable, its type and documentation -
+	// its own note, or its @param or @variable in the module note - or for a parameter of a function or template, its
+	// @param in the declaration's note - not for other variables, which have no documentation
+	private async findVariableHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		const wordRange = document.getWordRangeAtPosition(position, /\$[\w.:-]+/);
+		if (!wordRange) {
+			return undefined;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { allTokens, globalInstructionData, allImportedGlobals } = await this.definitionProvider!.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+		const isXSLT = this.languageConfiguration?.docType !== DocumentTypes.XPath;
+		const location = XsltTokenDefinitions.findDefinition(isXSLT, document, allTokens, globalInstructionData, allImportedGlobals, position).definitionLocation;
+		if (!location) {
+			return undefined;
+		}
+		let declarationDocument: TextDocument;
+		try {
+			declarationDocument = location.uri.toString() === document.uri.toString() ? document : await workspace.openTextDocument(location.uri);
+		} catch {
+			return undefined;
+		}
+		const text = declarationDocument.getText();
+		const nameOffset = declarationDocument.offsetAt(location.range.start);
+		const tagStart = text.lastIndexOf('<', nameOffset);
+		const element = /^<(xsl:param|xsl:variable)\s/.exec(text.substring(tagStart, tagStart + 14))?.[1];
+		const nameStart = element ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'name') : undefined;
+		// the declaration's name attribute, not e.g. a variable declared in an XPath expression within it
+		if (!element || nameStart === undefined || nameOffset < nameStart || nameOffset > nameStart + (RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name')?.length ?? 0)) {
+			return undefined;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const href = declarationDocument === document ? undefined : declarationDocument.fileName;
+		const itemTypes = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType);
+		if (XdocNotes.isGlobal(markup, tagStart)) {
+			return this.globalVariableHover(text, tagStart, href, itemTypes);
+		}
+		// a parameter of a function or template
+		const ancestors = RecordTypes.openElements(markup, tagStart);
+		const parent = ancestors[ancestors.length - 1];
+		const parentName = element === 'xsl:param' && parent && (parent.name === 'xsl:function' || parent.name === 'xsl:template') ? RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name') : undefined;
+		if (!parent || !parentName) {
+			return undefined;
+		}
+		const name = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name')!;
+		const asText = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as');
+		const note = XdocNotes.forDeclaration(text, parent.offset, markup);
+		const paramText = note ? XdocNotes.paramText(note, name) : undefined;
+		const enumValues = asText ? RecordTypes.resolveEnum(asText, XSLTHoverProvider.itemTypeMap(itemTypes)) : undefined;
+		const details = [paramText, enumValues ? XSLTHoverProvider.enumValuesMarkdown(enumValues) : undefined].filter((part) => !!part).join('\n\n');
+		const kind = parent.name === 'xsl:function' ? 'function' : 'template';
+		return this.createHover(`$${name}${asText ? ' as ' + asText : ''}`, `${details ? details + '\n\n---\n' : ''}Parameter of the ${kind}: \`${parentName}\``);
+	}
+
+	// a global xsl:param or xsl:variable: its declared type, its documentation - its own note, or its @param or @variable
+	// in the module note - and for an enumeration type, its values - with the module declaring it (href), if it's another
+	private globalVariableHover(text: string, tagStart: number, href: string | undefined, itemTypes: GlobalInstructionData[]) {
+		const isParam = text.startsWith('<xsl:param', tagStart);
+		const name = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') ?? '';
+		const asText = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as');
+		const documentation = XdocNotes.globalDocumentation(text, tagStart);
+		const enumValues = asText ? RecordTypes.resolveEnum(asText, XSLTHoverProvider.itemTypeMap(itemTypes)) : undefined;
+		const details = [documentation, enumValues ? XSLTHoverProvider.enumValuesMarkdown(enumValues) : undefined].filter((part) => !!part).join('\n\n');
+		const kind = isParam ? 'Global parameter' : 'Global variable';
+		const description = href ? `${kind}, declared in ${path.basename(href)}` : `${kind}, declared in this stylesheet`;
+		return this.createHover(`$${name}${asText ? ' as ' + asText : ''}`, details ? `${details}\n\n---\n${description}` : description);
+	}
+
+	// XSLT 4.0: for the href of an xsl:import or xsl:include, the module's note - the first child of its root element
+	private async findModuleHover(document: TextDocument, position: Position): Promise<Hover | undefined> {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset);
+		if (tagStart < 0 || !/^<xsl:(import|include)\s/.test(text.substring(tagStart, tagStart + 13))) {
+			return undefined;
+		}
+		const hrefStart = RecordTypes.attributeValueOffset(text, tagStart + 1, 'href');
+		const href = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'href');
+		if (hrefStart === undefined || !href || offset < hrefStart || offset > hrefStart + href.length || document.uri.scheme !== 'file' || href.includes('{')) {
+			return undefined;
+		}
+		const modulePath = path.resolve(path.dirname(document.fileName), href.startsWith('file:') ? decodeURIComponent(href.replace(/^file:(\/\/)?/, '')) : href);
+		const open = workspace.textDocuments.find((d) => d.fileName === modulePath);
+		let moduleText: string;
+		try {
+			moduleText = open ? open.getText() : fs.readFileSync(modulePath, 'utf8');
+		} catch {
+			return undefined;
+		}
+		const note = XdocNotes.moduleNote(moduleText);
+		return this.createHover(`module ${path.basename(modulePath)}`, `${note ? XdocNotes.toMarkdown(note) + '\n\n---\n' : ''}Stylesheet module: ${modulePath}`);
+	}
+
+	// XSLT 4.0: for the start tag of the module note, a preview of the note, as it's shown for an xsl:import or
+	// xsl:include of the module - not for other notes, which are shown where their declarations are used
+	private findModuleNoteHover(document: TextDocument, position: Position): Hover | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset);
+		if (tagStart < 0 || !/^<xsl:note[\s>]/.test(text.substring(tagStart, tagStart + 10))) {
+			return undefined;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const startTag = new RegExp(RecordTypes.tagPattern, 'y');
+		startTag.lastIndex = tagStart;
+		const match = startTag.exec(markup);
+		const root = XdocNotes.rootOffset(markup);
+		const moduleNoteOffset = root === undefined ? undefined : RecordTypes.childElements(text, markup, root, 'xsl:note')
+			.find((noteOffset) => RecordTypes.attributeOfElementAt(text, noteOffset + 1, 'format') === XdocNotes.format);
+		if (!match || offset >= tagStart + match[0].length || moduleNoteOffset !== tagStart) {
+			return undefined;
+		}
+		const note = XdocNotes.parseNote(text, markup, tagStart);
+		return note ? this.createHover(`module ${path.basename(document.fileName)}`, `${XdocNotes.toMarkdown(note)}\n\n---\nPreview of the module note, as shown for an xsl:import or xsl:include of this module`) : undefined;
+	}
+
 	// a named item type's declaration and documentation note - and for an enumeration type, its values, resolved from
 	// the item types, e.g. for one declared as another, or as a choice of enumeration types
 	private itemTypeHover(document: TextDocument, itemType: GlobalInstructionData, itemTypes: GlobalInstructionData[]) {
@@ -192,9 +312,15 @@ export class XSLTHoverProvider implements HoverProvider {
 			return nameStart !== undefined && name ? { nameStart, name } : undefined;
 		};
 		const tagStart = text.lastIndexOf('<', offset);
-		const element = /^<(xsl:function|xsl:template|xsl:item-type|xsl:param)\s/.exec(text.substring(tagStart, tagStart + 16))?.[1];
+		const element = /^<(xsl:function|xsl:template|xsl:item-type|xsl:param|xsl:variable)\s/.exec(text.substring(tagStart, tagStart + 16))?.[1];
 		const own = element ? nameAt(tagStart) : undefined;
 		if (!own || offset < own.nameStart || offset > own.nameStart + own.name.length) {
+			return undefined;
+		}
+		// a global xsl:param or xsl:variable
+		if ((element === 'xsl:param' || element === 'xsl:variable') && XdocNotes.isGlobal(RecordTypes.blankMarkup(text), tagStart)) {
+			return this.globalVariableHover(text, tagStart, undefined, await this.itemTypeGlobals(document, token));
+		} else if (element === 'xsl:variable') {
 			return undefined;
 		}
 		// for an xsl:param, the function or template declaring it

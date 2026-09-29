@@ -13,6 +13,10 @@
  * The tags are @param $name, @return, @see, @since, @deprecated and @error - each starts a line, and continues on the
  * following lines up to the next tag. For an xsl:item-type that's a record type, @field name documents a field - not an
  * xqDoc tag, but in the same style - with the name quoted if it's not an NCName, e.g. @field 'nick name'.
+ *
+ * A module note, as the first child of the xsl:stylesheet, xsl:transform or xsl:package, describes the module - with
+ * @param $name for its global parameters, @variable $name for its global variables, and xqDoc's @author and @version. A
+ * global xsl:param or xsl:variable may have a note of its own instead, for more detail.
  */
 import * as fs from 'fs';
 import { RecordTypes } from './recordTypes';
@@ -20,7 +24,7 @@ import { RecordExtraction } from './recordExtraction';
 
 export interface XdocTag {
 	name: string;
-	// for @param, the parameter name, without the '$'
+	// for @param, the parameter name - or for @variable, the variable name - without the '$'
 	paramName?: string;
 	// for @field, the field name, without any quotes
 	fieldName?: string;
@@ -135,7 +139,7 @@ export class XdocNotes {
 			if (tag && XdocNotes.tagNames.includes(tag[3])) {
 				const tagEnd = tag[1].length + tag[2].length;
 				typed.push({ start: tag[1].length, end: tagEnd, type: XdocNotes.tagType });
-				if ((tag[3] === 'param' || tag[3] === 'field') && tag[5]) {
+				if ((tag[3] === 'param' || tag[3] === 'variable' || tag[3] === 'field') && tag[5]) {
 					const paramStart = tagEnd + tag[4].length;
 					typed.push({ start: paramStart, end: paramStart + tag[5].length, type: XdocNotes.paramType });
 				}
@@ -170,9 +174,13 @@ export class XdocNotes {
 		return inCdata;
 	}
 	public static readonly format = 'xdoc-md';
-	public static readonly tagNames = ['param', 'field', 'return', 'see', 'since', 'deprecated', 'error'];
+	public static readonly tagNames = ['param', 'variable', 'field', 'return', 'see', 'since', 'deprecated', 'error', 'author', 'version'];
+	public static readonly rootNames = ['xsl:stylesheet', 'xsl:transform', 'xsl:package'];
 	public static readonly tagDescriptions: { [name: string]: string } = {
 		param: 'a parameter: @param $name description',
+		variable: 'a global variable: @variable $name description',
+		author: 'the author of the module',
+		version: 'the version of the module',
 		field: 'a field of the record type: @field name description',
 		return: 'the result',
 		see: 'a related function, template or URI',
@@ -182,10 +190,18 @@ export class XdocNotes {
 	};
 
 	// the tags that apply to a declaration, e.g. 'xsl:item-type' - @field is only for an item type, which has no
-	// parameters or result
+	// parameters or result - a module note has its global parameters and variables, and its author and version - and a
+	// global xsl:param or xsl:variable has neither
 	public static tagNamesFor(declarationName: string | undefined) {
-		return declarationName === 'xsl:item-type' ? XdocNotes.tagNames.filter((name) => name !== 'param' && name !== 'return' && name !== 'error') :
-			XdocNotes.tagNames.filter((name) => name !== 'field');
+		const common = ['see', 'since', 'deprecated'];
+		if (declarationName === 'xsl:item-type') {
+			return ['field'].concat(common);
+		} else if (declarationName && XdocNotes.rootNames.includes(declarationName)) {
+			return ['param', 'variable'].concat(common, ['author', 'version']);
+		} else if (declarationName === 'xsl:param' || declarationName === 'xsl:variable') {
+			return common;
+		}
+		return ['param', 'return'].concat(common, ['error']);
 	}
 
 	// the xsl:note elements with format="xdoc-md" in the markup, by the offset of their start tags
@@ -250,7 +266,8 @@ export class XdocNotes {
 					endOffset: documentOffset(lineStart + line.trimEnd().length - 1) + 1
 				});
 			} else if (tag && XdocNotes.tagNames.includes(tag[2]) && tag[2] !== 'field') {
-				const isParam = tag[2] === 'param' && tag[4] !== undefined;
+				// the name of a parameter, or of a global variable in a module note
+				const isParam = (tag[2] === 'param' || tag[2] === 'variable') && tag[4] !== undefined;
 				const textStart = isParam ? tag[0].length : tag[1].length + 1 + tag[2].length;
 				tags.push({
 					name: tag[2],
@@ -321,7 +338,8 @@ export class XdocNotes {
 			const text = XdocNotes.markdownText(tag.text);
 			switch (tag.name) {
 				case 'param':
-					return `*@param* \`$${tag.paramName ?? ''}\`${text ? ' — ' + text : ''}`;
+				case 'variable':
+					return `*@${tag.name}* \`$${tag.paramName ?? ''}\`${text ? ' — ' + text : ''}`;
 				case 'field':
 					return `*@field* \`${tag.fieldName ?? ''}\`${text ? ' — ' + text : ''}`;
 				case 'deprecated':
@@ -394,6 +412,44 @@ export class XdocNotes {
 		return itemTypes;
 	}
 
+	// the note of the module: the first child of its xsl:stylesheet, xsl:transform or xsl:package with format="xdoc-md"
+	public static moduleNote(text: string, markup = RecordTypes.blankMarkup(text)): XdocNote | undefined {
+		const root = XdocNotes.rootOffset(markup);
+		return root === undefined ? undefined : XdocNotes.forDeclaration(text, root, markup);
+	}
+
+	// the offset of the start tag of the module's root element
+	public static rootOffset(markup: string): number | undefined {
+		return /<(xsl:stylesheet|xsl:transform|xsl:package)[\s>]/.exec(markup)?.index;
+	}
+
+	// the element at the offset is a global declaration: a child of the root element
+	public static isGlobal(markup: string, offset: number) {
+		const ancestors = RecordTypes.openElements(markup, offset);
+		return ancestors.length === 1 && XdocNotes.rootNames.includes(ancestors[0].name);
+	}
+
+	// the documentation of the global xsl:param or xsl:variable at the offset: its own note - or else its @param or
+	// @variable in the module note - as Markdown, undefined if it has none
+	public static globalDocumentation(text: string, declarationOffset: number, markup = RecordTypes.blankMarkup(text)): string | undefined {
+		const own = XdocNotes.forDeclaration(text, declarationOffset, markup);
+		if (own) {
+			return XdocNotes.toMarkdown(own);
+		}
+		const isParam = text.startsWith('<xsl:param', declarationOffset);
+		const name = RecordTypes.attributeOfElementAt(text, declarationOffset + 1, 'name');
+		const tag = name ? XdocNotes.moduleNote(text, markup)?.tags.find((t) => t.name === (isParam ? 'param' : 'variable') && t.paramName === name) : undefined;
+		return tag ? XdocNotes.markdownText(tag.text) : undefined;
+	}
+
+	// the names of the global xsl:param (or xsl:variable) declarations of the module that have no note of their own
+	public static globalNamesWithoutNotes(text: string, markup: string, rootOffset: number, elementName: string): string[] {
+		return RecordTypes.childElements(text, markup, rootOffset, elementName)
+			.filter((offset) => !XdocNotes.forDeclaration(text, offset, markup))
+			.map((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'name'))
+			.filter((name): name is string => !!name);
+	}
+
 	// the declaration's parameter names, from its xsl:param children
 	public static paramNames(text: string, markup: string, declarationOffset: number): string[] {
 		return RecordTypes.childElements(text, markup, declarationOffset, 'xsl:param')
@@ -401,21 +457,27 @@ export class XdocNotes {
 			.filter((name): name is string => !!name);
 	}
 
-	// for the cursor in the start tag of an xsl:function, xsl:template or xsl:item-type without an xsl:note child,
-	// the snippet for a new note as its first child - with an @param for each xsl:param, and @return for a function or a
-	// template with an 'as' - and where to insert it: after the start tag, or replacing the '/>' of an empty xsl:item-type
+	// for the cursor in the start tag of an xsl:function, xsl:template, xsl:item-type, the root element, or a global
+	// xsl:param or xsl:variable, without an xsl:note child, the snippet for a new note as its first child - with an
+	// @param for each xsl:param, and @return for a function or a template with an 'as' - for a module note, an @param
+	// or @variable for each global parameter or variable without a note of its own - and where to insert it: after the
+	// start tag, or replacing the '/>' of an empty element
 	public static noteSnippetAt(text: string, offset: number): { insertOffset: number, replaceLength: number, snippet: string } | undefined {
 		const tagStart = offset > 0 ? text.lastIndexOf('<', offset - 1) : -1;
-		const elementName = tagStart > -1 ? /^<(xsl:function|xsl:template|xsl:item-type)[\s/>]/.exec(text.substring(tagStart, tagStart + 16))?.[1] : undefined;
+		const elementName = tagStart > -1 ? /^<(xsl:function|xsl:template|xsl:item-type|xsl:stylesheet|xsl:transform|xsl:package|xsl:param|xsl:variable)[\s/>]/.exec(text.substring(tagStart, tagStart + 16))?.[1] : undefined;
 		if (!elementName) {
 			return undefined;
 		}
 		const markup = RecordTypes.blankMarkup(text);
+		const isGlobalVariable = elementName === 'xsl:param' || elementName === 'xsl:variable';
+		if (isGlobalVariable && !XdocNotes.isGlobal(markup, tagStart)) {
+			return undefined;
+		}
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'y');
 		tagRgx.lastIndex = tagStart;
 		const startTag = tagRgx.exec(markup);
 		const isEmpty = !!startTag?.[3];
-		if (!startTag || (isEmpty && elementName !== 'xsl:item-type') || offset >= tagStart + startTag[0].length ||
+		if (!startTag || (isEmpty && elementName !== 'xsl:item-type' && !isGlobalVariable) || offset >= tagStart + startTag[0].length ||
 			RecordTypes.childElements(text, markup, tagStart, 'xsl:note').length > 0) {
 			return undefined;
 		}
@@ -437,7 +499,13 @@ export class XdocNotes {
 		const indent = declarationIndent + step;
 		const hasReturn = elementName === 'xsl:function' || (elementName === 'xsl:template' && RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as') !== undefined);
 		let tabStop = 2;
-		const tagLines = XdocNotes.paramNames(text, markup, tagStart).map((name) => `\n${indent}${step}@param \\$${name.replace(/[$}\\]/g, '\\$&')} \${${tabStop++}:description}`);
+		const escape = (name: string) => name.replace(/[$}\\]/g, '\\$&');
+		const isRoot = XdocNotes.rootNames.includes(elementName);
+		const paramNames = isGlobalVariable ? [] : isRoot ? XdocNotes.globalNamesWithoutNotes(text, markup, tagStart, 'xsl:param') : XdocNotes.paramNames(text, markup, tagStart);
+		const tagLines = paramNames.map((name) => `\n${indent}${step}@param \\$${escape(name)} \${${tabStop++}:description}`);
+		if (isRoot) {
+			XdocNotes.globalNamesWithoutNotes(text, markup, tagStart, 'xsl:variable').forEach((name) => tagLines.push(`\n${indent}${step}@variable \\$${escape(name)} \${${tabStop++}:description}`));
+		}
 		if (elementName === 'xsl:item-type') {
 			(XdocNotes.declarationFieldNames(text, tagStart) ?? []).forEach((name) => tagLines.push(`\n${indent}${step}@field ${XdocNotes.fieldLabel(name).replace(/[$}\\]/g, '\\$&')} \${${tabStop++}:description}`));
 		}

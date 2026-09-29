@@ -1623,6 +1623,24 @@ export class XsltTokenCompletions {
 				return item;
 			});
 		}
+		// after @variable, in a module note, the global variables
+		const variable = /@variable\s+(\$?[\w.-]*)$/.exec(lineBefore);
+		if (variable) {
+			if (!declaration || !XdocNotes.rootNames.includes(declaration.name)) {
+				return [];
+			}
+			const note = XdocNotes.parseNote(text, markup, noteStart);
+			const documented = (note?.tags ?? []).filter((tag) => tag.name === 'variable').map((tag) => tag.paramName);
+			const range = new vscode.Range(position.translate(0, -variable[1].length), position);
+			return RecordTypes.childElements(text, markup, declaration.offset, 'xsl:variable').map((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'name'))
+				.filter((name): name is string => !!name && !documented.includes(name)).map((name, index) => {
+					const item = new vscode.CompletionItem('$' + name, vscode.CompletionItemKind.Variable);
+					item.insertText = `$${name} `;
+					item.range = range;
+					item.sortText = String(index).padStart(4, '0');
+					return item;
+				});
+		}
 		// after @field, the fields of an xsl:item-type's record type - quoted if they're not NCNames
 		const field = /@field\s+((?:'[^']*|"[^"]*|[\w.-]*))$/.exec(lineBefore);
 		if (field) {
@@ -1651,9 +1669,9 @@ export class XsltTokenCompletions {
 				item.range = range;
 				item.detail = XdocNotes.tagDescriptions[name];
 				item.sortText = String(index).padStart(4, '0');
-				if (name === 'param' || name === 'field') {
-					// then the parameter or field names
-					item.command = { command: 'editor.action.triggerSuggest', title: name === 'param' ? 'parameter names' : 'field names' };
+				if (name === 'param' || name === 'variable' || name === 'field') {
+					// then the parameter, variable or field names
+					item.command = { command: 'editor.action.triggerSuggest', title: `${name} names` };
 				}
 				return item;
 			});

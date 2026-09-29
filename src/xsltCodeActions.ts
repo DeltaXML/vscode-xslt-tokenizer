@@ -13,7 +13,7 @@ import { XdocNotes } from './xdocNote';
 import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
 import * as path from 'path';
-import { wrapTarget } from './xsltWrap';
+import { wrapTarget, wrappersFor } from './xsltWrap';
 
 
 enum ElementSelectionType {
@@ -72,6 +72,7 @@ enum XsltCodeActionKind {
 	addDocumentationNote = 'Add documentation note',
 	addMissingNoteParams = 'Add missing @param',
 	addMissingNoteFields = 'Add missing @field',
+	addMissingNoteVariables = 'Add missing @variable',
 	removeDuplicateEnumValue = 'Remove duplicate enum value',
 	wrapWith = 'Wrap with...',
 }
@@ -221,7 +222,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();
 		context.diagnostics
-			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.enumValueDuplicate)
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing || diagnostic.code === DiagnosticCode.enumValueDuplicate)
 			.forEach(diagnostic => {
 				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
 				if (fix && !addedFixes.has(fix)) {
@@ -232,9 +233,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						action.edit = new vscode.WorkspaceEdit();
 						action.edit.delete(document.uri, new vscode.Range(fix.line, fix.character, fix.end!.line, fix.end!.character));
 						codeActions.push(action);
-					} else if (diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing) {
+					} else if (diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing) {
 						codeActions.push(XSLTCodeActions.createNoteParamsAction(document, diagnostic, fix,
-							diagnostic.code === DiagnosticCode.noteParamsMissing ? XsltCodeActionKind.addMissingNoteParams : XsltCodeActionKind.addMissingNoteFields));
+							diagnostic.code === DiagnosticCode.noteParamsMissing ? XsltCodeActionKind.addMissingNoteParams :
+							diagnostic.code === DiagnosticCode.noteFieldsMissing ? XsltCodeActionKind.addMissingNoteFields : XsltCodeActionKind.addMissingNoteVariables));
 					} else if (diagnostic.code === DiagnosticCode.switchCasesMissing) {
 						codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithSelect, fix.text));
 						if (fix.altText !== undefined) {
@@ -265,10 +267,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 
 		// 'Wrap with...': for selected instructions, or the element whose start tag is at the cursor - the command shows a
-		// quick pick of the instructions that can wrap it - not for the root element
+		// quick pick of the instructions that can wrap it, so it's only offered when there are some, e.g. not for the root
+		// element, an xsl:param or a top-level declaration
 		const wrapText = document.getText();
 		const wrap = wrapTarget(wrapText, document.offsetAt(range.start), document.offsetAt(range.end));
-		if (wrap && !/^<xsl:(stylesheet|transform|package)[\s>]/.test(wrapText.substring(wrap.start, wrap.start + 20))) {
+		const isWrapVersion4 = /\sversion\s*=\s*["']4\.0["']/.test(wrapText.substring(0, 3000));
+		if (wrap && wrappersFor(wrapText, wrap, isWrapVersion4).length > 0) {
 			const action = new vscode.CodeAction(XsltCodeActionKind.wrapWith, vscode.CodeActionKind.RefactorRewrite);
 			action.command = { command: 'xslt-xpath.wrapWith', title: XsltCodeActionKind.wrapWith, arguments: [document.uri, document.offsetAt(range.start), document.offsetAt(range.end)] };
 			codeActions.push(action);
