@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import { RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
 import { FieldLocations, RecordFieldReferences } from './recordFieldReferences';
+import { ImportIndex } from './importIndex';
 
 export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.RenameProvider {
 
@@ -140,14 +141,16 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
 				locations = refLocations;
 				locations.push(this.definition);
+				// the modules of an inferred top-level stylesheet that overrides the function or template aren't searched
+				const overridden = await XSLTReferenceProvider.overriddenModules(this.definition, document, eid.accumulatedHrefs);
 				// for a parameter of a function or template: its @param in a documentation note, and keyword arguments
-				const hrefs = [document.fileName].concat(eid.accumulatedHrefs.filter((href) => href !== document.fileName));
+				const hrefs = [document.fileName].concat(eid.accumulatedHrefs.filter((href) => href !== document.fileName && !overridden.has(href)));
 				const parameterLocations = await this.parameterReferences(this.definition, document, eid.allTokens, hrefs);
 				locations = locations.concat(parameterLocations.filter((p) => !locations.some((l) => l.uri.toString() === p.uri.toString() && l.range.isEqual(p.range))));
 				for (let index = 0; index < eid.accumulatedHrefs.length; index++) {
 					const currentHref = eid.accumulatedHrefs[index];
 					// not a missing module, e.g. an import that isn't found - VS Code logs an error for it
-					if (currentHref === document.fileName || !fs.existsSync(currentHref)) {
+					if (currentHref === document.fileName || !fs.existsSync(currentHref) || overridden.has(currentHref)) {
 						continue;
 					}
 					try {
@@ -172,7 +175,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 
 	// XSLT 4.0: for a parameter of an xsl:function or xsl:template, the name in its @param in the declaration's
 	// documentation note - and for a function parameter, keyword arguments for it in calls of the function, e.g.
-	// scale := 2 in ex:area(2, 3, scale := 2) - in the document and the modules it includes or imports (hrefs)
+	// scale := 2 in ex:area(2, 3, scale := 2) - in the document and the modules it includes or imports (hrefs), and in the
+	// other stylesheets that use the declaration (see usingModules) - where, for a template parameter, the xsl:with-param
+	// names in calls of the template are found too, as the other references are only found in the hrefs
 	private async parameterReferences(definition: vscode.Location, document: vscode.TextDocument, documentTokens: BaseToken[], hrefs: string[]): Promise<vscode.Location[]> {
 		const declarationDocument = definition.uri.toString() === document.uri.toString() ? document : await vscode.workspace.openTextDocument(definition.uri);
 		const text = declarationDocument.getText();
@@ -192,7 +197,36 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		XdocNotes.forDeclaration(text, parent.offset, markup)?.tags
 			.filter((tag) => tag.name === 'param' && tag.paramName === paramName && tag.paramOffset !== undefined)
 			.forEach((tag) => locations.push(nameLocation(declarationDocument, tag.paramOffset!)));
+		const declarationName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name');
+		const otherModules = declarationName ? (await XSLTReferenceProvider.usingModules(declarationDocument, parent.name, declarationName)).filter((file) => !hrefs.includes(file)) : [];
+		const openModule = async (href: string) => {
+			try {
+				return href === document.fileName ? document : await vscode.workspace.openTextDocument(vscode.Uri.parse(url.pathToFileURL(href).toString()));
+			} catch (error) {
+				return undefined;
+			}
+		};
 		if (parent.name !== 'xsl:function') {
+			// the xsl:with-param names in calls of the template, in the other stylesheets
+			for (const href of otherModules) {
+				const doc = await openModule(href);
+				const docText = doc?.getText() ?? '';
+				if (!doc || !docText.includes(paramName)) {
+					continue;
+				}
+				const docMarkup = RecordTypes.blankMarkup(docText);
+				for (const call of docMarkup.matchAll(/<xsl:call-template\s/g)) {
+					if (RecordTypes.attributeOfElementAt(docText, call.index! + 1, 'name') !== declarationName) {
+						continue;
+					}
+					RecordTypes.childElements(docText, docMarkup, call.index!, 'xsl:with-param').forEach((withParam) => {
+						const nameOffset = RecordTypes.attributeValueOffset(docText, withParam + 1, 'name');
+						if (nameOffset !== undefined && RecordTypes.attributeOfElementAt(docText, withParam + 1, 'name') === paramName) {
+							locations.push(nameLocation(doc, nameOffset));
+						}
+					});
+				}
+			}
 			return locations;
 		}
 		// the calls of the function that its arity allows - the parameters with required="no" are optional, and the
@@ -200,14 +234,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		const functionName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name');
 		const params = RecordTypes.childElements(text, markup, parent.offset, 'xsl:param');
 		const requiredCount = params.filter((offset) => !['no', 'false', '0'].includes((RecordTypes.attributeOfElementAt(text, offset + 1, 'required') ?? '').trim())).length;
-		for (const href of hrefs) {
+		for (const href of hrefs.concat(otherModules)) {
 			if (href !== document.fileName && !fs.existsSync(href)) {
 				continue;
 			}
-			let doc: vscode.TextDocument;
-			try {
-				doc = href === document.fileName ? document : await vscode.workspace.openTextDocument(vscode.Uri.parse(url.pathToFileURL(href).toString()));
-			} catch (error) {
+			const doc = await openModule(href);
+			if (!doc) {
 				continue;
 			}
 			const tokens = (doc === document ? documentTokens : this.xslLexer.analyse(doc.getText())).filter((t) => t.tokenType < XsltTokenDefinitions.xsltStartTokenNumber);
@@ -222,6 +254,74 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			});
 		}
 		return locations;
+	}
+
+	// from the index of the workspace's modules, the modules of the trees of the top-level stylesheets that import or
+	// include the module declaring a function or named template (elementName) - except a tree in which another module
+	// declares one with the same name, e.g. to override it with import precedence, as its calls may be of that one
+	private static async usingModules(declarationDocument: vscode.TextDocument, elementName: string, name: string): Promise<string[]> {
+		const modules = new Set<string>();
+		for (const tree of await ImportIndex.moduleTrees(declarationDocument)) {
+			if (!tree.some((file) => file !== declarationDocument.fileName && XSLTReferenceProvider.declares(file, elementName, name))) {
+				tree.forEach((file) => modules.add(file));
+			}
+		}
+		return [...modules];
+	}
+
+	// for a function or named template, or a parameter of one: the modules searched (hrefs) that aren't the document's
+	// own imports and includes, but those of the top-level stylesheet inferred for it - when one of them declares a
+	// function or template with the same name, which may override it, so that their calls may not be of this one
+	private static async overriddenModules(definition: vscode.Location, document: vscode.TextDocument, hrefs: string[]): Promise<Set<string>> {
+		const declaration = await XSLTReferenceProvider.overridableDeclaration(definition, document);
+		if (!declaration) {
+			return new Set();
+		}
+		// the document's own tree, from the hrefs in its text and in those of the modules it imports or includes
+		const ownTree = new Set<string>();
+		const addTree = (file: string, text: string) => {
+			if (ownTree.has(file)) {
+				return;
+			}
+			ownTree.add(file);
+			ImportIndex.moduleReferences(text, file).forEach((reference) => addTree(reference.path, XSLTReferenceProvider.moduleText(reference.path)));
+		};
+		addTree(document.fileName, document.getText());
+		const inferred = hrefs.filter((href) => !ownTree.has(href) && href !== declaration.file);
+		return inferred.some((file) => XSLTReferenceProvider.declares(file, declaration.elementName, declaration.name)) ? new Set(inferred) : new Set();
+	}
+
+	// the xsl:function or named xsl:template at the definition, or the one with the xsl:param at the definition
+	private static async overridableDeclaration(definition: vscode.Location, document: vscode.TextDocument): Promise<{ elementName: string, name: string, file: string } | undefined> {
+		const declarationDocument = definition.uri.toString() === document.uri.toString() ? document : await vscode.workspace.openTextDocument(definition.uri);
+		const text = declarationDocument.getText();
+		const tagStart = text.lastIndexOf('<', declarationDocument.offsetAt(definition.range.start));
+		let element = tagStart > -1 ? /^<(xsl:function|xsl:template|xsl:param)\s/.exec(text.substring(tagStart, tagStart + 16))?.[1] : undefined;
+		let elementStart = tagStart;
+		if (element === 'xsl:param') {
+			const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart);
+			const parent = ancestors[ancestors.length - 1];
+			element = parent && (parent.name === 'xsl:function' || parent.name === 'xsl:template') ? parent.name : undefined;
+			elementStart = parent?.offset ?? -1;
+		}
+		const name = element ? RecordTypes.attributeOfElementAt(text, elementStart + 1, 'name') : undefined;
+		return element && name ? { elementName: element, name, file: declarationDocument.fileName } : undefined;
+	}
+
+	// the module declares a function or named template (elementName) with the name - compared as written
+	private static declares(file: string, elementName: string, name: string) {
+		const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		return new RegExp(`<${elementName}\\s[^<>]*?\\bname\\s*=\\s*(["'])\\s*${escaped}\\s*\\1`).test(XSLTReferenceProvider.moduleText(file));
+	}
+
+	// the text of a module: from its editor, if it's open, as it may not be saved
+	private static moduleText(file: string) {
+		const open = vscode.workspace.textDocuments.find((d) => d.fileName === file);
+		try {
+			return open ? open.getText() : fs.readFileSync(file, 'utf8');
+		} catch {
+			return '';
+		}
 	}
 
 	public static calculateReferences = (seekInstruction: GlobalInstructionData, languageConfig: LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): BaseToken[] => {

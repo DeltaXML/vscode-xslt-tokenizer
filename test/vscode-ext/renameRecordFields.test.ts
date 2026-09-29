@@ -2,7 +2,8 @@
  * Test suite for renaming a field of an XPath 4.0 record type, and finding its references: the field's name in the
  * record type, its references - lookups, map constructor keys, xsl:map-entry keys and child steps on a JNode - and the
  * @field tags for it in the documentation notes of the xsl:item-type declaring it, and of one declared as that one - but
- * not a field with the same name in another record type. Also for a field of an item type in an imported module.
+ * not a field with the same name in another record type. Also for a field of an item type in an imported module, and
+ * from a module of types, in the stylesheets that import it, found from the index of the workspace's modules.
  */
 import * as vscode from 'vscode';
 import * as fs from 'fs';
@@ -10,6 +11,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
 import { XSLTReferenceProvider } from '../../src/xsltReferenceProvider';
+import { ImportIndex } from '../../src/importIndex';
 
 const content = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cx="cx" version="4.0">
   <xsl:item-type name="cx:point" as="record(x as xs:double, y as xs:double, 'unit name'? as xs:string)">
@@ -169,6 +171,44 @@ suite('Record fields: rename and find references', () => {
 		// the edited modules would otherwise be left unsaved, and closing their editors in a later test would prompt
 		await main.save();
 		await lib.save();
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+	test('from a module of types, in each stylesheet that imports it', async () => {
+		const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'record-rename-index-')));
+		const stylesheet = (body: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cx="cx" version="4.0">\n${body}\n</xsl:stylesheet>`;
+		const files: { [name: string]: string } = {
+			'types.xsl': stylesheet(`  <xsl:item-type name="cx:point" as="record(x as xs:double, y as xs:double)">\n    <xsl:note format="xdoc-md">\n      @field x the horizontal position\n    </xsl:note>\n  </xsl:item-type>`),
+			// imports the types, and includes a module that uses them without importing them
+			'main1.xsl': stylesheet(`  <xsl:import href="types.xsl"/>\n  <xsl:include href="part.xsl"/>\n  <xsl:variable name="p" as="cx:point" select="{ 'x': 1, 'y': 2 }"/>`),
+			'part.xsl': stylesheet(`  <xsl:template name="t" as="xs:double"><xsl:param name="q" as="cx:point"/><xsl:sequence select="$q?x"/></xsl:template>`),
+			'main2.xsl': stylesheet(`  <xsl:import href="types.xsl"/>\n  <xsl:variable name="o" as="cx:point" select="{ 'x': 0, 'y': 0 }"/>`),
+			// not connected: its own type with the same name
+			'unrelated.xsl': stylesheet(`  <xsl:item-type name="cx:point" as="record(x as xs:double)"/>\n  <xsl:variable name="u" as="cx:point" select="{ 'x': 5 }"/>`),
+		};
+		const file = (name: string) => path.join(dir, name);
+		Object.entries(files).forEach(([name, text]) => fs.writeFileSync(file(name), text));
+		await ImportIndex.instance.buildFrom(Object.keys(files).map(file));
+		const open = (name: string) => vscode.workspace.openTextDocument(vscode.Uri.file(file(name)));
+		const types = await open('types.xsl');
+		const position = types.positionAt(types.getText().indexOf('record(x') + 7);
+		const provider = new XSLTReferenceProvider();
+		assert.isDefined(await provider.prepareRename(types, position, token()));
+		const edit = await provider.provideRenameEdits(types, position, 'east', token());
+		assert.isTrue(await vscode.workspace.applyEdit(edit!));
+		const texts = new Map<string, string>();
+		for (const name of Object.keys(files)) {
+			texts.set(name, (await open(name)).getText());
+		}
+		assert.include(texts.get('types.xsl'), 'as="record(east as xs:double, y as xs:double)"');
+		assert.include(texts.get('types.xsl'), '@field east the horizontal position');
+		assert.include(texts.get('main1.xsl'), `{ 'east': 1, 'y': 2 }`);
+		assert.include(texts.get('part.xsl'), 'select="$q?east"');
+		assert.include(texts.get('main2.xsl'), `{ 'east': 0, 'y': 0 }`);
+		assert.equal(texts.get('unrelated.xsl'), files['unrelated.xsl']);
+		for (const name of Object.keys(files)) {
+			await (await open(name)).save();
+			ImportIndex.instance.setReferences(file(name), []);
+		}
 		fs.rmSync(dir, { recursive: true, force: true });
 	});
 });

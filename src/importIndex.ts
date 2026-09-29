@@ -217,6 +217,35 @@ export class ImportIndex {
 		return visit(module);
 	}
 
+	// for a rename or find references in a module: the modules of the tree of each top-level stylesheet that imports or
+	// includes it, directly or indirectly - or of its own tree, if nothing does - with each stylesheet's tree first - an
+	// empty list if the index isn't enabled, or can't be built as there's no workspace folder
+	public static async moduleTrees(document: vscode.TextDocument): Promise<string[][]> {
+		if (document.uri.scheme !== 'file' || !ImportIndex.isEnabled()) {
+			return [];
+		}
+		const index = ImportIndex.instance;
+		if (!index.built && (vscode.workspace.workspaceFolders?.length ?? 0) > 0) {
+			await index.whenBuilt();
+		}
+		if (!index.built) {
+			return [];
+		}
+		const tree = (stylesheet: string) => {
+			const modules: string[] = [];
+			const add = (file: string) => {
+				if (!modules.includes(file)) {
+					modules.push(file);
+					index.referencesOf(file).forEach((reference) => add(reference.path));
+				}
+			};
+			add(stylesheet);
+			return modules.filter((file) => fs.existsSync(file));
+		};
+		const topLevel = index.topLevelCandidates(document.fileName);
+		return (topLevel.length > 0 ? topLevel : [document.fileName]).map(tree);
+	}
+
 	// the top-level stylesheet that imports or includes the module, directly or indirectly - undefined if there isn't
 	// one, or the index isn't built yet
 	public masterFor(file: string): string | undefined {

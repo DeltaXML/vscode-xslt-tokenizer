@@ -4,8 +4,10 @@
  * in $c?r, a map constructor key or an xsl:map-entry key, or from an @field tag in a documentation note.
  *
  * A field is identified by the document and offset of its name in its declaration. The references are those that the
- * linter records, in the document and the modules it includes or imports - and the @field tags for the field in the
- * notes of the xsl:item-type declaring it, and of item types declared as that one, e.g. as="cx:point".
+ * linter records - and the @field tags for the field in the notes of the xsl:item-type declaring it, and of item types
+ * declared as that one, e.g. as="cx:point". They're found in the document and the modules it includes or imports - and,
+ * from the index of the workspace's modules, in each top-level stylesheet that imports or includes the document, directly
+ * or indirectly, and the modules of its tree - so a rename in a module of types reaches the stylesheets that use them.
  */
 import * as vscode from 'vscode';
 import * as fs from 'fs';
@@ -17,6 +19,7 @@ import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { FieldReference, RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
+import { ImportIndex } from './importIndex';
 
 // a field's declaration: the document, and the offset of its name
 interface FieldDeclaration {
@@ -62,9 +65,13 @@ export class RecordFieldReferences {
 		};
 		const hrefs = (await definitionProvider.getImportedGlobals(document, RecordFieldReferences.startPosition())).accumulatedHrefs;
 		const contexts = [context];
-		for (const href of hrefs.filter((h) => h !== document.fileName && fs.existsSync(h))) {
+		for (const href of await RecordFieldReferences.scopeModules(document, hrefs)) {
 			try {
 				const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(url.pathToFileURL(href).toString()));
+				// a module without the name has nothing to rename - unless it declares the field, e.g. with a quoted name
+				if (!doc.getText().includes(name) && doc.uri.toString() !== declaration.uri) {
+					continue;
+				}
 				const docContext = await RecordFieldReferences.documentContext(definitionProvider, doc);
 				if (docContext) {
 					contexts.push(docContext);
@@ -100,6 +107,14 @@ export class RecordFieldReferences {
 			});
 		}
 		return { name, range, locations };
+	}
+
+	// the other modules to search: those the document includes or imports (hrefs) - and from the index of the workspace's
+	// modules, each top-level stylesheet that imports or includes the document, with all the modules of its tree
+	private static async scopeModules(document: vscode.TextDocument, hrefs: string[]): Promise<string[]> {
+		const modules = new Set<string>(hrefs.concat((await ImportIndex.moduleTrees(document)).flat()));
+		modules.delete(document.fileName);
+		return [...modules].filter((file) => fs.existsSync(file));
 	}
 
 	// a field name for a rename: an NCName - or, for a field whose name isn't one, and so is always quoted, any name
