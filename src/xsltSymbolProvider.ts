@@ -171,8 +171,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						let errorData = globalInstructionData.find((dataObject) => {
 							let result = false;
 							if (dataObject.type === GlobalInstructionType.Import || dataObject.type === GlobalInstructionType.Include) {
-								let resolvedName = XsltSymbolProvider.resolvePath(dataObject.name, document.fileName);
-								result = resolvedName === globals.href;
+								result = HrefPaths.toPath(dataObject.name, document.fileName) === globals.href;
 							} else if (dataObject.type === GlobalInstructionType.UsePackage) {
 								// TODO:
 								const basePath = path.dirname(document.fileName);
@@ -180,8 +179,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 									return pkg.name === dataObject.name;
 								});
 								if (packageLookup && rootPath) {
-									let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
-									result = resolvedName === globals.href;
+									result = HrefPaths.settingsPath(packageLookup.path, rootPath) === globals.href;
 								} else {
 									result = false;
 								}
@@ -266,7 +264,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			};
 			const importInstruction: GlobalInstructionData = {
 				type: GlobalInstructionType.Import,
-				name: matchingParent,
+				// an href, as for an xsl:import
+				name: HrefPaths.fileUri(matchingParent),
 				token: token,
 				idNumber: 0
 			};
@@ -1255,8 +1254,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-					let resolvedName = XsltSymbolProvider.resolvePath(data.name, importedG.href);
-					if (existingHrefs.indexOf(resolvedName) < 0) {
+					let resolvedName = HrefPaths.toPath(data.name, importedG.href);
+					if (resolvedName !== undefined && existingHrefs.indexOf(resolvedName) < 0) {
 						existingHrefs.push(resolvedName);
 						result.push(resolvedName);
 					}
@@ -1265,8 +1264,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						return pkg.name === data.name;
 					});
 					if (packageLookup) {
-						let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
-						if (existingHrefs.indexOf(resolvedName) < 0) {
+						let resolvedName = HrefPaths.settingsPath(packageLookup.path, rootPath);
+						if (resolvedName !== undefined && existingHrefs.indexOf(resolvedName) < 0) {
 							existingHrefs.push(resolvedName);
 							result.push(resolvedName);
 						}
@@ -1283,28 +1282,24 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-					let resolvedName = XsltSymbolProvider.resolvePath(data.name, importedG.href);
-					result.push(resolvedName);
+					let resolvedName = HrefPaths.toPath(data.name, importedG.href);
+					if (resolvedName !== undefined) {
+						result.push(resolvedName);
+					}
 				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
 					let packageLookup = xsltPackages.find((pkg) => {
 						return pkg.name === data.name;
 					});
 					if (packageLookup) {
-						let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
-						result.push(resolvedName);
+						let resolvedName = HrefPaths.settingsPath(packageLookup.path, rootPath);
+						if (resolvedName !== undefined) {
+							result.push(resolvedName);
+						}
 					}
 				}
 			});
 		});
 		return result;
-	}
-
-	public static resolvePath(href: string, documentPath: string) {
-		return HrefPaths.resolvePath(href, documentPath);
-	}
-
-	public static resolvePathInSettings(href: string, workspace: string) {
-		return HrefPaths.resolvePathInSettings(href, workspace);
 	}
 
 	public static async fetchImportedGlobals(inputHrefs: string[]): Promise<ImportedGlobals[]> {

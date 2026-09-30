@@ -3095,7 +3095,7 @@ export class XsltTokenDiagnostics {
 	private static checkItemTypeDeclarations(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], itemTypeDeclarations: Map<string, string>,
 		xsltPrefixesToURIs: Map<string, XSLTnamespaces>, documentPath: string, problemTokens: BaseToken[]) {
 		const localItemTypes = globalInstructionData.filter((g) => g.type === GlobalInstructionType.ItemType);
-		const includedPaths = globalInstructionData.filter((g) => g.type === GlobalInstructionType.Include).map((g) => HrefPaths.resolveAgainstDocument(g.name, documentPath));
+		const includedPaths = globalInstructionData.filter((g) => g.type === GlobalInstructionType.Include).map((g) => HrefPaths.toPath(g.name, documentPath)).filter((p) => p !== undefined);
 		const includedItemTypeNames = importedInstructionData.filter((g) => g.type === GlobalInstructionType.ItemType && g.href && includedPaths.includes(path.resolve(g.href))).map((g) => g.name);
 		const reservedNamespaces = [XSLTnamespaces.XMLSchema, XSLTnamespaces.XPath, XSLTnamespaces.XSLT, XSLTnamespaces.Map, XSLTnamespaces.Array, XSLTnamespaces.Math];
 		const seenNames: string[] = [];

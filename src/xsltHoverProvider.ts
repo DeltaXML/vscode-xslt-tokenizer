@@ -223,7 +223,10 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (hrefStart === undefined || !href || offset < hrefStart || offset > hrefStart + href.length || document.uri.scheme !== 'file' || href.includes('{')) {
 			return undefined;
 		}
-		const modulePath = HrefPaths.hrefToModulePath(href, document.fileName);
+		const modulePath = HrefPaths.toPath(href, document.fileName);
+		if (modulePath === undefined) {
+			return undefined;
+		}
 		const open = workspace.textDocuments.find((d) => d.fileName === modulePath);
 		let moduleText: string;
 		try {

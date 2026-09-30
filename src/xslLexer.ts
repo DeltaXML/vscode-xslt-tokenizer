@@ -11,6 +11,7 @@
 import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType, XmlLessThan } from "./xpLexer";
 import { SchemaData } from "./xsltSchema";
 import { Snippet} from './xsltSnippets';
+import { HrefPaths } from './hrefPaths';
 
 export enum DocumentTypes {
     XSLT,
@@ -1073,6 +1074,12 @@ export class XslLexer {
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');                               
                                 let newTokenCopy = Object.assign({}, newToken);
+                                const writtenStart = newToken.startCharacter + newToken.length - (attValue.length + 2);
+                                if (attValue.includes('&') && writtenStart >= 0) {
+                                    // the token is the part of the value after its last reference: the name's token is the value, in quotes
+                                    newTokenCopy.startCharacter = writtenStart;
+                                    newTokenCopy.length = attValue.length + 2;
+                                }
                                 let globalType = tagGlobalInstructionType;
                                 let targetGlobal;
                                 if (isGlobalInstructionMode) {
@@ -1087,7 +1094,7 @@ export class XslLexer {
                                     modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
                                 } else {
                                     const idNumber = globalType === GlobalInstructionType.Variable ? result.length : 0;
-                                    const newGlobal: GlobalInstructionData = {type: globalType, name: attValue, token: newTokenCopy, idNumber: idNumber};
+                                    const newGlobal: GlobalInstructionData = {type: globalType, name: XslLexer.globalName(globalType, attValue), token: newTokenCopy, idNumber: idNumber};
                                     if (pendingDeclaredType !== undefined) {
                                         newGlobal.declaredType = pendingDeclaredType;
                                         pendingDeclaredType = undefined;
@@ -1293,11 +1300,18 @@ export class XslLexer {
                             break;
                         case XMLCharState.lEntity:
                             if (this.entityContext !== EntityPosition.text) {
+                                if (storeToken) {
+                                    // the value is kept as it's written, with its references
+                                    tokenChars.push(currentChar);
+                                }
                                 this.addCharTokenToResult(tokenStartChar, (this.lineCharCount - 1) - tokenStartChar,
                                     XSLTokenLevelState.attributeValue, result, nextState);
                             }
                             break;
                         case XMLCharState.rEntity:
+                            if (storeToken && this.entityContext !== EntityPosition.text) {
+                                tokenChars.push(currentChar);
+                            }
                             this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar,
                                                          XSLTokenLevelState.entityRef, result, nextState);
                             switch (this.entityContext) {
@@ -1392,6 +1406,13 @@ export class XslLexer {
                 }
             }
         }
+    }
+
+    // the name of a global instruction from its attribute value, as it's written: an href, of an xsl:import or
+    // xsl:include, or a package name, with its references decoded, e.g. a&amp;b.xsl is a&b.xsl
+    public static globalName(type: GlobalInstructionType, attValue: string) {
+        const isHref = type === GlobalInstructionType.Import || type === GlobalInstructionType.Include || type === GlobalInstructionType.UsePackage;
+        return isHref ? HrefPaths.fromAttribute(attValue) : attValue;
     }
 
     public static tokensInsideToken(token: BaseToken, attValue: string) {

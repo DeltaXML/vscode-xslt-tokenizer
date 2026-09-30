@@ -53,10 +53,9 @@ export class ImportIndex {
 		const references: ModuleReference[] = [];
 		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
 		for (const match of withoutComments.matchAll(/<xsl:(import|include)\s[^>]*?(?<![\w.:-])href\s*=\s*(["'])([^"'{}]+)\2/g)) {
-			const href = match[3].trim();
-			const referencePath = HrefPaths.moduleReferencePath(href, modulePath);
+			const referencePath = HrefPaths.toPath(HrefPaths.fromAttribute(match[3]), modulePath);
 			if (referencePath === undefined) {
-				// a URI with a scheme other than file:, e.g. http:
+				// not a file, e.g. an http: URI
 				continue;
 			}
 			references.push({ path: referencePath, isInclude: match[1] === 'include' });

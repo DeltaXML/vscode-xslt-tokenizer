@@ -95,7 +95,7 @@ export class FixedNamespaces {
 				}
 			} else {
 				// a URI, e.g. ./package.xsl, for the namespace declarations of its document's outermost element
-				const documentPath = HrefPaths.fixedNamespacesPath(token, moduleFile);
+				const documentPath = HrefPaths.toPath(token, moduleFile);
 				const text = documentPath !== undefined ? readText(documentPath) : undefined;
 				const rootTag = text !== undefined ? /<[\w.:-]+[\s/>]/.exec(RecordTypes.blankMarkup(text).replace(/<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>/g, (m) => ' '.repeat(m.length))) : null;
 				if (text === undefined || !rootTag) {
@@ -117,7 +117,15 @@ export class FixedNamespaces {
 		if (root === undefined || value === undefined || valueOffset === undefined) {
 			return undefined;
 		}
-		return { ...FixedNamespaces.bindings(value, FixedNamespaces.declarations(text, root), moduleFile), valueOffset };
+		// the tokens are those of the value with its references decoded, e.g. &#x20; separates two tokens - a problem's token
+		// and offset are as they're written in the value
+		const decoded = RecordTypes.decodeReferences(value);
+		const { bindings, problems } = FixedNamespaces.bindings(decoded.text, FixedNamespaces.declarations(text, root), moduleFile);
+		const written = problems.map((problem) => {
+			const start = decoded.offsets[problem.offset];
+			return { ...problem, token: value.substring(start, decoded.offsets[problem.offset + problem.token.length]), offset: start };
+		});
+		return { bindings, problems: written, valueOffset };
 	}
 
 	private static readFile(file: string): string | undefined {

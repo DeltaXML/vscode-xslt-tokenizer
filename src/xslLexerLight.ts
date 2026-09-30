@@ -253,7 +253,7 @@ export class XslLexerLight extends XslLexer {
                                     const modeTokens = XslLexer.tokensInsideToken(tkn, attValue);
                                     modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
                                 } else {
-                                    const newGlobal: GlobalInstructionData = {type: globalType, name: attValue, token: tkn, idNumber: 0};
+                                    const newGlobal: GlobalInstructionData = {type: globalType, name: XslLexer.globalName(globalType, attValue), token: tkn, idNumber: 0};
                                     if (pendingDeclaredType !== undefined) {
                                         newGlobal.declaredType = pendingDeclaredType;
                                         pendingDeclaredType = undefined;
@@ -368,7 +368,16 @@ export class XslLexerLight extends XslLexer {
                                 nextState = XMLCharState.awaitingRcdata;
                             }
                             break;
+                        case XMLCharState.lEntity:
+                            if (storeToken && this.entityContext !== EntityPosition.text) {
+                                // the value is kept as it's written, with its references
+                                tokenChars.push(currentChar);
+                            }
+                            break;
                         case XMLCharState.rEntity:
+                            if (storeToken && this.entityContext !== EntityPosition.text) {
+                                tokenChars.push(currentChar);
+                            }
                             switch (this.entityContext) {
                                 case EntityPosition.text:
                                     nextState = XMLCharState.init;

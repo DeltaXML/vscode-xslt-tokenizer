@@ -25,8 +25,9 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 		let globals = this.xslLexer.globalInstructionData;
 
 		async function returnBadFileLinks(item: GlobalInstructionData): Promise<GlobalInstructionData|undefined> {
-			const resolvedPath = HrefPaths.resolveAgainstDocument(item.name, document.fileName);
-			let fileExists = await GlobalsProvider.fileExists(resolvedPath);
+			const resolvedPath = HrefPaths.toPath(item.name, document.fileName);
+			// an href that isn't a file, e.g. http:, isn't checked
+			let fileExists = resolvedPath === undefined || await GlobalsProvider.fileExists(resolvedPath);
 			if (fileExists) {
 				return undefined;
 			} else {
