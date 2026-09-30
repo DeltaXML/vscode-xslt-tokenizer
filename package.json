@@ -503,7 +503,7 @@
 				"XSLT.resources.catalog": {
 					"type": "string",
 					"default": "",
-					"markdownDescription": "An OASIS XML catalog file, for resolving the `href` of `xsl:import` and `xsl:include`, and the URIs of `fixed-namespaces` - e.g. mapping `http://example.com/lib.xsl` to a local file. Its `uri`, `rewriteURI`, `uriSuffix` and `nextCatalog` entries are used. The path is relative to the workspace folder, or may use `${workspaceFolder}`. The catalog is also passed to Saxon (the `-catalog` option) by XSLT tasks that don't set their own `catalogFilenames`"
+					"markdownDescription": "An OASIS XML catalog file, for resolving the `href` of `xsl:import` and `xsl:include`, and the URIs of `fixed-namespaces` - e.g. mapping `http://example.com/lib.xsl` to a local file. Its `uri`, `rewriteURI`, `uriSuffix` and `nextCatalog` entries are used. The path is relative to the workspace folder, or may use `${workspaceFolder}`. The catalog is also passed to Saxon (the `-catalog` option) by XSLT tasks that don't set their own `catalogFilenames`. With no setting, a `catalog.xml` XML catalog in the root of the workspace folder is offered"
 				},
 				"XSLT.resources.inferParentFromWorkspace": {
 					"type": "boolean",

@@ -72,6 +72,48 @@ export class CatalogSetting {
 		context.subscriptions.push({ dispose: () => watchers.forEach((watcher) => watcher.dispose()) });
 	}
 
+	// the workspace state key for 'Don't Ask Again', for offering a workspace catalog
+	public static readonly dontOfferKey = 'xslt-xpath.dontOfferWorkspaceCatalog';
+	// the name of a catalog file that's offered: in the root of the workspace folder
+	public static readonly offeredName = 'catalog.xml';
+
+	// the path of a catalog.xml file in the root of the workspace folder, to offer as the setting's catalog - undefined
+	// when the setting has a value (in any scope, even ''), 'Don't Ask Again' was chosen, or the file isn't an OASIS XML
+	// catalog
+	public static catalogToOffer(workspaceFolder: string | undefined, hasSetting: boolean, dontOffer: boolean, readText = (file: string) => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : undefined) {
+		if (workspaceFolder === undefined || hasSetting || dontOffer) {
+			return undefined;
+		}
+		const candidate = path.join(workspaceFolder, CatalogSetting.offeredName);
+		try {
+			const text = readText(candidate);
+			return text !== undefined && XmlCatalog.isCatalog(text) ? candidate : undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	// when there's no setting, and the workspace folder has a catalog.xml that's an XML catalog: offers to use it, once -
+	// 'Use' sets the setting for the workspace, and 'Don't Ask Again' is saved for the workspace
+	public static async offerWorkspaceCatalog(context: vscode.ExtensionContext) {
+		const inspected = vscode.workspace.getConfiguration(CatalogSetting.section).inspect<string>(CatalogSetting.setting);
+		const hasSetting = [inspected?.globalValue, inspected?.workspaceValue, inspected?.workspaceFolderValue].some((value) => value !== undefined);
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const catalogPath = CatalogSetting.catalogToOffer(workspaceFolder, hasSetting, context.workspaceState.get<boolean>(CatalogSetting.dontOfferKey, false));
+		if (catalogPath === undefined) {
+			return;
+		}
+		const use = 'Use';
+		const dontAsk = 'Don\'t Ask Again';
+		const choice = await vscode.window.showInformationMessage(`This workspace has an XML catalog, ${CatalogSetting.offeredName}. Use it to resolve the hrefs of xsl:import and xsl:include, and pass it to Saxon?`, use, dontAsk);
+		if (choice === use) {
+			// relative to the workspace folder
+			await vscode.workspace.getConfiguration(CatalogSetting.section).update(CatalogSetting.setting, CatalogSetting.offeredName, vscode.ConfigurationTarget.Workspace);
+		} else if (choice === dontAsk) {
+			await context.workspaceState.update(CatalogSetting.dontOfferKey, true);
+		}
+	}
+
 	// the -catalog option for a Saxon task that doesn't have its own catalogFilenames - undefined when it has, or
 	// there's no catalog setting
 	public static taskOption(task: { catalogFilenames?: string }, catalogPath = CatalogSetting.catalogPath()) {

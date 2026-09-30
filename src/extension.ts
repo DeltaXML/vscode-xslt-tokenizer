@@ -412,6 +412,8 @@ export function activate(context: vscode.ExtensionContext) {
 		await ImportIndex.instance.refresh();
 		relintXsltModules();
 	});
+	// with no catalog setting: offer the workspace folder's catalog.xml, if it's an XML catalog - not waited for
+	CatalogSetting.offerWorkspaceCatalog(context);
 	const onIndexBuilt = ImportIndex.instance.onDidChange(() => {
 		if (ImportIndex.instance.built) {
 			onIndexBuilt.dispose();

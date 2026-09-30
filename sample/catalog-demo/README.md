@@ -36,7 +36,10 @@ How `http://example.com/xslt/strings.xsl` is resolved:
 
 Things to try:
 
-- Remove the setting: the imports aren't resolved, so `str:shout`, `dt:long-date` and `$str:separator` are reported -
+- Delete `.vscode/settings.json` and reopen the folder: as `catalog.xml`, in the root of the workspace folder, is an XML
+  catalog, you're asked whether to use it - **Use** adds the setting back, and **Don't Ask Again** is remembered for
+  the workspace.
+- Set the setting to `""` (no catalog, and no offer of one): the imports aren't resolved, so `str:shout`, `dt:long-date` and `$str:separator` are reported -
   and Saxon fails with an I/O error for `http://example.com/xslt/strings.xsl`.
 - Move `lib/dates` to another folder, and update the `uri` in `catalogs/libraries.xml`: `main.xsl` doesn't change.
 - Replace the two `uri` entries with the `rewriteURI` entry in the comment in `libraries.xml`, and change the hrefs in

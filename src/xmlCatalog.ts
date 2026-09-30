@@ -176,6 +176,19 @@ export class XmlCatalog {
 		return { entries, nextCatalogs };
 	}
 
+	// the text is an OASIS XML catalog: its root element is a catalog element in the catalog namespace - e.g. not
+	// another kind of file named catalog.xml
+	public static isCatalog(text: string) {
+		const withoutProlog = text.replace(/<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!DOCTYPE(?:[^[>]|\[[\s\S]*?\])*>/g, '');
+		const root = /<([\w.-]+:)?catalog((?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*\/?>/.exec(withoutProlog);
+		if (!root || withoutProlog.substring(0, root.index).trim() !== '') {
+			return false;
+		}
+		const prefix = root[1] ? root[1].substring(0, root[1].length - 1) : '';
+		const declaration = new RegExp(`\\s${prefix ? 'xmlns:' + prefix : 'xmlns'}\\s*=\\s*(["'])([^"']*)\\1`).exec(root[2]);
+		return declaration !== null && RecordTypes.decodeReferences(declaration[2]).text === XmlCatalog.namespace;
+	}
+
 	// a URI reference made absolute against a base URI - undefined if it isn't a URI
 	private static absolute(reference: string, base: string) {
 		try {

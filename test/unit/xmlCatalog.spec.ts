@@ -109,6 +109,27 @@ describe('XmlCatalog: catalog files', () => {
 	});
 });
 
+describe('XmlCatalog.isCatalog() - a file that\'s an OASIS XML catalog', () => {
+	const cases: [string, boolean][] = [
+		[`<catalog ${ns}/>`, true],
+		[`<?xml version="1.0"?>\n<!-- master -->\n<!DOCTYPE catalog PUBLIC "-//OASIS//DTD XML Catalogs V1.1//EN" "catalog.dtd">\n<catalog ${ns}>\n</catalog>`, true],
+		[`<cat:catalog xmlns:cat="${XmlCatalog.namespace}"></cat:catalog>`, true],
+		[`<catalog xmlns='${XmlCatalog.namespace}' prefer="public">`, true],
+		// another kind of catalog.xml
+		['<catalog><product id="1"/></catalog>', false],
+		['<catalog xmlns="urn:products"/>', false],
+		[`<cat:catalog xmlns="${XmlCatalog.namespace}" xmlns:cat="urn:other"/>`, false],
+		[`<products><catalog ${ns}/></products>`, false],
+		[`<catalogue ${ns}/>`, false],
+		['not XML', false],
+	];
+	cases.forEach(([text, expected]) => {
+		it(`${JSON.stringify(text.length > 60 ? text.substring(0, 57) + '...' : text)} → ${expected}`, () => {
+			expect(XmlCatalog.isCatalog(text)).to.equal(expected);
+		});
+	});
+});
+
 describe('XmlCatalog.normalize()', () => {
 	const cases: [string, string][] = [
 		['http://example.com/a b.xsl', 'http://example.com/a%20b.xsl'],

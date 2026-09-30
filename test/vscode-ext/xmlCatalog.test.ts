@@ -57,6 +57,30 @@ suite('XML catalog setting: the catalog\'s path', () => {
 	});
 });
 
+suite('XML catalog setting: offering the workspace folder\'s catalog.xml', () => {
+	const catalogFile = path.join('/ws', 'catalog.xml');
+	const files: { [file: string]: string } = { [catalogFile]: `<catalog xmlns="${XmlCatalog.namespace}"/>` };
+	const read = (file: string) => files[file];
+
+	test('offered when there\'s no setting, and it\'s an XML catalog', () => {
+		assert.strictEqual(CatalogSetting.catalogToOffer('/ws', false, false, read), catalogFile);
+	});
+
+	test('not offered when there\'s a setting, \'Don\'t Ask Again\' was chosen, or there\'s no workspace folder', () => {
+		assert.strictEqual(CatalogSetting.catalogToOffer('/ws', true, false, read), undefined);
+		assert.strictEqual(CatalogSetting.catalogToOffer('/ws', false, true, read), undefined);
+		assert.strictEqual(CatalogSetting.catalogToOffer(undefined, false, false, read), undefined);
+	});
+
+	test('not offered when there\'s no catalog.xml, it\'s another kind of file, or it can\'t be read', () => {
+		assert.strictEqual(CatalogSetting.catalogToOffer('/other', false, false, read), undefined);
+		assert.strictEqual(CatalogSetting.catalogToOffer('/ws', false, false, () => '<catalog><product/></catalog>'), undefined);
+		assert.strictEqual(CatalogSetting.catalogToOffer('/ws', false, false, () => {
+			throw new Error('unreadable');
+		}), undefined);
+	});
+});
+
 suite('XML catalog setting: imports and tasks', () => {
 	suiteSetup(async () => {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
