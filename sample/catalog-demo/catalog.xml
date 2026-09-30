@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The master catalog: the one named by the XSLT.resources.catalog setting.
+
+  It has no entries of its own - it hands every lookup on to the catalogs of its
+  nextCatalog entries, in order. A team can keep one master catalog like this and
+  a catalog per library, or per project, alongside the files it maps.
+
+  A relative path in a catalog is relative to the catalog file itself.
+-->
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <nextCatalog catalog="catalogs/libraries.xml"/>
+</catalog>
