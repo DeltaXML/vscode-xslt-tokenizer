@@ -12,7 +12,7 @@ import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
 import { ImportIndex } from './importIndex';
 import { XSLTConfiguration } from './languageConfigurations';
 import * as fs from 'fs';
-import { HrefPaths } from './hrefPaths';
+import { HrefPaths, ImportProblem } from './hrefPaths';
 
 interface ImportedGlobals {
 	href: string;
@@ -162,15 +162,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
 			let allImportedGlobals: GlobalInstructionData[] = [];
-			let importErrors: { data: GlobalInstructionData, reason?: string }[] = [];
+			let importErrors: { data: GlobalInstructionData, problem?: ImportProblem }[] = [];
 			const rootPath = vscode.workspace.rootPath;
 
-			// hrefs meant to be files that have no file path, e.g. file://folder/a.xsl - so they aren't imported
+			// hrefs that have no file path, e.g. file://folder/a.xsl, or a URI that the XML catalog doesn't map to a file - so
+			// they aren't imported
 			globalInstructionData.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-					const reason = HrefPaths.fileProblem(data.name, document.fileName);
-					if (reason) {
-						importErrors.push({ data, reason });
+					const problem = HrefPaths.importProblem(data.name, document.fileName);
+					if (problem) {
+						importErrors.push({ data, problem });
 					}
 				}
 			});
@@ -217,7 +218,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				if (this.collection && this.docType !== DocumentTypes.SCH) {
 					let importDiagnostics: vscode.Diagnostic[] = [];
 					importErrors.forEach((importError) => {
-						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.reason));
+						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem));
 					});
 					let allDiagnostics = importDiagnostics.concat(diagnostics);
 					if (allDiagnostics.length > 0) {

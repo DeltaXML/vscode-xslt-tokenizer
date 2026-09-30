@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionType, GlobalInstructionData } from './xslLexer';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { GlobalsProvider} from './globalsProvider';
-import { HrefPaths } from './hrefPaths';
+import { HrefPaths, ImportProblem } from './hrefPaths';
 
 export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 
@@ -24,12 +24,12 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		let globals = this.xslLexer.globalInstructionData;
 
-		async function returnBadFileLinks(item: GlobalInstructionData): Promise<{ item: GlobalInstructionData, reason?: string }|undefined> {
+		async function returnBadFileLinks(item: GlobalInstructionData): Promise<{ item: GlobalInstructionData, problem?: ImportProblem }|undefined> {
 			const resolvedPath = HrefPaths.toPath(item.name, document.fileName);
 			if (resolvedPath === undefined) {
-				// an href that isn't a file, e.g. http:, isn't checked
-				const reason = HrefPaths.fileProblem(item.name, document.fileName);
-				return reason ? { item, reason } : undefined;
+				// a problem, e.g. a URI that isn't a file
+				const problem = HrefPaths.importProblem(item.name, document.fileName);
+				return problem ? { item, problem } : undefined;
 			}
 			let fileExists = await GlobalsProvider.fileExists(resolvedPath);
 			if (fileExists) {
@@ -39,7 +39,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 		}
 
-		let fileChecks: Promise<{ item: GlobalInstructionData, reason?: string }|undefined>[] = [];
+		let fileChecks: Promise<{ item: GlobalInstructionData, problem?: ImportProblem }|undefined>[] = [];
 		globals.forEach((item) => {
 			if (item.type === GlobalInstructionType.Import || item.type === GlobalInstructionType.Include) {
 				fileChecks.push(returnBadFileLinks(item));
@@ -53,7 +53,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 			let importDiagnostics: vscode.Diagnostic[] = [];
 			errorFileRefs.forEach((fileRef) => {
 				if (fileRef) {
-					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(fileRef.item, fileRef.reason));
+					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(fileRef.item, fileRef.problem));
 				}
 			});
 			let allDiagnostics = importDiagnostics.concat(diagnostics);

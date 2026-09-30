@@ -180,6 +180,46 @@ describe('HrefPaths.toPath() with an XML catalog', () => {
 		expect(HrefPaths.fileProblem('http://example.com/lib.xsl', '/work/proj/main.xsl', path.posix)).to.equal(undefined);
 	});
 
+	it('an href that the catalog doesn\'t map to a file: a warning for http:, which Saxon fetches, and an error for urn:', () => {
+		useCatalog();
+		expect(HrefPaths.importProblem('http://example.com/other.xsl', '/work/proj/main.xsl', path.posix)).to.deep.equal({
+			message: 'Included/imported URI \'http://example.com/other.xsl\' isn\'t resolved to a file by the XML catalog catalog.xml - its declarations aren\'t known, and Saxon will fetch it, if it can',
+			warning: true,
+			catalogPath: '/cat/catalog.xml',
+		});
+		expect(HrefPaths.importProblem('urn:x:missing', '/work/proj/main.xsl', path.posix)).to.deep.equal({
+			message: 'Included/imported URI \'urn:x:missing\' isn\'t resolved to a file by the XML catalog catalog.xml',
+			warning: false,
+			catalogPath: '/cat/catalog.xml',
+		});
+		// mapped to a URI that isn't a file
+		expect(HrefPaths.importProblem('http://example.com/remote.xsl', '/work/proj/main.xsl', path.posix)?.warning).to.equal(true);
+		// resolved
+		expect(HrefPaths.importProblem('http://example.com/lib.xsl', '/work/proj/main.xsl', path.posix)).to.equal(undefined);
+		expect(HrefPaths.importProblem('a.xsl', '/work/proj/main.xsl', path.posix)).to.equal(undefined);
+	});
+
+	it('an href that the catalog doesn\'t map to a file: its document link opens the catalog', () => {
+		useCatalog();
+		expect(HrefPaths.linkTarget('http://example.com/other.xsl', '/work/proj/main.xsl', path.posix)).to.equal('file:///cat/catalog.xml');
+		expect(HrefPaths.linkTooltip('http://example.com/other.xsl', '/work/proj/main.xsl', path.posix)).to.equal('Not resolved to a file by the XML catalog catalog.xml - open the catalog');
+		expect(HrefPaths.linkTarget('urn:x:missing', '/work/proj/main.xsl', path.posix)).to.equal('file:///cat/catalog.xml');
+		expect(HrefPaths.linkTooltip('http://example.com/lib.xsl', '/work/proj/main.xsl', path.posix)).to.equal(undefined);
+	});
+
+	it('with no catalog, an href that isn\'t a file: a warning or error suggesting a catalog, and no link to one', () => {
+		expect(HrefPaths.importProblem('http://example.com/lib.xsl', '/work/proj/main.xsl', path.posix)).to.deep.equal({
+			message: 'Included/imported URI \'http://example.com/lib.xsl\' isn\'t a file - its declarations aren\'t known, and Saxon will fetch it, if it can - an XML catalog can map it to a local file (the XSLT.resources.catalog setting)',
+			warning: true,
+		});
+		expect(HrefPaths.importProblem('urn:x:a', '/work/proj/main.xsl', path.posix)?.warning).to.equal(false);
+		// a file problem is an error
+		expect(HrefPaths.importProblem('file://private/a.xsl', '/work/proj/main.xsl', path.posix)?.message).to.match(/^Included\/imported file 'file:\/\/private\/a.xsl' can't be resolved: 'private' is the URI's host/);
+		expect(HrefPaths.linkTarget('http://example.com/lib.xsl', '/work/proj/main.xsl', path.posix)).to.equal('http://example.com/lib.xsl');
+		expect(HrefPaths.linkTarget('urn:x:a', '/work/proj/main.xsl', path.posix)).to.equal(undefined);
+		expect(HrefPaths.linkTooltip('http://example.com/lib.xsl', '/work/proj/main.xsl', path.posix)).to.equal(undefined);
+	});
+
 	it('with no catalog, an http: href isn\'t a file', () => {
 		expect(HrefPaths.toPath('http://example.com/lib.xsl', '/work/proj/main.xsl', path.posix)).to.equal(undefined);
 	});

@@ -41,6 +41,9 @@ Things to try:
   the workspace.
 - Set the setting to `""` (no catalog, and no offer of one): the imports aren't resolved, so `str:shout`, `dt:long-date` and `$str:separator` are reported -
   and Saxon fails with an I/O error for `http://example.com/xslt/strings.xsl`.
+- Change an href in `main.xsl` to a URI that isn't in the catalog, e.g. `http://example.com/xslt/missing.xsl`: it's
+  reported as not resolved by the XML catalog `catalog.xml` - a warning, as Saxon would try to fetch it - and
+  Cmd/Ctrl+click opens `catalog.xml`, to add an entry. With a `urn:` URI, e.g. `urn:example:missing`, it's an error.
 - Move `lib/dates` to another folder, and update the `uri` in `catalogs/libraries.xml`: `main.xsl` doesn't change.
 - Replace the two `uri` entries with the `rewriteURI` entry in the comment in `libraries.xml`, and change the hrefs in
   `main.xsl` to `http://example.com/lib/strings/strings.xsl` and `http://example.com/lib/dates/dates.xsl`.

@@ -14,7 +14,8 @@ import { CatalogSetting } from '../../src/catalogSetting';
 import { HrefPaths } from '../../src/hrefPaths';
 import { XmlCatalog } from '../../src/xmlCatalog';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
-import { XSLTConfiguration } from '../../src/languageConfigurations';
+import { XSLTConfiguration, XSLTLightConfiguration } from '../../src/languageConfigurations';
+import { DocumentLinkProvider } from '../../src/documentLinkProvider';
 import { SaxonTaskProvider } from '../../src/saxonTaskProvider';
 import { SaxonCTaskProvider } from '../../src/saxonCTaskProvider';
 
@@ -94,12 +95,12 @@ suite('XML catalog setting: imports and tasks', () => {
 	});
 
 	let count = 0;
-	// the problems in a module importing http://example.com/lib.xsl, with the diagnostics set for the active editor's
-	// document - a new file each time, as VS Code keeps a document's text once it's opened
-	async function problems() {
+	// the problems in a module importing the href, by default http://example.com/lib.xsl, with the diagnostics set for
+	// the active editor's document - a new file each time, as VS Code keeps a document's text once it's opened
+	async function diagnostics(href = 'http://example.com/lib.xsl') {
 		const file = path.join(folder, `main${++count}.xsl`);
 		fs.writeFileSync(file, `<xsl:stylesheet ${namespaces}>
-  <xsl:import href="http://example.com/lib.xsl"/>
+  <xsl:import href="${href}"/>
   <xsl:template name="xsl:initial-template">
     <xsl:sequence select="$fromCatalog"/>
   </xsl:template>
@@ -108,17 +109,47 @@ suite('XML catalog setting: imports and tasks', () => {
 		const collection = vscode.languages.createDiagnosticCollection('xml-catalog-test');
 		await vscode.window.showTextDocument(document);
 		await new XsltSymbolProvider(XSLTConfiguration.configuration, collection).getDocumentSymbols(document, false);
-		const messages = (collection.get(document.uri) ?? []).map((d) => d.message);
+		const found = [...(collection.get(document.uri) ?? [])];
 		collection.dispose();
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-		return messages;
+		return found;
 	}
+	const problems = async (href?: string) => (await diagnostics(href)).map((d) => d.message);
+	const unresolvedVariable = 'XPath: The variable/parameter: $fromCatalog cannot be resolved here, but it may be defined in an external module.';
 
-	test('with no catalog, an http: import isn\'t resolved - and isn\'t reported', async function () {
+	test('with no catalog, an http: import isn\'t resolved - a warning, suggesting a catalog', async function () {
 		this.timeout(20000);
 		await settings().update(CatalogSetting.setting, undefined, vscode.ConfigurationTarget.Global);
 		await catalogChanged(undefined);
-		assert.deepEqual(await problems(), ['XPath: The variable/parameter: $fromCatalog cannot be resolved here, but it may be defined in an external module.']);
+		const found = await diagnostics();
+		assert.deepEqual(found.map((d) => [d.message, d.severity]), [
+			['Included/imported URI \'http://example.com/lib.xsl\' isn\'t a file - its declarations aren\'t known, and Saxon will fetch it, if it can - an XML catalog can map it to a local file (the XSLT.resources.catalog setting)', vscode.DiagnosticSeverity.Warning],
+			[unresolvedVariable, vscode.DiagnosticSeverity.Warning],
+		]);
+	});
+
+	test('with the catalog, an http: URI not in it is a warning, and a urn: URI an error - naming the catalog, with a link to it', async function () {
+		this.timeout(20000);
+		await settings().update(CatalogSetting.setting, catalogPath, vscode.ConfigurationTarget.Global);
+		await catalogChanged(catalogPath);
+		const http = (await diagnostics('http://example.com/missing.xsl'))[0];
+		assert.strictEqual(http.message, 'Included/imported URI \'http://example.com/missing.xsl\' isn\'t resolved to a file by the XML catalog catalog.xml - its declarations aren\'t known, and Saxon will fetch it, if it can');
+		assert.strictEqual(http.severity, vscode.DiagnosticSeverity.Warning);
+		assert.strictEqual(http.relatedInformation?.[0].location.uri.fsPath, catalogPath);
+		const urn = (await diagnostics('urn:example:missing'))[0];
+		assert.strictEqual(urn.message, 'Included/imported URI \'urn:example:missing\' isn\'t resolved to a file by the XML catalog catalog.xml');
+		assert.strictEqual(urn.severity, vscode.DiagnosticSeverity.Error);
+	});
+
+	test('with the catalog, the document link of a URI not in it opens the catalog', async () => {
+		await settings().update(CatalogSetting.setting, catalogPath, vscode.ConfigurationTarget.Global);
+		await catalogChanged(catalogPath);
+		const document = await vscode.workspace.openTextDocument({ language: 'xslt', content: `<xsl:stylesheet ${namespaces}>\n  <xsl:import href="http://example.com/missing.xsl"/>\n  <xsl:import href="http://example.com/lib.xsl"/>\n</xsl:stylesheet>` });
+		const links = new DocumentLinkProvider(XSLTLightConfiguration.configuration).provideDocumentLinks(document, new vscode.CancellationTokenSource().token);
+		assert.deepEqual(links.map((link) => [link.target?.fsPath, link.tooltip]), [
+			[catalogPath, 'Not resolved to a file by the XML catalog catalog.xml - open the catalog'],
+			[path.join(folder, 'local', 'lib.xsl'), undefined],
+		]);
 	});
 
 	test('with the catalog setting, an http: import is resolved to the local file', async function () {

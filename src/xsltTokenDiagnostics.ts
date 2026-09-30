@@ -19,7 +19,7 @@ import { XdocNotes, XdocTag } from './xdocNote';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
 import { FixedNamespaces } from './fixedNamespaces';
-import { HrefPaths } from './hrefPaths';
+import { HrefPaths, ImportProblem } from './hrefPaths';
 
 enum HasCharacteristic {
 	unknown,
@@ -4728,18 +4728,23 @@ export class XsltTokenDiagnostics {
 		};
 	}
 
-	// the reason is why the href has no file path, from HrefPaths.fileProblem() - undefined when the file isn't found
-	public static createImportDiagnostic(data: GlobalInstructionData, reason?: string): vscode.Diagnostic {
+	// the problem is why the href has no file path, from HrefPaths.importProblem() - undefined when the file isn't found
+	public static createImportDiagnostic(data: GlobalInstructionData, problem?: ImportProblem): vscode.Diagnostic {
 		let token = data.token;
 		let line = token.line;
 		let endChar = token.startCharacter + token.length;
-		return {
+		const diagnostic: vscode.Diagnostic = {
 			code: '',
-			message: reason ? `Included/imported file '${data.name}' can't be resolved: ${reason}` : `Included/imported file '${data.name}' not found`,
+			message: problem ? problem.message : `Included/imported file '${data.name}' not found`,
 			range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
-			severity: vscode.DiagnosticSeverity.Error,
+			severity: problem?.warning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error,
 			source: '',
 		};
+		if (problem?.catalogPath) {
+			// in the Problems panel, a link to the catalog
+			diagnostic.relatedInformation = [new vscode.DiagnosticRelatedInformation(new vscode.Location(vscode.Uri.file(problem.catalogPath), new vscode.Position(0, 0)), 'The XML catalog of the XSLT.resources.catalog setting')];
+		}
+		return diagnostic;
 	}
 
 	// XSLT 4.0 documentation notes - an xsl:note with format="xdoc-md" - of an xsl:function, xsl:template or

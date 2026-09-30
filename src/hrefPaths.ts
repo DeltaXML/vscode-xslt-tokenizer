@@ -6,6 +6,14 @@ import { XmlCatalog } from './xmlCatalog';
 // path.posix or path.win32 - the path module is one of them
 type PathApi = typeof path.posix;
 
+// a problem reported for the href of an xsl:import or xsl:include: an error, or a warning - with the XML catalog's path
+// when it's about the catalog
+export interface ImportProblem {
+	message: string;
+	warning: boolean;
+	catalogPath?: string;
+}
+
 // How the extension turns the href of an xsl:import, xsl:include or xsl:use-package, or a fixed-namespaces URI, into a
 // file path: all of them use toPath(), as a URI reference resolved against the file: URI of the document it's in - or
 // mapped by the XML catalog.
@@ -90,6 +98,33 @@ export class HrefPaths {
 		return 'it isn\'t a file path - e.g. it has an encoded \'/\' (%2F), or an invalid percent-encoding';
 	}
 
+	// the problem reported for the href of an xsl:import or xsl:include that has no file path - undefined when it has
+	// one. An http: or https: URI that isn't mapped to a file is a warning, as Saxon fetches it - another URI is an error
+	public static importProblem(href: string, documentPath: string | undefined, p: PathApi = path): ImportProblem | undefined {
+		const fileReason = HrefPaths.fileProblem(href, documentPath, p);
+		if (fileReason !== undefined) {
+			return { message: `Included/imported file '${href}' can't be resolved: ${fileReason}`, warning: false };
+		}
+		if (!HrefPaths.isUnresolvedURI(href, documentPath, p)) {
+			return undefined;
+		}
+		const fetched = /^https?:/i.test(href.trim());
+		const consequence = fetched ? ' - its declarations aren\'t known, and Saxon will fetch it, if it can' : '';
+		const catalogPath = HrefPaths.catalog?.catalogPath;
+		if (catalogPath !== undefined) {
+			return { message: `Included/imported URI '${href}' isn't resolved to a file by the XML catalog ${path.basename(catalogPath)}${consequence}`, warning: fetched, catalogPath };
+		}
+		return { message: `Included/imported URI '${href}' isn't a file${consequence} - an XML catalog can map it to a local file (the XSLT.resources.catalog setting)`, warning: fetched };
+	}
+
+	// the href is a URI with a scheme other than file:, e.g. http: or urn:, that has no file path
+	private static isUnresolvedURI(href: string, documentPath: string | undefined, p: PathApi) {
+		const trimmed = href.trim();
+		const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(trimmed)?.[1];
+		const isDrivePath = p === path.win32 && /^[a-z]:[\\/]/i.test(trimmed);
+		return scheme !== undefined && scheme.toLowerCase() !== 'file' && !isDrivePath && HrefPaths.toPath(href, documentPath, p) === undefined;
+	}
+
 	// the path of an xsl:use-package package, from the XSLT.resources.xsltPackages setting: a file path, relative to the
 	// workspace folder, or a file: URI
 	public static settingsPath(value: string, workspace: string, p: PathApi = path): string | undefined {
@@ -111,13 +146,25 @@ export class HrefPaths {
 		return url.pathToFileURL(filePath, { windows: p === path.win32 }).toString();
 	}
 
-	// the target of a document link for an href: the file: URI of its path, or an http: or https: URI as it is -
-	// undefined for another href that isn't a file
+	// the target of a document link for an href: the file: URI of its path - or for a URI that isn't resolved to a file,
+	// the XML catalog, to add an entry for it, or with no catalog, an http: or https: URI as it is - undefined for another
+	// href that isn't a file
 	public static linkTarget(href: string, documentPath: string | undefined, p: PathApi = path): string | undefined {
 		const filePath = HrefPaths.toPath(href, documentPath, p);
 		if (filePath !== undefined) {
 			return HrefPaths.fileUri(filePath, p);
 		}
+		if (HrefPaths.catalog && HrefPaths.isUnresolvedURI(href, documentPath, p)) {
+			return HrefPaths.fileUri(HrefPaths.catalog.catalogPath, p);
+		}
 		return /^https?:\/\//i.test(href.trim()) ? href.trim() : undefined;
+	}
+
+	// the tooltip of a document link for an href - undefined for VS Code's default
+	public static linkTooltip(href: string, documentPath: string | undefined, p: PathApi = path): string | undefined {
+		if (HrefPaths.catalog && HrefPaths.isUnresolvedURI(href, documentPath, p)) {
+			return `Not resolved to a file by the XML catalog ${path.basename(HrefPaths.catalog.catalogPath)} - open the catalog`;
+		}
+		return undefined;
 	}
 }
