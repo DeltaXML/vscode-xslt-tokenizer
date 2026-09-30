@@ -162,8 +162,18 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
 			let allImportedGlobals: GlobalInstructionData[] = [];
-			let importErrors: GlobalInstructionData[] = [];
+			let importErrors: { data: GlobalInstructionData, reason?: string }[] = [];
 			const rootPath = vscode.workspace.rootPath;
+
+			// hrefs meant to be files that have no file path, e.g. file://folder/a.xsl - so they aren't imported
+			globalInstructionData.forEach((data) => {
+				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
+					const reason = HrefPaths.fileProblem(data.name, document.fileName);
+					if (reason) {
+						importErrors.push({ data, reason });
+					}
+				}
+			});
 
 			globalsSummary0.globals.forEach((globals) => {
 				if (globals.error) {
@@ -188,7 +198,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							return result;
 						});
 						if (errorData) {
-							importErrors.push(errorData);
+							importErrors.push({ data: errorData });
 						}
 					}
 				} else {
@@ -207,7 +217,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				if (this.collection && this.docType !== DocumentTypes.SCH) {
 					let importDiagnostics: vscode.Diagnostic[] = [];
 					importErrors.forEach((importError) => {
-						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
+						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.reason));
 					});
 					let allDiagnostics = importDiagnostics.concat(diagnostics);
 					if (allDiagnostics.length > 0) {

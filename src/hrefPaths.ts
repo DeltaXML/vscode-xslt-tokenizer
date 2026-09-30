@@ -46,6 +46,22 @@ export class HrefPaths {
 		}
 	}
 
+	// why an href that's meant to be a file, i.e. a relative href or a file: URI, has no file path - undefined when it has
+	// one, or when it's a URI with another scheme, e.g. http:, or relative with no document
+	public static fileProblem(href: string, documentPath: string | undefined, p: PathApi = path): string | undefined {
+		const trimmed = href.trim();
+		const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(trimmed)?.[1];
+		if ((scheme !== undefined && scheme.toLowerCase() !== 'file') || (scheme === undefined && documentPath === undefined) ||
+			HrefPaths.toPath(href, documentPath, p) !== undefined) {
+			return undefined;
+		}
+		const host = /^file:\/\/([^/?#]+)/i.exec(trimmed)?.[1];
+		if (host !== undefined && host.toLowerCase() !== 'localhost') {
+			return `'${host}' is the URI's host, not a folder - a file: URI for a path has three slashes, e.g. file:///${trimmed.substring('file://'.length)}`;
+		}
+		return 'it isn\'t a file path - e.g. it has an encoded \'/\' (%2F), or an invalid percent-encoding';
+	}
+
 	// the path of an xsl:use-package package, from the XSLT.resources.xsltPackages setting: a file path, relative to the
 	// workspace folder, or a file: URI
 	public static settingsPath(value: string, workspace: string, p: PathApi = path): string | undefined {

@@ -24,18 +24,22 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		let globals = this.xslLexer.globalInstructionData;
 
-		async function returnBadFileLinks(item: GlobalInstructionData): Promise<GlobalInstructionData|undefined> {
+		async function returnBadFileLinks(item: GlobalInstructionData): Promise<{ item: GlobalInstructionData, reason?: string }|undefined> {
 			const resolvedPath = HrefPaths.toPath(item.name, document.fileName);
-			// an href that isn't a file, e.g. http:, isn't checked
-			let fileExists = resolvedPath === undefined || await GlobalsProvider.fileExists(resolvedPath);
+			if (resolvedPath === undefined) {
+				// an href that isn't a file, e.g. http:, isn't checked
+				const reason = HrefPaths.fileProblem(item.name, document.fileName);
+				return reason ? { item, reason } : undefined;
+			}
+			let fileExists = await GlobalsProvider.fileExists(resolvedPath);
 			if (fileExists) {
 				return undefined;
 			} else {
-				return item;
+				return { item };
 			}
 		}
 
-		let fileChecks: Promise<GlobalInstructionData|undefined>[] = [];
+		let fileChecks: Promise<{ item: GlobalInstructionData, reason?: string }|undefined>[] = [];
 		globals.forEach((item) => {
 			if (item.type === GlobalInstructionType.Import || item.type === GlobalInstructionType.Include) {
 				fileChecks.push(returnBadFileLinks(item));
@@ -49,7 +53,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 			let importDiagnostics: vscode.Diagnostic[] = [];
 			errorFileRefs.forEach((fileRef) => {
 				if (fileRef) {
-					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(fileRef));
+					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(fileRef.item, fileRef.reason));
 				}
 			});
 			let allDiagnostics = importDiagnostics.concat(diagnostics);

@@ -152,6 +152,43 @@ describe('HrefPaths.toPath()', () => {
 	});
 });
 
+describe('HrefPaths.fileProblem() - why an import\'s href, meant to be a file, has no file path', () => {
+	const hostProblem = (host: string, rest: string) => `'${host}' is the URI's host, not a folder - a file: URI for a path has three slashes, e.g. file:///${host}${rest}`;
+	const pathProblem = 'it isn\'t a file path - e.g. it has an encoded \'/\' (%2F), or an invalid percent-encoding';
+	describe('POSIX', () => {
+		check([
+			['a.xsl', undefined],
+			['file:///private/tmp/a.xsl', undefined],
+			['file://localhost/private/tmp/a.xsl', undefined],
+			// Saxon reports an I/O error for these
+			['file://private/tmp/a.xsl', hostProblem('private', '/tmp/a.xsl')],
+			['FILE://server/share/a.xsl', hostProblem('server', '/share/a.xsl')],
+			['a%2Fb.xsl', pathProblem],
+			['file:///a%zz.xsl', pathProblem],
+			// not meant to be files
+			['http://example.com/a.xsl', undefined],
+			['urn:x:a', undefined],
+			['C:\\lib\\a.xsl', undefined],
+		], (href) => HrefPaths.fileProblem(href, posixDocument, path.posix));
+	});
+
+	describe('Windows', () => {
+		check([
+			// a UNC share
+			['file://server/share/a.xsl', undefined],
+			['C:\\lib\\a.xsl', undefined],
+			['a%2Fb.xsl', pathProblem],
+		], (href) => HrefPaths.fileProblem(href, windowsDocument, path.win32));
+	});
+
+	describe('no document: a relative href isn\'t a problem', () => {
+		check([
+			['a.xsl', undefined],
+			['file://private/tmp/a.xsl', hostProblem('private', '/tmp/a.xsl')],
+		], (href) => HrefPaths.fileProblem(href, undefined, path.posix));
+	});
+});
+
 describe('HrefPaths.fromAttribute() - the href of an attribute value, with its XML references decoded', () => {
 	check([
 		['a.xsl', 'a.xsl'],

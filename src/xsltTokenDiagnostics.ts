@@ -4728,13 +4728,14 @@ export class XsltTokenDiagnostics {
 		};
 	}
 
-	public static createImportDiagnostic(data: GlobalInstructionData): vscode.Diagnostic {
+	// the reason is why the href has no file path, from HrefPaths.fileProblem() - undefined when the file isn't found
+	public static createImportDiagnostic(data: GlobalInstructionData, reason?: string): vscode.Diagnostic {
 		let token = data.token;
 		let line = token.line;
 		let endChar = token.startCharacter + token.length;
 		return {
 			code: '',
-			message: `Included/imported file '${data.name}' not found`,
+			message: reason ? `Included/imported file '${data.name}' can't be resolved: ${reason}` : `Included/imported file '${data.name}' not found`,
 			range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 			severity: vscode.DiagnosticSeverity.Error,
 			source: '',

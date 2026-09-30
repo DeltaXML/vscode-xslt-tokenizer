@@ -16,6 +16,8 @@ import { ImportIndex } from '../../src/importIndex';
 import { RecordTypes } from '../../src/recordTypes';
 import { FixedNamespaces } from '../../src/fixedNamespaces';
 import { DocumentLinkProvider } from '../../src/documentLinkProvider';
+import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
+import { HrefPaths } from '../../src/hrefPaths';
 
 const stylesheet = (href: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
   <xsl:import href="${href}"/>
@@ -114,5 +116,51 @@ suite('Href references: FixedNamespaces.forModule() - a document URI in a fixed-
 		const value = '#standard&#x20;missing&amp;.xml';
 		const result = FixedNamespaces.forModule(module(value), moduleFile)!;
 		assert.deepEqual(result.problems, [{ token: 'missing&amp;.xml', offset: value.indexOf('missing'), reason: 'unreadable' }]);
+	});
+});
+
+suite('Href problems: the import diagnostics of XsltSymbolProvider', () => {
+	const folder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'href-problems-')));
+	suiteSetup(() => fs.writeFileSync(path.join(folder, 'lib.xsl'), stylesheet('other.xsl').replace(/<xsl:import[^>]*>/, '')));
+	suiteTeardown(() => fs.rmSync(folder, { recursive: true, force: true }));
+
+	// the diagnostics are set for the active editor's document
+	let count = 0;
+	async function importProblems(href: string) {
+		// a new file each time, as VS Code keeps a document's text once it's opened
+		const file = path.join(folder, `main${++count}.xsl`);
+		fs.writeFileSync(file, stylesheet(href));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		const collection = vscode.languages.createDiagnosticCollection('href-problems-test');
+		await vscode.window.showTextDocument(document);
+		await new XsltSymbolProvider(XSLTConfiguration.configuration, collection).getDocumentSymbols(document, false);
+		const problems = (collection.get(document.uri) ?? []).map((d) => ({ message: d.message, text: document.getText(d.range) }));
+		collection.dispose();
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		return problems;
+	}
+
+	test('a file: URI with a host, e.g. two slashes before a path, is reported', async function () {
+		this.timeout(20000);
+		if (process.platform === 'win32') {
+			// file://host/... is a UNC share
+			this.skip();
+		}
+		const href = `file:/${folder}/lib.xsl`;
+		const host = folder.split('/')[1];
+		assert.deepEqual(await importProblems(href), [{
+			message: `Included/imported file '${href}' can't be resolved: '${host}' is the URI's host, not a folder - a file: URI for a path has three slashes, e.g. file://${folder}/lib.xsl`,
+			text: `"${href}"`
+		}]);
+	});
+
+	test('the same path with three slashes is imported', async function () {
+		this.timeout(20000);
+		assert.deepEqual(await importProblems(HrefPaths.fileUri(path.join(folder, 'lib.xsl'))), []);
+	});
+
+	test('a missing file is reported as not found', async function () {
+		this.timeout(20000);
+		assert.deepEqual((await importProblems('missing.xsl')).map((p) => p.message), [`Included/imported file 'missing.xsl' not found`]);
 	});
 });
