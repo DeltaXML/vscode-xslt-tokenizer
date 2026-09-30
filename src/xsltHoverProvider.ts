@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
-import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument, workspace } from "vscode";
+import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument, Uri, workspace } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration } from "./xslLexer";
@@ -228,14 +228,31 @@ export class XSLTHoverProvider implements HoverProvider {
 			return undefined;
 		}
 		const open = workspace.textDocuments.find((d) => d.fileName === modulePath);
+		const catalogText = XSLTHoverProvider.catalogResolutionMarkdown(href, document.fileName);
 		let moduleText: string;
 		try {
 			moduleText = open ? open.getText() : fs.readFileSync(modulePath, 'utf8');
 		} catch {
-			return undefined;
+			// for an href resolved by the XML catalog, how it was resolved, to a file that isn't found
+			return catalogText ? this.createHover(`module ${path.basename(modulePath)}`, `Stylesheet module: ${modulePath} (not found)\n\n${catalogText}`) : undefined;
 		}
 		const note = XdocNotes.moduleNote(moduleText);
-		return this.createHover(`module ${path.basename(modulePath)}`, `${note ? XdocNotes.toMarkdown(note) + '\n\n---\n' : ''}Stylesheet module: ${modulePath}`);
+		return this.createHover(`module ${path.basename(modulePath)}`, `${note ? XdocNotes.toMarkdown(note) + '\n\n---\n' : ''}Stylesheet module: ${modulePath}${catalogText ? '\n\n' + catalogText : ''}`);
+	}
+
+	// how the XML catalog resolved an href, e.g. 'Resolved by the uri entry in catalogs/libraries.xml, via catalog.xml'
+	// with links to the catalog files - undefined if the catalog didn't resolve it
+	public static catalogResolutionMarkdown(href: string, documentPath: string) {
+		const resolution = HrefPaths.catalogResolution(href, documentPath);
+		if (!resolution) {
+			return undefined;
+		}
+		const link = (file: string) => `[${workspace.asRelativePath(file)}](${Uri.file(file).toString()})`;
+		const entry = resolution.entry;
+		const matched = entry.kind === 'uri' ? `the \`uri\` entry for \`${entry.name}\`` :
+			entry.kind === 'rewriteURI' ? `the \`rewriteURI\` entry for \`${entry.uriStartString}\`` : `the \`uriSuffix\` entry for \`${entry.uriSuffix}\``;
+		const via = resolution.chain.length > 1 ? `, via ${resolution.chain.slice(0, -1).map(link).join(' → ')}` : '';
+		return `Resolved by the XML catalog: ${matched} in ${link(resolution.catalogPath)}${via}`;
 	}
 
 	// XSLT 4.0: for the start tag of the module note, a preview of the note, as it's shown for an xsl:import or

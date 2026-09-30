@@ -16,6 +16,8 @@ import { XmlCatalog } from '../../src/xmlCatalog';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSLTConfiguration, XSLTLightConfiguration } from '../../src/languageConfigurations';
 import { DocumentLinkProvider } from '../../src/documentLinkProvider';
+import { CatalogDocumentProvider } from '../../src/catalogDocumentProvider';
+import { XSLTHoverProvider } from '../../src/xsltHoverProvider';
 import { SaxonTaskProvider } from '../../src/saxonTaskProvider';
 import { SaxonCTaskProvider } from '../../src/saxonCTaskProvider';
 
@@ -170,5 +172,89 @@ suite('XML catalog setting: imports and tasks', () => {
 
 		const cTask = new SaxonCTaskProvider('').getTask({ type: 'xslt-c', label: 'catalog test', saxonCPath: '/saxonc/bin', xsltFile: 'main.xsl', xmlSource: '', unescapeMessages: false });
 		assert.include((cTask!.execution as vscode.ProcessExecution).args, `-catalog:${catalogPath}`);
+	});
+});
+
+suite('XML catalog files: document links and missing files', () => {
+	const catalogFolder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'xml-catalog-files-')));
+	const file = (name: string) => path.join(catalogFolder, name);
+	suiteSetup(async () => {
+		// the extension's catalog, from the setting, isn't set while these tests set their own
+		await settings().update(CatalogSetting.setting, undefined, vscode.ConfigurationTarget.Global);
+		await catalogChanged(undefined);
+		fs.mkdirSync(file('lib'));
+		fs.mkdirSync(file('catalogs'));
+		fs.writeFileSync(file('lib/a.xsl'), `<xsl:stylesheet ${namespaces}/>`);
+		fs.writeFileSync(file('catalogs/libraries.xml'), `<catalog xmlns="${XmlCatalog.namespace}">\n  <uri name="http://example.com/a.xsl" uri="../lib/a.xsl"/>\n</catalog>`);
+		fs.writeFileSync(file('catalog.xml'), `<catalog xmlns="${XmlCatalog.namespace}">
+  <uri name="http://example.com/a.xsl" uri="lib/a.xsl"/>
+  <uri name="http://example.com/moved.xsl" uri="lib/moved.xsl"/>
+  <rewriteURI uriStartString="http://example.com/lib/" rewritePrefix="lib/"/>
+  <rewriteURI uriStartString="http://example.com/old/" rewritePrefix="old/"/>
+  <uri name="http://example.com/remote.xsl" uri="http://mirror.example.com/remote.xsl"/>
+  <nextCatalog catalog="catalogs/libraries.xml"/>
+  <nextCatalog catalog="catalogs/missing.xml"/>
+</catalog>`);
+		fs.writeFileSync(file('products.xml'), '<catalog><product uri="lib/none.xsl"/></catalog>');
+	});
+	suiteTeardown(() => fs.rmSync(catalogFolder, { recursive: true, force: true }));
+
+	test('the uri and nextCatalog entries are links - with their values, in quotes, as the ranges', async () => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('catalog.xml')));
+		const links = new CatalogDocumentProvider().provideDocumentLinks(document);
+		assert.deepEqual(links.map((link) => [document.getText(link.range), link.target?.fsPath]), [
+			['"lib/a.xsl"', file('lib/a.xsl')],
+			['"lib/moved.xsl"', file('lib/moved.xsl')],
+			['"catalogs/libraries.xml"', file('catalogs/libraries.xml')],
+			['"catalogs/missing.xml"', file('catalogs/missing.xml')],
+		]);
+	});
+
+	test('the files and folders that aren\'t found are warnings', async () => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('catalog.xml')));
+		assert.deepEqual(CatalogDocumentProvider.diagnostics(document).map((d) => [document.getText(d.range), d.message, d.severity]), [
+			['"lib/moved.xsl"', `XML catalog: the file of this uri isn't found: ${file('lib/moved.xsl')}`, vscode.DiagnosticSeverity.Warning],
+			['"old/"', `XML catalog: the folder of this rewritePrefix isn't found: ${file('old/')}`, vscode.DiagnosticSeverity.Warning],
+			['"catalogs/missing.xml"', `XML catalog: the catalog file of this catalog isn't found: ${file('catalogs/missing.xml')}`, vscode.DiagnosticSeverity.Warning],
+		]);
+	});
+
+	test('a secondary catalog\'s paths are relative to it', async () => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('catalogs/libraries.xml')));
+		assert.deepEqual(new CatalogDocumentProvider().provideDocumentLinks(document).map((link) => link.target?.fsPath), [file('lib/a.xsl')]);
+		assert.deepEqual(CatalogDocumentProvider.diagnostics(document), []);
+	});
+
+	test('an XML file that isn\'t a catalog has no links or warnings', async () => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('products.xml')));
+		assert.deepEqual(new CatalogDocumentProvider().provideDocumentLinks(document), []);
+		assert.deepEqual(CatalogDocumentProvider.diagnostics(document), []);
+	});
+
+	test('the hover of an href resolved by the catalog: the entry, and the catalogs it was found through', () => {
+		HrefPaths.catalog = new XmlCatalog(file('catalog.xml'));
+		try {
+			const link = (name: string) => `[${vscode.workspace.asRelativePath(file(name))}](${vscode.Uri.file(file(name)).toString()})`;
+			assert.strictEqual(XSLTHoverProvider.catalogResolutionMarkdown('http://example.com/a.xsl', file('main.xsl')),
+				`Resolved by the XML catalog: the \`uri\` entry for \`http://example.com/a.xsl\` in ${link('catalog.xml')}`);
+			assert.strictEqual(XSLTHoverProvider.catalogResolutionMarkdown('http://example.com/lib/b.xsl', file('main.xsl')),
+				`Resolved by the XML catalog: the \`rewriteURI\` entry for \`http://example.com/lib/\` in ${link('catalog.xml')}`);
+			HrefPaths.catalog = new XmlCatalog(file('catalogs/libraries.xml'));
+			assert.strictEqual(XSLTHoverProvider.catalogResolutionMarkdown('lib/a.xsl', file('main.xsl')), undefined);
+		} finally {
+			HrefPaths.catalog = undefined;
+		}
+	});
+
+	test('the hover of an href resolved through a nextCatalog entry', () => {
+		fs.writeFileSync(file('master.xml'), `<catalog xmlns="${XmlCatalog.namespace}"><nextCatalog catalog="catalogs/libraries.xml"/></catalog>`);
+		HrefPaths.catalog = new XmlCatalog(file('master.xml'));
+		try {
+			const link = (name: string) => `[${vscode.workspace.asRelativePath(file(name))}](${vscode.Uri.file(file(name)).toString()})`;
+			assert.strictEqual(XSLTHoverProvider.catalogResolutionMarkdown('http://example.com/a.xsl', file('main.xsl')),
+				`Resolved by the XML catalog: the \`uri\` entry for \`http://example.com/a.xsl\` in ${link('catalogs/libraries.xml')}, via ${link('master.xml')}`);
+		} finally {
+			HrefPaths.catalog = undefined;
+		}
 	});
 });

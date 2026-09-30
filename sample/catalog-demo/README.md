@@ -30,8 +30,11 @@ How `http://example.com/xslt/strings.xsl` is resolved:
    instead, e.g. `sample/catalog-demo/catalog.xml`.)
 2. Open `main.xsl`: there are no problems, and hovering on `str:shout` shows the function's signature, from
    `strings.xsl`.
-3. Cmd/Ctrl+click an `href`: the library file opens.
-4. Run it with **Quick Run**: the task passes `-catalog:<path>/catalog.xml` to Saxon, and the result is e.g.
+3. Hover on an `href`: it shows the entry that resolved it - the `uri` entry in `catalogs/libraries.xml`, via
+   `catalog.xml`. Cmd/Ctrl+click it: the library file opens.
+4. Open `catalog.xml`: its `nextCatalog` entry is a link to `catalogs/libraries.xml`, whose `uri` entries are links to
+   the library files.
+5. Run it with **Quick Run**: the task passes `-catalog:<path>/catalog.xml` to Saxon, and the result is e.g.
    `CATALOGS WORK! | Wednesday 30 September 2026`.
 
 Things to try:
@@ -44,7 +47,8 @@ Things to try:
 - Change an href in `main.xsl` to a URI that isn't in the catalog, e.g. `http://example.com/xslt/missing.xsl`: it's
   reported as not resolved by the XML catalog `catalog.xml` - a warning, as Saxon would try to fetch it - and
   Cmd/Ctrl+click opens `catalog.xml`, to add an entry. With a `urn:` URI, e.g. `urn:example:missing`, it's an error.
-- Move `lib/dates` to another folder, and update the `uri` in `catalogs/libraries.xml`: `main.xsl` doesn't change.
+- Move `lib/dates` to another folder: the `uri` entry in `catalogs/libraries.xml` has a warning, as its file isn't
+  found. Update it: `main.xsl` doesn't change.
 - Replace the two `uri` entries with the `rewriteURI` entry in the comment in `libraries.xml`, and change the hrefs in
   `main.xsl` to `http://example.com/lib/strings/strings.xsl` and `http://example.com/lib/dates/dates.xsl`.
 

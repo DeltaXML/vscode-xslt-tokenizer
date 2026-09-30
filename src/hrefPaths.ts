@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as url from 'url';
 import { RecordTypes } from './recordTypes';
-import { XmlCatalog } from './xmlCatalog';
+import { CatalogResolution, XmlCatalog } from './xmlCatalog';
 
 // path.posix or path.win32 - the path module is one of them
 type PathApi = typeof path.posix;
@@ -59,27 +59,43 @@ export class HrefPaths {
 		}
 	}
 
-	// the URI of an href from the XML catalog - the href as it's written, or else the absolute URI, as in the xmlresolver
-	// library that Saxon uses - undefined when there's no catalog, or no entry for it
+	// the URI of an href from the XML catalog - undefined when there's no catalog, or no entry for it
 	private static catalogURI(href: string, base: URL | undefined): URL | undefined {
-		if (!HrefPaths.catalog) {
-			return undefined;
-		}
-		let mapped = HrefPaths.catalog.resolveURI(href);
-		if (mapped === undefined) {
-			let absolute: string | undefined;
-			try {
-				absolute = new URL(href, base).href;
-			} catch {
-				absolute = undefined;
-			}
-			mapped = absolute !== undefined && absolute !== href ? HrefPaths.catalog.resolveURI(absolute) : undefined;
-		}
+		const resolution = HrefPaths.catalogResolutionOf(href, base);
 		try {
-			return mapped !== undefined ? new URL(mapped) : undefined;
+			return resolution !== undefined ? new URL(resolution.uri) : undefined;
 		} catch {
 			return undefined;
 		}
+	}
+
+	// how the XML catalog resolves an href - the href as it's written, or else the absolute URI, as in the xmlresolver
+	// library that Saxon uses - undefined when there's no catalog, or no entry for it
+	public static catalogResolution(href: string, documentPath: string | undefined, p: PathApi = path): CatalogResolution | undefined {
+		let base: URL | undefined;
+		try {
+			base = documentPath !== undefined ? url.pathToFileURL(documentPath, { windows: p === path.win32 }) : undefined;
+		} catch {
+			base = undefined;
+		}
+		return HrefPaths.catalogResolutionOf(href, base);
+	}
+
+	private static catalogResolutionOf(href: string, base: URL | undefined): CatalogResolution | undefined {
+		if (!HrefPaths.catalog) {
+			return undefined;
+		}
+		const asWritten = HrefPaths.catalog.resolve(href);
+		if (asWritten !== undefined) {
+			return asWritten;
+		}
+		let absolute: string | undefined;
+		try {
+			absolute = new URL(href, base).href;
+		} catch {
+			absolute = undefined;
+		}
+		return absolute !== undefined && absolute !== href ? HrefPaths.catalog.resolve(absolute) : undefined;
 	}
 
 	// why an href that's meant to be a file, i.e. a relative href or a file: URI, has no file path - undefined when it has

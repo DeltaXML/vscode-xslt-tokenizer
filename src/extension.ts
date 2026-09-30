@@ -37,6 +37,7 @@ import { wrapWith } from './xsltWrap';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
 import { CatalogSetting } from './catalogSetting';
+import { CatalogDocumentProvider } from './catalogDocumentProvider';
 import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
@@ -414,6 +415,8 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	// with no catalog setting: offer the workspace folder's catalog.xml, if it's an XML catalog - not waited for
 	CatalogSetting.offerWorkspaceCatalog(context);
+	// XML catalog files: document links for their entries, and warnings for files and folders that aren't found
+	CatalogDocumentProvider.activate(context);
 	const onIndexBuilt = ImportIndex.instance.onDidChange(() => {
 		if (ImportIndex.instance.built) {
 			onIndexBuilt.dispose();

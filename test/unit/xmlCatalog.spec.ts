@@ -109,6 +109,67 @@ describe('XmlCatalog: catalog files', () => {
 	});
 });
 
+describe('XmlCatalog.parse(): the references to files and folders, with their ranges', () => {
+	const text = `<catalog ${ns}>
+  <uri name="urn:a" uri="lib/a&amp;b.xsl"/>
+  <rewriteURI uriStartString="http://example.com/" rewritePrefix='vendor/'/>
+  <group xml:base="sub/">
+    <uriSuffix uriSuffix="/c.xsl" uri="c.xsl"/>
+  </group>
+  <nextCatalog
+      catalog="next.xml"/>
+  <other xmlns="urn:other"><uri name="urn:foreign" uri="foreign.xsl"/></other>
+</catalog>`;
+	const lines = text.split('\n');
+	const { references } = XmlCatalog.parse(text, 'file:///cat/catalog.xml');
+	// the text of a single-line range
+	const rangeText = (range: { startLine: number, startCharacter: number, endCharacter: number }) => lines[range.startLine].substring(range.startCharacter, range.endCharacter);
+
+	it('each uri, rewritePrefix and catalog attribute, with its absolute URI - not those in another namespace', () => {
+		expect(references.map((r) => [r.attribute, r.target])).to.deep.equal([
+			['uri', 'file:///cat/lib/a&b.xsl'],
+			['rewritePrefix', 'file:///cat/vendor/'],
+			['uri', 'file:///cat/sub/c.xsl'],
+			['catalog', 'file:///cat/next.xml'],
+		]);
+	});
+
+	it('the range of each attribute value, with its quotes, as it\'s written', () => {
+		expect(references.map((r) => rangeText(r.range))).to.deep.equal(['"lib/a&amp;b.xsl"', '\'vendor/\'', '"c.xsl"', '"next.xml"']);
+		expect(references[3].range.startLine).to.equal(7);
+	});
+});
+
+describe('XmlCatalog.resolve(): how a URI is resolved', () => {
+	const { catalog } = catalogOf({
+		'/cat/catalog.xml': `<catalog ${ns}><uri name="urn:a" uri="a.xsl"/><nextCatalog catalog="one/catalog.xml"/></catalog>`,
+		'/cat/one/catalog.xml': `<catalog ${ns}><nextCatalog catalog="two.xml"/></catalog>`,
+		'/cat/one/two.xml': `<catalog ${ns}><rewriteURI uriStartString="urn:lib:" rewritePrefix="lib/"/></catalog>`,
+	});
+
+	it('an entry in the catalog', () => {
+		expect(catalog.resolve('urn:a')).to.deep.equal({ uri: 'file:///cat/a.xsl', entry: { kind: 'uri', name: 'urn:a', uri: 'file:///cat/a.xsl' }, catalogPath: '/cat/catalog.xml', chain: ['/cat/catalog.xml'] });
+	});
+
+	it('an entry found through nextCatalog entries: the catalogs it was found through', () => {
+		const resolution = catalog.resolve('urn:lib:x.xsl');
+		expect(resolution?.uri).to.equal('file:///cat/one/lib/x.xsl');
+		expect(resolution?.entry.kind).to.equal('rewriteURI');
+		expect(resolution?.catalogPath).to.equal('/cat/one/two.xml');
+		expect(resolution?.chain).to.deep.equal(['/cat/catalog.xml', '/cat/one/catalog.xml', '/cat/one/two.xml']);
+	});
+
+	it('HrefPaths.catalogResolution(): the href as it\'s written, or its absolute URI', () => {
+		HrefPaths.catalog = catalog;
+		try {
+			expect(HrefPaths.catalogResolution('urn:a', '/work/main.xsl', path.posix)?.catalogPath).to.equal('/cat/catalog.xml');
+			expect(HrefPaths.catalogResolution('other.xsl', '/work/main.xsl', path.posix)).to.equal(undefined);
+		} finally {
+			HrefPaths.catalog = undefined;
+		}
+	});
+});
+
 describe('XmlCatalog.isCatalog() - a file that\'s an OASIS XML catalog', () => {
 	const cases: [string, boolean][] = [
 		[`<catalog ${ns}/>`, true],
