@@ -12,6 +12,7 @@ import * as jsc from 'jsonc-parser';
 import { GlobalInstructionType, GlobalInstructionData } from './xslLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { LexPosition } from './xpLexer';
+import { CatalogSetting } from './catalogSetting';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -34,6 +35,7 @@ interface XSLTTask extends vscode.TaskDefinition {
     features?: XSLTParameter[];
     initialTemplate?: string;
     initialMode?: string;
+    catalogFilenames?: string;
     classPathEntries?: string[];
     useWorkspace?: boolean;
     messageEscaping?: string;
@@ -458,6 +460,11 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                 // no setting: as for 'auto'
                 isXSLT40 = true;
                 commandLineArgs.push('--allowSyntaxExtensions:on');
+            }
+            const catalogOption = CatalogSetting.taskOption(xsltTask);
+            if (catalogOption) {
+                // the XSLT.resources.catalog setting, as used for the task's hrefs in the editor
+                commandLineArgs.push(catalogOption);
             }
             if (nogo) {
                 commandLineArgs.push('-nogo');

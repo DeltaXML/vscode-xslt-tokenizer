@@ -36,6 +36,7 @@ import { XSLTCodeActions } from './xsltCodeActions';
 import { wrapWith } from './xsltWrap';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
+import { CatalogSetting } from './catalogSetting';
 import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
@@ -405,6 +406,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push({ dispose: () => ImportIndex.instance.dispose() });
 	const relintXsltModules = () => vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'xslt' && doc.uri.scheme === 'file').forEach((doc) => {
 		XsltSymbolProvider.instanceForXSLT?.getDocumentSymbols(doc, false);
+	});
+	// the XML catalog: when it changes, the hrefs of the indexed modules and the open modules are resolved again
+	CatalogSetting.activate(context, async () => {
+		await ImportIndex.instance.refresh();
+		relintXsltModules();
 	});
 	const onIndexBuilt = ImportIndex.instance.onDidChange(() => {
 		if (ImportIndex.instance.built) {

@@ -9,6 +9,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import { SaxonTaskProvider } from './saxonTaskProvider';
+import { CatalogSetting } from './catalogSetting';
 
 interface XSLTCTask extends vscode.TaskDefinition {
     label: string;
@@ -253,6 +254,11 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
                 commandLineArgs.push('--allowSyntaxExtensions:on');
             }
 
+            const catalogOption = CatalogSetting.taskOption(xsltTask);
+            if (catalogOption) {
+                // the XSLT.resources.catalog setting, as used for the task's hrefs in the editor
+                commandLineArgs.push(catalogOption);
+            }
             if (nogo) {
                 commandLineArgs.push('-nogo');
             }

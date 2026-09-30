@@ -1,15 +1,20 @@
 import * as path from 'path';
 import * as url from 'url';
 import { RecordTypes } from './recordTypes';
+import { XmlCatalog } from './xmlCatalog';
 
 // path.posix or path.win32 - the path module is one of them
 type PathApi = typeof path.posix;
 
 // How the extension turns the href of an xsl:import, xsl:include or xsl:use-package, or a fixed-namespaces URI, into a
-// file path: all of them use toPath(), as a URI reference resolved against the file: URI of the document it's in.
+// file path: all of them use toPath(), as a URI reference resolved against the file: URI of the document it's in - or
+// mapped by the XML catalog.
 //
 // The path module is a parameter so that the tests can check the Windows behaviour (path.win32) on any platform.
 export class HrefPaths {
+
+	// the XML catalog of the XSLT.resources.catalog setting - undefined when there's none
+	public static catalog: XmlCatalog | undefined;
 
 	// an href as it's written in an attribute value, e.g. a&amp;b.xsl, with its XML references decoded: a&b.xsl
 	public static fromAttribute(value: string) {
@@ -29,7 +34,7 @@ export class HrefPaths {
 		try {
 			const base = documentPath !== undefined ? url.pathToFileURL(documentPath, { windows }) : undefined;
 			// a backslash is a '/' in a file: URI, so \\server\share\a.xsl is file://server/share/a.xsl
-			let resolved = new URL(href, base);
+			let resolved = HrefPaths.catalogURI(href, base) ?? new URL(href, base);
 			if (resolved.protocol !== 'file:') {
 				return undefined;
 			}
@@ -42,6 +47,29 @@ export class HrefPaths {
 			return windows ? HrefPaths.lowerCaseDrive(filePath) : filePath;
 		} catch {
 			// a relative href with no document, or an invalid file: URI, e.g. with a host on POSIX or an encoded '/'
+			return undefined;
+		}
+	}
+
+	// the URI of an href from the XML catalog - the href as it's written, or else the absolute URI, as in the xmlresolver
+	// library that Saxon uses - undefined when there's no catalog, or no entry for it
+	private static catalogURI(href: string, base: URL | undefined): URL | undefined {
+		if (!HrefPaths.catalog) {
+			return undefined;
+		}
+		let mapped = HrefPaths.catalog.resolveURI(href);
+		if (mapped === undefined) {
+			let absolute: string | undefined;
+			try {
+				absolute = new URL(href, base).href;
+			} catch {
+				absolute = undefined;
+			}
+			mapped = absolute !== undefined && absolute !== href ? HrefPaths.catalog.resolveURI(absolute) : undefined;
+		}
+		try {
+			return mapped !== undefined ? new URL(mapped) : undefined;
+		} catch {
 			return undefined;
 		}
 	}

@@ -102,6 +102,13 @@ export class ImportIndex {
 		this.onDidChangeEmitter.fire();
 	}
 
+	// reads the indexed modules again, e.g. when the XML catalog changes - if the index is built
+	public async refresh() {
+		if (this.isBuilt) {
+			await this.buildFrom([...this.references.keys()]);
+		}
+	}
+
 	private watch() {
 		if (this.watcher) {
 			return;
