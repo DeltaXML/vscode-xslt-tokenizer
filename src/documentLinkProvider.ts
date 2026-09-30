@@ -3,9 +3,8 @@ import { XslLexerLight } from "./xslLexerLight";
 import { GlobalInstructionData, GlobalInstructionType } from "./xslLexer";
 import * as vscode from "vscode";
 import { LanguageConfiguration } from "./xslLexer";
-import * as path from 'path';
 import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
-import * as url from 'url';
+import { HrefPaths } from './hrefPaths';
 
 
 export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
@@ -26,7 +25,7 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 		data.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Import || instruction.type === GlobalInstructionType.Include) {
 				const resolvedPath = XsltSymbolProvider.resolvePath(instruction.name, document.fileName);
-				const pathForUri = resolvedPath.startsWith('file:/') ? resolvedPath : url.pathToFileURL(resolvedPath).toString();
+				const pathForUri = HrefPaths.linkTarget(resolvedPath);
 				const uri = vscode.Uri.parse(pathForUri);
 				const startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
 				const endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + (instruction.token.length + 2));
@@ -38,7 +37,7 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 				});
 				if (packageLookup && rootPath) {
 					let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
-					const pathForUri = resolvedName.startsWith('file:/') ? resolvedName : url.pathToFileURL(resolvedName).toString();
+					const pathForUri = HrefPaths.linkTarget(resolvedName);
 
 					const uri = vscode.Uri.parse(pathForUri);
 					const startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);

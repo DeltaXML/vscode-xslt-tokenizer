@@ -12,6 +12,7 @@ import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
 import { ImportIndex } from './importIndex';
 import { XSLTConfiguration } from './languageConfigurations';
 import * as fs from 'fs';
+import { HrefPaths } from './hrefPaths';
 
 interface ImportedGlobals {
 	href: string;
@@ -1299,29 +1300,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public static resolvePath(href: string, documentPath: string) {
-
-		if (path.isAbsolute(href)) {
-			return href;
-		} else if (href.startsWith('file:///')) {
-			return href.substring(7);
-		} else if (href.startsWith('file:/')) {
-			return href.substring(5);
-		} else {
-			href = href.startsWith('file:') ? href.substring(5) : href;
-			let basePath = path.dirname(documentPath);
-			let joinedPath = path.join(basePath, href);
-			return path.normalize(joinedPath);
-		}
+		return HrefPaths.resolvePath(href, documentPath);
 	}
 
 	public static resolvePathInSettings(href: string, workspace: string) {
-
-		if (path.isAbsolute(href)) {
-			return href;
-		} else {
-			let joinedPath = path.join(workspace, href);
-			return path.normalize(joinedPath);
-		}
+		return HrefPaths.resolvePathInSettings(href, workspace);
 	}
 
 	public static async fetchImportedGlobals(inputHrefs: string[]): Promise<ImportedGlobals[]> {

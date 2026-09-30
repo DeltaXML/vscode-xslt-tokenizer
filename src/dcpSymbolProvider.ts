@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionType, GlobalInstructionData } from './xslLexer';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { GlobalsProvider} from './globalsProvider';
-import * as path from 'path';
+import { HrefPaths } from './hrefPaths';
 
 export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 
@@ -25,8 +25,7 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 		let globals = this.xslLexer.globalInstructionData;
 
 		async function returnBadFileLinks(item: GlobalInstructionData): Promise<GlobalInstructionData|undefined> {
-			const basePath = path.dirname(document.fileName);
-			const resolvedPath = path.resolve(basePath, item.name);
+			const resolvedPath = HrefPaths.resolveAgainstDocument(item.name, document.fileName);
 			let fileExists = await GlobalsProvider.fileExists(resolvedPath);
 			if (fileExists) {
 				return undefined;

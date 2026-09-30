@@ -8,8 +8,8 @@
  *  DeltaXML Ltd.
  */
 import * as fs from 'fs';
-import * as path from 'path';
 import { RecordTypes } from './recordTypes';
+import { HrefPaths } from './hrefPaths';
 
 // a token of a fixed-namespaces attribute that's reported, as Saxon 13 reports XTSE0122: its offset in the attribute's
 // value, and why
@@ -95,8 +95,8 @@ export class FixedNamespaces {
 				}
 			} else {
 				// a URI, e.g. ./package.xsl, for the namespace declarations of its document's outermost element
-				const text = moduleFile && !/^[a-z][a-z0-9+.-]*:/i.test(token) ? readText(path.resolve(path.dirname(moduleFile), token)) :
-					token.startsWith('file:') ? readText(decodeURIComponent(token.replace(/^file:(\/\/)?/, ''))) : undefined;
+				const documentPath = HrefPaths.fixedNamespacesPath(token, moduleFile);
+				const text = documentPath !== undefined ? readText(documentPath) : undefined;
 				const rootTag = text !== undefined ? /<[\w.:-]+[\s/>]/.exec(RecordTypes.blankMarkup(text).replace(/<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>/g, (m) => ' '.repeat(m.length))) : null;
 				if (text === undefined || !rootTag) {
 					problems.push({ token, offset, reason: 'unreadable' });

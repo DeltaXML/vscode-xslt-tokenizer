@@ -10,6 +10,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { HrefPaths } from './hrefPaths';
 
 // an xsl:import or xsl:include of a module: its resolved path
 export interface ModuleReference {
@@ -53,12 +54,12 @@ export class ImportIndex {
 		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
 		for (const match of withoutComments.matchAll(/<xsl:(import|include)\s[^>]*?(?<![\w.:-])href\s*=\s*(["'])([^"'{}]+)\2/g)) {
 			const href = match[3].trim();
-			if (/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('file:')) {
+			const referencePath = HrefPaths.moduleReferencePath(href, modulePath);
+			if (referencePath === undefined) {
 				// a URI with a scheme other than file:, e.g. http:
 				continue;
 			}
-			const hrefPath = href.startsWith('file:') ? decodeURIComponent(href.replace(/^file:(\/\/)?/, '')) : href;
-			references.push({ path: path.resolve(path.dirname(modulePath), hrefPath), isInclude: match[1] === 'include' });
+			references.push({ path: referencePath, isInclude: match[1] === 'include' });
 		}
 		return references;
 	}

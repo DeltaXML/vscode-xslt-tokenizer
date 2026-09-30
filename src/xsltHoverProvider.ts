@@ -10,6 +10,7 @@ import { XdocNotes } from "./xdocNote";
 import { RecordTypes } from "./recordTypes";
 import { declarationParamLabels } from "./declarationParams";
 import { XsltTokenDefinitions } from "./xsltTokenDefintions";
+import { HrefPaths } from './hrefPaths';
 
 enum CharType {
 	none,
@@ -222,7 +223,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (hrefStart === undefined || !href || offset < hrefStart || offset > hrefStart + href.length || document.uri.scheme !== 'file' || href.includes('{')) {
 			return undefined;
 		}
-		const modulePath = path.resolve(path.dirname(document.fileName), href.startsWith('file:') ? decodeURIComponent(href.replace(/^file:(\/\/)?/, '')) : href);
+		const modulePath = HrefPaths.hrefToModulePath(href, document.fileName);
 		const open = workspace.textDocuments.find((d) => d.fileName === modulePath);
 		let moduleText: string;
 		try {
