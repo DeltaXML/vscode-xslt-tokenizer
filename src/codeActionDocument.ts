@@ -38,10 +38,16 @@ export class CodeActionDocument implements vscode.TextDocument {
         }
     }
     offsetAt(position: vscode.Position): number {
-        throw new Error('Method not implemented.');
+        let offset = 0;
+        for (let i = 0; i < position.line && i < this.textLines.length; i++) {
+            offset += this.textLines[i].length + 1;
+        }
+        return Math.min(offset + position.character, this.docText.length);
     }
     positionAt(offset: number): vscode.Position {
-        throw new Error('Method not implemented.');
+        const before = this.docText.substring(0, Math.max(0, offset));
+        const line = before.split('\n').length - 1;
+        return new vscode.Position(line, before.length - before.lastIndexOf('\n') - 1);
     }
     getText(range?: vscode.Range | undefined): string {
         if (range) {

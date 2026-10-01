@@ -2978,7 +2978,10 @@ export class XsltTokenDiagnostics {
 				variableType: (token) => argumentVariableTypes.get(token),
 				returnType: (name, arity) => allGlobals.find((g) => g.type === GlobalInstructionType.Function && g.name === name && XslLexer.functionArityMatches(g, arity))?.returnType
 			}, itemTypeDeclarations, problemTokens);
-			XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
+			if (docType !== DocumentTypes.XPath) {
+				// the values of XSLT instructions - an XPath document has none
+				XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
+			}
 			if (XsltTokenDiagnostics.isXPath40(docType)) {
 				// xsl:switch is XSLT 4.0
 				XsltTokenDiagnostics.checkSwitches(document, allTokens, argumentVariableTypes, allGlobals, itemTypeDeclarations, problemTokens);

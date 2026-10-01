@@ -376,7 +376,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const { document, range, firstSymbol, lastSymbol } = this.actionProps;
 		const usedLastSymbol = lastSymbol ? lastSymbol : firstSymbol;
 
-		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol);
+		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol, document.uri);
 		const symbolKind = firstSymbol?.kind;
 		const extraDescendants = symbolKind === vscode.SymbolKind.Event || symbolKind === vscode.SymbolKind.Field ? 1 : 0;
 		const ancestorOrSelfCount = ancestorOrSelfSymbols.length;
@@ -447,11 +447,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		}
 	}
 
-	private populateAncestorArray(testSymbol: anyDocumentSymbol) {
+	private populateAncestorArray(testSymbol: anyDocumentSymbol, uri: vscode.Uri) {
 		const ancestorOrSelfSymbol: vscode.DocumentSymbol[] = [];
 		while (testSymbol) {
 			ancestorOrSelfSymbol.push(testSymbol);
-			const tempSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, testSymbol.range.start);
+			const tempSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, testSymbol.range.start, undefined, uri);
 			if (tempSymbol) {
 				testSymbol = tempSymbol;
 			} else {
@@ -474,8 +474,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const startTagIndex = startLine.indexOf('<', startPosition.character);
 		const expandText: string[] = [];
 		if (startTagIndex < 0) {
-			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, expandText);
-			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
+			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, expandText, document.uri);
+			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end, undefined, document.uri);
 			const rangeInsideAttributeFirstSymbol = firstSymbol && firstSymbol.range.contains(range);
 
 			if (firstSymbol && lastSymbol && rangeInsideAttributeFirstSymbol) {
@@ -539,15 +539,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
 			const bothTagsOK = startTagIndex > - 1 && endTagIndex > -1;
 			if (!bothTagsOK) {
-				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, range.start, expandText);
+				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, range.start, expandText, document.uri);
 			} else {
-				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }), expandText);
-				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }));
+				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }), expandText, document.uri);
+				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }), undefined, document.uri);
 				const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);
 				const lastSymbolInsideRange = lastSymbol && range.contains(lastSymbol.range);
 				if (firstSymbol && lastSymbol && firstSymbolInsideRange && lastSymbolInsideRange) {
 					const isSameSymbol = firstSymbol.range.isEqual(lastSymbol.range);
-					const parentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, firstSymbol.range.start);
+					const parentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, firstSymbol.range.start, undefined, document.uri);
 
 					let allRangeElementsOK = true;
 					if (parentSymbol) {
@@ -558,7 +558,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								allRangeElementsOK = realName !== 'xsl:param' && this.expectedElementNames.includes(realName);
 							}
 						} else {
-							const parentSymbolLast = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, lastSymbol.range.start);
+							const parentSymbolLast = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, lastSymbol.range.start, undefined, document.uri);
 							allRangeElementsOK = !!parentSymbolLast && parentSymbol.range.isEqual(parentSymbolLast.range);
 							if (allRangeElementsOK) {
 								for (const sibling of parentSymbol.children) {
@@ -775,7 +775,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction, addMergeGroupMapInstruction } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
 		const varTypeMap: Map<string, string> = new Map();
 		const mergeNames: string[] = [];
-		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap, mergeNames);
+		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap, mergeNames, document.uri);
 
 		let fixedTrimmedBodyTextLines: string[] = [];
 		let finalCorrectText: string;

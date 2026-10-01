@@ -102,12 +102,23 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public static getSymbolsForActiveDocument(): vscode.DocumentSymbol[] {
-		if (vscode.window.activeTextEditor) {
-			const result = XsltSymbolProvider.documentSymbols.get(vscode.window.activeTextEditor.document.uri);
-			return !!result ? result : [];
-		} else {
-			return [];
+		return vscode.window.activeTextEditor ? XsltSymbolProvider.getSymbolsForDocument(vscode.window.activeTextEditor.document.uri) : [];
+	}
+
+	// the cached symbols of the document - none if they haven't been computed yet, e.g. for a document not shown in an
+	// editor - also when the cache has another Uri object for the same file
+	public static getSymbolsForDocument(uri: vscode.Uri): vscode.DocumentSymbol[] {
+		let result = XsltSymbolProvider.documentSymbols.get(uri);
+		if (!result) {
+			const uriString = uri.toString();
+			for (const [cachedUri, cachedSymbols] of XsltSymbolProvider.documentSymbols) {
+				if (cachedUri.toString() === uriString) {
+					result = cachedSymbols;
+					break;
+				}
+			}
 		}
+		return result ?? [];
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
@@ -367,13 +378,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static symbolForXMLElement(selectionType: SelectionType, position: vscode.Position, expandText?: string[]) {
-		if (vscode.window.activeTextEditor) {
-			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
+	// the symbol of the element at the position, in the document (uri) - by default, the active editor's - undefined if the
+	// document's symbols haven't been computed yet
+	public static symbolForXMLElement(selectionType: SelectionType, position: vscode.Position, expandText?: string[], uri = vscode.window.activeTextEditor?.document.uri) {
+		const rootSymbol = uri ? XsltSymbolProvider.getSymbolsForDocument(uri)[0] : undefined;
+		if (rootSymbol) {
 			const path: string[] = [];
 			const selection = new vscode.Selection(position, position);
-			const result = this.getChildSymbolForSelection(selection, rootSymbol, path, selectionType, null, null, null, expandText);
-            return result;
+			return this.getChildSymbolForSelection(selection, rootSymbol, path, selectionType, null, null, null, expandText);
 		}
 	}
 
@@ -392,6 +404,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		if (editor) {
 			const selection = editor.selection;
 			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
+			if (!rootSymbol) {
+				return undefined;
+			}
 			const newPath = ['/' + rootSymbol.name.split(' ')[0]];
 			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath, SelectionType.Current, null, null, null, expandText);
 			const fullPath = newPath.join('');
@@ -399,9 +414,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static findVariableTypeAtSymbol(targetSymbol: anyDocumentSymbol, variableNames: string[], types: Map<string, string>, mergeNames: string[]) {
-		const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
-		if (targetSymbol) XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, rootSymbol, variableNames, types, mergeNames);
+	public static findVariableTypeAtSymbol(targetSymbol: anyDocumentSymbol, variableNames: string[], types: Map<string, string>, mergeNames: string[], uri = vscode.window.activeTextEditor?.document.uri) {
+		const rootSymbol = uri ? XsltSymbolProvider.getSymbolsForDocument(uri)[0] : undefined;
+		if (targetSymbol && rootSymbol) XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, rootSymbol, variableNames, types, mergeNames);
 	}
 
 
