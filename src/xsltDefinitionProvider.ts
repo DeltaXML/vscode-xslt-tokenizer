@@ -8,12 +8,14 @@ import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
 import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
-import { BaseToken, ExitCondition, LexPosition, XPathLexer } from './xpLexer';
+import { BaseToken, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
 import { XPathSemanticTokensProvider } from './extension';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import { XMLConfiguration } from './languageConfigurations';
 import { ItemTypeSupport } from './itemTypeSupport';
 import * as url from 'url';
+import { XdocReferences, XdocTarget } from './xdocReferences';
+import { RecordTypes } from './recordTypes';
 
 interface ImportedGlobals {
 	href: string;
@@ -62,6 +64,15 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
 		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
+		// XSLT 4.0: a reference in a documentation note, e.g. @see my:area#2
+		const noteReference = this.noteReferenceAt(document, position, globalInstructionData.concat(allImportedGlobals));
+		if (noteReference) {
+			const location = noteReference.target ? XsltDefinitionProvider.noteTargetLocation(document, noteReference.target) : undefined;
+			if (location) {
+				location.extractedImportData = extractedImportData;
+			}
+			return location;
+		}
 		// XPath 4.0: a record field, e.g. 'r' in $c?r
 		const fieldLocation = XsltDefinitionProvider.recordFieldLocation(document, position, globalInstructionData.concat(allImportedGlobals));
 		if (fieldLocation) {
@@ -88,6 +99,29 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
 		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
+		// XSLT 4.0: a reference in a documentation note, e.g. @see my:area#2 - as for a use of the declaration it refers to
+		const noteReference = this.noteReferenceAt(document, position, globalInstructionData.concat(allImportedGlobals));
+		if (noteReference) {
+			const { reference, target } = noteReference;
+			if (!target) {
+				return undefined;
+			}
+			const start = document.positionAt(reference.offset);
+			const inputToken: BaseToken = { line: start.line, startCharacter: start.character, length: reference.name.length, value: reference.name, tokenType: TokenLevelState.Unset };
+			let defnData: DefinitionData;
+			if (target.global) {
+				defnData = { definitionLocation: XsltTokenDefinitions.createLocationFromInstruction(target.global, document), inputSymbol: { token: inputToken, type: target.global.type } };
+			} else {
+				// a parameter of the function or template: as for its declaration
+				const paramLocation = XsltDefinitionProvider.noteTargetLocation(document, target)!;
+				defnData = XsltTokenDefinitions.findDefinition(this.docType === DocumentTypes.XSLT, document, allTokens, globalInstructionData, allImportedGlobals, paramLocation.range.start);
+				defnData.inputSymbol = { token: inputToken, type: GlobalInstructionType.Variable };
+			}
+			if (defnData.definitionLocation) {
+				defnData.definitionLocation.extractedImportData = extractedImportData;
+			}
+			return defnData;
+		}
 		// uses, such as an xsl:apply-templates mode, are not declarations
 		let matchingGlobal = globalInstructionData.find(global => { 
 			return global.type !== GlobalInstructionType.AccumulatorUse && global.type !== GlobalInstructionType.Mode && global.token.line === position.line &&
@@ -116,6 +150,31 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	private static nameCharRgx = new RegExp(/[A-Z]|[a-z]|_|-|:/);
+
+	// XSLT 4.0: the reference in a documentation note at the position, with what it refers to, if anything
+	private noteReferenceAt(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[]) {
+		if (this.docType !== DocumentTypes.XSLT) {
+			return undefined;
+		}
+		const text = document.getText();
+		const reference = XdocReferences.at(text, document.offsetAt(position));
+		return reference ? { reference, target: XdocReferences.resolve(reference, globals, text)[0] } : undefined;
+	}
+
+	// the location of the name of the declaration a note's reference refers to
+	public static noteTargetLocation(document: vscode.TextDocument, target: XdocTarget): DefinitionLocation | undefined {
+		if (target.global) {
+			return XsltTokenDefinitions.createLocationFromInstruction(target.global, document);
+		}
+		const text = document.getText();
+		const nameOffset = RecordTypes.attributeValueOffset(text, target.paramOffset + 1, 'name');
+		const name = RecordTypes.attributeOfElementAt(text, target.paramOffset + 1, 'name');
+		if (nameOffset === undefined || !name) {
+			return undefined;
+		}
+		const start = document.positionAt(nameOffset);
+		return new vscode.Location(document.uri, new vscode.Range(start, start.translate(0, name.length)));
+	}
 
 	// the declaration of the record field at the position, e.g. on 'r' in $c?r: the field within the record type - or for
 	// a record type declared in an imported module, its xsl:item-type declaration

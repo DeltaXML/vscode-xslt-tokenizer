@@ -16,6 +16,7 @@ import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { RecordType, RecordTypes, FieldReference } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
+import { XdocReferences } from './xdocReferences';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
 import { FixedNamespaces } from './fixedNamespaces';
@@ -2948,6 +2949,7 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
 			XsltTokenDiagnostics.checkPatternOperators(document, allTokens, problemTokens);
 			XsltTokenDiagnostics.checkDocumentationNotes(document, itemTypeDeclarations, problemTokens);
+			XsltTokenDiagnostics.checkNoteReferences(document, globalInstructionData.concat(importedInstructionData), problemTokens);
 		}
 		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
 		const allXPathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
@@ -4396,6 +4398,12 @@ export class XsltTokenDiagnostics {
 					msg = `XPath: The value for record field '${field}' must be of type: ${fieldType}`;
 					break;
 				}
+				case ErrorType.NoteReferenceUnknown: {
+					const [reference, kind] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: The documentation note's @see '${reference}' is not a ${kind} declared in this stylesheet or the modules it includes or imports`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
 				case ErrorType.RecordLookupUnknown: {
 					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XPath: Lookup of '${field}' - this is not a field of the record type: ${recordName}`;
@@ -4824,6 +4832,17 @@ export class XsltTokenDiagnostics {
 				unknown: (name) => ({ value: name + RecordTypes.valueSeparator + typeName, error: ErrorType.NoteFieldUnknown }),
 				duplicate: ErrorType.NoteFieldDuplicate, missing: ErrorType.NoteFieldsMissing, label: XdocNotes.fieldLabel, line: (name) => `@field ${XdocNotes.fieldLabel(name)} description`
 			}, problemTokens);
+		});
+	}
+
+	// XSLT 4.0: a reference in a documentation note's @see, e.g. @see my:area#2, must refer to a declaration - not in a
+	// code span, which may be other code, nor for a built-in function or type (see XdocReferences.isReported)
+	private static checkNoteReferences(document: vscode.TextDocument, globals: GlobalInstructionData[], problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const markup = RecordTypes.blankMarkup(text);
+		XdocReferences.find(text, markup).filter((reference) => XdocReferences.isReported(reference, text) && XdocReferences.resolve(reference, globals, text, markup).length === 0).forEach((reference) => {
+			const position = document.positionAt(reference.start);
+			problemTokens.push({ line: position.line, startCharacter: position.character, length: reference.end - reference.start, value: text.substring(reference.start, reference.end) + RecordTypes.valueSeparator + XdocReferences.kindLabel(reference), tokenType: 0, error: ErrorType.NoteReferenceUnknown });
 		});
 	}
 

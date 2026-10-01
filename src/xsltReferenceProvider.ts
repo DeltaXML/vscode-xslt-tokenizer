@@ -14,6 +14,7 @@ import { RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
 import { FieldLocations, RecordFieldReferences } from './recordFieldReferences';
 import { ImportIndex } from './importIndex';
+import { XdocReferences } from './xdocReferences';
 
 // an xsl:function or named xsl:template, for a rename of it or of one of its parameters - with, for a function, the
 // numbers of arguments it can be called with
@@ -163,6 +164,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				const refLocations = refTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, document));
 				locations = refLocations;
 				locations.push(this.definition);
+				// XSLT 4.0: references in documentation notes, e.g. @see my:area#2
+				const globals = eid.globalInstructionData.concat(eid.allImportedGlobals);
+				const definition = this.definition;
+				locations = locations.concat(XSLTReferenceProvider.noteReferences(document, document, definition, globals));
 				// for a function or named template, or a parameter of one: the other declarations with the same name, which
 				// prevent a rename - and the modules of an inferred top-level stylesheet with one, which aren't searched
 				const declaration = await XSLTReferenceProvider.overridableDeclaration(this.definition, document);
@@ -191,7 +196,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						const hrefAllTokens = this.xslLexer.analyse(hrefDoc.getText());
 						let refDocTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, hrefDoc, hrefAllTokens, eid.globalInstructionData, eid.allImportedGlobals);
 						const refLocations = refDocTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, hrefDoc));
-						locations = locations.concat(refLocations);
+						locations = locations.concat(refLocations, XSLTReferenceProvider.noteReferences(hrefDoc, document, definition, globals));
 					} catch (error) {
 						console.error(error);
 					}
@@ -201,6 +206,22 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		return new Promise(resolve => {
 			this.refLocations = locations;
 			resolve(locations);
+		});
+	}
+
+	// XSLT 4.0: the references in the documentation notes of a module (noteDocument) to the declaration at the definition,
+	// e.g. @see my:area#2 - resolved with the globals of the document, which has the declarations without an href
+	private static noteReferences(noteDocument: vscode.TextDocument, document: vscode.TextDocument, definition: vscode.Location, globals: GlobalInstructionData[]): vscode.Location[] {
+		const text = noteDocument.getText();
+		const markup = RecordTypes.blankMarkup(text);
+		const isDefinition = (global: GlobalInstructionData) => {
+			const location = XsltTokenDefinitions.createLocationFromInstruction(global, document);
+			return !!location && location.uri.toString() === definition.uri.toString() && location.range.start.line === definition.range.start.line &&
+				Math.abs(location.range.start.character - definition.range.start.character) <= 1;
+		};
+		return XdocReferences.find(text, markup).filter((reference) => XdocReferences.resolve(reference, globals, text, markup).some((target) => target.global && isDefinition(target.global))).map((reference) => {
+			const start = noteDocument.positionAt(reference.offset);
+			return new vscode.Location(noteDocument.uri, new vscode.Range(start, start.translate(0, reference.name.length)));
 		});
 	}
 
@@ -239,6 +260,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		XdocNotes.forDeclaration(text, parent.offset, markup)?.tags
 			.filter((tag) => tag.name === 'param' && tag.paramName === paramName && tag.paramOffset !== undefined)
 			.forEach((tag) => locations.push(nameLocation(declarationDocument, tag.paramOffset!)));
+		// references to the parameter in the note, e.g. `$scale`
+		XdocReferences.find(text, markup).filter((reference) => reference.kind === 'variable' && reference.declarationOffset === parent.offset && XdocReferences.resolve(reference, [], text, markup)[0]?.paramOffset === tagStart)
+			.forEach((reference) => locations.push(nameLocation(declarationDocument, reference.offset)));
 		const declarationName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name');
 		const otherModules = declarationName && declaration ? (await XSLTReferenceProvider.usingModules(declarationDocument, declaration)).filter((file) => !hrefs.includes(file)) : [];
 		const openModule = async (href: string) => {

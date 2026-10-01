@@ -143,6 +143,12 @@ export class XdocNotes {
 					const paramStart = tagEnd + tag[4].length;
 					typed.push({ start: paramStart, end: paramStart + tag[5].length, type: XdocNotes.paramType });
 				}
+				// a reference after @see, e.g. my:area#2 or $scale, styled as code - but not a word of other text
+				const see = tag[3] === 'see' ? /^(\s*@see[ \t]+)((?:template[ \t]+)?\$?[\p{L}_][\p{L}\p{N}_.:-]*(?:#\d+|\(\))?)(?=[\s,;)]|$)/u.exec(line) : null;
+				const reference = see?.[2].replace(/[.:]+$/, '');
+				if (see && reference && /[:$#(]|^template\s/.test(reference)) {
+					typed.push({ start: see[1].length, end: see[1].length + reference.length, type: XdocNotes.codeType });
+				}
 			}
 			// inline Markdown: code spans, links, bold and italic - code spans are last, as their content isn't Markdown
 			const inline: [RegExp, number][] = [

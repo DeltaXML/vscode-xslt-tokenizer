@@ -1738,6 +1738,7 @@ export enum ErrorType {
     NoteVariableUnknown,
     NoteVariablesMissing,
     NoteVariableDuplicate,
+    NoteReferenceUnknown,
     NoteRequiresXSLT40,
     SaxonTypeAlias,
     OperatorRequiresXPath40,

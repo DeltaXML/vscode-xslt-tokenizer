@@ -11,6 +11,7 @@ import { RecordTypes } from "./recordTypes";
 import { declarationParamLabels } from "./declarationParams";
 import { XsltTokenDefinitions } from "./xsltTokenDefintions";
 import { HrefPaths } from './hrefPaths';
+import { XdocReferences } from './xdocReferences';
 
 enum CharType {
 	none,
@@ -51,6 +52,11 @@ export class XSLTHoverProvider implements HoverProvider {
 			const details = [fieldText, enumValues ? XSLTHoverProvider.enumValuesMarkdown(enumValues) : undefined].filter((part) => !!part).join('\n\n');
 			markdown.appendMarkdown(`${details ? details + '\n\n---\n' : ''}${field.optional ? 'Optional field' : 'Field'} of the record type: \`${record.name}\``);
 			return new Hover(markdown);
+		}
+		// XSLT 4.0: a reference in a documentation note, e.g. @see my:area#2 - null if it refers to nothing
+		const noteHover = await this.findNoteReferenceHover(document, position, token);
+		if (noteHover !== undefined) {
+			return noteHover ?? undefined;
 		}
 		const line = document.lineAt(position.line);
 		const rawFnName = this.getFunctionName(line.text, position.character);
@@ -107,6 +113,57 @@ export class XSLTHoverProvider implements HoverProvider {
 		// functions with the same name can be declared with different arities (overloads) - prefer the richest one
 		const bestMatch = candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
 		return this.functionHover(document, bestMatch);
+	}
+
+	// XSLT 4.0: for a reference in a documentation note, e.g. @see my:area#2 or `$scale`, the hover of the declaration it
+	// refers to, as for a use of it - or for a built-in function, its signature - null for a reference to nothing, and
+	// undefined if the position isn't on a reference
+	private async findNoteReferenceHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | null | undefined> {
+		if (!this.definitionProvider || this.languageConfiguration?.docType !== DocumentTypes.XSLT) {
+			return undefined;
+		}
+		const text = document.getText();
+		const reference = XdocReferences.at(text, document.offsetAt(position));
+		if (!reference) {
+			return undefined;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return null;
+		}
+		const globals = globalInstructionData.concat(allImportedGlobals);
+		const itemTypes = globals.filter((g) => g.type === GlobalInstructionType.ItemType);
+		const markup = RecordTypes.blankMarkup(text);
+		const target = XdocReferences.resolve(reference, globals, text, markup)[0];
+		if (target?.paramOffset !== undefined) {
+			return this.localParamHover(text, markup, target.paramOffset, itemTypes) ?? null;
+		} else if (!target) {
+			// a built-in function, e.g. fn:sum#1
+			const builtinName = reference.name.startsWith('fn:') ? reference.name.substring(3) : reference.name;
+			const builtin = reference.kind === 'function' || reference.kind === 'name' ? this.getFunctionData().find((item) => item.name === builtinName) : undefined;
+			return builtin ? this.createHover(builtin.signature, builtin.description) : null;
+		}
+		const global = target.global;
+		switch (global.type) {
+			case GlobalInstructionType.Function:
+				return this.functionHover(document, global);
+			case GlobalInstructionType.Template:
+				return this.templateHover(document, global);
+			case GlobalInstructionType.ItemType:
+				return this.itemTypeHover(document, global, itemTypes);
+			default: {
+				// a global xsl:param or xsl:variable, in this document or the module declaring it
+				let moduleText = text;
+				try {
+					moduleText = global.href ? fs.readFileSync(global.href, 'utf8') : text;
+				} catch {
+					return null;
+				}
+				const tagStart = moduleText.lastIndexOf('<', XdocNotes.offsetAt(moduleText, global.token.line, global.token.startCharacter));
+				return tagStart > -1 ? this.globalVariableHover(moduleText, tagStart, global.href, itemTypes) : null;
+			}
+		}
 	}
 
 	// a user-defined function's signature and documentation note
@@ -179,10 +236,14 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (XdocNotes.isGlobal(markup, tagStart)) {
 			return this.globalVariableHover(text, tagStart, href, itemTypes);
 		}
-		// a parameter of a function or template
+		return element === 'xsl:param' ? this.localParamHover(text, markup, tagStart, itemTypes) : undefined;
+	}
+
+	// for the xsl:param of a function or template at tagStart, its type and the text of its @param tag
+	private localParamHover(text: string, markup: string, tagStart: number, itemTypes: GlobalInstructionData[]) {
 		const ancestors = RecordTypes.openElements(markup, tagStart);
 		const parent = ancestors[ancestors.length - 1];
-		const parentName = element === 'xsl:param' && parent && (parent.name === 'xsl:function' || parent.name === 'xsl:template') ? RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name') : undefined;
+		const parentName = parent && (parent.name === 'xsl:function' || parent.name === 'xsl:template') ? RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name') : undefined;
 		if (!parent || !parentName) {
 			return undefined;
 		}
