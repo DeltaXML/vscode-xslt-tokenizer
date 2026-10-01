@@ -2,7 +2,7 @@
  * Test suite for the snippets for the root element of a new stylesheet - xsl:stylesheet and xsl:package, for XSLT 3.0
  * and 4.0, for an identity transform or starting from xsl:initial-template: each is offered in an empty document - in
  * the order they're declared, not by name, with the XSLT version right-aligned - and once expanded - with the default
- * for each placeholder - the stylesheet has no problems.
+ * for each placeholder - the stylesheet has no problems, also with a function in its namespace for functions, f.
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
@@ -47,6 +47,11 @@ suite('Root element snippets', () => {
 		test(`no problems: ${[snippet.name, snippet.labelDetail, snippet.group].filter((part) => part).join(', ')}`, async () => {
 			const text = '<' + expand(snippet.body);
 			assert.deepEqual(await problems(text, text.includes('version="4.0"')), []);
+			// with a function in the namespace for functions, and a call of it
+			const end = text.lastIndexOf('</xsl:');
+			const withFunction = text.substring(0, end) + '<xsl:function name="f:double"><xsl:param name="x"/><xsl:sequence select="$x * 2"/></xsl:function>\n' +
+				'<xsl:template name="doubled"><xsl:sequence select="f:double(2)"/></xsl:template>\n' + text.substring(end);
+			assert.deepEqual(await problems(withFunction, text.includes('version="4.0"')), []);
 		});
 	}
 });

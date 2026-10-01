@@ -13,7 +13,7 @@ export class XSLTSnippets {
 		{
 		name: 'xsl:stylesheet',
 		group: 'XSLT 3.0',
-		description: '`xsl:stylesheet` snippet for identity transform',
+		description: '`xsl:stylesheet` snippet for identity transform - with a namespace for functions',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -21,6 +21,7 @@ export class XSLTSnippets {
                 xmlns:array="http://www.w3.org/2005/xpath-functions/array"
                 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
                 xmlns:math="http://www.w3.org/2005/xpath-functions/math"
+                xmlns:\${1:f}="\${2:urn:example:functions}"
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="3.0">
@@ -28,9 +29,9 @@ export class XSLTSnippets {
 \t<xsl:output method="xml" indent="yes"/>
 \t<xsl:mode on-no-match="shallow-copy"/>
 
-\t<xsl:template match="\${1:/*}" mode="#all">
+\t<xsl:template match="\${3:/*}" mode="#all">
 \t\t<xsl:copy>
-\t\t\t<xsl:apply-templates select="\${2:@*, node()}" mode="#current"/>
+\t\t\t<xsl:apply-templates select="\${4:@*, node()}" mode="#current"/>
 \t\t</xsl:copy>
 \t</xsl:template>
 
@@ -42,7 +43,7 @@ export class XSLTSnippets {
 		name: 'xsl:stylesheet',
 		labelDetail: 'initial template',
 		group: 'XSLT 3.0',
-		description: '`xsl:stylesheet` snippet starting from `xsl:initial-template` - run without a source document, e.g. by Quick Run with no XML context file',
+		description: '`xsl:stylesheet` snippet starting from `xsl:initial-template` - run without a source document, e.g. by Quick Run with no XML context file - with a namespace for functions',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -50,6 +51,7 @@ export class XSLTSnippets {
                 xmlns:array="http://www.w3.org/2005/xpath-functions/array"
                 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
                 xmlns:math="http://www.w3.org/2005/xpath-functions/math"
+                xmlns:\${1:f}="\${2:urn:example:functions}"
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="3.0">
@@ -65,25 +67,25 @@ export class XSLTSnippets {
 	{
 		name: 'xsl:stylesheet',
 		group: 'XSLT 4.0',
-		description: 'XSLT 4.0 `xsl:stylesheet` snippet for identity transform - with the standard prefixes from `fixed-namespaces`, and a documentation note for the module',
+		description: 'XSLT 4.0 `xsl:stylesheet` snippet for identity transform - with the standard prefixes from `fixed-namespaces`, a namespace for functions, and a documentation note for the module',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-                fixed-namespaces="#standard"
+                fixed-namespaces="#standard \${1:f}=\${2:urn:example:functions}"
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="4.0">
 
 \t<xsl:note format="xdoc-md">
-\t\t\${1:What this stylesheet does}
+\t\t\${3:What this stylesheet does}
 \t</xsl:note>
 
 \t<xsl:output method="xml" indent="yes"/>
 \t<xsl:mode on-no-match="shallow-copy"/>
 
-\t<xsl:template match="\${2:/*}" mode="#all">
+\t<xsl:template match="\${4:/*}" mode="#all">
 \t\t<xsl:copy>
-\t\t\t<xsl:apply-templates select="\${3:@*, node()}" mode="#current"/>
+\t\t\t<xsl:apply-templates select="\${5:@*, node()}" mode="#current"/>
 \t\t</xsl:copy>
 \t</xsl:template>
 
@@ -95,17 +97,17 @@ export class XSLTSnippets {
 		name: 'xsl:stylesheet',
 		labelDetail: 'initial template',
 		group: 'XSLT 4.0',
-		description: 'XSLT 4.0 `xsl:stylesheet` snippet starting from `xsl:initial-template` - run without a source document, e.g. by Quick Run with no XML context file - with the standard prefixes from `fixed-namespaces`, and a documentation note for the module',
+		description: 'XSLT 4.0 `xsl:stylesheet` snippet starting from `xsl:initial-template` - run without a source document, e.g. by Quick Run with no XML context file - with the standard prefixes from `fixed-namespaces`, a namespace for functions, and a documentation note for the module',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-                fixed-namespaces="#standard"
+                fixed-namespaces="#standard \${1:f}=\${2:urn:example:functions}"
                 exclude-result-prefixes="#all"
                 expand-text="yes"
                 version="4.0">
 
 \t<xsl:note format="xdoc-md">
-\t\t\${1:What this stylesheet does}
+\t\t\${3:What this stylesheet does}
 \t</xsl:note>
 
 \t<xsl:output method="xml" indent="yes"/>
@@ -119,7 +121,7 @@ export class XSLTSnippets {
 	{
 		name: 'xsl:package',
 		group: 'XSLT 3.0',
-		description: '`xsl:package` snippet - root element and required attributes',
+		description: '`xsl:package` snippet - root element and required attributes - with a namespace for functions',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:package xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -127,19 +129,20 @@ export class XSLTSnippets {
 						 xmlns:array="http://www.w3.org/2005/xpath-functions/array"
 						 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
 						 xmlns:math="http://www.w3.org/2005/xpath-functions/math"
-						 name="\${1:package-uri}"
+						 xmlns:\${1:f}="\${2:urn:example:functions}"
+						 name="\${3:package-uri}"
 						 package-version="1.0"
 						 exclude-result-prefixes="#all"
 						 expand-text="yes"
 						 version="3.0">
 
 \t<xsl:output method="xml" indent="yes"/>
-\t<xsl:mode name="\${2:mode-name}" streamable="false" on-no-match="shallow-copy" visibility="public"/>
+\t<xsl:mode name="\${4:mode-name}" streamable="false" on-no-match="shallow-copy" visibility="public"/>
 
 
-\t<xsl:template match="\${3:/*}" mode="\$2">
+\t<xsl:template match="\${5:/*}" mode="\$4">
 \t\t<xsl:copy>
-\t\t\t<xsl:apply-templates select="\${4:@*, node()}" mode="#current"/>
+\t\t\t<xsl:apply-templates select="\${6:@*, node()}" mode="#current"/>
 \t\t</xsl:copy>
 \t</xsl:template>
 
@@ -150,27 +153,27 @@ export class XSLTSnippets {
 	{
 		name: 'xsl:package',
 		group: 'XSLT 4.0',
-		description: 'XSLT 4.0 `xsl:package` snippet - root element and required attributes, with the standard prefixes from `fixed-namespaces`, and a documentation note for the module',
+		description: 'XSLT 4.0 `xsl:package` snippet - root element and required attributes, with the standard prefixes from `fixed-namespaces`, a namespace for functions, and a documentation note for the module',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:package xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-             fixed-namespaces="#standard"
-             name="\${1:package-uri}"
+             fixed-namespaces="#standard \${1:f}=\${2:urn:example:functions}"
+             name="\${3:package-uri}"
              package-version="1.0"
              exclude-result-prefixes="#all"
              expand-text="yes"
              version="4.0">
 
 \t<xsl:note format="xdoc-md">
-\t\t\${2:What this package does}
+\t\t\${4:What this package does}
 \t</xsl:note>
 
 \t<xsl:output method="xml" indent="yes"/>
-\t<xsl:mode name="\${3:mode-name}" streamable="false" on-no-match="shallow-copy" visibility="public"/>
+\t<xsl:mode name="\${5:mode-name}" streamable="false" on-no-match="shallow-copy" visibility="public"/>
 
-\t<xsl:template match="\${4:/*}" mode="\$3">
+\t<xsl:template match="\${6:/*}" mode="\$5">
 \t\t<xsl:copy>
-\t\t\t<xsl:apply-templates select="\${5:@*, node()}" mode="#current"/>
+\t\t\t<xsl:apply-templates select="\${7:@*, node()}" mode="#current"/>
 \t\t</xsl:copy>
 \t</xsl:template>
 
