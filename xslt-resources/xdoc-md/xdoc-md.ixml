@@ -1,8 +1,9 @@
-{ xdoc-md documentation notes, as used in xsl:note format="xdoc-md": a Markdown description, then @param, @return,
-  @see, @since, @deprecated and @error fields - each field starts a line, and continues on the following lines up to
-  the next field. The input is the note's string value, with a line break appended. }
+{ xdoc-md documentation notes, as used in xsl:note format="xdoc-md": a Markdown description, then @param, @variable,
+  @field, @return, @see, @since, @deprecated, @error, @author and @version tags - each tag starts a line, and
+  continues on the following lines up to the next tag. The input is the note's string value, with a line break
+  appended. }
 
-note: description, -field*, -ws.
+note: description, -tag*, -ws.
 
 description: (line; -blank)*.
 line: -ws, -first, -rest, -nl.
@@ -10,15 +11,25 @@ line: -ws, -first, -rest, -nl.
 -rest: ~[#a; #d]*.
 -blank: -ws, -nl.
 
--field: param; return; see; since; deprecated; error.
+-tag: param; variable; field; return; see; since; deprecated; error; author; version.
+{ a parameter of a function or template, or a global parameter in a module note }
 param: -ws, -"@param", -sp, -"$"?, @name, (-sp, -text)?, -nl, -more*.
+{ a global variable, in a module note }
+variable: -ws, -"@variable", -sp, -"$"?, @name, (-sp, -text)?, -nl, -more*.
+{ a field of the record type of an xsl:item-type - its name is quoted if it's not an NCName, e.g. @field 'nick name' }
+field: -ws, -"@field", -sp, @field-name>name, (-sp, -text)?, -nl, -more*.
 return: -ws, -"@return", (-sp, -text)?, -nl, -more*.
 see: -ws, -"@see", (-sp, -text)?, -nl, -more*.
 since: -ws, -"@since", (-sp, -text)?, -nl, -more*.
 deprecated: -ws, -"@deprecated", (-sp, -text)?, -nl, -more*.
 error: -ws, -"@error", (-sp, -text)?, -nl, -more*.
+{ the author and version of the module, in a module note }
+author: -ws, -"@author", (-sp, -text)?, -nl, -more*.
+version: -ws, -"@version", (-sp, -text)?, -nl, -more*.
 
 name: [L; Nd; "_"; "."; "-"]+.
+{ the quotes are omitted from the output }
+field-name: name; -"'", ~["'"; #a; #d]*, -"'"; -'"', ~['"'; #a; #d]*, -'"'.
 -text: -first, -rest.
 -more: line; -blank.
 

@@ -2,7 +2,8 @@
 
 [xdoc-md.ixml](xdoc-md.ixml) is an [Invisible XML](https://invisiblexml.org) grammar for the documentation notes that the
 extension supports in XSLT 4.0 stylesheets: an `xsl:note` with `format="xdoc-md"`, containing a Markdown description,
-then `@param`, `@return`, `@see`, `@since`, `@deprecated` and `@error` fields.
+then tags: `@param`, `@return`, `@see`, `@since`, `@deprecated` and `@error`, from xqDoc - plus `@field` for the fields of a
+record type, `@variable` for global variables, and xqDoc's `@author` and `@version`, in a module note.
 
 With it, a stylesheet can turn its notes into XML - for example, to generate documentation for a library of functions.
 The XPath 4.0 `invisible-xml()` function, supported by Saxon-PE and Saxon-EE 13, compiles the grammar to a parser
@@ -45,7 +46,9 @@ the result is:
 Notes:
 
 - Markdown within the text, such as `**bold**` or `` `code` ``, is kept as text.
-- A line in the description that starts with `@` followed by a name other than one of the fields, e.g. `@class`, isn't
+- A field name is quoted if it's not an NCName, e.g. `@field 'nick name'` - the result is `<field name="nick name">`,
+  without the quotes. The grammar uses an Invisible XML 1.1 renaming (`@field-name>name`) for this.
+- A line in the description that starts with `@` followed by a name other than one of the tags, e.g. `@class`, isn't
   parsed: the result is an `ixml:state="failed"` element giving its line and column. The extension itself treats
   such a line as text.
 - The grammar was tested with Saxon-PE 13. Running Saxon from the command line with XPath 4.0 needs
