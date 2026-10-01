@@ -1654,6 +1654,7 @@ export enum ErrorType {
     XPathFunctionXdmDebug,
     XSLTFunctionNamePrefix,
     XSLTFunctionNameShadowsBuiltin,
+    FunctionResultEmpty,
     XPathEmpty,
     XPathFunctionNamespace,
     XPathFunctionUnexpected,

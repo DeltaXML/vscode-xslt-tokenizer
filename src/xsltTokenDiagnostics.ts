@@ -471,6 +471,10 @@ export class XsltTokenDiagnostics {
 		let tagSelectRange: [number, number] | null = null;
 		// the record type of the current xsl:function, and the 'select' of its last xsl:sequence (a direct child)
 		let functionResult: { record: RecordType | undefined, select: [number, number] | null } | null = null;
+		// the xsl:function whose content is being read: whether it has content other than its xsl:param and xsl:note
+		// children - whitespace and comments aren't content - with the token of its element name
+		let functionContent: { token: BaseToken, name: string, hasContent: boolean } | null = null;
+		let cdataStart: BaseToken | null = null;
 		// lookups and child steps whose value is a record, e.g. $a?b for record(b as record(c)), so $a?b?c can be checked -
 		// isJNode is true for a child step, e.g. jtree($a)/b, whose result can be used with '/' again
 		let lookupRecords = new Map<BaseToken, { record: RecordType, isJNode: boolean }>();
@@ -714,6 +718,10 @@ export class XsltTokenDiagnostics {
 
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xmlText:
+						if (functionContent && !functionContent.hasContent && elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:function' && token.startCharacter > -1 &&
+							XsltTokenDiagnostics.getTextForToken(lineNumber, token, document).trim().length !== 0) {
+							functionContent.hasContent = true;
+						}
 						if (elementStack.length === 0 && token.startCharacter > -1) {
 							const tValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							if (tValue.trim().length !== 0) {
@@ -896,6 +904,15 @@ export class XsltTokenDiagnostics {
 									}
 								}
 
+								if (tagElementName === 'xsl:function' && startTagToken) {
+									functionContent = { token: startTagToken, name: tagIdentifierName, hasContent: false };
+									if (xmlCharType === XMLCharState.rSelfCt || xmlCharType === XMLCharState.rSelfCtNoAtt) {
+										XsltTokenDiagnostics.checkFunctionContent(functionContent, problemTokens);
+										functionContent = null;
+									}
+								} else if (functionContent && elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:function' && tagElementName !== 'xsl:param' && tagElementName !== 'xsl:note') {
+									functionContent.hasContent = true;
+								}
 								const enclosingMode = elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:mode' ? elementStack[elementStack.length - 1] : undefined;
 								if (startTagToken && !problem && !startTagToken.error && enclosingMode && tagElementName === 'xsl:template' && XsltTokenDiagnostics.isXPath40(docType)) {
 									// XSLT 4.0 enclosed mode: a template rule within xsl:mode has a match but no mode or name, and the mode must be named
@@ -1037,6 +1054,10 @@ export class XsltTokenDiagnostics {
 									let poppedData = elementStack.pop()!;
 									inheritedPrefixes = poppedData.namespacePrefixes;
 									if (tagElementName === 'xsl:function') insideGlobalFunction = false;
+									if (tagElementName === 'xsl:function' && functionContent) {
+										XsltTokenDiagnostics.checkFunctionContent(functionContent, problemTokens);
+										functionContent = null;
+									}
 									if (tagElementName === 'xsl:function' && functionResult) {
 										if (functionResult.record && functionResult.select) {
 											RecordTypes.checkMapConstructor(allTokens.slice(functionResult.select[0], functionResult.select[1] + 1), functionResult.record, itemTypeDeclarations, problemTokens);
@@ -1106,9 +1127,16 @@ export class XsltTokenDiagnostics {
 								break;
 							case XMLCharState.lCdataEnd:
 								isWithinCDATA = true;
+								// the text of a CDATA section, between its markers, has no tokens of its own
+								cdataStart = token;
 								break;
 							case XMLCharState.rCdataEnd:
 								isWithinCDATA = false;
+								if (functionContent && !functionContent.hasContent && cdataStart && elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:function' &&
+									document.getText(new vscode.Range(cdataStart.line, cdataStart.startCharacter + cdataStart.length, token.line, token.startCharacter)).trim().length !== 0) {
+									functionContent.hasContent = true;
+								}
+								cdataStart = null;
 								break;
 						}
 						break;
@@ -3176,6 +3204,15 @@ export class XsltTokenDiagnostics {
 		});
 	}
 
+	// an xsl:function with no content - only xsl:param and xsl:note children, whitespace and comments - always returns an
+	// empty sequence: reported whatever its 'as' - when that requires an item, e.g. xs:string, Saxon reports a static
+	// type error (XTTE0780)
+	private static checkFunctionContent(functionContent: { token: BaseToken, name: string, hasContent: boolean }, problemTokens: BaseToken[]) {
+		if (!functionContent.hasContent) {
+			problemTokens.push({ ...functionContent.token, value: functionContent.name, error: ErrorType.FunctionResultEmpty });
+		}
+	}
+
 	private static textForTokenRange(document: vscode.TextDocument, allTokens: BaseToken[], range: [number, number]) {
 		const first = allTokens[range[0]];
 		const last = allTokens[range[1]];
@@ -4182,6 +4219,10 @@ export class XsltTokenDiagnostics {
 						`XSLT: missing namespace prefix in xsl:function name '${functionName}' - a function name without a prefix requires XSLT 4.0 (XTSE0740)`;
 					break;
 				}
+				case ErrorType.FunctionResultEmpty:
+					msg = `XSLT: The function '${tokenValue}' has no content, so it always returns an empty sequence - if its 'as' type doesn't allow an empty sequence, this is a type error (XTTE0780)`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
 				case ErrorType.XSLTFunctionNameShadowsBuiltin: {
 					const [shadowedName, shadowedArity] = tokenValue.split('#');
 					msg = `XSLT: The function '${shadowedName}' replaces the built-in function fn:${shadowedName}#${shadowedArity} - a call of '${shadowedName}' without a prefix, with ${shadowedArity} argument${shadowedArity === '1' ? '' : 's'}, calls this function instead`;

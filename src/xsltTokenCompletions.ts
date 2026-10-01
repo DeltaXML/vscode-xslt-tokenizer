@@ -3025,7 +3025,7 @@ export class XsltTokenCompletions {
 				} else if (tagName === 'xsl:function') {
 					useCurrent = false;
 					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
-					newItem.insertText = new vscode.SnippetString('xsl:function name="${1:prefix:name}" as="${2:item()*}">\n\t<xsl:param name="${3:name}" as="${4:item()*}"/>\n\t$0\n</xsl:function>');
+					newItem.insertText = new vscode.SnippetString('xsl:function name="${1:prefix:name}" as="${2:xs:string}">\n\t<xsl:param name="${3:name}" as="${4:item()*}"/>\n\t$0\n</xsl:function>');
 					completionItems.push(newItem);
 				} else if (docType === DocumentTypes.XSLT40 && tagName === 'xsl:if') {
 					useCurrent = true;
