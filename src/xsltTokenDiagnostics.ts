@@ -17,6 +17,7 @@ import { RecordType, RecordTypes, FieldReference } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
 import { XdocReferences } from './xdocReferences';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
 import { FixedNamespaces } from './fixedNamespaces';
@@ -541,6 +542,17 @@ export class XsltTokenDiagnostics {
 							instruction.token.value = functionNameWithArity;
 							problemTokens.push(instruction.token);
 							break;
+						}
+					}
+					// XSLT 4.0: a function in no namespace with the name and an arity of a built-in function replaces it in
+					// calls without a prefix with that number of arguments, e.g. count((1, 2)) for name="count" with one parameter
+					if (XsltTokenDiagnostics.isXPath40(docType) && !instruction.token['error']) {
+						const localName = instruction.name.startsWith('Q{}') ? instruction.name.substring(3) : instruction.name;
+						const shadowed = localName.includes(':') ? undefined : XsltTokenDiagnostics.functionNamesWithArity(instruction)
+							.map((nameWithArity) => localName + nameWithArity.substring(nameWithArity.lastIndexOf('#')))
+							.find((nameWithArity) => FunctionData.xpath40.includes(nameWithArity));
+						if (shadowed) {
+							problemTokens.push({ ...instruction.token, error: ErrorType.XSLTFunctionNameShadowsBuiltin, value: shadowed });
 						}
 					}
 					break;
@@ -1301,11 +1313,17 @@ export class XsltTokenDiagnostics {
 							}
 						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:function') {
-							if (!variableName.includes(':')) {
-								token['error'] = ErrorType.XSLTFunctionNamePrefix;
-								token.value = variableName;
-								problemTokens.push(token);
-								hasProblem = true;
+							// a function in no namespace, e.g. name="area" or name="Q{}area" - an XSLT 4.0 extension in
+							// Saxon 13 (PE or EE) - otherwise its name must have a prefix
+							const localName = variableName.startsWith('Q{}') ? variableName.substring(3) : variableName;
+							if (!localName.includes(':') && !localName.startsWith('Q{')) {
+								const reason = !XsltTokenDiagnostics.isXPath40(docType) ? 'XSLT 4.0' : XsltTokenDiagnostics.isSaxonHEConfigured() ? 'Saxon-HE' : undefined;
+								if (reason) {
+									token['error'] = ErrorType.XSLTFunctionNamePrefix;
+									token.value = variableName + RecordTypes.valueSeparator + reason;
+									problemTokens.push(token);
+									hasProblem = true;
+								}
 							}
 						}
 						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
@@ -3343,6 +3361,11 @@ export class XsltTokenDiagnostics {
 	}
 
 	// XSLT 4.0 stylesheets and XPath documents (e.g. .xpath files) use XPath 4.0
+	// the configured Saxon jar is Saxon-HE, which has no XSLT 4.0 extensions
+	private static isSaxonHEConfigured() {
+		return SaxonTaskProvider.isSaxonHE(vscode.workspace.getConfiguration('XSLT.tasks').get<string>('saxonJar'));
+	}
+
 	private static isXPath40(docType: DocumentTypes) {
 		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
 	}
@@ -3683,7 +3706,10 @@ export class XsltTokenDiagnostics {
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
-		if (fNameParts.length === 1) {
+		// a user-defined function in no namespace, e.g. area(2) for name="area" or name="Q{}area" - an XSLT 4.0 extension
+		if (fNameParts.length === 1 && (checkedGlobalFnNames.includes(qFunctionName) || checkedGlobalFnNames.includes('Q{}' + qFunctionName))) {
+			isValid = true;
+		} else if (fNameParts.length === 1) {
 			if (tokenValue.startsWith('~')) {
 				// reported as a type node test, e.g. ~record(a, b)
 				isValid = true;
@@ -4148,10 +4174,20 @@ export class XsltTokenDiagnostics {
 				case ErrorType.TemplateNameUnresolved:
 					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
 					break;
-				case ErrorType.XSLTFunctionNamePrefix:
+				case ErrorType.XSLTFunctionNamePrefix: {
 					errCode = DiagnosticCode.unresolvedGenericRef;
-					msg = `XSLT: missing namespace prefox in xsl:function name '${tokenValue}'`;
+					const [functionName, reason] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = reason === 'Saxon-HE' ?
+						`XSLT: missing namespace prefix in xsl:function name '${functionName}' - a function name without a prefix is an XSLT 4.0 extension, not available in Saxon-HE (XTSE0740)` :
+						`XSLT: missing namespace prefix in xsl:function name '${functionName}' - a function name without a prefix requires XSLT 4.0 (XTSE0740)`;
 					break;
+				}
+				case ErrorType.XSLTFunctionNameShadowsBuiltin: {
+					const [shadowedName, shadowedArity] = tokenValue.split('#');
+					msg = `XSLT: The function '${shadowedName}' replaces the built-in function fn:${shadowedName}#${shadowedArity} - a call of '${shadowedName}' without a prefix, with ${shadowedArity} argument${shadowedArity === '1' ? '' : 's'}, calls this function instead`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
 				case ErrorType.AttributeSetUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:attribute-set with name '${tokenValue}' not found`;
