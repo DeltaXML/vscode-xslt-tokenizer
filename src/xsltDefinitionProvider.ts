@@ -382,7 +382,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 			let completions: vscode.CompletionItem[]|undefined;
 			// XSLT 4.0: within a documentation note - an xsl:note with format="xdoc-md" - only its tags and parameter names
-			const noteCompletions = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getNoteCompletions(document, position) : undefined;
+			const noteCompletions = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getNoteCompletions(document, position, globalInstructionData.concat(allImportedGlobals)) : undefined;
 			if (noteCompletions) {
 				resolve(noteCompletions.length > 0 ? new vscode.CompletionList(noteCompletions, false) : undefined);
 				return;

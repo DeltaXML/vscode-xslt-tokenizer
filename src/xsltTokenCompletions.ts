@@ -5,6 +5,8 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
@@ -1758,7 +1760,7 @@ export class XsltTokenCompletions {
 	// XSLT 4.0: within the content of a documentation note - an xsl:note with format="xdoc-md" - the tag names after '@',
 	// and after '@param' or '@field', the names of the parameters or record fields that aren't documented yet - otherwise there are no completions -
 	// undefined if the position isn't within a documentation note
-	public static getNoteCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+	public static getNoteCompletions(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[] = []): vscode.CompletionItem[] | undefined {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const noteStart = offset > 0 ? text.lastIndexOf('<xsl:note', offset - 1) : -1;
@@ -1824,6 +1826,23 @@ export class XsltTokenCompletions {
 				return item;
 			});
 		}
+		// after @see, or in a code span, references to the declarations, e.g. my:area#2
+		const see = /^\s*@see[ \t]+((?:template[ \t]+)?[^\s`]*)$/.exec(lineBefore);
+		const codeSpan = see ? null : /(?<!`)`(?!`)([^`]*)$/.exec(lineBefore);
+		const isOpenSpan = !!codeSpan && (lineBefore.substring(0, codeSpan.index).match(/`/g) ?? []).length % 2 === 0;
+		if (see || isOpenSpan) {
+			const typed = see ? see[1] : codeSpan![1];
+			const range = new vscode.Range(position.translate(0, -typed.length), position);
+			// in a code span, the closing backtick, unless it's there already
+			const close = isOpenSpan && document.lineAt(position.line).text.charAt(position.character) !== '`' ? '`' : '';
+			const own = declaration && (declaration.name === 'xsl:function' || declaration.name === 'xsl:template') ? XdocNotes.paramNames(text, markup, declaration.offset) : [];
+			return XsltTokenCompletions.noteReferenceCompletions(globals, document, own, isOpenSpan).map((item, index) => {
+				item.range = range;
+				item.insertText = (item.insertText as string) + close;
+				item.sortText = String(index).padStart(4, '0');
+				return item;
+			});
+		}
 		const tag = /@([\w-]*)$/.exec(lineBefore);
 		if (tag) {
 			const range = new vscode.Range(position.translate(0, -tag[1].length), position);
@@ -1834,14 +1853,83 @@ export class XsltTokenCompletions {
 				item.range = range;
 				item.detail = XdocNotes.tagDescriptions[name];
 				item.sortText = String(index).padStart(4, '0');
-				if (name === 'param' || name === 'variable' || name === 'field') {
-					// then the parameter, variable or field names
+				if (name === 'param' || name === 'variable' || name === 'field' || name === 'see') {
+					// then the parameter, variable or field names - or for @see, the declarations
 					item.command = { command: 'editor.action.triggerSuggest', title: `${name} names` };
 				}
 				return item;
 			});
 		}
 		return [];
+	}
+
+	// XSLT 4.0: for a reference in a documentation note (see XdocReferences), an item for each declaration, written so
+	// that it refers to it: the parameters of the function or template the note documents (own), global params and
+	// variables, functions by arity, item types, and named templates - for a code span, only names that are references
+	// there, e.g. 'template draw', not 'draw'
+	private static noteReferenceCompletions(globals: GlobalInstructionData[], document: vscode.TextDocument, own: string[], inCodeSpan: boolean): vscode.CompletionItem[] {
+		const items: vscode.CompletionItem[] = [];
+		const labels = new Set<string>();
+		const moduleTexts = new Map<string, string | undefined>();
+		const moduleText = (href: string | undefined) => {
+			if (!href) {
+				return document.getText();
+			} else if (!moduleTexts.has(href)) {
+				try {
+					moduleTexts.set(href, fs.readFileSync(href, 'utf8'));
+				} catch {
+					moduleTexts.set(href, undefined);
+				}
+			}
+			return moduleTexts.get(href);
+		};
+		// the declaration's documentation note, and where it's declared
+		const documentation = (global: GlobalInstructionData) => {
+			const text = moduleText(global.href);
+			const tagStart = text ? text.lastIndexOf('<', XdocNotes.offsetAt(text, global.token.line, global.token.startCharacter)) : -1;
+			const note = text && tagStart > -1 ? XdocNotes.forDeclaration(text, tagStart) : undefined;
+			const declared = global.href ? `Declared in ${path.basename(global.href)}` : 'Declared in this stylesheet';
+			return new vscode.MarkdownString(note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${declared}` : declared);
+		};
+		const add = (label: string, kind: vscode.CompletionItemKind, detail: string, global?: GlobalInstructionData) => {
+			if (labels.has(label)) {
+				return;
+			}
+			labels.add(label);
+			const item = new vscode.CompletionItem(label, kind);
+			item.insertText = label;
+			item.detail = detail;
+			if (global) {
+				item.documentation = documentation(global);
+			}
+			items.push(item);
+		};
+		const params = (global: GlobalInstructionData, count: number) => (global.memberNames ?? []).slice(0, count).map((name, i) => global.memberTypes?.[i] ? `$${name} as ${global.memberTypes[i]}` : `$${name}`).join(', ');
+		own.forEach((name) => add('$' + name, vscode.CompletionItemKind.Variable, 'parameter'));
+		globals.filter((g) => g.type === GlobalInstructionType.Parameter || g.type === GlobalInstructionType.Variable).forEach((g) => {
+			add('$' + g.name, vscode.CompletionItemKind.Variable, `${g.type === GlobalInstructionType.Parameter ? 'global parameter' : 'global variable'}${g.declaredType ? ' as ' + g.declaredType : ''}`, g);
+		});
+		const functions = globals.filter((g) => g.type === GlobalInstructionType.Function);
+		const itemTypes = globals.filter((g) => g.type === GlobalInstructionType.ItemType);
+		functions.forEach((g) => {
+			const returnType = g.returnType ? ` as ${g.returnType}` : '';
+			if (g.idNumber < 0) {
+				add(`${g.name}()`, vscode.CompletionItemKind.Function, 'function', g);
+				return;
+			}
+			// an item for each arity, with optional parameters
+			const optional = (g.memberOptional ?? []).filter((isOptional) => isOptional).length;
+			for (let arity = g.idNumber - optional; arity <= g.idNumber; arity++) {
+				add(`${g.name}#${arity}`, vscode.CompletionItemKind.Function, `${g.name}(${params(g, arity)})${returnType}`, g);
+			}
+		});
+		itemTypes.filter((g) => !inCodeSpan || g.name.includes(':')).forEach((g) => add(g.name, vscode.CompletionItemKind.Struct, `type${g.declaredType ? ' as ' + g.declaredType : ''}`, g));
+		globals.filter((g) => g.type === GlobalInstructionType.Template).forEach((g) => {
+			// the name alone refers to a function or item type first, and in a code span, an unprefixed one isn't a reference
+			const isAmbiguous = inCodeSpan || functions.some((f) => f.name === g.name) || itemTypes.some((t) => t.name === g.name);
+			add(isAmbiguous ? `template ${g.name}` : g.name, vscode.CompletionItemKind.Method, `template ${g.name}(${params(g, g.memberNames?.length ?? 0)})`, g);
+		});
+		return items;
 	}
 
 	// XSLT 4.0: in the test of an xsl:when in an xsl:switch whose select has an enumeration type, the values that no

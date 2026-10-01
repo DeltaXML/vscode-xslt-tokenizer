@@ -36,6 +36,11 @@ function stylesheet(note: string) {
     <xsl:param name="scale"/>
     <xsl:sequence select="1"/>
   </xsl:function>
+  <xsl:function name="cx:scaled">
+    <xsl:param name="value"/>
+    <xsl:param name="factor" required="no" select="1"/>
+    <xsl:sequence select="$value * $factor"/>
+  </xsl:function>
   <xsl:template name="draw">
     <xsl:note format="xdoc-md">
       ${note}
@@ -87,6 +92,12 @@ async function rename(note: string, newName: string) {
 	const edit = await provider.provideRenameEdits(document, position, newName, cancel());
 	assert.isTrue(await vscode.workspace.applyEdit(edit!));
 	return document.getText().split('\n').map((line) => line.trim());
+}
+
+async function completions(note: string) {
+	const { document, position } = await open(stylesheet(note));
+	const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, position, cancel(), { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+	return Array.isArray(result) ? result : result?.items ?? [];
 }
 
 suite('Documentation notes: references', () => {
@@ -161,6 +172,35 @@ suite('Documentation notes: references', () => {
 		for (const note of ['@see https://example.com', '@see the specification', '@see xs:string', '@see fn:sum#1', '@see sum#1', '@see urn:isbn', 'Uses `cx:nothing` and `$nope`.', '@see cx:area#2.', '@see `cx:area#2`']) {
 			assert.deepEqual(await lint(note), [], note);
 		}
+	});
+
+	test('completions: after @see, the declarations - functions by arity, and a template by its name alone', async () => {
+		const items = await completions('@see ¦');
+		assert.deepEqual(items.map((item) => item.label), ['$colour', '$gscale', 'cx:area#2', 'cx:scaled#1', 'cx:scaled#2', 'cx:point', 'draw']);
+		const area = items.find((item) => item.label === 'cx:area#2')!;
+		assert.equal(area.detail, 'cx:area($shape, $scale) as xs:double');
+		assert.include((area.documentation as vscode.MarkdownString).value, 'Returns the area of a shape.');
+		assert.equal(items.find((item) => item.label === 'cx:scaled#1')!.detail, 'cx:scaled($value)');
+	});
+
+	test('completions: after @see, replacing the name being typed', async () => {
+		const { document, position } = await open(stylesheet('@see cx:ar¦'));
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, position, cancel(), { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+		const item = (Array.isArray(result) ? result : result?.items ?? []).find((i) => i.label === 'cx:area#2')!;
+		assert.equal(document.getText(item.range as vscode.Range), 'cx:ar');
+		assert.equal(item.insertText, 'cx:area#2');
+	});
+
+	test('completions: in a code span, template names with template, and the closing backtick', async () => {
+		const items = await completions('Uses `¦');
+		assert.deepEqual(items.map((item) => item.label), ['$colour', '$gscale', 'cx:area#2', 'cx:scaled#1', 'cx:scaled#2', 'cx:point', 'template draw']);
+		assert.equal(items.find((item) => item.label === 'cx:area#2')!.insertText, 'cx:area#2`');
+		assert.equal((await completions('Uses `cx¦`')).find((item) => item.label === 'cx:area#2')!.insertText, 'cx:area#2');
+	});
+
+	test('completions: not after a closed code span, or later in an @see', async () => {
+		assert.deepEqual((await completions('Uses `cx:area` and ¦')).map((item) => item.label), []);
+		assert.deepEqual((await completions('@see cx:area#2 and ¦')).map((item) => item.label), []);
 	});
 
 	test('highlighting: the reference after @see is code', async () => {
