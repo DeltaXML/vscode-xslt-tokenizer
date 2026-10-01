@@ -2,13 +2,18 @@ export interface Snippet {
 	name: string;
 	body: string;
 	description: string;
+	// shown after the name in the completion list, e.g. 'initial template', and right-aligned, e.g. 'XSLT 4.0' - for
+	// the root element snippets, listed in their order, so the version reads as a group
+	labelDetail?: string;
+	group?: string;
 }
 
 export class XSLTSnippets {
 	static xsltRootTags: Snippet[] = [
 		{
 		name: 'xsl:stylesheet',
-		description: 'xsl:stylesheet` snippet for identity transform ',
+		group: 'XSLT 3.0',
+		description: '`xsl:stylesheet` snippet for identity transform',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -34,8 +39,87 @@ export class XSLTSnippets {
 </xsl:stylesheet>`
 	},
 	{
+		name: 'xsl:stylesheet',
+		labelDetail: 'initial template',
+		group: 'XSLT 3.0',
+		description: '`xsl:stylesheet` snippet starting from `xsl:initial-template` - run without a source document, e.g. by Quick Run with no XML context file',
+		body:
+			`?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                xmlns:array="http://www.w3.org/2005/xpath-functions/array"
+                xmlns:map="http://www.w3.org/2005/xpath-functions/map"
+                xmlns:math="http://www.w3.org/2005/xpath-functions/math"
+                exclude-result-prefixes="#all"
+                expand-text="yes"
+                version="3.0">
+
+\t<xsl:output method="xml" indent="yes"/>
+
+\t<xsl:template name="xsl:initial-template">
+\t\t$0
+\t</xsl:template>
+
+</xsl:stylesheet>`
+	},
+	{
+		name: 'xsl:stylesheet',
+		group: 'XSLT 4.0',
+		description: 'XSLT 4.0 `xsl:stylesheet` snippet for identity transform - with the standard prefixes from `fixed-namespaces`, and a documentation note for the module',
+		body:
+			`?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                fixed-namespaces="#standard"
+                exclude-result-prefixes="#all"
+                expand-text="yes"
+                version="4.0">
+
+\t<xsl:note format="xdoc-md">
+\t\t\${1:What this stylesheet does}
+\t</xsl:note>
+
+\t<xsl:output method="xml" indent="yes"/>
+\t<xsl:mode on-no-match="shallow-copy"/>
+
+\t<xsl:template match="\${2:/*}" mode="#all">
+\t\t<xsl:copy>
+\t\t\t<xsl:apply-templates select="\${3:@*, node()}" mode="#current"/>
+\t\t</xsl:copy>
+\t</xsl:template>
+
+\t$0
+
+</xsl:stylesheet>`
+	},
+	{
+		name: 'xsl:stylesheet',
+		labelDetail: 'initial template',
+		group: 'XSLT 4.0',
+		description: 'XSLT 4.0 `xsl:stylesheet` snippet starting from `xsl:initial-template` - run without a source document, e.g. by Quick Run with no XML context file - with the standard prefixes from `fixed-namespaces`, and a documentation note for the module',
+		body:
+			`?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                fixed-namespaces="#standard"
+                exclude-result-prefixes="#all"
+                expand-text="yes"
+                version="4.0">
+
+\t<xsl:note format="xdoc-md">
+\t\t\${1:What this stylesheet does}
+\t</xsl:note>
+
+\t<xsl:output method="xml" indent="yes"/>
+
+\t<xsl:template name="xsl:initial-template">
+\t\t$0
+\t</xsl:template>
+
+</xsl:stylesheet>`
+	},
+	{
 		name: 'xsl:package',
-		description: 'xsl:package` snippet - root element and required attributes',
+		group: 'XSLT 3.0',
+		description: '`xsl:package` snippet - root element and required attributes',
 		body:
 			`?xml version="1.0" encoding="UTF-8"?>
 <xsl:package xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -56,6 +140,37 @@ export class XSLTSnippets {
 \t<xsl:template match="\${3:/*}" mode="\$2">
 \t\t<xsl:copy>
 \t\t\t<xsl:apply-templates select="\${4:@*, node()}" mode="#current"/>
+\t\t</xsl:copy>
+\t</xsl:template>
+
+\t$0
+
+</xsl:package>`
+	},
+	{
+		name: 'xsl:package',
+		group: 'XSLT 4.0',
+		description: 'XSLT 4.0 `xsl:package` snippet - root element and required attributes, with the standard prefixes from `fixed-namespaces`, and a documentation note for the module',
+		body:
+			`?xml version="1.0" encoding="UTF-8"?>
+<xsl:package xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+             fixed-namespaces="#standard"
+             name="\${1:package-uri}"
+             package-version="1.0"
+             exclude-result-prefixes="#all"
+             expand-text="yes"
+             version="4.0">
+
+\t<xsl:note format="xdoc-md">
+\t\t\${2:What this package does}
+\t</xsl:note>
+
+\t<xsl:output method="xml" indent="yes"/>
+\t<xsl:mode name="\${3:mode-name}" streamable="false" on-no-match="shallow-copy" visibility="public"/>
+
+\t<xsl:template match="\${4:/*}" mode="\$3">
+\t\t<xsl:copy>
+\t\t\t<xsl:apply-templates select="\${5:@*, node()}" mode="#current"/>
 \t\t</xsl:copy>
 \t</xsl:template>
 

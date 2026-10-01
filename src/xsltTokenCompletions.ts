@@ -325,7 +325,7 @@ export class XsltTokenCompletions {
 							// without this, the loop falls through to the "past a complete element name"
 							// fallback further down, which wrongly offers attribute completions instead.
 							if (elementStack.length === 0) {
-								resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
+								resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets, true);
 							} else {
 								const symbolId = elementStack[elementStack.length - 1].symbolID;
 								resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(document, docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList, symbolId);
@@ -341,7 +341,7 @@ export class XsltTokenCompletions {
 						if (isOnRequiredToken) {
 							// see the matching comment in the xslElementName case above
 							if (elementStack.length === 0) {
-								resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
+								resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets, true);
 							} else {
 								const symbolId = elementStack[elementStack.length - 1].symbolID;
 								resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(document, docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList, symbolId);
@@ -370,7 +370,7 @@ export class XsltTokenCompletions {
 							case XMLCharState.lSt:
 								if (isOnRequiredToken) {
 									if (elementStack.length === 0) {
-										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets);
+										resultCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(languageConfig.rootElementSnippets, true);
 									} else {
 										const symbolId = elementStack[elementStack.length - 1].symbolID;
 										resultCompletions = XsltTokenCompletions.getXSLTTagCompletions(document, docType, languageConfig, schemaQuery, position, elementStack, inScopeVariablesList, symbolId);
@@ -3152,15 +3152,20 @@ export class XsltTokenCompletions {
 		completionItems.push(newItem4);
 	}
 
-	private static getXSLTSnippetCompletions(snippets: Snippet[] | undefined) {
+	// with keepOrder, the snippets are listed in their order - e.g. the root elements for XSLT 3.0, then 4.0 - not by name
+	private static getXSLTSnippetCompletions(snippets: Snippet[] | undefined, keepOrder = false) {
 		if (!snippets) {
 			return [];
 		}
 		let completionItems: vscode.CompletionItem[] = [];
-		snippets.forEach((snippet) => {
-			const newItem = new vscode.CompletionItem(snippet.name, vscode.CompletionItemKind.Struct);
+		snippets.forEach((snippet, index) => {
+			const label = snippet.labelDetail || snippet.group ? { label: snippet.name, detail: snippet.labelDetail ? ' ' + snippet.labelDetail : undefined, description: snippet.group } : snippet.name;
+			const newItem = new vscode.CompletionItem(label, vscode.CompletionItemKind.Struct);
 			newItem.insertText = new vscode.SnippetString(snippet.body);
 			newItem.documentation = new vscode.MarkdownString(snippet.description);
+			if (keepOrder) {
+				newItem.sortText = String(index).padStart(4, '0');
+			}
 			completionItems.push(newItem);
 		});
 		return completionItems;
