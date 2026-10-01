@@ -6,8 +6,8 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 ---
 
 <p align="center">
-  <em>View of XSLT with syntax highlighting, formatting,problem reporting and node-outline:</em>
-  <img alt="XSLT Editor" src="vscode-xslt.png">
+  <em>XSLT 4.0 with a documentation note, its hover help where the function is called, and the XSLT Imports view:</em>
+  <img alt="XSLT Editor" src="vscode-xslt-notes.png">
 </p>
 
 
