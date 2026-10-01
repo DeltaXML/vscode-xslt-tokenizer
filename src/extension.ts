@@ -689,18 +689,15 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 			});
 		};
-		// with 'None' deliberately chosen as the XML context file, the stylesheet runs with no source document,
-		// starting from xsl:initial-template ('-it') - an undefined xmlSourceFsPath selects this throughout
+		// without an XML context file - 'None' deliberately chosen, or none chosen yet - the stylesheet runs with no
+		// source document, starting from xsl:initial-template ('-it') - an undefined xmlSourceFsPath selects this
+		// throughout - so it must declare one
 		const xmlSourceFsPath = DocumentChangeHandler.lastActiveXMLNonXSLUri?.fsPath;
-		if (!xmlSourceFsPath) {
-			if (!DocumentChangeHandler.contextFileIsNone) {
-				offerContextFilePick('Quick Run XSLT: no XML context file is set - open an XML source file, or pick one (or \'None\', to start from xsl:initial-template) from the status bar.');
-				return;
-			}
-			if (!await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
-				offerContextFilePick('Quick Run XSLT: the XML context file is \'None\', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.');
-				return;
-			}
+		if (!xmlSourceFsPath && !await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
+			offerContextFilePick(DocumentChangeHandler.contextFileIsNone ?
+				'Quick Run XSLT: the XML context file is \'None\', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.' :
+				'Quick Run XSLT: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar.');
+			return;
 		}
 		await runQuickRunTask(taskType, xsltDocument, xmlSourceFsPath);
 	};
