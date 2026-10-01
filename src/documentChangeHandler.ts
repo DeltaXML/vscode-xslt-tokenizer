@@ -152,7 +152,16 @@ export class DocumentChangeHandler {
 				isCloseTagFeature = prevChar === '<';
 			}
 
-			if (!isCloseTagFeature && !skipTrigger) {
+			if (isCloseTagFeature) {
+				// the end tag's name is added by the on-type formatter, so no completions: not for a trigger still
+				// pending for the '<' typed just before - which would run after the name is added - nor in a suggest
+				// widget it already opened
+				if (this.pendingTriggerSuggestTimeout) {
+					clearTimeout(this.pendingTriggerSuggestTimeout);
+					this.pendingTriggerSuggestTimeout = null;
+				}
+				vscode.commands.executeCommand('hideSuggestWidget');
+			} else if (!skipTrigger) {
 				// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
 				// debounce: fast typing schedules one of these per keystroke, and without
 				// cancelling earlier ones each still fires 10ms later, piling up overlapping
