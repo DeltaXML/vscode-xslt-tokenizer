@@ -1,0 +1,4 @@
+Error at xsl:with-param on line 3 column 86 of c06.xsl:
+  XTTE0590  An item of type xs:string cannot be converted to xs:integer as required for the
+  value of parameter $n
+Errors were reported during stylesheet compilation

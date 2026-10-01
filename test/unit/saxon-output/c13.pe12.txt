@@ -1,0 +1,4 @@
+Error evaluating ($s) in xsl:sequence/@select on line 4 column 37 of c13.xsl:
+  XPTY0019  The required item type of the first operand of '/' is node(), but the supplied
+  expression {$s} has item type xs:string
+Errors were reported during stylesheet compilation

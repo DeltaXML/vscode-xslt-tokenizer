@@ -1,0 +1,10 @@
+No license file found - running with licensable features disabled
+Error in {1 +} at char 4 in xsl:sequence/@select on line 3 column 36 of c17.xsl:
+  XPST0003  Unexpected token <eof> before ...
+Errors were reported during stylesheet compilation. Unexpected token <eof> before ...
+Unhandled exception: net.sf.saxon.CommandExitException: Errors were reported during stylesheet compilation. Unexpected token <eof> before ...
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

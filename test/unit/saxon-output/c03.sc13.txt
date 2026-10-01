@@ -1,0 +1,11 @@
+No license file found - running with licensable features disabled
+Error at xsl:variable on line 3 column 58 of c03.xsl:
+  XTTE0570  The required item type of the supplied value for variable $v is xs:integer. The
+  supplied value is of type xs:string
+Errors were reported during stylesheet compilation. The required item type of the supplied value for variable $v is xs:integer. The supplied value is of type xs:string
+Unhandled exception: net.sf.saxon.CommandExitException: Errors were reported during stylesheet compilation. The required item type of the supplied value for variable $v is xs:integer. The supplied value is of type xs:string
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

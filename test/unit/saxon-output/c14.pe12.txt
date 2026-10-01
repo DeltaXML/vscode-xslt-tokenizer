@@ -1,0 +1,5 @@
+Error at char 5 in expression in xsl:sequence/@select on line 3 column 51 of c14.xsl:
+  FODC0002  I/O error reported by XML parser processing
+  file:/work/proj/missing.xml. Caused by java.io.FileNotFoundException: /work/proj/missing.xml (No such file or directory)
+  In template rule with match="/" on line 2 of c14.xsl
+I/O error reported by XML parser processing file:/work/proj/missing.xml

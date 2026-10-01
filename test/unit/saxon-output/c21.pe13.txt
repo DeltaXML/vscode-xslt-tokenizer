@@ -1,0 +1,5 @@
+Error at char 5 in expression in xsl:variable/@select on line 3 column 94 of c21.xsl:
+  XTTE0570  Failed to convert the supplied value for variable $m: Cannot convert {"a":"x"}
+  to map(xs:string, xs:integer)
+  In template rule with match="document-node()" on line 2 of c21.xsl
+Failed to convert the supplied value for variable $m: Cannot convert {"a":"x"} to map(xs:string, xs:integer)

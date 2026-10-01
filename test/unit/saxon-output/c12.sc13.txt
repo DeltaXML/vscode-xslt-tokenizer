@@ -1,0 +1,11 @@
+No license file found - running with licensable features disabled
+Type error in expression in xsl:sequence/@select on line 3 column 35 of libstatic.xsl:
+  XTTE0780  The required item type of the result of a call to f:lib#0 is xs:integer. The
+  supplied value is of type xs:string
+Errors were reported during stylesheet compilation. The required item type of the result of a call to f:lib#0 is xs:integer. The supplied value is of type xs:string
+Unhandled exception: net.sf.saxon.CommandExitException: Errors were reported during stylesheet compilation. The required item type of the result of a call to f:lib#0 is xs:integer. The supplied value is of type xs:string
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

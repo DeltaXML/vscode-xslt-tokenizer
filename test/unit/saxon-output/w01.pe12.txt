@@ -1,0 +1,5 @@
+Warning at mode (unnamed) 
+  XTDE0540  Ambiguous rule match for /doc/a[1]
+Matches both "a[. = 1]" on line 6 of
+  file:/work/proj/w01.xsl
+and "a[1]" on line 5 of file:/work/proj/w01.xsl

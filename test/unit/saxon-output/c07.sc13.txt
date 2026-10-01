@@ -1,0 +1,11 @@
+No license file found - running with licensable features disabled
+Error in expression in xsl:sequence/@select on line 4 column 45 of c07.xsl:
+  FOAR0001  Integer division by zero
+  In template rule with match="document-node()" on line 3 of c07.xsl
+Integer division by zero
+Unhandled exception: net.sf.saxon.CommandExitException: Integer division by zero
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

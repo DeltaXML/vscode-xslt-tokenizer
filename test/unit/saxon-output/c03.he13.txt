@@ -1,0 +1,4 @@
+Error at xsl:variable on line 3 column 58 of c03.xsl:
+  XTTE0570  The required item type of the supplied value for variable $v is xs:integer. The
+  supplied value is of type xs:string
+Errors were reported during stylesheet compilation. The required item type of the supplied value for variable $v is xs:integer. The supplied value is of type xs:string

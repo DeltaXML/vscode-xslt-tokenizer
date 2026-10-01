@@ -1,0 +1,4 @@
+Error evaluating ("abc") in expression in xsl:sequence/@select on line 3 column 35 of libstatic.xsl:
+  XTTE0780  An item of type xs:string cannot be converted to xs:integer as required for the
+  result of a call to f:lib#0
+Errors were reported during stylesheet compilation

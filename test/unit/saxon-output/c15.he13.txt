@@ -1,0 +1,3 @@
+Error at char 13 in xsl:variable/@select on line 3 column 80 of c15.xsl:
+  XPTY0004  Arithmetic operator is not defined for arguments of types (xs:integer, xs:string)
+Errors were reported during stylesheet compilation. Arithmetic operator is not defined for arguments of types (xs:integer, xs:string)

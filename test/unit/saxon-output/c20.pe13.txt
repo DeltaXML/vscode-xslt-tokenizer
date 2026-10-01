@@ -1,0 +1,5 @@
+Error at xsl:attribute on line 3 column 51 of c20.xsl:
+  XTDE0410  An attribute node (late) cannot be output after a child of the containing
+  element. Most recent element start tag was output at line 3 of module c20.xsl
+  In template rule with match="document-node()" on line 2 of c20.xsl
+An attribute node (late) cannot be output after a child of the containing element. Most recent element start tag was output at line 3 of module c20.xsl

@@ -1,0 +1,11 @@
+No license file found - running with licensable features disabled
+Error at xsl:text on line 6 column 15 of c05.xsl:
+  XTTE0505  The required item type of the result of template t is element(), but the
+  supplied expression {text{"hello"}} delivers items of type text()
+Errors were reported during stylesheet compilation. The required item type of the result of template t is element(), but the supplied expression {text{"hello"}} delivers items of type text()
+Unhandled exception: net.sf.saxon.CommandExitException: Errors were reported during stylesheet compilation. The required item type of the result of template t is element(), but the supplied expression {text{"hello"}} delivers items of type text()
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

@@ -1071,14 +1071,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -1117,14 +1117,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -1139,14 +1139,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -1161,14 +1161,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -1183,14 +1183,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -1200,15 +1200,15 @@
 		"problemPatterns": [
 			{
 				"name": "error.line",
-				"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-				"line": 3,
-				"column": 4,
+				"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+				"line": 2,
+				"column": 3,
 				"severity": 1,
-				"file": 5
+				"file": 4
 			},
 			{
 				"name": "message.line",
-				"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+				"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 				"code": 1,
 				"message": 2
 			}

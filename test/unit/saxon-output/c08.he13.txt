@@ -1,0 +1,4 @@
+Error at char 13 in expression in xsl:sequence/@select on line 5 column 47 of c08.xsl:
+  FORG0001  Cannot convert string "x" to an integer
+  In template rule with match="document-node()" on line 2 of c08.xsl
+Cannot convert string "x" to an integer

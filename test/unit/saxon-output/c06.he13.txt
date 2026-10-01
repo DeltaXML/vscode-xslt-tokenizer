@@ -1,0 +1,4 @@
+Error at xsl:with-param on line 3 column 86 of c06.xsl:
+  XTTE0590  The required item type of the value of parameter $n is xs:integer, but the
+  supplied expression {fn:string(...)} delivers items of type xs:string
+Errors were reported during stylesheet compilation. The required item type of the value of parameter $n is xs:integer, but the supplied expression {fn:string(...)} delivers items of type xs:string

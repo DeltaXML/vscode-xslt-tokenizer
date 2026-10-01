@@ -1,0 +1,10 @@
+No license file found - running with licensable features disabled
+Error at char 13 in xsl:variable/@select on line 3 column 80 of c15.xsl:
+  XPTY0004  Arithmetic operator is not defined for arguments of types (xs:integer, xs:string)
+Errors were reported during stylesheet compilation. Arithmetic operator is not defined for arguments of types (xs:integer, xs:string)
+Unhandled exception: net.sf.saxon.CommandExitException: Errors were reported during stylesheet compilation. Arithmetic operator is not defined for arguments of types (xs:integer, xs:string)
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

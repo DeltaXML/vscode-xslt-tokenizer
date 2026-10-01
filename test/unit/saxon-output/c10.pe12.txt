@@ -1,0 +1,5 @@
+Stopping here
+Error at xsl:message on line 3 column 34 of c10.xsl:
+  XTMM9000  Processing terminated by xsl:message at line 3 in c10.xsl
+  In template rule with match="/" on line 2 of c10.xsl
+Processing terminated by xsl:message at line 3 in c10.xsl

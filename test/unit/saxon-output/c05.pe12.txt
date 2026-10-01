@@ -1,0 +1,4 @@
+Error at xsl:text on line 6 column 15 of c05.xsl:
+  XTTE0505  The required item type of the result of template t is element(), but the
+  supplied expression {text{"hello"}} has item type text()
+Errors were reported during stylesheet compilation
