@@ -159,7 +159,9 @@ This extension's linter performs a comprehensive set of checks on the code. The 
 
 # Running XSLT
 
-![xslt-tasks](xslt-tasks.png)
+![Quick Run](quick-run.png)
+
+*(1) XSLT in active editor, (2) the Saxon processor, (3) the XML context file - click the play button to run*
 
 The quickest way to run the stylesheet in the active editor is [Quick Run](https://deltaxml.github.io/vscode-xslt-xpath/quick-run.html) (`⌘⌥R` / `Ctrl+Alt+R`): the first run creates a task for you, which later runs reuse.
 
