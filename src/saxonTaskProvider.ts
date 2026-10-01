@@ -201,6 +201,17 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             SaxonTaskProvider.resolveStoredPath(storedSource, workspaceFolderFsPath) === path.normalize(xmlSourceFsPath);
     }
 
+    // the scope of a task: the workspace folder of its stylesheet - so ${workspaceFolder}, e.g. in the problem matchers'
+    // search for the files Saxon reports, is that folder, also in a multi-root workspace - or else the workspace. With
+    // xsltFile '${file}', the stylesheet is the active editor's file - otherwise, a path with a variable, e.g.
+    // ${workspaceFolder} or ${command:...}, or a relative path, isn't known until the task runs
+    public static taskScope(xsltFile: unknown): vscode.WorkspaceFolder | vscode.TaskScope.Workspace {
+        const fsPath = xsltFile === '${file}' ? vscode.window.activeTextEditor?.document.uri.fsPath :
+            typeof xsltFile === 'string' && !xsltFile.includes('${') ? xsltFile : undefined;
+        const folder = fsPath && path.isAbsolute(fsPath) ? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(fsPath)) : undefined;
+        return folder ?? vscode.TaskScope.Workspace;
+    }
+
     private static resolveStoredPath(value: string, workspaceFolderFsPath: string) {
         return path.normalize(value.startsWith('${workspaceFolder}')
             ? path.join(workspaceFolderFsPath, value.substring('${workspaceFolder}'.length))
@@ -492,7 +503,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             let problemMatcher = "$saxon-xslt";
             const javaArgs = ['-cp', rawClassPathString, saxonClassName];
             const processExecution = new vscode.ProcessExecution('java', javaArgs.concat(commandLineArgs).concat(saxonFeaturesCommand).concat(xsltParametersCommand));
-            let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, processExecution, problemMatcher);
+            let newTask = new vscode.Task(xsltTask, SaxonTaskProvider.taskScope(xsltTask.xsltFile), xsltTask.label, source, processExecution, problemMatcher);
             newTask.presentationOptions.clear = false;
             newTask.presentationOptions.showReuseMessage = false;
             newTask.presentationOptions.echo = true;

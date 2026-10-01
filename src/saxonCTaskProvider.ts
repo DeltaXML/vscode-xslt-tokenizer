@@ -290,7 +290,7 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
             } else {
                 execution = new vscode.ProcessExecution(executablePath, allArgs);
             }
-            let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, execution, problemMatcher);
+            let newTask = new vscode.Task(xsltTask, SaxonTaskProvider.taskScope(xsltTask.xsltFile), xsltTask.label, source, execution, problemMatcher);
             newTask.presentationOptions.clear = false;
             newTask.presentationOptions.showReuseMessage = false;
             newTask.presentationOptions.echo = true;

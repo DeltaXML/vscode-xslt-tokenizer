@@ -1066,8 +1066,16 @@
 				"name": "saxon-xslt",
 				"owner": "xslt",
 				"fileLocation": [
-					"relative",
-					"${file}/.."
+					"search",
+					{
+						"include": [
+							"${workspaceFolder}"
+						],
+						"exclude": [
+							"${workspaceFolder}/node_modules",
+							"${workspaceFolder}/.git"
+						]
+					}
 				],
 				"pattern": [
 					{
@@ -1088,8 +1096,16 @@
 				"name": "saxon-xslt-js",
 				"owner": "xslt-js",
 				"fileLocation": [
-					"relative",
-					"${file}/.."
+					"search",
+					{
+						"include": [
+							"${workspaceFolder}"
+						],
+						"exclude": [
+							"${workspaceFolder}/node_modules",
+							"${workspaceFolder}/.git"
+						]
+					}
 				],
 				"pattern": [
 					{

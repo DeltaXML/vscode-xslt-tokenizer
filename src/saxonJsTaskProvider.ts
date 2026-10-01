@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as jsc from 'jsonc-parser';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 
 interface XSLTJSTask {
     type: string;
@@ -265,7 +266,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             let problemMatcher = "$saxon-xslt-js";
 
             const processExecution = new vscode.ProcessExecution(npxCommand, commandLineArgs.concat(xsltParametersCommand));
-            let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, processExecution, problemMatcher);
+            let newTask = new vscode.Task(xsltTask, SaxonTaskProvider.taskScope(xsltTask.xsltFile), xsltTask.label, source, processExecution, problemMatcher);
             newTask.presentationOptions.clear = false;
             newTask.presentationOptions.showReuseMessage = false;
             newTask.presentationOptions.echo = true;
