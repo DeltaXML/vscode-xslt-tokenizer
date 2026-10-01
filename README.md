@@ -47,7 +47,7 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
       <li>Signature help and hover help</li>
       <li>Snippets, incl. new stylesheets for 3.0 and 4.0</li>
       <li>Formatting of instructions and multi-line XPath</li>
-      <li>Code folding, with <code>region</code> markers</li>
+      <li>Rename symbol, across imported modules</li>
     </ul>
   </td>
   <td width="50%" valign="top">
@@ -76,7 +76,7 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
     <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/navigation.html">Navigation</a></h4>
     <ul>
       <li>Go to (or peek) definition, and find references</li>
-      <li>Rename symbol, across modules</li>
+      <li>Go to the declarations of record fields</li>
       <li>Outline, breadcrumbs and Go to Symbol</li>
       <li>Links for <code>xsl:import</code> and <code>xsl:include</code></li>
       <li>XSLT Imports view, with inferred top-level stylesheets</li>
@@ -99,6 +99,8 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
     <ul>
       <li><strong>Quick Run</strong> (<code>⌘⌥R</code> / <code>Ctrl+Alt+R</code>)</li>
       <li>Tasks for SaxonJ, SaxonJS and SaxonC</li>
+      <li><code>xsl:param</code> defaults pre-filled by Quick Run</li>
+      <li><code>xsl:param</code> values controlled by tasks</li>
       <li>Start from <code>xsl:initial-template</code></li>
       <li>XML catalogs for <code>xsl:import</code> URIs</li>
       <li>File pickers for task inputs</li>
@@ -326,6 +328,7 @@ The [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) provi
 The main documentation pages are linked below:
 
 - [Overview](https://deltaxml.github.io/vscode-xslt-xpath/index.html)
+- [Release 2.0 Highlights](https://deltaxml.github.io/vscode-xslt-xpath/new-release.html)
 - [Editing XML](https://deltaxml.github.io/vscode-xslt-xpath/editing.html)
 - [Editing XSLT/XPath](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html)
 - [Code Navigation](https://deltaxml.github.io/vscode-xslt-xpath/navigation.html)
@@ -334,8 +337,9 @@ The main documentation pages are linked below:
 - [Debugging](https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html)
 - [Settings](https://deltaxml.github.io/vscode-xslt-xpath/settings.html)
 - [XSLT 4.0](https://deltaxml.github.io/vscode-xslt-xpath/xslt40.html)
-- [XSLT 4.0: Records and Enums](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-records.html)
-- [XSLT 4.0: Documentation Notes](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html)
+- [Records and Enums](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-records.html)
+- [Code Documentation](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html)
+- [XML Catalogs](https://deltaxml.github.io/vscode-xslt-xpath/xml-catalogs.html)
 
 ---
 
