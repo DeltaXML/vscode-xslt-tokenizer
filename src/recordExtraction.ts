@@ -330,8 +330,33 @@ export class RecordExtraction {
 		} else if (RecordTypes.mapConstructorEnd(tokens, start) === end) {
 			const record = RecordExtraction.mapConstructorRecord(tokens, start, end, nested);
 			return record ? nested(record.fieldNames) ?? record.recordType : undefined;
+		} else if (end > start + 1 && first.value === '(' && tokens[end].value === ')') {
+			return RecordExtraction.sequenceType(tokens, start, end, nested);
 		}
 		return undefined;
+	}
+
+	// the type of a parenthesized sequence of literals of one type, e.g. xs:string+ for ('one', 'two') - not for other
+	// items, e.g. a nested sequence or map constructor, or literals of different types
+	private static sequenceType(tokens: BaseToken[], start: number, end: number, nested: NestedTypeMatcher): string | undefined {
+		const types: (string | undefined)[] = [];
+		let itemStart = start + 1;
+		for (let i = start + 1; i <= end; i++) {
+			if (i < end && ['(', '{', '['].includes(tokens[i].value)) {
+				return undefined;
+			} else if (i === end || tokens[i].value === ',') {
+				if (i === itemStart) {
+					return undefined;
+				}
+				types.push(RecordExtraction.valueType(tokens, itemStart, i - 1, nested));
+				itemStart = i + 1;
+			}
+		}
+		const type = types[0];
+		if (!type || type.startsWith('record') || !types.every((t) => t === type)) {
+			return undefined;
+		}
+		return types.length === 1 ? type : type + '+';
 	}
 
 	// the declaration whose value is the value of the map: the element with the select attribute or xsl:select, or the

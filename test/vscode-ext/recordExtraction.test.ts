@@ -41,6 +41,12 @@ async function actionsFor(marked: string) {
 const importLine = `  <xsl:import href="common.xsl"/>`;
 
 suite('Extract record type', () => {
+	test('a sequence of literals of one type', async () => {
+		const { apply } = await actionsFor(stylesheet(`<xsl:variable name="p" as="map(*)" select="«{ 'names': ('one', 'two'), 'sizes': (1, 5), 'one': ('a'), 'mixed': (1, 'a'), 'nested': ((1), 2) }»"/>`));
+		assert.equal(await apply('Extract record type'), stylesheet(`<xsl:variable name="p" as="record-type" select="{ 'names': ('one', 'two'), 'sizes': (1, 5), 'one': ('a'), 'mixed': (1, 'a'), 'nested': ((1), 2) }"/>`)
+			.replace(importLine, `${importLine}\n  <xsl:item-type name="record-type" as="record(names as xs:string+, sizes as xs:integer+, one as xs:string, mixed, nested)"/>`));
+	});
+
 	test('a map constructor replacing a generic as', async () => {
 		const { apply } = await actionsFor(stylesheet(`<xsl:variable name="p" as="map(*)*" select="«{ 'name': 'Ann', 'age': 42, 'ok': true(), 'address': { 'city': 'Oxford', 'lat': 1.5e0 }, 'x': $v }»"/>`));
 		assert.equal(await apply('Extract record type'), stylesheet(`<xsl:variable name="p" as="record-type*" select="{ 'name': 'Ann', 'age': 42, 'ok': true(), 'address': { 'city': 'Oxford', 'lat': 1.5e0 }, 'x': $v }"/>`)
