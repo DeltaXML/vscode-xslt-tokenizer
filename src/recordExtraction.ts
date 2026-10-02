@@ -331,14 +331,19 @@ export class RecordExtraction {
 			const record = RecordExtraction.mapConstructorRecord(tokens, start, end, nested);
 			return record ? nested(record.fieldNames) ?? record.recordType : undefined;
 		} else if (end > start + 1 && first.value === '(' && tokens[end].value === ')') {
-			return RecordExtraction.sequenceType(tokens, start, end, nested);
+			const itemType = RecordExtraction.itemsType(tokens, start, end, nested);
+			return itemType && itemType.count > 1 ? itemType.type + '+' : itemType?.type;
+		} else if (end > start + 1 && first.value === '[' && tokens[end].value === ']') {
+			const memberType = RecordExtraction.itemsType(tokens, start, end, nested);
+			return memberType ? `array(${memberType.type})` : undefined;
 		}
 		return undefined;
 	}
 
-	// the type of a parenthesized sequence of literals of one type, e.g. xs:string+ for ('one', 'two') - not for other
-	// items, e.g. a nested sequence or map constructor, or literals of different types
-	private static sequenceType(tokens: BaseToken[], start: number, end: number, nested: NestedTypeMatcher): string | undefined {
+	// the type of the literals in brackets, all of one type - the items of a sequence, e.g. xs:string for ('one', 'two'),
+	// or the members of a square array, e.g. [1, 5] - with their number - undefined for other items, e.g. a nested
+	// sequence, array or map constructor, or literals of different types
+	private static itemsType(tokens: BaseToken[], start: number, end: number, nested: NestedTypeMatcher): { type: string, count: number } | undefined {
 		const types: (string | undefined)[] = [];
 		let itemStart = start + 1;
 		for (let i = start + 1; i <= end; i++) {
@@ -356,7 +361,7 @@ export class RecordExtraction {
 		if (!type || type.startsWith('record') || !types.every((t) => t === type)) {
 			return undefined;
 		}
-		return types.length === 1 ? type : type + '+';
+		return { type, count: types.length };
 	}
 
 	// the declaration whose value is the value of the map: the element with the select attribute or xsl:select, or the

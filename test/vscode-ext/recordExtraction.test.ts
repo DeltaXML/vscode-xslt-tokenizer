@@ -41,6 +41,12 @@ async function actionsFor(marked: string) {
 const importLine = `  <xsl:import href="common.xsl"/>`;
 
 suite('Extract record type', () => {
+	test('a square array of literals of one type', async () => {
+		const { apply } = await actionsFor(stylesheet(`<xsl:variable name="p" as="map(*)" select="«{ 'names': ['one', 'two'], 'sizes': [1, 5], 'one': ['a'], 'mixed': [1, 'a'], 'empty': [], 'nested': [[1], 2] }»"/>`));
+		assert.equal(await apply('Extract record type'), stylesheet(`<xsl:variable name="p" as="record-type" select="{ 'names': ['one', 'two'], 'sizes': [1, 5], 'one': ['a'], 'mixed': [1, 'a'], 'empty': [], 'nested': [[1], 2] }"/>`)
+			.replace(importLine, `${importLine}\n  <xsl:item-type name="record-type" as="record(names as array(xs:string), sizes as array(xs:integer), one as array(xs:string), mixed, empty, nested)"/>`));
+	});
+
 	test('a sequence of literals of one type', async () => {
 		const { apply } = await actionsFor(stylesheet(`<xsl:variable name="p" as="map(*)" select="«{ 'names': ('one', 'two'), 'sizes': (1, 5), 'one': ('a'), 'mixed': (1, 'a'), 'nested': ((1), 2) }»"/>`));
 		assert.equal(await apply('Extract record type'), stylesheet(`<xsl:variable name="p" as="record-type" select="{ 'names': ('one', 'two'), 'sizes': (1, 5), 'one': ('a'), 'mixed': (1, 'a'), 'nested': ((1), 2) }"/>`)
