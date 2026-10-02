@@ -1,0 +1,106 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "XPath Signature",
+	"scopeName": "source.xpath-signature",
+	"comment": "The signatures in the hovers of the XSLT/XPath extension: a function, e.g. cx:area($shape as cx:shape) as xs:double, a template, e.g. template draw($label as xs:string := 'shape'), an item type, e.g. type cx:point as record(x as xs:double), a variable or parameter, e.g. $scale as xs:double, a record field, e.g. size? as xs:double, or a module - with the types after 'as' from source.xpath-type",
+	"patterns": [
+		{ "include": "#module" },
+		{ "include": "#type-declaration" },
+		{ "include": "#template" },
+		{ "include": "#field" },
+		{ "include": "#as-type" },
+		{ "include": "#variable" },
+		{ "include": "#function" },
+		{ "include": "#default" },
+		{ "include": "#punctuation" }
+	],
+	"repository": {
+		"module": {
+			"match": "^\\s*(module)\\s+(.+)$",
+			"captures": {
+				"1": { "name": "keyword.other.module.xpath" },
+				"2": { "name": "string.unquoted.module.xpath" }
+			}
+		},
+		"type-declaration": {
+			"match": "^\\s*(type)\\s+((?:[\\w.-]+:)?[\\w.-]+)",
+			"captures": {
+				"1": { "name": "keyword.other.type.xpath" },
+				"2": { "name": "entity.name.type.xpath" }
+			}
+		},
+		"template": {
+			"match": "^\\s*(template)\\s+((?:[\\w.-]+:)?[\\w.-]+)",
+			"captures": {
+				"1": { "name": "keyword.other.template.xpath" },
+				"2": { "name": "entity.name.function.xpath" }
+			}
+		},
+		"field": {
+			"comment": "a record field, at the start of a field's hover - quoted if it isn't an NCName - and '?' for an optional field",
+			"match": "^\\s*('(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|[\\w.-]+)(\\?)?(?=\\s+as\\b)",
+			"captures": {
+				"1": { "name": "variable.other.property.xpath" },
+				"2": { "name": "keyword.operator.optional.xpath" }
+			}
+		},
+		"as-type": {
+			"comment": "a type, after 'as' - up to a separator or the end of a parameter list outside the type's own brackets, which the type's patterns consume",
+			"begin": "\\b(as)\\b",
+			"beginCaptures": {
+				"1": { "name": "keyword.other.as.xpath" }
+			},
+			"end": "(?=[,)]|:=|$)",
+			"patterns": [
+				{ "include": "source.xpath-type" }
+			]
+		},
+		"variable": {
+			"match": "\\$(?:[\\w.-]+:)?[\\w.-]+",
+			"name": "variable.parameter.xpath"
+		},
+		"function": {
+			"match": "(?:[\\w.-]+:)?[\\w.-]+(?=\\s*\\()",
+			"name": "entity.name.function.xpath"
+		},
+		"default": {
+			"comment": "the default of an optional parameter, after ':='",
+			"patterns": [
+				{
+					"match": ":=",
+					"name": "keyword.operator.assignment.xpath"
+				},
+				{
+					"begin": "'",
+					"end": "'(?!')",
+					"name": "string.quoted.single.xpath"
+				},
+				{
+					"begin": "\"",
+					"end": "\"(?!\")",
+					"name": "string.quoted.double.xpath"
+				},
+				{
+					"match": "\\b\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+)?\\b|\\.\\d+",
+					"name": "constant.numeric.xpath"
+				},
+				{
+					"match": "\\b(?:true|false)(?=\\s*\\(\\))",
+					"name": "constant.language.boolean.xpath"
+				}
+			]
+		},
+		"punctuation": {
+			"patterns": [
+				{
+					"match": ",",
+					"name": "punctuation.separator.comma.xpath"
+				},
+				{
+					"match": "[()]",
+					"name": "punctuation.definition.parameters.xpath"
+				}
+			]
+		}
+	}
+}

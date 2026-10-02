@@ -1,0 +1,314 @@
+{
+  "suite": "xpFunctionSyntax31",
+  "source": "xpFunctionSyntax31.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "inlineFn1",
+      "xpath": "fn($x) { $x * 2 }(3)",
+      "problems": [
+        [
+          "XPath: The 'fn' keyword for inline functions requires XPath 4.0 - use 'function' instead",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "inlineFn2",
+      "xpath": "for-each((1, 2), fn($x) { $x + 1 })",
+      "problems": [
+        [
+          "XPath: The 'fn' keyword for inline functions requires XPath 4.0 - use 'function' instead",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "inlineFn3",
+      "xpath": "fn($x as xs:integer, $y) as xs:integer { $x + $y }",
+      "problems": [
+        [
+          "XPath: The 'fn' keyword for inline functions requires XPath 4.0 - use 'function' instead",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "inlineFn4",
+      "xpath": "fn() { 1 }",
+      "problems": [
+        [
+          "XPath: The 'fn' keyword for inline functions requires XPath 4.0 - use 'function' instead",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "inlineFn5",
+      "xpath": "fold-left((1, 2, 3), 1, fn($x, $y) { $x * $y })",
+      "problems": [
+        [
+          "XPath: The 'fn' keyword for inline functions requires XPath 4.0 - use 'function' instead",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "focusFn1",
+      "xpath": "fn { . * 2 }(3)",
+      "problems": [
+        [
+          "XPath: Focus functions, e.g. fn { . + 1 }, require XPath 4.0",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "focusFn2",
+      "xpath": "function { . * 2 }(3)",
+      "problems": [
+        [
+          "XPath: Focus functions, e.g. function { . + 1 }, require XPath 4.0",
+          "function"
+        ]
+      ]
+    },
+    {
+      "label": "focusFn3",
+      "xpath": "filter((1, 2, 3), fn { . gt 1 })",
+      "problems": [
+        [
+          "XPath: Focus functions, e.g. fn { . + 1 }, require XPath 4.0",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "focusFn4",
+      "xpath": "sort((3, 1, 2), (), fn { -. })",
+      "problems": [
+        [
+          "XPath: Focus functions, e.g. fn { . + 1 }, require XPath 4.0",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "focusFn5",
+      "xpath": "let $f := fn { string-length(.) } return $f('abc')",
+      "problems": [
+        [
+          "XPath: Focus functions, e.g. fn { . + 1 }, require XPath 4.0",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArg1",
+      "xpath": "subsequence((1, 2, 3, 4), start := 2)",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. start := value, require XPath 4.0",
+          "start"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArg2",
+      "xpath": "subsequence((1, 2, 3, 4), 2, length := 1)",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. length := value, require XPath 4.0",
+          "length"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArg3",
+      "xpath": "subsequence((1, 2, 3, 4), length := 1, start := 2)",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. length := value, require XPath 4.0",
+          "length"
+        ],
+        [
+          "XPath: Keyword arguments, e.g. start := value, require XPath 4.0",
+          "start"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArg4",
+      "xpath": "let $s := subsequence(start := ?, input := (1, 2, 3)) return $s(2)",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. start := value, require XPath 4.0",
+          "start"
+        ],
+        [
+          "XPath: Keyword arguments, e.g. input := value, require XPath 4.0",
+          "input"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArg5",
+      "xpath": "fn:subsequence((1, 2), start := 1)",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. start := value, require XPath 4.0",
+          "start"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArg6",
+      "xpath": "subsequence((1, 2, 3), start := let $a := 2 return $a)",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. start := value, require XPath 4.0",
+          "start"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDecl1",
+      "xpath": "declare namespace m = 'http://www.w3.org/2005/xpath-functions/math'; m:pi()",
+      "problems": [
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDecl2",
+      "xpath": "declare default element namespace 'urn:x'; count(//a)",
+      "problems": [
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDecl3",
+      "xpath": "declare default element namespace 'urn:x'; declare namespace p = 'com.example.p'; //p:a",
+      "problems": [
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ],
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDecl4",
+      "xpath": "declare namespace p = 'com.example.p'; declare namespace q = 'com.example.q'; //p:a/q:b",
+      "problems": [
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ],
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ]
+      ]
+    },
+    {
+      "label": "focusFn6",
+      "xpath": "fn { }()",
+      "problems": [
+        [
+          "XPath: Focus functions, e.g. fn { . + 1 }, require XPath 4.0",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArgError1",
+      "xpath": "subsequence(start := 2, (1, 2, 3, 4))",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. start := value, require XPath 4.0",
+          "start"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArgError2",
+      "xpath": "subsequence((1, 2, 3, 4), stat := 2)",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. stat := value, require XPath 4.0",
+          "stat"
+        ]
+      ]
+    },
+    {
+      "label": "keywordArgError3",
+      "xpath": "subsequence((1, 2), start := 1, start := 2)",
+      "problems": [
+        [
+          "XPath: Keyword arguments, e.g. start := value, require XPath 4.0",
+          "start"
+        ],
+        [
+          "XPath: Keyword arguments, e.g. start := value, require XPath 4.0",
+          "start"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDeclError1",
+      "xpath": "declare namespace p = 'com.example.p' //p:a",
+      "problems": [
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ],
+        [
+          "XPath: Expected ';' after the namespace declaration's URI: 'com.example.p'",
+          "'com.example.p'"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDeclError2",
+      "xpath": "declare namespace p = 'com.example.p'; declare default element namespace 'urn:x'; //a",
+      "problems": [
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ],
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ]
+      ]
+    },
+    {
+      "label": "contextNsDeclError3",
+      "xpath": "declare namespace p = 'com.example.p'; //q:a",
+      "problems": [
+        [
+          "XPath: Namespace declarations in an XPath expression require XPath 4.0",
+          "declare"
+        ],
+        [
+          "XPath: Undeclared prefix in name: 'q:a'",
+          "q:a"
+        ]
+      ]
+    }
+  ]
+}

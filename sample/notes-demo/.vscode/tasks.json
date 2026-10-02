@@ -1,0 +1,29 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "xslt",
+			"label": "shapes-demo with xsl:initial-template",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/shapes-demo.xsl",
+			"xmlSource": "",
+			"initialTemplate": "",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			},
+			"parameters": [
+				{
+					"name": "?scale",
+					"value": "1"
+				},
+				{
+					"name": "?fill",
+					"value": "'blue'"
+				}
+			]
+		}
+	]
+}

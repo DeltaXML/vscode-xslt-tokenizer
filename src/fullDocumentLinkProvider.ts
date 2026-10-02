@@ -2,7 +2,7 @@
 import { GlobalInstructionData, GlobalInstructionType } from "./xslLexer";
 import * as vscode from "vscode";
 import { LanguageConfiguration, XslLexer} from "./xslLexer";
-import * as path from 'path';
+import { HrefPaths } from './hrefPaths';
 
 export class FullDocumentLinkProvider implements vscode.DocumentLinkProvider {
 
@@ -20,12 +20,15 @@ export class FullDocumentLinkProvider implements vscode.DocumentLinkProvider {
 		let result: vscode.DocumentLink[] = [];
 		data.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Import || instruction.type === GlobalInstructionType.Include) {
-				const basePath = path.dirname(document.fileName);
-				const resolvedPath = path.resolve(basePath, instruction.name);
-				const uri = vscode.Uri.parse(resolvedPath);
+				const target = HrefPaths.linkTarget(instruction.name, document.fileName);
+				if (target === undefined) {
+					return;
+				}
+				const uri = vscode.Uri.parse(target);
 				const startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
-				const endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + (instruction.token.length + 2));
+				const endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
 				const link = new vscode.DocumentLink(new vscode.Range(startPos, endPos), uri);
+				link.tooltip = HrefPaths.linkTooltip(instruction.name, document.fileName);
 				result.push(link);
 			}
 		});

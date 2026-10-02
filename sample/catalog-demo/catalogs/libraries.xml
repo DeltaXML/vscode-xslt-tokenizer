@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The secondary catalog, reached from the master catalog's nextCatalog entry.
+
+  Each uri entry maps a URI - the name an xsl:import uses - to the file it's
+  resolved to. The name needn't be a real web address: it's an identifier for the
+  library that stays the same wherever the files are kept. Only this catalog
+  changes when the files move.
+
+  The uri values are relative to this file, in the catalogs folder - hence '../'.
+-->
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <uri name="http://example.com/xslt/strings.xsl" uri="../lib/strings/strings.xsl"/>
+  <uri name="http://example.com/xslt/dates.xsl" uri="../lib/dates/dates.xsl"/>
+
+  <!--
+    An alternative to a uri entry for each file: one rewriteURI entry maps every
+    URI that starts with a prefix, keeping the rest of the URI - e.g. this would
+    map http://example.com/lib/strings/strings.xsl to ../lib/strings/strings.xsl
+
+    <rewriteURI uriStartString="http://example.com/lib/" rewritePrefix="../lib/"/>
+  -->
+</catalog>

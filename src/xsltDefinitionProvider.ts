@@ -4,13 +4,18 @@ import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XSLTSchema, SchemaData } from './xsltSchema';
 import { SchemaQuery } from './schemaQuery';
 import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
-import { BaseToken, ExitCondition, LexPosition, XPathLexer } from './xpLexer';
+import { BaseToken, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
 import { XPathSemanticTokensProvider } from './extension';
 import { DocumentChangeHandler } from './documentChangeHandler';
+import { XMLConfiguration } from './languageConfigurations';
+import { ItemTypeSupport } from './itemTypeSupport';
 import * as url from 'url';
+import { XdocReferences, XdocTarget } from './xdocReferences';
+import { RecordTypes } from './recordTypes';
 
 interface ImportedGlobals {
 	href: string;
@@ -59,6 +64,20 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
 		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
+		// XSLT 4.0: a reference in a documentation note, e.g. @see my:area#2
+		const noteReference = this.noteReferenceAt(document, position, globalInstructionData.concat(allImportedGlobals));
+		if (noteReference) {
+			const location = noteReference.target ? XsltDefinitionProvider.noteTargetLocation(document, noteReference.target) : undefined;
+			if (location) {
+				location.extractedImportData = extractedImportData;
+			}
+			return location;
+		}
+		// XPath 4.0: a record field, e.g. 'r' in $c?r
+		const fieldLocation = XsltDefinitionProvider.recordFieldLocation(document, position, globalInstructionData.concat(allImportedGlobals));
+		if (fieldLocation) {
+			return fieldLocation;
+		}
 
 		return new Promise((resolve, reject) => {
 			let location: DefinitionLocation|undefined = undefined;
@@ -80,8 +99,32 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let extractedImportData: ExtractedImportData = await this.getImportedGlobals(document, lexPosition);
 		const { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs } = extractedImportData;
+		// XSLT 4.0: a reference in a documentation note, e.g. @see my:area#2 - as for a use of the declaration it refers to
+		const noteReference = this.noteReferenceAt(document, position, globalInstructionData.concat(allImportedGlobals));
+		if (noteReference) {
+			const { reference, target } = noteReference;
+			if (!target) {
+				return undefined;
+			}
+			const start = document.positionAt(reference.offset);
+			const inputToken: BaseToken = { line: start.line, startCharacter: start.character, length: reference.name.length, value: reference.name, tokenType: TokenLevelState.Unset };
+			let defnData: DefinitionData;
+			if (target.global) {
+				defnData = { definitionLocation: XsltTokenDefinitions.createLocationFromInstruction(target.global, document), inputSymbol: { token: inputToken, type: target.global.type } };
+			} else {
+				// a parameter of the function or template: as for its declaration
+				const paramLocation = XsltDefinitionProvider.noteTargetLocation(document, target)!;
+				defnData = XsltTokenDefinitions.findDefinition(this.docType === DocumentTypes.XSLT, document, allTokens, globalInstructionData, allImportedGlobals, paramLocation.range.start);
+				defnData.inputSymbol = { token: inputToken, type: GlobalInstructionType.Variable };
+			}
+			if (defnData.definitionLocation) {
+				defnData.definitionLocation.extractedImportData = extractedImportData;
+			}
+			return defnData;
+		}
+		// uses, such as an xsl:apply-templates mode, are not declarations
 		let matchingGlobal = globalInstructionData.find(global => { 
-			return global.token.line === position.line && 
+			return global.type !== GlobalInstructionType.AccumulatorUse && global.type !== GlobalInstructionType.Mode && global.token.line === position.line &&
 			position.character >= global.token.startCharacter && 
 			position.character <= global.token.startCharacter + global.token.length;
 		});
@@ -107,6 +150,73 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	private static nameCharRgx = new RegExp(/[A-Z]|[a-z]|_|-|:/);
+
+	// XSLT 4.0: the reference in a documentation note at the position, with what it refers to, if anything
+	private noteReferenceAt(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[]) {
+		if (this.docType !== DocumentTypes.XSLT) {
+			return undefined;
+		}
+		const text = document.getText();
+		const reference = XdocReferences.at(text, document.offsetAt(position));
+		return reference ? { reference, target: XdocReferences.resolve(reference, globals, text)[0] } : undefined;
+	}
+
+	// the location of the name of the declaration a note's reference refers to
+	public static noteTargetLocation(document: vscode.TextDocument, target: XdocTarget): DefinitionLocation | undefined {
+		if (target.global) {
+			return XsltTokenDefinitions.createLocationFromInstruction(target.global, document);
+		}
+		const text = document.getText();
+		const nameOffset = RecordTypes.attributeValueOffset(text, target.paramOffset + 1, 'name');
+		const name = RecordTypes.attributeOfElementAt(text, target.paramOffset + 1, 'name');
+		if (nameOffset === undefined || !name) {
+			return undefined;
+		}
+		const start = document.positionAt(nameOffset);
+		return new vscode.Location(document.uri, new vscode.Range(start, start.translate(0, name.length)));
+	}
+
+	// the declaration of the record field at the position, e.g. on 'r' in $c?r: the field within the record type - or for
+	// a record type declared in an imported module, its xsl:item-type declaration
+	private static recordFieldLocation(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[]): DefinitionLocation | undefined {
+		const reference = XsltTokenDiagnostics.recordFieldAt(document, position);
+		if (!reference) {
+			return undefined;
+		} else if (reference.field.nameOffset !== undefined) {
+			const start = document.positionAt(reference.field.nameOffset);
+			return new vscode.Location(document.uri, new vscode.Range(start, start.translate(0, reference.field.name.length)));
+		}
+		const itemType = globals.find((g) => g.type === GlobalInstructionType.ItemType && g.name === reference.record.name);
+		return itemType ? XsltTokenDefinitions.createLocationFromInstruction(itemType, document) : undefined;
+	}
+
+	// the symbols of the XML context file, for element and attribute name completions - computed here if they're not
+	// cached yet, e.g. when VS Code restores the context file's editor at startup without its symbols being requested
+	private static async contextFileSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[] | undefined> {
+		let symbols = XsltSymbolProvider.documentSymbols.get(uri);
+		if (!symbols) {
+			// the cache is keyed by Uri object: look for another Uri object for the same file
+			const uriString = uri.toString();
+			for (const [cachedUri, cachedSymbols] of XsltSymbolProvider.documentSymbols) {
+				if (cachedUri.toString() === uriString) {
+					symbols = cachedSymbols;
+					break;
+				}
+			}
+		}
+		if (!symbols) {
+			try {
+				const contextDocument = await vscode.workspace.openTextDocument(uri);
+				symbols = await new XsltSymbolProvider(XMLConfiguration.configuration, null).getDocumentSymbols(contextDocument, false);
+				if (symbols) {
+					XsltSymbolProvider.documentSymbols.set(uri, symbols);
+				}
+			} catch {
+				// e.g. the file no longer exists
+			}
+		}
+		return symbols;
+	}
 
 	public static functionInstructionFromDocPosition(document: vscode.TextDocument, position: vscode.Position) {
 		let fnName: string | undefined;
@@ -183,7 +293,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		return { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs };
 	}
 
-	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | undefined> {
+	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
 		const keepNameTests = true;
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		let symbolsForXPath: vscode.DocumentSymbol[] = [];
@@ -191,13 +301,22 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];
 		let uri: vscode.Uri|undefined;
+		// this.xslLexer is a single instance shared by every completion request for this language,
+		// so any value read off it (or off this.languageConfig) must be captured into a local
+		// variable immediately - i.e. before the first `await` below - otherwise an overlapping
+		// completion request (fired while this one is still awaiting) can overwrite it first,
+		// and this request would read back that other request's data instead of its own.
+		let attNames: string[] = [];
+		let nodeNames: string[] = [];
+		let localLanguageConfig = this.languageConfig;
+		const isCommaTrigger = DocumentChangeHandler.consumeCommaTrigger(document, position);
 		if (this.docType === DocumentTypes.XPath) {
 			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
 			uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
 
 		} else {
-			if (this.docType === DocumentTypes.XSLT) {
+			if (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.DCP) {
 				if ( DocumentChangeHandler.lastActiveXMLNonXSLUri) {
 					uri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 				}
@@ -206,11 +325,14 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 			globalInstructionData = this.xslLexer.globalInstructionData;
+			attNames = this.xslLexer.attributeNameTests ? this.xslLexer.attributeNameTests : [];
+			nodeNames = this.xslLexer.elementNameTests ? this.xslLexer.elementNameTests : [];
 			this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
+			localLanguageConfig = { ...this.languageConfig };
 		}
 
 		if (uri) {
-			const lastSymbols = XsltSymbolProvider.documentSymbols.get(uri);
+			const lastSymbols = await XsltDefinitionProvider.contextFileSymbols(uri);
 			if (lastSymbols) {
 				symbolsForXPath = lastSymbols;
 			}
@@ -230,13 +352,18 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let processNestedGlobals = async () => {
 			let level = 0;
-			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel) {
+			while (globalsSummary0.hrefs.length > 0 && level < maxImportLevel && !token.isCancellationRequested) {
 				globalsSummary0 = await XsltSymbolProvider.processImportedGlobals(xsltPackages, globalsSummary0.globals, accumulatedHrefs, level === 0);
 				level++;
 			}
 		};
 
 		await processNestedGlobals();
+
+		if (token.isCancellationRequested) {
+			// a newer completion request has superseded this one - don't resolve with a stale result
+			return undefined;
+		}
 
 		return new Promise((resolve, reject) => {
 			let allImportedGlobals: GlobalInstructionData[] = [];
@@ -251,13 +378,88 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
-			let attNames = this.xslLexer.attributeNameTests? this.xslLexer.attributeNameTests: [];
-			let nodeNames = this.xslLexer.elementNameTests? this.xslLexer.elementNameTests: [];
 			let xslVariable = ['xsl:variable', 'xsl:param'];
-			
+
 			let completions: vscode.CompletionItem[]|undefined;
-			completions= XsltTokenCompletions.getCompletions(this.languageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
-			resolve(completions);
+			// XSLT 4.0: within a documentation note - an xsl:note with format="xdoc-md" - only its tags and parameter names
+			const noteCompletions = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getNoteCompletions(document, position, globalInstructionData.concat(allImportedGlobals)) : undefined;
+			if (noteCompletions) {
+				resolve(noteCompletions.length > 0 ? new vscode.CompletionList(noteCompletions, false) : undefined);
+				return;
+			}
+			const isXSLT40 = localLanguageConfig.isVersion4 && this.docType === DocumentTypes.XSLT;
+			// record and enumeration types - also before XSLT 4.0, with the setting (see ItemTypeSupport)
+			const hasItemTypes = ItemTypeSupport.isEnabled(!!localLanguageConfig.isVersion4) && this.docType === DocumentTypes.XSLT;
+			// XSLT 4.0: within the fixed-namespaces attribute, its tokens
+			const fixedNamespaceTokens = this.docType === DocumentTypes.XSLT && localLanguageConfig.isVersion4 ? XsltTokenCompletions.getFixedNamespacesCompletions(document, position) : undefined;
+			if (fixedNamespaceTokens) {
+				resolve(new vscode.CompletionList(fixedNamespaceTokens, false));
+				return;
+			}
+			// within element(...) or attribute(...): only the names, from the XML context file and the stylesheet
+			const kindTestNames = this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XPath ?
+				XsltTokenCompletions.getKindTestNameCompletions(document, position, symbolsForXPath, nodeNames, attNames, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath) : undefined;
+			if (kindTestNames) {
+				resolve(new vscode.CompletionList(kindTestNames, false));
+				return;
+			}
+						// XPath 4.0 record types: the next entry of a map constructor
+			const recordEntries = hasItemTypes ? XsltTokenCompletions.getRecordEntryCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
+			// an empty select, for an enumeration type or xs:boolean
+			// or the test of an xsl:when in an xsl:switch on an enumeration type - xsl:switch is XSLT 4.0
+			const selectValues = !recordEntries && hasItemTypes ? XsltTokenCompletions.getSelectValueCompletions(document, position, globalInstructionData, allImportedGlobals) ??
+				(isXSLT40 ? XsltTokenCompletions.getSwitchCaseCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined) : undefined;
+			// an argument of a user-defined function, or the value of a typed let binding, for an enumeration type or xs:boolean
+			const argumentValues = !recordEntries && !selectValues && hasItemTypes ? XsltTokenCompletions.getArgumentValueCompletions(document, allTokens, position, globalInstructionData, allImportedGlobals) : undefined;
+			// XPath 4.0 keyword arguments, e.g. ex:area(2, scale := 2) - the names of the called function's parameters
+			const keywordArguments = (isXSLT40 || this.docType === DocumentTypes.XPath) && !recordEntries && !argumentValues?.inString ?
+				XsltTokenCompletions.getKeywordArgumentCompletions(document, allTokens, position, this.docType === DocumentTypes.XPath, globalInstructionData, allImportedGlobals) : undefined;
+			if (recordEntries || selectValues || isCommaTrigger || argumentValues?.inString) {
+				// triggered by a ',', '{', ':' or quote, or within a string literal: only these completions
+				const items = recordEntries ?? selectValues ?? (argumentValues?.items ?? []).concat(keywordArguments?.items ?? []);
+				resolve(items && items.length > 0 ? new vscode.CompletionList(items, true) : undefined);
+				return;
+			}
+			// the key attribute of an xsl:map-entry for a record type
+			const mapEntryKeys = hasItemTypes ? XsltTokenCompletions.getMapEntryKeyCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (mapEntryKeys) {
+				resolve(mapEntryKeys.length > 0 ? new vscode.CompletionList(mapEntryKeys, true) : undefined);
+				return;
+			}
+			completions= XsltTokenCompletions.getCompletions(localLanguageConfig, symbolsForXPath, xslVariable, attNames, nodeNames, document, allTokens, globalInstructionData, allImportedGlobals, position);
+			if (completions && (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XPath)) {
+				// after an operand, only keyword operators - or at the start of an expression, snippets for 'for', 'let' etc. too
+				completions = XsltTokenCompletions.adjustExpressionCompletions(document, allTokens, position, !!localLanguageConfig.isVersion4 || this.docType === DocumentTypes.XPath, completions);
+			}
+			// xsl:map-entry elements for a record type, before the other element completions
+			const mapEntryElements = hasItemTypes ? XsltTokenCompletions.getMapEntryElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (mapEntryElements && mapEntryElements.length > 0) {
+				completions = mapEntryElements.concat(completions ?? []);
+			}
+			// an xsl:with-param for each parameter of the called template not already passed
+			const withParamElements = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getWithParamElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (withParamElements && withParamElements.length > 0) {
+				completions = withParamElements.concat(completions ?? []);
+			}
+			if (argumentValues) {
+				completions = argumentValues.items.concat(completions ?? []);
+			}
+			if (keywordArguments && keywordArguments.items.length > 0) {
+				// after a keyword argument, only keyword arguments can follow
+				completions = keywordArguments.keywordsOnly ? keywordArguments.items : keywordArguments.items.concat(completions ?? []);
+			}
+			// an xsl:map for a record type, before the other element completions
+			const recordMaps = isXSLT40 ? XsltTokenCompletions.getRecordMapElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			if (recordMaps) {
+				completions = recordMaps.concat(completions ?? []);
+			}
+			// mark incomplete: these completions depend on surrounding code (variable scope, node
+			// context etc.), not just a static list to prefix-filter, so VS Code must call this
+			// provider again for every further keystroke rather than reusing/filtering this list.
+			// Safe now that the nodeNameTest completion branch no longer degrades to a near-empty
+			// list once more than one character of an identifier has been typed (see the
+			// `requiredChar > token.startCharacter` fix in XsltTokenCompletions.getCompletions).
+			resolve(completions ? new vscode.CompletionList(completions, true) : undefined);
 		});
 
 	}

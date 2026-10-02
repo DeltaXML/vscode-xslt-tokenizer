@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionType, GlobalInstructionData } from './xslLexer';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { GlobalsProvider} from './globalsProvider';
-import * as path from 'path';
+import { HrefPaths, ImportProblem } from './hrefPaths';
 
 export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 
@@ -24,18 +24,22 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 		const allTokens = this.xslLexer.analyse(document.getText());
 		let globals = this.xslLexer.globalInstructionData;
 
-		async function returnBadFileLinks(item: GlobalInstructionData): Promise<GlobalInstructionData|undefined> {
-			const basePath = path.dirname(document.fileName);
-			const resolvedPath = path.resolve(basePath, item.name);
+		async function returnBadFileLinks(item: GlobalInstructionData): Promise<{ item: GlobalInstructionData, problem?: ImportProblem }|undefined> {
+			const resolvedPath = HrefPaths.toPath(item.name, document.fileName);
+			if (resolvedPath === undefined) {
+				// a problem, e.g. a URI that isn't a file
+				const problem = HrefPaths.importProblem(item.name, document.fileName);
+				return problem ? { item, problem } : undefined;
+			}
 			let fileExists = await GlobalsProvider.fileExists(resolvedPath);
 			if (fileExists) {
 				return undefined;
 			} else {
-				return item;
+				return { item };
 			}
 		}
 
-		let fileChecks: Promise<GlobalInstructionData|undefined>[] = [];
+		let fileChecks: Promise<{ item: GlobalInstructionData, problem?: ImportProblem }|undefined>[] = [];
 		globals.forEach((item) => {
 			if (item.type === GlobalInstructionType.Import || item.type === GlobalInstructionType.Include) {
 				fileChecks.push(returnBadFileLinks(item));
@@ -49,14 +53,15 @@ export class DCPSymbolProvider implements vscode.DocumentSymbolProvider {
 			let importDiagnostics: vscode.Diagnostic[] = [];
 			errorFileRefs.forEach((fileRef) => {
 				if (fileRef) {
-					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(fileRef));
+					importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(fileRef.item, fileRef.problem));
 				}
 			});
 			let allDiagnostics = importDiagnostics.concat(diagnostics);
 			if (allDiagnostics.length > 0) {
 				this.collection.set(document.uri, allDiagnostics);
 			} else {
-				this.collection.clear();
+				// only this document's problems - not those of other documents
+				this.collection.delete(document.uri);
 			}
 			resolve(symbols);
 		});

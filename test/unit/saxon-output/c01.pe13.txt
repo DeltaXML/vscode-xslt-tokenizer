@@ -1,0 +1,4 @@
+Type error in expression in xsl:sequence/@select on line 3 column 35 of c01.xsl:
+  XTTE0780  The required item type of the result of a call to f:f#0 is xs:integer. The
+  supplied value is of type xs:string
+Errors were reported during stylesheet compilation. The required item type of the result of a call to f:f#0 is xs:integer. The supplied value is of type xs:string

@@ -5,12 +5,23 @@
  *  DeltaXML Ltd. - xsltTokenDiagnostics
  */
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer, ExitCondition } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
+import { XPathFunctionDetails } from './xpathFunctionDetails';
+import { RecordType, RecordTypes, FieldReference } from './recordTypes';
+import { RecordExtraction } from './recordExtraction';
+import { XdocNotes, XdocTag } from './xdocNote';
+import { XdocReferences } from './xdocReferences';
+import { SaxonTaskProvider } from './saxonTaskProvider';
+import { ItemTypeSupport } from './itemTypeSupport';
+import { SaxonTypeAliases } from './saxonTypeAliases';
+import { FixedNamespaces } from './fixedNamespaces';
+import { HrefPaths, ImportProblem } from './hrefPaths';
 
 enum HasCharacteristic {
 	unknown,
@@ -33,6 +44,10 @@ export enum AttributeType {
 	InstructionName,
 	InstructionMode,
 	UseAttributeSets,
+	// a list of accumulator names, e.g. on xsl:mode or xsl:source-document
+	UseAccumulators,
+	// [xsl:]default-mode: the mode for templates without a mode attribute
+	DefaultMode,
 	ExcludeResultPrefixes,
 	XPath
 }
@@ -58,7 +73,13 @@ export interface ElementData {
 	namespacePrefixes: string[];
 	expectedChildElements: string[];
 }
-export interface XPathData {
+// context value set by the pipeline operator '->' or the simple map operator '!' for their right-hand operand
+export interface OperandContext {
+	hasPipelineContext?: boolean;
+	hasSimpleMapContext?: boolean;
+}
+
+export interface XPathData extends OperandContext {
 	token: BaseToken;
 	variables: VariableData[];
 	preXPathVariable: boolean;
@@ -69,11 +90,20 @@ export interface XPathData {
 	awaitingMapKey?: boolean;
 	curlyBraceType?: CurlyBraceType;
 	hasContextItem?: boolean;
+	// XPath 4.0 keyword arguments, e.g. subsequence($s, start := 2)
+	keywordNames?: string[];
+	// XPath 4.0 map constructor without the 'map' keyword
+	isBareMap?: boolean;
+	anonFnSyntaxErrorReported?: boolean;
 }
 
 export interface VariableData {
 	token: BaseToken;
 	name: string;
+	// XPath 4.0: the record type from the declaration's 'as' attribute, for checking lookups such as $c?r
+	recordType?: RecordType;
+	// XPath 4.0: the 'as' attribute is a JNode type for the record type, e.g. jnode(*, point), for child steps such as $c/r
+	isJNode?: boolean;
 }
 
 enum NameValidationError {
@@ -98,7 +128,7 @@ export enum DiagnosticCode {
 	unresolvedVariableRef,
 	unresolvedGenericRef,
 	parseHtmlRef,
-	externalPrintRef,
+	xdmDebugRef,
 	fnWithNoContextItem,
 	currentWithNoContextItem,
 	groupOutsideForEachGroup,
@@ -109,10 +139,71 @@ export enum DiagnosticCode {
 	rootOnlyWithNoContextItem,
 	instrWithNoContextItem,
 	noContextItem,
-	regexNoContextItem
+	regexNoContextItem,
+	recordFieldMissing,
+	switchCasesMissing,
+	noteParamsMissing,
+	noteFieldsMissing,
+	noteVariablesMissing,
+	noteRequiresXSLT40,
+	saxonTypeAlias,
+	enumValueDuplicate
 }
 
 export class XsltTokenDiagnostics {
+	static oneCharOps = new Set([')', ']', '}', '-', '+', '|', '*', '.', '×', '÷']);
+	static twoCharOps = new Set(['as', '//', '{}', '[]', '()', '*:', '::', '<<', '>>', '=>']);
+	static threeCharOps = new Set(['div', 'mod', '=!>', '=?>']);
+	static otherOps = new Set(['idiv', 'union', 'except', 'intersect', '&lt;&lt;', '&gt;&gt;']);
+	static anonFunctionOps = new Set([')', '(', 'as', 'map', 'array', ',']);
+	static anonFunctionVarOps = new Set([')','as', ',']);
+	static anonFunctionTokenTypes = new Set([TokenLevelState.operator, TokenLevelState.variable, TokenLevelState.simpleType]);
+	// operators within a path expression, all other binary operators end the right-hand operand of the simple map operator '!'
+	static pathExprOps = new Set(['/', '//', '!', '?', '::', '()', '[]', '{}', '*:', '..']);
+	// binary operators with lower precedence than the pipeline operator '->', these end the pipeline's right-hand operand
+	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '×', '÷', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>', '&lt;', '&lt;=', '&gt;', '&gt;=', '&lt;&lt;', '&gt;&gt;',
+		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance'].concat(Data.nodeComparisons40));
+	static operators40 = new Set(['×', '÷', '=?>'].concat(Data.nodeComparisons40));
+	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
+		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber ||
+			token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
+			// string template middle/closing parts always follow the '}' of a variable part
+			return;
+		}
+		let isXPathError = false;
+		const pt = prevToken.value;
+		if (prevToken.tokenType === TokenLevelState.operator) {
+			// check string is permitted to follow a string - not a node or numeric operator:
+			switch (pt.length) {
+				case 1:
+					isXPathError = XsltTokenDiagnostics.oneCharOps.has(pt);
+					break;
+				case 2:
+					isXPathError = XsltTokenDiagnostics.twoCharOps.has(pt);
+					break;
+				case 3:
+					isXPathError = XsltTokenDiagnostics.threeCharOps.has(pt);
+					break;
+				default:
+					isXPathError = XsltTokenDiagnostics.otherOps.has(pt);
+					break;
+			}
+		} else if (prevToken.tokenType === TokenLevelState.complexExpression) {
+			isXPathError = false;
+		} else if (prevToken.tokenType === TokenLevelState.string || prevToken.tokenType === TokenLevelState.entityRef) {
+			// string tokens may be split by newline characters
+			const currentTokenFirstChar = token.value.charAt(0);
+			// a template split by newlines continues on a new line, so only a same-line back-tick starts a new template
+			const startsTemplate = currentTokenFirstChar === '`' && prevToken.line === token.line && (token.charType === CharLevelState.lBt || token.charType === CharLevelState.sBt);
+			isXPathError = startsTemplate || (token.value.length > 1 && (currentTokenFirstChar === '"' || currentTokenFirstChar === '\''));
+		} else {
+			isXPathError = true;
+		}
+		if (isXPathError) {
+			token.error = ErrorType.XPathUnexpected;
+			problemTokens.push(token);
+		}
+	}
 	public static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number'];
 	public static readonly xslInclude = 'xsl:include';
@@ -121,7 +212,10 @@ export class XsltTokenDiagnostics {
 	public static readonly typesWithMaxArity2 = ['map', 'attribute', 'element'];
 	public static readonly typesWithMinArity0 = ['element', 'attribute'];
 	public static readonly typesWithArity1 = ['array', 'map'];
-	public static readonly typesInXPath4_specialArgs = ['record', 'enum'];
+	public static readonly typesInXPath4_specialArgs = ['record', 'enum', 'tuple'];
+	// item types added in XPath 4.0, and obsolete Saxon extension item types (dropped in Saxon 13)
+	public static readonly itemTypes40 = ['record', 'enum', 'fn', 'jnode'];
+	public static readonly obsoleteItemTypes = ['union', 'type', 'tuple'];
 
 
 	public static readonly xslFunction = 'xsl:function';
@@ -181,6 +275,9 @@ export class XsltTokenDiagnostics {
 					if (prefix === 'xsl' || prefix === 'ixsl') {
 						if (isSchematron) {
 							// TODO: check xslt elements within schematron
+							valid = NameValidationError.None;
+						} else if (name === 'xsl:note' || elementStack?.find(item => item.symbolName === 'xsl:note')) {
+							// xsl:note is permitted anywhere and its content is not checked
 							valid = NameValidationError.None;
 						} else if (expectedNames.length === 0 && elementStack) {
 							const withinNextIteration = elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration';
@@ -299,7 +396,7 @@ export class XsltTokenDiagnostics {
 		return valid;
 	}
 
-	public static calculateDiagnostics = (languageConfig: LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[]): vscode.Diagnostic[] => {
+	public static calculateDiagnostics = (languageConfig: LanguageConfiguration, docType: DocumentTypes, document: vscode.TextDocument, allTokens: BaseToken[], globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], symbols: vscode.DocumentSymbol[], testingAsAttribute = false): vscode.Diagnostic[] => {
 		let lineNumber = -1;
 		let xslVariable = languageConfig.variableElementNames;
 		let inScopeVariablesList: VariableData[] = [];
@@ -308,11 +405,17 @@ export class XsltTokenDiagnostics {
 		let inScopeXPathVariablesList: VariableData[] = [];
 		let anonymousFunctionParamList: VariableData[] = [];
 		let xpathStack: XPathData[] = [];
+		// the operand context when the xpathStack is empty:
+		let rootOperandContext: OperandContext = {};
+		// XPath 4.0 namespace declarations at the start of an expression: the prefixes are in scope only for that expression
+		let prologSavedPrefixes: { prefixes: string[], prefixesToURIs: Map<string, XSLTnamespaces> } | null = null;
+		let prologNamespaceDeclared = false;
+		let prologUriToken: BaseToken | null = null;
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
 		let tagElementName = '';
 		let tagElementId: number = -1;
-		let tagElementAttributes: string[] = [];
+		let tagElementAttributes: string[] | undefined = [];
 		let tagElementChildren: string[] = [];
 		let startTagToken: XSLTToken | null = null;
 		let preXPathVariable = false;
@@ -338,6 +441,8 @@ export class XsltTokenDiagnostics {
 		let globalVariableData: VariableData[] = [];
 		let checkedGlobalVarNames: string[] = [];
 		let checkedGlobalFnNames: string[] = [];
+		// parameter names for each declaration of a user-defined function, for XPath 4.0 keyword arguments
+		let userFunctionParams = new Map<string, string[][]>();
 		let importedGlobalVarNames: string[] = [];
 		let importedGlobalFnNames: string[] = [];
 		let incrementFunctionArity = false;
@@ -348,8 +453,31 @@ export class XsltTokenDiagnostics {
 		let dtdStarted = false;
 		let dtdEnded = false;
 		let namedTemplates: Map<string, string[]> = new Map();
-		let globalModes: string[] = ['#current', '#default'];
+		let globalModes: string[] = ['#current', '#default', '#unnamed'];
 		let globalKeys: string[] = [];
+		// names declared with xsl:item-type
+		let globalItemTypeNames: string[] = [];
+		// XPath 4.0 record types: xsl:item-type declarations, and the 'as' of global variables and parameters
+		let itemTypeDeclarations = new Map<string, string>();
+		const documentText = document.getText();
+		RecordTypes.itemTypeOffsets = new Map<string, number>();
+		RecordTypes.fieldReferences = [];
+		let globalVariableTypes = new Map<string, string>();
+		// XPath 4.0: the declared types of variable references that may be function call arguments
+		const argumentVariableTypes = new Map<BaseToken, string>();
+		// the 'as' and 'select' attributes of the current start tag, as allTokens index ranges
+		let currentAttName = '';
+		let tagAsRange: [number, number] | null = null;
+		let tagSelectRange: [number, number] | null = null;
+		// the record type of the current xsl:function, and the 'select' of its last xsl:sequence (a direct child)
+		let functionResult: { record: RecordType | undefined, select: [number, number] | null } | null = null;
+		// the xsl:function whose content is being read: whether it has content other than its xsl:param and xsl:note
+		// children - whitespace and comments aren't content - with the token of its element name
+		let functionContent: { token: BaseToken, name: string, hasContent: boolean } | null = null;
+		let cdataStart: BaseToken | null = null;
+		// lookups and child steps whose value is a record, e.g. $a?b for record(b as record(c)), so $a?b?c can be checked -
+		// isJNode is true for a child step, e.g. jtree($a)/b, whose result can be used with '/' again
+		let lookupRecords = new Map<BaseToken, { record: RecordType, isJNode: boolean }>();
 		let globalAccumulatorNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
@@ -367,13 +495,31 @@ export class XsltTokenDiagnostics {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
 			docType = DocumentTypes.XSLT40;
 		} else if (languageConfig.schemaData) {
-			schemaQuery = new SchemaQuery(languageConfig.schemaData);
+			// before XSLT 4.0, with the setting, the schema has xsl:item-type
+			schemaQuery = new SchemaQuery(docType === DocumentTypes.XSLT && ItemTypeSupport.isEnabledBefore40() ? ItemTypeSupport.schemaData30() : languageConfig.schemaData);
 		}
+		// XSLT 4.0 named item types, record and enumeration types, and xsl:note - also before 4.0, with the setting
+		const hasItemTypes = docType === DocumentTypes.XSLT40 || (docType === DocumentTypes.XSLT && ItemTypeSupport.isEnabledBefore40());
 
 		if (isSchematron && XSLTConfiguration.configuration.schemaData) {
 			xsltSchemaQuery = new SchemaQuery(XSLTConfiguration.configuration.schemaData);
 		}
+		// XSLT 4.0: the fixed-namespaces attribute of the module's outermost element defines all the namespace bindings for
+		// XPath expressions, patterns and attributes with QNames - the in-scope namespaces still apply to element names
+		const fixedNamespaces = docType === DocumentTypes.XSLT40 ? FixedNamespaces.forModule(documentText, document.uri.scheme === 'file' ? document.fileName : undefined) : undefined;
+		const fixedPrefixes = fixedNamespaces ? [...fixedNamespaces.bindings.keys()].concat(['xml']) : undefined;
+		// the namespace prefixes for XPath and QNames: the fixed ones, or else the in-scope ones
+		const xpathPrefixes = () => fixedPrefixes ?? inheritedPrefixes;
+		fixedNamespaces?.problems.forEach((problem) => {
+			const position = document.positionAt(fixedNamespaces.valueOffset + problem.offset);
+			problemTokens.push({ line: position.line, startCharacter: position.character, length: problem.token.length, value: problem.token + RecordTypes.valueSeparator + problem.reason, tokenType: 0, error: ErrorType.FixedNamespacesToken });
+		});
 
+		globalInstructionData.concat(importedInstructionData).forEach((instruction) => {
+			if (instruction.declaredType && (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter) && !globalVariableTypes.has(instruction.name)) {
+				globalVariableTypes.set(instruction.name, instruction.declaredType);
+			}
+		});
 		globalInstructionData.forEach((instruction) => {
 			switch (instruction.type) {
 				case GlobalInstructionType.Variable:
@@ -389,13 +535,29 @@ export class XsltTokenDiagnostics {
 					xsltVariableDeclarations.push(instruction.token);
 					break;
 				case GlobalInstructionType.Function:
-					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
-					if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
-						checkedGlobalFnNames.push(functionNameWithArity);
-					} else {
-						instruction.token['error'] = ErrorType.DuplicateFnName;
-						instruction.token.value = functionNameWithArity;
-						problemTokens.push(instruction.token);
+					XsltTokenDiagnostics.checkOptionalParams(instruction, docType, problemTokens);
+					XsltTokenDiagnostics.addUserFunctionParams(userFunctionParams, instruction);
+					// with XSLT 4.0 optional parameters, a function has an arity range
+					for (const functionNameWithArity of XsltTokenDiagnostics.functionNamesWithArity(instruction)) {
+						if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
+							checkedGlobalFnNames.push(functionNameWithArity);
+						} else {
+							instruction.token['error'] = ErrorType.DuplicateFnName;
+							instruction.token.value = functionNameWithArity;
+							problemTokens.push(instruction.token);
+							break;
+						}
+					}
+					// XSLT 4.0: a function in no namespace with the name and an arity of a built-in function replaces it in
+					// calls without a prefix with that number of arguments, e.g. count((1, 2)) for name="count" with one parameter
+					if (XsltTokenDiagnostics.isXPath40(docType) && !instruction.token['error']) {
+						const localName = instruction.name.startsWith('Q{}') ? instruction.name.substring(3) : instruction.name;
+						const shadowed = localName.includes(':') ? undefined : XsltTokenDiagnostics.functionNamesWithArity(instruction)
+							.map((nameWithArity) => localName + nameWithArity.substring(nameWithArity.lastIndexOf('#')))
+							.find((nameWithArity) => FunctionData.xpath40.includes(nameWithArity));
+						if (shadowed) {
+							problemTokens.push({ ...instruction.token, error: ErrorType.XSLTFunctionNameShadowsBuiltin, value: shadowed });
+						}
 					}
 					break;
 				case GlobalInstructionType.Template:
@@ -414,6 +576,17 @@ export class XsltTokenDiagnostics {
 					break;
 				case GlobalInstructionType.Key:
 					globalKeys.push(instruction.name);
+					break;
+				case GlobalInstructionType.ItemType:
+					globalItemTypeNames.push(instruction.name);
+					if (instruction.declaredType) {
+						itemTypeDeclarations.set(instruction.name, instruction.declaredType);
+						// the offset of the declaration's 'as' value, for the offsets of record fields
+						const asOffset = RecordTypes.attributeValueOffset(documentText, document.offsetAt(new vscode.Position(instruction.token.line, instruction.token.startCharacter)), 'as');
+						if (asOffset !== undefined) {
+							RecordTypes.itemTypeOffsets.set(instruction.name, asOffset);
+						}
+					}
 					break;
 				case GlobalInstructionType.Accumulator:
 					if (globalAccumulatorNames.indexOf(instruction.name) < 0) {
@@ -445,10 +618,12 @@ export class XsltTokenDiagnostics {
 					}
 					break;
 				case GlobalInstructionType.Function:
-					let functionNameWithArity = instruction.name + '#' + instruction.idNumber;
-					if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
-						checkedGlobalFnNames.push(functionNameWithArity);
-						importedGlobalFnNames.push(functionNameWithArity);
+					XsltTokenDiagnostics.addUserFunctionParams(userFunctionParams, instruction);
+					for (const functionNameWithArity of XsltTokenDiagnostics.functionNamesWithArity(instruction)) {
+						if (checkedGlobalFnNames.indexOf(functionNameWithArity) < 0) {
+							checkedGlobalFnNames.push(functionNameWithArity);
+							importedGlobalFnNames.push(functionNameWithArity);
+						}
 					}
 					break;
 				case GlobalInstructionType.Template:
@@ -462,6 +637,12 @@ export class XsltTokenDiagnostics {
 				case GlobalInstructionType.Key:
 					globalKeys.push(instruction.name);
 					break;
+				case GlobalInstructionType.ItemType:
+					globalItemTypeNames.push(instruction.name);
+					if (instruction.declaredType) {
+						itemTypeDeclarations.set(instruction.name, instruction.declaredType);
+					}
+					break;
 				case GlobalInstructionType.Accumulator:
 					globalAccumulatorNames.push(instruction.name);
 					break;
@@ -474,7 +655,7 @@ export class XsltTokenDiagnostics {
 		if (docType === DocumentTypes.XPath) {
 			xsltPrefixesToURIs.set('array', XSLTnamespaces.Array);
 			xsltPrefixesToURIs.set('map', XSLTnamespaces.Map);
-			xsltPrefixesToURIs.set('math', XSLTnamespaces.Map);
+			xsltPrefixesToURIs.set('math', XSLTnamespaces.Math);
 			xsltPrefixesToURIs.set('xs', XSLTnamespaces.XMLSchema);
 			xsltPrefixesToURIs.set('fn', XSLTnamespaces.XPath);
 			xsltPrefixesToURIs.set('xsl', XSLTnamespaces.XSLT);
@@ -486,6 +667,18 @@ export class XsltTokenDiagnostics {
 			lineNumber = token.line;
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 			if (isXMLToken) {
+				if (prologSavedPrefixes) {
+					inheritedPrefixes = prologSavedPrefixes.prefixes;
+					xsltPrefixesToURIs = prologSavedPrefixes.prefixesToURIs;
+					prologSavedPrefixes = null;
+				}
+				prologNamespaceDeclared = false;
+				if (prologUriToken) {
+					// expected ';' after the namespace URI
+					prologUriToken.error = ErrorType.NamespaceDeclSemicolon;
+					problemTokens.push(prologUriToken);
+					prologUriToken = null;
+				}
 				if (ifThenStack.length > 0) {
 					let ifToken = ifThenStack[0];
 					ifToken['error'] = ErrorType.BracketNesting;
@@ -518,12 +711,17 @@ export class XsltTokenDiagnostics {
 					}
 				}
 				xpathStack = [];
+				rootOperandContext = {};
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
 
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xmlText:
+						if (functionContent && !functionContent.hasContent && elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:function' && token.startCharacter > -1 &&
+							XsltTokenDiagnostics.getTextForToken(lineNumber, token, document).trim().length !== 0) {
+							functionContent.hasContent = true;
+						}
 						if (elementStack.length === 0 && token.startCharacter > -1) {
 							const tValue = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 							if (tValue.trim().length !== 0) {
@@ -589,6 +787,9 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.lSt:
 								tagAttributeNames = [];
 								withinTypeDeclarationAttr = false;
+								currentAttName = '';
+								tagAsRange = null;
+								tagSelectRange = null;
 								tagAttributeSymbols = [];
 								tagXmlnsNames = [];
 								tagIdentifierName = '';
@@ -602,8 +803,11 @@ export class XsltTokenDiagnostics {
 							case XMLCharState.rSelfCt:
 							case XMLCharState.rSelfCtNoAtt:
 								isGroupingAttribute = false;
+								const startTagAttributeNames = tagAttributeNames;
 								tagAttributeNames = [];
 								withinTypeDeclarationAttr = false;
+								// e.g. a text value template in the element's content is not part of the last attribute
+								currentAttName = '';
 								// start-tag ended, we're now within the new element scope:
 								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
@@ -619,6 +823,16 @@ export class XsltTokenDiagnostics {
 											startTagToken['error'] = ErrorType.XSLTNamesapce;
 											problemTokens.push(startTagToken);
 										}
+									}
+									if (fixedNamespaces) {
+										// the prefixes for the known namespaces, e.g. fn and xs, are those of the fixed bindings
+										xsltPrefixesToURIs = new Map();
+										fixedNamespaces.bindings.forEach((uri, pfx) => {
+											const xsltType = FunctionData.namespaces.get(uri);
+											if (xsltType !== undefined) {
+												xsltPrefixesToURIs.set(pfx, xsltType);
+											}
+										});
 									}
 								}
 								onRootStartTag = false;
@@ -645,7 +859,7 @@ export class XsltTokenDiagnostics {
 
 								let tunnelAttributeFound = false;
 								const checkPendingErrors = pendingTemplateParamErrors.length !== 0;
-								tagAttributeNames.forEach((attName) => {
+								startTagAttributeNames.forEach((attName) => {
 									if (checkPendingErrors && !tunnelAttributeFound) {
 										tunnelAttributeFound = attName === 'tunnel';
 									}
@@ -664,7 +878,7 @@ export class XsltTokenDiagnostics {
 								pendingTemplateParamErrors = [];
 
 
-								if (startTagToken && !problem) {
+								if (startTagToken && !problem && !startTagToken.error) {
 									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, docType, inheritedPrefixes, elementStack);
 									if (validationError !== NameValidationError.None) {
 										startTagToken['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
@@ -681,13 +895,84 @@ export class XsltTokenDiagnostics {
 										startTagToken['value'] = tagElementName + '\': \'' + attsWithXmlnsErrors.join('\', ');
 										problemTokens.push(startTagToken);
 									}
-									else if (xsltAttsWithNameErrors.length > 0) {
+									// an xsl:note may have any attributes, and its content isn't checked - also before XSLT 4.0,
+									// as a note is excluded with use-when, or else reported itself
+									else if (xsltAttsWithNameErrors.length > 0 && tagElementName !== 'xsl:note' && !elementStack.some((element) => element.symbolName === 'xsl:note')) {
 										startTagToken['error'] = ErrorType.XSLTAttrUnexpected;
 										startTagToken['value'] = tagElementName + '\': \'' + xsltAttsWithNameErrors.join('\', ');
 										problemTokens.push(startTagToken);
 									}
 								}
 
+								if (tagElementName === 'xsl:function' && startTagToken) {
+									functionContent = { token: startTagToken, name: tagIdentifierName, hasContent: false };
+									if (xmlCharType === XMLCharState.rSelfCt || xmlCharType === XMLCharState.rSelfCtNoAtt) {
+										XsltTokenDiagnostics.checkFunctionContent(functionContent, problemTokens);
+										functionContent = null;
+									}
+								} else if (functionContent && elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:function' && tagElementName !== 'xsl:param' && tagElementName !== 'xsl:note') {
+									functionContent.hasContent = true;
+								}
+								const enclosingMode = elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:mode' ? elementStack[elementStack.length - 1] : undefined;
+								if (startTagToken && !problem && !startTagToken.error && enclosingMode && tagElementName === 'xsl:template' && XsltTokenDiagnostics.isXPath40(docType)) {
+									// XSLT 4.0 enclosed mode: a template rule within xsl:mode has a match but no mode or name, and the mode must be named
+									const disallowedAttribute = ['mode', 'name'].find((attName) => startTagAttributeNames.includes(attName));
+									if (disallowedAttribute) {
+										startTagToken.error = ErrorType.EnclosedTemplateAttribute;
+										startTagToken.value = disallowedAttribute;
+										problemTokens.push(startTagToken);
+									} else if (!startTagAttributeNames.includes('match')) {
+										startTagToken.error = ErrorType.EnclosedTemplateMatch;
+										problemTokens.push(startTagToken);
+									}
+									const modeToken = enclosingMode.identifierToken;
+									if (enclosingMode.symbolID === '' && modeToken && !modeToken.error) {
+										modeToken.error = ErrorType.EnclosedModeName;
+										problemTokens.push(modeToken);
+									}
+								}
+
+								if (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes) {
+									// XPath 4.0 record types: check a map constructor against the declared record type
+									const parentName = elementStack.length > 0 ? elementStack[elementStack.length - 1].symbolName : '';
+									let asText = tagAsRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, tagAsRange) : undefined;
+									// the offset of an inline record type, for the offsets of its fields
+									const asOffset = tagAsRange ? document.offsetAt(new vscode.Position(allTokens[tagAsRange[0]].line, allTokens[tagAsRange[0]].startCharacter)) : undefined;
+									if (!asText && tagElementName === 'xsl:with-param' && startTagToken && (parentName === 'xsl:call-template' || parentName === 'xsl:next-iteration')) {
+										// the type of the parameter it sets: of the called template, or the enclosing xsl:iterate
+										const text = document.getText();
+										const tagStart = document.offsetAt(new vscode.Position(startTagToken.line, startTagToken.startCharacter)) - 1;
+										const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart).concat([{ name: tagElementName, offset: tagStart }]);
+										const allGlobals = globalInstructionData.concat(importedInstructionData);
+										asText = RecordTypes.withParamType(text, ancestors, ancestors.length - 1, (template, param) =>
+											XsltTokenDiagnostics.parameterType(allGlobals, GlobalInstructionType.Template, template, undefined, -1, param));
+									}
+									const record = asText && ['xsl:variable', 'xsl:param', 'xsl:with-param', 'xsl:function'].includes(tagElementName) ? RecordTypes.resolve(asText, itemTypeDeclarations, 0, tagAsRange ? asOffset : undefined) : undefined;
+									if (tagElementName === 'xsl:function') {
+										functionResult = { record, select: null };
+									} else if (functionResult && parentName === 'xsl:function' && tagElementName !== 'xsl:param') {
+										// the function result is the last instruction, if it's an xsl:sequence
+										functionResult.select = tagElementName === 'xsl:sequence' ? tagSelectRange : null;
+									}
+									if (record && tagSelectRange && tagElementName !== 'xsl:function') {
+										RecordTypes.checkMapConstructor(allTokens.slice(tagSelectRange[0], tagSelectRange[1] + 1), record, itemTypeDeclarations, problemTokens);
+									}
+									// XPath 4.0 enumeration types: a string literal must be one of the values, e.g. as="enum('a', 'b')" select="'a'"
+									const enumValues = asText && tagSelectRange && ['xsl:variable', 'xsl:param', 'xsl:with-param'].includes(tagElementName) ? RecordTypes.resolveEnum(asText, itemTypeDeclarations) : undefined;
+									if (enumValues) {
+										RecordTypes.checkEnumValue(allTokens.slice(tagSelectRange![0], tagSelectRange![1] + 1), enumValues, asText!, problemTokens);
+									}
+									if (record && variableData) {
+										variableData.recordType = record;
+									} else if (asText && variableData && ['xsl:variable', 'xsl:param', 'xsl:with-param'].includes(tagElementName)) {
+										// a JNode for a record, e.g. as="jnode(*, point)" select="jtree(...)"
+										const jnodeRecord = RecordTypes.resolveJNode(asText, itemTypeDeclarations);
+										if (jnodeRecord) {
+											variableData.recordType = jnodeRecord;
+											variableData.isJNode = true;
+										}
+									}
+								}
 								if (xmlCharType === XMLCharState.rStNoAtt || xmlCharType === XMLCharState.rSt) {
 									// on a start tag
 									if (tagElementName === 'xsl:accumulator') {
@@ -769,6 +1054,16 @@ export class XsltTokenDiagnostics {
 									let poppedData = elementStack.pop()!;
 									inheritedPrefixes = poppedData.namespacePrefixes;
 									if (tagElementName === 'xsl:function') insideGlobalFunction = false;
+									if (tagElementName === 'xsl:function' && functionContent) {
+										XsltTokenDiagnostics.checkFunctionContent(functionContent, problemTokens);
+										functionContent = null;
+									}
+									if (tagElementName === 'xsl:function' && functionResult) {
+										if (functionResult.record && functionResult.select) {
+											RecordTypes.checkMapConstructor(allTokens.slice(functionResult.select[0], functionResult.select[1] + 1), functionResult.record, itemTypeDeclarations, problemTokens);
+										}
+										functionResult = null;
+									}
 									if (tagElementName === 'xsl:iterate') {
 										currentXSLTIterateParams.pop();
 									} else if (tagElementName === 'xsl:function') {
@@ -832,9 +1127,16 @@ export class XsltTokenDiagnostics {
 								break;
 							case XMLCharState.lCdataEnd:
 								isWithinCDATA = true;
+								// the text of a CDATA section, between its markers, has no tokens of its own
+								cdataStart = token;
 								break;
 							case XMLCharState.rCdataEnd:
 								isWithinCDATA = false;
+								if (functionContent && !functionContent.hasContent && cdataStart && elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === 'xsl:function' &&
+									document.getText(new vscode.Range(cdataStart.line, cdataStart.startCharacter + cdataStart.length, token.line, token.startCharacter)).trim().length !== 0) {
+									functionContent.hasContent = true;
+								}
+								cdataStart = null;
 								break;
 						}
 						break;
@@ -844,6 +1146,7 @@ export class XsltTokenDiagnostics {
 						rootXmlnsName = null;
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						withinTypeDeclarationAttr = attNameText === 'as';
+						currentAttName = attNameText;
 						let problemReported = false;
 						if (prevToken) {
 							if (token.line === prevToken.line && token.startCharacter - (prevToken.startCharacter + prevToken.length) === 0) {
@@ -908,6 +1211,8 @@ export class XsltTokenDiagnostics {
 								attType = AttributeType.InstructionMode;
 							} else if (attNameText === XsltTokenDiagnostics.useAttSet) {
 								attType = AttributeType.UseAttributeSets;
+							} else if (attNameText === 'use-accumulators') {
+								attType = AttributeType.UseAccumulators;
 							} else if (attNameText === XsltTokenDiagnostics.excludePrefixes || attNameText === XsltTokenDiagnostics.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -982,7 +1287,7 @@ export class XsltTokenDiagnostics {
 										if (!matchingNameAndDesc) {
 											const isNameTest = SimpleTypeNames.nametests === expectedSimpleType;
 											if (isNameTest) {
-												const invalidNames = XsltTokenDiagnostics.findInvalidNames(variableName, docType, inheritedPrefixes);
+												const invalidNames = XsltTokenDiagnostics.findInvalidNames(variableName, docType, xpathPrefixes());
 												if (invalidNames.length > 0) {
 													const quotedNames = invalidNames.map((uName) => '\'' + uName + '\'');
 													token['error'] = ErrorType.XMLNameList;
@@ -1019,6 +1324,14 @@ export class XsltTokenDiagnostics {
 								hasProblem = true;
 							}
 						}
+						if (!hasProblem && attType === AttributeType.UseAccumulators) {
+							// each name must be a declared accumulator (XTSE3300)
+							XslLexer.tokensInsideToken(token, variableName).forEach((nameToken) => {
+								if (nameToken.value !== '#all' && !globalAccumulatorNames.includes(nameToken.value)) {
+									problemTokens.push({ ...nameToken, tokenType: token.tokenType, error: ErrorType.AccumulatorNameUnresolved });
+								}
+							});
+						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
 							if (!namedTemplates.get(variableName)) {
 								token['error'] = ErrorType.TemplateNameUnresolved;
@@ -1028,11 +1341,17 @@ export class XsltTokenDiagnostics {
 							}
 						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:function') {
-							if (!variableName.includes(':')) {
-								token['error'] = ErrorType.XSLTFunctionNamePrefix;
-								token.value = variableName;
-								problemTokens.push(token);
-								hasProblem = true;
+							// a function in no namespace, e.g. name="area" or name="Q{}area" - an XSLT 4.0 extension in
+							// Saxon 13 (PE or EE) - otherwise its name must have a prefix
+							const localName = variableName.startsWith('Q{}') ? variableName.substring(3) : variableName;
+							if (!localName.includes(':') && !localName.startsWith('Q{')) {
+								const reason = !XsltTokenDiagnostics.isXPath40(docType) ? 'XSLT 4.0' : XsltTokenDiagnostics.isSaxonHEConfigured() ? 'Saxon-HE' : undefined;
+								if (reason) {
+									token['error'] = ErrorType.XSLTFunctionNamePrefix;
+									token.value = variableName + RecordTypes.valueSeparator + reason;
+									problemTokens.push(token);
+									hasProblem = true;
+								}
 							}
 						}
 						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
@@ -1067,7 +1386,7 @@ export class XsltTokenDiagnostics {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;
 								const nameToTest = tagElementName === "xsl:namespace" && variableName === '' ? 'empty' : variableName;
-								let validateResult = XsltTokenDiagnostics.validateName(nameToTest, vType, docType, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(nameToTest, vType, docType, xpathPrefixes());
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
 									token['value'] = variableName;
@@ -1145,6 +1464,7 @@ export class XsltTokenDiagnostics {
 				}
 
 			} else {
+				withinTypeDeclarationAttr = testingAsAttribute ? true : withinTypeDeclarationAttr;
 				if (isWithinCDATA && !!prevToken) {
 					// reset prevToken if this token is preceded by a '{' char that is not in a token
 					try {
@@ -1161,9 +1481,114 @@ export class XsltTokenDiagnostics {
 				}
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
-				if (xpathStack.length > 0) {
-					const tv = xpathStack[xpathStack.length - 1].token.value;
-					if (prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && (tv === 'for' || tv === 'let' || tv === 'every')) {
+				const stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+
+				if (currentAttName === 'as') {
+					tagAsRange = tagAsRange ? [tagAsRange[0], index] : [index, index];
+				} else if (currentAttName === 'select') {
+					tagSelectRange = tagSelectRange ? [tagSelectRange[0], index] : [index, index];
+				}
+				const isStepPosition = prevToken?.tokenType === TokenLevelState.operator && (prevToken.value === '/' || prevToken.value === '//' || prevToken.value === '::');
+				if (isStepPosition && (xpathTokenType === TokenLevelState.function || xpathTokenType === TokenLevelState.nodeNameTest) && token.value.startsWith('~') && !token.error) {
+					// e.g. $tree//~record(a, b) or child::~xs:string - shown in the Saxon 13 JNodes documentation, but rejected by Saxon 13
+					token.error = ErrorType.TypeNodeTestNotSupported;
+					if (xpathTokenType === TokenLevelState.function) {
+						// a name test token's error is reported with the name test checks
+						problemTokens.push(token);
+					}
+				}
+				const isRecordStep = xpathTokenType === TokenLevelState.nodeNameTest && prevToken?.tokenType === TokenLevelState.operator && prevToken.value === '/';
+				// a lookup with a string literal, e.g. $c?'first name'
+				const isStringLookup = xpathTokenType === TokenLevelState.string && prevToken?.value === '?' && token.value.length > 1;
+				if ((isRecordStep || isStringLookup || (xpathTokenType === TokenLevelState.mapNameLookup && (prevToken?.value === '?' || prevToken?.value === '=?>'))) && (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes)) {
+					// XPath 4.0: a lookup on a value declared with a record type, e.g. $c?r, or a method call, e.g. $c =?> area(), or a child step on a JNode for one, e.g. jtree($c)/r
+					// the record type of a variable, and whether it's declared as a JNode for one, e.g. jnode(*, point)
+					const variableRecord = (variableToken: BaseToken): { record: RecordType | undefined, isJNode: boolean } => {
+						const fromType = (typeText: string, offset?: number) => {
+							const record = RecordTypes.resolve(typeText, itemTypeDeclarations, 0, offset);
+							const jnodeRecord = record ? undefined : RecordTypes.resolveJNode(typeText, itemTypeDeclarations);
+							return { record: record ?? jnodeRecord, isJNode: !!jnodeRecord };
+						};
+						const variableName = variableToken.value.substring(1);
+						// a variable declared in the XPath expression, e.g. let $p as person := ..., or function($p as person) - the innermost one
+						const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList, anonymousFunctionParamList);
+						const xpathVariable = [...xpathVariables].reverse().find((v) => v.name === variableName);
+						if (xpathVariable) {
+							const typeRange = RecordTypes.xpathVariableTypeRange(allTokens, allTokens.indexOf(xpathVariable.token));
+							return typeRange ? fromType(XsltTokenDiagnostics.textForTokenRange(document, allTokens, typeRange)) : { record: undefined, isJNode: false };
+						}
+						const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
+						const globalType = globalVariableTypes.get(variableName);
+						// the offset of a global variable's 'as' in this document, for the offsets of an inline record type's fields
+						const globalDeclaration = globalType ? globalInstructionData.find((g) => (g.type === GlobalInstructionType.Variable || g.type === GlobalInstructionType.Parameter) && g.name === variableName) : undefined;
+						const globalTypeOffset = globalDeclaration ? RecordTypes.attributeValueOffset(documentText, document.offsetAt(new vscode.Position(globalDeclaration.token.line, globalDeclaration.token.startCharacter)), 'as') : undefined;
+						return localVariable ? { record: localVariable.recordType, isJNode: !!localVariable.isJNode } : globalType ? fromType(globalType, globalTypeOffset) : { record: undefined, isJNode: false };
+					};
+					const operandIndex = index - 2;
+					const operand = operandIndex > -1 ? allTokens[operandIndex] : undefined;
+					let operandRecord: { record: RecordType | undefined, isJNode: boolean } | undefined;
+					const functionCall = !isRecordStep && operand ? RecordTypes.functionCallAt(allTokens, operandIndex) : undefined;
+					if (functionCall) {
+						// the result of a user-defined function with a record type, e.g. cx:new(1, 2)?
+						const fn = globalInstructionData.concat(importedInstructionData).find((g) => g.type === GlobalInstructionType.Function && g.name === functionCall.name && XslLexer.functionArityMatches(g, functionCall.arity));
+						operandRecord = { record: fn?.returnType ? RecordTypes.resolve(fn.returnType, itemTypeDeclarations) : undefined, isJNode: false };
+					} else if (operand?.tokenType === TokenLevelState.variable) {
+						operandRecord = variableRecord(operand);
+					} else if (operand?.charType === CharLevelState.rB && operandIndex > 2 && allTokens[operandIndex - 1].tokenType === TokenLevelState.variable &&
+						allTokens[operandIndex - 2].charType === CharLevelState.lB && allTokens[operandIndex - 3].value === 'jtree') {
+						// jtree($c)
+						operandRecord = { record: variableRecord(allTokens[operandIndex - 1]).record, isJNode: true };
+					} else if (operand) {
+						operandRecord = lookupRecords.get(operand);
+					}
+					const record = operandRecord?.record;
+					if (record && isRecordStep && !operandRecord!.isJNode) {
+						// Saxon 13 requires a node on the left of '/' when the static type is a record type (XPTY0019)
+						problemTokens.push(RecordTypes.problemToken(prevToken!, ErrorType.RecordStepNeedsJtree, record.name));
+					} else if (record && isStringLookup) {
+						// only recorded for the field, e.g. for rename - a string key isn't checked
+						const field = record.fields.find((f) => f.name === token.value.substring(1, token.value.length - 1));
+						if (field) {
+							RecordTypes.fieldReferences.push({ token, field, record });
+							const fieldRecord = RecordTypes.fieldRecord(field, itemTypeDeclarations);
+							if (fieldRecord) {
+								lookupRecords.set(token, { record: fieldRecord, isJNode: false });
+							}
+						}
+					} else if (record && /^[\w.-]+$/.test(token.value) && !/^\d+$/.test(token.value)) {
+						const field = record.fields.find((f) => f.name === token.value);
+						if (!field) {
+							problemTokens.push(RecordTypes.problemToken(token, isRecordStep ? ErrorType.RecordStepUnknown : ErrorType.RecordLookupUnknown, token.value, record.name));
+						} else {
+							RecordTypes.fieldReferences.push({ token, field, record });
+							const fieldRecord = RecordTypes.fieldRecord(field, itemTypeDeclarations);
+							if (fieldRecord) {
+								lookupRecords.set(token, { record: fieldRecord, isJNode: isRecordStep });
+							}
+						}
+					}
+				}
+
+				if (prologUriToken && xpathTokenType !== TokenLevelState.comment) {
+					if (!(xpathCharType === CharLevelState.sep && token.value === ';')) {
+						prologUriToken.error = ErrorType.NamespaceDeclSemicolon;
+						problemTokens.push(prologUriToken);
+					}
+					prologUriToken = null;
+				} else if (xpathCharType === CharLevelState.sep && token.value === ';') {
+					// ';' is only permitted after a namespace declaration
+					token.error = ErrorType.XPathUnexpected;
+					problemTokens.push(token);
+				}
+				const isKeywordName = xpathTokenType === TokenLevelState.mapKey && allTokens[index + 1]?.value === ':=';
+				if (stackItem?.keywordNames && prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && !isKeywordName && xpathTokenType !== TokenLevelState.comment) {
+					token.error = ErrorType.PositionalArgumentAfterKeyword;
+					problemTokens.push(token);
+				}
+
+				if (stackItem) {
+					const tv = stackItem.token.value;
+					if (prevToken?.charType === CharLevelState.sep && prevToken.value === ',' && (tv === 'for' || tv === 'let' || tv === 'every' || tv === 'some')) {
 						if (xpathTokenType !== TokenLevelState.variable) {
 							const realType = (xpathTokenType === TokenLevelState.comment && index + 1 < allTokens.length) ? allTokens[index + 1].tokenType : xpathTokenType;
 							if (realType != TokenLevelState.variable) {
@@ -1174,6 +1599,11 @@ export class XsltTokenDiagnostics {
 					}
 				}
 				let isTypeError = false;
+				// a '|' within element(...) or attribute(...) is a union of names - see checkKindTestNames
+				if (token.choiceSeparator && !XsltTokenDiagnostics.isXPath40(docType) && XsltTokenDiagnostics.kindTestPart(allTokens, index) !== 'name') {
+					token.error = ErrorType.ChoiceTypeRequiresXPath40;
+					problemTokens.push(token);
+				}
 				if (withinTypeDeclarationAttr) {
 					const tType = token.tokenType;
 					if (!(tType === TokenLevelState.nodeType || tType === TokenLevelState.simpleType)) {
@@ -1183,7 +1613,13 @@ export class XsltTokenDiagnostics {
 						} else if (!(token.value === 'as' || token.value === ',' || token.charType === CharLevelState.lB || token.charType === CharLevelState.rB)) {
 							const lastStackEntry = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
 							const typeName = !lastStackEntry ? undefined : lastStackEntry.function ? lastStackEntry.function.value : undefined;
- 							const isValidXPath4SpecialArg = (typeName === 'enum' && tType === TokenLevelState.string) || (typeName === 'record' && tType === TokenLevelState.nodeNameTest);
+							const isRecord = typeName === 'record' || typeName === 'tuple';
+							const isValidXPath4SpecialArg = (typeName === 'enum' && tType === TokenLevelState.string) ||
+								(isRecord && (tType === TokenLevelState.nodeNameTest || tType === TokenLevelState.string)) ||
+								(isRecord && XsltTokenDiagnostics.isOptionalFieldMarker(token, prevToken)) ||
+								(token.value === '()' && prevToken?.value === 'record') || !!token.choiceSeparator ||
+								// an EQName, e.g. Q{urn:x}para in element(Q{urn:x}para) - see checkBracedURILiterals
+								tType === TokenLevelState.uriLiteral;
 							if (!isValidXPath4SpecialArg) {
 								token['error'] = ErrorType.XPathUnexpected;
 								problemTokens.push(token);
@@ -1220,12 +1656,25 @@ export class XsltTokenDiagnostics {
 							problemTokens.push(token);
 						}
 					}
+				} else if (XsltTokenDiagnostics.isAnonymousFunctionParams(stackItem)) {
+					let invalidTokenForAnonFunction = !XsltTokenDiagnostics.anonFunctionTokenTypes.has(token.tokenType);
+					// nodeType is also permitted except when value is '*'
+					if (invalidTokenForAnonFunction && token.tokenType === TokenLevelState.nodeType && token.value !== '*') {
+						invalidTokenForAnonFunction = false;
+					}
+					if (invalidTokenForAnonFunction && !stackItem.anonFnSyntaxErrorReported) {
+						token.error = ErrorType.AnonymousFunctionSyntax;
+						problemTokens.push(token);
+						stackItem.anonFnSyntaxErrorReported = true;
+					}
 				}
-				if (isTypeError) {
+				// a placeholder is lexically a name test, but it's not reported as needing a context item
+				const isPlaceholder = xpathTokenType === TokenLevelState.nodeNameTest && token.value.startsWith(XsltTokenDiagnostics.placeholderPrefix);
+				if (isTypeError || isPlaceholder) {
 				} else if (insideGlobalFunction && !isGroupingAttribute) {
 					const tv = token.value;
 					const isRootSelector = tv === '/' || tv === '//';
-					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr))) {
+					if (prevToken && (tv === '?' && !(prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.tokenType === TokenLevelState.simpleType || prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rBr))) {
 						let isNoArgFunctionCall = false;
 						if (prevToken.charType == CharLevelState.dSep && prevToken.value == '()' && index > 2) {
 							let prevToken2 = allTokens[index - 2];
@@ -1239,12 +1688,12 @@ export class XsltTokenDiagnostics {
 							const nextToken = allTokens[index + 1];
 							isPartialFunctionArg = (nextToken.charType === CharLevelState.rB  || nextToken.value === ',');
 						}
-						if (!withinTypeDeclarationAttr && !isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+						if (!withinTypeDeclarationAttr && !isNoArgFunctionCall && !isPartialFunctionArg && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, rootOperandContext)) {
 							token.error = ErrorType.MissingContextItemGeneral;
 							problemTokens.push(token);
 						}
 					} else if (prevToken && (isRootSelector || xpathTokenType === TokenLevelState.nodeNameTest || xpathTokenType === TokenLevelState.attributeNameTest || xpathTokenType === TokenLevelState.axisName)) {
-						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+						if (!XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, rootOperandContext)) {
 							if (isRootSelector) {
 								if (!XsltTokenDiagnostics.providesContext(prevToken)) {
 									let isRootOnly = true;
@@ -1253,7 +1702,7 @@ export class XsltTokenDiagnostics {
 										const ntt = <TokenLevelState>nt.tokenType;
 										const ntv = nt.value;
 										isRootOnly = !(ntt === TokenLevelState.nodeNameTest || ntt === TokenLevelState.anonymousFunction || ntt === TokenLevelState.axisName ||
-											ntt === TokenLevelState.function || ntt === TokenLevelState.variable || ntv === '*' || ntv === '()' || ntv === '(' || ntv === '=>');
+											ntt === TokenLevelState.function || ntt === TokenLevelState.variable || ntv === '*' || ntv === '()' || ntv === '(' || ntv === '=>' || ntv === '=!>');
 									}
 									token.error = isRootOnly ? ErrorType.MissingContextItemForRootOnly : ErrorType.MissingContextItemForRoot;
 									problemTokens.push(token);
@@ -1278,7 +1727,29 @@ export class XsltTokenDiagnostics {
 						if (token.error && !isTypeError) {
 							problemTokens.push(token);
 						}
-						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+						if (prevToken?.tokenType === TokenLevelState.complexExpression && prevToken.value === 'namespace' && allTokens[index - 2]?.value === 'element') {
+							// declare default element namespace 'uri';
+							prologUriToken = token;
+							break;
+						} else if (prevToken?.value === '=' && allTokens[index - 2]?.tokenType === TokenLevelState.mapKey && allTokens[index - 3]?.value === 'namespace' &&
+							allTokens[index - 3].tokenType === TokenLevelState.complexExpression) {
+							// declare namespace prefix = 'uri';
+							const prefix = allTokens[index - 2].value;
+							if (!prologSavedPrefixes) {
+								prologSavedPrefixes = { prefixes: inheritedPrefixes, prefixesToURIs: xsltPrefixesToURIs };
+								xsltPrefixesToURIs = new Map(xsltPrefixesToURIs);
+							}
+							inheritedPrefixes = inheritedPrefixes.includes(prefix) ? inheritedPrefixes : inheritedPrefixes.concat([prefix]);
+							const nsType = FunctionData.namespaces.get(token.value.substring(1, token.value.length - 1));
+							if (nsType === undefined) {
+								xsltPrefixesToURIs.delete(prefix);
+							} else {
+								xsltPrefixesToURIs.set(prefix, nsType);
+							}
+							prologUriToken = token;
+							break;
+						}
+						XsltTokenDiagnostics.checkStringIsExpected(prevToken, token, problemTokens);
 						if (xpathStack.length > 0 && !isTypeError) {
 							let xp = xpathStack[xpathStack.length - 1];
 							if (xp.functionArity === 0 && (xp.function?.value === 'key' || xp.function?.value.startsWith('accumulator-'))) {
@@ -1296,6 +1767,9 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.axisName:
+						if (!token.error && !withinTypeDeclarationAttr && !XsltTokenDiagnostics.isXPath40(docType) && Data.axes40.includes(token.value)) {
+							token.error = ErrorType.AxisRequiresXPath40;
+						}
 						if (token.error && !withinTypeDeclarationAttr) {
 							problemTokens.push(token);
 						}
@@ -1318,10 +1792,18 @@ export class XsltTokenDiagnostics {
 							let prefixEnd = token.value.indexOf(':');
 							if (prefixEnd !== -1) {
 								let prefix = token.value.substring(1, prefixEnd);
-								if (inheritedPrefixes.indexOf(prefix) === -1) {
+								if (xpathPrefixes().indexOf(prefix) === -1) {
 									token['error'] = ErrorType.XPathPrefix;
 									problemTokens.push(token);
 								}
+							}
+							// XSLT 4.0: $group and $next are in scope only within the split-when attribute of xsl:for-each-group
+							// (and 'break-when', its Saxon 12 name, still accepted by Saxon 13)
+							const isSplitWhenVariable = tagElementName === 'xsl:for-each-group' && (currentAttName === 'split-when' || currentAttName === 'break-when') &&
+								(token.value === '$group' || token.value === '$next');
+							if (isSplitWhenVariable) {
+								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+								break;
 							}
 							// don't include any current pending variable declarations when resolving
 							let globalVarName: string | null = null;
@@ -1334,9 +1816,45 @@ export class XsltTokenDiagnostics {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+							const nextValue = allTokens[index + 1]?.value;
+							// or the whole attribute value, e.g. the select of an xsl:switch
+							const isWholeValue = (!allTokens[index + 1] || allTokens[index + 1].tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber) && !!prevToken && prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+							if (XsltTokenDiagnostics.isXPath40(docType) && (isWholeValue || nextValue === ')' || nextValue === ',' || nextValue === '=>' || nextValue === '=!>')) {
+								// XPath 4.0: the declared type of a variable that may be a function call argument, for checking against the parameter type
+								const variableName = token.value.substring(1);
+								const xpathVariables = xpathStack.flatMap((x) => x.variables).concat(inScopeXPathVariablesList, anonymousFunctionParamList);
+								const xpathVariable = [...xpathVariables].reverse().find((v) => v.name === variableName);
+								let declaredType: string | undefined;
+								if (xpathVariable) {
+									const typeRange = RecordTypes.xpathVariableTypeRange(allTokens, allTokens.indexOf(xpathVariable.token));
+									declaredType = typeRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, typeRange) : undefined;
+								} else {
+									const localVariable = XsltTokenDiagnostics.findLocalVariable(variableName, inScopeVariablesList, elementStack, globalVariableData);
+									declaredType = localVariable ? RecordTypes.attributeOfElementAt(document.getText(), document.offsetAt(new vscode.Position(localVariable.token.line, localVariable.token.startCharacter)), 'as') :
+										globalVariableTypes.get(variableName);
+								}
+								if (declaredType) {
+									argumentVariableTypes.set(token, declaredType);
+								}
+							}
 						}
 						break;
 					case TokenLevelState.complexExpression:
+						if (token.value === 'declare' && (allTokens[index + 1]?.value === 'namespace' || allTokens[index + 1]?.value === 'default')) {
+							// XPath 4.0 namespace declaration
+							const isDefault = allTokens[index + 1].value === 'default';
+							if (!XsltTokenDiagnostics.isXPath40(docType)) {
+								token.error = ErrorType.NamespaceDeclRequiresXPath40;
+								problemTokens.push(token);
+							} else if (isDefault && prologNamespaceDeclared) {
+								token.error = ErrorType.NamespaceDeclOrder;
+								problemTokens.push(token);
+							}
+							prologNamespaceDeclared = true;
+							break;
+						} else if (['namespace', 'default', 'element'].includes(token.value) && allTokens[index - 1]?.tokenType === TokenLevelState.complexExpression) {
+							break;
+						}
 						let valueText = withinTypeDeclarationAttr? '' : token.value;
 						let testStartOfExpression = false;
 						switch (valueText) {
@@ -1345,6 +1863,9 @@ export class XsltTokenDiagnostics {
 							case 'if':
 								ifThenStack.push(token);
 								testStartOfExpression = true;
+								if (index > 0) {
+									XsltTokenDiagnostics.checkTokenIsExpected(prevToken, allTokens[index - 1], problemTokens, TokenLevelState.Unset);
+								}
 								break;
 							case 'every':
 							case 'for':
@@ -1355,12 +1876,42 @@ export class XsltTokenDiagnostics {
 								if (allTokens.length > index + 2) {
 									const nextToken = allTokens[index + 1];
 									const isForMember = valueText === 'for' && nextToken.value === 'member';
-									if (!isForMember) {
+									// XPath 4.0: for key $k value $v in map-expression
+									const isForKeyValue = valueText === 'for' && (nextToken.value === 'key' || nextToken.value === 'value') && nextToken.tokenType === TokenLevelState.complexExpression;
+									if (isForKeyValue && !XsltTokenDiagnostics.isXPath40(docType)) {
+										nextToken.error = ErrorType.ForKeyValueRequiresXPath40;
+										problemTokens.push(nextToken);
+									} else if (!isForMember && !isForKeyValue) {
 										const opToken = allTokens[index + 2];
 										const expectedOp = valueText === 'let' ? ':=' : 'in';
-										if (opToken.value !== expectedOp) {
-											opToken['error'] = ErrorType.XPathExpectedComplex;
-											problemTokens.push(opToken);
+										// the index of the ':=' or 'in' after the variable, or -1 if it's not checked
+										let opIndex = index + 2;
+										if (opToken.value === 'as' && valueText !== 'member') {
+											// XPath 4.0 typed variable binding, e.g. let $x as xs:integer := 3
+											if (!XsltTokenDiagnostics.isXPath40(docType)) {
+												opToken.error = ErrorType.TypedBindingRequiresXPath40;
+												problemTokens.push(opToken);
+												opIndex = -1;
+											} else {
+												// the ':=' or 'in' follows the type
+												opIndex = allTokens.findIndex((t, i) => i > index + 2 && t.tokenType === TokenLevelState.complexExpression);
+											}
+										}
+										const positionalToken = opIndex > -1 ? allTokens[opIndex] : undefined;
+										if (valueText === 'for' && positionalToken?.value === 'at' && positionalToken.tokenType === TokenLevelState.complexExpression) {
+											// XPath 4.0 positional variable, e.g. for $x at $i in $seq - the 'in' follows it
+											if (!XsltTokenDiagnostics.isXPath40(docType)) {
+												positionalToken.error = ErrorType.PositionalVariableRequiresXPath40;
+												problemTokens.push(positionalToken);
+												opIndex = -1;
+											} else {
+												opIndex += 2;
+											}
+										}
+										const afterBinding = opIndex > -1 ? allTokens[opIndex] : undefined;
+										if (afterBinding && afterBinding.value !== expectedOp) {
+											afterBinding['error'] = ErrorType.XPathExpectedComplex;
+											problemTokens.push(afterBinding);
 										}
 									}
 								}
@@ -1372,6 +1923,16 @@ export class XsltTokenDiagnostics {
 									xpathVariableCurrentlyBeingDefined = false;
 									xpathStack.push({ token: token, variables: inScopeXPathVariablesList.slice(), preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, isRangeVar: true });
 								}
+								break;
+							case 'key':
+							case 'value':
+							case 'at':
+								// XPath 4.0: for key $k value $v in map-expression - the variable after 'value' is a new binding, as is
+								// the positional variable after 'at', e.g. for $x at $i in $seq
+								if (xpathStack.length > 0 && xpathStack[xpathStack.length - 1].isRangeVar) {
+									preXPathVariable = xpathStack[xpathStack.length - 1].preXPathVariable;
+								}
+								xpathVariableCurrentlyBeingDefined = false;
 								break;
 							case 'then':
 								if (ifThenStack.length > 0) {
@@ -1436,6 +1997,8 @@ export class XsltTokenDiagnostics {
 											//const ptv = peekedStack.token.value;
 											//peekedStack.hasContextItem = ptv === 'for' || ptv === 'every' || ptv === 'some';
 											peekedStack.token = token;
+											peekedStack.hasPipelineContext = false;
+											peekedStack.hasSimpleMapContext = false;
 										}
 									} else {
 										inScopeXPathVariablesList = [];
@@ -1456,32 +2019,57 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.mapKey:
-						if (!(prevToken && prevToken.tokenType === TokenLevelState.operator
+						if (isKeywordName) {
+							// XPath 4.0 keyword argument, e.g. subsequence($s, start := 2)
+							if (!token.error) {
+								XsltTokenDiagnostics.checkKeywordArgument(token, stackItem, docType, userFunctionParams, xsltPrefixesToURIs);
+							}
+							if (token.error) {
+								problemTokens.push(token);
+							}
+						} else if (prevToken?.tokenType === TokenLevelState.complexExpression && prevToken.value === 'namespace') {
+							// namespace prefix in: declare namespace prefix = 'uri';
+						} else if (!(prevToken && prevToken.tokenType === TokenLevelState.operator
 							&& (prevToken.value === ',' || prevToken.value === '{'))) {
 							token['error'] = ErrorType.XPathUnexpected;
 							problemTokens.push(token);
 						}
 						break;
+					case TokenLevelState.anonymousFunction:
+						if (!XsltTokenDiagnostics.isXPath40(docType)) {
+							const isFocusFunction = allTokens[index + 1]?.charType === CharLevelState.lBr;
+							if (isFocusFunction || token.value === 'fn') {
+								token.error = isFocusFunction ? ErrorType.FocusFunctionRequiresXPath40 : ErrorType.InlineFunctionFnRequiresXPath40;
+								problemTokens.push(token);
+							}
+						}
+						break;
 					case TokenLevelState.operator:
 						let isXPathError = false;
 						let tv = token.value;
+						// the XPath 4.0 operators: the node comparisons, e.g. is-not, precedes and follows-or-is, '×', '÷' and the
+						// method call '=?>'
+						if (!XsltTokenDiagnostics.isXPath40(docType) && XsltTokenDiagnostics.operators40.has(tv) && !token.error) {
+							token.error = ErrorType.OperatorRequiresXPath40;
+							problemTokens.push(token);
+						}
 
 						// start checks
-						let stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
-						const sv = stackItem?.token.value;
+						let latestStackItem = stackItem;
+						const sv = latestStackItem?.token.value;
 						const tokenIsComma = tv === ',';
 						const popStackLaterForComma = sv && tokenIsComma && (sv === 'return' || sv === 'else' || sv === 'satisfies');
 						if (popStackLaterForComma && xpathStack.length > 1) {
-							stackItem = xpathStack[xpathStack.length - 2];
+							latestStackItem = xpathStack[xpathStack.length - 2];
 							if (xpathStack.length > 1) {
 								let deleteCount = 0;
 								for (let i = xpathStack.length - 1; i > -1; i--) {
-									const stackItem = xpathStack[i];
-									const sv = stackItem.token.value;
+									const loopStackItem = xpathStack[i];
+									const sv = loopStackItem.token.value;
 									if (sv === 'return' || sv === 'else' || sv === 'satisfies') {
-										inScopeXPathVariablesList = stackItem.variables;
-										xpathVariableCurrentlyBeingDefined = stackItem.xpathVariableCurrentlyBeingDefined;
-										preXPathVariable = stackItem.xpathVariableCurrentlyBeingDefined;
+										inScopeXPathVariablesList = loopStackItem.variables;
+										xpathVariableCurrentlyBeingDefined = loopStackItem.xpathVariableCurrentlyBeingDefined;
+										preXPathVariable = loopStackItem.xpathVariableCurrentlyBeingDefined;
 										deleteCount++;
 									} else {
 										break;
@@ -1492,15 +2080,45 @@ export class XsltTokenDiagnostics {
 								}
 							}
 						}
-						if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
+						// XPath 4.0 empty map constructor without the 'map' keyword
+						const isBareEmptyMap = tv === '{}' && token.charType === CharLevelState.dSep && XsltTokenDiagnostics.isOperandExpected(prevToken);
+						// the pipeline operator '->' and simple map operator '!' set the context value for their right-hand operand
+						const operandContext: OperandContext = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : rootOperandContext;
+						const isBinaryOperator = !!prevToken && XsltTokenDiagnostics.isEndOfOperand(prevToken);
+						if (tv === '->' && token.charType === CharLevelState.dSep) {
+							operandContext.hasPipelineContext = true;
+						} else if (operandContext.hasPipelineContext && isBinaryOperator && XsltTokenDiagnostics.endPipelineOps.has(tv)) {
+							operandContext.hasPipelineContext = false;
+						}
+						if (tv === '!' && token.charType === CharLevelState.sep) {
+							operandContext.hasSimpleMapContext = true;
+						} else if (operandContext.hasSimpleMapContext && isBinaryOperator && !XsltTokenDiagnostics.pathExprOps.has(tv) && !XsltTokenDiagnostics.isBracket(<CharLevelState>token.charType)) {
+							// the right-hand operand of '!' is a path expression, including any predicates, lookups and dynamic function calls
+							operandContext.hasSimpleMapContext = false;
+						}
+						if (latestStackItem && latestStackItem.curlyBraceType === CurlyBraceType.Map) {
+							// in XPath 4.0 a map constructor entry without ':' is a sequence of maps to be merged, e.g. { $map1, $map2 }
 							if (tokenIsComma) {
-								if (stackItem.awaitingMapKey) {
-									isXPathError = true;
+								if (latestStackItem.awaitingMapKey) {
+									isXPathError = !XsltTokenDiagnostics.isXPath40(docType) && !latestStackItem.isBareMap;
 								} else {
-									stackItem.awaitingMapKey = true;
+									latestStackItem.awaitingMapKey = true;
 								}
-							} else if (tv === '}' && stackItem.awaitingMapKey) {
-								isXPathError = prevToken?.value !== '{';
+							} else if (tv === '}' && latestStackItem.awaitingMapKey) {
+								isXPathError = prevToken?.value !== '{' && !XsltTokenDiagnostics.isXPath40(docType) && !latestStackItem.isBareMap;
+							}
+						}
+						if (XsltTokenDiagnostics.isAnonymousFunctionParams(latestStackItem)) {
+							let isFnError = false;
+							if (prevToken?.tokenType === TokenLevelState.variable) {
+								isFnError = !XsltTokenDiagnostics.anonFunctionVarOps.has(tv);
+							} else {
+								isFnError = !XsltTokenDiagnostics.anonFunctionOps.has(tv);
+							}
+							if (isFnError && !latestStackItem.anonFnSyntaxErrorReported) {
+								token.error = ErrorType.AnonymousFunctionSyntax;
+								problemTokens.push(token);
+								latestStackItem.anonFnSyntaxErrorReported = true;
 							}
 						}
 						if (prevToken?.tokenType === TokenLevelState.complexExpression) {
@@ -1546,9 +2164,9 @@ export class XsltTokenDiagnostics {
 							let currCharType = <CharLevelState>token.charType;
 							let nextToken = index + 1 < allTokens.length ? allTokens[index + 1] : undefined;
 							if (tv === ':') {
-								if (stackItem && stackItem.curlyBraceType === CurlyBraceType.Map) {
-									if (stackItem.awaitingMapKey) {
-										stackItem.awaitingMapKey = false;
+								if (latestStackItem && latestStackItem.curlyBraceType === CurlyBraceType.Map) {
+									if (latestStackItem.awaitingMapKey) {
+										latestStackItem.awaitingMapKey = false;
 									} else {
 										isXPathError = true;
 									}
@@ -1562,6 +2180,8 @@ export class XsltTokenDiagnostics {
 								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens, TokenLevelState.function);
 							} else if ((tv === '+' || tv === '-') && nextToken && nextToken.tokenType !== TokenLevelState.string) {
 								// either a number of an operator so show no error
+							} else if (tv === '?' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record' && XsltTokenDiagnostics.isOptionalFieldMarker(token, prevToken)) {
+								// optional record field, e.g. record(a? as xs:string)
 							} else if (tv === '?') {
 								if (isXMLToken || prevToken.value === '.' || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment || prevToken.tokenType === TokenLevelState.mapNameLookup) {
 									// don't check
@@ -1570,13 +2190,14 @@ export class XsltTokenDiagnostics {
 										const invalidPrevOperators = ['{', '?'];
 										isXPathError = invalidPrevOperators.indexOf(prevToken.value) !== -1;
 									} else if (prevToken.charType === CharLevelState.dSep) {
-										const illegalPrevOperators = ['=>', '//', '..', '*:', '::'];
+										const illegalPrevOperators = ['=>', '=!>', '//', '..', '*:', '::'];
 										isXPathError = illegalPrevOperators.indexOf(prevToken.value) !== -1;
 									}
 								} else {
 									isXPathError = true;
 								}
-
+							} else if (tv === '::') {
+								isXPathError = prevToken.tokenType !== TokenLevelState.axisName;
 							} else if (isXMLToken) {
 								switch (currCharType) {
 									case CharLevelState.rB:
@@ -1595,6 +2216,29 @@ export class XsltTokenDiagnostics {
 										}
 										break;
 								}
+							} else if (tv === '{' && (prevToken.charType === CharLevelState.lBt || prevToken.charType === CharLevelState.mBt)) {
+								// string template variable part
+							} else if (!isXPathError && prevToken?.tokenType === TokenLevelState.string) {
+								// check operator is permitted to follow a string - not a node or numeric operator - a predicate is
+								// permitted, as for any primary expression, e.g. 'a'[$show]
+								switch (tv.length) {
+									case 1:
+										isXPathError = (tv === '(' || tv === '{' || tv === '-' || tv === '+' || tv === '|' || tv === '?' || tv === '*' || tv === '.');
+										break;
+									case 2:
+										isXPathError = (tv === 'as' || tv === 'of' || tv === '//' || tv === '{}' || tv === '[]' || tv === '()' || tv === '*:' || tv === '::' || tv === '<<' || tv === '>>');
+										if (tv === 'as' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record') {
+											// a quoted record field name with a type, e.g. record('nick name' as xs:string)
+											isXPathError = false;
+										}
+										break;
+									case 3:
+										isXPathError = (tv === 'div' || tv === 'mod');
+										break;
+									default:
+										isXPathError = (tv === 'idiv' || tv === 'union' || tv === 'except' || tv === 'intersect' || tv === '&lt;&lt;' || tv === '&gt;&gt;');
+										break;
+								}								
 							} else if (prevToken.tokenType === TokenLevelState.operator) {
 								// current type is operator and previous type is operator
 								let prevCharType = <CharLevelState>prevToken.charType;
@@ -1648,7 +2292,9 @@ export class XsltTokenDiagnostics {
 												if ((pv === '&gt;' && (tv === '&gt;' || tv === '=')) || (pv === '&lt;' && (tv === '&lt;' || tv === '&gt;' || tv === '='))) {
 													// allow << <> >> <= >=
 												} else if (tv === 'as') {
-													isXPathError = pv !== 'castable' && pv !== 'cast' && pv !== 'treat';
+													// also permitted after an optional record field, e.g. record(a? as xs:string)
+													isXPathError = pv !== 'castable' && pv !== 'cast' && pv !== 'treat' &&
+														!(pv === '?' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record');
 												} else if (tv === 'of') {
 													isXPathError = pv !== 'instance';
 												} else if (!(
@@ -1664,7 +2310,7 @@ export class XsltTokenDiagnostics {
 								}
 
 							}
-							if (isXPathError && !isTypeError) {
+							if (isXPathError && !isTypeError && !isBareEmptyMap) {
 								token['error'] = ErrorType.XPathUnexpected;
 								problemTokens.push(token);
 								// token is pushed onto problemTokens later
@@ -1692,6 +2338,15 @@ export class XsltTokenDiagnostics {
 								problemTokens.push(token);
 							}
 						}
+						if (isBareEmptyMap && !XsltTokenDiagnostics.isXPath40(docType) && !token.error) {
+							token.error = ErrorType.MapConstructorRequiresXPath40;
+							problemTokens.push(token);
+						}
+						if (token.charType === CharLevelState.dSep && (tv === '??' || tv === '!!') && !token.error) {
+							// deep lookup '??' and the draft ternary conditional '?? !!' are not supported by Saxon 13
+							token.error = ErrorType.OperatorNotSupported;
+							problemTokens.push(token);
+						}
 						// end checks
 						let functionToken: BaseToken | null = null;
 						const isBrackets = xpathCharType === CharLevelState.lB;
@@ -1710,14 +2365,29 @@ export class XsltTokenDiagnostics {
 										const prevToken2Val = index > 2 ? allTokens[index - 2].value : '';
 										setContextItemProp = prevToken2Val === '!' || prevToken2Val === '/';
 									}
-								} else if (prevToken && prevToken.tokenType === TokenLevelState.anonymousFunction) {
-									setContextItemProp = prevToken.value === '->';
+								}
+								const isBareMap = curlyBraceType === CurlyBraceType.None && XsltTokenDiagnostics.isOperandExpected(prevToken);
+								if (isBareMap) {
+									// XPath 4.0 map constructor without the 'map' keyword, e.g. { 'a': 1 }
+									curlyBraceType = CurlyBraceType.Map;
+									setContextItemProp = !!prevToken && (prevToken.value === '!' || prevToken.value === '/');
+									if (!XsltTokenDiagnostics.isXPath40(docType)) {
+										token.error = ErrorType.MapConstructorRequiresXPath40;
+										problemTokens.push(token);
+									}
 								}
 								const stackItem: XPathData = { token: token, variables: inScopeXPathVariablesList, preXPathVariable: preXPathVariable, xpathVariableCurrentlyBeingDefined: xpathVariableCurrentlyBeingDefined, curlyBraceType };
 								if (curlyBraceType === CurlyBraceType.Map) {
 									stackItem.awaitingMapKey = true;
 								}
 								if (setContextItemProp) {
+									stackItem.hasContextItem = true;
+								}
+								if (isBareMap) {
+									stackItem.isBareMap = true;
+								}
+								if (prevToken?.tokenType === TokenLevelState.anonymousFunction) {
+									// XPath 4.0 focus function, e.g. fn { @code }
 									stackItem.hasContextItem = true;
 								}
 								xpathStack.push(stackItem);
@@ -1786,7 +2456,15 @@ export class XsltTokenDiagnostics {
 										const isIfExpr = ctx.tokenType === TokenLevelState.complexExpression && ctx.value === 'if';
 										if (isIfExpr) {
 											const tokenAfterIf = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index);
-											if (tokenAfterIf && tokenAfterIf.value !== 'then') {
+											const isBracedAction = !!tokenAfterIf && (tokenAfterIf.charType === CharLevelState.lBr || (tokenAfterIf.charType === CharLevelState.dSep && tokenAfterIf.value === '{}'));
+											if (isBracedAction) {
+												// XPath 4.0 braced action: if ($condition) { ... } has no 'then' or 'else'
+												ifThenStack.pop();
+												if (!XsltTokenDiagnostics.isXPath40(docType)) {
+													tokenAfterIf['error'] = ErrorType.BracedIfRequiresXPath40;
+													problemTokens.push(tokenAfterIf);
+												}
+											} else if (tokenAfterIf && tokenAfterIf.value !== 'then') {
 												tokenAfterIf['error'] = ErrorType.XPathIfAwaitingThen;
 												problemTokens.push(tokenAfterIf);
 											}
@@ -1820,24 +2498,8 @@ export class XsltTokenDiagnostics {
 											if (index === allTokens.length - 1) {
 												hasProblem = true;
 											} else {
-												const nextToken = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index)?.value;
-												hasProblem = !(nextToken === '{' || nextToken === '{}');
-												if (hasProblem && nextToken === 'as') {
-													// crude test to get '{' in next 20 tokens
-													// allows for fairly complex types like map{map(xs:string, xs:string)}
-													// without texting the type properly
-													for (let i = 1; i < 20; i++) {
-														const s = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index + i)?.value;
-                                                        if (s) {
-															hasProblem = !(s === '{' || s === '{}');
-															if (!hasProblem) {
-																break;
-															}
-														} else {
-															break;
-														}
-													}
-												}
+												let foundDeclaration = XsltTokenDiagnostics.findFunctionDeclaration(allTokens, index);
+												hasProblem = !foundDeclaration;
 											}
 											if (hasProblem) {
 												const t = poppedData.token.context!;
@@ -1879,7 +2541,7 @@ export class XsltTokenDiagnostics {
 												}
 											}
 											if (!(regexSpecial || withinTypeDeclarationAttr)) {
-												let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
+												let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
 												if (!isValid) {
 													poppedData.function['error'] = fErrorType;
 													poppedData.function['value'] = qFunctionName;
@@ -1943,20 +2605,20 @@ export class XsltTokenDiagnostics {
 								break;
 							case CharLevelState.dSep:
 								const isEmptyBracketsToken = token.value === '()';
-								if (withinTypeDeclarationAttr && isEmptyBracketsToken && (prevToken?.value === 'function' || prevToken?.tokenType === TokenLevelState.simpleType)) {
+								if (withinTypeDeclarationAttr && isEmptyBracketsToken && (prevToken?.value === 'function' || prevToken?.tokenType === TokenLevelState.simpleType) && prevToken?.value !== 'record') {
 									prevToken['error'] = ErrorType.XPathTypeEmptyArity;
 									problemTokens.push(prevToken);
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity ? 1 : 0;
 									incrementFunctionArity = false;
-									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
+									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
 									if (!isValid) {
 										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
 										problemTokens.push(prevToken);
 									} else if (fnArity === 0) {
 										const isCurrentFunction = prevToken.value === 'current';
-										if (!isGroupingAttribute && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction)) {
+										if (!isGroupingAttribute && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, isCurrentFunction, rootOperandContext)) {
 											if (FunctionData.contextFunctions.indexOf(prevToken.value) > -1) {
 												const prevToken2 = allTokens[index - 2];
 												if (isCurrentFunction) {
@@ -1997,8 +2659,8 @@ export class XsltTokenDiagnostics {
 									token.error = ErrorType.XPathConditionExpected;
 									problemTokens.push(token);
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.anonymousFunction) {
-									const nexttoken = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index);
-									if (nexttoken && nexttoken.value.charAt(0) !== '{') {
+									let foundDeclaration = XsltTokenDiagnostics.findFunctionDeclaration(allTokens, index);
+									if (!foundDeclaration) {
 										prevToken.error = ErrorType.AnonymousFunctionSyntax;
 										problemTokens.push(prevToken);
 									}
@@ -2016,22 +2678,46 @@ export class XsltTokenDiagnostics {
 										token.error = ErrorType.XPathUnexpected;
 										problemTokens.push(token);
 									}
-								} else if (token.value === '=>') {
+								} else if (token.value === '=>' || token.value === '=!>') {
 									incrementFunctionArity = true;
 								}
 								break;
 						}
 						break;
 					case TokenLevelState.nodeType:
-						if (token.value === ':*' && prevToken && !prevToken.error) {
+						if ((token.value === 'fn' || token.value === 'jnode') && XsltTokenDiagnostics.checkItemTypeVersion(token, docType, hasItemTypes)) {
+							problemTokens.push(token);
+						} else if (token.value === 'get' && !token.error && !XsltTokenDiagnostics.isXPath40(docType)) {
+							token.error = ErrorType.NodeTestRequiresXPath40;
+							problemTokens.push(token);
+						} else if (token.value === '*' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record') {
+							// Saxon 13 has dropped extensible record types, e.g. record(*) or record(a, *)
+							token.error = ErrorType.ExtensibleRecordType;
+							problemTokens.push(token);
+						}
+						const isChoiceOccurrence = prevToken?.charType === CharLevelState.rB && token.charType === CharLevelState.lName &&
+							(token.value === '?' || token.value === '*' || token.value === '+');
+						if (token.error) {
+							// already reported
+						} else if (isChoiceOccurrence && !withinTypeDeclarationAttr) {
+							// e.g. castable as (xs:date | xs:time)? - only '?' is permitted for 'cast as' and 'castable as'
+							const castOperator = XsltTokenDiagnostics.typeOperatorBeforeParen(allTokens, index - 1);
+							if (token.value !== '?' && (castOperator === 'cast' || castOperator === 'castable')) {
+								token.error = ErrorType.XPathTypeName;
+								problemTokens.push(token);
+							}
+						} else if (token.value === ':*' && prevToken && !prevToken.error) {
 							let pfx = prevToken.tokenType === TokenLevelState.attributeNameTest ? prevToken.value.substring(1) : prevToken.value;
-							if (inheritedPrefixes.indexOf(pfx) === -1 && pfx !== 'xml') {
+							if (xpathPrefixes().indexOf(pfx) === -1 && pfx !== 'xml') {
 								prevToken['error'] = ErrorType.XPathPrefix;
 								problemTokens.push(prevToken);
 							}
-						} else if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
+						} else if (!withinTypeDeclarationAttr) {
+							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+						}
+						if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
-							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction)) {
+							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, rootOperandContext)) {
 								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()' || prevToken.value === 'as'))) {
 									token.error = ErrorType.MissingContextItemGeneral;
 									problemTokens.push(token);
@@ -2042,7 +2728,10 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.attributeNameTest:
 					case TokenLevelState.nodeNameTest:
 					case TokenLevelState.mapNameLookup:
-						if (token.error && token.error !== ErrorType.XPathIfAwaitingThen) {
+						if (isPlaceholder) {
+							token.error = ErrorType.Placeholder;
+							problemTokens.push(token);
+						} else if (token.error && token.error !== ErrorType.XPathIfAwaitingThen) {
 							problemTokens.push(token);
 						} else {
 							let tokenValue;
@@ -2058,7 +2747,7 @@ export class XsltTokenDiagnostics {
 							}
 							if (!skipValidation) skipValidation = xpathTokenType === TokenLevelState.mapNameLookup && xpathCharType === CharLevelState.sep; // for '*' lookup
 							if (!skipValidation) {
-								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, docType, inheritedPrefixes);
+								let validateResult = XsltTokenDiagnostics.validateName(tokenValue, validationType, docType, xpathPrefixes());
 								if (validateResult !== NameValidationError.None) {
 									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XPathName : ErrorType.XPathPrefix;
 									token['value'] = token.value;
@@ -2070,7 +2759,22 @@ export class XsltTokenDiagnostics {
 						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
 						break;
 					case TokenLevelState.functionNameTest:
-						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, inheritedPrefixes, xsltPrefixesToURIs, token, checkedGlobalFnNames);
+						if (token.value.startsWith('#')) {
+							// XPath 4.0 QName literal, e.g. #xml:lang
+							const qNamePrefixEnd = token.value.indexOf(':');
+							const qNamePrefix = qNamePrefixEnd === -1 ? '' : token.value.substring(1, qNamePrefixEnd);
+							if (!XsltTokenDiagnostics.isXPath40(docType)) {
+								token.error = ErrorType.QNameLiteralRequiresXPath40;
+								problemTokens.push(token);
+							} else if (qNamePrefix !== '' && qNamePrefix !== 'xml' && xpathPrefixes().indexOf(qNamePrefix) === -1) {
+								token.error = ErrorType.XPathPrefix;
+								problemTokens.push(token);
+							} else {
+								XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+							}
+							break;
+						}
+						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, token, checkedGlobalFnNames);
 						if (!isValid) {
 							token['error'] = fErrorType;
 							token['value'] = qFunctionName;
@@ -2078,28 +2782,49 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case TokenLevelState.function:
-					case TokenLevelState.number:
 						XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+						break;
+					case TokenLevelState.number:
+						if (!XsltTokenDiagnostics.isXPath40(docType) && XsltTokenDiagnostics.isXPath40Number(token.value)) {
+							token.error = ErrorType.NumberRequiresXPath40;
+							problemTokens.push(token);
+						} else if (XsltTokenDiagnostics.validateNumber(token.value)) {
+							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
+						} else {
+							token.error = ErrorType.XPathNumber;
+							problemTokens.push(token);
+						}
 						break;
 					case TokenLevelState.simpleType:
 						let tValue = token.value;
 						let tParts = tValue.split(':');
 						let isValidType = false;
-						let isNodeName = false;
-						if (withinTypeDeclarationAttr && prevToken?.charType === CharLevelState.lB && index > 2) {
-							const prevToken2 = allTokens[index - 2];
-							isNodeName = prevToken2.tokenType === TokenLevelState.nodeType && (prevToken2.value === 'element' || prevToken2.value === 'attribute');
-						}
+						// in an 'as' attribute, the name test of element(...) or attribute(...) - a name, a wildcard such as my:* or
+						// *:para, or a union of them - or its type annotation, after a comma, e.g. xs:untyped in element(*, xs:untyped)
+						const kindTestPart = withinTypeDeclarationAttr ? XsltTokenDiagnostics.kindTestPart(allTokens, index) : undefined;
+						const isNodeName = kindTestPart === 'name';
 						if (isNodeName) {
 							isValidType = true;
-							let validationError = XsltTokenDiagnostics.validateName(tValue, ValidationType.Name, docType, inheritedPrefixes, undefined);
+							// the prefix of a wildcard, e.g. my:*, must be declared - there's none for *:para, or a local name after Q{...}
+							const wildcardPrefix = /^([\w.-]+):\*$/.exec(tValue);
+							const nameToCheck = /^\*:[\w.-]+$/.test(tValue) ? tValue.substring(2) : wildcardPrefix ? wildcardPrefix[1] + ':x' : tValue;
+							let validationError = XsltTokenDiagnostics.validateName(nameToCheck, ValidationType.Name, docType, xpathPrefixes(), undefined);
 							if (validationError !== NameValidationError.None) {
 								token['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
 								token['value'] = tValue;
 								problemTokens.push(token);
 							}
-						} else if (withinTypeDeclarationAttr && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
-							// e.g. xs:integer* don't check name
+						} else if ((tValue === '*' || tValue === '?' || tValue === '+') && index > 2 && prevToken?.tokenType === TokenLevelState.simpleType &&
+							!(prevToken.value === '*' || prevToken.value === '?' || prevToken.value === '+')) {
+							// occurrence indicator on the type in 'treat as', 'instance of', 'cast as' or 'castable as' - e.g. 5 instance of xs:integer+
+							// only '?' is permitted for the single type in 'cast as' and 'castable as'
+							const typeOperator = allTokens[index - 3].value;
+							isValidType = tValue === '?' || !(typeOperator === 'cast' || typeOperator === 'castable');
+						} else if ((withinTypeDeclarationAttr || XsltTokenDiagnostics.isAnonymousFunctionParams(stackItem)) && (tValue === '*' || tValue === '?' || tValue === '+' || tValue.startsWith('~'))) {
+							// e.g. xs:integer* don't check name - also valid for an anonymous function's inline 'as' type declaration, e.g. function($i as xs:integer*) {...}
+							isValidType = true;
+						} else if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
+							// the local name of an EQName, e.g. Q{http://www.w3.org/2001/XMLSchema}string - not checked
 							isValidType = true;
 						} else if (tParts.length === 1) {
 							let nextToken = allTokens.length > index + 1 ? allTokens[index + 1] : null;
@@ -2107,8 +2832,15 @@ export class XsltTokenDiagnostics {
 							if (nextToken && (nextToken.charType === CharLevelState.lB || (nextToken.charType === CharLevelState.dSep && nextToken.value === '()'))) {
 								isValidType = Data.nodeTypes.indexOf(tParts[0]) > -1;
 								if (!isValidType) {
-									isValidType = Data.nonFunctionTypes.indexOf(tParts[0]) > -1;
+									isValidType = Data.nonFunctionTypes.indexOf(tParts[0]) > -1 || tParts[0] === 'fn';
 								}
+								if (isValidType && XsltTokenDiagnostics.checkItemTypeVersion(token, docType, hasItemTypes)) {
+									problemTokens.push(token);
+									isTypeError = true;
+								}
+							} else {
+								// XPath 4.0 named item type, declared with xsl:item-type
+								isValidType = (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes) && globalItemTypeNames.includes(tValue);
 							}
 						} else if (tParts.length === 2) {
 							let nsType = xsltPrefixesToURIs.get(tParts[0]);
@@ -2117,16 +2849,25 @@ export class XsltTokenDiagnostics {
 									const part2 = tParts[1];
 									if (part2 === 'numeric' || part2 === 'anyAtomicType') {
 										isValidType = true;
+									} else if (kindTestPart === 'type' && (part2 === 'untyped' || part2 === 'anyType' || part2 === 'anySimpleType')) {
+										// the type annotation of an element or attribute, e.g. element(*, xs:untyped)
+										isValidType = true;
 									} else {
 										isValidType = FunctionData.schema.indexOf(tParts[1] + '#1') > -1;
 									}
 								} 
-							} else if (inheritedPrefixes.indexOf(tParts[0]) !== -1) {
-								// this namespace prefix is declared, assume this is an imported XML Schema type
-								isValidType = true;
+							} else if (xpathPrefixes().indexOf(tParts[0]) !== -1) {
+								// the namespace prefix is declared: in XSLT 4.0 the type must be declared with xsl:item-type,
+								// except for the type annotation in element(*, my:type) - schema-aware processing is not supported
+								const isTypeAnnotation = ['element', 'attribute', 'schema-element', 'schema-attribute'].includes(XsltTokenDiagnostics.enclosingTypeName(xpathStack) ?? '');
+								isValidType = !hasItemTypes || isTypeAnnotation || globalItemTypeNames.includes(tValue);
+								if (!isValidType) {
+									token.error = ErrorType.UndeclaredItemType;
+									problemTokens.push(token);
+								}
 							}
 						}
-						if (!isValidType) {
+						if (!isValidType && !token.error) {
 							token['error'] = ErrorType.XPathTypeName;
 							problemTokens.push(token);
 						}
@@ -2173,9 +2914,18 @@ export class XsltTokenDiagnostics {
 
 					}
 				}
-				if (!token.error && prevToken?.charType === CharLevelState.dSep && prevToken.value === '=>') {
+				if (!token.error && prevToken?.charType === CharLevelState.dSep && (prevToken.value === '=>' || prevToken.value === '=!>')) {
 					let isValid = false;
+					if (xpathTokenType !== TokenLevelState.function) {
+						// the implicit first argument only applies to a static function call, not to a dynamic call
+						incrementFunctionArity = false;
+					}
 					if (xpathCharType === CharLevelState.lB || xpathTokenType === TokenLevelState.function) {
+						isValid = true;
+					} else if (xpathTokenType === TokenLevelState.anonymousFunction || xpathTokenType === TokenLevelState.functionNameTest ||
+						xpathCharType === CharLevelState.lPr || xpathCharType === CharLevelState.lBr ||
+						(xpathTokenType === TokenLevelState.operator && (token.value === 'map' || token.value === 'array'))) {
+						// XPath 4.0 dynamic call on an inline function, named function reference, map or array constructor
 						isValid = true;
 					} else if (xpathTokenType === TokenLevelState.variable) {
 						if (allTokens.length > index + 2) {
@@ -2230,10 +2980,110 @@ export class XsltTokenDiagnostics {
 				}
 			}
 		});
+		XsltTokenDiagnostics.checkAccumulatorsApplicable(globalInstructionData, importedInstructionData, problemTokens);
+		if (hasItemTypes) {
+			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
+		}
 		let variableRefDiagnostics = XsltTokenDiagnostics.getDiagnosticsFromUnusedVariableTokens(document, xsltVariableDeclarations, unresolvedXsltVariableReferences, includeOrImport);
+		if (docType === DocumentTypes.XSLT && !hasItemTypes) {
+			XsltTokenDiagnostics.checkNotesBeforeXSLT40(document, problemTokens);
+		}
+		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
+			XsltTokenDiagnostics.checkSaxonTypeAliases(document, problemTokens);
+		}
+		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
+			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
+			XsltTokenDiagnostics.checkPatternOperators(document, allTokens, problemTokens);
+			XsltTokenDiagnostics.checkDocumentationNotes(document, itemTypeDeclarations, problemTokens);
+			XsltTokenDiagnostics.checkNoteReferences(document, globalInstructionData.concat(importedInstructionData), problemTokens);
+		}
+		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
+		const allXPathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
+		RecordTypes.checkMapConstructorKeys(allXPathTokens, problemTokens);
+		XsltTokenDiagnostics.checkBracedURILiterals(allXPathTokens, problemTokens);
+		if (!XsltTokenDiagnostics.isXPath40(docType)) {
+			XsltTokenDiagnostics.checkKindTestNames(allXPathTokens, problemTokens);
+		}
+		if (documentText.includes('<xsl:map')) {
+			RecordTypes.duplicateMapEntryKeys(documentText, RecordTypes.blankMarkup(documentText)).forEach((duplicate) => {
+				const position = document.positionAt(duplicate.offset);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: duplicate.key.length, value: duplicate.key, tokenType: 0, error: ErrorType.MapEntryKeyDuplicate });
+			});
+		}
+		// record and enumeration types - before XSLT 4.0 too, when item types are available
+		if (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes) {
+			const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
+			if (XsltTokenDiagnostics.isXPath40(docType)) {
+				// XPath 4.0: the value of a typed let binding, e.g. let $p as person := { ... }
+				RecordTypes.checkLetBindings(xpathTokens, (range) => XsltTokenDiagnostics.textForTokenRange(document, xpathTokens, range), itemTypeDeclarations, problemTokens);
+			}
+			// the arguments of calls of user-defined functions, e.g. cx:area({ ... }) or cx:area(shape := { ... })
+			const allGlobals = globalInstructionData.concat(importedInstructionData);
+			RecordTypes.checkFunctionArguments(xpathTokens, {
+				paramType: (name, arity, position, keyword) => XsltTokenDiagnostics.parameterType(allGlobals, GlobalInstructionType.Function, name, arity, position, keyword),
+				variableType: (token) => argumentVariableTypes.get(token),
+				returnType: (name, arity) => allGlobals.find((g) => g.type === GlobalInstructionType.Function && g.name === name && XslLexer.functionArityMatches(g, arity))?.returnType
+			}, itemTypeDeclarations, problemTokens);
+			if (docType !== DocumentTypes.XPath) {
+				// the values of XSLT instructions - an XPath document has none
+				XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
+			}
+			if (XsltTokenDiagnostics.isXPath40(docType)) {
+				// xsl:switch is XSLT 4.0
+				XsltTokenDiagnostics.checkSwitches(document, allTokens, argumentVariableTypes, allGlobals, itemTypeDeclarations, problemTokens);
+			}
+			// duplicate record field names and enumeration values
+			RecordTypes.checkTypeDuplicates(xpathTokens, problemTokens);
+		}
+		// the record field references, for hover and go to definition - the offsets only apply to this document
+		XsltTokenDiagnostics.recordFieldReferences.set(document.uri.toString(), RecordTypes.fieldReferences);
+		RecordTypes.fieldReferences = [];
+		RecordTypes.itemTypeOffsets = new Map<string, number>();
+		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
+		const reportedTokens = new Set(problemTokens);
+		allTokens.forEach((token) => {
+			if ((token.error === ErrorType.XPathLessThanInAttribute || token.error === ErrorType.XPathLessThanTagStart) && !reportedTokens.has(token)) {
+				problemTokens.push(token);
+			}
+		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
+		// the quick fixes for missing record fields
+		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
+		problemTokens.forEach((token) => {
+			if (token.recordFix) {
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.noteVariablesMissing || d.code === DiagnosticCode.noteRequiresXSLT40 || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
+			}
+		});
+		XsltTokenDiagnostics.recordFixes.set(document.uri.toString(), recordFixes);
 		return allDiagnostics;
 	};
+
+	private static findFunctionDeclaration(allTokens: BaseToken[], index: number) {
+		const nextToken = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index)?.value;
+		let foundDeclaration = (nextToken === '{' || nextToken === '{}');
+		if (!foundDeclaration && nextToken === 'as') {
+			// crude test to get '{' in next 20 tokens
+			// allows for fairly complex types like map{map(xs:string, xs:string)}
+			// without texting the type properly
+			for (let i = 1; i < 30; i++) {
+				const b = XsltTokenDiagnostics.nextNonCommentToken(allTokens, index + i);
+				if (!b || b.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber) {
+					break;
+				}
+				const s = b?.value;
+				if (s) {
+					foundDeclaration = (s === '{' || s === '{}');
+					if (foundDeclaration) {
+						break;
+					}
+				} else {
+					break;
+				}
+			}
+		}
+		return foundDeclaration;
+	}
 
 	private static addProblemIfMissingContextSC(insideGlobalFunction: boolean, tagElementName: string, tagAttributeSymbols: vscode.DocumentSymbol[], elementStack: ElementData[], xpathStack: XPathData[], startTagToken: XSLTToken, problemTokens: BaseToken[]) {
 		if (insideGlobalFunction && (tagElementName === 'xsl:copy' || tagElementName === 'xsl:apply-templates')) {
@@ -2270,7 +3120,7 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean, forFunctionNamedCurrent = false) {
+	private static contextItemExists(elementStack: ElementData[], xpathStack: XPathData[], insideGlobalFunction: boolean, forFunctionNamedCurrent = false, rootOperandContext: OperandContext = {}) {
 		if (!insideGlobalFunction) return true;
 
 		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' ||
@@ -2279,12 +3129,316 @@ export class XsltTokenDiagnostics {
 		if (foundForEach) return true;
 		let foundContextBracketsOrPredicate: boolean;
 		if (forFunctionNamedCurrent) {
-			// need to ignore predicates from xpath stack
+			// need to ignore predicates, pipeline and simple map operators from xpath stack
 			foundContextBracketsOrPredicate = !!xpathStack.find((item) => item.token.charType !== CharLevelState.lPr && item.hasContextItem === true);
 		} else {
-			foundContextBracketsOrPredicate = !!xpathStack.find((item) => item.hasContextItem === true);
+			const hasOperandContext = (item: OperandContext) => item.hasPipelineContext === true || item.hasSimpleMapContext === true;
+			foundContextBracketsOrPredicate = hasOperandContext(rootOperandContext) || !!xpathStack.find((item) => item.hasContextItem === true || hasOperandContext(item));
 		}
 		return foundContextBracketsOrPredicate;
+	}
+
+	// xsl:item-type declarations in this document:
+	// - XTSE4030: no two with the same name and import precedence - i.e. in this document, or in a module it includes (a module it imports
+	//   has lower precedence, so a declaration here overrides it). Saxon 13 doesn't report this, and uses the last declaration, so it's a warning
+	// - the name must not be in a reserved namespace, e.g. xs:point (Saxon 13 reports XTSE0080)
+	// - XTSE4035: a named item type must not refer to itself, directly or through other named item types
+	private static checkItemTypeDeclarations(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], itemTypeDeclarations: Map<string, string>,
+		xsltPrefixesToURIs: Map<string, XSLTnamespaces>, documentPath: string, problemTokens: BaseToken[]) {
+		const localItemTypes = globalInstructionData.filter((g) => g.type === GlobalInstructionType.ItemType);
+		const includedPaths = globalInstructionData.filter((g) => g.type === GlobalInstructionType.Include).map((g) => HrefPaths.toPath(g.name, documentPath)).filter((p) => p !== undefined);
+		const includedItemTypeNames = importedInstructionData.filter((g) => g.type === GlobalInstructionType.ItemType && g.href && includedPaths.includes(path.resolve(g.href))).map((g) => g.name);
+		const reservedNamespaces = [XSLTnamespaces.XMLSchema, XSLTnamespaces.XPath, XSLTnamespaces.XSLT, XSLTnamespaces.Map, XSLTnamespaces.Array, XSLTnamespaces.Math];
+		const seenNames: string[] = [];
+		localItemTypes.forEach((itemType) => {
+			const prefix = itemType.name.includes(':') ? itemType.name.substring(0, itemType.name.indexOf(':')) : undefined;
+			const nsType = prefix ? xsltPrefixesToURIs.get(prefix) : undefined;
+			if (nsType !== undefined && reservedNamespaces.includes(nsType)) {
+				problemTokens.push({ ...itemType.token, error: ErrorType.ItemTypeReservedNamespace, value: itemType.name });
+			} else if (XsltTokenDiagnostics.isCircularItemType(itemType.name, itemTypeDeclarations)) {
+				problemTokens.push({ ...itemType.token, error: ErrorType.ItemTypeCircular, value: itemType.name });
+			} else if (seenNames.includes(itemType.name) || includedItemTypeNames.includes(itemType.name)) {
+				problemTokens.push({ ...itemType.token, error: ErrorType.ItemTypeDuplicate, value: itemType.name });
+			}
+			seenNames.push(itemType.name);
+		});
+	}
+
+	// true if the named item type refers to itself, e.g. record(a as t) for t, or through other named item types
+	private static isCircularItemType(name: string, itemTypeDeclarations: Map<string, string>) {
+		const referencedNames = (typeName: string) => {
+			const declaredType = itemTypeDeclarations.get(typeName);
+			if (!declaredType) {
+				return [];
+			}
+			// the item type names in the 'as' attribute - lexed as a type declaration, so record field names aren't included
+			const tokens = new XPathLexer().analyse(declaredType, ExitCondition.None, { line: 0, startCharacter: 0, documentOffset: 0 }, true);
+			return tokens.filter((t) => t.tokenType === TokenLevelState.simpleType && itemTypeDeclarations.has(t.value)).map((t) => t.value);
+		};
+		const visited = new Set<string>();
+		const pending = referencedNames(name);
+		while (pending.length > 0) {
+			const next = pending.pop()!;
+			if (next === name) {
+				return true;
+			}
+			if (!visited.has(next)) {
+				visited.add(next);
+				pending.push(...referencedNames(next));
+			}
+		}
+		return false;
+	}
+
+	// an accumulator is only applicable to the principal source document if it's listed in the initial mode's use-accumulators
+	// (otherwise XTDE3362 is raised at run time), or to an xsl:source-document or xsl:merge-source tree if listed there -
+	// it's applicable to documents loaded with doc() etc. regardless. So a warning, for accumulators declared in this document
+	// that aren't listed in any use-accumulators attribute, here or in an included or imported module
+	private static checkAccumulatorsApplicable(globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[], problemTokens: BaseToken[]) {
+		const usedNames = globalInstructionData.concat(importedInstructionData).filter((g) => g.type === GlobalInstructionType.AccumulatorUse).map((g) => g.name);
+		if (usedNames.includes('#all')) {
+			return;
+		}
+		globalInstructionData.filter((g) => g.type === GlobalInstructionType.Accumulator && !usedNames.includes(g.name)).forEach((accumulator) => {
+			problemTokens.push({ ...accumulator.token, error: ErrorType.AccumulatorNotApplicable, value: accumulator.name });
+		});
+	}
+
+	// an xsl:function with no content - only xsl:param and xsl:note children, whitespace and comments - always returns an
+	// empty sequence: reported whatever its 'as' - when that requires an item, e.g. xs:string, Saxon reports a static
+	// type error (XTTE0780)
+	private static checkFunctionContent(functionContent: { token: BaseToken, name: string, hasContent: boolean }, problemTokens: BaseToken[]) {
+		if (!functionContent.hasContent) {
+			problemTokens.push({ ...functionContent.token, value: functionContent.name, error: ErrorType.FunctionResultEmpty });
+		}
+	}
+
+	private static textForTokenRange(document: vscode.TextDocument, allTokens: BaseToken[], range: [number, number]) {
+		const first = allTokens[range[0]];
+		const last = allTokens[range[1]];
+		return document.getText(new vscode.Range(first.line, first.startCharacter, last.line, last.startCharacter + last.length));
+	}
+
+	// the xsl:variable or xsl:param in scope with the name, not including globals - these are resolved from the global instruction data
+	private static findLocalVariable(name: string, inScopeVariablesList: VariableData[], elementStack: ElementData[], globalVariableData: VariableData[]) {
+		const findIn = (list: VariableData[]) => {
+			for (let i = list.length - 1; i > -1; i--) {
+				if (list[i].name === name) {
+					return list[i];
+				}
+			}
+			return undefined;
+		};
+		let found = findIn(inScopeVariablesList);
+		for (let i = elementStack.length - 1; !found && i > -1; i--) {
+			if (elementStack[i].variables !== globalVariableData) {
+				found = findIn(elementStack[i].variables);
+			}
+		}
+		return found;
+	}
+
+	private static isAnonymousFunctionParams(item: XPathData | undefined): item is XPathData {
+		// within the parameter list of an inline function: function($a, $b) or fn($a, $b) - not a function type, e.g.
+		// function(*) in function($a) as function(*) { ... }
+		const ctx = item?.token.context;
+		return !!ctx && item?.token.charType === CharLevelState.lB && (ctx.value === 'function' || ctx.value === 'fn') && ctx.tokenType === TokenLevelState.anonymousFunction;
+	}
+
+	private static functionNamesWithArity(instruction: GlobalInstructionData) {
+		// e.g. ['f:add#1', 'f:add#2'] for a function with one required and one optional parameter
+		const total = instruction.idNumber;
+		const optionalCount = instruction.memberOptional ? instruction.memberOptional.filter((o) => o).length : 0;
+		const names: string[] = [];
+		for (let arity = total - optionalCount; arity <= total; arity++) {
+			names.push(instruction.name + '#' + arity);
+		}
+		return names;
+	}
+
+	private static addUserFunctionParams(userFunctionParams: Map<string, string[][]>, instruction: GlobalInstructionData) {
+		const paramLists = userFunctionParams.get(instruction.name) ?? [];
+		paramLists.push(instruction.memberNames ?? []);
+		userFunctionParams.set(instruction.name, paramLists);
+	}
+
+	private static checkOptionalParams(instruction: GlobalInstructionData, docType: DocumentTypes, problemTokens: BaseToken[]) {
+		// XSLT 4.0: optional function parameters, xsl:param required="no", must follow any required parameters
+		const optional = instruction.memberOptional ?? [];
+		const tokens = instruction.memberTokens ?? [];
+		const names = instruction.memberNames ?? [];
+		let optionalFound = false;
+		optional.forEach((isOptional, i) => {
+			const paramToken = tokens[i];
+			if (!paramToken) {
+				return;
+			}
+			paramToken.value = names[i] ?? paramToken.value;
+			if (isOptional && docType !== DocumentTypes.XSLT40) {
+				paramToken.error = ErrorType.OptionalParamRequiresXSLT40;
+				problemTokens.push(paramToken);
+			} else if (!isOptional && optionalFound) {
+				paramToken.error = ErrorType.RequiredParamAfterOptional;
+				problemTokens.push(paramToken);
+			}
+			optionalFound = optionalFound || isOptional;
+		});
+	}
+
+	private static builtInParamNamesCache = new Map<typeof XPathFunctionDetails.data, Map<string, string[]>>();
+
+	private static builtInParamNames(docType: DocumentTypes, functionName: string) {
+		// parameter names from the function signatures, e.g. subsequence($input as item()*, $start as xs:numeric, ...)
+		const data = XsltTokenDiagnostics.isXPath40(docType) ? XPathFunctionDetails.dataPlus40 : XPathFunctionDetails.data;
+		let names = XsltTokenDiagnostics.builtInParamNamesCache.get(data);
+		if (!names) {
+			names = new Map();
+			for (const item of data) {
+				const params = XsltTokenDiagnostics.signatureParamNames(item.signature);
+				names.set(item.name, (names.get(item.name) ?? []).concat(params));
+			}
+			XsltTokenDiagnostics.builtInParamNamesCache.set(data, names);
+		}
+		return names.get(functionName);
+	}
+
+	private static signatureParamNames(signature: string) {
+		// the '$name' of each top-level parameter in the signature's parameter list
+		const params: string[] = [];
+		let depth = 0;
+		for (let i = signature.indexOf('('); i > -1 && i < signature.length; i++) {
+			const ch = signature[i];
+			if (ch === '(' || ch === '[' || ch === '{') {
+				depth++;
+			} else if (ch === ')' || ch === ']' || ch === '}') {
+				if (--depth === 0) {
+					break;
+				}
+			} else if (ch === '$' && depth === 1) {
+				const match = /^\$([\w.-]+)/.exec(signature.substring(i));
+				if (match) {
+					params.push(match[1]);
+				}
+			}
+		}
+		return params;
+	}
+
+	private static checkKeywordArgument(token: BaseToken, callItem: XPathData | undefined, docType: DocumentTypes, userFunctionParams: Map<string, string[][]>, xsltPrefixesToURIs: Map<string, XSLTnamespaces>) {
+		if (!XsltTokenDiagnostics.isXPath40(docType)) {
+			token.error = ErrorType.KeywordArgumentRequiresXPath40;
+			return;
+		}
+		const functionToken = callItem?.function;
+		if (!callItem || !functionToken) {
+			return;
+		}
+		const keywordNames = callItem.keywordNames ?? [];
+		if (keywordNames.includes(token.value)) {
+			token.error = ErrorType.KeywordArgumentDuplicate;
+			return;
+		}
+		callItem.keywordNames = keywordNames.concat([token.value]);
+		// the known parameter names for the function, if any
+		let paramNames: string[] | undefined;
+		const userParams = userFunctionParams.get(functionToken.value);
+		if (userParams) {
+			paramNames = userParams.flat();
+		} else {
+			const parts = functionToken.value.split(':');
+			const nsType = parts.length === 2 ? xsltPrefixesToURIs.get(parts[0]) : XSLTnamespaces.XPath;
+			const prefix = nsType === XSLTnamespaces.Map ? 'map:' : nsType === XSLTnamespaces.Array ? 'array:' : nsType === XSLTnamespaces.Math ? 'math:' : nsType === XSLTnamespaces.XPath ? '' : undefined;
+			if (prefix !== undefined) {
+				paramNames = XsltTokenDiagnostics.builtInParamNames(docType, prefix + parts[parts.length - 1]);
+			}
+		}
+		if (paramNames && !paramNames.includes(token.value)) {
+			token.error = ErrorType.KeywordArgumentUnknown;
+			token.value = token.value + '#' + functionToken.value;
+		}
+	}
+
+	// the item type whose parentheses enclose the current token, e.g. 'record' for record(a as xs:string)
+	private static enclosingTypeName(xpathStack: XPathData[]) {
+		const lastStackEntry = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+		if (!lastStackEntry || lastStackEntry.token.charType !== CharLevelState.lB) {
+			return undefined;
+		}
+		return lastStackEntry.function ? lastStackEntry.function.value : lastStackEntry.token.context?.value;
+	}
+
+	private static isOptionalFieldMarker(token: BaseToken, prevToken: BaseToken | null) {
+		// e.g. record(a? as xs:string, 'b c'? as xs:integer)
+		return token.value === '?' && !!prevToken && (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.string);
+	}
+
+	// sets an error on an XPath 4.0 item type used with XPath 3.1, or an obsolete Saxon item type, returning true if set -
+	// record and enumeration types are available before 4.0 when item types are (see ItemTypeSupport)
+	private static checkItemTypeVersion(token: BaseToken, docType: DocumentTypes, hasItemTypes = false) {
+		if (XsltTokenDiagnostics.obsoleteItemTypes.includes(token.value)) {
+			token.error = ErrorType.ObsoleteItemType;
+		} else if (XsltTokenDiagnostics.itemTypes40.includes(token.value) && !XsltTokenDiagnostics.isXPath40(docType) && !(hasItemTypes && (token.value === 'record' || token.value === 'enum'))) {
+			token.error = ErrorType.ItemTypeRequiresXPath40;
+		}
+		return !!token.error;
+	}
+
+	// for the ')' at closeIndex, the operator before its '(', e.g. 'castable' for castable as (xs:date | xs:time)
+	private static typeOperatorBeforeParen(allTokens: BaseToken[], closeIndex: number) {
+		let depth = 0;
+		for (let i = closeIndex; i > -1; i--) {
+			const t = allTokens[i];
+			if (t.charType === CharLevelState.rB) {
+				depth++;
+			} else if (t.charType === CharLevelState.lB && --depth === 0) {
+				return i > 1 && allTokens[i - 1].value === 'as' ? allTokens[i - 2].value : undefined;
+			}
+		}
+		return undefined;
+	}
+
+	// XSLT 4.0 stylesheets and XPath documents (e.g. .xpath files) use XPath 4.0
+	// the configured Saxon jar is Saxon-HE, which has no XSLT 4.0 extensions
+	private static isSaxonHEConfigured() {
+		return SaxonTaskProvider.isSaxonHE(vscode.workspace.getConfiguration('XSLT.tasks').get<string>('saxonJar'));
+	}
+
+	private static isXPath40(docType: DocumentTypes) {
+		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
+	}
+
+	private static isOperandExpected(prevToken: BaseToken | null) {
+		// true if the previous token cannot end an operand - so a '{' here starts a map constructor rather than an enclosed expression
+		// e.g. a function body, as in function($a) as xs:integer* { $a }, or the braced action in if ($a) { 1 }
+		if (!prevToken || prevToken.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber || prevToken.tokenType === TokenLevelState.complexExpression) {
+			return true;
+		}
+		if (prevToken.tokenType !== TokenLevelState.operator) {
+			return false;
+		}
+		switch (prevToken.charType) {
+			case CharLevelState.lB:
+			case CharLevelState.lPr:
+			case CharLevelState.lBr:
+			case CharLevelState.sep:
+				return true;
+			case CharLevelState.dSep:
+				return !(prevToken.value === '()' || prevToken.value === '[]' || prevToken.value === '{}' || prevToken.value === '..');
+			case CharLevelState.lName:
+				// e.g. 'and', 'div', 'to' - but not 'map' or 'array' which have their own braces
+				return !(prevToken.value === 'map' || prevToken.value === 'array');
+			default:
+				return false;
+		}
+	}
+
+	private static isEndOfOperand(token: BaseToken) {
+		// used to distinguish a binary operator from a unary operator or wildcard
+		if (token.tokenType !== TokenLevelState.operator) {
+			return token.tokenType !== TokenLevelState.complexExpression;
+		}
+		return token.charType === CharLevelState.rB || token.charType === CharLevelState.rPr || token.charType === CharLevelState.rBr ||
+			(token.charType === CharLevelState.dSep && (token.value === '()' || token.value === '[]' || token.value === '{}'));
 	}
 
 	private static providesContext(token: BaseToken) {
@@ -2348,7 +3502,7 @@ export class XsltTokenDiagnostics {
 
 	public static getExpectedElementNames(parentName: string, schemaQuery: SchemaQuery | undefined, elementStack: ElementData[]) {
 		let expectedElements: string[] = [];
-		let expectedAttributes: string[] = [];
+		let expectedAttributes: string[] | undefined = [];
 
 		if (schemaQuery?.docType === DocumentTypes.DCP ||
 			(parentName.startsWith('xsl:') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT) ||
@@ -2356,13 +3510,14 @@ export class XsltTokenDiagnostics {
 			const allExpected = schemaQuery.getExpected(parentName);
 			const nameDetailArray = allExpected.elements;
 			expectedElements = nameDetailArray.map(item => item[0]);
-			expectedAttributes = allExpected.attrs;
+			// undefined: attribute names are not checked against the schema
+			expectedAttributes = allExpected.anyAttribute ? undefined : allExpected.attrs;
 		} else if (elementStack.length > 0) {
 			expectedElements = elementStack[elementStack.length - 1].expectedChildElements;
 		} else {
 			expectedElements = [];
 		}
-		return [expectedElements, expectedAttributes];
+		return [expectedElements, expectedAttributes] as [string[], string[] | undefined];
 	}
 
 	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[]) {
@@ -2390,7 +3545,8 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], overridType?: TokenLevelState) {
-		if (token.error) {
+		if (token.error || token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
+			// string template middle/closing parts always follow the '}' of a variable part
 			return;
 		}
 		let tokenType = overridType ? overridType : token.tokenType;
@@ -2398,7 +3554,7 @@ export class XsltTokenDiagnostics {
 		if (tokenType === TokenLevelState.number) {
 			errorSingleSeparators = ['|'];
 		} else if (tokenType === TokenLevelState.string) {
-			errorSingleSeparators = ['|', '+', '-', '*'];
+			errorSingleSeparators = ['|', '+', '-', '*', '×', '÷'];
 		} else {
 			errorSingleSeparators = [];
 		}
@@ -2407,6 +3563,8 @@ export class XsltTokenDiagnostics {
 			errDoubleSeparators = ['{}', '[]', '()'];
 		} else if (tokenType === TokenLevelState.number || tokenType === TokenLevelState.string) {
 			errDoubleSeparators = ['{}', '[]', '()', '*:', '::', '//'];
+		} else if (tokenType === TokenLevelState.nodeType) {
+			errDoubleSeparators = ['{}', '[]', '()', '*:'];
 		} else {
 			errDoubleSeparators = ['{}', '[]', '()', '*:', '::'];
 		}
@@ -2416,10 +3574,17 @@ export class XsltTokenDiagnostics {
 				let isXPathError = false;
 				if (prevToken.tokenType === TokenLevelState.complexExpression || prevToken.tokenType === TokenLevelState.entityRef) {
 					// no error
-				} else if (prevToken.tokenType === TokenLevelState.uriLiteral && tokenType !== TokenLevelState.nodeNameTest) {
-					isXPathError = true;
+				} else if (prevToken.tokenType === TokenLevelState.uriLiteral) {
+					// a name test after a braced URI literal - a local name, or '*' for a wildcard, e.g. Q{urn:x}*
+					isXPathError = tokenType !== TokenLevelState.nodeNameTest && !(token.value === '*' && tokenType === TokenLevelState.nodeType);
+				} else if (prevToken.tokenType === TokenLevelState.nodeType) {
+					if (token.value === '()') {
+						isXPathError = prevToken.value.charAt(0) === '.';
+					} else {
+						isXPathError = true;
+					}
 				} else if (prevToken.tokenType === TokenLevelState.operator) {
-					if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rPr) {
+					if (prevToken.charType === CharLevelState.rB || prevToken.charType === CharLevelState.rPr || prevToken.charType === CharLevelState.rBr) {
 						isXPathError = true;
 					}
 					else if (prevToken.charType === CharLevelState.dSep) {
@@ -2449,6 +3614,24 @@ export class XsltTokenDiagnostics {
 				}
 			}
 		}
+	}
+
+	private static validateNumber(text: string) {
+		if (text.startsWith('0x')) {
+			return /^0x[0-9a-fA-F]+(_+[0-9a-fA-F]+)*$/.test(text);
+		} else if (text.startsWith('0b')) {
+			return /^0b[01]+(_+[01]+)*$/.test(text);
+		} else if (text.includes('_') && /(^|[^0-9_])_|_($|[^0-9_])/.test(text)) {
+			// XPath 4.0 '_' digit separators are only allowed between digits
+			return false;
+		}
+		const number = Number(text.replace(/_/g, ''));
+		return !isNaN(number) && isFinite(number);
+	}
+
+	// XPath 4.0 hexadecimal and binary integer literals, and '_' digit separators
+	private static isXPath40Number(text: string) {
+		return text.startsWith('0x') || text.startsWith('0b') || text.includes('_');
 	}
 
 	private static validateXMLDeclaration(lineNumber: number, token: BaseToken, document: vscode.TextDocument, problemTokens: BaseToken[]) {
@@ -2546,7 +3729,7 @@ export class XsltTokenDiagnostics {
 	}
 
 	public static isValidFunctionName(docType: DocumentTypes, xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number) {
-		const useXPath40 = docType === DocumentTypes.XSLT40;
+		const useXPath40 = XsltTokenDiagnostics.isXPath40(docType);
 		let isParseHTMLFnWarning = false;
 		let tokenValue;
 		if (arity === undefined) {
@@ -2560,8 +3743,14 @@ export class XsltTokenDiagnostics {
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
-		if (fNameParts.length === 1) {
-			if (tokenValue === 'concat' || tokenValue === 'codepoints-to-string') {
+		// a user-defined function in no namespace, e.g. area(2) for name="area" or name="Q{}area" - an XSLT 4.0 extension
+		if (fNameParts.length === 1 && (checkedGlobalFnNames.includes(qFunctionName) || checkedGlobalFnNames.includes('Q{}' + qFunctionName))) {
+			isValid = true;
+		} else if (fNameParts.length === 1) {
+			if (tokenValue.startsWith('~')) {
+				// reported as a type node test, e.g. ~record(a, b)
+				isValid = true;
+			} else if (tokenValue === 'concat') {
 				isValid = arity > 0;
 			} else if (useXPath40) {
 				isValid = FunctionData.xpath40.indexOf(fNameParts[0]) > -1;
@@ -2582,7 +3771,7 @@ export class XsltTokenDiagnostics {
 			} else if (useXPath40) {
 				switch (xsltType) {
 					case XSLTnamespaces.XPath:
-						if (tokenValue.endsWith(':concat') || tokenValue.endsWith(':codepoints-to-string')) {
+						if (tokenValue.endsWith(':concat')) {
 							isValid = arity > 0;
 						} else {
 							isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
@@ -2592,17 +3781,13 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTnamespaces.Array:
-						if (tokenValue.endsWith(':members') || tokenValue.endsWith(':of')) {
-							isValid = arity > 0;
-						} else {
-							isValid = FunctionData.array40.indexOf(fNameParts[1]) > -1;
-						}
+						isValid = FunctionData.array40.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.Map:
 						isValid = FunctionData.map40.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.Math:
-						isValid = FunctionData.math.indexOf(fNameParts[1]) > -1;
+						isValid = FunctionData.math40.indexOf(fNameParts[1]) > -1;
 						break;
 					case XSLTnamespaces.SQL:
 						isValid = FunctionData.sql.indexOf(fNameParts[1]) > -1;
@@ -2628,10 +3813,10 @@ export class XsltTokenDiagnostics {
 			} else {
 				switch (xsltType) {
 					case XSLTnamespaces.XPath:
-						if (tokenValue.endsWith(':concat') || tokenValue.endsWith(':codepoints-to-string')) {
+						if (tokenValue.endsWith(':concat')) {
 							isValid = arity > 0;
 						} else {
-							isValid = FunctionData.xpath40.indexOf(fNameParts[1]) > -1;
+							isValid = FunctionData.xpath.indexOf(fNameParts[1]) > -1;
 						}
 						break;
 					case XSLTnamespaces.Array:
@@ -2671,8 +3856,8 @@ export class XsltTokenDiagnostics {
 			isValid = !isParseHTMLFnWarning;
 		}
 		fErrorType = isParseHTMLFnWarning ? ErrorType.XPathFunctionParseHtml : isValid ? ErrorType.None : fErrorType;
-		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && tokenValue.startsWith('ext:print')) {
-			fErrorType = ErrorType.XPathFunctionExternalPrint;
+		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && tokenValue.startsWith('xdm:debug')) {
+			fErrorType = ErrorType.XPathFunctionXdmDebug;
 		}
 		return { isValid, qFunctionName, fErrorType };
 	}
@@ -2959,7 +4144,7 @@ export class XsltTokenDiagnostics {
 			let isFunctionContextProblem = false;
 			switch (token.error) {
 				case ErrorType.AxisName:
-					msg = `XPath: Invalid axis name: '${tokenValue}`;
+					msg = `XPath: Invalid axis name: '${tokenValue}'`;
 					break;
 				case ErrorType.BracketNesting:
 					let matchingChar: any = XsltTokenDiagnostics.getMatchingSymbol(tokenValue);
@@ -3026,10 +4211,24 @@ export class XsltTokenDiagnostics {
 				case ErrorType.TemplateNameUnresolved:
 					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
 					break;
-				case ErrorType.XSLTFunctionNamePrefix:
+				case ErrorType.XSLTFunctionNamePrefix: {
 					errCode = DiagnosticCode.unresolvedGenericRef;
-					msg = `XSLT: missing namespace prefox in xsl:function name '${tokenValue}'`;
+					const [functionName, reason] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = reason === 'Saxon-HE' ?
+						`XSLT: missing namespace prefix in xsl:function name '${functionName}' - a function name without a prefix is an XSLT 4.0 extension, not available in Saxon-HE (XTSE0740)` :
+						`XSLT: missing namespace prefix in xsl:function name '${functionName}' - a function name without a prefix requires XSLT 4.0 (XTSE0740)`;
 					break;
+				}
+				case ErrorType.FunctionResultEmpty:
+					msg = `XSLT: The function '${tokenValue}' has no content, so it always returns an empty sequence - if its 'as' type doesn't allow an empty sequence, this is a type error (XTTE0780)`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.XSLTFunctionNameShadowsBuiltin: {
+					const [shadowedName, shadowedArity] = tokenValue.split('#');
+					msg = `XSLT: The function '${shadowedName}' replaces the built-in function fn:${shadowedName}#${shadowedArity} - a call of '${shadowedName}' without a prefix, with ${shadowedArity} argument${shadowedArity === '1' ? '' : 's'}, calls this function instead`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
 				case ErrorType.AttributeSetUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:attribute-set with name '${tokenValue}' not found`;
@@ -3041,6 +4240,51 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XSLTKeyUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:key declaration with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.OperatorNotSupported:
+					msg = `XPath: The '${tokenValue}' operator is not supported by Saxon 13 - for a conditional use if (...) then ... else ...`;
+					break;
+				case ErrorType.FixedNamespacesToken: {
+					const [fixedToken, reason] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = reason === 'xmlns' ? `XSLT: The prefix xmlns can't be bound in fixed-namespaces: '${fixedToken}' (XTSE0122)` :
+						reason === 'xml' ? `XSLT: The prefix xml can only be bound to the XML namespace, and no other prefix to it: '${fixedToken}' (XTSE0122)` :
+						`XSLT: The fixed-namespaces token '${fixedToken}' isn't #standard, a prefix declared on this element, a standard prefix or prefix=uri - and as a URI, the XML document it refers to can't be read (XTSE0122)`;
+					break;
+				}
+				case ErrorType.KindTestNameRequiresXPath40: {
+					const [kind, text, reason] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = reason === 'union' ? `XPath: A union of names in ${kind}(...), e.g. ${kind}(a | b), requires XPath 4.0` :
+						`XPath: The wildcard '${text}' in ${kind}(...) requires XPath 4.0 - before it, only a name or '*' is allowed`;
+					break;
+				}
+				case ErrorType.NodeTestRequiresXPath40:
+					msg = `XPath: The '${tokenValue}(...)' node test requires XPath 4.0`;
+					break;
+				case ErrorType.TypeNodeTestNotSupported:
+					msg = `XPath: Type node tests, e.g. ~record(...) or ~xs:string, are not supported by Saxon 13: '${tokenValue}'`;
+					break;
+				case ErrorType.RecordStepNeedsJtree:
+					msg = `XPath: A value with the record type ${tokenValue} must be converted with jtree() before '/', e.g. jtree($value)/field (Saxon 13 reports XPTY0019)`;
+					break;
+				case ErrorType.RecordStepUnknown: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: Child step '${field}' - this is not a field of the record type: ${recordName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.ItemTypeDuplicate:
+					msg = `XSLT: Duplicate xsl:item-type name '${tokenValue}' - not allowed for declarations with the same import precedence (XTSE4030). Saxon 13 uses the last declaration`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.ItemTypeReservedNamespace:
+					msg = `XSLT: The xsl:item-type name '${tokenValue}' is in a reserved namespace`;
+					break;
+				case ErrorType.ItemTypeCircular:
+					msg = `XSLT: The item type '${tokenValue}' refers to itself, directly or through other named item types (XTSE4035)`;
+					break;
+				case ErrorType.AccumulatorNotApplicable:
+					msg = `XSLT: The accumulator '${tokenValue}' is not listed in any use-accumulators attribute, e.g. on xsl:mode, so it only applies to documents loaded with functions such as doc()`;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.AccumulatorNameUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;
@@ -3070,6 +4314,259 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.FunctionAfterArrowOp:
 					msg = `XPath: Expected function after arrow operator`;
+					break;
+				case ErrorType.ItemTypeRequiresXPath40:
+					msg = `XPath: The '${tokenValue}(...)' item type requires XPath 4.0`;
+					break;
+				case ErrorType.ChoiceTypeRequiresXPath40:
+					msg = `XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0`;
+					break;
+				case ErrorType.ObsoleteItemType:
+					msg = tokenValue === 'union' ? `XPath: 'union(...)' is not supported - use a choice item type instead, e.g. (xs:date | xs:time)` :
+						tokenValue === 'type' ? `XPath: 'type(...)' is not supported - use the named item type directly, e.g. my:type instead of type(my:type)` :
+						`XPath: '${tokenValue}(...)' is not supported - use 'record(...)' instead`;
+					break;
+				case ErrorType.InlineFunctionFnRequiresXPath40:
+					msg = `XPath: The 'fn' keyword for inline functions requires XPath 4.0 - use 'function' instead`;
+					break;
+				case ErrorType.FocusFunctionRequiresXPath40:
+					msg = `XPath: Focus functions, e.g. ${tokenValue} { . + 1 }, require XPath 4.0`;
+					break;
+				case ErrorType.KeywordArgumentRequiresXPath40:
+					msg = `XPath: Keyword arguments, e.g. ${tokenValue} := value, require XPath 4.0`;
+					break;
+				case ErrorType.KeywordArgumentUnknown: {
+					const [keyword, fnName] = tokenValue.split('#');
+					msg = `XPath: The function '${fnName}' has no parameter named '${keyword}'`;
+					break;
+				}
+				case ErrorType.KeywordArgumentDuplicate:
+					msg = `XPath: Duplicate keyword argument: '${tokenValue}'`;
+					break;
+				case ErrorType.PositionalArgumentAfterKeyword:
+					msg = `XPath: A positional argument cannot follow a keyword argument`;
+					break;
+				case ErrorType.NamespaceDeclRequiresXPath40:
+					msg = `XPath: Namespace declarations in an XPath expression require XPath 4.0`;
+					break;
+				case ErrorType.NamespaceDeclOrder:
+					msg = `XPath: 'declare default element namespace' must come before any 'declare namespace'`;
+					break;
+				case ErrorType.NamespaceDeclSemicolon:
+					msg = `XPath: Expected ';' after the namespace declaration's URI: ${tokenValue}`;
+					break;
+				case ErrorType.OptionalParamRequiresXSLT40:
+					msg = `XSLT: Optional function parameters, with required="no", require XSLT 4.0: '${tokenValue}'`;
+					break;
+				case ErrorType.RequiredParamAfterOptional:
+					msg = `XSLT: A required function parameter cannot follow an optional parameter: '${tokenValue}'`;
+					break;
+				case ErrorType.RecordFieldMissing: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: Record field '${field}' is missing - it's required by the record type: ${recordName}`;
+					errCode = DiagnosticCode.recordFieldMissing;
+					break;
+				}
+				case ErrorType.RecordFieldUnknown: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: '${field}' is not a field of the record type: ${recordName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.SwitchCaseNotEnumValue: {
+					const [value, typeText] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: '${value}' is not one of the values of the enumeration type ${typeText}, so this xsl:when never matches it`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.SwitchCaseDuplicate:
+					msg = `XPath: '${tokenValue}' is also tested by an earlier xsl:when, so this xsl:when never matches it`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteParamDuplicate:
+					msg = `XSLT: The documentation note already has an @param for '$${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteParamsMissing:
+					msg = `XSLT: The documentation note has no @param for: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Information;
+					errCode = DiagnosticCode.noteParamsMissing;
+					break;
+				case ErrorType.NoteFieldDuplicate:
+					msg = `XSLT: The documentation note already has an @field for '${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteFieldsMissing:
+					msg = `XSLT: The documentation note has no @field for: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Information;
+					errCode = DiagnosticCode.noteFieldsMissing;
+					break;
+				case ErrorType.NoteFieldUnknown: {
+					const [fieldName, typeName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: The documentation note's @field '${fieldName}' is not a field of the record type ${typeName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.NoteTagNotApplicable: {
+					const [tagName, target] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: @${tagName} is not for ${target}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.SaxonTypeAlias:
+					msg = `XSLT: ${tokenValue} is ignored by Saxon 12.8 and later - use xsl:item-type: one quick fix converts the type aliases in all the workspace's files`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.saxonTypeAlias;
+					break;
+				case ErrorType.NoteRequiresXSLT40:
+					msg = 'XSLT: xsl:note is XSLT 4.0 - an XSLT 3.0 processor reports XTSE0010 for it. Use version="4.0", or exclude it with use-when="false()"';
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.noteRequiresXSLT40;
+					break;
+				case ErrorType.NoteVariableUnknown:
+					msg = `XSLT: The module note's @variable '$${tokenValue}' is not a global variable of this module`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteVariableDuplicate:
+					msg = `XSLT: The module note already has an @variable for '$${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteVariablesMissing:
+					msg = `XSLT: The module note has no @variable for: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Information;
+					errCode = DiagnosticCode.noteVariablesMissing;
+					break;
+				case ErrorType.NoteFieldNotApplicable:
+					msg = `XSLT: @field is for the fields of a record type, declared with xsl:item-type - not for ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.NoteParamUnknown: {
+					const [paramName, declarationName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: The documentation note's @param '$${paramName}' is not a parameter of this ${declarationName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.IterateTailPosition:
+					msg = `XSLT: ${tokenValue} must be the last instruction of xsl:iterate - or of an xsl:if, xsl:when, xsl:otherwise, xsl:try or xsl:catch in that position`;
+					break;
+				case ErrorType.IterateParamOrder:
+					msg = `XSLT: xsl:param must come before any other content of xsl:iterate`;
+					break;
+				case ErrorType.IterateOnCompletionOrder:
+					msg = `XSLT: xsl:on-completion must come after any xsl:param and before any other content of xsl:iterate`;
+					break;
+				case ErrorType.SwitchWithoutWhen:
+					msg = `XSLT: xsl:switch must contain at least one xsl:when`;
+					break;
+				case ErrorType.SwitchCasesMissing:
+					msg = `XSLT: xsl:switch has no xsl:when or xsl:otherwise for the enumeration values: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Information;
+					errCode = DiagnosticCode.switchCasesMissing;
+					break;
+				case ErrorType.ArgumentTypeMismatch: {
+					const [argument, argType, paramType, reason] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: The type of '${argument}', ${argType}, doesn't match the parameter type ${paramType} - ${reason}`;
+					break;
+				}
+				case ErrorType.EnumValueUnknown: {
+					const [value, typeText] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: '${value}' is not one of the values of the enumeration type: ${typeText}`;
+					break;
+				}
+				case ErrorType.RecordFieldValueType: {
+					const [field, fieldType] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: The value for record field '${field}' must be of type: ${fieldType}`;
+					break;
+				}
+				case ErrorType.NoteReferenceUnknown: {
+					const [reference, kind] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: The documentation note's @see '${reference}' is not a ${kind} declared in this stylesheet or the modules it includes or imports`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.RecordLookupUnknown: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XPath: Lookup of '${field}' - this is not a field of the record type: ${recordName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				}
+				case ErrorType.UndeclaredItemType:
+					msg = `XPath: The item type '${tokenValue}' is not declared - expected an xsl:item-type declaration with this name`;
+					break;
+				case ErrorType.ExtensibleRecordType:
+					msg = `XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead`;
+					break;
+				case ErrorType.RecordFieldDuplicate:
+					msg = `XPath: Duplicate field name in the record type: '${tokenValue}'`;
+					break;
+				case ErrorType.UriLiteralUnclosed:
+					msg = `XPath: The braced URI literal has no closing '}': ${tokenValue}`;
+					break;
+				case ErrorType.UriLiteralLocalName:
+					msg = `XPath: A local name must follow the braced URI literal, with no space between: ${tokenValue}`;
+					break;
+				case ErrorType.UriLiteralPrefix:
+					msg = `XPath: The local name after a braced URI literal cannot have a prefix: ${tokenValue}`;
+					break;
+				case ErrorType.PatternOperator:
+					msg = `XSLT: '${tokenValue}' is not allowed in a pattern, except within a predicate or function call - for either of two patterns, use '|'`;
+					break;
+				case ErrorType.MapKeyDuplicate:
+					msg = `XPath: Duplicate key in the map constructor: ${tokenValue}`;
+					break;
+				case ErrorType.MapEntryKeyDuplicate:
+					msg = `XSLT: Duplicate key in the xsl:map - an xsl:map-entry has the same key: ${tokenValue}`;
+					break;
+				case ErrorType.EnumValueDuplicate:
+					msg = `XPath: Duplicate value in the enumeration type: '${tokenValue}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.enumValueDuplicate;
+					break;
+				case ErrorType.Placeholder:
+					msg = `XPath: Placeholder '${tokenValue}' - replace it with a value for '${tokenValue.substring(XsltTokenDiagnostics.placeholderPrefix.length)}'`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					break;
+				case ErrorType.XPathLessThanInAttribute:
+					msg = `XML: A '<' character is not allowed in an attribute value - use '&lt;' instead: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathLessThanTagStart:
+					msg = `XPath: Expected '}' to end the text value template before '<' - use '&lt;' for the less-than operator`;
+					break;
+				case ErrorType.EnclosedModeName:
+					msg = `XSLT: An xsl:mode with enclosed xsl:template elements must have a name attribute`;
+					break;
+				case ErrorType.EnclosedTemplateAttribute:
+					msg = `XSLT: A template rule enclosed within xsl:mode must not have a '${tokenValue}' attribute`;
+					break;
+				case ErrorType.EnclosedTemplateMatch:
+					msg = `XSLT: A template rule enclosed within xsl:mode must have a match attribute`;
+					break;
+				case ErrorType.QNameLiteralRequiresXPath40:
+					msg = `XPath: The QName literal '${tokenValue}' requires XPath 4.0`;
+					break;
+				case ErrorType.TypedBindingRequiresXPath40:
+					msg = `XPath: A type declaration with 'as' for a variable binding requires XPath 4.0`;
+					break;
+				case ErrorType.ForKeyValueRequiresXPath40:
+					msg = `XPath: 'for ${tokenValue}' map bindings require XPath 4.0`;
+					break;
+				case ErrorType.NumberRequiresXPath40:
+					msg = `XPath: Hexadecimal and binary numeric literals, and '_' digit separators, require XPath 4.0: '${tokenValue}'`;
+					break;
+				case ErrorType.PositionalVariableRequiresXPath40:
+					msg = `XPath: A positional variable, 'at $var', in a for clause requires XPath 4.0`;
+					break;
+				case ErrorType.OperatorRequiresXPath40:
+					msg = `XPath: The '${tokenValue}' operator requires XPath 4.0`;
+					break;
+				case ErrorType.AxisRequiresXPath40:
+					msg = `XPath: The axis '${tokenValue}' requires XPath 4.0`;
+					break;
+				case ErrorType.MapConstructorRequiresXPath40:
+					msg = `XPath: A map constructor without the 'map' keyword requires XPath 4.0`;
+					break;
+				case ErrorType.BracedIfRequiresXPath40:
+					msg = `XPath: An 'if' expression without 'then' and 'else' requires XPath 4.0`;
 					break;
 				case ErrorType.XPathEmpty:
 					msg = 'XSLT: Expected XPath expression';
@@ -3164,13 +4661,16 @@ export class XsltTokenDiagnostics {
 					severity = vscode.DiagnosticSeverity.Warning;
 					msg = `XPath: The 'parse-html' function requires the 'htmlParserJar' setting when invoked from VS Code`;
 					break;
-				case ErrorType.XPathFunctionExternalPrint:
-					errCode = DiagnosticCode.externalPrintRef;
+				case ErrorType.XPathFunctionXdmDebug:
+					errCode = DiagnosticCode.xdmDebugRef;
 					severity = vscode.DiagnosticSeverity.Warning;
-					msg = `XPath: 'ext:print/println' function not defined - use QuickFix`;
+					msg = `XPath: 'xdm:debug/debug-color' function not defined - use QuickFix`;
 					break;
 				case ErrorType.XPathTypeName:
 					msg = `XPath: Invalid type: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathNumber:
+					msg = `XPath: Invalid numeric literal: '${tokenValue}'`;
 					break;
 				case ErrorType.XPathFunctionNamespace:
 					errCode = DiagnosticCode.unresolvedGenericRef;
@@ -3201,7 +4701,7 @@ export class XsltTokenDiagnostics {
 					msg = `XML: Invalid attribute names on element '${tokenValue}'`;
 					break;
 				case ErrorType.AnonymousFunctionSyntax:
-					msg = `XPath: Expected syntax: 'function($v) {expression}'`;
+					msg = `XPath: Unexpected token '${tokenValue}' - expected syntax: \n'function($v) {expression} or\n'function($v as <TYPE>) as <TYPE> {expression}'`;
 					break;
 				case ErrorType.XMLAttributeXMLNS:
 					msg = `XML: Invalid prefix for attribute on element '${tokenValue}'`;
@@ -3316,17 +4816,690 @@ export class XsltTokenDiagnostics {
 		};
 	}
 
-	public static createImportDiagnostic(data: GlobalInstructionData): vscode.Diagnostic {
+	// the problem is why the href has no file path, from HrefPaths.importProblem() - undefined when the file isn't found
+	public static createImportDiagnostic(data: GlobalInstructionData, problem?: ImportProblem): vscode.Diagnostic {
 		let token = data.token;
 		let line = token.line;
 		let endChar = token.startCharacter + token.length;
-		return {
+		const diagnostic: vscode.Diagnostic = {
 			code: '',
-			message: `Included/imported file '${data.name}' not found`,
+			message: problem ? problem.message : `Included/imported file '${data.name}' not found`,
 			range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
-			severity: vscode.DiagnosticSeverity.Error,
+			severity: problem?.warning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error,
 			source: '',
 		};
+		if (problem?.catalogPath) {
+			// in the Problems panel, a link to the catalog
+			diagnostic.relatedInformation = [new vscode.DiagnosticRelatedInformation(new vscode.Location(vscode.Uri.file(problem.catalogPath), new vscode.Position(0, 0)), 'The XML catalog of the XSLT.resources.catalog setting')];
+		}
+		return diagnostic;
+	}
+
+	// XSLT 4.0 documentation notes - an xsl:note with format="xdoc-md" - of an xsl:function, xsl:template or
+	// xsl:item-type: each @param must name one of its parameters, so an item type's note has none - and each @field one
+	// of the fields of an item type's record type
+	private static checkDocumentationNotes(document: vscode.TextDocument, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const noteOffsets = XdocNotes.noteOffsets(text);
+		if (noteOffsets.length === 0) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const openElements = RecordTypes.openElementsAt(markup, noteOffsets);
+		noteOffsets.forEach((noteOffset, index) => {
+			const ancestors = openElements[index];
+			const declaration = ancestors[ancestors.length - 1];
+			const isRoot = !!declaration && XdocNotes.rootNames.includes(declaration.name) && ancestors.length === 1;
+			const isGlobalVariable = !!declaration && (declaration.name === 'xsl:param' || declaration.name === 'xsl:variable') && ancestors.length === 2 && XdocNotes.rootNames.includes(ancestors[0].name);
+			if (!declaration || !(['xsl:function', 'xsl:template', 'xsl:item-type'].includes(declaration.name) || isRoot || isGlobalVariable)) {
+				return;
+			}
+			// for the module, only its note - the first child of the root element with format="xdoc-md" - not another one
+			if (isRoot && RecordTypes.childElements(text, markup, declaration.offset, 'xsl:note').find((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'format') === XdocNotes.format) !== noteOffset) {
+				return;
+			}
+			const note = XdocNotes.parseNote(text, markup, noteOffset);
+			if (!note) {
+				return;
+			}
+			// the tags for another kind of declaration, e.g. @return for an item type, which has no result
+			const applicable = XdocNotes.tagNamesFor(declaration.name);
+			const target = () => declaration.name === 'xsl:item-type' ? 'an xsl:item-type, which is a type, not a function or template' :
+				isRoot ? `the module note of an ${declaration.name}, as a module isn't a function or template` :
+				isGlobalVariable ? `the note of a global ${declaration.name} - its own documentation is the note's text` :
+				`an ${declaration.name} - it is for a global variable, in the module note`;
+			note.tags.filter((tag) => ['return', 'error', 'variable'].concat(isGlobalVariable ? ['param'] : []).includes(tag.name) && !applicable.includes(tag.name)).forEach((tag) => {
+				const position = document.positionAt(tag.offset);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: tag.name.length + 1, value: tag.name + RecordTypes.valueSeparator + target(), tokenType: 0, error: ErrorType.NoteTagNotApplicable });
+			});
+			const namedTags = (tagName: string) => note.tags.filter((tag) => tag.name === tagName && tag.paramName && tag.paramOffset !== undefined).map((tag) => ({ tag, name: tag.paramName!, offset: tag.paramOffset! }));
+			if (isRoot) {
+				// the global parameters and variables - those with notes of their own needn't be in the module note
+				XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, namedTags('param'), XdocNotes.paramNames(text, markup, declaration.offset), {
+					unknown: (name) => ({ value: name + RecordTypes.valueSeparator + 'module', error: ErrorType.NoteParamUnknown }),
+					duplicate: ErrorType.NoteParamDuplicate, missing: ErrorType.NoteParamsMissing, label: (name) => '$' + name, line: (name) => `@param $${name} description`
+				}, problemTokens, XdocNotes.globalNamesWithoutNotes(text, markup, declaration.offset, 'xsl:param'));
+				const variableNames = RecordTypes.childElements(text, markup, declaration.offset, 'xsl:variable').map((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'name')).filter((name): name is string => !!name);
+				XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, namedTags('variable'), variableNames, {
+					unknown: (name) => ({ value: name, error: ErrorType.NoteVariableUnknown }),
+					duplicate: ErrorType.NoteVariableDuplicate, missing: ErrorType.NoteVariablesMissing, label: (name) => '$' + name, line: (name) => `@variable $${name} description`
+				}, problemTokens, XdocNotes.globalNamesWithoutNotes(text, markup, declaration.offset, 'xsl:variable'));
+			} else if (!isGlobalVariable) {
+				XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, namedTags('param'), XdocNotes.paramNames(text, markup, declaration.offset), {
+					unknown: (name) => ({ value: name + RecordTypes.valueSeparator + declaration.name, error: ErrorType.NoteParamUnknown }),
+					duplicate: ErrorType.NoteParamDuplicate, missing: ErrorType.NoteParamsMissing, label: (name) => '$' + name, line: (name) => `@param $${name} description`
+				}, problemTokens);
+			}
+			const fieldTags = note.tags.filter((tag) => tag.name === 'field' && tag.fieldName !== undefined && tag.fieldOffset !== undefined);
+			if (fieldTags.length === 0) {
+				return;
+			}
+			const typeName = RecordTypes.attributeOfElementAt(text, declaration.offset + 1, 'name') ?? '';
+			const asText = RecordTypes.attributeOfElementAt(text, declaration.offset + 1, 'as') ?? '';
+			const fieldNames = declaration.name === 'xsl:item-type' ? XdocNotes.declarationFieldNames(text, declaration.offset, itemTypes) : undefined;
+			if (!fieldNames) {
+				// not a record type - unless it's one that isn't recognised here, e.g. a choice of record types
+				if (declaration.name !== 'xsl:item-type' || !/\brecord\s*\(/.test(asText)) {
+					const target = declaration.name === 'xsl:item-type' ? `the item type ${typeName}, which is not a record type` : `an ${declaration.name}`;
+					fieldTags.forEach((tag) => {
+						const tagPosition = document.positionAt(tag.offset);
+						problemTokens.push({ line: tagPosition.line, startCharacter: tagPosition.character, length: '@field'.length, value: target, tokenType: 0, error: ErrorType.NoteFieldNotApplicable });
+					});
+				}
+				return;
+			}
+			XsltTokenDiagnostics.checkNoteNames(document, text, noteOffset, fieldTags.map((tag) => ({ tag, name: tag.fieldName!, offset: tag.fieldOffset! })), fieldNames, {
+				unknown: (name) => ({ value: name + RecordTypes.valueSeparator + typeName, error: ErrorType.NoteFieldUnknown }),
+				duplicate: ErrorType.NoteFieldDuplicate, missing: ErrorType.NoteFieldsMissing, label: XdocNotes.fieldLabel, line: (name) => `@field ${XdocNotes.fieldLabel(name)} description`
+			}, problemTokens);
+		});
+	}
+
+	// XSLT 4.0: a reference in a documentation note's @see, e.g. @see my:area#2, must refer to a declaration - not in a
+	// code span, which may be other code, nor for a built-in function or type (see XdocReferences.isReported)
+	private static checkNoteReferences(document: vscode.TextDocument, globals: GlobalInstructionData[], problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const markup = RecordTypes.blankMarkup(text);
+		XdocReferences.find(text, markup).filter((reference) => XdocReferences.isReported(reference, text) && XdocReferences.resolve(reference, globals, text, markup).length === 0).forEach((reference) => {
+			const position = document.positionAt(reference.start);
+			problemTokens.push({ line: position.line, startCharacter: position.character, length: reference.end - reference.start, value: text.substring(reference.start, reference.end) + RecordTypes.valueSeparator + XdocReferences.kindLabel(reference), tokenType: 0, error: ErrorType.NoteReferenceUnknown });
+		});
+	}
+
+	// a saxon:type-alias declaration - Saxon's earlier syntax for named types, ignored by Saxon 12.8 and 13, which only
+	// report its uses, e.g. as="~dfx:bounds" - with a fix that converts the workspace's type aliases to xsl:item-type
+	private static checkSaxonTypeAliases(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		if (!text.includes(':type-alias')) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		SaxonTypeAliases.saxonPrefixes(text).forEach((prefix) => {
+			const elementName = `${prefix}:type-alias`;
+			for (const match of markup.matchAll(new RegExp(`<${elementName.replace(/\./g, '\\.')}[\\s/>]`, 'g'))) {
+				const position = document.positionAt(match.index! + 1);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: elementName.length, value: elementName, tokenType: 0, error: ErrorType.SaxonTypeAlias });
+			}
+		});
+	}
+
+	// before XSLT 4.0, e.g. with version="3.0": an xsl:note - not within another one, as its content is ignored - that
+	// isn't excluded with a use-when attribute, e.g. use-when="false()" - a processor for XSLT 3.0, or Saxon 13 without
+	// XPath 4.0 syntax extensions, reports XTSE0010 for it - with a fix that adds use-when="false()"
+	private static checkNotesBeforeXSLT40(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		if (!text.includes('<xsl:note')) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const noteOffsets = [...markup.matchAll(/<xsl:note[\s/>]/g)].map((match) => match.index!);
+		const openElements = RecordTypes.openElementsAt(markup, noteOffsets);
+		noteOffsets.forEach((noteOffset, index) => {
+			const isExcluded = RecordTypes.attributeOfElementAt(text, noteOffset + 1, 'use-when') !== undefined || RecordTypes.attributeOfElementAt(text, noteOffset + 1, '_use-when') !== undefined;
+			if (isExcluded || openElements[index].some((element) => element.name === 'xsl:note')) {
+				return;
+			}
+			const position = document.positionAt(noteOffset + 1);
+			problemTokens.push({ line: position.line, startCharacter: position.character, length: 'xsl:note'.length, value: '', tokenType: 0, error: ErrorType.NoteRequiresXSLT40,
+				recordFix: { line: position.line, character: position.character + 'xsl:note'.length, text: ' use-when="false()"' } });
+		});
+	}
+
+	// the parameter or field names of a note's @param or @field tags: each must be one of the names, and not a duplicate -
+	// and when there are any, the names without one are reported, with a fix that adds them after the last - of those
+	// that are required, e.g. not a global parameter with a note of its own
+	private static checkNoteNames(document: vscode.TextDocument, text: string, noteOffset: number, named: { tag: XdocTag, name: string, offset: number }[], names: string[],
+		errors: { unknown: (name: string) => { value: string, error: ErrorType }, duplicate: ErrorType, missing: ErrorType, label: (name: string) => string, line: (name: string) => string }, problemTokens: BaseToken[], required = names) {
+		const documented: string[] = [];
+		named.forEach(({ name, offset }) => {
+			const position = document.positionAt(offset);
+			if (!names.includes(name)) {
+				const { value, error } = errors.unknown(name);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: name.length, value, tokenType: 0, error });
+			} else if (documented.includes(name)) {
+				// the first tag for the name is the one used, e.g. for hover
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: name.length, value: name, tokenType: 0, error: errors.duplicate });
+			}
+			documented.push(name);
+		});
+		const missing = required.filter((name) => !documented.includes(name));
+		if (named.length > 0 && missing.length > 0) {
+			const last = named[named.length - 1].tag;
+			const lineStart = text.lastIndexOf('\n', last.offset - 1) + 1;
+			const indent = /^[ \t]*$/.test(text.substring(lineStart, last.offset)) ? text.substring(lineStart, last.offset) : '';
+			const fixPosition = document.positionAt(last.endOffset);
+			const lines = missing.map((name) => `\n${indent}${errors.line(name)}`).join('');
+			const namePosition = document.positionAt(noteOffset + 1);
+			problemTokens.push({ line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:note'.length, value: missing.map(errors.label).join(', '), tokenType: 0,
+				error: errors.missing, recordFix: { line: fixPosition.line, character: fixPosition.character, text: lines } });
+		}
+	}
+
+	// the children of an xsl:iterate are any xsl:param elements, then an optional xsl:on-completion, then the rest -
+	// Saxon 13 reports XTSE0010 for an xsl:param or xsl:on-completion out of order (comments are ignored, and so are
+	// elements with use-when, as they may be excluded)
+	// for a token within element(...) or attribute(...): 'name' if it's in the name test - a name, a wildcard such as
+	// my:*, *:para or Q{urn:x}*, or a union of them - or 'type' if it's in the type annotation, after the comma, e.g.
+	// xs:untyped in element(*, xs:untyped) - undefined if it's not within one
+	public static kindTestPart(tokens: BaseToken[], index: number): 'name' | 'type' | undefined {
+		let depth = 0;
+		let isAfterComma = false;
+		for (let i = index - 1; i > -1 && i > index - 60; i--) {
+			const t = tokens[i];
+			if (t.charType === CharLevelState.rB || t.charType === CharLevelState.rPr || t.charType === CharLevelState.rBr) {
+				depth++;
+			} else if (t.charType === CharLevelState.lB || t.charType === CharLevelState.lPr || t.charType === CharLevelState.lBr) {
+				if (depth === 0) {
+					const kind = tokens[i - 1];
+					const isKindTest = t.charType === CharLevelState.lB && !!kind && kind.tokenType === TokenLevelState.nodeType && (kind.value === 'element' || kind.value === 'attribute');
+					return isKindTest ? (isAfterComma ? 'type' : 'name') : undefined;
+				}
+				depth--;
+			} else if (depth === 0 && t.value === ',') {
+				isAfterComma = true;
+			}
+		}
+		return undefined;
+	}
+
+	// before XPath 4.0: the name test of element(...) or attribute(...) can only be a name or '*' - a wildcard such as
+	// my:*, *:para or Q{urn:x}*, or a union of names, e.g. element(a | b), requires XPath 4.0 - as in an 'as' attribute,
+	// an expression, e.g. after 'instance of', or a pattern
+	private static checkKindTestNames(xpathTokens: BaseToken[], problemTokens: BaseToken[]) {
+		xpathTokens.forEach((token, index) => {
+			if (token.tokenType !== TokenLevelState.nodeType || (token.value !== 'element' && token.value !== 'attribute') || xpathTokens[index + 1]?.charType !== CharLevelState.lB) {
+				return;
+			}
+			let depth = 0;
+			for (let i = index + 2; i < xpathTokens.length; i++) {
+				const t = xpathTokens[i];
+				if (t.charType === CharLevelState.lB || t.charType === CharLevelState.lPr || t.charType === CharLevelState.lBr) {
+					depth++;
+				} else if (t.charType === CharLevelState.rB || t.charType === CharLevelState.rPr || t.charType === CharLevelState.rBr) {
+					if (depth === 0) {
+						break;
+					}
+					depth--;
+				}
+				if (depth > 0 || t.error) {
+					continue;
+				}
+				if (t.value === ',') {
+					break;
+				}
+				const isWildcard = /^[\w.-]+:\*$|^\*:[\w.-]+$/.test(t.value) || (t.value === '*' && xpathTokens[i - 1]?.tokenType === TokenLevelState.uriLiteral);
+				const isUnion = t.value === '|';
+				if (isWildcard || isUnion) {
+					const text = isWildcard && t.value === '*' ? xpathTokens[i - 1].value + '*' : t.value;
+					problemTokens.push({ ...t, error: ErrorType.KindTestNameRequiresXPath40, value: [token.value, text, isUnion ? 'union' : 'wildcard'].join(RecordTypes.valueSeparator) });
+					break;
+				}
+			}
+		});
+	}
+
+	// the braced URI literal of an EQName, e.g. Q{http://example.com}name: as in Saxon 13, XPST0003 if it's not closed, if
+	// a local name without a prefix doesn't follow it immediately, or if it follows an operand, e.g. 'book Q{urn:x}name'
+	private static checkBracedURILiterals(xpathTokens: BaseToken[], problemTokens: BaseToken[]) {
+		xpathTokens.forEach((token, index) => {
+			if (token.tokenType !== TokenLevelState.uriLiteral || token.error) {
+				return;
+			}
+			const next = xpathTokens[index + 1];
+			const previous = xpathTokens[index - 1];
+			// a local name - or '*', for a wildcard, e.g. Q{urn:x}*
+			const isAdjacentName = !!next && next.line === token.line && next.startCharacter === token.startCharacter + token.length &&
+				(/^[A-Za-z_\u00C0-\uFFFF]/.test(next.value) || next.value === '*');
+			const previousIsOperand = !!previous && !previous.error && (previous.tokenType === TokenLevelState.number || previous.tokenType === TokenLevelState.string ||
+				previous.tokenType === TokenLevelState.variable || previous.tokenType === TokenLevelState.nodeNameTest || previous.tokenType === TokenLevelState.attributeNameTest ||
+				previous.charType === CharLevelState.rB || previous.charType === CharLevelState.rPr || previous.charType === CharLevelState.rBr);
+			if (!token.value.endsWith('}')) {
+				problemTokens.push({ ...token, error: ErrorType.UriLiteralUnclosed });
+			} else if (!isAdjacentName) {
+				problemTokens.push({ ...token, error: ErrorType.UriLiteralLocalName });
+			} else if (/^[^:(]*:/.test(next.value) && !next.error) {
+				problemTokens.push({ ...next, error: ErrorType.UriLiteralPrefix });
+			} else if (previousIsOperand) {
+				problemTokens.push({ ...token, error: ErrorType.XPathUnexpected });
+			}
+		});
+	}
+
+	// the attributes whose values are patterns, for each XSLT element
+	private static readonly patternAttributes = new Map<string, string[]>([
+		['xsl:template', ['match']], ['xsl:key', ['match']], ['xsl:accumulator-rule', ['match']],
+		['xsl:number', ['count', 'from']], ['xsl:for-each-group', ['group-starting-with', 'group-ending-with']]
+	]);
+
+	// the operators - other than ',' - that are only allowed in a pattern within a predicate etc.: the lexer distinguishes
+	// them from element names with the same name, e.g. match="and/eq"
+	private static readonly patternOperators = ['or', 'and', 'eq'];
+
+	// a pattern is a union of paths, so 'or', 'and', 'eq' and ',' are only allowed within a predicate, the arguments of a
+	// function call or the parentheses of a type, e.g. ~record(a, b) - not at the top level or within other parentheses -
+	// as in Saxon 13, XTSE0340 - a common mistake is match="a or b", or match="a, b", for match="a | b"
+	private static checkPatternOperators(document: vscode.TextDocument, allTokens: BaseToken[], problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const markup = RecordTypes.blankMarkup(text);
+		const ranges: [number, number][] = [];
+		for (const match of markup.matchAll(/<(xsl:template|xsl:key|xsl:accumulator-rule|xsl:number|xsl:for-each-group)[\s>\/]/g)) {
+			XsltTokenDiagnostics.patternAttributes.get(match[1])!.forEach((attributeName) => {
+				const start = RecordTypes.attributeValueOffset(text, match.index! + 1, attributeName);
+				if (start !== undefined) {
+					ranges.push([start, text.indexOf(text.charAt(start - 1), start)]);
+				}
+			});
+		}
+		if (ranges.length === 0) {
+			return;
+		}
+		const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && t.tokenType !== TokenLevelState.comment);
+		// the tokens' document offsets, in document order - for a binary search for the first token of each pattern
+		const offsets = xpathTokens.map((t) => document.offsetAt(new vscode.Position(t.line, t.startCharacter)));
+		ranges.forEach(([start, end]) => {
+			// for each open bracket, whether 'or' and ',' are allowed within it
+			const allowed: boolean[] = [];
+			let previous: BaseToken | undefined;
+			let low = 0;
+			let high = offsets.length;
+			while (low < high) {
+				const mid = (low + high) >> 1;
+				if (offsets[mid] < start) {
+					low = mid + 1;
+				} else {
+					high = mid;
+				}
+			}
+			const patternTokens: BaseToken[] = [];
+			for (let i = low; i < offsets.length && offsets[i] < end; i++) {
+				patternTokens.push(xpathTokens[i]);
+			}
+			patternTokens.forEach((t) => {
+				const isOpen = t.charType === CharLevelState.lB || t.charType === CharLevelState.lPr || t.charType === CharLevelState.lBr;
+				const isClose = t.charType === CharLevelState.rB || t.charType === CharLevelState.rPr || t.charType === CharLevelState.rBr;
+				if (isOpen) {
+					const isCallOrType = t.charType !== CharLevelState.lB || (!!previous && (previous.tokenType === TokenLevelState.function ||
+						previous.tokenType === TokenLevelState.nodeType || previous.tokenType === TokenLevelState.simpleType));
+					allowed.push(isCallOrType);
+				} else if (isClose) {
+					allowed.pop();
+				} else if (!t.error && !allowed.includes(true) && ((t.tokenType === TokenLevelState.operator && XsltTokenDiagnostics.patternOperators.includes(t.value)) ||
+					(t.charType === CharLevelState.sep && t.value === ','))) {
+					problemTokens.push({ ...t, error: ErrorType.PatternOperator });
+				}
+				previous = t;
+			});
+		});
+	}
+
+	private static checkIterateOrder(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const iterateStarts = [...text.matchAll(/<xsl:iterate[\s>]/g)].map((match) => match.index!);
+		if (iterateStarts.length === 0) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const nameToken = (offset: number, name: string, error: ErrorType): BaseToken => {
+			const position = document.positionAt(offset + 1);
+			return { line: position.line, startCharacter: position.character, length: name.length, value: name, tokenType: 0, error };
+		};
+		XsltTokenDiagnostics.checkIterateTailPositions(document, text, markup, problemTokens);
+		iterateStarts.forEach((iterateStart) => {
+			const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+			tagRgx.lastIndex = iterateStart;
+			const iterateTag = tagRgx.exec(markup);
+			if (!iterateTag || iterateTag[3]) {
+				return;
+			}
+			// 0: xsl:param elements, 1: after xsl:on-completion, 2: after other content
+			let phase = 0;
+			let depth = 1;
+			let previousEnd = tagRgx.lastIndex;
+			let match: RegExpExecArray | null;
+			while (depth > 0 && (match = tagRgx.exec(markup)) !== null) {
+				if (depth === 1 && markup.substring(previousEnd, match.index).trim() !== '') {
+					// text content
+					phase = 2;
+				}
+				if (match[1]) {
+					depth--;
+				} else {
+					if (depth === 1) {
+						const name = match[2];
+						if (name === 'xsl:param') {
+							if (phase > 0) {
+								problemTokens.push(nameToken(match.index, name, ErrorType.IterateParamOrder));
+							}
+						} else if (name === 'xsl:on-completion') {
+							if (phase > 0) {
+								problemTokens.push(nameToken(match.index, name, ErrorType.IterateOnCompletionOrder));
+							}
+							phase = Math.max(phase, 1);
+						} else if (!/\s(?:xsl:)?use-when\s*=/.test(match[0])) {
+							// an instruction with use-when may be excluded at compile time, so it doesn't affect the order
+							phase = 2;
+						}
+					}
+					if (!match[3]) {
+						depth++;
+					}
+				}
+				previousEnd = tagRgx.lastIndex;
+			}
+		});
+	}
+
+	// xsl:next-iteration and xsl:break must be in a tail position of the xsl:iterate: its last instruction, or the last in an
+	// xsl:if, xsl:when or xsl:otherwise (of xsl:choose or xsl:switch), xsl:try or xsl:catch that is in a tail position -
+	// Saxon 13 reports XTSE3120 - comments, and xsl:fallback after the instruction, are ignored
+	private static checkIterateTailPositions(document: vscode.TextDocument, text: string, markup: string, problemTokens: BaseToken[]) {
+		const candidates = [...markup.matchAll(/<(xsl:next-iteration|xsl:break)[\s/>]/g)].map((match) => ({ offset: match.index!, name: match[1] }));
+		if (candidates.length === 0) {
+			return;
+		}
+		// true if only whitespace, xsl:fallback (or xsl:catch, for the content of xsl:try) follows the element in its parent
+		const isLast = (elementOffset: number, parentOffset: number, allowCatch: boolean) => {
+			const parentEnd = RecordExtraction.elementEnd(markup, parentOffset);
+			const endTagStart = markup.lastIndexOf('<', parentEnd - 1);
+			const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+			let position = RecordExtraction.elementEnd(markup, elementOffset);
+			while (position > -1 && position < endTagStart) {
+				tagRgx.lastIndex = position;
+				const next = tagRgx.exec(markup);
+				const nextStart = next && next.index < endTagStart ? next.index : endTagStart;
+				if (markup.substring(position, nextStart).trim() !== '') {
+					return false;
+				} else if (nextStart === endTagStart) {
+					return true;
+				} else if (next![1] || !(next![2] === 'xsl:fallback' || (allowCatch && next![2] === 'xsl:catch'))) {
+					return false;
+				}
+				position = RecordExtraction.elementEnd(markup, next!.index);
+			}
+			return true;
+		};
+		const openElements = RecordTypes.openElementsAt(markup, candidates.map((c) => c.offset));
+		candidates.forEach((candidate, index) => {
+			const ancestors = openElements[index];
+			if (!ancestors.some((a) => a.name === 'xsl:iterate')) {
+				return;
+			}
+			let current = candidate.offset;
+			let i = ancestors.length - 1;
+			let inTailPosition = false;
+			while (i > -1) {
+				const parent = ancestors[i];
+				if (!isLast(current, parent.offset, parent.name === 'xsl:try')) {
+					break;
+				} else if (parent.name === 'xsl:iterate') {
+					inTailPosition = true;
+					break;
+				} else if (parent.name === 'xsl:if' || parent.name === 'xsl:try') {
+					current = parent.offset;
+					i--;
+				} else if ((parent.name === 'xsl:when' || parent.name === 'xsl:otherwise' || parent.name === 'xsl:catch') && i > 0) {
+					// a branch of an xsl:choose, xsl:switch or xsl:try: that must be in a tail position
+					current = ancestors[i - 1].offset;
+					i -= 2;
+				} else {
+					break;
+				}
+			}
+			if (!inTailPosition) {
+				const position = document.positionAt(candidate.offset + 1);
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: candidate.name.length, value: candidate.name, tokenType: 0, error: ErrorType.IterateTailPosition });
+			}
+		});
+	}
+
+	// XSLT 4.0: for each xsl:switch whose select has an enumeration type, the declared type, by the offset of its start tag
+	public static readonly switchTypes = new Map<string, Map<number, string>>();
+
+	// XSLT 4.0: checks each xsl:switch whose select has an enumeration type - a variable, function call or record field
+	// lookup with a declared type: an xsl:when test with a string literal that isn't one of the values, or that's also
+	// in an earlier xsl:when, never matches - and without an xsl:otherwise, the values that no xsl:when tests are reported
+	private static checkSwitches(document: vscode.TextDocument, allTokens: BaseToken[], variableTypes: Map<BaseToken, string>, globals: GlobalInstructionData[], itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const switchTypes = new Map<number, string>();
+		XsltTokenDiagnostics.switchTypes.set(document.uri.toString(), switchTypes);
+		const switchStarts = [...text.matchAll(/<xsl:switch[\s>]/g)].map((match) => match.index!);
+		if (switchStarts.length === 0) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const tokenOffset = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter));
+		// the XPath tokens of the attribute value starting at the offset
+		const valueTokens = (valueStart: number) => {
+			const first = allTokens.findIndex((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && tokenOffset(t) >= valueStart);
+			const tokens: BaseToken[] = [];
+			for (let i = first; i > -1 && i < allTokens.length && allTokens[i].tokenType < XsltTokenDiagnostics.xsltStartTokenNumber; i++) {
+				if (allTokens[i].tokenType !== TokenLevelState.comment) {
+					tokens.push(allTokens[i]);
+				}
+			}
+			return first > -1 && text.substring(valueStart, tokenOffset(allTokens[first])).trim() === '' ? tokens : [];
+		};
+		switchStarts.forEach((switchStart) => {
+			if (RecordTypes.childElements(text, markup, switchStart, 'xsl:when').length === 0) {
+				// Saxon 13: XTSE0010
+				const namePosition = document.positionAt(switchStart + 1);
+				problemTokens.push({ line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:switch'.length, value: '', tokenType: 0, error: ErrorType.SwitchWithoutWhen });
+			}
+			const selectStart = RecordTypes.attributeValueOffset(text, switchStart + 1, 'select');
+			const select = selectStart !== undefined ? valueTokens(selectStart) : [];
+			// the declared type of the select: a variable, a user-defined function call or a record field lookup
+			let declaredType: string | undefined;
+			if (select.length === 1 && select[0].tokenType === TokenLevelState.variable) {
+				declaredType = variableTypes.get(select[0]);
+			} else if (select.length > 1 && select[0].tokenType === TokenLevelState.function) {
+				const call = RecordTypes.functionCallAt(select, select.length - 1);
+				declaredType = call && call.name === select[0].value ? globals.find((g) => g.type === GlobalInstructionType.Function && g.name === call.name && XslLexer.functionArityMatches(g, call.arity))?.returnType : undefined;
+			} else if (select.length > 2) {
+				declaredType = RecordTypes.fieldReferences.find((ref) => ref.token === select[select.length - 1])?.field.type;
+			}
+			const enumValues = declaredType ? RecordTypes.resolveEnum(declaredType, itemTypes) : undefined;
+			if (!enumValues) {
+				return;
+			}
+			switchTypes.set(switchStart, declaredType!);
+			const tested: string[] = [];
+			let allLiterals = true;
+			let lastWhen = -1;
+			RecordTypes.childElements(text, markup, switchStart, 'xsl:when').forEach((whenStart) => {
+				lastWhen = whenStart;
+				const testStart = RecordTypes.attributeValueOffset(text, whenStart + 1, 'test');
+				const test = testStart !== undefined ? valueTokens(testStart) : [];
+				// a string literal, or a sequence of them, e.g. 'red', 'green'
+				const literals = test.filter((t, i) => i % 2 === 0);
+				const isLiteralSequence = test.length > 0 && literals.every((t) => t.tokenType === TokenLevelState.string) && test.every((t, i) => i % 2 === 0 || (t.charType === CharLevelState.sep && t.value === ','));
+				if (!isLiteralSequence) {
+					allLiterals = false;
+					return;
+				}
+				literals.forEach((literal) => {
+					const quote = literal.value.charAt(0);
+					const value = literal.value.substring(1, literal.value.length - 1).split(quote + quote).join(quote);
+					if (!enumValues.includes(value)) {
+						problemTokens.push(RecordTypes.problemToken(literal, ErrorType.SwitchCaseNotEnumValue, value, declaredType!.trim()));
+					} else if (tested.includes(value)) {
+						problemTokens.push(RecordTypes.problemToken(literal, ErrorType.SwitchCaseDuplicate, value));
+					} else {
+						tested.push(value);
+					}
+				});
+			});
+			const hasOtherwise = RecordTypes.childElements(text, markup, switchStart, 'xsl:otherwise').length > 0;
+			const missing = enumValues.filter((value) => !tested.includes(value));
+			if (allLiterals && !hasOtherwise && missing.length > 0) {
+				// on the element name, with a quick fix that adds an xsl:when for each value after the last one
+				const namePosition = document.positionAt(switchStart + 1);
+				const token: BaseToken = { line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:switch'.length, value: '', tokenType: 0 };
+				// two forms of fix, with the same edit position: xsl:when elements with a select attribute, or with content
+				let recordFix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } } | undefined;
+				const lineIndent = (offset: number) => {
+					const lineStart = text.lastIndexOf('\n', offset) + 1;
+					return /^[ \t]*$/.test(text.substring(lineStart, offset)) ? text.substring(lineStart, offset) : undefined;
+				};
+				const switchIndent = lineIndent(switchStart) ?? '';
+				// the indentation step: from an xsl:when's line and the xsl:switch's, or the xsl:switch's and its parent's
+				const stepFrom = (inner: string | undefined, outer: string | undefined) => inner !== undefined && outer !== undefined && inner.length > outer.length && inner.startsWith(outer) ? inner.substring(outer.length) : undefined;
+				const ancestors = RecordTypes.openElements(markup, switchStart);
+				const parentIndent = ancestors.length > 0 ? lineIndent(ancestors[ancestors.length - 1].offset) : undefined;
+				const lastWhenIndent = lastWhen > -1 ? lineIndent(lastWhen) : undefined;
+				const step = stepFrom(lastWhenIndent, switchIndent) ?? stepFrom(switchIndent, parentIndent) ?? (switchIndent.includes('\t') ? '\t' : '  ');
+				// the xsl:when elements' indentation, undefined if they're on the same line as the previous one
+				const whenIndent = lastWhen > -1 ? lastWhenIndent : switchIndent + step;
+				const whenFor = (value: string, withSelect: boolean) => {
+					const startTag = `<xsl:when test="'${value.replace(/'/g, '\'\'')}'"`;
+					return withSelect ? `${startTag} select=""/>` : whenIndent !== undefined ? `${startTag}>\n${whenIndent}${step}\n${whenIndent}</xsl:when>` : `${startTag}></xsl:when>`;
+				};
+				const whens = (withSelect: boolean) => missing.map((value) => `${whenIndent !== undefined ? '\n' + whenIndent : ''}${whenFor(value, withSelect)}`).join('');
+				// replaces whitespace up to the end tag, so no empty line is left before it
+				const endTagStart = text.lastIndexOf('<', RecordExtraction.elementEnd(markup, switchStart) - 1);
+				const toEndTag = (from: number, withSelect: boolean) => {
+					const between = text.substring(from, endTagStart);
+					const isWhitespace = endTagStart > from && between.trim() === '';
+					const endTagLine = whenIndent !== undefined || between.includes('\n') ? `\n${switchIndent}` : between;
+					return isWhitespace ? { text: whens(withSelect) + endTagLine, end: document.positionAt(endTagStart) } : { text: whens(withSelect), end: undefined };
+				};
+				if (lastWhen > -1) {
+					// after the last xsl:when
+					const whenEnd = RecordExtraction.elementEnd(markup, lastWhen);
+					const fixPosition = document.positionAt(whenEnd);
+					const withSelect = toEndTag(whenEnd, true);
+					recordFix = { line: fixPosition.line, character: fixPosition.character, text: withSelect.text, altText: toEndTag(whenEnd, false).text, end: withSelect.end };
+				} else {
+					// no xsl:when: after the start tag, indented one step more than the xsl:switch
+					const tagRgx = new RegExp(RecordTypes.tagPattern, 'y');
+					tagRgx.lastIndex = switchStart;
+					const tag = tagRgx.exec(markup)!;
+					const tagEnd = switchStart + tag[0].length;
+					if (tag[3]) {
+						// an empty element, e.g. <xsl:switch select="$c"/>: replace '/>' with the xsl:when elements and an end tag
+						const fixPosition = document.positionAt(tagEnd - 2);
+						const withEndTag = (withSelect: boolean) => `>${whens(withSelect)}\n${switchIndent}</xsl:switch>`;
+						recordFix = { line: fixPosition.line, character: fixPosition.character, text: withEndTag(true), altText: withEndTag(false), replaceLength: 2 };
+					} else {
+						// with the end tag on its own line
+						const fixPosition = document.positionAt(tagEnd);
+						const between = text.substring(tagEnd, endTagStart);
+						const isWhitespace = between.trim() === '';
+						const endTagLine = `\n${switchIndent}`;
+						recordFix = { line: fixPosition.line, character: fixPosition.character, text: whens(true) + endTagLine, altText: whens(false) + endTagLine,
+							end: isWhitespace ? document.positionAt(endTagStart) : undefined };
+					}
+				}
+				problemTokens.push({ ...RecordTypes.problemToken(token, ErrorType.SwitchCasesMissing, missing.map((value) => `'${value}'`).join(', ')), recordFix });
+			}
+		});
+	}
+
+	// XPath 4.0: checks the select of an xsl:sequence or xsl:map-entry, or the content of an xsl:select, when it's a map
+	// constructor or a single string literal, against the declared type of the value - from the containing instruction,
+	// e.g. an xsl:param with an 'as' - an xsl:sequence that is an xsl:function's result is checked separately
+	private static checkInstructionValues(document: vscode.TextDocument, allTokens: BaseToken[], globals: GlobalInstructionData[], itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const candidates: { tokens: BaseToken[], isLiteral: boolean, name: string, tagStart: number }[] = [];
+		let runStart = -1;
+		for (let i = 0; i <= allTokens.length; i++) {
+			const isXPath = i < allTokens.length && allTokens[i].tokenType < XsltTokenDiagnostics.xsltStartTokenNumber;
+			if (isXPath && runStart === -1) {
+				runStart = i;
+			} else if (!isXPath && runStart > -1) {
+				const run = allTokens.slice(runStart, i).filter((t) => t.tokenType !== TokenLevelState.comment);
+				runStart = -1;
+				const isLiteral = run.length === 1 && run[0].tokenType === TokenLevelState.string;
+				if (run.length === 0 || !(isLiteral || RecordTypes.mapConstructorEnd(run, 0) === run.length - 1)) {
+					continue;
+				}
+				const offset = document.offsetAt(new vscode.Position(run[0].line, run[0].startCharacter));
+				const tagStart = text.lastIndexOf('<', offset);
+				const tagText = text.substring(tagStart, offset);
+				const selectElement = /^<(xsl:sequence|xsl:map-entry)\s(?:[^<>]*\s)?select\s*=\s*["']\s*$/.exec(tagText)?.[1] ?? (/^<xsl:select(?:\s[^<>]*)?>\s*$/.test(tagText) ? 'xsl:select' : undefined);
+				// the key of an xsl:map-entry, for a reference to a record field
+				const isMapEntryKey = isLiteral && /^<xsl:map-entry\s(?:[^<>]*\s)?key\s*=\s*["']\s*$/.test(tagText);
+				if (selectElement || isMapEntryKey) {
+					candidates.push({ tokens: run, isLiteral, name: selectElement ?? 'key', tagStart });
+				}
+			}
+		}
+		if (candidates.length === 0) {
+			return;
+		}
+		const templateParamType = (template: string, param: string) => XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Template, template, undefined, -1, param);
+		const openElements = RecordTypes.openElementsAt(RecordTypes.blankMarkup(text), candidates.map((c) => c.tagStart));
+		candidates.forEach((candidate, index) => {
+			if (candidate.name === 'key') {
+				// the record field for an xsl:map-entry key in an xsl:map with a record type
+				const mapAncestors = openElements[index];
+				const mapIndex = mapAncestors.length - 1;
+				const record = mapIndex > -1 && mapAncestors[mapIndex].name === 'xsl:map' ? RecordTypes.xslMapRecord(text, mapAncestors, mapIndex, itemTypes, templateParamType) : undefined;
+				const keyToken = candidate.tokens[0];
+				const field = record?.fields.find((f) => f.name === keyToken.value.substring(1, keyToken.value.length - 1));
+				if (record && field) {
+					RecordTypes.fieldReferences.push({ token: keyToken, field, record });
+				}
+				return;
+			}
+			const ancestors = openElements[index].concat([{ name: candidate.name, offset: candidate.tagStart }]);
+			const ownType = candidate.name === 'xsl:map-entry' ? undefined : RecordTypes.attributeOfElementAt(text, candidate.tagStart + 1, 'as');
+			if (!ownType && candidate.name === 'xsl:sequence' && ancestors[ancestors.length - 2]?.name === 'xsl:function') {
+				return;
+			}
+			if (candidate.name === 'xsl:map-entry') {
+				// the type of the record field for the key - as for an instruction within the xsl:map-entry
+				ancestors.push({ name: 'xsl:sequence', offset: -1 });
+			}
+			const declaredType = ownType ?? RecordTypes.contentType(text, ancestors, ancestors.length - 1, itemTypes, templateParamType);
+			if (declaredType) {
+				RecordTypes.checkValue(candidate.tokens, 0, candidate.isLiteral ? 0 : -1, declaredType, itemTypes, problemTokens, candidate.tokens.length - 1);
+			}
+		});
+	}
+
+	// the declared type of a parameter of a user-defined function (with the arity) or a named template, by keyword or position
+	public static parameterType(globals: GlobalInstructionData[], type: GlobalInstructionType, name: string, arity: number | undefined, position: number, keyword?: string) {
+		const declaration = globals.find((g) => g.type === type && g.name === name && (arity === undefined || type !== GlobalInstructionType.Function || XslLexer.functionArityMatches(g, arity)));
+		const index = keyword !== undefined ? declaration?.memberNames?.indexOf(keyword) ?? -1 : position;
+		return index > -1 ? declaration?.memberTypes?.[index] : undefined;
+	}
+
+	// a placeholder for a value, e.g. __TODO.city - inserted by the completion for a map constructor with a record type
+	public static readonly placeholderPrefix = RecordTypes.placeholderPrefix;
+	// XPath 4.0 record types: the quick fixes for missing fields, for each document - by the diagnostic's position and message
+	public static readonly recordFixes = new Map<string, Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>>();
+
+	// XPath 4.0 record types: the tokens that refer to record fields, for each document
+	public static readonly recordFieldReferences = new Map<string, FieldReference[]>();
+
+	// the record field reference at the position, e.g. on 'r' in $c?r
+	public static recordFieldAt(document: vscode.TextDocument, position: vscode.Position): FieldReference | undefined {
+		return XsltTokenDiagnostics.recordFieldReferences.get(document.uri.toString())?.find((ref) => ref.token.line === position.line &&
+			position.character >= ref.token.startCharacter && position.character <= ref.token.startCharacter + ref.token.length);
+	}
+
+	public static recordFixKey(range: vscode.Range, message: string) {
+		return `${range.start.line}:${range.start.character}:${message}`;
 	}
 
 	private static createUnresolvedVarDiagnostic(document: vscode.TextDocument, token: BaseToken, includeOrImport: boolean): vscode.Diagnostic {

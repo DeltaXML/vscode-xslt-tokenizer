@@ -1,98 +1,176 @@
 [<img src="deltaxigniaLogoSmall.png">](https://www.deltaxml.com/?utm_source=VisualStudio&utm_medium=Dev-Tools&utm_campaign=XSLT-XPATH)
 # XSLT/XPath for Visual Studio Code
 
-The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1. This ReadMe is merely a 'quick start' guide, see the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for more comprehensive help.
+The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1, and for the XSLT 4.0 and XPath 4.0 features implemented in Saxon 13. This ReadMe is merely a 'quick start' guide, see the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for more comprehensive help.
 
 ---
 
 <p align="center">
-  <em>View of XSLT with syntax highlighting, formatting,problem reporting and node-outline:</em>
-  <img alt="XSLT Editor" src="vscode-xslt.png" style="display:block; padding:0; margin:0">
+  <em>XSLT 4.0 with a documentation note, its hover help where the function is called, and the XSLT Imports view:</em>
+  <img alt="XSLT Editor" src="vscode-xslt-notes.png">
 </p>
 
 
 
-# XSLT/XPath Features
+# Features
 
-| Feature  | Details |
-| ------- | ------- |
-| **XSLT 3.0**    | Full language support for [XSLT 3.0](https://www.w3.org/TR/xslt-30/) and [XPath 3.1](https://www.w3.org/TR/xpath-31/)
-| **XSLT 4.0 (proposed)**    | Basic language support for [Saxon 12 Experimental 4.0 extensions](https://www.saxonica.com/html/documentation12/v4extensions/)
-| **XPath 3.1**            | [Companion XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook) tests XPaths against current XML file
-| **SaxonJS 2 Interactive (IXSL)** | Language support for [Saxon interactive extensions](https://www.saxonica.com/saxon-js/documentation/index.html#!ixsl-extension)
-| **Syntax Highlighting**   | Fast and precise - using [Semantic Highlighting](https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide) exclusively
-| **Code Formatting**       | XSLT instruction elements, attributes and multi-line XPath expressions
-| **XSLT/XPath Linter\***   | For XPath Syntax, XSLT Instructions, cross-moodule variable/param references, all XPath symbols
-| **XSLT/XPath Processing** | VS Code Task Support for [Saxon](https://www.saxonica.com/documentation10/index.html) ([Java](https://adoptopenjdk.net/installation.html)) and [Saxon-JS](https://www.saxonica.com/saxon-js/documentation/index.html) ([NodeJS](https://nodejs.org/en/))
-| **Auto-Completion**       | XSLT instructions, XPath functions/axis, XPath variables, XPath symbol names, Node names *(uses last XML opened in VS Code)*
-| **XPath Tester**          | Support for companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension for XML Analysis or XPath Testing
-| **Color Theme Support**   | Tested with most popular color themes ([Semantic Highlighting]() must be enabled in settings) 
-| **Inferred xsl:import**   | Open the 'master' XSLT module first. Now all subsequent XSLT modules opened infer 'missing' imports using the 'master'
-| **Code Folding**          | Either uses indentation or `region` XML processing-instructions
-| **Snippets**              | Set of snippets accessed via auto-completion
-| **Symbol Outline**        | Tree-view of XSLT instructions *- this can be shown in the 'Side Panel' or 'Side Bar'*
-| **Symbol Breadcrumbs**    | Shows location within the code hierarchy
-| **Extract xsl:function**  | Refactors selected XSLT instructions or XPath expression passing fn args as required
-| **Extract xsl:template**  | Refactors selected XSLT instructions passing xsl:params as required
-| **Extract xsl:variable**  | Refactors selected XPath expression as an XSLT variable
-| **Rename Symbol**         | All in-scope usages of the symbol will be renamed - across all imported stylesheet modules 
-| **Goto Symbol**           | Quick access via filterable list of code symbols
-| **Goto Definition**       | For all symbol references like variables, parameters, functions, modes, accumulators etc.
-| **Peek Definition**       | View symbol declarations inline with corresponding references
-| **Goto (Peek) References**  | Inline view of references for variables, functions etc. *(includes references from imported modules)*
-| **Find All References**       | View and navigate between all references for a selected symbol in the References Pane
-| **VS Code Tasks**         | Configurable XSLT tasks for Saxon and Saxon-JS Prcoessors - with user-input options
-| **XSLT/XPath Linter**     | Checks syntax and integrity of symbol references across all imported modules
-| **Follow Links**          | For `xsl:import`, `xsl:include` and `xsl:use-package`
-| **Hover assistance**      | Shows tooltips. Providing signatures and descriptions for all built-in XSLT and XPath functions
-| **Variable watcher**      | Auto-complete for 'print-debugging' with `xsl:message` for local XSLT/XPath variables - output shown in terminal at runtime
-| **Colorised `xsl:message`** | use `ext:print()` function to format and colorise XPath 3.1 types like maps and arrays
-| **Documentation**         | Features are documented in the: [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) 
-|||
+This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highlights](https://deltaxml.github.io/vscode-xslt-xpath/new-release.html).
 
-   \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
+<table>
+<tr>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xslt40.html">XSLT &amp; XPath languages</a></h4>
+    <ul>
+      <li><a href="https://www.w3.org/TR/xslt-30/">XSLT 3.0</a> and XPath 3.1</li>
+      <li><a href="https://qt4cg.org/2026-01-28/xslt-40/Overview.html">XSLT 4.0</a> and XPath 4.0, as in 
+      <a href="https://www.saxonica.com/html/documentation13/changes/v13/xslt40.html">Saxon 13</a></li>
+      <li>SaxonJS interactive extensions (IXSL)</li>
+      <li><code>.xpath</code> files, as XPath 4.0</li>
+      <li>Fast semantic highlighting</li>
+    </ul>
+  </td>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xslt40-records.html">XSLT 4.0</a></h4>
+    <ul>
+      <li>Record and enum types, with type-aware checks</li>
+      <li>Named item types: <code>xsl:item-type</code></li>
+      <li><code>xsl:switch</code>, with missing-case quick fixes</li>
+      <li>Keyword arguments and optional parameters</li>
+      <li>Functions in no namespace</li>
+    </ul>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html#intellisense">Editing</a></h4>
+    <ul>
+      <li>Context-aware auto-completion, incl. node names</li>
+      <li>Signature help and hover help</li>
+      <li>Snippets, incl. new stylesheets for 3.0 and 4.0</li>
+      <li>Formatting of instructions and multi-line XPath</li>
+      <li>Rename symbol, across imported modules</li>
+      <li>Semantic highlighting from a full XPath parser</li>
+    </ul>
+  </td>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html">Code documentation</a></h4>
+    <ul>
+      <li><code>xsl:note</code> with Markdown and xqDoc-style tags</li>
+      <li>Shown in hover and signature help</li>
+      <li><code>@see</code> references, with navigation and rename</li>
+      <li>Checks of <code>@param</code> and <code>@field</code> tags</li>
+      <li>Module notes for stylesheets</li>
+      <li>Highlighting and auto completion for tags or references</li>
+    </ul>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html#checking">Linter</a></h4>
+    <ul>
+      <li>XPath syntax and XSLT instructions</li>
+      <li>Types, records, enums and function arguments</li>
+      <li>Unused XSLT and XPath variables or parameters</li>
+      <li>References across imported modules</li>
+      <li>Saxon errors from runs, in the Problems panel</li>
+      <li>Quick fixes for common problems</li>
+    </ul>
+  </td>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/navigation.html">Navigation</a></h4>
+    <ul>
+      <li>Go to (or peek) definition, and find references</li>
+      <li>Go to the declarations of record fields</li>
+      <li>Outline, breadcrumbs and Go to Symbol</li>
+      <li>Links for <code>xsl:import</code> and <code>xsl:include</code></li>
+      <li>XSLT Imports view, with inferred top-level stylesheets</li>
+      <li>Filterable dropdown listing all symbols and modes</li>
+    </ul>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/refactoring-xslt.html">Refactoring</a></h4>
+    <ul>
+      <li>Context-aware with safe symbol renaming</li>
+      <li>Extract <code>xsl:function</code> or <code>xsl:template</code></li>
+      <li>Extract <code>xsl:variable</code> from an XPath expression</li>
+      <li>Extract a record type from a map</li>
+      <li><strong>Wrap with...</strong> an instruction (<code>⌥⇧W</code> / <code>Alt+Shift+W</code>)</li>
+      <li>Add a documentation note</li>
+    </ul>
+  </td>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/quick-run.html">Running XSLT</a></h4>
+    <ul>
+      <li><strong>Quick Run</strong> (<code>⌘⌥R</code> / <code>Ctrl+Alt+R</code>)</li>
+      <li>Tasks for SaxonJ, SaxonJS and SaxonC</li>
+      <li><code>xsl:param</code> defaults pre-filled by Quick Run</li>
+      <li><code>xsl:param</code> values controlled by tasks</li>
+      <li>XML catalogs for <code>xsl:import</code> URIs</li>
+      <li>File pickers for task inputs</li>
+    </ul>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html">Debugging &amp; tools</a></h4>
+    <ul>
+      <li><code>xsl:message</code> for all in-scope variables</li>
+      <li>Formatted, colored output with <code>xdm:debug()</code></li>
+      <li>Companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension</li>
+      <li>Test XPath against the current XML file</li>
+      <li>The full <a href="https://deltaxml.github.io/vscode-xslt-xpath/">User Guide</a></li>
+    </ul>
+  </td>
+  <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/editing.html">XML editing</a></h4>
+    <ul>
+      <li>Well-formedness and namespace checks</li>
+      <li>Formatting and tree-view outline</li>
+      <li>Auto tag-close, tag rename and self-close</li>
+      <li>Comment command (<code>⌘/</code>)</li>
+      <li>XML snippets</li>
+    </ul>
+  </td>
+</tr>
+</table>
 
-
-
-# General XML Features
-| Feature  | Details |
-| ------- | ------- |
-| **Well-formedness checking** | Checks XML syntax and checks prefixes against in-scope namespace declarations
-| **XML Formatting**       | Indents XML elements, attributes and multi-line attribute-values
-| **XML Tree-view**        | Outline of XML elements and attributes in document
-| **XML Breadcrumbs**      | Shows ancestors of current XML node
-| **Auto Tag-Close**       | Pressing `</` results in the auto-completion for the close tag of the current element
-| **Tag Rename**           | When start-tag is modified, corresponding end-tag is also updated
-| **Tag Self-Close**       | Convert start-tag to self-closed tag by inserting `/` before  `>` (end-tag is removed) 
-| **Comment Command**    | keyboard shortcut: `⌘/` - convert lines to an XML comment
-| **XML Snippets**         | For XML elements, attributes, processing-instrucitons and comments
-|||
+\* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
 
 # XML Commands
-| Command  | Key-Binding | Details |
+
+The XML selection commands are also in the **XML Selection** submenu of the editor's context menu (right-click), and in the **XML: Select Element...** quick pick (`⇧⌘2` / `Ctrl+Shift+2`) - both show their key-bindings.
+
+| Command  | Key-Binding (macOS / Windows, Linux) | Details |
 | ------- | ------- | --------- |
 | XML: Goto XPath |  | Initially shows current XPath at the text prompt  |
-| XML: Select current element | ⇧⌘0 | Includes start/end tags |
-| XML: Select parent element | ⇧⌘9 | Includes start/end tags |
-| XML: Select child element | ⇧⌘8 | Includes start/end tags |
-| XML: Select following element | ⇧⌘7 | Includes start/end tags |
-| XML: Select preceding element | ⇧⌘6 | Includes start/end tags |
+| XML: Select Element... | ⇧⌘2 / Ctrl+Shift+2 | Quick pick of the XML selection commands, and Goto XPath |
+| XML: Select current element | ⇧⌘0 / Ctrl+Shift+0 | Includes start/end tags |
+| XML: Select parent element | ⇧⌘9 / Ctrl+Shift+9 | Includes start/end tags |
+| XML: Select first child element | ⇧⌘8 / Ctrl+Shift+8 | Includes start/end tags |
+| XML: Select following element | ⇧⌘7 / Ctrl+Shift+7 | Includes start/end tags |
+| XML: Select preceding element | ⇧⌘6 / Ctrl+Shift+6 | Includes start/end tags |
 | XSLT: Add XSLT Inputs to Tasks File ||For file-selection prompt when running XSLT|
 | New XPath Notebook | - | DeltaXignia's [XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook) is required
 
  # Introduction
  
-For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. Avoiding the much more common use of regular expressions on a line-by-line basis brings significant benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and full integrity for syntax highlighting.
+For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. Avoiding the much more common use of regular expressions on a line-by-line basis brings significant benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and greater integrity for syntax highlighting.
 
-**Auto-completion** is provided for XSLT and XPath. This includes contex-aware completion items for all code symbol names. XSLT and XPATH function signatures and descriptions are shown in the description alongside function completion items. The last active non-XSLT file is used as the source to compute available node names for XPath location steps.
+**Auto-completion** is provided for XSLT and XPath. This includes context-aware completion items for all code symbol names. XSLT and XPATH function signatures and descriptions are shown in the description alongside function completion items. The last active non-XSLT file is used as the source to compute available node names for XPath location steps.
 
 This extension's linter performs a comprehensive set of checks on the code. The linter ensures that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows checking of references to symbol definitions regardless of the location of the definition.
 
 # Running XSLT
 
-![xslt-tasks](xslt-tasks.png)
+![Quick Run](quick-run.png)
 
-XSLT transforms for SaxonJava and SaxonJS are configured and run as special VSCode Tasks. 
+*(1) XSLT in active editor, (2) the Saxon processor, (3) the XML context file - click the play button to run*
+
+The quickest way to run the stylesheet in the active editor is [Quick Run](https://deltaxml.github.io/vscode-xslt-xpath/quick-run.html) (`⌘⌥R` / `Ctrl+Alt+R`): the first run creates a task for you, which later runs reuse.
+
+XSLT transforms for SaxonJava, SaxonJS and SaxonC are configured and run as special VSCode Tasks. 
 
 XSLT task JSON properties can reference special commands. The special commands allow file-selection via a File Explorer or 'Recent Files' list, an example using: `"xsltFile": "${command:xslt-xpath:pickXsltFile}"`. A sample screenshot is shown below:
 
@@ -116,12 +194,20 @@ For more details on how these settings are managed within VS Code see: [VSCode S
 To use the task-provider for the _Java_ Saxon XSLT Processor, the following setting is required (alter path to suit actual jar location):
 
 ```
-  "XSLT.tasks.saxonJar": "/path/to/folder/SaxonHE10-0J/saxon-he-10.0.jar"
+  "XSLT.tasks.saxonJar": "/path/to/folder/SaxonHE12-9J/saxon-he-12.9.jar"
+```
+
+To use the task-provider for SaxonC, set the path of the folder containing the SaxonC command-line `Transform` executable:
+
+```
+  "XSLT.tasks.saxonCPath": "/path/to/folder/containing/Transform"
 ```
 
 ## XSLT 4.0 Tasks
 
-To use the task-provider with XSLT 4.0, the following setting is needed when the `parse-html()` function is used e.g.:
+XSLT 4.0 requires Saxon-PE or Saxon-EE (or the equivalent SaxonC edition). The task property `allowSyntaxExtensions40` defaults to `"auto"`, which enables XPath 4.0 syntax unless the processor is Saxon-HE.
+
+When the `parse-html()` function is used, the following setting is also needed, e.g.:
 
 ```
   "XSLT.tasks.htmlParserJar": "/path/to/folder/htmlparser-1.4.jar" // or: nu.validator.jar
@@ -186,7 +272,7 @@ You should start with something like the following in the `settings.json` file:
 ```
 
 ## Refactoring
-A range of [code refactoring](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html#refactoring) features are supported, including **Rename Symbol** and **Extract Function**. 
+A range of [code refactoring](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html#refactoring) features are supported, including **Rename Symbol**, **Extract Function** and, for XSLT 4.0, **Extract record type**. 
 
 When XSLT code is refactored, instructions and expressions are revised when necessary to
 ensure the code behaviour remains unchanged. For example, the **Extract Function** refactor revises all expressions requiring the context-item so the code compiles and runs as before.
@@ -249,11 +335,18 @@ The [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) provi
 The main documentation pages are linked below:
 
 - [Overview](https://deltaxml.github.io/vscode-xslt-xpath/index.html)
+- [Release 2.0 Highlights](https://deltaxml.github.io/vscode-xslt-xpath/new-release.html)
 - [Editing XML](https://deltaxml.github.io/vscode-xslt-xpath/editing.html)
 - [Editing XSLT/XPath](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html)
 - [Code Navigation](https://deltaxml.github.io/vscode-xslt-xpath/navigation.html)
+- [Quick Run](https://deltaxml.github.io/vscode-xslt-xpath/quick-run.html)
 - [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html)
+- [Debugging](https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html)
 - [Settings](https://deltaxml.github.io/vscode-xslt-xpath/settings.html)
+- [XSLT 4.0](https://deltaxml.github.io/vscode-xslt-xpath/xslt40.html)
+- [Records and Enums](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-records.html)
+- [Code Documentation](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html)
+- [XML Catalogs](https://deltaxml.github.io/vscode-xslt-xpath/xml-catalogs.html)
 
 ---
 

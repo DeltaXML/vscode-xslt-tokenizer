@@ -8,7 +8,13 @@ import { Data, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { InlineRecordExtractionPlan, RecordExtraction, RecordExtractionPlan } from './recordExtraction';
+import { XdocNotes } from './xdocNote';
+import { ItemTypeSupport } from './itemTypeSupport';
+import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
+import * as path from 'path';
+import { wrapTarget, wrappersFor } from './xsltWrap';
 
 
 enum ElementSelectionType {
@@ -56,9 +62,22 @@ enum XsltCodeActionKind {
 	extractXsltFunctionPartial = 'xsl:function - partial refactor',
 	extractXsltTemplate = 'xsl:template',
 	extractXsltVariable = 'xsl:variable',
-	fixExternalPrintRef = 'include XSLT module for ext:print',
+	fixXdmDebugRef = 'include XSLT module for xdm:debug',
+	copyXdmViewToWorkspace = 'copy xdm-view library into workspace',
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
+	addMissingRecordFields = 'Add missing record fields',
+	addMissingSwitchCasesWithSelect = 'Add missing xsl:when cases with select',
+	addMissingSwitchCasesWithContent = 'Add missing xsl:when cases with content',
+	extractRecordType = 'Extract record type',
+	addDocumentationNote = 'Add documentation note',
+	addMissingNoteParams = 'Add missing @param',
+	addMissingNoteFields = 'Add missing @field',
+	addMissingNoteVariables = 'Add missing @variable',
+	excludeNote = 'Exclude with use-when="false()"',
+	convertSaxonTypeAliases = 'Convert all Saxon type aliases in the workspace to xsl:item-type...',
+	removeDuplicateEnumValue = 'Remove duplicate enum value',
+	wrapWith = 'Wrap with...',
 }
 
 enum ExtractFunctionParams {
@@ -91,26 +110,217 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private static regexForAVT = new RegExp(/([^{}]+)|(\{[^\}]+})/g);
 
 	private actionProps: ActionProps | null = null;
+	// XPath 4.0: the 'Extract record type' refactoring for the selection, and the existing record types it could use instead
+	private recordExtraction: { document: vscode.TextDocument, plan: RecordExtractionPlan, existingTypes: string[] } | null = null;
+	// or for a record type within an 'as' attribute
+	private inlineRecordExtraction: { document: vscode.TextDocument, plan: InlineRecordExtractionPlan } | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
-	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
-		let codeActions: vscode.CodeAction[] | undefined = [];
+	private static useRecordTypeTitle(name: string) {
+		return `Use record type '${name}'`;
+	}
 
-		if (context.triggerKind === vscode.CodeActionTriggerKind.Automatic) {
-			const matchingRanges = context.diagnostics.filter(diagnostic => diagnostic.code === DiagnosticCode.externalPrintRef && diagnostic.range.start.line == range.start.line);
-			if (matchingRanges.length > 0) {
-				const quickFixAction = new vscode.CodeAction(XsltCodeActionKind.fixExternalPrintRef, vscode.CodeActionKind.QuickFix);
-				codeActions = [quickFixAction];
-			}
-		} else if (this.actionProps?.firstSymbol || this.actionProps?.lastSymbol) {
-			codeActions = context.diagnostics
-				.filter(diagnotic => diagnotic.code === DiagnosticCode.parseHtmlRef || diagnotic.code === DiagnosticCode.externalPrintRef)
-				.map(diagnostic => diagnostic.code === DiagnosticCode.parseHtmlRef ?
-					this.createCommandCodeAction(diagnostic) :
-					new vscode.CodeAction(XsltCodeActionKind.fixExternalPrintRef, vscode.CodeActionKind.QuickFix));
+	// the edits for 'Extract record type', adding an xsl:item-type for the record type and setting the declaration's 'as',
+	// then renaming the new type - or for 'Use record type', only setting the 'as'
+	private addRecordTypeEdits(codeAction: vscode.CodeAction) {
+		const { document, plan } = this.recordExtraction!;
+		const isExtract = codeAction.title === XsltCodeActionKind.extractRecordType;
+		const text = document.getText();
+		const existingNames = [...text.matchAll(/<xsl:item-type\s[^>]*name\s*=\s*["']([^"']*)["']/g)].map((match) => match[1]);
+		const typeName = isExtract ? RecordExtraction.newTypeName(existingNames) : this.recordExtraction!.existingTypes.find((name) => codeAction.title === XSLTCodeActions.useRecordTypeTitle(name))!;
+		codeAction.edit = new vscode.WorkspaceEdit();
+		const { asEdit, itemTypeInsert } = plan;
+		const asRange = new vscode.Range(document.positionAt(asEdit.start), document.positionAt(asEdit.end));
+		codeAction.edit.replace(document.uri, asRange, asEdit.isInsert ? ` as="${typeName}"` : typeName + asEdit.occurrence);
+		if (isExtract) {
+			this.addItemTypeEdit(codeAction.edit, document, typeName, plan.recordType, itemTypeInsert);
 		}
+		return codeAction;
+	}
+
+	// the edits for 'Extract record type' for a record type within an 'as' attribute: adding an xsl:item-type for it and
+	// replacing it with the new type's name, then renaming the new type
+	private addInlineRecordTypeEdits(codeAction: vscode.CodeAction) {
+		const { document, plan } = this.inlineRecordExtraction!;
+		codeAction.edit = new vscode.WorkspaceEdit();
+		codeAction.edit.replace(document.uri, new vscode.Range(document.positionAt(plan.start), document.positionAt(plan.end)), plan.typeName);
+		this.addItemTypeEdit(codeAction.edit, document, plan.typeName, plan.recordType, plan.itemTypeInsert);
+		return codeAction;
+	}
+
+	// inserts the xsl:item-type declaration, then renames the new type
+	private addItemTypeEdit(edit: vscode.WorkspaceEdit, document: vscode.TextDocument, typeName: string, recordType: string, itemTypeInsert: { offset: number, indent: string, isAfter: boolean }) {
+		const declaration = `<xsl:item-type name="${typeName}" as="${recordType}"/>`;
+		const insertPosition = document.positionAt(itemTypeInsert.offset);
+		edit.insert(document.uri, insertPosition, itemTypeInsert.isAfter ? `\n${itemTypeInsert.indent}${declaration}` : `${itemTypeInsert.indent}${declaration}\n`);
+		// the new type's name, after the edit - the xsl:item-type is before the type's use
+		const nameLine = insertPosition.line + (itemTypeInsert.isAfter ? 1 : 0);
+		this.executeRenameCommand(nameLine, itemTypeInsert.indent.length + '<xsl:item-type name="'.length, document.uri);
+	}
+
+	// XSLT 4.0: adds an @param to a documentation note for each parameter without one, or an @field for each field - as a
+	// snippet, with a placeholder for each description
+	private static createNoteParamsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string }, title: string) {
+		const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+		action.diagnostics = [diagnostic];
+		action.edit = new vscode.WorkspaceEdit();
+		let tabStop = 1;
+		const snippet = fix.text.replace(/[$}\\]/g, '\\$&').replace(/ description(?=\n|$)/g, () => ` \${${tabStop++}:description}`);
+		const position = new vscode.Position(fix.line, fix.character);
+		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, position), new vscode.SnippetString(snippet));
+		// the lines have the indentation
+		snippetEdit.keepWhitespace = true;
+		action.edit.set(document.uri, [snippetEdit]);
+		return action;
+	}
+
+	// XSLT 4.0: adds an xsl:when for each enumeration value that an xsl:switch doesn't test
+	private static createSwitchCasesAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }, title: string, text: string) {
+		const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+		action.diagnostics = [diagnostic];
+		action.edit = new vscode.WorkspaceEdit();
+		const position = new vscode.Position(fix.line, fix.character);
+		const end = fix.end ? new vscode.Position(fix.end.line, fix.end.character) : position.translate(0, fix.replaceLength ?? 0);
+		// a snippet, for the cursor position after the edit: within the first select, or the first xsl:when's content
+		const snippetText = text.replace(/[$}\\]/g, '\\$&');
+		const withCursor = snippetText.replace(/select=""/, 'select="$0"') !== snippetText ? snippetText.replace(/select=""/, 'select="$0"') :
+			snippetText.replace(/(<xsl:when test="[^"]*">(?:\n[ \t]*)?)/, '$1$$0');
+		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, end), new vscode.SnippetString(withCursor));
+		// the text already has the indentation
+		snippetEdit.keepWhitespace = true;
+		action.edit.set(document.uri, [snippetEdit]);
+		return action;
+	}
+
+	private static createRecordFieldsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }) {
+		const position = new vscode.Position(fix.line, fix.character);
+		// the string literal keys use the quote character that isn't the attribute value's delimiter
+		const textBefore = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
+		const isApostropheAttribute = textBefore.lastIndexOf('=\'') > textBefore.lastIndexOf('="');
+		const text = isApostropheAttribute ? fix.text.replace(/'/g, '"') : fix.text;
+		const action = new vscode.CodeAction(XsltCodeActionKind.addMissingRecordFields, vscode.CodeActionKind.QuickFix);
+		action.diagnostics = [diagnostic];
+		action.edit = new vscode.WorkspaceEdit();
+		action.edit.insert(document.uri, position, text);
+		return action;
+	}
+
+	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
+		let codeActions: vscode.CodeAction[] = [];
+
+		// Diagnostic-driven fixes are decided purely from context.diagnostics, which VS Code
+		// always passes fresh and pre-scoped to `range` - unlike `this.actionProps`, which is
+		// only populated as a side effect further down (via estimateSelectionType) and so lags
+		// one call behind. Gating these on actionProps meant the very first invocation for a
+		// given diagnostic (e.g. the first "Quick Fix..." click from a hover) returned an empty
+		// list, since actionProps hadn't been set yet.
+		context.diagnostics
+			.filter(diagnostic => (diagnostic.code === DiagnosticCode.parseHtmlRef || diagnostic.code === DiagnosticCode.xdmDebugRef)
+				&& diagnostic.range.start.line === range.start.line)
+			.forEach(diagnostic => {
+				if (diagnostic.code === DiagnosticCode.parseHtmlRef) {
+					codeActions.push(this.createCommandCodeAction(diagnostic));
+				} else {
+					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.fixXdmDebugRef, vscode.CodeActionKind.QuickFix));
+					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix));
+				}
+			});
+		// Saxon type aliases: a fix that runs the command to convert them in the workspace
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.saxonTypeAlias).slice(0, 1).forEach((diagnostic) => {
+			const action = new vscode.CodeAction(XsltCodeActionKind.convertSaxonTypeAliases, vscode.CodeActionKind.QuickFix);
+			action.diagnostics = [diagnostic];
+			action.command = { command: 'xslt-xpath.convertSaxonTypeAliases', title: XsltCodeActionKind.convertSaxonTypeAliases };
+			codeActions.push(action);
+		});
+		// XPath 4.0 record types: one fix adds all the missing fields of a map constructor
+		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
+		const addedFixes = new Set<object>();
+		context.diagnostics
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing || diagnostic.code === DiagnosticCode.noteRequiresXSLT40 || diagnostic.code === DiagnosticCode.enumValueDuplicate)
+			.forEach(diagnostic => {
+				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
+				if (fix && !addedFixes.has(fix)) {
+					addedFixes.add(fix);
+					if (diagnostic.code === DiagnosticCode.noteRequiresXSLT40) {
+						// before XSLT 4.0: the note is excluded, so the processor doesn't see it
+						const action = new vscode.CodeAction(XsltCodeActionKind.excludeNote, vscode.CodeActionKind.QuickFix);
+						action.diagnostics = [diagnostic];
+						action.edit = new vscode.WorkspaceEdit();
+						action.edit.insert(document.uri, new vscode.Position(fix.line, fix.character), fix.text);
+						codeActions.push(action);
+					} else if (diagnostic.code === DiagnosticCode.enumValueDuplicate) {
+						const action = new vscode.CodeAction(XsltCodeActionKind.removeDuplicateEnumValue, vscode.CodeActionKind.QuickFix);
+						action.diagnostics = [diagnostic];
+						action.edit = new vscode.WorkspaceEdit();
+						action.edit.delete(document.uri, new vscode.Range(fix.line, fix.character, fix.end!.line, fix.end!.character));
+						codeActions.push(action);
+					} else if (diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing) {
+						codeActions.push(XSLTCodeActions.createNoteParamsAction(document, diagnostic, fix,
+							diagnostic.code === DiagnosticCode.noteParamsMissing ? XsltCodeActionKind.addMissingNoteParams :
+							diagnostic.code === DiagnosticCode.noteFieldsMissing ? XsltCodeActionKind.addMissingNoteFields : XsltCodeActionKind.addMissingNoteVariables));
+					} else if (diagnostic.code === DiagnosticCode.switchCasesMissing) {
+						codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithSelect, fix.text));
+						if (fix.altText !== undefined) {
+							codeActions.push(XSLTCodeActions.createSwitchCasesAction(document, diagnostic, fix, XsltCodeActionKind.addMissingSwitchCasesWithContent, fix.altText));
+						}
+					} else {
+						codeActions.push(XSLTCodeActions.createRecordFieldsAction(document, diagnostic, fix));
+					}
+				}
+			});
 		if (codeActions.length > 0) {
 			codeActions[0].isPreferred = true;
+		}
+
+		// XPath 4.0: 'Extract record type'
+		this.recordExtraction = null;
+		this.inlineRecordExtraction = null;
+		if (ItemTypeSupport.isEnabledForText(document.getText(new vscode.Range(0, 0, 50, 0)))) {
+			// a selected map constructor or xsl:map, or the cursor on the start tag of a declaration whose value is one
+			const text = document.getText();
+			const plan = range.isEmpty ? RecordExtraction.forCursor(text, document.offsetAt(range.start)) :
+				RecordExtraction.forSelection(text, document.offsetAt(range.start), document.offsetAt(range.end));
+			if (plan) {
+				const existingTypes = RecordExtraction.matchingRecordTypes(text, plan.fieldNames);
+				this.recordExtraction = { document, plan, existingTypes };
+				codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractRecordType, vscode.CodeActionKind.RefactorExtract));
+				existingTypes.forEach((name) => codeActions.push(new vscode.CodeAction(XSLTCodeActions.useRecordTypeTitle(name), vscode.CodeActionKind.RefactorRewrite)));
+			} else {
+				// or a record type within an 'as' attribute, e.g. the type of a field
+				const inlinePlan = RecordExtraction.inlineRecordAt(text, document.offsetAt(range.start), document.offsetAt(range.end));
+				if (inlinePlan) {
+					this.inlineRecordExtraction = { document, plan: inlinePlan };
+					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.extractRecordType, vscode.CodeActionKind.RefactorExtract));
+				}
+			}
+		}
+
+		// 'Wrap with...': for selected instructions, or the element whose start tag is at the cursor - the command shows a
+		// quick pick of the instructions that can wrap it, so it's only offered when there are some, e.g. not for the root
+		// element, an xsl:param or a top-level declaration
+		const wrapText = document.getText();
+		const wrap = wrapTarget(wrapText, document.offsetAt(range.start), document.offsetAt(range.end));
+		const isWrapVersion4 = /\sversion\s*=\s*["']4\.0["']/.test(wrapText.substring(0, 3000));
+		if (wrap && wrappersFor(wrapText, wrap, isWrapVersion4).length > 0) {
+			const action = new vscode.CodeAction(XsltCodeActionKind.wrapWith, vscode.CodeActionKind.RefactorRewrite);
+			action.command = { command: 'xslt-xpath.wrapWith', title: XsltCodeActionKind.wrapWith, arguments: [document.uri, document.offsetAt(range.start), document.offsetAt(range.end)] };
+			codeActions.push(action);
+		}
+
+		// XSLT 4.0: a documentation note for the declaration at the cursor - before 4.0, excluded with use-when
+		if (range.isEmpty) {
+			// before XSLT 4.0, the note is excluded with use-when - unless notes are available (see ItemTypeSupport)
+			const note = XdocNotes.noteSnippetAt(document.getText(), document.offsetAt(range.start), !ItemTypeSupport.isEnabledForText(document.getText(new vscode.Range(0, 0, 50, 0))));
+			if (note) {
+				const action = new vscode.CodeAction(XsltCodeActionKind.addDocumentationNote, vscode.CodeActionKind.RefactorRewrite);
+				action.edit = new vscode.WorkspaceEdit();
+				const noteRange = new vscode.Range(document.positionAt(note.insertOffset), document.positionAt(note.insertOffset + note.replaceLength));
+				const snippetEdit = new vscode.SnippetTextEdit(noteRange, new vscode.SnippetString(note.snippet));
+				// the snippet has the indentation
+				snippetEdit.keepWhitespace = true;
+				action.edit.set(document.uri, [snippetEdit]);
+				codeActions.push(action);
+			}
 		}
 
 		let roughSelectionType : RangeTagType = RangeTagType.unknown;
@@ -155,35 +365,55 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	}
 
 	async resolveCodeAction(codeAction: vscode.CodeAction, token: vscode.CancellationToken): Promise<vscode.CodeAction> {
+		if (this.inlineRecordExtraction && codeAction.title === XsltCodeActionKind.extractRecordType) {
+			return this.addInlineRecordTypeEdits(codeAction);
+		}
+		if (this.recordExtraction && (codeAction.title === XsltCodeActionKind.extractRecordType || this.recordExtraction.existingTypes.some((name) => codeAction.title === XSLTCodeActions.useRecordTypeTitle(name)))) {
+			return this.addRecordTypeEdits(codeAction);
+		}
 		if (!this.actionProps) return codeAction;
 
 		const { document, range, firstSymbol, lastSymbol } = this.actionProps;
 		const usedLastSymbol = lastSymbol ? lastSymbol : firstSymbol;
 
-		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol);
+		const ancestorOrSelfSymbols = this.populateAncestorArray(usedLastSymbol, document.uri);
 		const symbolKind = firstSymbol?.kind;
 		const extraDescendants = symbolKind === vscode.SymbolKind.Event || symbolKind === vscode.SymbolKind.Field ? 1 : 0;
 		const ancestorOrSelfCount = ancestorOrSelfSymbols.length;
-		const isPrintRefFix = codeAction.title == XsltCodeActionKind.fixExternalPrintRef;
-		if (!isPrintRefFix && ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
-		const targetSymbolRange = isPrintRefFix ? range : ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
+		const isXdmDebugFix = codeAction.title == XsltCodeActionKind.fixXdmDebugRef || codeAction.title == XsltCodeActionKind.copyXdmViewToWorkspace;
+		if (!isXdmDebugFix && ancestorOrSelfCount < 3 + extraDescendants) return codeAction;
+		const targetSymbolRange = isXdmDebugFix ? range : ancestorOrSelfSymbols[ancestorOrSelfCount - 2].range;
 
 		switch (codeAction.title) {
-			case XsltCodeActionKind.fixExternalPrintRef:
-				const rootElementSymbol = ancestorOrSelfSymbols[ancestorOrSelfSymbols.length - 1];
-				const rootElementAttributes = rootElementSymbol.children.find(item => item.kind === vscode.SymbolKind.Array)?.children;
-				if (rootElementAttributes) {
-					const newXmlnsRange = rootElementAttributes[0].range;
-					const firstChildElement = rootElementSymbol.children[1];
-					if (firstChildElement && codeAction) {
-						codeAction.edit = new vscode.WorkspaceEdit();
-						const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
-						codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:ext="${'com.deltaxml.xpath.result.print'}"` + '\n' + prefixWS);
-						const serializerPath = await SaxonTaskProvider.getResultSerializerPath(document);
-						codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${serializerPath}"/>` + '\n\t');
+			case XsltCodeActionKind.fixXdmDebugRef: {
+				const xdmViewPath = await SaxonTaskProvider.getXdmViewPath(document);
+				this.insertXdmDebugInclude(codeAction, document, ancestorOrSelfSymbols, xdmViewPath);
+				break;
+			}
+			case XsltCodeActionKind.copyXdmViewToWorkspace: {
+				const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+				const targetBaseUri = workspaceFolder ? workspaceFolder.uri : vscode.Uri.file(path.dirname(document.uri.fsPath));
+				const targetDirUri = vscode.Uri.joinPath(targetBaseUri, 'xslt-resources', 'xdm-view');
+				const bundledDirUri = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI!, 'xslt-resources', 'xdm-view');
+				let targetExists = true;
+				try {
+					await vscode.workspace.fs.stat(targetDirUri);
+				} catch {
+					targetExists = false;
+				}
+				if (!targetExists) {
+					try {
+						await vscode.workspace.fs.copy(bundledDirUri, targetDirUri, { overwrite: false });
+					} catch (e: any) {
+						vscode.window.showErrorMessage(`Could not copy xdm-view into workspace: ${e?.message ?? e}`);
+						break;
 					}
 				}
+				const docBaseURI = path.dirname(document.uri.fsPath);
+				const newXdmViewPath = path.relative(docBaseURI, vscode.Uri.joinPath(targetDirUri, 'xdm-view.xsl').fsPath);
+				this.insertXdmDebugInclude(codeAction, document, ancestorOrSelfSymbols, newXdmViewPath);
 				break;
+			}
 			case XsltCodeActionKind.extractXsltFunction:
 			case XsltCodeActionKind.extractXsltFunctionPartial:
 			case XsltCodeActionKind.extractXsltTemplate:
@@ -202,11 +432,26 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private populateAncestorArray(testSymbol: anyDocumentSymbol) {
+	private insertXdmDebugInclude(codeAction: vscode.CodeAction, document: vscode.TextDocument, ancestorOrSelfSymbols: vscode.DocumentSymbol[], xdmViewIncludePath: string) {
+		const rootElementSymbol = ancestorOrSelfSymbols[ancestorOrSelfSymbols.length - 1];
+		const rootElementAttributes = rootElementSymbol.children.find(item => item.kind === vscode.SymbolKind.Array)?.children;
+		if (rootElementAttributes) {
+			const newXmlnsRange = rootElementAttributes[0].range;
+			const firstChildElement = rootElementSymbol.children[1];
+			if (firstChildElement) {
+				codeAction.edit = new vscode.WorkspaceEdit();
+				const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
+				codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:xdm="${'http://deltaxignia.com/ns/xdm-persistence'}"` + '\n' + prefixWS);
+				codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${xdmViewIncludePath}"/>` + '\n\t');
+			}
+		}
+	}
+
+	private populateAncestorArray(testSymbol: anyDocumentSymbol, uri: vscode.Uri) {
 		const ancestorOrSelfSymbol: vscode.DocumentSymbol[] = [];
 		while (testSymbol) {
 			ancestorOrSelfSymbol.push(testSymbol);
-			const tempSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, testSymbol.range.start);
+			const tempSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, testSymbol.range.start, undefined, uri);
 			if (tempSymbol) {
 				testSymbol = tempSymbol;
 			} else {
@@ -229,8 +474,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const startTagIndex = startLine.indexOf('<', startPosition.character);
 		const expandText: string[] = [];
 		if (startTagIndex < 0) {
-			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, expandText);
-			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end);
+			firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, expandText, document.uri);
+			lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end, undefined, document.uri);
 			const rangeInsideAttributeFirstSymbol = firstSymbol && firstSymbol.range.contains(range);
 
 			if (firstSymbol && lastSymbol && rangeInsideAttributeFirstSymbol) {
@@ -259,7 +504,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 							const blockingIssue = diagnostics.find((item) => item.severity !== vscode.DiagnosticSeverity.Hint &&
 								item.code !== DiagnosticCode.unresolvedGenericRef &&
 								item.code !== DiagnosticCode.unresolvedVariableRef &&
-								item.code !== DiagnosticCode.externalPrintRef &&
+								item.code !== DiagnosticCode.xdmDebugRef &&
 								item.code !== DiagnosticCode.parseHtmlRef);
 							if (!blockingIssue) {
 								let pass = xpathText.length > 30;
@@ -294,15 +539,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			const endTagIndex = endLine.lastIndexOf('>', endPosition.character);
 			const bothTagsOK = startTagIndex > - 1 && endTagIndex > -1;
 			if (!bothTagsOK) {
-				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, range.start, expandText);
+				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, range.start, expandText, document.uri);
 			} else {
-				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }), expandText);
-				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }));
+				firstSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start.with({ character: startTagIndex }), expandText, document.uri);
+				lastSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.end.with({ character: endTagIndex }), undefined, document.uri);
 				const firstSymbolInsideRange = firstSymbol && range.contains(firstSymbol.range);
 				const lastSymbolInsideRange = lastSymbol && range.contains(lastSymbol.range);
 				if (firstSymbol && lastSymbol && firstSymbolInsideRange && lastSymbolInsideRange) {
 					const isSameSymbol = firstSymbol.range.isEqual(lastSymbol.range);
-					const parentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, firstSymbol.range.start);
+					const parentSymbol = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, firstSymbol.range.start, undefined, document.uri);
 
 					let allRangeElementsOK = true;
 					if (parentSymbol) {
@@ -313,7 +558,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								allRangeElementsOK = realName !== 'xsl:param' && this.expectedElementNames.includes(realName);
 							}
 						} else {
-							const parentSymbolLast = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, lastSymbol.range.start);
+							const parentSymbolLast = XsltSymbolProvider.symbolForXMLElement(SelectionType.Parent, lastSymbol.range.start, undefined, document.uri);
 							allRangeElementsOK = !!parentSymbolLast && parentSymbol.range.isEqual(parentSymbolLast.range);
 							if (allRangeElementsOK) {
 								for (const sibling of parentSymbol.children) {
@@ -530,7 +775,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const { requiredArgNames, requiredParamNames, quickfixDiagnostics, addRegexMapInstruction, addMergeGroupMapInstruction } = this.findEvalContextErrors(document, functionBodyLinesCount, targetRange, interimFunctionText);
 		const varTypeMap: Map<string, string> = new Map();
 		const mergeNames: string[] = [];
-		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap, mergeNames);
+		XsltSymbolProvider.findVariableTypeAtSymbol(finalSymbol, requiredParamNames, varTypeMap, mergeNames, document.uri);
 
 		let fixedTrimmedBodyTextLines: string[] = [];
 		let finalCorrectText: string;

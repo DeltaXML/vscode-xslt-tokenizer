@@ -1,0 +1,7 @@
+Type error evaluating (map:entry(...)) at char 5 in expression in xsl:variable/@select on line 3 column 94 of c21.xsl:
+  XTTE0570  The required item type of the value of variable $m is map(xs:string,
+  xs:integer); the supplied value map{"a":"x"} does not match. The map contains an entry
+  with key (xs:string("a")) whose corresponding value ("x") is not an instance of the
+  required type xs:integer. The supplied value is of type xs:string
+  In template rule with match="/" on line 2 of c21.xsl
+The required item type of the value of variable $m is map(xs:string, xs:integer); the supplied value map{"a":"x"} does not match. The map contains an entry with key (xs:string("a")) whose corresponding value ("x") is not an instance of the required type xs:integer. The supplied value is of type xs:string

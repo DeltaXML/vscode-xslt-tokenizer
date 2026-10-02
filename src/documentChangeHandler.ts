@@ -18,13 +18,44 @@ export class DocumentChangeHandler {
 	public static lastActiveXMLEditor: vscode.TextEditor | null = null;
 	public static lastActiveXMLNonXSLEditor: vscode.TextEditor | null = null;
 	public static lastActiveXMLNonXSLUri: vscode.Uri | null = null;
+	// true when the user deliberately chose 'None' as the XML context file - unlike the initial unset state,
+	// this is not replaced by the next XML file viewed
+	public static contextFileIsNone = false;
 
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
+	// set when completions are triggered by typing ',' in an XSLT 4.0 stylesheet: the completion provider then only
+	// offers the entries of a map constructor for a record type, and otherwise no completions
+	// - for the cursor position after the typed character: a completion request for any other position, e.g. after a
+	// further character was typed before the triggered request, doesn't use it
+	private static commaTriggerPending: { uri: string, offset: number } | null = null;
+
+	public static setCommaTrigger(document: vscode.TextDocument, offset: number) {
+		DocumentChangeHandler.commaTriggerPending = { uri: document.uri.toString(), offset };
+	}
+
+	public static consumeCommaTrigger(document: vscode.TextDocument, position: vscode.Position): boolean {
+		const pending = DocumentChangeHandler.commaTriggerPending;
+		DocumentChangeHandler.commaTriggerPending = null;
+		return !!pending && pending.uri === document.uri.toString() && pending.offset === document.offsetAt(position);
+	}
 	public static isWindowsOS: boolean | undefined;
+
+	public static setLastActiveXMLNonXSLUri(uri: vscode.Uri): void {
+		DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
+		DocumentChangeHandler.contextFileIsNone = false;
+		FileSelection.instance?.setContextFileUri(uri.fsPath);
+	}
+
+	public static setNoContextFile(): void {
+		DocumentChangeHandler.lastActiveXMLNonXSLUri = null;
+		DocumentChangeHandler.contextFileIsNone = true;
+		FileSelection.instance?.setContextFileUri(FileSelection.NO_FILE_PICKED);
+	}
 
 	private onDidChangeRegistration: vscode.Disposable | null = null;
 	private xmlDocumentRegistered = false;
 	private lastChangePerformed: TagRenameEdit | null = null;
+	private pendingTriggerSuggestTimeout: ReturnType<typeof setTimeout> | null = null;
 	private lexer = new XslLexerRenameTag(XMLConfiguration.configuration);
 	private cachedFailedEdit: TagRenameEdit | null = null;
 	private xpathDocumentChangeHanlder: XPathDocumentChangeHandler | null = null;
@@ -79,7 +110,41 @@ export class DocumentChangeHandler {
 				skipTrigger = true;
 			}
 		}
-		const triggerSuggest = DocumentChangeHandler.setTriggerSuggestP1(skipTrigger, activeChange, e);
+		let triggerSuggest = DocumentChangeHandler.setTriggerSuggestP1(skipTrigger, activeChange, e);
+		if (!triggerSuggest && !skipTrigger && activeChange.text === '?') {
+			// XPath 4.0 record fields for a lookup on a variable, e.g. $c? or $p?address? - not for an occurrence indicator such as xs:string?
+			const textBefore = e.document.lineAt(activeChange.range.start.line).text.substring(0, activeChange.range.start.character);
+			triggerSuggest = /\$[\w.:-]+(\?[\w.-]+)*$/.test(textBefore);
+		}
+		// the start of a map constructor or of an entry's key, or of an entry's value - after a string literal key, e.g. 'a':
+		const lineBefore = e.document.lineAt(activeChange.range.start.line).text.substring(0, activeChange.range.start.character);
+		const isValueStart = activeChange.text === ':' && /['"]\s*$/.test(lineBefore);
+		// a quote, or an auto-closed pair, starting a string literal key or value, e.g. { 'a': ' or select="'
+		const isStringStart = ['\'', '"', '\'\'', '""'].includes(activeChange.text) && /(?:[:,{(]|:=|=\s*["'])\s*$/.test(lineBefore);
+		// the name of an xsl:with-param or xsl:call-template: the parameter or template names, as the value's quote is typed
+		const isNameStart = ['"', '\'', '""', '\'\''].includes(activeChange.text) && /<xsl:(?:with-param|call-template)\s(?:[^<>]*\s)?name\s*=\s*$/.test(lineBefore);
+		if (!triggerSuggest && !skipTrigger && isNameStart) {
+			triggerSuggest = true;
+		}
+		const isMapEntryStart = activeChange.text === ',' || activeChange.text === '{' || activeChange.text === '{}' || isValueStart || isStringStart;
+		if (!triggerSuggest && !skipTrigger && isMapEntryStart && e.document.languageId === 'xslt' && /\sversion\s*=\s*["']4\.0["']/.test(e.document.getText(new vscode.Range(0, 0, 50, 0)))) {
+			// XPath 4.0 record types: the next entry of a map constructor, or the whole map constructor
+			triggerSuggest = true;
+			// the cursor is after the first typed character - also between an auto-closed pair, e.g. {}
+			DocumentChangeHandler.setCommaTrigger(e.document, activeChange.rangeOffset + 1);
+		}
+		if (!triggerSuggest && !skipTrigger && XPathDocumentChangeHandler.isKindTestWildcardStart(activeChange.text, lineBefore)) {
+			// the names in element(...) or attribute(...), e.g. *:book
+			triggerSuggest = true;
+		}
+		if (!triggerSuggest && !skipTrigger && activeChange.text === '@' && e.document.languageId === 'xslt') {
+			// a tag within a documentation note, an xsl:note with format="xdoc-md"
+			const textBefore = e.document.getText(new vscode.Range(new vscode.Position(0, 0), activeChange.range.start));
+			const noteStart = textBefore.lastIndexOf('<xsl:note');
+			const noteTag = noteStart > -1 ? /^<xsl:note\s[^>]*format\s*=\s*["']xdoc-md["'][^>]*>/.exec(textBefore.substring(noteStart)) : null;
+			// no other markup after the note's start tag, except CDATA sections
+			triggerSuggest = !!noteTag && !textBefore.substring(noteStart + noteTag[0].length).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '').includes('<');
+		}
 		if (triggerSuggest || activeChange.text === '(' || (activeChange.text === '/') || activeChange.text === '[' || activeChange.text === '!' || activeChange.text === '$' || activeChange.text === '<' || activeChange.text.endsWith('::')) {
 			let isCloseTagFeature = false;
 			if (activeChange.text === '/') {
@@ -87,9 +152,26 @@ export class DocumentChangeHandler {
 				isCloseTagFeature = prevChar === '<';
 			}
 
-			if (!isCloseTagFeature && !skipTrigger) {
+			if (isCloseTagFeature) {
+				// the end tag's name is added by the on-type formatter, so no completions: not for a trigger still
+				// pending for the '<' typed just before - which would run after the name is added - nor in a suggest
+				// widget it already opened
+				if (this.pendingTriggerSuggestTimeout) {
+					clearTimeout(this.pendingTriggerSuggestTimeout);
+					this.pendingTriggerSuggestTimeout = null;
+				}
+				vscode.commands.executeCommand('hideSuggestWidget');
+			} else if (!skipTrigger) {
 				// console.log('activeChange.text:', activeChange.text, 'triggerSuggest', triggerSuggest);
-				setTimeout(() => {
+				// debounce: fast typing schedules one of these per keystroke, and without
+				// cancelling earlier ones each still fires 10ms later, piling up overlapping
+				// triggerSuggest calls (and so overlapping completion requests) for what the
+				// user now sees as a single edit - only the latest keystroke should trigger.
+				if (this.pendingTriggerSuggestTimeout) {
+					clearTimeout(this.pendingTriggerSuggestTimeout);
+				}
+				this.pendingTriggerSuggestTimeout = setTimeout(() => {
+					this.pendingTriggerSuggestTimeout = null;
 					vscode.commands.executeCommand('editor.action.triggerSuggest');
 				}, 10);
 			}
@@ -213,11 +295,11 @@ export class DocumentChangeHandler {
 		}
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLEditor = editor;
-			if (document.languageId !== 'xslt') {
+			if (document.languageId !== 'xslt' && document.languageId !== 'dcp') {
 				FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
 				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
-				if (!DocumentChangeHandler.lastActiveXMLNonXSLUri) {
-					DocumentChangeHandler.lastActiveXMLNonXSLUri = editor.document.uri;
+				if (!DocumentChangeHandler.lastActiveXMLNonXSLUri && !DocumentChangeHandler.contextFileIsNone) {
+					DocumentChangeHandler.setLastActiveXMLNonXSLUri(editor.document.uri);
 				}
 			}
 			DocumentChangeHandler.getLastDocXmlnsPrefixes();
@@ -229,15 +311,16 @@ export class DocumentChangeHandler {
 			this.xmlDocumentRegistered = true;
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
 		}
-		DocumentChangeHandler.updateStatusBarItem(isXPathDocument || isXSLTDocument);
+		let isDCPDocument = document.languageId === 'dcp';
+		DocumentChangeHandler.updateStatusBarItem(isXPathDocument || isXSLTDocument || isDCPDocument);
 
 	};
 
 	public static updateStatusBarItem(isXSLTOrXPath: boolean): void {
 		if (isXSLTOrXPath) {
 			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
-			const filename = docUri ? path.basename(docUri.path) : '[auto-completion context]';
-			DocumentChangeHandler.contextStatusBarItem.tooltip = 'set XML context file to use for xpath auto-completion';
+			const filename = docUri ? path.basename(docUri.path) : DocumentChangeHandler.contextFileIsNone ? '[no XML context]' : '[XML context file]';
+			DocumentChangeHandler.contextStatusBarItem.tooltip = 'XML context file - used for XPath auto-completion and as the source for Quick Run';
 			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
 			DocumentChangeHandler.contextStatusBarItem.show();
 		} else {

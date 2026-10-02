@@ -28,6 +28,7 @@ enum AttributeType {
 	InstructionName,
 	InstructionMode,
 	UseAttributeSets,
+	UseAccumulators,
 	ExcludeResultPrefixes
 }
 
@@ -345,6 +346,8 @@ export class XsltTokenDefinitions {
 								attType = AttributeType.InstructionMode;
 							} else if (attNameText === XsltTokenDefinitions.useAttSet) {
 								attType = AttributeType.UseAttributeSets;
+							} else if (attNameText === 'use-accumulators') {
+								attType = AttributeType.UseAccumulators;
 							} else if (attNameText === XsltTokenDefinitions.excludePrefixes || attNameText === XsltTokenDefinitions.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -420,6 +423,17 @@ export class XsltTokenDefinitions {
 									}
 								}
 								break;
+							case AttributeType.UseAccumulators:
+								if (isOnRequiredToken) {
+									const nameToken = XslLexer.tokensInsideToken(token, variableName).find((innerToken) =>
+										position.character >= innerToken.startCharacter && position.character <= (innerToken.startCharacter + innerToken.length));
+									if (nameToken) {
+										const instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, nameToken.value, GlobalInstructionType.Accumulator);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
+										resultInputToken = { token: nameToken, type: GlobalInstructionType.Accumulator };
+									}
+								}
+								break;
 							case AttributeType.InstructionMode:
 								if (tagIdentifierName === '') {
 									tagIdentifierName = variableName;
@@ -441,9 +455,11 @@ export class XsltTokenDefinitions {
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 									} else {
 										resultInputToken = { token: token, type: GlobalInstructionType.Mode };
+										// an xsl:mode declaration, then a template with this mode, then a default-mode that names it
 										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeInstruction);
 										if (!instruction) {
-											instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, seekName, GlobalInstructionType.ModeTemplate);
+											const modeTemplates = globalInstructionData.concat(importedInstructionData).filter((global) => global.type === GlobalInstructionType.ModeTemplate && global.name === seekName);
+											instruction = modeTemplates.find((global) => !global.isDefaultMode) ?? modeTemplates[0];
 										}
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 									}
@@ -660,13 +676,23 @@ export class XsltTokenDefinitions {
 									}
 									awaitingRequiredArity = false;
 									incrementFunctionArity = false;
-								} else if (token.value === '=>') {
+								} else if (token.value === '=>' || token.value === '=!>') {
 									incrementFunctionArity = true;
 								}
 								break;
 						}
 						break;
 
+					case TokenLevelState.simpleType:
+						if (isOnRequiredToken) {
+							// XSLT 4.0 named item type, declared with xsl:item-type, e.g. as="cx:complex"
+							const instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, token.value, GlobalInstructionType.ItemType);
+							if (instruction) {
+								resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
+								resultInputToken = { token: token, type: GlobalInstructionType.ItemType };
+							}
+						}
+						break;
 					case TokenLevelState.functionNameTest:
 						if (isOnRequiredToken) {
 							let { name, arity } = XsltTokenDefinitions.resolveFunctionName(inheritedPrefixes, xsltPrefixesToURIs, token);
@@ -676,6 +702,10 @@ export class XsltTokenDefinitions {
 						}
 						break;
 				}
+			}
+			if (incrementFunctionArity && prevToken?.charType === CharLevelState.dSep && (prevToken.value === '=>' || prevToken.value === '=!>') && token.tokenType !== TokenLevelState.function) {
+				// the implicit first argument only applies to a static function call, not to a dynamic call
+				incrementFunctionArity = false;
 			}
 			prevToken = token;
 		}
@@ -829,7 +859,7 @@ export class XsltTokenDefinitions {
 			if (type !== instruction.type) {
 				return;
 			} else if (findFunction && arity) {
-				return instruction.name === name && instruction.idNumber === arity;
+				return instruction.name === name && XslLexer.functionArityMatches(instruction, arity);
 			} else {
 				return instruction.name === name;
 			}
@@ -839,7 +869,7 @@ export class XsltTokenDefinitions {
 				if (type !== instruction.type) {
 					return;
 				} else if (findFunction && arity) {
-					return instruction.name === name && instruction.idNumber === arity;
+					return instruction.name === name && XslLexer.functionArityMatches(instruction, arity);
 				} else {
 					return instruction.name === name;
 				}

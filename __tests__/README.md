@@ -1,43 +1,92 @@
-# Testing Process for the XSLT/XPath extension
+# Test Process for the XPath Lexer and Linter
+
+## Quick Reference: the two test types
+
+There are two separate test setups here, each running in a different environment - hence two different Mocha versions, which isn't a mistake, just an artifact of needing two genuinely different execution contexts.
+
+| | Standalone | VS Code host |
+|---|---|---|
+| Command | `npm run unit-test` | `npm run test` |
+| Files | `test/unit/*.spec.ts` | `test/vscode-ext/*.test.ts` (compiled) |
+| Runner | top-level `mocha` devDependency | `@vscode/test-cli`'s own bundled/nested `mocha` |
+| Needs `vscode` API | No | Yes |
+| Needs compile first | No (`ts-node` on the fly) | Yes (`.vscode-test.cjs` points at `out/test/vscode-ext/**/*.test.js`) |
+
+- **Standalone lexer tests** (`test/unit/*.spec.ts`) are pure TypeScript with no `vscode` API involved - just the lexer/tokenizer logic. `npm run unit-test` runs them directly via `ts-node/register` in a plain Node process, no VS Code instance spun up.
+- **VS Code extension-host tests** (`test/vscode-ext/*.test.ts`) need the real `vscode` API (e.g. the linter tests open documents and read back diagnostics), so they run inside an actual headless VS Code instance, launched via `@vscode/test-cli`'s `vscode-test` CLI. That package bundles its own separate Mocha to drive tests inside that sandboxed environment - independent of, and not controlled by, the top-level Mocha version pinned in `package.json`.
 
 ## Overview
-This process involves testing XML/XSLT functionality through a series of automated steps.
-The example set out here is for one of just two automated test suites defined in `.spec.ts` files.
+This document explains how to create and run tests for the XPath lexer and, subsequently, for the XSLT linter - using the same XPath test data. These two components are the most important part of the extension as they drive amlost all language-specific features, from Syntax Highlighting to Symbol Referencing.
 
-This example checks `as` attributes found in XSLT instructions to ensure the generated tokens
-are correct. In this case, that they have properties matching the expected tokens.
+To test the XPath Lexer we need the following: 
+1. name of the test
+2. an XPath expression
+3. a set of tokens that we expect the lexer to generate.
+
+The Mocha test [xpathLexer_catalog.spec.ts](../test/unit/xpathLexer_catalog.spec.ts) loads XPath strings and their expected token information from the first 'group' in the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file.
+
+Each file listed in the group contains a set of tests contained in a *.json* file, generated from a single *.xsl* source file. The *.xsl* test source file
+(eg. [xpInAsAttribute.xsl](data/xsl-test-files/xpInAsAttribute.xsl)) comprises a set of `xsl:variable` instructions. A `attribute-name` processing instruction indicates whether the `as` or `select` attribute on the `xsl:variable` instruction is to be tested, for example: 
+
+```xml
+<!-- file: __tests__/data/xsl-test-files/xpTypes.xsl -->
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                expand-text="true" version="3.0">
+  
+  <?test-attribute select?>
+  <xsl:variable name="test1" select="1 + 2"/>
+  <xsl:variable name="test2" select="1 div 2"/>
+  ...
+</xsl:stylesheet>
+```
+
+## Generating Lexer test suite data from the XSLT source
+*for example output see:  [xpInAsAttribute-test.json](data/xpInAsAttribute-test.json)*
+
+1. open the new source XSLT test file (eg. *xsl-tests-files/xpInAsAttribute.xsl*) in the editor
+2. invoke the VS Code command: *'Tasks: run tesk task'* from the command pallette<br>
+   *(the task: *gen: expected test json from xsl - PICK input* is now triggered as it's the default)*
+3. on the prompt *'Select source XSLT for test'*, pick the test file from the *recently used* list
+4. once the generator completes, review the `tokens` property for each test in the generated JSON data file
+5. if satisfied, add the test base name (eg. 'xpInAsAttribute') to the first group in [catalog.jsonc](data/xsl-test-files/catalog.jsonc)
+
+## Executing the Lexer Test
+Run the test from the terminal using the command `npm run unit-test`. Each named test, corresponding to an `xsl:variable` will invoke the lexer and verify the output tokens correspond to those generated in the test data.
+
+All test suites will run, including the new test suite, which works as a regression test, ensuring future changes to 
+the lexer do not affect existing functionality.
+
+#### Aside
+>#### The *'gen: expected test json from xsl - PICK input'* task comprises these stages:
+>
+>1. The first stage runs [xslXPathAttributesToJson.xsl](scripts/xslXPathAttributesToJson.xsl) to extract, from each 'xsl:variable' instruction, the name and XPath expression from the 'as' or 'select' attribute to an interim JSON file (named *temp/json-from-xml-out.json*).
+>
+>2. The final stage uses [xpLexerTestGen.ts](utils/xpLexerTestGen.ts) to run the XPath Lexer for each XPath expression (in the interim JSON file) and output data for the tokens on each XPath expression and add this to the JSON object.
+>3. The JSON test file created is placed in the *__tests/data* directory, with a *-test.json* suffix added to the source XSLT selected
+
+#### 3. Once the task has created the JSON test file, add the base name of the test to the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file.
 
 
-## Steps
 
-### 1. Create XSLT Test File
-- Create a new XSLT file (like `__tests__/data/xsl-test-files/xpInAsAttribute.xsl`)
-- Include XPath expressions you want to test
-- Save file in appropriate test directory
-
-### 2. XSLT to JSON Conversion
-- Convert the XSLT file into a JSON format using the `xslt: as-attributes-to-json` task
-- This creates a JSON test specification file
-- JSON structure includes a set of tests
-- Each test is represented by an array with `name` and `xpath` array items
-
-### 3. Generate Expected Tokens 
-- Run the launch task "`Add expected tokens to XP Lexer Test`" to process the JSON file
-- System analyzes XPath expressions
-- Automatically adds expected token results to JSON file
-
-### 4. Execute Test
-- Run the test using `npm test`
-- The `__tests__/xpLexerAsAttribute.spec.ts` file loads the JSON created in *Step 3*
-- The Jest test framework compares actual vs expected tokens
-- Provides confidence that features relying on XSLT/XPath tokens will work as expected
 
 ## Notes
-- Keep XPath expressions clear and focused
-- Review generated expected token data in _Step 3_ for accuracy
+- Keep XPath expressions in the test *.xsl* files clear and focused
+- Review generated expected token data for accuracy
+- Use `<select>` elements for multi-line XPath expression testing (avoids XML attribute whitespace normalisation)
+- Mark pending tests in the .xsl test file by suffixing the test label (the `name` attribute of `xsl:variable`) with '-PENDING' - these tests will be skipped
+
+## Linter testing (extending Lexer tests):
+  - Tests for the **Linter** with a *'.dg'* suffix can be generated from the Lexer tests using the shell command `npm run test`
+  - Linter tests use the 2nd group in the [catalog.jsonc](data/xsl-test-files/catalog.jsonc) file
+  - The `tokens` property from the Lexer test is replaced with a `problems` token - for expected diagnostics values
+  - The same `npm run test` command is also used to run the **Linter** tests (when a `problems` property for expected diagnostics data exists for the test)
+  - **Linter** tests rely on the VS Code API and are therefore run (using an older Mocha version) within the VS Code extension host
+    - By default `isDirect` in [linter.test.ts](/test/vscode-ext/linter.test.ts) is set `false` so Linter tests bypass the VS Code editor (otherwise using the same API)<br>
+  *this avoids a 500ms wait between each test - imposed by the editor for 'debouncing' purposes*
 
 ## Test Strategy
-The XSLT/XPath extension has evolved organically without any automated tests except those used
+The XSLT/XPath extension has evolved organically without, until now, any automated tests except those used
 at the time of project inception.
 
 The manual test strategy involves manually opening `*.xsl` files in the `sample` directory, along with other
@@ -47,20 +96,28 @@ XSLT resources such as those found in the W3C XSLT tests. The following are the 
 - Syntax-highlighting of XSLT and XPath (Lexers for XSLT and XPath)
 - Problem reporting for XSLT and XPath syntax (Linter)
 - Code formatting of XSLT and XPath (Formatting Provider)
+- Auto completion
+- Symbol referencing and outline views
 
-The tokens created by this extension's lexers are used in all XSLT/XPath language features with just one exception:
-when running XSLT tasks. If there's a problem with XPath generated tokens, all these language features are compromised.
-
-Syntax-highlighting proves to be a very effective way for manually testing the lexer behaviour. If tokens are highlighted
-badly then we know we have a problem that will affect other features like the linter or code-formatting provider.
-
-> The maintainer of this project is primarily an XSLT developer. This extension is therefore used, and thus tested, almost daily
+Syntax-highlighting proves to be a highly effective way for manually testing the lexer behaviour. When tokens are highlighted
+badly we know we have a problem that will affect other features like the linter or code-formatting provider.
 
 
+The automated test setup described provides a useful supplement to this test strategy, but manual testing remains critical to this project.
 
-The automated test setup described here should be a useful supplement to this test strategy.
+## Pre Release Testing
+1. Create a new vsix package: `vsce package`
+2. Install the .vsix VS Code extension created:
+```
+code --install-extension xslt-xpath-1.7.1.vsix
+```
+3. _note: from an existing VS Code instance you would need to press the **Restart Extensions** button in the Extensions panel_
+4. Launch VS Code with the 'sample' directory
+```
+code sample
+```
 
 
 ## Conclusion
-The tests, with their expected token data, ensure later releases do not
-change the token structure inadvertently.
+The tests, with their expected 'tokens' and 'problems' data, are 'regression tests' ensuring later releases do not
+break features relying on the Lexer and Linter.

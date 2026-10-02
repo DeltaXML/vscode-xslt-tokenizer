@@ -1,0 +1,11 @@
+No license file found - running with licensable features disabled
+Error in expression in xsl:sequence/@select on line 4 column 32 of lib.xsl:
+  XTTE0780  Failed to convert the result of a call to f:lib#1: Cannot convert "x" to xs:integer
+  In template rule with match="document-node()" on line 3 of c11.xsl
+Failed to convert the result of a call to f:lib#1: Cannot convert "x" to xs:integer
+Unhandled exception: net.sf.saxon.CommandExitException: Failed to convert the result of a call to f:lib#1: Cannot convert "x" to xs:integer
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

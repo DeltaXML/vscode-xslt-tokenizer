@@ -1,8 +1,8 @@
 {
 	"name": "xslt-xpath",
 	"displayName": "XSLT/XPath for Visual Studio Code",
-	"description": "Comprehensive language support for XSLT 3.0 / XPath 3.1",
-	"version": "1.7.0",
+	"description": "XSLT 3.0/4.0 and XPath 3.1/4.0 language support - linting, auto-completion, code documentation and Quick Run with Saxon",
+	"version": "2.0.0",
 	"publisher": "deltaxml",
 	"icon": "xslt-xpath.png",
 	"bugs": {
@@ -18,13 +18,24 @@
 		"xsl",
 		"xpath",
 		"highlighter",
-		"formatter"
+		"formatter",
+		"saxon",
+		"saxonjs",
+		"xslt 3.0",
+		"xslt 4.0",
+		"xpath 3.1",
+		"xpath 4.0",
+		"linter",
+		"xml catalog"
 	],
 	"engines": {
-		"vscode": "^1.72.0"
+		"vscode": "^1.138.0"
 	},
 	"categories": [
-		"Programming Languages"
+		"Programming Languages",
+		"Linters",
+		"Formatters",
+		"Snippets"
 	],
 	"activationEvents": [
 		"onLanguage:xml",
@@ -32,77 +43,111 @@
 		"onCommand:workbench.action.tasks.runTask"
 	],
 	"license": "MIT",
-	"main": "./out/extension.js",
+	"main": "./out/src/extension.js",
 	"contributes": {
-			"configurationDefaults": {
-				"[xslt]": {
-					"editor.defaultFormatter": "deltaxml.xslt-xpath",
-					"editor.formatOnSaveMode": "file",
-					"editor.formatOnSave": false,
-					"editor.formatOnPaste": true,
-					"editor.formatOnType": true,
-					"editor.semanticHighlighting.enabled": true,
-					"editor.detectIndentation": true,
-					"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
-					"editor.insertSpaces": true,
-					"editor.tabSize": 2,
-					"outline.showArrays": false
-				},
-				"[xml]": {
-					"editor.defaultFormatter": "deltaxml.xslt-xpath",
-					"editor.formatOnSaveMode": "file",
-					"editor.formatOnSave": false,
-					"editor.formatOnPaste": true,
-					"editor.formatOnType": true,
-					"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
-					"editor.detectIndentation": true,
-					"editor.insertSpaces": true,
-					"editor.tabSize": 4,
-					"outline.showArrays": false
+		"configurationDefaults": {
+			"[xslt]": {
+				"editor.defaultFormatter": "deltaxml.xslt-xpath",
+				"editor.formatOnSaveMode": "file",
+				"editor.formatOnSave": false,
+				"editor.formatOnPaste": true,
+				"editor.formatOnType": true,
+				"editor.semanticHighlighting.enabled": true,
+				"editor.detectIndentation": true,
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.insertSpaces": true,
+				"editor.tabSize": 2,
+				"outline.showArrays": false
 			},
-				"[xsl]": {
-					"editor.semanticHighlighting.enabled": true
-				},
-				"[xpath]": {
-					"editor.defaultFormatter": "deltaxml.xslt-xpath",
-					"editor.formatOnSaveMode": "file",
-					"editor.formatOnSave": false,
-					"editor.formatOnPaste": true,
-					"editor.formatOnType": true,
-					"editor.semanticHighlighting.enabled": true,
-					"editor.detectIndentation": true,
-					"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
-					"editor.insertSpaces": true,
-					"editor.tabSize": 2,
-					"outline.showArrays": false
-				},
-				"[bpmn]": {
-					"editor.semanticHighlighting.enabled": true
-				}
+			"[xml]": {
+				"editor.defaultFormatter": "deltaxml.xslt-xpath",
+				"editor.formatOnSaveMode": "file",
+				"editor.formatOnSave": false,
+				"editor.formatOnPaste": true,
+				"editor.formatOnType": true,
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.detectIndentation": true,
+				"editor.insertSpaces": true,
+				"editor.tabSize": 4,
+				"outline.showArrays": false
 			},
+			"[xsl]": {
+				"editor.semanticHighlighting.enabled": true
+			},
+			"[xpath]": {
+				"editor.defaultFormatter": "deltaxml.xslt-xpath",
+				"editor.formatOnSaveMode": "file",
+				"editor.formatOnSave": false,
+				"editor.formatOnPaste": true,
+				"editor.formatOnType": true,
+				"editor.semanticHighlighting.enabled": true,
+				"editor.detectIndentation": true,
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.insertSpaces": true,
+				"editor.tabSize": 2,
+				"outline.showArrays": false
+			},
+			"[bpmn]": {
+				"editor.semanticHighlighting.enabled": true
+			}
+		},
 		"keybindings": [
 			{
 				"command": "xslt-xpath.selectCurrentElement",
-				"key": "Shift+Cmd+0"
+				"key": "ctrl+shift+0",
+				"mac": "shift+cmd+0",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectParentElement",
-				"key": "Shift+Cmd+9"
+				"key": "ctrl+shift+9",
+				"mac": "shift+cmd+9",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectFirstChildElement",
-				"key": "Shift+Cmd+8"
+				"key": "ctrl+shift+8",
+				"mac": "shift+cmd+8",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+			},
+			{
+				"command": "xslt-xpath.quickRunXslt",
+				"key": "ctrl+alt+r",
+				"mac": "cmd+alt+r",
+				"when": "editorLangId == xslt"
+			},
+			{
+				"command": "xslt-xpath.quickRunXml",
+				"key": "ctrl+alt+r",
+				"mac": "cmd+alt+r",
+				"when": "editorLangId == xml"
 			},
 			{
 				"command": "xslt-xpath.selectFollowingElement",
-				"key": "Shift+Cmd+7"
+				"key": "ctrl+shift+7",
+				"mac": "shift+cmd+7",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectPrecedingElement",
-				"key": "Shift+Cmd+6"
+				"key": "ctrl+shift+6",
+				"mac": "shift+cmd+6",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+			},
+			{
+				"command": "xslt-xpath.wrapWith",
+				"key": "alt+shift+w",
+				"mac": "alt+shift+w",
+				"when": "editorTextFocus && editorLangId == xslt"
+			},
+			{
+				"command": "xslt-xpath.xmlSelectionPick",
+				"key": "ctrl+shift+2",
+				"mac": "shift+cmd+2",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
 			}
 		],
-		"commands": [			
+		"commands": [
 			{
 				"command": "xslt-xpath.addTaskInputs",
 				"title": "Add XSLT Inputs to Tasks File",
@@ -129,6 +174,38 @@
 				"category": "XML"
 			},
 			{
+				"command": "xslt-xpath.xmlSelectionPick",
+				"title": "Select Element...",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.wrapWith",
+				"title": "Wrap with...",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.convertSaxonTypeAliases",
+				"title": "Convert Saxon Type Aliases to xsl:item-type",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.chooseTopLevelStylesheet",
+				"title": "Choose Top-Level Stylesheet...",
+				"category": "XSLT",
+				"icon": "$(list-selection)"
+			},
+			{
+				"command": "xslt-xpath.resetTopLevelStylesheets",
+				"title": "Reset Top-Level Stylesheet Choices",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.quickRunModule",
+				"title": "Quick Run",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
 				"command": "xslt-xpath.selectFollowingElement",
 				"title": "Select following element",
 				"category": "XML"
@@ -142,8 +219,161 @@
 				"command": "xslt-xpath.selectFirstChildElement",
 				"title": "Select first child element",
 				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.quickRunXslt",
+				"title": "Quick Run with Saxon",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunXsltSaxonJ",
+				"title": "Quick Run with SaxonJ",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunXsltSaxonJS",
+				"title": "Quick Run with SaxonJS",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunXsltSaxonC",
+				"title": "Quick Run with SaxonC",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunXml",
+				"title": "Quick Run: Run XSLT on this XML File",
+				"category": "XSLT",
+				"icon": "$(play)"
+			},
+			{
+				"command": "xslt-xpath.quickRunSwitchProcessor",
+				"title": "Quick Run: Switch Processor",
+				"category": "XSLT",
+				"icon": "$(arrow-swap)"
 			}
 		],
+		"views": {
+			"explorer": [
+				{
+					"id": "xslt-xpath.imports",
+					"name": "XSLT Imports",
+					"when": "resourceLangId == xslt",
+					"visibility": "collapsed"
+				}
+			]
+		},
+		"submenus": [
+			{
+				"id": "xslt-xpath.xmlSelection",
+				"label": "XML Selection"
+			}
+		],
+		"menus": {
+			"editor/context": [
+				{
+					"submenu": "xslt-xpath.xmlSelection",
+					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/",
+					"group": "2_xml@1"
+				}
+			],
+			"xslt-xpath.xmlSelection": [
+				{
+					"command": "xslt-xpath.selectCurrentElement",
+					"group": "1_select@1"
+				},
+				{
+					"command": "xslt-xpath.selectParentElement",
+					"group": "1_select@2"
+				},
+				{
+					"command": "xslt-xpath.selectFirstChildElement",
+					"group": "1_select@3"
+				},
+				{
+					"command": "xslt-xpath.selectPrecedingElement",
+					"group": "1_select@4"
+				},
+				{
+					"command": "xslt-xpath.selectFollowingElement",
+					"group": "1_select@5"
+				},
+				{
+					"command": "xslt-xpath.gotoXPath",
+					"group": "2_goto@1"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "xslt-xpath.quickRunXml",
+					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xml",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonJ",
+					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt'",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonJS",
+					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonC",
+					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
+					"group": "navigation"
+				}
+			],
+			"view/title": [
+				{
+					"command": "xslt-xpath.chooseTopLevelStylesheet",
+					"when": "view == xslt-xpath.imports",
+					"group": "navigation"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "xslt-xpath.quickRunModule",
+					"when": "view == xslt-xpath.imports && viewItem == topLevel",
+					"group": "inline"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "xslt-xpath.quickRunModule",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.chooseTopLevelStylesheet",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.wrapWith",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonJ",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonJS",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.quickRunXsltSaxonC",
+					"when": "false"
+				}
+			]
+		},
 		"semanticTokenScopes": [
 			{
 				"scopes": {
@@ -180,6 +410,41 @@
 					],
 					"anonymousFunction": [
 						"variable.other.constant"
+					],
+					"xdocText": [
+						"comment.block.documentation",
+						"comment"
+					],
+					"xdocTag": [
+						"storage.type.class.jsdoc",
+						"keyword"
+					],
+					"xdocParam": [
+						"variable.other.jsdoc",
+						"variable.parameter"
+					],
+					"xdocCode": [
+						"markup.inline.raw",
+						"markup.inline.raw.string.markdown",
+						"string"
+					],
+					"xdocBold": [
+						"markup.bold"
+					],
+					"xdocItalic": [
+						"markup.italic"
+					],
+					"xdocHeading": [
+						"markup.heading",
+						"heading.1.markdown",
+						"markup.heading.markdown"
+					],
+					"xdocLink": [
+						"markup.underline.link",
+						"string.other.link"
+					],
+					"xdocCdata": [
+						"punctuation.definition.tag.xml"
 					]
 				}
 			}
@@ -204,6 +469,57 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Enable Saxon-JS Tasks"
+				},
+				"XSLT.tasks.saxonCPath": {
+					"type": "string",
+					"description": "Path of the folder containing the installed SaxonC command-line executable (Transform / Transform.exe)"
+				},
+				"XSLT.tasks.saxonCLicenseFileLocation": {
+					"type": "string",
+					"description": "Path of the SaxonC saxon-license.lic file, passed as --licenseFileLocation: on the command line"
+				},
+				"XSLT.tasks.saxonCLibraryPaths": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "Extra folders to search for SaxonC's native libraries at runtime (macOS: DYLD_LIBRARY_PATH, Linux: LD_LIBRARY_PATH, Windows: PATH). The folder containing the installed SaxonC command-line executable's sibling 'lib' folder is always included automatically - use this for anything else, e.g. a separately-packaged core library"
+				},
+				"XSLT.tasks.saxonc.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable SaxonC Tasks"
+				},
+				"XSLT.tasks.quickRunProcessor": {
+					"type": "string",
+					"enum": [
+						"xslt",
+						"xslt-js",
+						"xslt-c"
+					],
+					"enumDescriptions": [
+						"Saxon (Java) - requires the 'XSLT.tasks.saxonJar' setting",
+						"SaxonJS - runs the 'xslt3' npm package via npx",
+						"SaxonC - requires the 'XSLT.tasks.saxonCPath' setting"
+					],
+					"default": "xslt",
+					"scope": "resource",
+					"markdownDescription": "The XSLT processor (task type) used by the **Quick Run** command. Quick Run persists a separate task in `.vscode/tasks.json` for each processor used with a given XSLT/XML pair"
+				},
+				"XSLT.validation.xslt30ItemTypesAndNotes": {
+					"type": "boolean",
+					"default": false,
+					"markdownDescription": "Allow XSLT 4.0 named item types (`xsl:item-type`, with `record(...)` and `enum(...)` types, also in `as` attributes) and `xsl:note` in stylesheets for XSLT 3.0 and earlier. Requires Saxon PE or EE 12.8 or later, run with syntax extensions (the `--allowSyntaxExtensions:on` option). Other XSLT 4.0 features still need `version=\"4.0\"`."
+				},
+				"XSLT.resources.catalog": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "An OASIS XML catalog file, for resolving the `href` of `xsl:import` and `xsl:include`, and the URIs of `fixed-namespaces` - e.g. mapping `http://example.com/lib.xsl` to a local file. Its `uri`, `rewriteURI`, `uriSuffix` and `nextCatalog` entries are used. The path is relative to the workspace folder, or may use `${workspaceFolder}`. The catalog is also passed to Saxon (the `-catalog` option) by XSLT tasks that don't set their own `catalogFilenames`. With no setting, a `catalog.xml` XML catalog in the root of the workspace folder is offered"
+				},
+				"XSLT.resources.inferParentFromWorkspace": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "For an XSLT module that another stylesheet imports or includes, find the top-level stylesheet from the workspace's XSLT files - so that references to its declarations are resolved without it being opened first. The files are scanned in the background, once, and kept up to date as they change"
 				},
 				"XSLT.resources.useSourceFile": {
 					"description": "Control how completion-list for XPath node names is populated",
@@ -250,7 +566,6 @@
 					"label",
 					"xsltFile",
 					"xmlSource",
-					"resultPath",
 					"saxonJar"
 				],
 				"properties": {
@@ -268,7 +583,12 @@
 					},
 					"xmlSource": {
 						"type": "string",
-						"description": "The path to the XML source file"
+						"description": "The path to the XML/JSON source file (a '.json' file is passed as JSON - otherwise set 'useJsonSource')"
+					},
+					"useJsonSource": {
+						"type": "boolean",
+						"default": true,
+						"description": "Pass the 'xmlSource' file as JSON (-json:) rather than XML (-s:). When not set, files with a '.json' extension are passed as JSON"
 					},
 					"initialTemplate": {
 						"type": "string",
@@ -314,10 +634,17 @@
 							"string"
 						],
 						"enum": [
+							"auto",
 							"on",
 							"off"
 						],
-						"description": "Enables experimental XPath 4.0 extensions. See: https://www.saxonica.com/documentation11/index.html#!v4extensions"
+						"enumDescriptions": [
+							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
+							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
+						],
+						"default": "auto",
+						"description": "Enables XPath 4.0 syntax (the Saxon '--allowSyntaxExtensions' option). See: https://www.saxonica.com/html/documentation13/expressions/xpath40new.html"
 					},
 					"expandValues": {
 						"type": "string",
@@ -442,8 +769,7 @@
 				"required": [
 					"label",
 					"xsltFile",
-					"xmlSource",
-					"resultPath"
+					"xmlSource"
 				],
 				"properties": {
 					"label": {
@@ -460,15 +786,15 @@
 					},
 					"xmlSource": {
 						"type": "string",
-						"description": "The path to the XML/JSON file (for JSON - set 'useJsonSource')"
+						"description": "The path to the XML/JSON source file (a '.json' file is passed as JSON - otherwise set 'useJsonSource')"
 					},
 					"useJsonSource": {
 						"type": "boolean",
 						"default": true,
-						"description": "To supply a JSON file in the 'xmlSource' property"
+						"description": "Pass the 'xmlSource' file as JSON (-json:) rather than XML (-s:). When not set, files with a '.json' extension are passed as JSON"
 					},
 					"unprefixedElementNames": {
-                        "type": "string",
+						"type": "string",
 						"enum": [
 							"##html5"
 						],
@@ -542,6 +868,208 @@
 						}
 					}
 				}
+			},
+			{
+				"type": "xslt-c",
+				"required": [
+					"label",
+					"xsltFile",
+					"xmlSource"
+				],
+				"properties": {
+					"label": {
+						"type": "string",
+						"description": "The user interface label. Change this to uniquely identify the task"
+					},
+					"saxonCPath": {
+						"type": "string",
+						"description": "Path of the folder containing the installed SaxonC command-line executable (Transform / Transform.exe). Defaults to the 'XSLT.tasks.saxonCPath' setting, or relies on it being on the PATH if neither is set"
+					},
+					"licenseFileLocation": {
+						"type": "string",
+						"description": "Path of the SaxonC saxon-license.lic file, passed as --licenseFileLocation: on the command line. Defaults to the 'XSLT.tasks.saxonCLicenseFileLocation' setting"
+					},
+					"saxonCLibraryPaths": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Extra folders to search for SaxonC's native libraries at runtime. The sibling 'lib' folder next to saxonCPath is always included automatically - use this for anything else, e.g. a separately-packaged core library. Defaults to the 'XSLT.tasks.saxonCLibraryPaths' setting"
+					},
+					"unescapeMessages": {
+						"type": "boolean",
+						"default": true,
+						"description": "SaxonC serializes xsl:message output as escaped XML text. When true (the default), character references and predefined entities in messages (on stderr) are converted back to literal characters, so that e.g. '<' and ANSI color codes display as intended in the terminal. The transform result is never changed"
+					},
+					"xsltFile": {
+						"type": "string",
+						"description": "The path to the XSLT stylesheet"
+					},
+					"xmlSource": {
+						"type": "string",
+						"description": "The path to the XML/JSON source file (a '.json' file is passed as JSON - otherwise set 'useJsonSource')"
+					},
+					"useJsonSource": {
+						"type": "boolean",
+						"default": true,
+						"description": "Pass the 'xmlSource' file as JSON (-json:) rather than XML (-s:). When not set, files with a '.json' extension are passed as JSON"
+					},
+					"initialTemplate": {
+						"type": "string",
+						"description": "The named template to be executed. Namespaced templates can be written as {uri}localname. Default is xsl:initial-template"
+					},
+					"initialMode": {
+						"type": "string",
+						"description": "The initial mode for the transformation. Namespaced modes can be written as {uri}localname"
+					},
+					"resultPath": {
+						"type": "string",
+						"description": "The destination path for the XSLT result"
+					},
+					"catalogFilenames": {
+						"type": "string",
+						"description": "Either a file name or a list of file names separated by semicolons; the files are OASIS XML catalogs defining how public identifiers and system identifiers (URIs) are to be redirected"
+					},
+					"configFilename": {
+						"type": "string",
+						"description": "If set, configuration properties (unless overridden by other properties here) are taken from the supplied configuration file."
+					},
+					"dtd": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Requests DTD-based validation of the source file and of any files read using the document() function"
+					},
+					"enableAssertions": {
+						"type": [
+							"string"
+						],
+						"enum": [
+							"on",
+							"off",
+							"recover"
+						],
+						"description": "Enables assertions both at compile time and at run time"
+					},
+					"allowSyntaxExtensions40": {
+						"type": [
+							"string"
+						],
+						"enum": [
+							"auto",
+							"on",
+							"off"
+						],
+						"enumDescriptions": [
+							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
+							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
+						],
+						"default": "auto",
+						"description": "Enables XPath 4.0 syntax (the Saxon '--allowSyntaxExtensions' option). See: https://www.saxonica.com/html/documentation13/expressions/xpath40new.html"
+					},
+					"expandValues": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Specifying 'off' suppresses expansion of DTD/Schema fixed or default values"
+					},
+					"explainFilename": {
+						"type": [
+							"string"
+						],
+						"description": "Writes an execution plan and other diagnostic information for the stylesheet to the specified filename"
+					},
+					"exportFilename": {
+						"type": "string",
+						"description": "Export filename: If set, exports the compiled stylesheet, in a form suitable for subsequent execution"
+					},
+					"traceOutFilename": {
+						"type": "string",
+						"description": "Display stylesheet tracing information using the class name supplied. An empty-string causes a system-supplied traceListener to be used."
+					},
+					"traceListener": {
+						"type": "string",
+						"description": "Indicates that the output of the trace() function should be directed to a specified file"
+					},
+					"timing": {
+						"type": "string",
+						"enum": [
+							"on",
+							"off"
+						],
+						"description": "Display version and timing information to the standard error output"
+					},
+					"execute": {
+						"type": "boolean",
+						"description": "Default: 'true'. If set 'false' any -export output is generated but XSLT is not executed"
+					},
+					"TPfilename": {
+						"type": "string",
+						"description": "Filename target for trace profile information to be sent"
+					},
+					"TPxslFilename": {
+						"type": "string",
+						"description": "Stylesheet filename to be used to format the result with the -TP option set"
+					},
+					"parameters": {
+						"description": "The xsl:param values for the XSLT",
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "The xsl:param name.\nNamespaced params are written as {uri}localname.\nSpecial prefix characters are:\n'?' (XPath)\n'!' (xsl:output)\n'+' (filename):\nSee: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+								},
+								"value": {
+									"type": "string",
+									"description": "The xsl:param value. "
+								}
+							},
+							"required": [
+								"name",
+								"value"
+							]
+						},
+						"minItems": 1
+					},
+					"features": {
+						"description": "Set a feature defined in the Saxon Configuration interface. See https://www.saxonica.com/documentation11/index.html#!configuration/config-features",
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "The feature name - the last part of the Configuration name after the '/' char (name may have a uri suffix). E.g. for 'http://saxon.sf.net/feature/parserFeature?uri=' enter  'parserFeature?uri='"
+								},
+								"value": {
+									"type": "string",
+									"description": "The value for the given feature"
+								}
+							},
+							"required": [
+								"name",
+								"value"
+							]
+						},
+						"minItems": 1
+					},
+					"group": {
+						"type": "object",
+						"properties": {
+							"kind": {
+								"type": "string",
+								"description": "The kind of task. E.g. 'build'"
+							}
+						}
+					}
+				}
 			}
 		],
 		"problemMatchers": [
@@ -549,19 +1077,27 @@
 				"name": "saxon-xslt",
 				"owner": "xslt",
 				"fileLocation": [
-					"relative",
-					"${file}/.."
+					"search",
+					{
+						"include": [
+							"${workspaceFolder}"
+						],
+						"exclude": [
+							"${workspaceFolder}/node_modules",
+							"${workspaceFolder}/.git"
+						]
+					}
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -571,8 +1107,16 @@
 				"name": "saxon-xslt-js",
 				"owner": "xslt-js",
 				"fileLocation": [
-					"relative",
-					"${file}/.."
+					"search",
+					{
+						"include": [
+							"${workspaceFolder}"
+						],
+						"exclude": [
+							"${workspaceFolder}/node_modules",
+							"${workspaceFolder}/.git"
+						]
+					}
 				],
 				"pattern": [
 					{
@@ -600,14 +1144,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -622,14 +1166,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -644,14 +1188,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -666,14 +1210,14 @@
 				],
 				"pattern": [
 					{
-						"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-						"line": 3,
-						"column": 4,
+						"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+						"line": 2,
+						"column": 3,
 						"severity": 1,
-						"file": 5
+						"file": 4
 					},
 					{
-						"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+						"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 						"code": 1,
 						"message": 2
 					}
@@ -683,20 +1227,65 @@
 		"problemPatterns": [
 			{
 				"name": "error.line",
-				"regexp": "^(?:Syntax |Static |Dynamic |Type )?(error|Error|Warning|Info)\\s+(?:at.*in.*\\sin|in|on|at|near\\s+.*.*)(?:\\s+)?([^\\s]*)(?:\\s+on)?\\s+line\\s+(\\d+)\\s+column\\s+(\\d+)\\s+of\\s+([^:]*)",
-				"line": 3,
-				"column": 4,
+				"regexp": "^(?:(?:Syntax|Static|Dynamic|Type) )?(error|Error|Warning|Info)\\b.*\\bline (\\d+) column (\\d+) of (.+?):$",
+				"line": 2,
+				"column": 3,
 				"severity": 1,
-				"file": 5
+				"file": 4
 			},
 			{
 				"name": "message.line",
-				"regexp": "^\\s+(\\w{4}\\d{4})(?::)?\\s+(.*)",
+				"regexp": "^\\s+((?:Q\\{[^}]*\\})?[^\\s{}]+?):?\\s+(.*)$",
 				"code": 1,
 				"message": 2
 			}
 		],
 		"semanticTokenTypes": [
+			{
+				"id": "xdocText",
+				"superType": "comment",
+				"description": "The text of a documentation note: an xsl:note with format=\"xdoc-md\""
+			},
+			{
+				"id": "xdocTag",
+				"superType": "keyword",
+				"description": "A tag in a documentation note, e.g. @param"
+			},
+			{
+				"id": "xdocParam",
+				"superType": "parameter",
+				"description": "A parameter name in a documentation note, after @param"
+			},
+			{
+				"id": "xdocCode",
+				"superType": "string",
+				"description": "A code span in a documentation note, e.g. `code`"
+			},
+			{
+				"id": "xdocBold",
+				"superType": "comment",
+				"description": "Bold text in a documentation note, e.g. **bold**"
+			},
+			{
+				"id": "xdocItalic",
+				"superType": "comment",
+				"description": "Italic text in a documentation note, e.g. *italic*"
+			},
+			{
+				"id": "xdocHeading",
+				"superType": "comment",
+				"description": "A heading in a documentation note, e.g. # Heading"
+			},
+			{
+				"id": "xdocLink",
+				"superType": "string",
+				"description": "A link in a documentation note, e.g. [text](url)"
+			},
+			{
+				"id": "xdocCdata",
+				"superType": "operator",
+				"description": "The start or end of a CDATA section in a documentation note"
+			},
 			{
 				"id": "attributeNameTest",
 				"superType": "struct",
@@ -952,30 +1541,55 @@
 					".xul",
 					".xoml"
 				]
+			},
+			{
+				"id": "xpath-signature",
+				"aliases": [
+					"XPath Signature"
+				]
+			}
+		],
+		"grammars": [
+			{
+				"language": "xpath-signature",
+				"scopeName": "source.xpath-signature",
+				"path": "./syntaxes/xpath-signature.tmLanguage.json"
+			},
+			{
+				"scopeName": "source.xpath-type",
+				"path": "./syntaxes/xpath-type.tmLanguage.json"
 			}
 		]
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
-		"compile": "tsc -p ./",
-		"lint": "eslint -c .eslintrc.js --ext .ts src",
-		"lint-fix": "eslint -c .eslintrc.js --fix --ext .ts src",
+		"clean": "rm -rf out",
+		"compile": "npm run clean && tsc -p ./",
+		"lint": "eslint src",
+		"lint-fix": "eslint --fix src",
 		"watch": "tsc -watch -p ./",
-		"test": "jest"
+		"test": "npm run compile && node scripts/run-vscode-tests.js --extensionDevelopmentPath=.",
+		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts",
+		"generate-xpath40-functions": "xslt3 -xsl:resources/xslt/saxon-functions-to-typescript.xsl -s:resources/data/saxon-functions.xml -o:src/xpath40FunctionDetails.ts",
+		"update-saxon-functions": "curl -sfL https://www.saxonica.com/documentation13/doc/functions.xml -o resources/data/saxon-functions.xml && npm run generate-xpath40-functions"
 	},
 	"devDependencies": {
-		"@types/jest": "^29.5.14",
-		"@types/node": "^10.17.17",
-		"@types/vscode": "^1.72.0",
-		"@typescript-eslint/eslint-plugin": "^5.4.0",
-		"@typescript-eslint/parser": "^5.4.0",
-		"eslint": "^8.2.0",
-		"eslint-config-prettier": "^8.3.0",
-		"jest": "^29.7.0",
-		"prettier": "^2.4.1",
-		"ts-jest": "^29.3.2",
-		"tslint": "^5.20.1",
-		"typescript": "^4.9.4",
+		"@types/chai": "^5.2.2",
+		"@types/mocha": "^10.0.1",
+		"@types/node": "^26.6.2",
+		"@types/vscode": "^1.138.0",
+		"@typescript-eslint/eslint-plugin": "^8.70.0",
+		"@typescript-eslint/parser": "^8.70.0",
+		"@vscode/test-cli": "^0.0.15",
+		"@vscode/test-electron": "^3.1.0",
+		"chai": "^5.2.0",
+		"eslint": "^10.11.0",
+		"eslint-config-prettier": "^10.1.8",
+		"globals": "^17.12.0",
+		"mocha": "^12.0.2",
+		"prettier": "^3.9.8",
+		"ts-node": "^10.9.2",
+		"typescript": "^5.9.3",
 		"xslt3": "^2.0.3"
 	},
 	"dependencies": {

@@ -1,0 +1,4 @@
+Error at char 12 in expression in xsl:sequence/@select on line 4 column 44 of c19.xsl:
+  FORG0001  Cannot convert string "x" to an integer
+  In template rule with match="/" on line 10 of c19.xsl
+Cannot convert string "x" to an integer

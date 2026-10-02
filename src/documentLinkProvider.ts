@@ -3,9 +3,8 @@ import { XslLexerLight } from "./xslLexerLight";
 import { GlobalInstructionData, GlobalInstructionType } from "./xslLexer";
 import * as vscode from "vscode";
 import { LanguageConfiguration } from "./xslLexer";
-import * as path from 'path';
-import { XsltPackage, XsltSymbolProvider } from './xsltSymbolProvider';
-import * as url from 'url';
+import { XsltPackage } from './xsltSymbolProvider';
+import { HrefPaths } from './hrefPaths';
 
 
 export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
@@ -25,24 +24,28 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 
 		data.forEach((instruction) => {
 			if (instruction.type === GlobalInstructionType.Import || instruction.type === GlobalInstructionType.Include) {
-				const resolvedPath = XsltSymbolProvider.resolvePath(instruction.name, document.fileName);
-				const pathForUri = resolvedPath.startsWith('file:/') ? resolvedPath : url.pathToFileURL(resolvedPath).toString();
-				const uri = vscode.Uri.parse(pathForUri);
+				const target = HrefPaths.linkTarget(instruction.name, document.fileName);
+				if (target === undefined) {
+					return;
+				}
+				const uri = vscode.Uri.parse(target);
 				const startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
-				const endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + (instruction.token.length + 2));
+				const endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
 				const link = new vscode.DocumentLink(new vscode.Range(startPos, endPos), uri);
+				link.tooltip = HrefPaths.linkTooltip(instruction.name, document.fileName);
 				result.push(link);
 			} else if (instruction.type === GlobalInstructionType.UsePackage) {
 				let packageLookup = xsltPackages.find((pkg) => {
 					return pkg.name === instruction.name;
 				});
 				if (packageLookup && rootPath) {
-					let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
-					const pathForUri = resolvedName.startsWith('file:/') ? resolvedName : url.pathToFileURL(resolvedName).toString();
-
-					const uri = vscode.Uri.parse(pathForUri);
+					const packagePath = HrefPaths.settingsPath(packageLookup.path, rootPath);
+					if (packagePath === undefined) {
+						return;
+					}
+					const uri = vscode.Uri.file(packagePath);
 					const startPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter);
-					const endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + (instruction.token.length + 2));
+					const endPos = new vscode.Position(instruction.token.line, instruction.token.startCharacter + instruction.token.length);
 					const link = new vscode.DocumentLink(new vscode.Range(startPos, endPos), uri);
 					result.push(link);
 				}

@@ -25,7 +25,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	private docType: DocumentTypes;
 	private onType = false;
 	private onTypeLineEmpty = false;
+	// for on-type formatting, the line to indent - the new line after Enter, which may be empty
+	private onTypeLine = -1;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
+	// the parts of a string template, or of a string delimited by entities, that can't start a string
+	private static readonly stringContinuationCharTypes = [CharLevelState.mBt, CharLevelState.rBt, CharLevelState.rDqEnt, CharLevelState.rSqEnt,
+		CharLevelState.rLiteralDqEnt, CharLevelState.rLiteralSqEnt];
 	public static currentIndentString: string = '';
 	private isCloseTag = false;
 	private closeTagLine: vscode.TextLine | null = null;
@@ -47,16 +52,26 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			let chBefore = tLine.text.charAt(pos.character - 2);
 			this.isCloseTag = chBefore === '<';
 		}
+		if (token.isCancellationRequested) {
+			// e.g. superseded by further typing
+			this.isCloseTag = false;
+			return [];
+		}
 		if (ch.indexOf('\n') > -1 || this.isCloseTag) {
 			//const prevLine = document.lineAt(pos.line - 1);
 			const newLine = document.lineAt(pos.line);
 			this.onTypeLineEmpty = newLine.text.trim().length === 0;
 			const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
 			this.onType = true;
-			let formatEdit = this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
-			this.onType = false;
-			this.onTypeLineEmpty = false;
-			return formatEdit;
+			this.onTypeLine = pos.line;
+			try {
+				return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+			} finally {
+				// reset even if formatting fails, so later full-document formatting isn't treated as on-type
+				this.onType = false;
+				this.onTypeLineEmpty = false;
+				this.onTypeLine = -1;
+			}
 		} else {
 			return [];
 		}
@@ -69,6 +84,19 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	};
 
 	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
+		// formatting is synchronous, so the token can't change while it runs - but the request may already be cancelled
+		if (token.isCancellationRequested) {
+			this.isCloseTag = false;
+			return [];
+		}
+		try {
+			return this.formatRange(document, range, options);
+		} finally {
+			this.isCloseTag = false;
+		}
+	};
+
+	private formatRange(document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions): vscode.TextEdit[] {
 		let result: vscode.TextEdit[] = [];
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
@@ -134,6 +162,26 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let closeTagWithinText = false;
 		let closeTagName: string | null = null;
 		let emptyStackIsElseBlock = false;
+		// the content of an xsl:note is indented as a block: each line keeps its indentation relative to the least
+		// indented line, as indentation is significant in Markdown - the note's end tag is indented as usual
+		let withinNote = false;
+		let isNoteEndTag = false;
+		let noteBaseIndent = 0;
+		const startNote = (startTagLine: number) => {
+			withinNote = true;
+			// the least indentation of the note's non-blank content lines, up to the line of its end tag
+			noteBaseIndent = Number.MAX_SAFE_INTEGER;
+			for (let l = startTagLine + 1; l < document.lineCount; l++) {
+				const line = document.lineAt(l);
+				if (line.text.trimStart().startsWith('</xsl:note')) {
+					break;
+				}
+				if (!line.isEmptyOrWhitespace) {
+					noteBaseIndent = Math.min(noteBaseIndent, line.firstNonWhitespaceCharacterIndex);
+				}
+			}
+			noteBaseIndent = noteBaseIndent === Number.MAX_SAFE_INTEGER ? 0 : noteBaseIndent;
+		};
 
 		if (this.docType === DocumentTypes.XPath) {
 			complexStateStack = [[0, [], false]];
@@ -142,6 +190,15 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 		allTokens.forEach((token) => {
 			let newMultiLineState = MultiLineState.None;
+			isNoteEndTag = false;
+			// the continuation of a string literal or string template on a new line: the lexer splits a string at line
+			// breaks, so the continuation starts at the start of the line - it's the middle or right part of a template
+			// or a string delimited by entities, or it follows the string's previous part - the lines since the previous
+			// token are within the string, so their indentation is part of its value (in an attribute, the XML parser
+			// replaces each whitespace character with a space, but doesn't collapse them)
+			const isStringContinuation = token.tokenType === TokenLevelState.string && token.startCharacter === 0 &&
+				(XMLDocumentFormattingProvider.stringContinuationCharTypes.includes(<CharLevelState>token.charType) ||
+					(!!prevToken && prevToken.tokenType === TokenLevelState.string && prevToken.line < token.line));
 			let stackLength = xmlSpacePreserveStack.length;
 			let addNewLine = false;
 
@@ -202,6 +259,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case XMLCharState.rStNoAtt:
 								let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 								xmlSpacePreserveStack.push(preserveSpace);
+								if (!withinNote && isXSLTStartTag && elementName === 'xsl:note') {
+									startNote(lineNumber);
+								}
 								if (this.isCloseTag) {
 									xmlelementStack.push(elementName);
 								}
@@ -209,6 +269,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case XMLCharState.rSt:
 								attributeNameOffset = 0;
 								attributeValueOffset = 0;
+								if (!withinNote && isXSLTStartTag && elementName === 'xsl:note') {
+									startNote(lineNumber);
+								}
 								if (xmlSpaceAttributeValue === null) {
 									let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 									xmlSpacePreserveStack.push(preserveSpace);
@@ -221,6 +284,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								}
 								break;
 							case XMLCharState.lCt:
+								isNoteEndTag = withinNote && document.lineAt(lineNumber).text.startsWith('</xsl:note', token.startCharacter);
 								// outdent:
 								indent = -1;
 								newNestingLevel--;
@@ -451,9 +515,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					result.push(edit);
 
 				}
-			} else if (!withinCDATA && lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
+			} else if ((!withinCDATA || withinNote) && lineNumber >= startFormattingLineNumber && lineNumberDiff > 0) {
 				// process any skipped lines (text not in tokens):
-				for (let i = lineNumberDiff - 1; i > -1; i--) {
+				for (let i = lineNumberDiff - 1; i > -1 && !isStringContinuation; i--) {
 					let loopLineNumber = lineNumber - i;
 					const currentLine = document.lineAt(loopLineNumber);
 					// token may not be at start of line
@@ -485,7 +549,22 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 					}
 					requiredIndentLength = requiredIndentLength < 0 ? 0 : requiredIndentLength;
 
-					if (!(preserveSpace || isPreserveSpaceElement)) {
+					// a line within a note, other than the note's end tag
+					const isNoteLine = withinNote && !(i === 0 && isNoteEndTag);
+					// a blank line is left empty - except the new line for on-type formatting, which is indented
+					const isBlankLine = currentLine.isEmptyOrWhitespace && !(this.onType && loopLineNumber === this.onTypeLine);
+					if (isBlankLine && !addNewLine) {
+						if (currentLine.text.length > 0 && !(preserveSpace || isPreserveSpaceElement)) {
+							result.push(vscode.TextEdit.delete(currentLine.range));
+						}
+					} else if (isNoteLine && !(preserveSpace || isPreserveSpaceElement)) {
+						// the required indentation, plus the line's indentation relative to the note's least indented line
+						const currentIndent = currentLine.text.substring(0, currentLine.firstNonWhitespaceCharacterIndex);
+						const replacementString = indentString.repeat(requiredIndentLength) + currentIndent.substring(Math.min(noteBaseIndent, currentIndent.length));
+						if (currentIndent !== replacementString) {
+							result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+						}
+					} else if (!(preserveSpace || isPreserveSpaceElement)) {
 						if (this.replaceIndendation) {
 							if (addNewLine) {
 								let editPos = new vscode.Position(loopLineNumber, token.startCharacter);
@@ -493,7 +572,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								result.push(vscode.TextEdit.insert(editPos, replacementString));
 							} else {
 								let replacementString = indentString.repeat(requiredIndentLength);
-								result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+								// only where the indentation changes
+								if (currentLine.text.substring(0, currentLine.firstNonWhitespaceCharacterIndex) !== replacementString) {
+									result.push(this.getReplaceLineIndentTextEdit(currentLine, replacementString));
+								}
 							}
 						} else if (actualIndentLength !== requiredIndentLength) {
 							let indentLengthDiff = requiredIndentLength - actualIndentLength;
@@ -509,14 +591,16 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 				}
 			}
 			withinCDATA = false;
+			if (isNoteEndTag) {
+				withinNote = false;
+			}
 			prevLineNumber = lineNumber;
 			nestingLevel = newNestingLevel;
 			multiLineState = newMultiLineState;
 			prevToken = token;
 		});
-		this.isCloseTag = false;
 		return result;
-	};
+	}
 
 	private shouldAddNewLine(documenthasNewLines: HasCharacteristic, prevToken: BaseToken | null, token: BaseToken): boolean {
 		let addNewLine = false;

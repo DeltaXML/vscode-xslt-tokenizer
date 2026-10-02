@@ -1,0 +1,252 @@
+{
+  "suite": "xpNumericLiterals",
+  "source": "xpNumericLiterals.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "num1",
+      "xpath": "1",
+      "tokens": [
+        [
+          "1",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num2",
+      "xpath": "100",
+      "tokens": [
+        [
+          "100",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num3",
+      "xpath": "10.0",
+      "tokens": [
+        [
+          "10.0",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num4",
+      "xpath": "10.02",
+      "tokens": [
+        [
+          "10.02",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num5-error",
+      "xpath": "10.0.2",
+      "tokens": [
+        [
+          "10.0.2",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num6",
+      "xpath": ".2",
+      "tokens": [
+        [
+          ".2",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num7",
+      "xpath": "-1",
+      "tokens": [
+        [
+          "-",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num8",
+      "xpath": "- 1",
+      "tokens": [
+        [
+          "-",
+          "operator"
+        ],
+        [
+          "1",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num9",
+      "xpath": "-100",
+      "tokens": [
+        [
+          "-",
+          "operator"
+        ],
+        [
+          "100",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num10",
+      "xpath": "-100.1",
+      "tokens": [
+        [
+          "-",
+          "operator"
+        ],
+        [
+          "100.1",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num11-error",
+      "xpath": "-100.2.4",
+      "tokens": [
+        [
+          "-",
+          "operator"
+        ],
+        [
+          "100.2.4",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num12",
+      "xpath": "5E7",
+      "tokens": [
+        [
+          "5E7",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num13",
+      "xpath": "5e-72",
+      "tokens": [
+        [
+          "5e-72",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num14",
+      "xpath": "5e+72",
+      "tokens": [
+        [
+          "5e+72",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num15-error",
+      "xpath": "5e77.5",
+      "tokens": [
+        [
+          "5e77.5",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num16-error",
+      "xpath": "5e7e8",
+      "tokens": [
+        [
+          "5e7e8",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num17-error",
+      "xpath": "5..5",
+      "tokens": [
+        [
+          "5..5",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num18-error",
+      "xpath": "5e.5",
+      "tokens": [
+        [
+          "5e.5",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num19-error",
+      "xpath": "5e",
+      "tokens": [
+        [
+          "5e",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num20-error",
+      "xpath": "5e.",
+      "tokens": [
+        [
+          "5e.",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num21",
+      "xpath": "5.",
+      "tokens": [
+        [
+          "5.",
+          "number"
+        ]
+      ]
+    },
+    {
+      "label": "num22",
+      "xpath": "5e-5",
+      "tokens": [
+        [
+          "5e-5",
+          "number"
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+Type error in expression in xsl:variable/@select on line 3 column 66 of c04.xsl:
+  XTTE0570  A sequence of more than one item { ("1", "2") } is not allowed as the value of variable $v
+  In template rule with match="/" on line 2 of c04.xsl
+A sequence of more than one item { ("1", "2") } is not allowed as the value of variable $v

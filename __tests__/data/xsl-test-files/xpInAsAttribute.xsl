@@ -4,6 +4,10 @@
                 xmlns:fn="namespace-uri"
                 xmlns:ct="com.test"
                 version="3.0">
+  
+  <!-- inform script that generates unit-test data to use 'as' attribute -->
+  <?test-attribute as?>
+
   <!-- tests with valid types specific by the 'as' attribute -->
   <xsl:variable name="test1" as="xs:integer" select="count(22)"/>
   <xsl:variable name="test2" as="map(xs:integer, map(xs:string, array(xs:integer*)))?" select="/*"/>
@@ -25,7 +29,7 @@
   <xsl:variable name="test18" as="element(as)" select="/*"/>
   <xsl:variable name="test19" as="function(*)" select="function() {}"/>
   
-  <!-- XPath 4.0 proposed types supported in Saxon 12: -->
+  <!-- XPath 4.0 types and Saxon 12 extensions (union, type) - errors in this XSLT 3.0 stylesheet, see xpItemTypesAs40.xsl for XPath 4.0: -->
   <xsl:variable name="XP4test1" as="record(ssn as xs:string, emp as element(employee))" select="/*"/>
   <xsl:variable name="XP4test2" as="union(xs:dateTime, xs:date, xs:time, xs:string)" select="/*"/>
   <xsl:variable name="XP4test3" as="enum('NFC', 'NFD', 'NFKC', 'NFKD')" select="/*"/>

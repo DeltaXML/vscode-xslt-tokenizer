@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import * as jsc from 'jsonc-parser';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 
 interface XSLTJSTask {
     type: string;
@@ -16,7 +17,7 @@ interface XSLTJSTask {
     xmlSource: string;
     useJsonSource?: boolean;
     execute?: boolean;
-    resultPath: string;
+    resultPath?: string;
     relocate?: string;
     timing?: string;
     unprefixedElementNames?: string;
@@ -102,6 +103,15 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
         return this.getTask(_task.definition);
     }
 
+    // true if the task's xmlSource should be passed as '-json:' rather than '-s:' - explicitly via useJsonSource,
+    // otherwise when xmlSource is a '.json' file (which '-s:' would fail to parse as XML). Shared by all XSLT task types
+    public static isJsonSource(task: { xmlSource?: unknown; useJsonSource?: boolean }): boolean {
+        if (task.useJsonSource !== undefined) {
+            return !!task.useJsonSource;
+        }
+        return typeof task.xmlSource === 'string' && /\.json$/i.test(task.xmlSource);
+    }
+
     public static async getTasksObject() {
         let workspaceUri = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri : vscode.Uri.file('/');
         let workspaceTaskUri = workspaceUri.with({ path: workspaceUri.path + '/.vscode/tasks.json' });
@@ -182,7 +192,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
         return this.getTask(xsltTask);
     }
 
-    private getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
+    public getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt-js';
 
@@ -197,7 +207,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
 
             let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
             let xsltParametersCommand: string[] = [];
-            let useJSON = !!xsltTask.useJsonSource;
+            let useJSON = SaxonJsTaskProvider.isJsonSource(xsltTask);
             let nogo = xsltTask.execute !== undefined && xsltTask.execute === false;
             for (const param of xsltParameters) {
                 xsltParametersCommand.push(param.name + '=' + param.value);
@@ -256,7 +266,7 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
             let problemMatcher = "$saxon-xslt-js";
 
             const processExecution = new vscode.ProcessExecution(npxCommand, commandLineArgs.concat(xsltParametersCommand));
-            let newTask = new vscode.Task(xsltTask, vscode.TaskScope.Workspace, xsltTask.label, source, processExecution, problemMatcher);
+            let newTask = new vscode.Task(xsltTask, SaxonTaskProvider.taskScope(xsltTask.xsltFile), xsltTask.label, source, processExecution, problemMatcher);
             newTask.presentationOptions.clear = false;
             newTask.presentationOptions.showReuseMessage = false;
             newTask.presentationOptions.echo = true;

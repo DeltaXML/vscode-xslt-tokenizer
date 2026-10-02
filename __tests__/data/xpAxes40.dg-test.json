@@ -1,0 +1,78 @@
+{
+  "suite": "xpAxes40",
+  "source": "xpAxes40.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "xsltVersion": "4.0",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "axis40a",
+      "xpath": "following-or-self::*",
+      "problems": []
+    },
+    {
+      "label": "axis40b",
+      "xpath": "following-sibling-or-self::a",
+      "problems": []
+    },
+    {
+      "label": "axis40c",
+      "xpath": "preceding-or-self::node()",
+      "problems": []
+    },
+    {
+      "label": "axis40d",
+      "xpath": "preceding-sibling-or-self::a[1]",
+      "problems": []
+    },
+    {
+      "label": "axis40e",
+      "xpath": "a/following-sibling-or-self::b/preceding-sibling-or-self::*",
+      "problems": []
+    },
+    {
+      "label": "axis40f",
+      "xpath": "(a, b)/following-or-self::text()",
+      "problems": []
+    },
+    {
+      "label": "axis40g",
+      "xpath": "count(preceding-sibling-or-self::*)",
+      "problems": []
+    },
+    {
+      "label": "axis31a",
+      "xpath": "following-sibling::a",
+      "problems": []
+    },
+    {
+      "label": "axis31b",
+      "xpath": "preceding::node()",
+      "problems": []
+    },
+    {
+      "label": "axisError1",
+      "xpath": "following-or-selfie::a",
+      "problems": [
+        [
+          "XPath: Invalid axis name: 'following-or-selfie'",
+          "following-or-selfie"
+        ]
+      ]
+    },
+    {
+      "label": "axisError2",
+      "xpath": "preceding-sibling-or-self:a",
+      "problems": [
+        [
+          "XPath: Undeclared prefix in name: 'preceding-sibling-or-self:a'",
+          "preceding-sibling-or-self:a"
+        ]
+      ]
+    }
+  ]
+}

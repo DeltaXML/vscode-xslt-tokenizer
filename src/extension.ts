@@ -8,10 +8,12 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 import * as vscode from 'vscode';
+import { XdocNotes } from './xdocNote';
 import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
-import { SaxonTaskProvider } from './saxonTaskProvider';
+import { SaxonTaskProvider, QuickRunTaskType } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
+import { SaxonCTaskProvider } from './saxonCTaskProvider';
 import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration } from './languageConfigurations';
 import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
@@ -25,10 +27,19 @@ import { DCPSymbolProvider } from './dcpSymbolProvider';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { window } from 'vscode';
 import { XSLTHoverProvider } from './xsltHoverProvider';
+import { XSLTSignatureHelpProvider } from './xsltSignatureHelpProvider';
 import * as os from 'os';
+import * as path from 'path';
 import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTReferenceProvider } from './xsltReferenceProvider';
 import { XSLTCodeActions } from './xsltCodeActions';
+import { wrapWith } from './xsltWrap';
+import { ItemTypeSupport } from './itemTypeSupport';
+import { SaxonTypeAliases } from './saxonTypeAliases';
+import { CatalogSetting } from './catalogSetting';
+import { CatalogDocumentProvider } from './catalogDocumentProvider';
+import { ImportIndex } from './importIndex';
+import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
 
 
@@ -36,7 +47,8 @@ import { FileSelection } from './fileSelection';
 const tokenModifiers = new Map<string, number>();
 
 const legend = (function () {
-	const tokenTypesLegend = XslLexer.getTextmateTypeLegend();
+	// the XSLT lexer's token types, then those for documentation notes
+	const tokenTypesLegend = XslLexer.getTextmateTypeLegend().concat(XdocNotes.tokenTypes);
 
 	const tokenModifiersLegend = [
 		'declaration', 'documentation', 'member', 'static', 'abstract', 'deprecated',
@@ -47,9 +59,44 @@ const legend = (function () {
 	return new vscode.SemanticTokensLegend(tokenTypesLegend, tokenModifiersLegend);
 })();
 
+// why the stylesheet needs Saxon's syntax extensions: it's XSLT 4.0, or it uses item types or notes (see ItemTypeSupport)
+async function syntaxExtensionsReason(fsPath: string) {
+	try {
+		const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fsPath));
+		return ItemTypeSupport.syntaxExtensionsReason(doc.getText());
+	} catch {
+		return undefined;
+	}
+}
+
 export function activate(context: vscode.ExtensionContext) {
 	const fileSelector = new FileSelection(context);
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
+
+	// a deliberate 'None' XML context file is restored synchronously, before registerXMLEditor() below can adopt
+	// the active XML file as the context file
+	DocumentChangeHandler.contextFileIsNone = fileSelector.isNoContextFile();
+
+	// restore the deliberately-chosen XML context file on startup, rather than waiting for the user to open/pick
+	// one again - only if it still exists. Deliberately not derived from the recently-used file list, since that
+	// list also gets entries from any XML file the user happens to view (e.g. inspecting a transform's output)
+	(async () => {
+		const persistedContextFsPath = fileSelector.getContextFileUri();
+		if (persistedContextFsPath) {
+			try {
+				const uri = vscode.Uri.file(persistedContextFsPath);
+				await vscode.workspace.fs.stat(uri);
+				DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
+				// registerXMLEditor() below already ran by the time this resolves and may have rendered the
+				// status bar with the placeholder text (lastActiveXMLNonXSLUri was still unset then) - refresh
+				// it now, using the same visibility rule registerXMLDocument uses for the current active editor
+				const activeLangId = vscode.window.activeTextEditor?.document.languageId;
+				DocumentChangeHandler.updateStatusBarItem(activeLangId === 'xslt' || activeLangId === 'xpath' || activeLangId === 'dcp');
+			} catch {
+				// file no longer exists - leave this to be set the usual way, by opening/picking an XML file
+			}
+		}
+	})();
 	const xsltDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xslt');
 	const xsltSymbolProvider = new XsltSymbolProvider(XSLTConfiguration.configuration, xsltDiagnosticsCollection);
 
@@ -105,6 +152,24 @@ export function activate(context: vscode.ExtensionContext) {
 					break;
 				}
 			}			
+		}
+	}
+
+	// the XML selection commands in a quick pick, with their default keyboard shortcuts - a keyboard-friendly alternative
+	// to the XML Selection submenu of the editor's context menu
+	async function showXMLSelectionPick() {
+		const shortcut = (digit: string) => (process.platform === 'darwin' ? '⇧⌘' : 'Ctrl+Shift+') + digit;
+		const items = [
+			{ label: 'Select current element', description: shortcut('0'), command: 'xslt-xpath.selectCurrentElement' },
+			{ label: 'Select parent element', description: shortcut('9'), command: 'xslt-xpath.selectParentElement' },
+			{ label: 'Select first child element', description: shortcut('8'), command: 'xslt-xpath.selectFirstChildElement' },
+			{ label: 'Select preceding element', description: shortcut('6'), command: 'xslt-xpath.selectPrecedingElement' },
+			{ label: 'Select following element', description: shortcut('7'), command: 'xslt-xpath.selectFollowingElement' },
+			{ label: 'Goto XPath', description: '', command: 'xslt-xpath.gotoXPath' }
+		];
+		const picked = await vscode.window.showQuickPick(items, { placeHolder: 'XML selection' });
+		if (picked) {
+			await vscode.commands.executeCommand(picked.command);
 		}
 	}
 
@@ -175,11 +240,129 @@ export function activate(context: vscode.ExtensionContext) {
 		docChangeHandler.registerXMLEditor(editor);
 	}));
 
-	context.subscriptions.push(vscode.tasks.onDidEndTask((event) => {
+	// the task definition a started or ended task carries still has its '${...}' variables unresolved, so a path
+	// property (e.g. 'resultPath' or 'xsltFile') is resolved here - file-picker commands (directly, or via a tasks.json
+	// input) resolve to the file the user picked for this run. Returns undefined for anything that can't be resolved
+	const resolveTaskPath = async (task: vscode.Task, propName: string): Promise<string | undefined> => {
+		const resultPath = task.definition[propName];
+		if (typeof resultPath !== 'string' || resultPath === '') {
+			return undefined;
+		}
+		const workspaceFolder = typeof task.scope === 'object' ? task.scope : vscode.workspace.workspaceFolders?.[0];
+		const resultPickerLabels: { [command: string]: string } = {
+			'xslt-xpath.pickResultFile': FileSelection.RESULT_LABEL,
+			'xslt-xpath.pickStage2ResultFile': FileSelection.STAGE2_RESULT_LABEL,
+			'xslt-xpath.pickXsltFile': FileSelection.XSLT_LABEL,
+		};
+		const inputs: { id?: string; command?: string; args?: { label?: string } }[] = resultPath.includes('${input:') ? (await SaxonJsTaskProvider.getTasksObject()).inputs ?? [] : [];
+		const pickedValueForCommand = (command: string | undefined, args?: { label?: string }) =>
+			command === 'xslt-xpath.pickFile' ? (args?.label ? fileSelector.pickedValues.get(args.label) : undefined)
+				: command && resultPickerLabels[command] ? fileSelector.pickedValues.get(resultPickerLabels[command]) : undefined;
+
+		let unresolved = false;
+		const resolved = resultPath.replace(/\$\{([^}]+)\}/g, (match: string, variable: string) => {
+			let value: string | undefined;
+			if (variable === 'workspaceFolder') {
+				value = workspaceFolder?.uri.fsPath;
+			} else if (variable === 'file') {
+				value = vscode.window.activeTextEditor?.document.uri.fsPath;
+			} else if (variable === 'workspaceFolderBasename') {
+				value = workspaceFolder?.name;
+			} else if (variable === 'userHome') {
+				value = os.homedir();
+			} else if (variable === 'pathSeparator' || variable === '/') {
+				value = path.sep;
+			} else if (variable.startsWith('env:')) {
+				value = process.env[variable.substring('env:'.length)];
+			} else if (variable.startsWith('config:')) {
+				const configValue = vscode.workspace.getConfiguration().get(variable.substring('config:'.length));
+				value = typeof configValue === 'string' ? configValue : undefined;
+			} else if (variable.startsWith('command:')) {
+				value = pickedValueForCommand(variable.substring('command:'.length));
+			} else if (variable.startsWith('input:')) {
+				const input = inputs.find((i) => i.id === variable.substring('input:'.length));
+				value = pickedValueForCommand(input?.command, input?.args);
+			}
+			if (value === undefined) {
+				unresolved = true;
+				return match;
+			}
+			return value;
+		});
+		if (unresolved) {
+			return undefined;
+		}
+		// the processor runs in the workspace folder, so a relative result path is relative to it
+		return path.isAbsolute(resolved) || !workspaceFolder ? resolved : path.join(workspaceFolder.uri.fsPath, resolved);
+	};
+
+	// an XSLT 4.0 stylesheet run with "allowSyntaxExtensions40": "off" fails on any XPath 4.0 syntax, with Saxon errors
+	// that don't mention the setting - as does an XSLT 3.0 one with item types or notes, when the extension allows them -
+	// so warn once per task (Saxon-HE is excluded, as it has no XPath 4.0 syntax support)
+	const warnedSyntaxExtensionTasks = new Set<string>();
+	context.subscriptions.push(vscode.tasks.onDidStartTaskProcess(async (event) => {
 		const t = event.execution.task;
-		if (fileSelector.completedPick === true && (t.definition.type === 'xslt' || t.definition.type === 'xslt-js')) {
-			vscode.window.showInformationMessage(`Completed task: '${t.definition.label}'`);
+		const isJava = t.definition.type === 'xslt';
+		if (!(isJava || t.definition.type === 'xslt-c') || t.definition.allowSyntaxExtensions40 !== 'off' || warnedSyntaxExtensionTasks.has(t.name)) {
+			return;
+		}
+		const saxonPathSetting = isJava ? 'saxonJar' : 'saxonCPath';
+		const saxonPath = t.definition[saxonPathSetting] === '${config:XSLT.tasks.' + saxonPathSetting + '}' ?
+			vscode.workspace.getConfiguration('XSLT.tasks').get<string>(saxonPathSetting) : t.definition[saxonPathSetting];
+		const xsltFsPath = await resolveTaskPath(t, 'xsltFile');
+		const reason = xsltFsPath ? await syntaxExtensionsReason(xsltFsPath) : undefined;
+		if (SaxonTaskProvider.isSaxonHE(saxonPath) || !xsltFsPath || !reason) {
+			return;
+		}
+		warnedSyntaxExtensionTasks.add(t.name);
+		const openAction = 'Open tasks.json';
+		const message = reason === 'xslt40' ?
+			`Task '${t.name}': the XSLT 4.0 stylesheet '${path.basename(xsltFsPath)}' is run with "allowSyntaxExtensions40": "off", so Saxon will report any XPath 4.0 syntax as an error. Set it to "auto" or "on" in tasks.json.` :
+			`Task '${t.name}': the stylesheet '${path.basename(xsltFsPath)}' uses XSLT 4.0 item types or notes, and is run with "allowSyntaxExtensions40": "off", so Saxon will report them as errors. Set it to "auto" or "on" in tasks.json.`;
+		vscode.window.showWarningMessage(message, openAction).then(async (choice) => {
+			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+			if (choice === openAction && workspaceFolder) {
+				vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'));
+			}
+		});
+	}));
+
+	// onDidEndTaskProcess (rather than onDidEndTask) provides the exit code, so 'Open' is only offered for a result
+	// written by this run - a failed run can leave an earlier run's result file in place
+	context.subscriptions.push(vscode.tasks.onDidEndTaskProcess(async (event) => {
+		const t = event.execution.task;
+		if (fileSelector.completedPick === true && (t.definition.type === 'xslt' || t.definition.type === 'xslt-js' || t.definition.type === 'xslt-c')) {
+			// exitCode is undefined when VS Code can't determine it (e.g. the task was terminated) - not treated as a failure
+			const failed = event.exitCode !== undefined && event.exitCode !== 0;
+			const message = failed ? `Task '${t.definition.label}' failed (exit code ${event.exitCode})` : `Completed task: '${t.definition.label}'`;
+			let resultUri: vscode.Uri | undefined;
+			if (!failed) {
+				const resultFsPath = await resolveTaskPath(t, 'resultPath');
+				if (resultFsPath) {
+					try {
+						resultUri = vscode.Uri.file(resultFsPath);
+						await vscode.workspace.fs.stat(resultUri);
+					} catch {
+						resultUri = undefined;
+					}
+				}
+			}
 			fileSelector.pickedValues.clear();
+			if (resultUri) {
+				// for an HTML result, also 'Open in Browser' - VS Code's integrated browser
+				const actions = SaxonTaskProvider.resultActions(resultUri.fsPath, await vscode.commands.getCommands(true));
+				vscode.window.showInformationMessage(message, ...actions).then((choice) => {
+					if (choice === SaxonTaskProvider.openResultAction) {
+						vscode.commands.executeCommand('vscode.open', resultUri);
+					} else if (choice === SaxonTaskProvider.openResultInBrowserAction) {
+						vscode.commands.executeCommand(SaxonTaskProvider.integratedBrowserOpenFile, resultUri);
+					}
+				});
+			} else if (failed) {
+				vscode.window.showErrorMessage(message);
+			} else {
+				vscode.window.showInformationMessage(message);
+			}
 		}
 		fileSelector.completedPick = true; // as fileselector may not be used for next task
 	}));
@@ -199,8 +382,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, schLinkProvider));
-	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider()));
-	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider()));
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider(xsltDefintiionProvider, XSLTConfiguration.configuration)));
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider(xpathDefinitionProvider, XPathConfiguration.configuration)));
+	// '"', "'" and '<' for the parameters of a named template, in an xsl:call-template
+	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xslt' }, new XSLTSignatureHelpProvider(XSLTConfiguration.configuration, xsltDefintiionProvider), '(', ',', '"', '\'', '<'));
+	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xpath' }, new XSLTSignatureHelpProvider(XPathConfiguration.configuration), '(', ','));
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));
@@ -215,6 +401,92 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setVariableNames', (...args) => XPathSemanticTokensProvider.setVariableNames(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xmlSelectionPick', () => showXMLSelectionPick()));
+	// when the index of the workspace's XSLT modules is first built, check the open modules again, for references to
+	// declarations in the stylesheets that import or include them
+	context.subscriptions.push({ dispose: () => ImportIndex.instance.dispose() });
+	const relintXsltModules = () => vscode.workspace.textDocuments.filter((doc) => doc.languageId === 'xslt' && doc.uri.scheme === 'file').forEach((doc) => {
+		XsltSymbolProvider.instanceForXSLT?.getDocumentSymbols(doc, false);
+	});
+	// the XML catalog: when it changes, the hrefs of the indexed modules and the open modules are resolved again
+	CatalogSetting.activate(context, async () => {
+		await ImportIndex.instance.refresh();
+		relintXsltModules();
+	});
+	// with no catalog setting: offer the workspace folder's catalog.xml, if it's an XML catalog - not waited for
+	CatalogSetting.offerWorkspaceCatalog(context);
+	// XML catalog files: document links for their entries, and warnings for files and folders that aren't found
+	CatalogDocumentProvider.activate(context);
+	const onIndexBuilt = ImportIndex.instance.onDidChange(() => {
+		if (ImportIndex.instance.built) {
+			onIndexBuilt.dispose();
+			relintXsltModules();
+		}
+	});
+	// the top-level stylesheets chosen for modules, saved for the workspace
+	const topLevelChoicesKey = 'xslt-xpath.topLevelStylesheetChoices';
+	ImportIndex.instance.setChoices(context.workspaceState.get(topLevelChoicesKey));
+	const saveTopLevelChoices = async () => {
+		await context.workspaceState.update(topLevelChoicesKey, ImportIndex.instance.choices);
+		relintXsltModules();
+	};
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.chooseTopLevelStylesheet', async () => {
+		const document = vscode.window.activeTextEditor?.document;
+		if (!document || document.languageId !== 'xslt' || document.uri.scheme !== 'file') {
+			vscode.window.showErrorMessage('Choose Top-Level Stylesheet: open an XSLT module in the active editor first.');
+			return;
+		}
+		const index = ImportIndex.instance;
+		await index.whenBuilt();
+		const module = document.fileName;
+		const current = index.masterFor(module);
+		const isChosen = index.isChosen(module);
+		type Item = vscode.QuickPickItem & { stylesheet?: string, action?: 'automatic' | 'browse' };
+		const items: Item[] = index.topLevelCandidates(module).map((stylesheet) => ({
+			label: path.basename(stylesheet),
+			description: vscode.workspace.asRelativePath(path.dirname(stylesheet)) + (stylesheet === current ? (isChosen ? ' · chosen' : ' · automatic') : ''),
+			stylesheet
+		}));
+		items.push({ label: 'Automatic (nearest folder)', description: isChosen ? '' : 'current', action: 'automatic' }, { label: 'Browse...', action: 'browse' });
+		const picked = await vscode.window.showQuickPick(items, { placeHolder: `The top-level stylesheet for ${path.basename(module)}` });
+		if (!picked) {
+			return;
+		}
+		if (picked.stylesheet) {
+			index.chooseTopLevel(picked.stylesheet, module);
+		} else if (picked.action === 'automatic') {
+			index.clearChoice(module);
+		} else {
+			const uris = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { 'XSLT': ['xsl', 'xslt'] }, defaultUri: vscode.Uri.file(path.dirname(module)), openLabel: 'Choose' });
+			if (!uris || uris.length === 0) {
+				return;
+			}
+			index.chooseForModule(module, uris[0].fsPath);
+		}
+		await saveTopLevelChoices();
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.resetTopLevelStylesheets', async () => {
+		const count = ImportIndex.instance.resetChoices();
+		await saveTopLevelChoices();
+		vscode.window.showInformationMessage(count === 0 ? 'There are no top-level stylesheet choices to clear.' : `Cleared ${count} top-level stylesheet choice${count === 1 ? '' : 's'}.`);
+	}));
+	// Quick Run for a module in the 'XSLT Imports' view, e.g. the top-level stylesheet
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunModule', async (node?: { path: string }) => {
+		if (node?.path) {
+			await quickRunDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(node.path)));
+		}
+	}));
+
+	// the 'XSLT Imports' view, for the active XSLT module
+	const importTreeProvider = new ImportTreeProvider();
+	importTreeProvider.view = vscode.window.createTreeView('xslt-xpath.imports', { treeDataProvider: importTreeProvider, showCollapseAll: true });
+	context.subscriptions.push(importTreeProvider.view);
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => importTreeProvider.refresh()));
+	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => doc.languageId === 'xslt' && importTreeProvider.refresh()));
+	context.subscriptions.push(ImportIndex.instance.onDidChange(() => importTreeProvider.refresh()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.wrapWith', (uri?: vscode.Uri, start?: number, end?: number) => wrapWith(uri, start, end)));
+	// Saxon's earlier syntax for named types, which Saxon 12.8 and later ignore, as XSLT 4.0 xsl:item-type declarations
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.convertSaxonTypeAliases', () => SaxonTypeAliases.convertWorkspace()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectCurrentElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Current)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectPrecedingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Previous)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectFollowingElement', () => XsltSymbolProvider.selectXMLElement(SelectionType.Next)));
@@ -223,6 +495,293 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.symbolFromXPath', (...args) => getSymbolFromXPath(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.selectXPathInDocument', (...args) => selectXPathInDocument(args)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setExtensionXPathVariable', (...args) => XsltTokenCompletions.extXPathVariables.set(args[0], args[1])));
+	const quickRunTaskProviders: { [type in QuickRunTaskType]: { getTask(definition: vscode.TaskDefinition): vscode.Task | undefined } } = {
+		'xslt': new SaxonTaskProvider(''),
+		'xslt-js': new SaxonJsTaskProvider(''),
+		'xslt-c': new SaxonCTaskProvider(''),
+	};
+	const getQuickRunTaskType = (uri?: vscode.Uri) => vscode.workspace.getConfiguration('XSLT.tasks', uri).get<QuickRunTaskType>('quickRunProcessor', 'xslt');
+
+	// the status bar item shows the active processor as text (editor title buttons can only show an icon); the
+	// context key picks which processor-specific variant of the editor title play button - and so its tooltip - is shown
+	const quickRunProcessorStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
+	quickRunProcessorStatusBarItem.command = 'xslt-xpath.quickRunSwitchProcessor';
+	context.subscriptions.push(quickRunProcessorStatusBarItem);
+	const updateQuickRunProcessorIndicators = () => {
+		const document = vscode.window.activeTextEditor?.document;
+		const taskType = getQuickRunTaskType(document?.uri);
+		vscode.commands.executeCommand('setContext', 'xslt-xpath.quickRunProcessor', taskType);
+		// shown for XML files too, as a stylesheet picked from the XML file's Quick Run list runs with this processor
+		if (document?.languageId === 'xslt' || document?.languageId === 'xml') {
+			const processorName = SaxonTaskProvider.quickRunProcessorNames[taskType] ?? taskType;
+			quickRunProcessorStatusBarItem.text = `$(play) ${processorName}`;
+			quickRunProcessorStatusBarItem.tooltip = `Quick Run processor: ${processorName} - click to switch`;
+			quickRunProcessorStatusBarItem.show();
+		} else {
+			quickRunProcessorStatusBarItem.hide();
+		}
+	};
+	updateQuickRunProcessorIndicators();
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => updateQuickRunProcessorIndicators()));
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+		if (e.affectsConfiguration('XSLT.tasks.quickRunProcessor')) {
+			updateQuickRunProcessorIndicators();
+		}
+		// item types and notes before XSLT 4.0: check the open modules again
+		if (e.affectsConfiguration(`${ItemTypeSupport.section}.${ItemTypeSupport.setting}`)) {
+			relintXsltModules();
+		}
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunSwitchProcessor', async () => {
+		const uri = vscode.window.activeTextEditor?.document.uri;
+		const current = getQuickRunTaskType(uri);
+		const items = (Object.keys(SaxonTaskProvider.quickRunProcessorNames) as QuickRunTaskType[]).map((taskType) => ({
+			label: SaxonTaskProvider.quickRunProcessorNames[taskType],
+			description: taskType === current ? `'${taskType}' task (current)` : `'${taskType}' task`,
+			taskType: taskType,
+		}));
+		const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Select the XSLT processor used by Quick Run' });
+		if (!picked || picked.taskType === current) {
+			return;
+		}
+		// update the most specific level the setting is already defined at, so the change actually takes effect
+		const config = vscode.workspace.getConfiguration('XSLT.tasks', uri);
+		const inspected = config.inspect('quickRunProcessor');
+		const target = inspected?.workspaceFolderValue !== undefined ? vscode.ConfigurationTarget.WorkspaceFolder
+			: inspected?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace
+				: vscode.ConfigurationTarget.Global;
+		await config.update('quickRunProcessor', picked.taskType, target);
+	}));
+
+	// a stylesheet with both match templates and xsl:initial-template can be run either way - Quick Run can't tell
+	// which is intended, so it keeps to the XML context file, and points out the alternative once, when the task is created
+	const showInitialTemplateTip = (label: string, sourceName: string) => {
+		const openTasksAction = 'Open tasks.json';
+		vscode.window.showInformationMessage(`Quick Run: task '${label}' applies templates to ${sourceName}. This stylesheet also declares xsl:initial-template - to start from it instead, add "initialTemplate": "" to the task (${sourceName} then becomes the global context item), or pick 'None' as the XML context file.`, openTasksAction).then((choice) => {
+			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+			if (choice === openTasksAction && workspaceFolder) {
+				vscode.window.showTextDocument(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'));
+			}
+		});
+	};
+
+	// the selected Quick Run processor's task type, or undefined (having reported why) if it isn't set up to run
+	const getRunnableQuickRunTaskType = (uri: vscode.Uri): QuickRunTaskType | undefined => {
+		const taskType = getQuickRunTaskType(uri);
+		const processorName = SaxonTaskProvider.quickRunProcessorNames[taskType];
+		if (!processorName) {
+			vscode.window.showErrorMessage(`Quick Run XSLT: unrecognised "XSLT.tasks.quickRunProcessor" setting value '${taskType}' - use 'xslt', 'xslt-js' or 'xslt-c'.`);
+			return undefined;
+		}
+		const enabledSetting = { 'xslt': 'java', 'xslt-js': 'js', 'xslt-c': 'saxonc' }[taskType];
+		if (!vscode.workspace.getConfiguration(`XSLT.tasks.${enabledSetting}`).get('enabled')) {
+			vscode.window.showErrorMessage(`Quick Run XSLT: ${processorName} tasks are disabled - enable the "XSLT.tasks.${enabledSetting}.enabled" setting to use this.`);
+			return undefined;
+		}
+		if (taskType === 'xslt' && !vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar')) {
+			vscode.window.showErrorMessage('Quick Run XSLT: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+			return undefined;
+		}
+		if (taskType === 'xslt-c' && !vscode.workspace.getConfiguration('XSLT.tasks').get('saxonCPath')) {
+			vscode.window.showErrorMessage('Quick Run XSLT: set the "XSLT.tasks.saxonCPath" setting to the folder containing the SaxonC Transform executable first.');
+			return undefined;
+		}
+		return taskType;
+	};
+
+	// runs the stylesheet with the given XML source (undefined: none, starting from xsl:initial-template). The first
+	// use for an xslt+source pair persists a real task in .vscode/tasks.json (result path uses the file-picker command,
+	// so it also lands in the recent-files list), letting the user add xslt parameters etc. by hand afterwards;
+	// subsequent runs re-execute that same (possibly since-edited) persisted task
+	const runQuickRunTask = async (taskType: QuickRunTaskType, xsltDocument: vscode.TextDocument, xmlSourceFsPath: string | undefined) => {
+		const xsltFsPath = xsltDocument.uri.fsPath;
+		try {
+			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask(taskType, xsltDocument, xmlSourceFsPath, xsltDefintiionProvider);
+			if (quickRunTask) {
+				const { label, created } = quickRunTask;
+				if (created && xmlSourceFsPath && await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
+					showInitialTemplateTip(label, path.basename(xmlSourceFsPath));
+				}
+				// a task just written to tasks.json isn't returned by fetchTasks until VS Code has asynchronously
+				// reloaded the file - on a first run the initial fetch nearly always misses it, so retry briefly
+				let persistedTasks: vscode.Task[] = [];
+				for (let attempt = 0; attempt < 15; attempt++) {
+					if (attempt > 0) {
+						await new Promise((resolve) => setTimeout(resolve, 200));
+					}
+					persistedTasks = await vscode.tasks.fetchTasks({ type: taskType });
+					const persistedTask = persistedTasks.find((t) => {
+						const folder = typeof t.scope === 'object' ? t.scope : vscode.workspace.workspaceFolders?.[0];
+						return !!folder && SaxonTaskProvider.isQuickRunTaskFor(t.definition, taskType, xsltFsPath, xmlSourceFsPath, folder.uri.fsPath);
+					});
+					if (persistedTask) {
+						await vscode.tasks.executeTask(persistedTask);
+						return;
+					}
+				}
+				console.warn(`Quick Run XSLT: expected a persisted task "${label}" for this xsltFile/xmlSource but vscode.tasks.fetchTasks returned: [${persistedTasks.map((t) => t.name).join(', ')}] - falling back to an ad hoc run.`);
+			}
+		} catch (e) {
+			// no workspace, or tasks.json couldn't be read/written - fall back to an ad hoc, non-persisted run below
+			console.warn('Quick Run XSLT: failed to find/create a persisted task, falling back to an ad hoc run.', e);
+		}
+
+		const processorName = SaxonTaskProvider.quickRunProcessorNames[taskType];
+		const definition = SaxonTaskProvider.createQuickRunTaskDefinition(taskType, `${processorName} Quick Run`, xsltFsPath, xmlSourceFsPath, '${command:xslt-xpath.pickResultFile}');
+		if (taskType === 'xslt') {
+			definition.saxonJar = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
+		}
+		const task = quickRunTaskProviders[taskType].getTask(definition);
+		if (task) {
+			await vscode.tasks.executeTask(task);
+		}
+	};
+
+	// for a module that depends on declarations in the top-level stylesheet importing it, the choice to run that
+	// stylesheet or the module - for the rest of the session
+	const parentRunChoices = new Map<string, 'parent' | 'module'>();
+
+	// the stylesheet to run for the module: the module, or for a module that depends on declarations in its top-level
+	// stylesheet - so it can't be compiled on its own - that stylesheet, if chosen - undefined if the run is cancelled
+	const stylesheetToRun = async (document: vscode.TextDocument): Promise<vscode.TextDocument | undefined> => {
+		const parent = await XsltSymbolProvider.parentDependency(document);
+		if (!parent) {
+			return document;
+		}
+		let choice = parentRunChoices.get(document.fileName);
+		if (!choice) {
+			const runParent = `Run ${path.basename(parent)}`;
+			const runModule = 'Run Anyway';
+			const picked = await vscode.window.showWarningMessage(`Quick Run XSLT: ${path.basename(document.fileName)} uses declarations from ${path.basename(parent)}, which imports it, so it can't be run on its own.`, runParent, runModule);
+			if (!picked) {
+				return undefined;
+			}
+			choice = picked === runParent ? 'parent' : 'module';
+			parentRunChoices.set(document.fileName, choice);
+		}
+		return choice === 'parent' ? vscode.workspace.openTextDocument(vscode.Uri.file(parent)) : document;
+	};
+
+	const quickRunXslt = async () => {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
+			vscode.window.showErrorMessage('Quick Run XSLT: open an XSLT stylesheet in the active editor first.');
+			return;
+		}
+		const document = await stylesheetToRun(activeEditor.document);
+		if (document) {
+			await quickRunDocument(document);
+		}
+	};
+
+	// runs the stylesheet with the XML context file, with the selected Quick Run processor
+	const quickRunDocument = async (xsltDocument: vscode.TextDocument) => {
+		const taskType = getRunnableQuickRunTaskType(xsltDocument.uri);
+		if (!taskType) {
+			return;
+		}
+		const pickContextFileAction = 'Pick XML Context File';
+		const offerContextFilePick = (message: string) => {
+			vscode.window.showErrorMessage(message, pickContextFileAction).then((choice) => {
+				if (choice === pickContextFileAction) {
+					vscode.commands.executeCommand('xslt-xpath.pickXsltContextFile');
+				}
+			});
+		};
+		// without an XML context file - 'None' deliberately chosen, or none chosen yet - the stylesheet runs with no
+		// source document, starting from xsl:initial-template ('-it') - an undefined xmlSourceFsPath selects this
+		// throughout - so it must declare one
+		const xmlSourceFsPath = DocumentChangeHandler.lastActiveXMLNonXSLUri?.fsPath;
+		if (!xmlSourceFsPath && !await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
+			offerContextFilePick(DocumentChangeHandler.contextFileIsNone ?
+				'Quick Run XSLT: the XML context file is \'None\', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.' :
+				'Quick Run XSLT: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar.');
+			return;
+		}
+		await runQuickRunTask(taskType, xsltDocument, xmlSourceFsPath);
+	};
+	// the processor-specific variants exist only so the editor title play button's tooltip names the processor
+	for (const command of ['xslt-xpath.quickRunXslt', 'xslt-xpath.quickRunXsltSaxonJ', 'xslt-xpath.quickRunXsltSaxonJS', 'xslt-xpath.quickRunXsltSaxonC']) {
+		context.subscriptions.push(vscode.commands.registerCommand(command, quickRunXslt));
+	}
+
+	// with an XML file active, offers the XSLT tasks that can run on it: tasks whose xmlSource is this file (e.g. those
+	// Quick Run created from its stylesheets), tasks whose xmlSource is '${file}' (whatever file is active when the task
+	// runs), or a stylesheet to pick - which creates a Quick Run task for it and this file, found in this list next time
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunXml', async () => {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor || activeEditor.document.languageId !== 'xml') {
+			vscode.window.showErrorMessage('Quick Run XSLT: open an XML file in the active editor first.');
+			return;
+		}
+		const xmlUri = activeEditor.document.uri;
+		const xmlFileName = path.basename(xmlUri.fsPath);
+
+		const fetchedTasks = (await Promise.all((Object.keys(quickRunTaskProviders) as QuickRunTaskType[]).map((type) => vscode.tasks.fetchTasks({ type })))).flat();
+		const sourceTasks: vscode.Task[] = [];
+		const currentFileTasks: vscode.Task[] = [];
+		// a task configured in tasks.json can be returned both as configured and by its provider - list it once
+		const seen = new Set<string>();
+		for (const t of fetchedTasks) {
+			const key = JSON.stringify([t.definition.type, t.name, t.definition.xsltFile, t.definition.xmlSource]);
+			if (seen.has(key)) {
+				continue;
+			}
+			seen.add(key);
+			const folder = typeof t.scope === 'object' ? t.scope : vscode.workspace.workspaceFolders?.[0];
+			if (t.definition.xmlSource === '${file}') {
+				currentFileTasks.push(t);
+			} else if (folder && SaxonTaskProvider.hasXmlSource(t.definition, xmlUri.fsPath, folder.uri.fsPath)) {
+				sourceTasks.push(t);
+			}
+		}
+
+		const pickStylesheetAndRun = async () => {
+			const taskType = getRunnableQuickRunTaskType(xmlUri);
+			if (!taskType) {
+				return;
+			}
+			const xsltFsPath = await fileSelector.pickXsltFile();
+			if (!xsltFsPath) {
+				fileSelector.completedPick = true; // no task runs, so nothing else would reset this for the next task
+				return;
+			}
+			const xsltDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(xsltFsPath));
+			await runQuickRunTask(taskType, xsltDocument, xmlUri.fsPath);
+		};
+		if (sourceTasks.length === 0 && currentFileTasks.length === 0) {
+			await pickStylesheetAndRun();
+			return;
+		}
+
+		type TaskItem = vscode.QuickPickItem & { task?: vscode.Task };
+		const toItem = (t: vscode.Task): TaskItem => ({
+			label: `$(play) ${t.name}`,
+			description: SaxonTaskProvider.quickRunProcessorNames[t.definition.type as QuickRunTaskType],
+			detail: typeof t.definition.xsltFile === 'string' ? t.definition.xsltFile.replace(/^\$\{workspaceFolder\}\//, '') : undefined,
+			task: t,
+		});
+		const items: TaskItem[] = [];
+		if (sourceTasks.length > 0) {
+			items.push({ label: `tasks for ${xmlFileName}`, kind: vscode.QuickPickItemKind.Separator }, ...sourceTasks.map(toItem));
+		}
+		if (currentFileTasks.length > 0) {
+			items.push({ label: 'tasks for the current file', kind: vscode.QuickPickItemKind.Separator }, ...currentFileTasks.map(toItem));
+		}
+		const pickStylesheetItem: TaskItem = {
+			label: '$(file-code) Pick Stylesheet...',
+			description: `- creates a ${SaxonTaskProvider.quickRunProcessorNames[getQuickRunTaskType(xmlUri)] ?? ''} Quick Run task for it and ${xmlFileName}`,
+		};
+		items.push({ label: '', kind: vscode.QuickPickItemKind.Separator }, pickStylesheetItem);
+
+		const picked = await vscode.window.showQuickPick(items, { placeHolder: `Select an XSLT task to run on ${xmlFileName}`, matchOnDescription: true, matchOnDetail: true });
+		if (picked?.task) {
+			await vscode.tasks.executeTask(picked.task);
+		} else if (picked === pickStylesheetItem) {
+			await pickStylesheetAndRun();
+		}
+	}));
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xslt', new XSLTCodeActions(), { providedCodeActionKinds: XSLTCodeActions.providedCodeActionKinds }));
 	context.subscriptions.push(
 		vscode.commands.registerCommand(XSLTCodeActions.COMMAND, () => vscode.env.openExternal(vscode.Uri.parse('https://unicode.org/emoji/charts-12.0/full-emoji-list.html')))
@@ -278,6 +837,9 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('sch',
 		schFormatter, '\n', '/'));
 
+	// used to locate bundled resources (xslt-resources) by task providers and code actions
+	SaxonTaskProvider.extensionURI = context.extensionUri;
+
 	let workspaceRoot = vscode.workspace.rootPath;
 	if (!workspaceRoot) {
 		return;
@@ -285,7 +847,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	let xsltTaskEnabled = vscode.workspace.getConfiguration('XSLT.tasks.java').get('enabled');
 	if (xsltTaskEnabled) {
-		SaxonTaskProvider.extensionURI = context.extensionUri;
 		let xsltTaskProvider = vscode.tasks.registerTaskProvider(SaxonTaskProvider.SaxonBuildScriptType, new SaxonTaskProvider(workspaceRoot));
 		context.subscriptions.push(xsltTaskProvider);
 	}
@@ -294,6 +855,12 @@ export function activate(context: vscode.ExtensionContext) {
 	if (xsltJsTaskEnabled) {
 		let xsltjsTaskProvider = vscode.tasks.registerTaskProvider(SaxonJsTaskProvider.SaxonBuildScriptType, new SaxonJsTaskProvider(workspaceRoot));
 		context.subscriptions.push(xsltjsTaskProvider);
+	}
+
+	let xsltCTaskEnabled = vscode.workspace.getConfiguration('XSLT.tasks.saxonc').get('enabled');
+	if (xsltCTaskEnabled) {
+		let xsltCTaskProvider = vscode.tasks.registerTaskProvider(SaxonCTaskProvider.SaxonBuildScriptType, new SaxonCTaskProvider(workspaceRoot));
+		context.subscriptions.push(xsltCTaskProvider);
 	}
 	//vscode.commands.executeCommand('xslt-xpath.setExtensionXPathVariable', 'new', '/countries/country');
 
@@ -359,7 +926,8 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
 			} else {
-				this.collection.clear();
+				// only this document's problems - not those of other documents
+				this.collection.delete(document.uri);
 			};
 		}
 	}
@@ -376,11 +944,30 @@ export class XsltSemanticTokensProvider implements vscode.DocumentSemanticTokens
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
 		// console.log('provideDocumentSemanticTokens');
-		const allTokens = this.xslLexer.analyse(document.getText());
+		const text = document.getText();
+		const allTokens = this.xslLexer.analyse(text);
 		const builder = new vscode.SemanticTokensBuilder();
-		allTokens.forEach((token) => {
-			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
-		});
+		// XSLT 4.0 documentation notes: their tokens replace the lexer's tokens within their content
+		const notes = text.includes('xdoc-md') ? XdocNotes.highlight(text) : { tokens: [], ranges: [] };
+		if (notes.ranges.length === 0) {
+			allTokens.forEach((token) => {
+				builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
+			});
+			return builder.build();
+		}
+		const lineRanges = notes.ranges.map(([start, end]) => [document.positionAt(start).line, document.positionAt(end).line]);
+		const isInNote = (token: BaseToken) => lineRanges.some(([startLine, endLine], i) => token.line >= startLine && token.line <= endLine && (() => {
+			const offset = document.offsetAt(new vscode.Position(token.line, token.startCharacter));
+			return offset < notes.ranges[i][1] && offset + token.length > notes.ranges[i][0];
+		})());
+		const noteTypeStart = XslLexer.getTextmateTypeLegend().length;
+		const merged = allTokens.filter((token) => !isInNote(token)).map((token) => ({ line: token.line, character: token.startCharacter, length: token.length, type: token.tokenType }))
+			.concat(notes.tokens.map((token) => {
+				const position = document.positionAt(token.offset);
+				return { line: position.line, character: position.character, length: token.length, type: noteTypeStart + token.type };
+			}))
+			.sort((a, b) => a.line - b.line || a.character - b.character);
+		merged.forEach((token) => builder.push(token.line, token.character, token.length, token.type, 0));
 		return builder.build();
 	}
 }

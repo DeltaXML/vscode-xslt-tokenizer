@@ -8,9 +8,10 @@
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
 
-import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType} from "./xpLexer";
+import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, ErrorType, XmlLessThan } from "./xpLexer";
 import { SchemaData } from "./xsltSchema";
 import { Snippet} from './xsltSnippets';
+import { HrefPaths } from './hrefPaths';
 
 export enum DocumentTypes {
     XSLT,
@@ -116,6 +117,8 @@ export interface XslToken extends BaseToken {
 
 interface XmlElement {
     expandText: boolean;
+    // text content is an XPath expression (xsl:select)
+    xpathText?: boolean;
 }
 
 export interface LanguageConfiguration {
@@ -143,11 +146,59 @@ export interface GlobalInstructionData {
     idNumber: number;
     memberNames?: string[];
     memberTokens?: BaseToken[];
+    memberTypes?: (string|undefined)[];
+    // XSLT 4.0: xsl:function parameters with required="no", in parameter order
+    memberOptional?: boolean[];
+    // a mode named by a [xsl:]default-mode attribute, for templates without a mode attribute
+    isDefaultMode?: boolean;
     href?: string;
     version?: string;
+    returnType?: string;
+    // the 'as' attribute of an xsl:item-type, or of a global xsl:variable or xsl:param
+    declaredType?: string;
+    defaultSelect?: string;
 }
 
 export class XslLexer {
+    // XSLT 4.0 optional function parameter: xsl:param required="no" (the 'required' attribute may come before or after 'name')
+    protected static recordParamRequired(gd: GlobalInstructionData | undefined, requiredValue: string, currentParamNamePushed: boolean): boolean | undefined {
+        const isOptional = ['no', 'false', '0'].includes(requiredValue.trim());
+        if (currentParamNamePushed && gd?.memberOptional && gd.memberOptional.length > 0) {
+            gd.memberOptional[gd.memberOptional.length - 1] = isOptional;
+            return undefined;
+        }
+        return isOptional;
+    }
+
+    // true if a call with this arity matches the function - which may have XSLT 4.0 optional parameters (a negative idNumber matches any arity)
+    public static functionArityMatches(instruction: GlobalInstructionData, arity: number) {
+        if (instruction.idNumber < 0) {
+            return true;
+        }
+        const optionalCount = instruction.memberOptional ? instruction.memberOptional.filter((isOptional) => isOptional).length : 0;
+        return arity <= instruction.idNumber && arity >= instruction.idNumber - optionalCount;
+    }
+
+    // accumulator names (or '#all') in a use-accumulators attribute value - as AccumulatorUse entries, so that the names used
+    // in included or imported modules are known
+    protected static recordAccumulatorUses(globalInstructionData: GlobalInstructionData[], valueToken: BaseToken, attValue: string) {
+        XslLexer.tokensInsideToken(valueToken, attValue).forEach((nameToken) => {
+            globalInstructionData.push({ type: GlobalInstructionType.AccumulatorUse, name: nameToken.value, token: nameToken, idNumber: 0 });
+        });
+    }
+
+    protected static hasDeclaredType(instructionType: GlobalInstructionType) {
+        return instructionType === GlobalInstructionType.ItemType || instructionType === GlobalInstructionType.Variable || instructionType === GlobalInstructionType.Parameter;
+    }
+
+    protected static pushParamOptional(gd: GlobalInstructionData, pendingParamOptional: boolean | undefined) {
+        if (gd.memberOptional) {
+            gd.memberOptional.push(!!pendingParamOptional);
+        } else {
+            gd.memberOptional = [!!pendingParamOptional];
+        }
+    }
+
     public debug: boolean = false;
     public flatten: boolean = false;
     public timerOn: boolean = false;
@@ -174,7 +225,6 @@ export class XslLexer {
     private nonNativeAvts = false;
     private docType: DocumentTypes;
     private static splitModesregexp = /([^\s]+)|(\s+)/g;
-    private static startsWithWSRegex = new RegExp('$\s');
 
 
     constructor(languageConfiguration: LanguageConfiguration) {
@@ -213,6 +263,9 @@ export class XslLexer {
     public isExpressionAtt(name: string, parentElement: string) {
         if (name === 'use' && (parentElement === 'context-item' || parentElement === 'global-context-item')) {
             return false;
+        } else if (parentElement === 'record') {
+            // xsl:record: each no-namespace attribute is a map entry expression
+            return name === 'xsl:duplicates' || name.indexOf(':') === -1;
         } else {
             return this.languageConfiguration.expressionAtts ? this.languageConfiguration.expressionAtts.indexOf(name) > -1 : false;
         }
@@ -642,6 +695,7 @@ export class XslLexer {
         }
         this.globalInstructionData.length = 0;
         this.globalModeData.length = 0;
+        this.isXSLT40 = false;
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.charCount = -1;
@@ -683,9 +737,12 @@ export class XslLexer {
         let isExpandTextAttribute = false;
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
+        // [xsl:]default-mode: templates without a mode attribute are in this mode
+        let isDefaultModeAttribute = false;
         let isGlobalParameterName = false;
         let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
+        let isParamDefaultSelectAttribute = false;
 
         let expandTextValue: boolean|null = false;
         let xmlElementStack: XmlElement[] = [];
@@ -693,6 +750,14 @@ export class XslLexer {
         let tokenStartLine = -1;
         let attributeNameTokenAdded = false;
         let collectParamName = false;
+        let pendingParamType: string|undefined;
+        let currentParamNamePushed = false;
+        let isParamRequiredAttribute = false;
+        let pendingParamOptional: boolean | undefined;
+        let pendingDeclaredType: string | undefined;
+        let isUseAccumulatorsAttribute = false;
+        let pendingParamSelect: string|undefined;
+        let topLevelParamNamePushed = false;
         let xpathEnded = false;
         
         if (this.debug) {
@@ -728,7 +793,6 @@ export class XslLexer {
                         switch (nextState) {
                             case XMLCharState.lPiValue:
                                 addToken = XSLTokenLevelState.processingInstrValue;
-                                this.addNewTokenToResult(tokenStartChar, addToken, result, nextState);
                                 break;
                             case XMLCharState.lComment:
                                 addToken = XSLTokenLevelState.xmlComment;
@@ -805,9 +869,20 @@ export class XslLexer {
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;
                             tagElementName = elementProperties.nativeName;
+                            if (nextState === XMLCharState.rStNoAtt && isNativeElement && tagElementName === 'note' && xmlElementStack.length > 0) {
+                                // <xsl:note> - its content is ignored, so it has no text value templates
+                                xmlElementStack[xmlElementStack.length - 1].expandText = false;
+                                expandTextValue = false;
+                            }
                             tagInstructionNameAdded = false;
                             tagMatchToken = null;
                             collectParamName = false;
+                            pendingParamType = undefined;
+                            pendingParamOptional = undefined;
+                            pendingDeclaredType = undefined;
+                            currentParamNamePushed = false;
+                            pendingParamSelect = undefined;
+                            topLevelParamNamePushed = false;
                             if (xmlElementStack.length === 0 && tokenChars.length > 5) {
                                 tagGlobalInstructionType = GlobalInstructionType.RootXSLT;
                             } if (xmlElementStack.length === 1) {
@@ -832,6 +907,10 @@ export class XslLexer {
                             if (nextState !== XMLCharState.lsElementNameWs) {
                                 let punctuationLength = nextState === XMLCharState.rCt || nextState === XMLCharState.rStNoAtt? 1: 2;
                                 this.addCharTokenToResult(this.lineCharCount - 1, punctuationLength, XSLTokenLevelState.xmlPunctuation, result, nextState);
+                            }
+                            if (nextState === XMLCharState.rStNoAtt && this.isXPathTextElement(isNativeElement, tagElementName)) {
+                                xmlElementStack[xmlElementStack.length - 1].xpathText = true;
+                                nextChar = this.analyseXPathText(xpLexer, ExitCondition.LessThan, xsl, result);
                             }
                             break;
                         case XMLCharState.rDtd:
@@ -866,13 +945,17 @@ export class XslLexer {
                         case XMLCharState.lStEq:
                             let isXMLNSattribute = false;
                             isTypeDeclarationAttribute = false;
+                            isParamDefaultSelectAttribute = false;
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
                             isGlobalParameterName = false;
+                            isParamRequiredAttribute = false;
+                            isUseAccumulatorsAttribute = false;
                             isGlobalInstructionMatch = false;
                             isGlobalUsePackageVersion = false;
                             isGlobalVersion = false;
                             attName = tokenChars.join('');
+                            isDefaultModeAttribute = isNativeElement ? attName === 'default-mode' : attName === 'xsl:default-mode';
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
                                 if (attName === 'as') {
@@ -907,9 +990,19 @@ export class XslLexer {
                                     isXPathAttribute = true;
                                 } else if (collectParamName && attName === 'name') {
                                     isGlobalParameterName = true;
+                                } else if (collectParamName && attName === 'required') {
+                                    isExpandTextAttribute = false;
+                                    isParamRequiredAttribute = true;
+                                } else if (attName === 'use-accumulators') {
+                                    isExpandTextAttribute = false;
+                                    isUseAccumulatorsAttribute = true;
                                 } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                     isExpandTextAttribute = false;
                                     isGlobalUsePackageVersion = true;
+                                } else if (tagGlobalInstructionType === GlobalInstructionType.Parameter && attName === 'select') {
+                                    isExpandTextAttribute = false;
+                                    isParamDefaultSelectAttribute = true;
+                                    isXPathAttribute = this.isExpressionAtt(attName, tagElementName);
                                 } else {
                                     isExpandTextAttribute = false;
                                     // todo: 'as'
@@ -939,10 +1032,15 @@ export class XslLexer {
                             if (tagGlobalInstructionType === GlobalInstructionType.Template && !tagInstructionNameAdded && tagMatchToken) {
                                 this.globalInstructionData.push({type: GlobalInstructionType.TemplateMatch, name: `${tagMatchToken.value}#${this.globalInstructionData.length}`, token: tagMatchToken, idNumber: 0});
                             }
-                            expandTextValue = this.addToElementStack(expandTextValue, xmlElementStack);
+                            // the content of xsl:note (XSLT 4.0) is ignored, so it has no text value templates
+                            expandTextValue = this.addToElementStack(isNativeElement && tagElementName === 'note' ? false : expandTextValue, xmlElementStack);
                             this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.xmlPunctuation, result, nextState);
                             storeToken = false;
                             tokenChars = [];
+                            if (this.isXPathTextElement(isNativeElement, tagElementName)) {
+                                xmlElementStack[xmlElementStack.length - 1].xpathText = true;
+                                nextChar = this.analyseXPathText(xpLexer, ExitCondition.LessThan, xsl, result);
+                            }
                             break;
                         case XMLCharState.lCt:
                         case XMLCharState.lPi:
@@ -966,9 +1064,22 @@ export class XslLexer {
                                 xpathEnded = false;
                             }
                             let newToken = this.addNewTokenToResult(tokenStartChar, XSLTokenLevelState.attributeValue, result, nextState);
+                            if (isDefaultModeAttribute) {
+                                const defaultMode = tokenChars.join('').trim();
+                                if (defaultMode !== '' && defaultMode !== '#unnamed') {
+                                    XslLexer.tokensInsideToken(newToken, tokenChars.join('')).forEach((modeToken) => this.globalModeData.push({type: GlobalInstructionType.ModeTemplate, name: modeToken.value, token: modeToken, idNumber: 0, isDefaultMode: true}));
+                                }
+                                isDefaultModeAttribute = false;
+                            }
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');                               
                                 let newTokenCopy = Object.assign({}, newToken);
+                                const writtenStart = newToken.startCharacter + newToken.length - (attValue.length + 2);
+                                if (attValue.includes('&') && writtenStart >= 0) {
+                                    // the token is the part of the value after its last reference: the name's token is the value, in quotes
+                                    newTokenCopy.startCharacter = writtenStart;
+                                    newTokenCopy.length = attValue.length + 2;
+                                }
                                 let globalType = tagGlobalInstructionType;
                                 let targetGlobal;
                                 if (isGlobalInstructionMode) {
@@ -983,7 +1094,17 @@ export class XslLexer {
                                     modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
                                 } else {
                                     const idNumber = globalType === GlobalInstructionType.Variable ? result.length : 0;
-                                    targetGlobal.push({type: globalType, name: attValue, token: newTokenCopy, idNumber: idNumber});
+                                    const newGlobal: GlobalInstructionData = {type: globalType, name: XslLexer.globalName(globalType, attValue), token: newTokenCopy, idNumber: idNumber};
+                                    if (pendingDeclaredType !== undefined) {
+                                        newGlobal.declaredType = pendingDeclaredType;
+                                        pendingDeclaredType = undefined;
+                                    }
+                                    if (globalType === GlobalInstructionType.Parameter) {
+                                        newGlobal.defaultSelect = pendingParamSelect;
+                                        pendingParamSelect = undefined;
+                                        topLevelParamNamePushed = true;
+                                    }
+                                    targetGlobal.push(newGlobal);
                                 }
                             } else if (isGlobalParameterName) {
                                 let attValue = tokenChars.join('');
@@ -996,12 +1117,25 @@ export class XslLexer {
                                         }
                                         gd.memberNames.push(attValue);
                                         gd.memberTokens?.push({...newToken});
+                                        gd.memberTypes?.push(pendingParamType);
                                     } else {
                                         gd['memberNames'] = [attValue];
                                         gd['memberTokens'] = [{...newToken}];
+                                        gd['memberTypes'] = [pendingParamType];
                                     }
+                                    XslLexer.pushParamOptional(gd, pendingParamOptional);
+                                    pendingParamOptional = undefined;
                                     gd.idNumber++;
+                                    pendingParamType = undefined;
+                                    currentParamNamePushed = true;
                                 }
+                            } else if (isParamRequiredAttribute) {
+                                const gd = this.globalInstructionData.length > 0 ? this.globalInstructionData[this.globalInstructionData.length - 1] : undefined;
+                                pendingParamOptional = XslLexer.recordParamRequired(gd, tokenChars.join(''), currentParamNamePushed);
+                                isParamRequiredAttribute = false;
+                            } else if (isUseAccumulatorsAttribute) {
+                                XslLexer.recordAccumulatorUses(this.globalInstructionData, newToken, tokenChars.join(''));
+                                isUseAccumulatorsAttribute = false;
                             } else if (isGlobalUsePackageVersion) {
                                 let attValue = tokenChars.join('');
                                 if (this.globalInstructionData.length > 0) {
@@ -1025,11 +1159,12 @@ export class XslLexer {
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage || tagGlobalInstructionType === GlobalInstructionType.RootXSLT) {
                                 storeToken = true;
                             }
-                            if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode) {
+                            if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode || isUseAccumulatorsAttribute || isDefaultModeAttribute) {
                                 storeToken = true;
                             } else if (isXPathAttribute) {
                                 this.addCharTokenToResult(this.lineCharCount - 1, 1, XSLTokenLevelState.attributeValue, result, nextState);
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
+                                const typeAttributeStartOffset = this.charCount;
 
                                 let exit: ExitCondition;
                                 if (nextState === XMLCharState.lSq) {
@@ -1038,8 +1173,44 @@ export class XslLexer {
                                     exit = ExitCondition.DoubleQuote;
                                 }
 
+                                xpLexer.xmlLessThan = XmlLessThan.Error;
                                 xpLexer.analyse('', exit, p, isTypeDeclarationAttribute);
+                                xpLexer.xmlLessThan = XmlLessThan.Allowed;
                                 this.updateNames(result);
+                                if (isTypeDeclarationAttribute) {
+                                    // 'as' attribute value - captured as raw text (not parsed) purely for display on hover
+                                    const declaredType = xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim();
+                                    if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
+                                        this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
+                                    } else if (XslLexer.hasDeclaredType(tagGlobalInstructionType)) {
+                                        if (tagInstructionNameAdded && this.globalInstructionData.length > 0) {
+                                            this.globalInstructionData[this.globalInstructionData.length - 1].declaredType = declaredType;
+                                        } else {
+                                            pendingDeclaredType = declaredType;
+                                        }
+                                    } else if (collectParamName && this.globalInstructionData.length > 0) {
+                                        if (currentParamNamePushed) {
+                                            const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                            if (gd.memberTypes && gd.memberTypes.length > 0) {
+                                                gd.memberTypes[gd.memberTypes.length - 1] = declaredType;
+                                            }
+                                        } else {
+                                            pendingParamType = declaredType;
+                                        }
+                                    }
+                                } else if (isParamDefaultSelectAttribute) {
+                                    // top-level xsl:param's 'select' attribute value - captured as raw text (not evaluated), so it
+                                    // can be offered back as a Saxon '?param=<xpath>' command-line override with matching semantics
+                                    const declaredSelect = xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim();
+                                    if (topLevelParamNamePushed && this.globalInstructionData.length > 0) {
+                                        const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                        if (gd.type === GlobalInstructionType.Parameter) {
+                                            gd.defaultSelect = declaredSelect;
+                                        }
+                                    } else {
+                                        pendingParamSelect = declaredSelect;
+                                    }
+                                }
                                 // need to process right double-quote/single-quote
                                 this.lineNumber = p.line;
                                 let newCharCount = p.documentOffset - 1;
@@ -1078,7 +1249,9 @@ export class XslLexer {
 
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
+                                xpLexer.xmlLessThan = XmlLessThan.Error;
                                 xpLexer.analyse('', exit, p);
+                                xpLexer.xmlLessThan = XmlLessThan.Allowed;
                                 this.updateNames(result);
 
                                 // need to process right double-quote
@@ -1103,7 +1276,10 @@ export class XslLexer {
                             if (useTvt) {
                                 let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
                                 
+                                // a '<' ends a text value template in element content, but not in a CDATA section
+                                xpLexer.xmlLessThan = nextState === XMLCharState.tvtCdata ? XmlLessThan.Allowed : XmlLessThan.Exit;
                                 xpLexer.analyse('', ExitCondition.CurlyBrace, p);
+                                xpLexer.xmlLessThan = XmlLessThan.Allowed;
                                 this.updateNames(result);
                                 // need to process right double-quote
                                 this.lineNumber = p.line;
@@ -1124,11 +1300,18 @@ export class XslLexer {
                             break;
                         case XMLCharState.lEntity:
                             if (this.entityContext !== EntityPosition.text) {
+                                if (storeToken) {
+                                    // the value is kept as it's written, with its references
+                                    tokenChars.push(currentChar);
+                                }
                                 this.addCharTokenToResult(tokenStartChar, (this.lineCharCount - 1) - tokenStartChar,
                                     XSLTokenLevelState.attributeValue, result, nextState);
                             }
                             break;
                         case XMLCharState.rEntity:
+                            if (storeToken && this.entityContext !== EntityPosition.text) {
+                                tokenChars.push(currentChar);
+                            }
                             this.addCharTokenToResult(tokenStartChar, this.lineCharCount - tokenStartChar,
                                                          XSLTokenLevelState.entityRef, result, nextState);
                             switch (this.entityContext) {
@@ -1147,6 +1330,14 @@ export class XslLexer {
                             break;
                         case XMLCharState.lCdataEnd:
                             this.addCharTokenToResult(tokenStartChar - 2, 9, XSLTokenLevelState.xmlPunctuation, result, nextState);
+                            if (xmlElementStack.length > 0 && xmlElementStack[xmlElementStack.length - 1].xpathText) {
+                                // entity references are not recognised within CDATA sections
+                                const entityRefOn = xpLexer.entityRefOn;
+                                xpLexer.entityRefOn = false;
+                                nextChar = this.analyseXPathText(xpLexer, ExitCondition.CdataEnd, xsl, result);
+                                xpLexer.entityRefOn = entityRefOn;
+                                nextState = XMLCharState.awaitingRcdata;
+                            }
                             break;
                         case XMLCharState.rCdataEnd:
                             this.addCharTokenToResult(tokenStartChar, 3, XSLTokenLevelState.xmlPunctuation, result, nextState);
@@ -1184,6 +1375,24 @@ export class XslLexer {
         return result;
     }
 
+    private isXPathTextElement(isNativeElement: boolean, nativeName: string) {
+        return isNativeElement && nativeName === 'select' && (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.XSLT40);
+    }
+
+    // lex text node (or CDATA section) content as XPath, starting at the current char, and return the new nextChar
+    private analyseXPathText(xpLexer: XPathLexer, exit: ExitCondition, xsl: string, result: BaseToken[]) {
+        let p: LexPosition = {line: this.lineNumber, startCharacter: this.lineCharCount, documentOffset: this.charCount};
+        xpLexer.analyse('', exit, p);
+        this.updateNames(result);
+        this.lineNumber = p.line;
+        let newCharCount = p.documentOffset - 1;
+        if (newCharCount > this.charCount) {
+            this.charCount = newCharCount;
+        }
+        this.lineCharCount = p.startCharacter;
+        return xsl.charAt(this.charCount);
+    }
+
     private updateNames(result: BaseToken[]) {
         if (this.elementNameTests && this.attributeNameTests && result.length > 0) {
             let prevToken = result[result.length - 1];
@@ -1199,6 +1408,13 @@ export class XslLexer {
         }
     }
 
+    // the name of a global instruction from its attribute value, as it's written: an href, of an xsl:import or
+    // xsl:include, or a package name, with its references decoded, e.g. a&amp;b.xsl is a&b.xsl
+    public static globalName(type: GlobalInstructionType, attValue: string) {
+        const isHref = type === GlobalInstructionType.Import || type === GlobalInstructionType.Include || type === GlobalInstructionType.UsePackage;
+        return isHref ? HrefPaths.fromAttribute(attValue) : attValue;
+    }
+
     public static tokensInsideToken(token: BaseToken, attValue: string) {
 
         const tokenValues = attValue.match(this.splitModesregexp);
@@ -1208,17 +1424,11 @@ export class XslLexer {
         const result: BaseToken[] = [];
         const tokenType = -1; // not a standard token
 
-        let isWhitespace = false;
         // attValue startwith a " character so offset by one:
         let partPosition = token.startCharacter + 1;
-        tokenValues.forEach((value, index) => {
-            if (index === 0) {
-                isWhitespace = this.startsWithWSRegex.test(tokenValues[index]);
-            } else {
-                // tokenValues isWhiteSpace alternates: 
-                // eg: "mode1 mode2" => ["mode1", " ", "mode2"]
-                isWhitespace = !isWhitespace;
-            }
+        tokenValues.forEach((value) => {
+            // each part is either a name or a whitespace run, eg: " mode1 mode2" => [" ", "mode1", " ", "mode2"]
+            const isWhitespace = /^\s/.test(value);
             const valueLength = value.length;
             if (!isWhitespace) {
                 let tkn: BaseToken = {
@@ -1333,6 +1543,9 @@ export class XslLexer {
                     case 'use-package':
                         instructionType = GlobalInstructionType.UsePackage;
                         break;
+                    case 'item-type':
+                        instructionType = GlobalInstructionType.ItemType;
+                        break;
                 }
             }
         }
@@ -1365,7 +1578,10 @@ export enum GlobalInstructionType {
     UsePackage,
     RootXMLNS,
     RootXSLT,
-    Unknown
+    Unknown,
+    ItemType,
+    // not a declaration: an accumulator name listed in a use-accumulators attribute, e.g. on xsl:mode
+    AccumulatorUse
 }
 
 

@@ -1,0 +1,162 @@
+{
+  "suite": "qnamesAndURILiterals",
+  "source": "qnamesAndURILiterals.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "qname1",
+      "xpath": "book",
+      "problems": []
+    },
+    {
+      "label": "qname2",
+      "xpath": "book.new",
+      "problems": []
+    },
+    {
+      "label": "qname3",
+      "xpath": "book-new",
+      "problems": []
+    },
+    {
+      "label": "qname4",
+      "xpath": "_book",
+      "problems": []
+    },
+    {
+      "label": "qname5",
+      "xpath": "book1",
+      "problems": []
+    },
+    {
+      "label": "qname6-error",
+      "xpath": "1book",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: book ",
+          "book"
+        ]
+      ]
+    },
+    {
+      "label": "qname7",
+      "xpath": "book_new",
+      "problems": []
+    },
+    {
+      "label": "qname8",
+      "xpath": "ct:book",
+      "problems": []
+    },
+    {
+      "label": "qname9",
+      "xpath": "_ct:book",
+      "problems": []
+    },
+    {
+      "label": "qname10",
+      "xpath": "ct:book.",
+      "problems": []
+    },
+    {
+      "label": "qname11",
+      "xpath": "ct:book12.4",
+      "problems": []
+    },
+    {
+      "label": "bracedURILiteral1",
+      "xpath": "Q{http://www.w3.org/2005/xpath-functions/math}name",
+      "problems": []
+    },
+    {
+      "label": "bracedURILiteral2",
+      "xpath": "Q{}name",
+      "problems": []
+    },
+    {
+      "label": "bracedURILiteral3",
+      "xpath": "Q{name",
+      "problems": [
+        [
+          "XPath: The braced URI literal has no closing '}': Q{name",
+          "Q{name"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral4",
+      "xpath": "Q{name}",
+      "problems": [
+        [
+          "XPath: A local name must follow the braced URI literal, with no space between: Q{name}",
+          "Q{name}"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral5-PENDING",
+      "xpath": "EQ{name}",
+      "problems": [
+        [
+          "pending msg",
+          "pending tkn"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral6",
+      "xpath": "Q{urn:com.example}ct:name",
+      "problems": [
+        [
+          "XPath: The local name after a braced URI literal cannot have a prefix: ct:name",
+          "ct:name"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral7",
+      "xpath": "Q{name} name",
+      "problems": [
+        [
+          "XPath: A local name must follow the braced URI literal, with no space between: Q{name}",
+          "Q{name}"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral8",
+      "xpath": "9 Q{name}name",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: Q{name} ",
+          "Q{name}"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral9",
+      "xpath": "9Q{name}name",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: Q{name} ",
+          "Q{name}"
+        ]
+      ]
+    },
+    {
+      "label": "bracedURILiteral10",
+      "xpath": "book Q{name}name",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: Q{name} ",
+          "Q{name}"
+        ]
+      ]
+    }
+  ]
+}

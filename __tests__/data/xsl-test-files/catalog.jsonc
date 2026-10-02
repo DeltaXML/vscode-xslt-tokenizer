@@ -1,0 +1,72 @@
+// defines the test suites used for Lexer and Linter testing
+// only the first two groups are used
+[
+    {
+        // 1st group is used for Lexer tests:
+        "group": "XPath Lexer",
+        "files": [
+            "xpInAsAttribute",
+            "xpLiterals",
+            "xpNumericLiterals",
+            "qnamesAndURILiterals",
+            "expressions",
+            "expressionsErrors",
+            "xpPipeline",
+            "xpMappingArrow",
+            "xpSequenceTypes",
+            "xpArrowTargets",
+            "xpMapConstructor40",
+            "xpMapConstructor31",
+            "xpSimpleMap",
+            "xpBracedIf40",
+            "xpBracedIf31",
+            "xpAxes40",
+            "xpAxes31",
+            "xpItemTypesAs40",
+            "xpItemTypesAs31",
+            "xpItemTypesSel40",
+            "xpItemTypesSel31",
+            "xpFunctionSyntax40",
+            "xpFunctionSyntax31"
+        ]
+    },
+    // 2nd group is used for Linter tests:
+    {
+        "group": "XPath Linter",
+        "files": [
+            "xpInAsAttribute.dg",
+            "xpLiterals.dg",
+            "xpNumericLiterals.dg",
+            "qnamesAndURILiterals.dg",
+            "expressions.dg",
+            "expressionsErrors.dg",
+            "xpPipeline.dg",
+            "xpMappingArrow.dg",
+            "xpSequenceTypes.dg",
+            "xpArrowTargets.dg",
+            "xpMapConstructor40.dg",
+            "xpMapConstructor31.dg",
+            "xpSimpleMap.dg",
+            "xpBracedIf40.dg",
+            "xpBracedIf31.dg",
+            "xpAxes40.dg",
+            "xpAxes31.dg",
+            "xpItemTypesAs40.dg",
+            "xpItemTypesAs31.dg",
+            "xpItemTypesSel40.dg",
+            "xpItemTypesSel31.dg",
+            "xpFunctionSyntax40.dg",
+            "xpFunctionSyntax31.dg"
+        ]
+    },
+    // to run Linter test in one-off generator mode
+    // temporarily replace the second group with this group
+    // (or modify LINTER_GROUP_INDEX in linter.test.ts to be 2)
+    {
+        "group": "XPath Linter (Generate Expected)",
+        "files": [
+            // replace with a new *Lexer* test name:
+            "expressionsErrors"
+        ]
+    }
+]

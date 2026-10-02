@@ -1,0 +1,12 @@
+No license file found - running with licensable features disabled
+Type error in expression in xsl:variable/@select on line 3 column 66 of c04.xsl:
+  XTTE0570  A sequence of more than one item { ("1", "2") } is not allowed as the supplied
+  value for variable $v
+  In template rule with match="document-node()" on line 2 of c04.xsl
+A sequence of more than one item { ("1", "2") } is not allowed as the supplied value for variable $v
+Unhandled exception: net.sf.saxon.CommandExitException: A sequence of more than one item { ("1", "2") } is not allowed as the supplied value for variable $v
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

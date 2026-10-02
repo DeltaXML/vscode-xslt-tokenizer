@@ -27,8 +27,8 @@
 import { XPathLexer, ExitCondition, LexPosition, TokenLevelState } from '../../src/xpLexer';
 import fs = require('fs');
 import path = require('path');
-import { TestPaths } from './testPaths';
 import { RawLexerTestData } from '../types';
+import { TestPaths } from './testPaths';
 
 function generator() {
 	const args = process.argv.slice(2);
@@ -41,7 +41,9 @@ function generator() {
 	}
 	console.log("Test Data File: " + testDataFile);
 	const rawTestData: RawLexerTestData = JSON.parse(fs.readFileSync(testDataFile, 'utf8'));
-	const { suite, descriptor, testCases } = rawTestData;
+	const { suite, source, description, attributeName, xsltVersion, testCases } = rawTestData;
+	console.log('==== rawTestData');
+	console.log(rawTestData);
 
 	const metadata = getMetadata();
 
@@ -50,13 +52,23 @@ function generator() {
 	const entries: any[] = [];
 
 	testCases.forEach(([label, xpath]) => {
-		const isTypeDeclaration = true;
+		const isTypeDeclaration = attributeName === 'as';
 		const tokensOut = lexer.analyse(xpath, ExitCondition.None, position, isTypeDeclaration);
 		const tokens = tokensOut.map(token => [token.value, TokenLevelState[token.tokenType]]);
 		entries.push({ label, xpath, tokens });
 	});
-	const outputPath = path.join(TestPaths.testDataDir, suite + "-expected.json");
-	fs.writeFileSync(outputPath, JSON.stringify({ suite, description: descriptor, metadata, tests: entries }, null, 2));
+	const outputPath = resolvePath(suite);
+	fs.writeFileSync(outputPath, JSON.stringify({
+		suite,
+		source,
+		description,
+		attributeName,
+		// omitted for XSLT 3.0 sources, and then used by the linter tests
+		...(xsltVersion && xsltVersion !== '3.0' ? { xsltVersion } : {}),
+		metadata,
+		tests: entries
+	}
+		, null, 2));
 	console.log("Generated expected test data saved to: " + outputPath);
 };
 generator();
@@ -67,4 +79,8 @@ function getMetadata() {
 	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 	const version = packageJson.version;
 	return { moduleName: generator, version };
+}
+
+function resolvePath(suite: string) {
+	return path.join(__dirname, '../../../', TestPaths.testDataDir, suite + '-test.json');
 }

@@ -23,17 +23,79 @@
 			"detail": "eslint -c .eslintrc.js --ext .ts src"
 		},
 		{
+			// CHAIN (1/2)
+			// 1. prompts for input path
+			// 2. uses hard-coded temp file as output
 			"type": "xslt-js",
-			"label": "xslt: as-attributes-to-json",
-			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslAsAttributesToJson.xsl",
-			"xmlSource": "${workspaceFolder}/__tests__/data/xsl-test-files/xpInAsAttribute.xsl",
-			"resultPath": "${workspaceFolder}/__tests__/data/as-attributes-to-json-out.json",
+			"label": "gen: json from xsl - PICK - CHAIN (1/2)",
+			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslXPathAttributesToJson.xsl",
+			"initialTemplate": "initial",
+			"parameters": [
+				{
+					"name": "testSourceURL",
+					"value": "${input:sourceOfXPathAttribute}"
+				}
+			],
+			"resultPath": "${workspaceFolder}/temp/json-from-xml-out.json",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"clear": false
+			},
 			"group": {
-				"kind": "build",
+				"kind": "hidden",
 			},
 			"problemMatcher": [
 				"$saxon-xslt-js"
 			]
-		}
+		},
+		{
+			// CHAIN (2/2)
+			// invokes: xpLexerTestGen.js"
+			// 1. uses hard-coded temp out file from CHAIN as input
+			// 2. derives output path from input
+			"label": "gen: expected test json from xsl - PICK input",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"${workspaceFolder}/out/__tests__/utils/xpLexerTestGen.js",
+				"--file",
+				"${workspaceFolder}/temp/json-from-xml-out.json",
+			],
+			"dependsOn": [
+				"gen: json from xsl - PICK - CHAIN (1/2)",
+				"tsc: build - tsconfig.json"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			},
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": [],
+		},
+	],
+	"inputs": [
+		/*
+			the 'pickFile' command enhances 'QuickPick' by allowing selectin from a 'recent files' list:
+		*/
+		{
+			/* --- Usage: ---
+			"source": "${input:sourceOfXPathAttribute}",
+			*/
+			"id": "sourceOfXPathAttribute",
+			"type": "command",
+			"command": "xslt-xpath.pickFile",
+			"args": {
+				"label": "select source XSLT for test",
+				"extensions": [
+					"xsl"
+				]
+			}
+		},
 	]
 }

@@ -1,0 +1,133 @@
+{
+  "suite": "xpMapConstructor40",
+  "source": "xpMapConstructor40.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "xsltVersion": "4.0",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "mapCons1",
+      "xpath": "{ 'a': 1, 'b': 2 }",
+      "problems": []
+    },
+    {
+      "label": "mapCons2",
+      "xpath": "{}",
+      "problems": []
+    },
+    {
+      "label": "mapCons3",
+      "xpath": "{ 1: 'one' }?1",
+      "problems": []
+    },
+    {
+      "label": "mapCons4",
+      "xpath": "let $m := { 'a': 1 } return $m?a",
+      "problems": []
+    },
+    {
+      "label": "mapCons5",
+      "xpath": "({ 'a': 1 }, { 'b': 2 })",
+      "problems": []
+    },
+    {
+      "label": "mapCons6",
+      "xpath": "(1, 2) -> { 'value': . }",
+      "problems": []
+    },
+    {
+      "label": "mapCons7",
+      "xpath": "(1, 2) ! { 'n': . }",
+      "problems": []
+    },
+    {
+      "label": "mapCons8",
+      "xpath": "{ 'a': { 'b': 1 } }?a?b",
+      "problems": []
+    },
+    {
+      "label": "mapCons9",
+      "xpath": "if (true()) then { 'a': 1 } else {}",
+      "problems": []
+    },
+    {
+      "label": "mapCons10",
+      "xpath": "{ 'a': 1 } => exists()",
+      "problems": []
+    },
+    {
+      "label": "mapCons11",
+      "xpath": "function($a) as map(*) { { 'a': $a } }",
+      "problems": []
+    },
+    {
+      "label": "mapCons12",
+      "xpath": "[{ 'a': 1 }, { 'b': 2 }]",
+      "problems": []
+    },
+    {
+      "label": "mapCons13",
+      "xpath": "{ 'a': 1 } instance of map(*)",
+      "problems": []
+    },
+    {
+      "label": "mapMerge1",
+      "xpath": "{ map { 'a': 1 }, map { 'b': 2 } }",
+      "problems": []
+    },
+    {
+      "label": "mapMerge2",
+      "xpath": "map { map { 'a': 1 }, map { 'b': 2 } }",
+      "problems": []
+    },
+    {
+      "label": "mapMerge3",
+      "xpath": "map { 'a': 1, map { 'b': 2 } }",
+      "problems": []
+    },
+    {
+      "label": "notMap1",
+      "xpath": "map { 'a': 1 }",
+      "problems": []
+    },
+    {
+      "label": "notMap2",
+      "xpath": "function($a) as xs:integer* { $a }",
+      "problems": []
+    },
+    {
+      "label": "notMap3",
+      "xpath": "array { 1, 2 }",
+      "problems": []
+    },
+    {
+      "label": "notMap4",
+      "xpath": "for-each((1, 2), function($a) { $a + 1 })",
+      "problems": []
+    },
+    {
+      "label": "mapConsError1",
+      "xpath": "{ 'a': 1, }",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: } ",
+          "}"
+        ]
+      ]
+    },
+    {
+      "label": "mapConsError2",
+      "xpath": "{ 'a': 1 : 2 }",
+      "problems": [
+        [
+          "XPath: Expression context - unexpected token here: : ",
+          ":"
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,328 @@
+{
+  "suite": "xpLiterals",
+  "source": "xpLiterals.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT select attribute",
+  "attributeName": "select",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.0"
+  },
+  "tests": [
+    {
+      "label": "string1",
+      "xpath": "'one'",
+      "tokens": [
+        [
+          "'one'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string2",
+      "xpath": "'o''ne'",
+      "tokens": [
+        [
+          "'o''ne'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string3",
+      "xpath": "'o''ne'''",
+      "tokens": [
+        [
+          "'o''ne'''",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string4",
+      "xpath": "'''one'",
+      "tokens": [
+        [
+          "'''one'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string5",
+      "xpath": "\"one\"",
+      "tokens": [
+        [
+          "\"one\"",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string6",
+      "xpath": "\"o\"\"ne\"",
+      "tokens": [
+        [
+          "\"o\"\"ne\"",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string7",
+      "xpath": "\"o\"\"ne\"\"\"\"",
+      "tokens": [
+        [
+          "\"o\"\"ne\"\"\"\"",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string8",
+      "xpath": "\"\"\"one\"",
+      "tokens": [
+        [
+          "\"\"\"one\"",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string9",
+      "xpath": "'one &amp;amp; two'",
+      "tokens": [
+        [
+          "'one ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          "amp; two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string10",
+      "xpath": "'one &amp;amp;&amp;amp; two'",
+      "tokens": [
+        [
+          "'one ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          "amp;",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          "amp; two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string11",
+      "xpath": "'one &amp;amp;amp; two'",
+      "tokens": [
+        [
+          "'one ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          "amp;amp; two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string12",
+      "xpath": "'one&#32;two'",
+      "tokens": [
+        [
+          "'one",
+          "string"
+        ],
+        [
+          "&#32;",
+          "entityRef"
+        ],
+        [
+          "two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string13",
+      "xpath": "'one&#xa0;two'",
+      "tokens": [
+        [
+          "'one",
+          "string"
+        ],
+        [
+          "&#xa0;",
+          "entityRef"
+        ],
+        [
+          "two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string14",
+      "xpath": "'one(:this:)two'",
+      "tokens": [
+        [
+          "'one(:this:)two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string15",
+      "xpath": "'\n      one\n      '",
+      "tokens": [
+        [
+          "'",
+          "string"
+        ],
+        [
+          "      one",
+          "string"
+        ],
+        [
+          "      '",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string16",
+      "xpath": "\n      'one \n      &amp;&amp; two'",
+      "tokens": [
+        [
+          "'one ",
+          "string"
+        ],
+        [
+          "      ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          " two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string17",
+      "xpath": "'\n      one\n      two\n      three\n      four'",
+      "tokens": [
+        [
+          "'",
+          "string"
+        ],
+        [
+          "      one",
+          "string"
+        ],
+        [
+          "      two",
+          "string"
+        ],
+        [
+          "      three",
+          "string"
+        ],
+        [
+          "      four'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string18",
+      "xpath": "\n      'one &amp; \n      two'",
+      "tokens": [
+        [
+          "'one ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          " ",
+          "string"
+        ],
+        [
+          "      two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string19",
+      "xpath": "\n      'one &amp;\n  two'",
+      "tokens": [
+        [
+          "'one ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          "  two'",
+          "string"
+        ]
+      ]
+    },
+    {
+      "label": "string20",
+      "xpath": "\n  \"one &amp;\n  two\"",
+      "tokens": [
+        [
+          "\"one ",
+          "string"
+        ],
+        [
+          "&amp;",
+          "entityRef"
+        ],
+        [
+          "  two\"",
+          "string"
+        ]
+      ]
+    }
+  ]
+}

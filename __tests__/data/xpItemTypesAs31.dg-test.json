@@ -1,0 +1,333 @@
+{
+  "suite": "xpItemTypesAs31",
+  "source": "xpItemTypesAs31.xsl",
+  "description": "XPath Lexer: expected tokens for each XSLT as attribute",
+  "attributeName": "as",
+  "metadata": {
+    "moduleName": "xpLexerTestGen.js",
+    "version": "1.7.2"
+  },
+  "tests": [
+    {
+      "label": "choice1",
+      "xpath": "(xs:date | xs:time | xs:dateTime)",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ],
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choice2",
+      "xpath": "(map(*) | array(*))?",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choice3",
+      "xpath": "(document-node() | element())+",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choice4",
+      "xpath": "(xs:string | enum('a', 'b'))*",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ],
+        [
+          "XPath: The 'enum(...)' item type requires XPath 4.0",
+          "enum"
+        ]
+      ]
+    },
+    {
+      "label": "choice5",
+      "xpath": "(ct:complex | xs:string)?",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choice6",
+      "xpath": "(xs:string | (xs:integer | xs:date))",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ],
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choice7",
+      "xpath": "map(xs:string, (xs:integer | xs:date))",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "choice8",
+      "xpath": "(element(a) | attribute(b))*",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "enum1",
+      "xpath": "enum('NFC', 'NFD', 'NFKC', 'NFKD')",
+      "problems": [
+        [
+          "XPath: The 'enum(...)' item type requires XPath 4.0",
+          "enum"
+        ]
+      ]
+    },
+    {
+      "label": "enum2",
+      "xpath": "enum('red')+",
+      "problems": [
+        [
+          "XPath: The 'enum(...)' item type requires XPath 4.0",
+          "enum"
+        ]
+      ]
+    },
+    {
+      "label": "record1",
+      "xpath": "record(r as xs:double, i as xs:double)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "record2",
+      "xpath": "record('first name', 'middle initial', 'last name')",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "record3",
+      "xpath": "record()",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "record4",
+      "xpath": "record(ssn as xs:string, emp as element(employee)?)*",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "record5",
+      "xpath": "record(a as record(b as xs:integer), c as (xs:string | xs:integer))",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ],
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ],
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    },
+    {
+      "label": "record6",
+      "xpath": "record(a? as xs:string, 'b c'? as xs:integer)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "record7",
+      "xpath": "record(a)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ]
+      ]
+    },
+    {
+      "label": "named1",
+      "xpath": "ct:complex",
+      "problems": []
+    },
+    {
+      "label": "named2",
+      "xpath": "ct:complex*",
+      "problems": []
+    },
+    {
+      "label": "fnType1",
+      "xpath": "fn(xs:string) as xs:integer",
+      "problems": [
+        [
+          "XPath: The 'fn(...)' item type requires XPath 4.0",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "fnType2",
+      "xpath": "(fn(xs:string) as xs:integer)?",
+      "problems": [
+        [
+          "XPath: The 'fn(...)' item type requires XPath 4.0",
+          "fn"
+        ]
+      ]
+    },
+    {
+      "label": "fnType3",
+      "xpath": "function(xs:string) as xs:integer",
+      "problems": []
+    },
+    {
+      "label": "oldUnion1",
+      "xpath": "union(xs:date, xs:time)",
+      "problems": [
+        [
+          "XPath: 'union(...)' is not supported - use a choice item type instead, e.g. (xs:date | xs:time)",
+          "union"
+        ]
+      ]
+    },
+    {
+      "label": "oldType1",
+      "xpath": "type(ct:complex)",
+      "problems": [
+        [
+          "XPath: 'type(...)' is not supported - use the named item type directly, e.g. my:type instead of type(my:type)",
+          "type"
+        ]
+      ]
+    },
+    {
+      "label": "oldTuple1",
+      "xpath": "tuple(a as xs:string)",
+      "problems": [
+        [
+          "XPath: 'tuple(...)' is not supported - use 'record(...)' instead",
+          "tuple"
+        ]
+      ]
+    },
+    {
+      "label": "recordErr1",
+      "xpath": "record(r as)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ],
+        [
+          "XPath: Expression context - unexpected token here: ) ",
+          ")"
+        ]
+      ]
+    },
+    {
+      "label": "recordErr2",
+      "xpath": "record(*)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ],
+        [
+          "XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead",
+          "*"
+        ]
+      ]
+    },
+    {
+      "label": "recordErr3",
+      "xpath": "record(a as xs:string, *)",
+      "problems": [
+        [
+          "XPath: The 'record(...)' item type requires XPath 4.0",
+          "record"
+        ],
+        [
+          "XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead",
+          "*"
+        ]
+      ]
+    },
+    {
+      "label": "enumErr1",
+      "xpath": "enum(red)",
+      "problems": [
+        [
+          "XPath: The 'enum(...)' item type requires XPath 4.0",
+          "enum"
+        ],
+        [
+          "XPath: Invalid type: 'red'",
+          "red"
+        ]
+      ]
+    },
+    {
+      "label": "choiceErr1",
+      "xpath": "(xs:date | )",
+      "problems": [
+        [
+          "XPath: Choice item types, e.g. (xs:date | xs:time), require XPath 4.0",
+          "|"
+        ]
+      ]
+    }
+  ]
+}

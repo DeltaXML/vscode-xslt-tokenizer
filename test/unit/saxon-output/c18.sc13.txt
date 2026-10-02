@@ -1,0 +1,12 @@
+No license file found - running with licensable features disabled
+Expected five a elements
+Error on line 3 column 76 of c18.xsl:
+  XTMM9001  Processing terminated by xsl:message at line 3 in c18.xsl
+  In template rule with match="document-node()" on line 2 of c18.xsl
+Processing terminated by xsl:message at line 3 in c18.xsl
+Unhandled exception: net.sf.saxon.CommandExitException: Processing terminated by xsl:message at line 3 in c18.xsl
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

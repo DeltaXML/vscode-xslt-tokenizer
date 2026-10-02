@@ -1,0 +1,4 @@
+Error at xsl:variable on line 3 column 58 of c03.xsl:
+  XTTE0570  An item of type xs:string cannot be converted to xs:integer as required for the
+  value of variable $v
+Errors were reported during stylesheet compilation

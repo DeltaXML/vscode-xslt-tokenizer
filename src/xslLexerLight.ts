@@ -36,15 +36,27 @@ export class XslLexerLight extends XslLexer {
         let contextGlobalInstructionType = GlobalInstructionType.Unknown;
         let isGlobalInstructionName = false;
         let isGlobalInstructionMode = false;
+        // default-mode: templates without a mode attribute are in this mode
+        let isDefaultModeAttribute = false;
         let isGlobalParameterName = false;
         let isGlobalUsePackageVersion = false;
         let isGlobalInstructionMatch = false;
+        let isTypeDeclarationAttribute = false;
+        let isParamDefaultSelectAttribute = false;
 
         let xmlElementStack: number = 0;
         let lCharCount = -1;
         let lineNumber = 0;
         let lineNumberChar = -1;
         let collectParamName = false;
+        let pendingParamType: string|undefined;
+        let currentParamNamePushed = false;
+        let isParamRequiredAttribute = false;
+        let pendingParamOptional: boolean | undefined;
+        let pendingDeclaredType: string | undefined;
+        let isUseAccumulatorsAttribute = false;
+        let pendingParamSelect: string|undefined;
+        let topLevelParamNamePushed = false;
 
         while (lCharCount < xslLength + 1) {
             lCharCount++;
@@ -99,6 +111,12 @@ export class XslLexerLight extends XslLexer {
                             tagInstructionNameAdded = false;
                             tagMatchToken = null;
                             collectParamName = false;
+                            pendingParamType = undefined;
+                            pendingParamOptional = undefined;
+                            pendingDeclaredType = undefined;
+                            currentParamNamePushed = false;
+                            pendingParamSelect = undefined;
+                            topLevelParamNamePushed = false;
                             if (xmlElementStack === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
                             } else if (xmlElementStack === 2 
@@ -122,7 +140,10 @@ export class XslLexerLight extends XslLexer {
                             break;      
                         case XMLCharState.lAn:
                             if ((xmlElementStack === 1 && tagGlobalInstructionType !== GlobalInstructionType.Unknown) ||
-                                xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage) {
+                                xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage ||
+                                (xmlElementStack === 1 && isNativeElement) ||
+                                // the root element: it isn't known to be native until its xmlns attributes are read
+                                (xmlElementStack === 0 && !xmlnsPrefixesOnly)) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             } else if (xmlElementStack < 3 && xmlnsPrefixesOnly) {
@@ -134,22 +155,35 @@ export class XslLexerLight extends XslLexer {
                             attName = tokenChars.join('');
                             isGlobalInstructionName = false;
                             isGlobalInstructionMode = false;
+                            isDefaultModeAttribute = (isNativeElement || xmlElementStack === 0) && attName === 'default-mode';
                             isGlobalParameterName = false;
+                            isParamRequiredAttribute = false;
+                            isUseAccumulatorsAttribute = false;
                             isGlobalUsePackageVersion = false;
                             isGlobalInstructionMatch = false;
+                            isTypeDeclarationAttribute = false;
+                            isParamDefaultSelectAttribute = false;
                             if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
                              && attName === 'href') {
                                 isGlobalInstructionName = true;
                             } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
                                 isGlobalInstructionName = true;
                             } else if (attName === 'mode') {
-                                isGlobalInstructionMode = true; 
+                                isGlobalInstructionMode = true;
                             } else if (tagGlobalInstructionType == GlobalInstructionType.Template && attName === 'match') {
                                 isGlobalInstructionMatch = true;
                             } else if (collectParamName && attName === 'name') {
                                 isGlobalParameterName = true;
+                            } else if (collectParamName && attName === 'required') {
+                                isParamRequiredAttribute = true;
+                            } else if (isNativeElement && attName === 'use-accumulators') {
+                                isUseAccumulatorsAttribute = true;
                             } else if (contextGlobalInstructionType === GlobalInstructionType.UsePackage && attName === 'package-version') {
                                 isGlobalUsePackageVersion = true;
+                            } else if ((tagGlobalInstructionType === GlobalInstructionType.Function || collectParamName || XslLexer.hasDeclaredType(tagGlobalInstructionType)) && attName === 'as') {
+                                isTypeDeclarationAttribute = true;
+                            } else if (tagGlobalInstructionType === GlobalInstructionType.Parameter && attName === 'select') {
+                                isParamDefaultSelectAttribute = true;
                             } else if (xmlnsPrefixesOnly && attName.startsWith('xmlns:')) {
                                 let xmlnsTkn: BaseToken = {
                                     line: lineNumber,
@@ -182,6 +216,20 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.rDq:
                         case XMLCharState.escDqAvt:
                         case XMLCharState.escSqAvt:
+                            if (isDefaultModeAttribute) {
+                                const defaultMode = tokenChars.join('').trim();
+                                if (defaultMode !== '' && defaultMode !== '#unnamed') {
+                                    const defaultModeToken: BaseToken = {
+                                        line: lineNumber,
+                                        length: defaultMode.length,
+                                        startCharacter: lineNumberChar - (defaultMode.length + 1),
+                                        value: defaultMode,
+                                        tokenType: XSLTokenLevelState.attributeValue
+                                    };
+                                    this.globalModeData.push({type: GlobalInstructionType.ModeTemplate, name: defaultMode, token: defaultModeToken, idNumber: 0, isDefaultMode: true});
+                                }
+                                isDefaultModeAttribute = false;
+                            }
                             if (isGlobalInstructionName || isGlobalInstructionMode) {
                                 let attValue = tokenChars.join('');
                                 const modeNames = attValue.split(/\s+/);
@@ -205,7 +253,17 @@ export class XslLexerLight extends XslLexer {
                                     const modeTokens = XslLexer.tokensInsideToken(tkn, attValue);
                                     modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
                                 } else {
-                                    targetGlobal.push({type: globalType, name: attValue, token: tkn, idNumber: 0});
+                                    const newGlobal: GlobalInstructionData = {type: globalType, name: XslLexer.globalName(globalType, attValue), token: tkn, idNumber: 0};
+                                    if (pendingDeclaredType !== undefined) {
+                                        newGlobal.declaredType = pendingDeclaredType;
+                                        pendingDeclaredType = undefined;
+                                    }
+                                    if (globalType === GlobalInstructionType.Parameter) {
+                                        newGlobal.defaultSelect = pendingParamSelect;
+                                        pendingParamSelect = undefined;
+                                        topLevelParamNamePushed = true;
+                                    }
+                                    targetGlobal.push(newGlobal);
                                 }
                                 isGlobalInstructionName = false;
                                 // fix bug where function arity was added to by following template params
@@ -227,12 +285,56 @@ export class XslLexerLight extends XslLexer {
                                         if (gd.memberNames) {
                                             gd.memberNames.push(attValue);
                                             gd.memberTokens?.push(newToken);
+                                            gd.memberTypes?.push(pendingParamType);
                                         } else {
                                             gd['memberNames'] = [attValue];
                                             gd['memberTokens'] = [newToken];
+                                            gd['memberTypes'] = [pendingParamType];
                                         }
+                                        XslLexer.pushParamOptional(gd, pendingParamOptional);
+                                        pendingParamOptional = undefined;
                                         gd.idNumber++;
+                                        pendingParamType = undefined;
+                                        currentParamNamePushed = true;
                                     }
+                                }
+                            } else if (isParamRequiredAttribute) {
+                                const gd = this.globalInstructionData.length > 0 ? this.globalInstructionData[this.globalInstructionData.length - 1] : undefined;
+                                pendingParamOptional = XslLexer.recordParamRequired(gd, tokenChars.join(''), currentParamNamePushed);
+                                isParamRequiredAttribute = false;
+                            } else if (isUseAccumulatorsAttribute) {
+                                const valueToken: BaseToken = { line: lineNumber, length: tokenChars.length + 2, startCharacter: lineNumberChar - (tokenChars.length + 2), value: tokenChars.join(''), tokenType: XSLTokenLevelState.attributeValue };
+                                XslLexer.recordAccumulatorUses(this.globalInstructionData, valueToken, tokenChars.join(''));
+                                isUseAccumulatorsAttribute = false;
+                            } else if (isTypeDeclarationAttribute) {
+                                const declaredType = tokenChars.join('').trim();
+                                if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
+                                    this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
+                                } else if (XslLexer.hasDeclaredType(tagGlobalInstructionType)) {
+                                    if (tagInstructionNameAdded && this.globalInstructionData.length > 0) {
+                                        this.globalInstructionData[this.globalInstructionData.length - 1].declaredType = declaredType;
+                                    } else {
+                                        pendingDeclaredType = declaredType;
+                                    }
+                                } else if (collectParamName && this.globalInstructionData.length > 0) {
+                                    if (currentParamNamePushed) {
+                                        const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                        if (gd.memberTypes && gd.memberTypes.length > 0) {
+                                            gd.memberTypes[gd.memberTypes.length - 1] = declaredType;
+                                        }
+                                    } else {
+                                        pendingParamType = declaredType;
+                                    }
+                                }
+                            } else if (isParamDefaultSelectAttribute) {
+                                const declaredSelect = tokenChars.join('').trim();
+                                if (topLevelParamNamePushed && this.globalInstructionData.length > 0) {
+                                    const gd = this.globalInstructionData[this.globalInstructionData.length - 1];
+                                    if (gd.type === GlobalInstructionType.Parameter) {
+                                        gd.defaultSelect = declaredSelect;
+                                    }
+                                } else {
+                                    pendingParamSelect = declaredSelect;
                                 }
                             } else if (isGlobalInstructionMatch) {
                                 let attValue = tokenChars.join('');
@@ -252,7 +354,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage
-                                 || isGlobalInstructionName || isGlobalInstructionMode) {
+                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute || isUseAccumulatorsAttribute || isDefaultModeAttribute) {
                                 storeToken = true;
                             }
                            break;
@@ -266,7 +368,16 @@ export class XslLexerLight extends XslLexer {
                                 nextState = XMLCharState.awaitingRcdata;
                             }
                             break;
+                        case XMLCharState.lEntity:
+                            if (storeToken && this.entityContext !== EntityPosition.text) {
+                                // the value is kept as it's written, with its references
+                                tokenChars.push(currentChar);
+                            }
+                            break;
                         case XMLCharState.rEntity:
+                            if (storeToken && this.entityContext !== EntityPosition.text) {
+                                tokenChars.push(currentChar);
+                            }
                             switch (this.entityContext) {
                                 case EntityPosition.text:
                                     nextState = XMLCharState.init;

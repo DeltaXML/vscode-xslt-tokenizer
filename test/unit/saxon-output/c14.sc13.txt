@@ -1,0 +1,12 @@
+No license file found - running with licensable features disabled
+Error at char 5 in expression in xsl:sequence/@select on line 3 column 51 of c14.xsl:
+  FODC0002  I/O error reported by XML parser processing
+  file:/work/proj/missing.xml. Caused by java.io.FileNotFoundException: /work/proj/missing.xml (No such file or directory)
+  In template rule with match="document-node()" on line 2 of c14.xsl
+I/O error reported by XML parser processing file:/work/proj/missing.xml
+Unhandled exception: net.sf.saxon.CommandExitException: I/O error reported by XML parser processing file:/work/proj/missing.xml
+    at net.sf.saxon.Transform.quit(Transform.java:1093)
+    at net.sf.saxon.Transform.doTransform(Transform.java:966)
+    at net.sf.saxon.option.cpp.SaxonCAPI.run_transform(SaxonCAPI.java:434)
+
+Fatal error: Unhandled exception

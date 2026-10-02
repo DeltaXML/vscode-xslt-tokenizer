@@ -2,6 +2,12 @@ import * as vscode from 'vscode';
 import { Data } from './xpLexer';
 
 export class XPathDocumentChangeHandler {
+	// a '*' typed at the start of the name in element(...) or attribute(...), or after a '|' - for the names and the
+	// XPath 4.0 wildcards, e.g. *:book
+	public static isKindTestWildcardStart(text: string, lineBefore: string) {
+		return text === '*' && /(?<![\w.:-])(?:element|attribute)\s*\((?:[^(),]*\|)?\s*$/.test(lineBefore);
+	}
+
 	public async onDocumentChange(e: vscode.TextDocumentChangeEvent) {
 		let activeChange = e.contentChanges[0];
 		if (!activeChange) {
@@ -45,7 +51,8 @@ export class XPathDocumentChangeHandler {
 
 		if (charIsWs) {
 			doTrigger = followsSeparator || (keyword !== undefined && Data.triggerWords.indexOf(keyword) !== -1);
-		} else if (char === '$' || char === '/' || char === '[' || char === '?' || char === '@') {
+		} else if (char === '$' || char === '/' || char === '[' || char === '?' || char === '@' ||
+			XPathDocumentChangeHandler.isKindTestWildcardStart(char, docText.substring(docText.lastIndexOf('\n', pos) + 1, pos + 1))) {
 			doTrigger = true;
 		} else if (followsSeparator && (char === ':' && separatorChar === ':')) {
 			doTrigger = true;

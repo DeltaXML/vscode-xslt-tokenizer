@@ -9,6 +9,10 @@ import * as url from 'url';
 import { BaseToken, CharLevelState, ExitCondition, LexPosition, TokenLevelState, XPathLexer } from './xpLexer';
 import { ElementData, VariableData, XPathData, XsltTokenCompletions } from './xsltTokenCompletions';
 import { anyDocumentSymbol, XSLTCodeActions } from './xsltCodeActions';
+import { ImportIndex } from './importIndex';
+import { XSLTConfiguration } from './languageConfigurations';
+import * as fs from 'fs';
+import { HrefPaths, ImportProblem } from './hrefPaths';
 
 interface ImportedGlobals {
 	href: string;
@@ -98,12 +102,23 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	public static getSymbolsForActiveDocument(): vscode.DocumentSymbol[] {
-		if (vscode.window.activeTextEditor) {
-			const result = XsltSymbolProvider.documentSymbols.get(vscode.window.activeTextEditor.document.uri);
-			return !!result ? result : [];
-		} else {
-			return [];
+		return vscode.window.activeTextEditor ? XsltSymbolProvider.getSymbolsForDocument(vscode.window.activeTextEditor.document.uri) : [];
+	}
+
+	// the cached symbols of the document - none if they haven't been computed yet, e.g. for a document not shown in an
+	// editor - also when the cache has another Uri object for the same file
+	public static getSymbolsForDocument(uri: vscode.Uri): vscode.DocumentSymbol[] {
+		let result = XsltSymbolProvider.documentSymbols.get(uri);
+		if (!result) {
+			const uriString = uri.toString();
+			for (const [cachedUri, cachedSymbols] of XsltSymbolProvider.documentSymbols) {
+				if (cachedUri.toString() === uriString) {
+					result = cachedSymbols;
+					break;
+				}
+			}
 		}
+		return result ?? [];
 	}
 
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
@@ -158,8 +173,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return new Promise((resolve, reject) => {
 			let symbols: vscode.DocumentSymbol[] = [];
 			let allImportedGlobals: GlobalInstructionData[] = [];
-			let importErrors: GlobalInstructionData[] = [];
+			let importErrors: { data: GlobalInstructionData, problem?: ImportProblem }[] = [];
 			const rootPath = vscode.workspace.rootPath;
+
+			// hrefs that have no file path, e.g. file://folder/a.xsl, or a URI that the XML catalog doesn't map to a file - so
+			// they aren't imported
+			globalInstructionData.forEach((data) => {
+				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
+					const problem = HrefPaths.importProblem(data.name, document.fileName);
+					if (problem) {
+						importErrors.push({ data, problem });
+					}
+				}
+			});
 
 			globalsSummary0.globals.forEach((globals) => {
 				if (globals.error) {
@@ -167,8 +193,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						let errorData = globalInstructionData.find((dataObject) => {
 							let result = false;
 							if (dataObject.type === GlobalInstructionType.Import || dataObject.type === GlobalInstructionType.Include) {
-								let resolvedName = XsltSymbolProvider.resolvePath(dataObject.name, document.fileName);
-								result = resolvedName === globals.href;
+								result = HrefPaths.toPath(dataObject.name, document.fileName) === globals.href;
 							} else if (dataObject.type === GlobalInstructionType.UsePackage) {
 								// TODO:
 								const basePath = path.dirname(document.fileName);
@@ -176,8 +201,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 									return pkg.name === dataObject.name;
 								});
 								if (packageLookup && rootPath) {
-									let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
-									result = resolvedName === globals.href;
+									result = HrefPaths.settingsPath(packageLookup.path, rootPath) === globals.href;
 								} else {
 									result = false;
 								}
@@ -186,7 +210,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							return result;
 						});
 						if (errorData) {
-							importErrors.push(errorData);
+							importErrors.push({ data: errorData });
 						}
 					}
 				} else {
@@ -205,13 +229,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				if (this.collection && this.docType !== DocumentTypes.SCH) {
 					let importDiagnostics: vscode.Diagnostic[] = [];
 					importErrors.forEach((importError) => {
-						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError));
+						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem));
 					});
 					let allDiagnostics = importDiagnostics.concat(diagnostics);
 					if (allDiagnostics.length > 0) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
-						this.collection.clear();
+						// only this document's problems - not those of other documents
+						this.collection.delete(document.uri);
 					};
 				}
 				this.internalDiagnostics = diagnostics;
@@ -235,8 +260,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return this.internalDiagnostics;
 	}	
 
-	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[]) {
-		const matchingParent = this.findMatchingParent(localImportedHrefs, document.fileName);
+	// the parent imported with the module: true for the top-level stylesheet importing or including it, directly or
+	// indirectly - one opened recently, or from the index of the workspace's modules - false for none, or a path
+	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[], parent: boolean | string = true) {
+		const inferParent = parent === true;
+		let matchingParent = typeof parent === 'string' ? parent : inferParent ? this.findMatchingParent(localImportedHrefs, document.fileName) : undefined;
+		if (inferParent && !matchingParent && document.uri.scheme === 'file' && ImportIndex.isEnabled()) {
+			// the top-level stylesheet importing or including the module, from an index of the workspace's modules - built
+			// in the background the first time it's needed, when the open XSLT modules are checked again
+			matchingParent = ImportIndex.instance.masterFor(document.fileName);
+			if (!ImportIndex.instance.built) {
+				ImportIndex.instance.whenBuilt();
+			}
+		}
 		let importedGlobals1: ImportedGlobals[] = [];
 		let accumulatedHrefs: string[];
 		if (matchingParent) {
@@ -250,7 +286,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			};
 			const importInstruction: GlobalInstructionData = {
 				type: GlobalInstructionType.Import,
-				name: matchingParent,
+				// an href, as for an xsl:import
+				name: HrefPaths.fileUri(matchingParent),
 				token: token,
 				idNumber: 0
 			};
@@ -276,6 +313,61 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return { importedGlobals1, accumulatedHrefs };
 	}
 
+	// the top-level stylesheet that the module depends on, to be run: one importing or including it, directly or
+	// indirectly, that declares something used by the module or a module it imports or includes - undefined if it can be
+	// run on its own. Each module of the tree is linted with the top-level stylesheet, and as it would be when the module
+	// is run: for the module, on its own, and for the modules it imports or includes, with the module as their parent - a
+	// problem reported only in the second case is for a reference that the top-level stylesheet resolves
+	public static async parentDependency(document: vscode.TextDocument): Promise<string | undefined> {
+		const topLevel = ImportIndex.isEnabled() ? ImportIndex.instance.masterFor(document.fileName) : undefined;
+		if (!topLevel) {
+			return undefined;
+		}
+		const key = (d: vscode.Diagnostic) => `${d.range.start.line}:${d.range.start.character}:${d.message}`;
+		const dependsOnTopLevel = async (doc: vscode.TextDocument, parentWhenRun: string | false) => {
+			const withTopLevel = new Set((await XsltSymbolProvider.moduleDiagnostics(doc, topLevel)).map(key));
+			return (await XsltSymbolProvider.moduleDiagnostics(doc, parentWhenRun)).some((d) => !withTopLevel.has(key(d)));
+		};
+		if (await dependsOnTopLevel(document, false)) {
+			return topLevel;
+		}
+		// the modules the module imports or includes, directly or indirectly
+		const tree = new Set<string>();
+		const addReferences = (file: string) => ImportIndex.instance.referencesOf(file).forEach((reference) => {
+			if (reference.path !== document.fileName && !tree.has(reference.path) && fs.existsSync(reference.path)) {
+				tree.add(reference.path);
+				addReferences(reference.path);
+			}
+		});
+		addReferences(document.fileName);
+		for (const file of tree) {
+			if (await dependsOnTopLevel(await vscode.workspace.openTextDocument(vscode.Uri.file(file)), document.fileName)) {
+				return topLevel;
+			}
+		}
+		return undefined;
+	}
+
+	// the diagnostics of the module, with its imports and includes, and the parent (see processTopLevelImports)
+	private static async moduleDiagnostics(document: vscode.TextDocument, parent: boolean | string): Promise<vscode.Diagnostic[]> {
+		const xslLexer = new XslLexer(XSLTConfiguration.configuration);
+		xslLexer.provideCharLevelState = true;
+		const allTokens = xslLexer.analyse(document.getText());
+		const globalInstructionData = xslLexer.globalInstructionData;
+		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const { importedGlobals1, accumulatedHrefs } = await XsltSymbolProvider.processTopLevelImports(false, xslLexer, XsltSymbolProvider.importSymbolHrefs, document, globalInstructionData, xsltPackages, parent);
+		let summary: GlobalsSummary = { globals: importedGlobals1, hrefs: accumulatedHrefs };
+		for (let level = 0; summary.hrefs.length > 0 && level < 20; level++) {
+			summary = await XsltSymbolProvider.processImportedGlobals(xsltPackages, summary.globals, accumulatedHrefs, level === 0);
+		}
+		const importedGlobals: GlobalInstructionData[] = [];
+		summary.globals.filter((globals) => !globals.error).forEach((globals) => globals.data.forEach((global) => {
+			global['href'] = globals.href;
+			importedGlobals.push(global);
+		}));
+		return XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, importedGlobals, []);
+	}
+
 	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol | undefined) {
 		if (DocumentChangeHandler.lastActiveXMLEditor && symbol) {
 			const range = symbol.range;
@@ -286,13 +378,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static symbolForXMLElement(selectionType: SelectionType, position: vscode.Position, expandText?: string[]) {
-		if (vscode.window.activeTextEditor) {
-			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
+	// the symbol of the element at the position, in the document (uri) - by default, the active editor's - undefined if the
+	// document's symbols haven't been computed yet
+	public static symbolForXMLElement(selectionType: SelectionType, position: vscode.Position, expandText?: string[], uri = vscode.window.activeTextEditor?.document.uri) {
+		const rootSymbol = uri ? XsltSymbolProvider.getSymbolsForDocument(uri)[0] : undefined;
+		if (rootSymbol) {
 			const path: string[] = [];
 			const selection = new vscode.Selection(position, position);
-			const result = this.getChildSymbolForSelection(selection, rootSymbol, path, selectionType, null, null, null, expandText);
-            return result;
+			return this.getChildSymbolForSelection(selection, rootSymbol, path, selectionType, null, null, null, expandText);
 		}
 	}
 
@@ -311,6 +404,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		if (editor) {
 			const selection = editor.selection;
 			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
+			if (!rootSymbol) {
+				return undefined;
+			}
 			const newPath = ['/' + rootSymbol.name.split(' ')[0]];
 			const result = this.getChildSymbolForSelection(selection, rootSymbol, newPath, SelectionType.Current, null, null, null, expandText);
 			const fullPath = newPath.join('');
@@ -318,9 +414,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static findVariableTypeAtSymbol(targetSymbol: anyDocumentSymbol, variableNames: string[], types: Map<string, string>, mergeNames: string[]) {
-		const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
-		if (targetSymbol) XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, rootSymbol, variableNames, types, mergeNames);
+	public static findVariableTypeAtSymbol(targetSymbol: anyDocumentSymbol, variableNames: string[], types: Map<string, string>, mergeNames: string[], uri = vscode.window.activeTextEditor?.document.uri) {
+		const rootSymbol = uri ? XsltSymbolProvider.getSymbolsForDocument(uri)[0] : undefined;
+		if (targetSymbol && rootSymbol) XsltSymbolProvider.findChildVariableTypeAtSymbol(targetSymbol, rootSymbol, variableNames, types, mergeNames);
 	}
 
 
@@ -565,7 +661,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					case TokenLevelState.axisName:
 						saveToken = token.value !== 'child';
 						if (!hasParentAxis) {
-							hasParentAxis = ['parent', 'ancestor', 'ancestor-or-self', 'following-sibling', 'preceding-sibling'].indexOf(token.value) !== -1;
+							hasParentAxis = ['parent', 'ancestor', 'ancestor-or-self', 'following-sibling', 'preceding-sibling', 'following-sibling-or-self', 'preceding-sibling-or-self'].indexOf(token.value) !== -1;
 						}
 						break;
 					case TokenLevelState.nodeType:
@@ -672,7 +768,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		let exitForLoop = false;
 		let onXsltTokensAtStart = false;
 
-		const startPosiiton = xpv.index + 2;
+		// For xsl:variable/xsl:param declarations, selectExprStartIndex is captured directly
+		// while scanning the element's attributes and points at the true start of the select
+		// attribute's expression, regardless of what other attributes (e.g. as=) intervene
+		// between name= and select=. XPath-level let/for/anonymous-function range-variable
+		// bindings don't set this field, so they keep using the fixed +2 offset (xpv.index
+		// there points at the $var token itself, and +2 skips exactly one keyword - ':=' or 'in').
+		const startPosiiton = xpv.selectExprStartIndex !== undefined ? xpv.selectExprStartIndex : xpv.index + 2;
 
 		for (let index = startPosiiton; index < tokens.length; index++) {
 			const token = tokens[index];
@@ -884,12 +986,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							currentSymbols.forEach(symbol => { if (symbol.parent) nextSymbols.push(symbol.parent); });
 							nextAxis = AxisType.ParentKeep;
 							break;
-					  case 'following-sibling':
-							nextAxis = AxisType.FollowingSibling;
+						case 'following-sibling':
+						case 'following-sibling-or-self':
 						case 'preceding-sibling':
-							// include all siblings
-							const isFollowing = nextAxis === AxisType.FollowingSibling;
+						case 'preceding-sibling-or-self': {
+							// include all following or preceding siblings - and, for the XPath 4.0 '-or-self' axes, the node itself
+							const isFollowing = token.value.startsWith('following');
+							const includeSelfNode = token.value.endsWith('-or-self');
 							currentSymbols.forEach(symbol => {
+								if (includeSelfNode) {
+									nextSymbols.push(symbol);
+								}
 								const sParent = symbol.parent;
 								if (sParent) {
 									const pos = symbol.range.start;
@@ -907,10 +1014,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 									});
 								} 
 							});
-							if (!isFollowing) {
-								nextAxis = AxisType.PrecedingSibling;
-							}
+							nextAxis = isFollowing ? AxisType.FollowingSibling : AxisType.PrecedingSibling;
 							break;
+						}
 						case 'ancestor-or-self':
 							nextAxis = AxisType.AncestorOrSelf;
 						case 'ancestor':
@@ -1174,8 +1280,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-					let resolvedName = XsltSymbolProvider.resolvePath(data.name, importedG.href);
-					if (existingHrefs.indexOf(resolvedName) < 0) {
+					let resolvedName = HrefPaths.toPath(data.name, importedG.href);
+					if (resolvedName !== undefined && existingHrefs.indexOf(resolvedName) < 0) {
 						existingHrefs.push(resolvedName);
 						result.push(resolvedName);
 					}
@@ -1184,8 +1290,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						return pkg.name === data.name;
 					});
 					if (packageLookup) {
-						let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
-						if (existingHrefs.indexOf(resolvedName) < 0) {
+						let resolvedName = HrefPaths.settingsPath(packageLookup.path, rootPath);
+						if (resolvedName !== undefined && existingHrefs.indexOf(resolvedName) < 0) {
 							existingHrefs.push(resolvedName);
 							result.push(resolvedName);
 						}
@@ -1202,46 +1308,24 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
-					let resolvedName = XsltSymbolProvider.resolvePath(data.name, importedG.href);
-					result.push(resolvedName);
+					let resolvedName = HrefPaths.toPath(data.name, importedG.href);
+					if (resolvedName !== undefined) {
+						result.push(resolvedName);
+					}
 				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
 					let packageLookup = xsltPackages.find((pkg) => {
 						return pkg.name === data.name;
 					});
 					if (packageLookup) {
-						let resolvedName = XsltSymbolProvider.resolvePathInSettings(packageLookup.path, rootPath);
-						result.push(resolvedName);
+						let resolvedName = HrefPaths.settingsPath(packageLookup.path, rootPath);
+						if (resolvedName !== undefined) {
+							result.push(resolvedName);
+						}
 					}
 				}
 			});
 		});
 		return result;
-	}
-
-	public static resolvePath(href: string, documentPath: string) {
-
-		if (path.isAbsolute(href)) {
-			return href;
-		} else if (href.startsWith('file:///')) {
-			return href.substring(7);
-		} else if (href.startsWith('file:/')) {
-			return href.substring(5);
-		} else {
-			href = href.startsWith('file:') ? href.substring(5) : href;
-			let basePath = path.dirname(documentPath);
-			let joinedPath = path.join(basePath, href);
-			return path.normalize(joinedPath);
-		}
-	}
-
-	public static resolvePathInSettings(href: string, workspace: string) {
-
-		if (path.isAbsolute(href)) {
-			return href;
-		} else {
-			let joinedPath = path.join(workspace, href);
-			return path.normalize(joinedPath);
-		}
 	}
 
 	public static async fetchImportedGlobals(inputHrefs: string[]): Promise<ImportedGlobals[]> {
