@@ -25,7 +25,7 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
       <li>XSLT 4.0 and XPath 4.0, as in Saxon 13</li>
       <li>SaxonJS interactive extensions (IXSL)</li>
       <li><code>.xpath</code> files, as XPath 4.0</li>
-      <li>Fast semantic highlighting, for most color themes</li>
+      <li>Fast semantic highlighting</li>
     </ul>
   </td>
   <td width="50%" valign="top">
@@ -48,6 +48,7 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
       <li>Snippets, incl. new stylesheets for 3.0 and 4.0</li>
       <li>Formatting of instructions and multi-line XPath</li>
       <li>Rename symbol, across imported modules</li>
+      <li>Semantic highlighting from a full XPath parser</li>
     </ul>
   </td>
   <td width="50%" valign="top">
@@ -58,6 +59,7 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
       <li><code>@see</code> references, with navigation and rename</li>
       <li>Checks of <code>@param</code> and <code>@field</code> tags</li>
       <li>Module notes for stylesheets</li>
+      <li>Highlighting and auto completion for tags or references</li>
     </ul>
   </td>
 </tr>
@@ -66,7 +68,8 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
     <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html#checking">Linter</a></h4>
     <ul>
       <li>XPath syntax and XSLT instructions</li>
-      <li>Types, records and function arguments</li>
+      <li>Types, records, enums and function arguments</li>
+      <li>Unused XSLT and XPath variables or parameters</li>
       <li>References across imported modules</li>
       <li>Saxon errors from runs, in the Problems panel</li>
       <li>Quick fixes for common problems</li>
@@ -80,6 +83,7 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
       <li>Outline, breadcrumbs and Go to Symbol</li>
       <li>Links for <code>xsl:import</code> and <code>xsl:include</code></li>
       <li>XSLT Imports view, with inferred top-level stylesheets</li>
+      <li>Filterable dropdown listing all symbols and modes</li>
     </ul>
   </td>
 </tr>
@@ -87,6 +91,7 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
   <td width="50%" valign="top">
     <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/refactoring-xslt.html">Refactoring</a></h4>
     <ul>
+      <li>Context-aware with safe symbol renaming</li>
       <li>Extract <code>xsl:function</code> or <code>xsl:template</code></li>
       <li>Extract <code>xsl:variable</code> from an XPath expression</li>
       <li>Extract a record type from a map</li>
@@ -101,7 +106,6 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
       <li>Tasks for SaxonJ, SaxonJS and SaxonC</li>
       <li><code>xsl:param</code> defaults pre-filled by Quick Run</li>
       <li><code>xsl:param</code> values controlled by tasks</li>
-      <li>Start from <code>xsl:initial-template</code></li>
       <li>XML catalogs for <code>xsl:import</code> URIs</li>
       <li>File pickers for task inputs</li>
     </ul>
