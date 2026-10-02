@@ -21,8 +21,9 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
   <td width="50%" valign="top">
     <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xslt40.html">XSLT &amp; XPath languages</a></h4>
     <ul>
-      <li>XSLT 3.0 and XPath 3.1</li>
-      <li>XSLT 4.0 and XPath 4.0, as in Saxon 13</li>
+      <li><a href="https://www.w3.org/TR/xslt-30/">XSLT 3.0</a> and XPath 3.1</li>
+      <li><a href="https://qt4cg.org/2026-01-28/xslt-40/Overview.html">XSLT 4.0</a> and XPath 4.0, as in 
+      <a href="https://www.saxonica.com/html/documentation13/changes/v13/xslt40.html">Saxon 13</a></li>
       <li>SaxonJS interactive extensions (IXSL)</li>
       <li><code>.xpath</code> files, as XPath 4.0</li>
       <li>Fast semantic highlighting</li>
