@@ -46,6 +46,13 @@ export interface EnumLiterals {
 	literals: { token: BaseToken, value: string }[];
 }
 
+// the 'as' attribute of an xsl:item-type: from the start of its first token to the end of its last token
+export interface ItemTypeAsRange {
+	name: string;
+	start: { line: number, character: number };
+	end: { line: number, character: number };
+}
+
 // a token that refers to a field of a record type, e.g. 'r' in $c?r - for hover and go to definition
 export interface FieldReference {
 	token: BaseToken;
@@ -136,6 +143,8 @@ export class RecordTypes {
 	public static fieldReferences: FieldReference[] = [];
 	// the string literals matched to enumeration values in the document being processed
 	public static enumValueReferences: EnumValueReference[] = [];
+	// the 'as' attributes of the xsl:item-type declarations in the document being processed
+	public static itemTypeAsRanges: ItemTypeAsRange[] = [];
 
 	// the type that a named item type is declared as, following named item types, e.g. 'xs:boolean' for 'flag'
 	public static resolveNamedType(typeText: string, itemTypes: Map<string, string>, depth = 0): string | undefined {

@@ -16,8 +16,7 @@ import { XSLTConfiguration } from './languageConfigurations';
 import { BaseToken } from './xpLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
-import { EnumValueReference, RecordTypes } from './recordTypes';
-import { XdocNotes } from './xdocNote';
+import { EnumValueReference, ItemTypeAsRange, RecordTypes } from './recordTypes';
 import { DocumentContext, RecordFieldReferences } from './recordFieldReferences';
 
 export interface EnumValueLocations {
@@ -37,6 +36,8 @@ interface DocumentEnums {
 	context: DocumentContext;
 	references: EnumValueReference[];
 	allTokens: BaseToken[];
+	// the 'as' attributes of the document's xsl:item-type declarations
+	itemTypeAsRanges: ItemTypeAsRange[];
 }
 
 export class EnumValueReferences {
@@ -142,19 +143,16 @@ export class EnumValueReferences {
 	// e.g. as="enum('a', 'b')" or as="(enum('a') | enum('b'))" - otherwise its values
 	private static declarations(enums: DocumentEnums) {
 		const document = enums.context.document;
-		const text = document.getText();
 		const itemTypeMap = EnumValueReferences.itemTypeMap(enums.context);
-		const named = enums.context.itemTypes.filter((itemType) => RecordFieldReferences.isDeclaredIn(itemType, document) && itemType.declaredType &&
-			RecordTypes.resolveEnum(itemType.declaredType, itemTypeMap)).map((itemType) => {
-			const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, itemType.token.line, itemType.token.startCharacter));
-			const asOffset = tagStart > -1 ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'as') : undefined;
-			const asText = tagStart > -1 ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as', true) : undefined;
-			return { name: itemType.name, start: asOffset ?? -1, end: asOffset !== undefined && asText !== undefined ? asOffset + asText.length : -1 };
+		const named = enums.itemTypeAsRanges.filter((asRange) => {
+			const declared = itemTypeMap.get(asRange.name);
+			return declared && RecordTypes.resolveEnum(declared, itemTypeMap);
 		});
+		const isBefore = (a: { line: number, character: number }, b: { line: number, character: number }) => a.line < b.line || (a.line === b.line && a.character <= b.character);
 		return RecordTypes.enumLiterals(enums.allTokens).map((enumLiterals) => {
 			const first = enumLiterals.literals[0]?.token;
-			const offset = first ? document.offsetAt(new vscode.Position(first.line, first.startCharacter)) : -1;
-			const itemType = named.find((n) => offset >= n.start && offset < n.end);
+			const start = first ? { line: first.line, character: first.startCharacter } : undefined;
+			const itemType = start ? named.find((asRange) => isBefore(asRange.start, start) && isBefore(start, asRange.end)) : undefined;
 			return { enumLiterals, key: itemType ? EnumValueReferences.namedKey(document.fileName, itemType.name) : EnumValueReferences.valuesKey(enumLiterals.values) };
 		});
 	}
@@ -199,6 +197,7 @@ export class EnumValueReferences {
 		if (!cached) {
 			await RecordFieldReferences.lint(definitionProvider, context);
 		}
-		return { context, allTokens, references: cached ?? XsltTokenDiagnostics.enumValueReferences.get(context.document.uri.toString()) ?? [] };
+		const uri = context.document.uri.toString();
+		return { context, allTokens, references: cached ?? XsltTokenDiagnostics.enumValueReferences.get(uri) ?? [], itemTypeAsRanges: XsltTokenDiagnostics.itemTypeAsRanges.get(uri) ?? [] };
 	}
 }
