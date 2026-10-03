@@ -54,7 +54,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		// XPath 4.0: a value of an enumeration type
 		this.enumLocations = await EnumValueReferences.find(document, position, token);
 		if (this.enumLocations) {
-			return this.enumLocations.range;
+			return this.enumLocations.origin.location.range;
 		}
 
 		const refContext = { includeDeclaration: true };
@@ -114,12 +114,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			return fieldEdit;
 		}
 		if (this.enumLocations) {
-			const invalid = EnumValueReferences.invalidValue(this.enumLocations, newName);
-			if (invalid) {
-				return new Promise((resolve, reject) => reject(invalid));
+			const enumEdit = EnumValueReferences.renameEdit(this.enumLocations, newName);
+			if (typeof enumEdit === 'string') {
+				return new Promise((resolve, reject) => reject(enumEdit));
 			}
-			const enumEdit = new vscode.WorkspaceEdit();
-			this.enumLocations.locations.forEach((location) => enumEdit.replace(location.uri, location.range, newName));
 			return enumEdit;
 		}
 		// check that name is valid
@@ -169,7 +167,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		// XPath 4.0: a value of an enumeration type - in its declaration, and the string literals that refer to it
 		const enumValue = await EnumValueReferences.find(document, position, token);
 		if (enumValue) {
-			return enumValue.locations.concat(enumValue.escaped);
+			return enumValue.literals.map((literal) => literal.location);
 		}
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		const langConfig = XSLTConfiguration.configuration;

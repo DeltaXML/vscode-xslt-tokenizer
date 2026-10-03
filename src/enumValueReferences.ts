@@ -13,20 +13,29 @@
 import * as vscode from 'vscode';
 import * as url from 'url';
 import { XSLTConfiguration } from './languageConfigurations';
-import { BaseToken } from './xpLexer';
+import { BaseToken, CharLevelState } from './xpLexer';
+import { XslLexer, XSLTokenLevelState } from './xslLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { EnumValueReference, ItemTypeAsRange, RecordTypes } from './recordTypes';
 import { DocumentContext, RecordFieldReferences } from './recordFieldReferences';
 
+// how a string literal is written, for an edit of its value
+interface LiteralForm {
+	// the value, within the quotes
+	location: vscode.Location;
+	// the literal's quote character
+	quote: string;
+	// the quote character delimiting the XML attribute the literal is in - undefined in element content, e.g. xsl:select
+	attributeQuote?: string;
+}
+
 export interface EnumValueLocations {
 	value: string;
-	// the value at the position
-	range: vscode.Range;
-	// the value within the quotes of each literal
-	locations: vscode.Location[];
-	// the literals that can't be renamed in place: written with doubled quotes or character references, e.g. &quot;
-	escaped: vscode.Location[];
+	// the literal at the position
+	origin: LiteralForm;
+	// each literal with the value: in its declaration, and the references to it
+	literals: LiteralForm[];
 	// the values of the enumeration types with the value
 	typeValues: string[];
 }
@@ -56,19 +65,17 @@ export class EnumValueReferences {
 			return undefined;
 		}
 		const { value, key } = target;
-		const result: EnumValueLocations = { value, range: target.range, locations: [], escaped: [], typeValues: [] };
-		const add = (doc: vscode.TextDocument, literal: BaseToken) => {
-			const location = EnumValueReferences.valueLocation(doc, literal, value);
-			const list = location ? result.locations : result.escaped;
-			const added = location ?? new vscode.Location(doc.uri, EnumValueReferences.tokenRange(doc, literal));
-			if (!list.some((l) => l.uri.toString() === added.uri.toString() && l.range.isEqual(added.range))) {
-				list.push(added);
+		const result: EnumValueLocations = { value, origin: target.form, literals: [], typeValues: [] };
+		const add = (doc: vscode.TextDocument, allTokens: BaseToken[], literal: BaseToken) => {
+			const form = EnumValueReferences.literalForm(doc, allTokens, literal);
+			if (form && !result.literals.some((l) => l.location.uri.toString() === form.location.uri.toString() && l.location.range.isEqual(form.location.range))) {
+				result.literals.push(form);
 			}
 		};
 		const hrefs = (await definitionProvider.getImportedGlobals(document, RecordFieldReferences.startPosition())).accumulatedHrefs;
 		const all = [documentEnums];
 		// a value with no characters that may be escaped is written as it is in each module that refers to it
-		const isPlain = !/['"&<>]/.test(value);
+		const isPlain = !/['"&<]/.test(value);
 		for (const href of await RecordFieldReferences.scopeModules(document, hrefs)) {
 			try {
 				const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(url.pathToFileURL(href).toString()));
@@ -88,34 +95,55 @@ export class EnumValueReferences {
 		}
 		for (const enums of all) {
 			const doc = enums.context.document;
-			enums.references.filter((ref) => ref.value === value && EnumValueReferences.referenceKey(enums.context, ref) === key).forEach((ref) => add(doc, ref.token));
+			enums.references.filter((ref) => ref.value === value && EnumValueReferences.referenceKey(enums.context, ref) === key).forEach((ref) => add(doc, enums.allTokens, ref.token));
 			EnumValueReferences.declarations(enums).filter((declaration) => declaration.key === key).forEach((declaration) => {
-				declaration.enumLiterals.literals.filter((literal) => literal.value === value).forEach((literal) => add(doc, literal.token));
+				declaration.enumLiterals.literals.filter((literal) => literal.value === value).forEach((literal) => add(doc, enums.allTokens, literal.token));
 				result.typeValues.push(...declaration.enumLiterals.values.filter((v) => !result.typeValues.includes(v)));
 			});
 		}
 		return result;
 	}
 
-	// a new value for a rename: undefined if it's valid, otherwise why not
-	public static invalidValue(locations: EnumValueLocations, newValue: string): string | undefined {
-		if (newValue.length === 0 || /['"&<\r\n]/.test(newValue)) {
-			return `new value is invalid: '${newValue}' - an enumeration value can't be renamed to one with quotes, '&', '<' or a new line`;
+	// the edit for a rename to the new name, written as the value would be in the literal at the position - e.g. it''s
+	// for the value it's, in a literal with single quotes - or why it's not valid
+	public static renameEdit(locations: EnumValueLocations, newName: string): vscode.WorkspaceEdit | string {
+		const { quote } = locations.origin;
+		// the quotes may be references, e.g. &apos; in an attribute
+		const parts = RecordTypes.decodeReferences(newName).text.split(quote + quote);
+		const newValue = parts.join(quote);
+		if (parts.some((part) => part.includes(quote))) {
+			return `new value is invalid: '${newName}' - a ${quote} in the value must be doubled: ${quote}${quote}`;
+		} else if (newValue.length === 0 || /[\r\n]/.test(newValue)) {
+			return `new value is invalid: '${newName}'`;
 		} else if (newValue !== locations.value && locations.typeValues.includes(newValue)) {
 			return `'${newValue}' is already a value of the enumeration type`;
-		} else if (locations.escaped.length > 0) {
-			const where = locations.escaped.map((l) => `${vscode.workspace.asRelativePath(l.uri)}:${l.range.start.line + 1}`).join(', ');
-			return `'${locations.value}' is written with doubled quotes or character references at ${where} - rename it there first`;
 		}
-		return undefined;
+		// the attribute's quote character can only be a reference, e.g. &apos; for it's in "..." within select='...', or
+		// &quot;&quot; in &quot;...&quot; - which the lexer splits into separate tokens - so by convention, it's not written
+		const conflicts = locations.literals.filter((literal) => literal.attributeQuote && newValue.includes(literal.attributeQuote));
+		if (conflicts.length > 0) {
+			const where = conflicts.map((l) => `${vscode.workspace.asRelativePath(l.location.uri)}:${l.location.range.start.line + 1}`).join(', ');
+			return `'${newValue}' can't be written in the literal at ${where}: it's in an attribute with ${conflicts[0].attributeQuote} quotes - change them to use the other quotes`;
+		}
+		const edit = new vscode.WorkspaceEdit();
+		locations.literals.forEach((literal) => edit.replace(literal.location.uri, literal.location.range, EnumValueReferences.literalText(newValue, literal)));
+		return edit;
+	}
+
+	// the value as written within the quotes of the literal: its quote character doubled, and the characters that the XML
+	// requires as references, e.g. &amp;
+	private static literalText(value: string, literal: LiteralForm) {
+		return value.split(literal.quote).join(literal.quote + literal.quote).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 	}
 
 	// the enumeration value at the position: a reference to it, or a value in an enum(...) declaration - with its key
-	private static valueAt(enums: DocumentEnums, position: vscode.Position): { value: string, key: string, range: vscode.Range } | undefined {
+	private static valueAt(enums: DocumentEnums, position: vscode.Position): { value: string, key: string, form: LiteralForm } | undefined {
 		const document = enums.context.document;
 		const isAt = (t: BaseToken) => t.line === position.line && position.character >= t.startCharacter && position.character <= t.startCharacter + t.length;
-		const result = (value: string, key: string | undefined, literal: BaseToken) => key ?
-			{ value, key, range: EnumValueReferences.valueLocation(document, literal, value)?.range ?? EnumValueReferences.tokenRange(document, literal) } : undefined;
+		const result = (value: string, key: string | undefined, literal: BaseToken) => {
+			const form = key ? EnumValueReferences.literalForm(document, enums.allTokens, literal) : undefined;
+			return form ? { value, key: key!, form } : undefined;
+		};
 		const reference = enums.references.find((ref) => isAt(ref.token));
 		if (reference) {
 			return result(reference.value, EnumValueReferences.referenceKey(enums.context, reference), reference.token);
@@ -165,21 +193,38 @@ export class EnumValueReferences {
 		return `values:${[...new Set(values)].sort().join('\u0000')}`;
 	}
 
-	// the range of the value within the quotes of the literal - undefined if it's written with doubled quotes or references
-	private static valueLocation(document: vscode.TextDocument, literal: BaseToken, value: string): vscode.Location | undefined {
-		const quote = literal.value.charAt(0);
-		const isQuoted = (quote === '\'' || quote === '"') && literal.value.length > 1 && literal.value.endsWith(quote);
-		if (!isQuoted || literal.value.substring(1, literal.value.length - 1) !== value) {
+	// how the string literal is written, from the tokens: its quote character, from the token's charType - which also tells
+	// if the quotes are references, e.g. &quot;red&quot; - the range within its quotes, and the quote character of the XML
+	// attribute it's in, from the token before the literal
+	private static literalForm(document: vscode.TextDocument, allTokens: BaseToken[], literal: BaseToken): LiteralForm | undefined {
+		const index = allTokens.findIndex((t) => t.line === literal.line && t.startCharacter === literal.startCharacter);
+		const charType = index > -1 ? allTokens[index].charType : undefined;
+		const quote = charType === CharLevelState.lSq || charType === CharLevelState.rSqEnt ? '\'' : charType === CharLevelState.lDq || charType === CharLevelState.rDqEnt ? '"' : undefined;
+		// the offsets of the decoded characters, for the length of quotes that are references
+		const decoded = RecordTypes.decodeReferences(literal.value);
+		if (!quote || decoded.text.length < 2) {
 			return undefined;
 		}
-		const start = document.offsetAt(new vscode.Position(literal.line, literal.startCharacter)) + 1;
-		return new vscode.Location(document.uri, new vscode.Range(document.positionAt(start), document.positionAt(start + value.length)));
+		const text = document.getText();
+		const tokenOffset = (t: BaseToken) => document.offsetAt(new vscode.Position(t.line, t.startCharacter));
+		let attributeQuote: string | undefined;
+		for (let i = index - 1; i > -1; i--) {
+			const t = allTokens[i];
+			if (t.tokenType >= EnumValueReferences.xsltStartTokenNumber) {
+				// the attribute's opening quote is an attributeValue token
+				const quoteChar = text.charAt(tokenOffset(t));
+				if (t.tokenType - EnumValueReferences.xsltStartTokenNumber === XSLTokenLevelState.attributeValue && (quoteChar === '"' || quoteChar === '\'')) {
+					attributeQuote = quoteChar;
+				}
+				break;
+			}
+		}
+		const start = tokenOffset(literal);
+		const range = new vscode.Range(document.positionAt(start + decoded.offsets[1]), document.positionAt(start + decoded.offsets[decoded.text.length - 1]));
+		return { location: new vscode.Location(document.uri, range), quote, attributeQuote };
 	}
 
-	private static tokenRange(document: vscode.TextDocument, literal: BaseToken) {
-		const start = document.offsetAt(new vscode.Position(literal.line, literal.startCharacter));
-		return new vscode.Range(document.positionAt(start), document.positionAt(start + literal.length));
-	}
+	private static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 
 	private static itemTypeMap(context: DocumentContext) {
 		const map = new Map<string, string>();

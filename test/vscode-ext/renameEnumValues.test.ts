@@ -56,9 +56,9 @@ async function rename(text: string, delta: number, newName: string, source = con
 }
 
 // the rejection of a rename to the new name, from the value at the offset of the text, plus the delta
-async function renameError(text: string, delta: number, newName: string) {
-	const document = await vscode.workspace.openTextDocument({ content, language: 'xslt' });
-	const position = document.positionAt(content.indexOf(text) + delta);
+async function renameError(text: string, delta: number, newName: string, source = content) {
+	const document = await vscode.workspace.openTextDocument({ content: source, language: 'xslt' });
+	const position = document.positionAt(source.indexOf(text) + delta);
 	const provider = new XSLTReferenceProvider();
 	await provider.prepareRename(document, position, token());
 	try {
@@ -130,8 +130,42 @@ suite('Enumeration values: rename and find references', () => {
 		assert.include(await renameError(`cx:paint('red')`, 10, 'green'), 'already a value');
 	});
 
-	test('a new value with a quote is rejected', async () => {
-		assert.include(await renameError(`cx:paint('red')`, 10, `it's`), 'new value is invalid');
+	test('a new value with a quote that is not doubled is rejected', async () => {
+		assert.include(await renameError(`cx:paint('red')`, 10, `it's`), 'must be doubled');
+	});
+
+	// the literals of a value written in each form: single quotes, quotes as references, and element content
+	const quoted = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:cx="cx" version="4.0">
+  <xsl:item-type name="cx:mark" as="enum('dot', 'it''s')"/>
+  <xsl:variable name="a" as="cx:mark" select="'dot'"/>
+  <xsl:variable name="c" as="cx:mark" select="&quot;dot&quot;"/>
+  <xsl:variable name="d" as="cx:mark"><xsl:select>'dot'</xsl:select></xsl:variable>
+  <xsl:variable name="e" as="cx:mark" select="'it''s'"/>
+</xsl:stylesheet>`;
+
+	test('a new value with a doubled quote, written in the form of each literal', async () => {
+		const lines = await rename(`select="'dot'"`, 10, `don''t`, quoted);
+		assert.include(lines, `<xsl:item-type name="cx:mark" as="enum('don''t', 'it''s')"/>`);
+		assert.include(lines, `<xsl:variable name="a" as="cx:mark" select="'don''t'"/>`);
+		assert.include(lines, `<xsl:variable name="c" as="cx:mark" select="&quot;don't&quot;"/>`);
+		assert.include(lines, `<xsl:variable name="d" as="cx:mark"><xsl:select>'don''t'</xsl:select></xsl:variable>`);
+	});
+
+	test('a value with a doubled quote', async () => {
+		const lines = await rename(`select="'it''s'"`, 10, 'its', quoted);
+		assert.include(lines, `<xsl:item-type name="cx:mark" as="enum('dot', 'its')"/>`);
+		assert.include(lines, `<xsl:variable name="e" as="cx:mark" select="'its'"/>`);
+	});
+
+	test('a new value with the quote of attributes with double quotes is rejected', async () => {
+		// as &quot; - e.g. &quot;&quot; within &quot;...&quot;, which the lexer splits
+		assert.include(await renameError(`enum('dot'`, 6, `say "hi"`, quoted), `can't be written`);
+	});
+
+	test('a new value with a quote that would have to be a reference is rejected', async () => {
+		// "..." within select='...' - a single quote there would have to be &apos;
+		const source = quoted.replace(`<xsl:variable name="a" as="cx:mark" select="'dot'"/>`, `<xsl:variable name="a" as="cx:mark" select='"dot"'/>`);
+		assert.include(await renameError(`enum('dot'`, 6, `don''t`, source), `can't be written`);
 	});
 
 	test('find all references', async () => {
