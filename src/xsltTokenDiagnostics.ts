@@ -13,7 +13,7 @@ import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
-import { RecordType, RecordTypes, FieldReference } from './recordTypes';
+import { RecordType, RecordTypes, FieldReference, EnumValueReference, ItemTypeAsRange } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
 import { XdocReferences } from './xdocReferences';
@@ -462,6 +462,8 @@ export class XsltTokenDiagnostics {
 		const documentText = document.getText();
 		RecordTypes.itemTypeOffsets = new Map<string, number>();
 		RecordTypes.fieldReferences = [];
+		RecordTypes.enumValueReferences = [];
+		RecordTypes.itemTypeAsRanges = [];
 		let globalVariableTypes = new Map<string, string>();
 		// XPath 4.0: the declared types of variable references that may be function call arguments
 		const argumentVariableTypes = new Map<BaseToken, string>();
@@ -938,6 +940,12 @@ export class XsltTokenDiagnostics {
 									let asText = tagAsRange ? XsltTokenDiagnostics.textForTokenRange(document, allTokens, tagAsRange) : undefined;
 									// the offset of an inline record type, for the offsets of its fields
 									const asOffset = tagAsRange ? document.offsetAt(new vscode.Position(allTokens[tagAsRange[0]].line, allTokens[tagAsRange[0]].startCharacter)) : undefined;
+									if (tagElementName === 'xsl:item-type' && tagAsRange && tagIdentifierName !== '') {
+										// the tokens of the 'as', e.g. for the enumeration values it declares
+										const first = allTokens[tagAsRange[0]];
+										const last = allTokens[tagAsRange[1]];
+										RecordTypes.itemTypeAsRanges.push({ name: tagIdentifierName, start: { line: first.line, character: first.startCharacter }, end: { line: last.line, character: last.startCharacter + last.length } });
+									}
 									if (!asText && tagElementName === 'xsl:with-param' && startTagToken && (parentName === 'xsl:call-template' || parentName === 'xsl:next-iteration')) {
 										// the type of the parameter it sets: of the called template, or the enclosing xsl:iterate
 										const text = document.getText();
@@ -3038,6 +3046,10 @@ export class XsltTokenDiagnostics {
 		// the record field references, for hover and go to definition - the offsets only apply to this document
 		XsltTokenDiagnostics.recordFieldReferences.set(document.uri.toString(), RecordTypes.fieldReferences);
 		RecordTypes.fieldReferences = [];
+		XsltTokenDiagnostics.enumValueReferences.set(document.uri.toString(), RecordTypes.enumValueReferences);
+		RecordTypes.enumValueReferences = [];
+		XsltTokenDiagnostics.itemTypeAsRanges.set(document.uri.toString(), RecordTypes.itemTypeAsRanges);
+		RecordTypes.itemTypeAsRanges = [];
 		RecordTypes.itemTypeOffsets = new Map<string, number>();
 		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
 		const reportedTokens = new Set(problemTokens);
@@ -5346,6 +5358,9 @@ export class XsltTokenDiagnostics {
 					} else {
 						tested.push(value);
 					}
+					if (enumValues.includes(value)) {
+						RecordTypes.enumValueReferences.push({ token: literal, value, type: declaredType! });
+					}
 				});
 			});
 			const hasOtherwise = RecordTypes.childElements(text, markup, switchStart, 'xsl:otherwise').length > 0;
@@ -5491,6 +5506,10 @@ export class XsltTokenDiagnostics {
 
 	// XPath 4.0 record types: the tokens that refer to record fields, for each document
 	public static readonly recordFieldReferences = new Map<string, FieldReference[]>();
+	// XPath 4.0 enumeration types: the string literals that are enumeration values, for each document
+	public static readonly enumValueReferences = new Map<string, EnumValueReference[]>();
+	// the 'as' attributes of the xsl:item-type declarations, for each document
+	public static readonly itemTypeAsRanges = new Map<string, ItemTypeAsRange[]>();
 
 	// the record field reference at the position, e.g. on 'r' in $c?r
 	public static recordFieldAt(document: vscode.TextDocument, position: vscode.Position): FieldReference | undefined {
