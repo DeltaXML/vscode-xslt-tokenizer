@@ -32,6 +32,20 @@ export interface ArgumentTypes {
 	returnType: (name: string, arity: number) => string | undefined;
 }
 
+// a string literal that is a value of an enumeration type, e.g. 'red' in select="'red'" for as="enum('red', 'green')" -
+// with the declared type it was checked against - for find references and rename
+export interface EnumValueReference {
+	token: BaseToken;
+	value: string;
+	type: string;
+}
+
+// the values of an enumeration type, e.g. enum('red', 'green'), with their string literal tokens
+export interface EnumLiterals {
+	values: string[];
+	literals: { token: BaseToken, value: string }[];
+}
+
 // a token that refers to a field of a record type, e.g. 'r' in $c?r - for hover and go to definition
 export interface FieldReference {
 	token: BaseToken;
@@ -120,6 +134,8 @@ export class RecordTypes {
 	public static itemTypeOffsets = new Map<string, number>();
 	// the tokens matched to record fields in the document being processed: lookups, child steps and map keys
 	public static fieldReferences: FieldReference[] = [];
+	// the string literals matched to enumeration values in the document being processed
+	public static enumValueReferences: EnumValueReference[] = [];
 
 	// the type that a named item type is declared as, following named item types, e.g. 'xs:boolean' for 'flag'
 	public static resolveNamedType(typeText: string, itemTypes: Map<string, string>, depth = 0): string | undefined {
@@ -180,8 +196,68 @@ export class RecordTypes {
 			const value = literal.substring(1, literal.length - 1).split(quote + quote).join(quote);
 			if (!enumValues.includes(value)) {
 				problemTokens.push(RecordTypes.problemToken(token, ErrorType.EnumValueUnknown, value, typeText.trim()));
+			} else {
+				RecordTypes.enumValueReferences.push({ token, value, type: typeText });
 			}
 		}
+	}
+
+	// for a value of an enumeration type, the enum(...) type with the value: its values, and the name of the item type
+	// declared as it, or as a choice including it - e.g. 'color' for 'red' with <xsl:item-type name="color"
+	// as="enum('red', 'green')"/>, also when the type is an item type declared as 'color' - with no name for an inline
+	// enum(...), e.g. in an 'as' attribute - undefined if the type has no enum(...) with the value
+	public static enumSource(typeText: string, value: string, itemTypes: Map<string, string>, typeName?: string, depth = 0): { values: string[], typeName?: string } | undefined {
+		let text = typeText.trim();
+		if (depth > 10 || text.length === 0) {
+			return undefined;
+		}
+		if ('?*+'.includes(text.charAt(text.length - 1))) {
+			text = text.substring(0, text.length - 1).trim();
+		}
+		if (text.startsWith('(') && RecordTypes.closingIndex(text, 0) === text.length - 1) {
+			for (const choice of RecordTypes.splitTopLevel(text.substring(1, text.length - 1), '|')) {
+				const source = RecordTypes.enumSource(choice, value, itemTypes, typeName, depth + 1);
+				if (source) {
+					return source;
+				}
+			}
+			return undefined;
+		}
+		if (/^enum\s*\(/.test(text)) {
+			const values = RecordTypes.resolveEnum(text, itemTypes);
+			return values?.includes(value) ? { values, typeName } : undefined;
+		}
+		if (/^[\w.-]+(:[\w.-]+)?$/.test(text)) {
+			const declared = itemTypes.get(text);
+			return declared ? RecordTypes.enumSource(declared, value, itemTypes, text, depth + 1) : undefined;
+		}
+		return undefined;
+	}
+
+	// the enumeration types in the tokens, e.g. enum('red', 'green') in an 'as' attribute, with the tokens of their values
+	public static enumLiterals(tokens: BaseToken[]): EnumLiterals[] {
+		const result: EnumLiterals[] = [];
+		tokens.forEach((token, index) => {
+			if (token.tokenType !== TokenLevelState.simpleType || token.value !== 'enum') {
+				return;
+			}
+			const openIndex = RecordTypes.nextNonComment(tokens, index);
+			const closeIndex = openIndex > -1 && tokens[openIndex].charType === CharLevelState.lB ? RecordTypes.closingTokenIndex(tokens, openIndex) : -1;
+			if (closeIndex < 0) {
+				return;
+			}
+			const literals: { token: BaseToken, value: string }[] = [];
+			for (let i = openIndex + 1; i < closeIndex; i++) {
+				const t = tokens[i];
+				// the quotes may be references, e.g. &quot;x&quot; or &#39;x&#39; in an attribute
+				const quoted = t.tokenType === TokenLevelState.string ? /^(['"])(.*)\1$/.exec(RecordTypes.decodeReferences(t.value).text) : null;
+				if (quoted) {
+					literals.push({ token: t, value: quoted[2].split(quoted[1] + quoted[1]).join(quoted[1]) });
+				}
+			}
+			result.push({ values: literals.map((l) => l.value), literals });
+		});
+		return result;
 	}
 
 	// the record type of a field's value, e.g. for record(a as record(b as xs:integer))

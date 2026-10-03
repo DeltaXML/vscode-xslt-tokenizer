@@ -13,7 +13,7 @@ import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
-import { RecordType, RecordTypes, FieldReference } from './recordTypes';
+import { RecordType, RecordTypes, FieldReference, EnumValueReference } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
 import { XdocReferences } from './xdocReferences';
@@ -462,6 +462,7 @@ export class XsltTokenDiagnostics {
 		const documentText = document.getText();
 		RecordTypes.itemTypeOffsets = new Map<string, number>();
 		RecordTypes.fieldReferences = [];
+		RecordTypes.enumValueReferences = [];
 		let globalVariableTypes = new Map<string, string>();
 		// XPath 4.0: the declared types of variable references that may be function call arguments
 		const argumentVariableTypes = new Map<BaseToken, string>();
@@ -3038,6 +3039,8 @@ export class XsltTokenDiagnostics {
 		// the record field references, for hover and go to definition - the offsets only apply to this document
 		XsltTokenDiagnostics.recordFieldReferences.set(document.uri.toString(), RecordTypes.fieldReferences);
 		RecordTypes.fieldReferences = [];
+		XsltTokenDiagnostics.enumValueReferences.set(document.uri.toString(), RecordTypes.enumValueReferences);
+		RecordTypes.enumValueReferences = [];
 		RecordTypes.itemTypeOffsets = new Map<string, number>();
 		// a lexical '<' in XPath within XML, marked by the lexer on any type of token
 		const reportedTokens = new Set(problemTokens);
@@ -5346,6 +5349,9 @@ export class XsltTokenDiagnostics {
 					} else {
 						tested.push(value);
 					}
+					if (enumValues.includes(value)) {
+						RecordTypes.enumValueReferences.push({ token: literal, value, type: declaredType! });
+					}
 				});
 			});
 			const hasOtherwise = RecordTypes.childElements(text, markup, switchStart, 'xsl:otherwise').length > 0;
@@ -5491,6 +5497,8 @@ export class XsltTokenDiagnostics {
 
 	// XPath 4.0 record types: the tokens that refer to record fields, for each document
 	public static readonly recordFieldReferences = new Map<string, FieldReference[]>();
+	// XPath 4.0 enumeration types: the string literals that are enumeration values, for each document
+	public static readonly enumValueReferences = new Map<string, EnumValueReference[]>();
 
 	// the record field reference at the position, e.g. on 'r' in $c?r
 	public static recordFieldAt(document: vscode.TextDocument, position: vscode.Position): FieldReference | undefined {

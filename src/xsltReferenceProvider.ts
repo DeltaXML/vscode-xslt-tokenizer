@@ -13,6 +13,7 @@ import * as path from 'path';
 import { RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
 import { FieldLocations, RecordFieldReferences } from './recordFieldReferences';
+import { EnumValueLocations, EnumValueReferences } from './enumValueReferences';
 import { ImportIndex } from './importIndex';
 import { XdocReferences } from './xdocReferences';
 
@@ -34,6 +35,8 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 	private refLocations: vscode.Location[] = [];
 	// XPath 4.0: the record field being renamed
 	private fieldLocations: FieldLocations | undefined = undefined;
+	// XPath 4.0: the enumeration value being renamed
+	private enumLocations: EnumValueLocations | undefined = undefined;
 	// the modules with another declaration of the function or template being renamed, or whose parameter is
 	private renameConflicts: { declaration: OverridableDeclaration, files: string[] } | undefined = undefined;
 	public constructor() {
@@ -47,6 +50,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		this.fieldLocations = await RecordFieldReferences.find(document, position, token);
 		if (this.fieldLocations) {
 			return this.fieldLocations.range;
+		}
+		// XPath 4.0: a value of an enumeration type
+		this.enumLocations = await EnumValueReferences.find(document, position, token);
+		if (this.enumLocations) {
+			return this.enumLocations.range;
 		}
 
 		const refContext = { includeDeclaration: true };
@@ -105,6 +113,15 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			this.fieldLocations.locations.forEach((location) => fieldEdit.replace(location.uri, location.range, newName));
 			return fieldEdit;
 		}
+		if (this.enumLocations) {
+			const invalid = EnumValueReferences.invalidValue(this.enumLocations, newName);
+			if (invalid) {
+				return new Promise((resolve, reject) => reject(invalid));
+			}
+			const enumEdit = new vscode.WorkspaceEdit();
+			this.enumLocations.locations.forEach((location) => enumEdit.replace(location.uri, location.range, newName));
+			return enumEdit;
+		}
 		// check that name is valid
 		let newNameIsValid = XsltTokenDiagnostics.validateSimpleName(newName);
 		if (!newNameIsValid || !this.definition) {
@@ -148,6 +165,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		const field = await RecordFieldReferences.find(document, position, token);
 		if (field) {
 			return field.locations;
+		}
+		// XPath 4.0: a value of an enumeration type - in its declaration, and the string literals that refer to it
+		const enumValue = await EnumValueReferences.find(document, position, token);
+		if (enumValue) {
+			return enumValue.locations.concat(enumValue.escaped);
 		}
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		const langConfig = XSLTConfiguration.configuration;
