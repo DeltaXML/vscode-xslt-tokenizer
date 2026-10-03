@@ -262,8 +262,10 @@
 				{
 					"id": "xslt-xpath.imports",
 					"name": "XSLT Imports",
+					"contextualTitle": "XSLT Imports",
 					"when": "resourceLangId == xslt",
-					"visibility": "collapsed"
+					"visibility": "collapsed",
+					"icon": "$(type-hierarchy)"
 				}
 			]
 		},
