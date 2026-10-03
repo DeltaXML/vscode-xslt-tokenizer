@@ -205,7 +205,10 @@ export class XsltTokenDiagnostics {
 		}
 	}
 	public static readonly xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
-	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number'];
+	// the variables in scope within xsl:catch - err:stack-trace, err:additional and err:map are new in XSLT 4.0, but
+	// Saxon 13 also allows them in XSLT 3.0, with or without syntax extensions (Saxon 12 has only err:additional)
+	public static readonly xsltCatchVariables = ['err:code', 'err:description', 'err:value', 'err:module', 'err:line-number', 'err:column-number',
+		'err:stack-trace', 'err:additional', 'err:map'];
 	public static readonly xslInclude = 'xsl:include';
 	public static readonly xslImport = 'xsl:import';
 	public static readonly xmlChars = ['lt', 'gt', 'quot', 'apos', 'amp'];
