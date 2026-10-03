@@ -296,8 +296,16 @@ export class FunctionData {
 		"unparsed-entity-uri#2"
 	];
 
+	// XSLT 4.0 functions, not in the Saxon function library documentation - Saxon 13 has them only with syntax extensions
+	public static readonly xslt40 = [
+		"apply-templates#1",
+		"apply-templates#2",
+		"character-map#1",
+		"current-merge-key-array#0"
+	];
+
 	// XPath 4.0: generated from the Saxon function library documentation (see xpath40FunctionDetails.ts)
-	public static readonly xpath40 = FunctionData.replaceByName(xpath40Arities.fn, FunctionData.xpath);
+	public static readonly xpath40 = FunctionData.replaceByName(xpath40Arities.fn, FunctionData.xpath).concat(FunctionData.xslt40);
 
 	public static readonly array = [
 		"append#2",

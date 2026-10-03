@@ -1819,7 +1819,9 @@ export class XsltTokenDiagnostics {
 							// don't include any current pending variable declarations when resolving
 							let globalVarName: string | null = null;
 							if (tagType === TagType.XSLTvar && elementStack.length === 1) {
-								globalVarName = tagIdentifierName;
+								// XSLT 4.0: a global variable may refer to itself within an inline function, e.g. a recursive
+								// function - Saxon 13 also allows it in XSLT 3.0 - elsewhere it's circular, e.g. select="$x + 1"
+								globalVarName = XsltTokenDiagnostics.isInInlineFunctionBody(allTokens, index) ? null : tagIdentifierName;
 							}
 							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(globalVarName, document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 								xpathStack, inScopeVariablesList, elementStack);
@@ -2653,7 +2655,7 @@ export class XsltTokenDiagnostics {
 												prevToken.value += '()';
 												problemTokens.push(prevToken);
 											} else if (insideGlobalFunction) {
-												if (prevToken.value === 'current-merge-key' || prevToken.value === 'current-merge-group') {
+												if (prevToken.value === 'current-merge-key' || prevToken.value === 'current-merge-key-array' || prevToken.value === 'current-merge-group') {
 													if (!elementStack.find((es) => es.symbolName === 'xsl:merge-action')) {
 														prevToken.error = ErrorType.MissingContextItemForMerge;
 														prevToken.value += '()';
@@ -3018,7 +3020,8 @@ export class XsltTokenDiagnostics {
 		if (documentText.includes('<xsl:map')) {
 			RecordTypes.duplicateMapEntryKeys(documentText, RecordTypes.blankMarkup(documentText)).forEach((duplicate) => {
 				const position = document.positionAt(duplicate.offset);
-				problemTokens.push({ line: position.line, startCharacter: position.character, length: duplicate.key.length, value: duplicate.key, tokenType: 0, error: ErrorType.MapEntryKeyDuplicate });
+				const error = duplicate.handled ? ErrorType.MapEntryKeyDuplicateHandled : ErrorType.MapEntryKeyDuplicate;
+				problemTokens.push({ line: position.line, startCharacter: position.character, length: duplicate.key.length, value: duplicate.key, tokenType: 0, error });
 			});
 		}
 		// record and enumeration types - before XSLT 4.0 too, when item types are available
@@ -3894,6 +3897,25 @@ export class XsltTokenDiagnostics {
 		return valueText;
 	}
 
+	// true if allTokens[index] is within the body of an inline function in the same XPath expression, e.g. $f in
+	// fn($n) { $f($n - 1) } - from the tokens: the braces after the anonymousFunction token, e.g. 'fn' or 'function'
+	private static isInInlineFunctionBody(allTokens: BaseToken[], index: number) {
+		for (let i = index - 1; i > -1 && allTokens[i].tokenType < XsltTokenDiagnostics.xsltStartTokenNumber; i--) {
+			if (allTokens[i].tokenType !== TokenLevelState.anonymousFunction) {
+				continue;
+			}
+			let open = i + 1;
+			while (open < index && allTokens[open].charType !== CharLevelState.lBr) {
+				open++;
+			}
+			const close = open < index ? RecordTypes.closingTokenIndex(allTokens, open) : -1;
+			if (close === -1 || close > index) {
+				return open < index;
+			}
+		}
+		return false;
+	}
+
 	public static resolveXPathVariableReference(globalVarName: string | null, document: vscode.TextDocument, importedVariables: string[], token: BaseToken, xpathVariableCurrentlyBeingDefined: boolean, inScopeXPathVariablesList: VariableData[],
 		xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken | null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
@@ -4531,6 +4553,10 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.MapEntryKeyDuplicate:
 					msg = `XSLT: Duplicate key in the xsl:map - an xsl:map-entry has the same key: ${tokenValue}`;
+					break;
+				case ErrorType.MapEntryKeyDuplicateHandled:
+					msg = `XSLT: Duplicate key in the xsl:map, handled by its duplicates attribute - an xsl:map-entry has the same key: ${tokenValue}`;
+					severity = vscode.DiagnosticSeverity.Warning;
 					break;
 				case ErrorType.EnumValueDuplicate:
 					msg = `XPath: Duplicate value in the enumeration type: '${tokenValue}'`;

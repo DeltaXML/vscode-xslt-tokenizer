@@ -507,7 +507,8 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (!parts || (isVersion4 && XSLTHoverProvider.unspecified40.includes(name))) {
 			return undefined;
 		}
-		const isXSLT = XPathFunctionDetails.xsltData.some((item) => item.name === name) && !(isVersion4 && XSLTHoverProvider.functions40.includes(name));
+		const isXSLT = (XPathFunctionDetails.xsltData.some((item) => item.name === name) && !(isVersion4 && XSLTHoverProvider.functions40.includes(name))) ||
+			(isVersion4 && XPathFunctionDetails.xslt40Data.some((item) => item.name === name));
 		const [title, url] = isXSLT ?
 			(isVersion4 ? ['XSLT 4.0', 'https://qt4cg.org/specifications/xslt-40/Overview.html'] : ['XSLT 3.0', 'https://www.w3.org/TR/xslt-30/']) :
 			(isVersion4 ? ['XPath Functions 4.0', 'https://qt4cg.org/specifications/xpath-functions-40/Overview.html'] : ['XPath Functions 3.1', 'https://www.w3.org/TR/xpath-functions-31/']);

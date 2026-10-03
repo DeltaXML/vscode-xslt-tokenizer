@@ -1772,6 +1772,8 @@ export enum ErrorType {
     MissingContextItemForGrouping,
     MissingContextItemForMerge,
     MissingContextItemForRegex,
+    // a duplicate xsl:map-entry key in an xsl:map with a duplicates attribute
+    MapEntryKeyDuplicateHandled,
 }
 
 export interface BaseToken {

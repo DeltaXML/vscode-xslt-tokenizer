@@ -799,11 +799,13 @@ export class RecordTypes {
 	}
 
 	// the xsl:map-entry children of each xsl:map with a literal key that's the same as that of an earlier one - as in
-	// Saxon, a dynamic error XTDE3365 - excluding xsl:map-entry elements within xsl:if etc. and those with use-when
-	public static duplicateMapEntryKeys(text: string, markup: string): { key: string, offset: number }[] {
-		const duplicates: { key: string, offset: number }[] = [];
+	// Saxon, a dynamic error XTDE3365 - excluding xsl:map-entry elements within xsl:if etc. and those with use-when - and
+	// whether it's handled: XSLT 4.0, the xsl:map has a duplicates attribute, e.g. duplicates="fn($a, $b) { $a + $b }"
+	public static duplicateMapEntryKeys(text: string, markup: string): { key: string, offset: number, handled: boolean }[] {
+		const duplicates: { key: string, offset: number, handled: boolean }[] = [];
 		[...markup.matchAll(/<xsl:map[\s>]/g)].forEach((mapMatch) => {
 			const keys = new Set<string>();
+			const handled = RecordTypes.attributeOfElementAt(text, mapMatch.index! + 1, 'duplicates') !== undefined;
 			RecordTypes.childElements(text, markup, mapMatch.index!, 'xsl:map-entry').forEach((entryOffset) => {
 				const valueOffset = RecordTypes.attributeValueOffset(text, entryOffset + 1, 'key');
 				const key = RecordTypes.attributeOfElementAt(text, entryOffset + 1, 'key')?.trim();
@@ -812,7 +814,7 @@ export class RecordTypes {
 					return;
 				}
 				if (keys.has(identity)) {
-					duplicates.push({ key: key!, offset: valueOffset + text.substring(valueOffset).search(/\S/) });
+					duplicates.push({ key: key!, offset: valueOffset + text.substring(valueOffset).search(/\S/), handled });
 				}
 				keys.add(identity);
 			});
@@ -1156,7 +1158,7 @@ export class RecordTypes {
 		return t.charType === CharLevelState.rB || t.charType === CharLevelState.rBr || t.charType === CharLevelState.rPr;
 	}
 
-	private static closingTokenIndex(tokens: BaseToken[], openIndex: number) {
+	public static closingTokenIndex(tokens: BaseToken[], openIndex: number) {
 		let depth = 0;
 		for (let i = openIndex; i < tokens.length; i++) {
 			if (RecordTypes.isOpenBracket(tokens[i])) {
