@@ -25,7 +25,8 @@ const maxFiles = 20000;
 // each file - without the lexer - so that for a module opened on its own, the top-level stylesheet that imports or
 // includes it, directly or indirectly, can be found without that stylesheet being opened first. The index is built in
 // the background the first time it's needed, and is updated by a file watcher.
-// Only literal hrefs are found: not those from shadow attributes, e.g. _href="{$dir}/a.xsl", or a catalog.
+// Only literal hrefs are found, not those from shadow attributes, e.g. _href="{$dir}/a.xsl" - an href the XML catalog
+// maps to a file is found as that file.
 export class ImportIndex {
 	public static readonly instance = new ImportIndex();
 
