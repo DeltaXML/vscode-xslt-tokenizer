@@ -2,7 +2,7 @@
 	"name": "xslt-xpath",
 	"displayName": "XSLT/XPath for Visual Studio Code",
 	"description": "XSLT 3.0/4.0 and XPath 3.1/4.0 language support - linting, auto-completion, code documentation and Quick Run with Saxon",
-	"version": "2.0.0",
+	"version": "2.0.1",
 	"publisher": "deltaxml",
 	"icon": "xslt-xpath.png",
 	"bugs": {
