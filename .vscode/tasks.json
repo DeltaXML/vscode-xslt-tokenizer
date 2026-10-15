@@ -100,7 +100,7 @@
 			"initialTemplate": "",
 			"messageEscaping": "adaptive",
 			"allowSyntaxExtensions40": "auto",
-			"resultPath": "${workspaceFolder}/sample/json-schema-records/order-report-out.txt",
+			// "resultPath": "${workspaceFolder}/sample/json-schema-records/order-report-out.txt",
 			"group": {
 				"kind": "build"
 			},
