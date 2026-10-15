@@ -33,7 +33,7 @@ stylesheet. On the command line, add `--allowSyntaxExtensions:on`.
 
    ```
    Order ORD-1042, placed 2026-10-14 - paid
-   Customer: Sam Taylor <sam.taylor@example.com>
+   Customer: Sam Taylor (sam.taylor@example.com)
 
    1. 2 x BK-0042 Notes on the Analytical Engine @ GBP 18.50 = GBP 37.00
    2. 1 x KIT-7 Electronics starter kit @ GBP 64.00 = GBP 64.00

@@ -79,7 +79,6 @@
 			"xsltFile": "${workspaceFolder}/sample/json-schema-records/schema-to-records.xsl",
 			"xmlSource": "",
 			"initialTemplate": "",
-			"resultPath": "${command:xslt-xpath.pickResultFile}",
 			"messageEscaping": "adaptive",
 			"allowSyntaxExtensions40": "auto",
 			"group": {
@@ -89,6 +88,25 @@
 				{
 					"name": "?schema-uri",
 					"value": "'order.schema.json'"
+				}
+			]
+		},
+		{
+			"type": "xslt",
+			"label": "order-report with xsl:initial-template",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/sample/json-schema-records/order-report.xsl",
+			"xmlSource": "",
+			"initialTemplate": "",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			},
+			"parameters": [
+				{
+					"name": "?order-uri",
+					"value": "'order.json'"
 				}
 			]
 		},

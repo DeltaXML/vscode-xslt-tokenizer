@@ -3,8 +3,8 @@
                 xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 xmlns:map="http://www.w3.org/2005/xpath-functions/map"
                 xmlns:js="http://example.com/ns/json-schema"
+                xmlns:axsl="http://example.com/ns/xslt-alias"
                 exclude-result-prefixes="#all"
-                expand-text="yes"
                 version="4.0">
 
    <xsl:note format="xdoc-md">
@@ -26,6 +26,9 @@
    </xsl:note>
 
    <xsl:output method="text"/>
+
+   <!-- the output is a stylesheet module: literal result elements in the axsl namespace become xsl elements -->
+   <xsl:namespace-alias stylesheet-prefix="axsl" result-prefix="xsl"/>
 
    <xsl:param name="schema-uri" as="xs:string" select="'order.schema.json'"/>
    <xsl:param name="root-name" as="xs:string?"/>
@@ -78,26 +81,29 @@
    </xsl:function>
 
    <xsl:template name="xsl:initial-template">
-      <xsl:result-document href="{resolve-uri($types-uri, static-base-uri())}" method="text">
-         <xsl:text>&lt;?xml version="1.0" encoding="UTF-8"?>&#10;</xsl:text>
-         <xsl:text>&lt;!-- Generated from {$schema-uri} by schema-to-records.xsl: regenerate this file rather than edit it -->&#10;</xsl:text>
-         <xsl:text>&lt;xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"&#10;</xsl:text>
-         <xsl:text>                xmlns:xs="http://www.w3.org/2001/XMLSchema"&#10;</xsl:text>
-         <xsl:text>                version="4.0">&#10;</xsl:text>
-         <xsl:call-template name="js:item-type">
-            <xsl:with-param name="name" select="($root-name, js:type-name($root/title), 'root')[1]"/>
-            <xsl:with-param name="schema" select="$root"/>
-         </xsl:call-template>
-         <xsl:for-each select="$defs">
+      <xsl:result-document href="{resolve-uri($types-uri, static-base-uri())}" method="xml" indent="yes">
+         <xsl:comment select="` Generated from {$schema-uri} by schema-to-records.xsl: regenerate this file rather than edit it `"/>
+         <axsl:stylesheet version="4.0">
+            <!-- the generated types use the xs prefix in their 'as' attributes, where the serializer can't see it -->
+            <xsl:namespace name="xs" select="'http://www.w3.org/2001/XMLSchema'"/>
             <xsl:call-template name="js:item-type">
-               <xsl:with-param name="name" select="jkey()"/>
-               <xsl:with-param name="schema" select="."/>
-               <xsl:with-param name="def" select="jkey()"/>
+               <xsl:with-param name="name" select="($root-name, js:type-name($root/title), 'root')[1]"/>
+               <xsl:with-param name="schema" select="$root"/>
             </xsl:call-template>
-         </xsl:for-each>
-         <xsl:text>&#10;&lt;/xsl:stylesheet>&#10;</xsl:text>
+            <xsl:for-each select="$defs">
+               <xsl:call-template name="js:item-type">
+                  <xsl:with-param name="name" select="jkey()"/>
+                  <xsl:with-param name="schema" select="."/>
+                  <xsl:with-param name="def" select="jkey()"/>
+               </xsl:call-template>
+            </xsl:for-each>
+         </axsl:stylesheet>
       </xsl:result-document>
-      <xsl:text>Wrote {count($defs) + 1} item types to {$types-uri}&#10;</xsl:text>
+      <xsl:variable name="type-count" as="xs:integer" select="count($defs) + 1"/>
+      <xsl:select>
+         `Wrote {$type-count} item types to {$types-uri}
+`
+      </xsl:select>
    </xsl:template>
 
    <xsl:template name="js:item-type">
@@ -114,31 +120,36 @@
       <xsl:param name="def" as="xs:string?"/>
       <xsl:variable name="back-refs" as="xs:string*" select="distinct-values(js:refs($schema)[$def = js:reachable(., ())])"/>
       <xsl:variable name="described-fields" as="jnode()*" select="$schema/properties/*[exists(js:description(.))]"/>
-      <xsl:variable name="type" as="xs:string" select="js:sequence-type($schema, $def, '   ')"/>
-      <xsl:text>&#10;</xsl:text>
       <xsl:if test="exists($back-refs)">
-         <xsl:text>   &lt;!-- map(*) is used for the references to {string-join($back-refs, ', ')}, which lead back to {$name}: Saxon 13 doesn't allow recursive item types -->&#10;</xsl:text>
+         <xsl:variable name="refs" as="xs:string" select="string-join($back-refs, ', ')"/>
+         <xsl:comment select="` map(*) is used for the references to {$refs}, which lead back to {$name}: Saxon 13 doesn't allow recursive item types `"/>
       </xsl:if>
       <!-- an item type can't have an occurrence indicator, as a sequence type can -->
-      <xsl:text>   &lt;xsl:item-type name="{$name}" as="{js:escape(replace($type, '\?$', ''))}"</xsl:text>
-      <xsl:choose>
-         <xsl:when test="$schema/description or exists($described-fields)">
-            <xsl:text>>&#10;      &lt;xsl:note format="xdoc-md">&#10;</xsl:text>
-            <xsl:for-each select="$schema/description">
-               <xsl:text>         {js:escape(.)}&#10;</xsl:text>
-            </xsl:for-each>
-            <xsl:if test="$schema/description and exists($described-fields)">
-               <xsl:text>&#10;</xsl:text>
-            </xsl:if>
-            <xsl:for-each select="$described-fields">
-               <xsl:text>         @field {js:field-name(jkey())} {js:escape(js:description(.))}&#10;</xsl:text>
-            </xsl:for-each>
-            <xsl:text>      &lt;/xsl:note>&#10;   &lt;/xsl:item-type>&#10;</xsl:text>
-         </xsl:when>
-         <xsl:otherwise>
-            <xsl:text>/>&#10;</xsl:text>
-         </xsl:otherwise>
-      </xsl:choose>
+      <axsl:item-type name="{$name}" as="{replace(js:sequence-type($schema, $def), '\?$', '')}">
+         <xsl:if test="$schema/description or exists($described-fields)">
+            <!-- the note's text is written with its own line breaks and indentation, as for a note in a stylesheet -->
+            <axsl:note format="xdoc-md">
+               <xsl:variable name="note-lines" as="xs:string*">
+                  <xsl:select>
+                     $schema/description,
+                     ''[$schema/description and exists($described-fields)],
+                     $described-fields ! `@field {js:field-name(jkey())} {js:description(.)}`
+                  </xsl:select>
+               </xsl:variable>
+               <!-- each line is indented within the note, and the end tag is indented as for the start tag -->
+               <xsl:variable name="indented-lines" as="xs:string*">
+                  <xsl:select>
+                     $note-lines ! `{if (.) then '         ' || . else ''}
+`
+                  </xsl:select>
+               </xsl:variable>
+               <xsl:select>
+                  `
+{string-join($indented-lines)}      `
+               </xsl:select>
+            </axsl:note>
+         </xsl:if>
+      </axsl:item-type>
    </xsl:template>
 
    <xsl:function name="js:description" as="xs:string?">
@@ -158,11 +169,9 @@
 
          @param $schema the schema
          @param $def the name of the definition being declared, if any - references that lead back to it are `map(*)`
-         @param $indent the indentation of the line the type starts on, for the fields of a record type
       </xsl:note>
       <xsl:param name="schema" as="jnode(*, schema)"/>
       <xsl:param name="def" as="xs:string?"/>
-      <xsl:param name="indent" as="xs:string"/>
       <xsl:variable name="types" as="xs:string*" select="data($schema/type/jvalue())"/>
       <xsl:variable name="non-null-types" as="xs:string*" select="$types[. ne 'null']"/>
       <xsl:variable name="optional" as="xs:string?" select="'?'[$types = 'null']"/>
@@ -175,18 +184,18 @@
          </xsl:when>
          <xsl:when test="empty($types)">
             <!-- no type: it may be implied by other keywords -->
-            <xsl:sequence select="if ($schema/properties) then js:json-type($schema, 'object', $def, $indent)
-                                  else if ($schema/items) then js:json-type($schema, 'array', $def, $indent)
+            <xsl:sequence select="if ($schema/properties) then js:json-type($schema, 'object', $def)
+                                  else if ($schema/items) then js:json-type($schema, 'array', $def)
                                   else 'item()?'"/>
          </xsl:when>
          <xsl:when test="empty($non-null-types)">
             <xsl:sequence select="'empty-sequence()'"/>
          </xsl:when>
          <xsl:when test="count($non-null-types) eq 1">
-            <xsl:sequence select="js:json-type($schema, $non-null-types, $def, $indent) || $optional"/>
+            <xsl:sequence select="js:json-type($schema, $non-null-types, $def) || $optional"/>
          </xsl:when>
          <xsl:otherwise>
-            <xsl:sequence select="'(' || string-join($non-null-types ! js:json-type($schema, ., $def, $indent), ' | ') || ')' || $optional"/>
+            <xsl:sequence select="'(' || string-join($non-null-types ! js:json-type($schema, ., $def), ' | ') || ')' || $optional"/>
          </xsl:otherwise>
       </xsl:choose>
    </xsl:function>
@@ -199,21 +208,19 @@
          @param $schema the schema
          @param $type the JSON type, e.g. `object`
          @param $def the name of the definition being declared, if any
-         @param $indent the indentation of the line the type starts on
       </xsl:note>
       <xsl:param name="schema" as="jnode(*, schema)"/>
       <xsl:param name="type" as="xs:string"/>
       <xsl:param name="def" as="xs:string?"/>
-      <xsl:param name="indent" as="xs:string"/>
       <xsl:choose>
          <xsl:when test="$type eq 'string'">xs:string</xsl:when>
          <xsl:when test="$type = ('number', 'integer')">xs:double</xsl:when>
          <xsl:when test="$type eq 'boolean'">xs:boolean</xsl:when>
          <xsl:when test="$type eq 'array'">
-            <xsl:sequence select="'array(' || (if ($schema/items) then js:sequence-type($schema/items, $def, $indent) else '*') || ')'"/>
+            <xsl:sequence select="'array(' || (if ($schema/items) then js:sequence-type($schema/items, $def) else '*') || ')'"/>
          </xsl:when>
          <xsl:when test="$type eq 'object' and $schema/properties/*">
-            <xsl:sequence select="js:record-type($schema, $def, $indent)"/>
+            <xsl:sequence select="js:record-type($schema, $def)"/>
          </xsl:when>
          <xsl:when test="$type eq 'object'">map(*)</xsl:when>
          <xsl:otherwise>item()</xsl:otherwise>
@@ -222,26 +229,22 @@
 
    <xsl:function name="js:record-type" as="xs:string">
       <xsl:note format="xdoc-md">
-         The record type for an object schema with properties: one field per property, each on a line of its own.
+         The record type for an object schema with properties: one field per property.
          A property that isn't `required` is an optional field, e.g. `notes? as xs:string`.
 
          @param $schema the object schema
          @param $def the name of the definition being declared, if any
-         @param $indent the indentation of the line the record type starts on
       </xsl:note>
       <xsl:param name="schema" as="jnode(*, schema)"/>
       <xsl:param name="def" as="xs:string?"/>
-      <xsl:param name="indent" as="xs:string"/>
       <xsl:variable name="required" as="xs:string*" select="data($schema/required/jvalue())"/>
-      <xsl:variable name="field-indent" as="xs:string" select="$indent || '      '"/>
       <xsl:variable name="fields" as="xs:string*">
          <xsl:for-each select="$schema/properties/*">
             <xsl:variable name="key" as="xs:string" select="jkey()"/>
-            <xsl:sequence select="$field-indent || js:field-name($key) || ('?'[not($key = $required)])
-                                  || ' as ' || js:sequence-type(., $def, $indent || '   ')"/>
+            <xsl:sequence select="js:field-name($key) || ('?'[not($key = $required)]) || ' as ' || js:sequence-type(., $def)"/>
          </xsl:for-each>
       </xsl:variable>
-      <xsl:sequence select="'record(&#10;' || string-join($fields, ',&#10;') || '&#10;' || $indent || '   )'"/>
+      <xsl:sequence select="'record(' || string-join($fields, ', ') || ')'"/>
    </xsl:function>
 
    <xsl:function name="js:enum-type" as="xs:string">
@@ -324,16 +327,6 @@
    <xsl:function name="js:string-literal" as="xs:string">
       <xsl:param name="value" as="xs:string"/>
       <xsl:sequence select='"&apos;" || replace($value, "&apos;", "&apos;&apos;") || "&apos;"'/>
-   </xsl:function>
-
-   <xsl:function name="js:escape" as="xs:string">
-      <xsl:note format="xdoc-md">
-         Escapes the characters that can't be written as they are in an attribute value or text.
-
-         @param $text the text
-      </xsl:note>
-      <xsl:param name="text" as="xs:string"/>
-      <xsl:sequence select="$text => replace('&amp;', '&amp;amp;') => replace('&lt;', '&amp;lt;') => replace('&quot;', '&amp;quot;')"/>
    </xsl:function>
 
 </xsl:stylesheet>

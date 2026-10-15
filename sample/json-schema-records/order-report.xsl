@@ -3,7 +3,6 @@
                 xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 xmlns:ord="http://example.com/ns/order-report"
                 exclude-result-prefixes="#all"
-                expand-text="yes"
                 version="4.0">
 
    <xsl:note format="xdoc-md">
@@ -29,16 +28,23 @@
    <xsl:variable name="order" as="jnode(*, order)" select="jtree($order-value)"/>
 
    <xsl:template name="xsl:initial-template">
-      <xsl:text>Order {$order/id}, placed {$order/placed} - {$order/status}&#10;</xsl:text>
-      <xsl:text>Customer: {$order/customer/name} &lt;{$order/customer/email}>&#10;&#10;</xsl:text>
-      <xsl:for-each select="$order/lines/*">
-         <xsl:value-of select="ord:line(.)"/>
-      </xsl:for-each>
-      <xsl:text>&#10;Total: {ord:price(sum($order/lines/* ! ord:line-total(.)), $order/currency)}&#10;</xsl:text>
-      <xsl:text>Ship to: {ord:address(($order/shipping-address, $order/customer/address)[1])}&#10;</xsl:text>
-      <xsl:if test="$order/notes/jvalue()">
-         <xsl:text>Notes: {$order/notes}&#10;</xsl:text>
-      </xsl:if>
+      <xsl:variable name="customer" as="jnode(*, customer)" select="$order/customer"/>
+      <xsl:variable name="ship-to" as="jnode(*, address)" select="($order/shipping-address, $customer/address)[1]"/>
+      <xsl:variable name="total" as="xs:double" select="sum($order/lines/* ! ord:line-total(.))"/>
+      <xsl:variable name="notes" as="xs:string?" select="$order/notes/jvalue()"/>
+
+      <xsl:variable name="lines" as="xs:string" select="string-join($order/lines/* ! ord:line(.))"/>
+
+      <xsl:text expand-text="yes">
+Order {$order/id}, placed {$order/placed} - {$order/status}
+Customer: {$customer/name} ({$customer/email})
+
+{$lines}
+Total: {ord:price($total, $order/currency)}
+Ship to: {ord:address($ship-to)}
+Notes: {$notes}
+      </xsl:text>
+
    </xsl:template>
 
    <xsl:function name="ord:line" as="xs:string">
@@ -49,17 +55,21 @@
       </xsl:note>
       <xsl:param name="line" as="jnode(*, line)"/>
       <!-- a JNode knows where it is in the tree: jkey() is its position in the 'lines' array, and '../..' is the order -->
+      <xsl:variable name="number" as="xs:integer" select="jkey($line)"/>
       <xsl:variable name="currency" as="xs:string" select="$line/../../currency"/>
+      <xsl:variable name="product" as="xs:string" select="string-join(($line/sku, $line/description), ' ')"/>
+      <xsl:variable name="unit-price" as="xs:string" select="ord:price($line/unit-price, $currency)"/>
+      <xsl:variable name="line-total" as="xs:string" select="ord:price(ord:line-total($line), $currency)"/>
+      <!-- the type of bundle-items is array(map(*)), so the steps after it aren't checked -->
       <xsl:variable name="bundle-items" as="xs:string*">
-         <!-- the type of bundle-items is array(map(*)), so the steps after it aren't checked -->
-         <xsl:for-each select="$line/bundle-items/*">
-            <xsl:sequence select="'       includes ' || quantity || ' x ' || sku || (description ! (' ' || .)) || '&#10;'"/>
-         </xsl:for-each>
+         <xsl:select>
+            $line/bundle-items/* ! `       includes {quantity} x {string-join((sku, description), ' ')}&#10;`
+         </xsl:select>
       </xsl:variable>
-      <xsl:sequence select="jkey($line) || '. ' || $line/quantity || ' x ' || $line/sku || ($line/description ! (' ' || .))
-                            || ' @ ' || ord:price($line/unit-price, $currency)
-                            || ' = ' || ord:price(ord:line-total($line), $currency) || '&#10;'
-                            || string-join($bundle-items)"/>
+      <xsl:select>
+         `{$number}. {$line/quantity} x {$product} @ {$unit-price} = {$line-total}
+{string-join($bundle-items)}`
+      </xsl:select>
    </xsl:function>
 
    <xsl:function name="ord:line-total" as="xs:double">
@@ -75,7 +85,8 @@
    <xsl:function name="ord:price" as="xs:string">
       <xsl:param name="amount" as="xs:double"/>
       <xsl:param name="currency" as="xs:string"/>
-      <xsl:sequence select="$currency || ' ' || format-number($amount, '#,##0.00')"/>
+      <xsl:variable name="formatted" as="xs:string" select="format-number($amount, '#,##0.00')"/>
+      <xsl:sequence select="`{$currency} {$formatted}`"/>
    </xsl:function>
 
 </xsl:stylesheet>
