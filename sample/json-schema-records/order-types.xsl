@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated from order.schema.json by schema-to-records.xsl: regenerate this file rather than edit it -->
 <xsl:stylesheet xmlns:xs="http://www.w3.org/2001/XMLSchema"
                 xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 version="4.0">
+   <xsl:note format="xdoc-md">
+               ### XSLT type declarations extracted from JSON Schema: order.schema.json
+
+               Generated from order.schema.json by schema-to-records.xsl: **regenerate this file rather than edit it**.
+
+               @version 1.0
+            </xsl:note>
    <xsl:item-type name="order"
                   as="record(
          id as xs:string,
@@ -61,7 +67,6 @@
          @field country The ISO 3166 two-letter country code.
       </xsl:note>
    </xsl:item-type>
-   <!-- map(*) is used for the references to line, which lead back to line: Saxon 13 doesn't allow recursive item types -->
    <xsl:item-type name="line"
                   as="record(
          sku as xs:string,
@@ -77,7 +82,7 @@
          @field description The product's name, as shown to the customer.
          @field quantity How many were ordered.
          @field unit-price The price of one, in the order's currency.
-         @field bundle-items For a bundle, the items in it - included in the bundle's price.
+         @field bundle-items For a bundle, the items in it - included in the bundle's price. (`map(*)` rather than `line`: Saxon 13 doesn't allow recursive item types.)
       </xsl:note>
    </xsl:item-type>
 </xsl:stylesheet>

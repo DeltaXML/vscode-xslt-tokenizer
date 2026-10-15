@@ -86,10 +86,16 @@
 
    <xsl:template name="xsl:initial-template">
       <xsl:result-document href="{resolve-uri($types-uri, static-base-uri())}" method="xml" indent="yes" use-character-maps="newlines">
-         <xsl:comment select="` Generated from {$schema-uri} by schema-to-records.xsl: regenerate this file rather than edit it `"/>
          <axsl:stylesheet version="4.0">
-            <!-- the generated types use the xs prefix in their 'as' attributes, where the serializer can't see it -->
             <xsl:namespace name="xs" select="'http://www.w3.org/2001/XMLSchema'"/>
+            <axsl:note format="xdoc-md" xsl:expand-text="yes">
+               ### XSLT type declarations extracted from JSON Schema: {$schema-uri}
+
+               Generated from {$schema-uri} by schema-to-records.xsl: **regenerate this file rather than edit it**.
+
+               @version 1.0
+            </axsl:note>
+            <!-- the generated types use the xs prefix in their 'as' attributes, where the serializer can't see it -->
             <xsl:call-template name="js:item-type">
                <xsl:with-param name="name" select="($root-name, js:type-name($root/title), 'root')[1]"/>
                <xsl:with-param name="schema" select="$root"/>
@@ -113,7 +119,7 @@
    <xsl:template name="js:item-type">
       <xsl:note format="xdoc-md">
          Writes an `xsl:item-type` declaration for a schema, with an `xsl:note` for its description and those of its
-         properties.
+         properties. The note for a property that's `map(*)` because its references lead back to this type says why.
 
          @param $name the name of the item type
          @param $schema the schema
@@ -123,24 +129,25 @@
       <xsl:param name="schema" as="jnode(*, schema)"/>
       <xsl:param name="def" as="xs:string?"/>
       <xsl:variable name="back-refs" as="xs:string*" select="distinct-values(js:refs($schema)[$def = js:reachable(., ())])"/>
-      <xsl:variable name="described-fields" as="jnode()*" select="$schema/properties/*[exists(js:description(.))]"/>
-      <xsl:if test="exists($back-refs)">
-         <xsl:variable name="refs" as="xs:string" select="string-join($back-refs, ', ')"/>
-         <xsl:comment select="` map(*) is used for the references to {$refs}, which lead back to {$name}: Saxon 13 doesn't allow recursive item types `"/>
-      </xsl:if>
+      <!-- the properties whose references lead back to this type: their types use map(*) instead -->
+      <xsl:variable name="recursive-fields" as="jnode()*" select="$schema/properties/*[js:refs(.) = $back-refs]"/>
+      <xsl:variable name="described-fields" as="jnode()*" select="$schema/properties/*[exists(js:description(.)) or exists(. intersect $recursive-fields)]"/>
       <!-- an item type can't have an occurrence indicator, as a sequence type can -->
       <xsl:variable name="item-type" as="xs:string" select="replace(js:sequence-type($schema, $def), '\?$', '')"/>
       <!-- a record type's lines are indented relative to the line it starts on: here, within xsl:item-type -->
       <axsl:item-type name="{$name}" as="{replace($item-type, '&#10;', '&#10;      ')}">
-         <xsl:if test="$schema/description or exists($described-fields)">
+         <xsl:if test="exists($schema/description) or exists($described-fields)">
             <!-- the note's text is written with its own line breaks and indentation, as for a note in a stylesheet -->
             <axsl:note format="xdoc-md">
                <xsl:variable name="note-lines" as="xs:string*">
                   <xsl:select>
                      $schema/description,
-                     ''[$schema/description and exists($described-fields)],
-                     $described-fields ! `@field {js:field-name(jkey())} {js:description(.)}`
+                     ''[exists($schema/description) and exists($described-fields)]
                   </xsl:select>
+                  <xsl:for-each select="$described-fields">
+                     <xsl:variable name="recursion-note" as="xs:string?" select="js:recursion-note(., $name)[exists(current() intersect $recursive-fields)]"/>
+                     <xsl:sequence select="string-join((`@field {js:field-name(jkey())}`, js:description(.), $recursion-note), ' ')"/>
+                  </xsl:for-each>
                </xsl:variable>
                <!-- each line is indented within the note, and the end tag is indented as for the start tag -->
                <xsl:variable name="indented-lines" as="xs:string*">
@@ -157,6 +164,23 @@
          </xsl:if>
       </axsl:item-type>
    </xsl:template>
+
+   <xsl:function name="js:recursion-note" as="xs:string">
+      <xsl:note format="xdoc-md">
+         Why a property's type uses `map(*)` for its references, e.g. for `line`'s `bundle-items`, which are lines too.
+         Saxon 13 doesn't allow recursive item types, directly or through other types.
+
+         @param $property the property's schema
+         @param $type-name the name of the item type it's a field of
+      </xsl:note>
+      <xsl:param name="property" as="jnode(*, schema)"/>
+      <xsl:param name="type-name" as="xs:string"/>
+      <!-- in Markdown code spans: plain strings, as a backtick in a string template would have to be doubled -->
+      <xsl:variable name="refs" as="xs:string" select="string-join(distinct-values(js:refs($property)) ! ('`' || . || '`'), ', ')"/>
+      <!-- e.g. a line's bundle-items are lines: a direct reference needs no explanation of where it leads -->
+      <xsl:variable name="leads-back" as="xs:string?" select="(', which refers back to `' || $type-name || '`')[js:refs($property) != $type-name]"/>
+      <xsl:sequence select="'(`map(*)` rather than ' || $refs || $leads-back || ': Saxon 13 doesn''t allow recursive item types.)'"/>
+   </xsl:function>
 
    <xsl:function name="js:description" as="xs:string?">
       <xsl:note format="xdoc-md">
@@ -182,16 +206,16 @@
       <xsl:variable name="non-null-types" as="xs:string*" select="$types[. ne 'null']"/>
       <xsl:variable name="optional" as="xs:string?" select="'?'[$types = 'null']"/>
       <xsl:choose>
-         <xsl:when test="$schema/get('$ref')">
+         <xsl:when test="exists($schema/get('$ref'))">
             <xsl:sequence select="js:ref-type($schema/get('$ref'), $def)"/>
          </xsl:when>
-         <xsl:when test="$schema/enum">
+         <xsl:when test="exists($schema/enum)">
             <xsl:sequence select="js:enum-type($schema)"/>
          </xsl:when>
          <xsl:when test="empty($types)">
             <!-- no type: it may be implied by other keywords -->
-            <xsl:sequence select="if ($schema/properties) then js:json-type($schema, 'object', $def)
-                                  else if ($schema/items) then js:json-type($schema, 'array', $def)
+            <xsl:sequence select="if (exists($schema/properties)) then js:json-type($schema, 'object', $def)
+                                  else if (exists($schema/items)) then js:json-type($schema, 'array', $def)
                                   else 'item()?'"/>
          </xsl:when>
          <xsl:when test="empty($non-null-types)">
@@ -223,9 +247,9 @@
          <xsl:when test="$type = ('number', 'integer')">xs:double</xsl:when>
          <xsl:when test="$type eq 'boolean'">xs:boolean</xsl:when>
          <xsl:when test="$type eq 'array'">
-            <xsl:sequence select="'array(' || (if ($schema/items) then js:sequence-type($schema/items, $def) else '*') || ')'"/>
+            <xsl:sequence select="'array(' || (if (exists($schema/items)) then js:sequence-type($schema/items, $def) else '*') || ')'"/>
          </xsl:when>
-         <xsl:when test="$type eq 'object' and $schema/properties/*">
+         <xsl:when test="$type eq 'object' and exists($schema/properties/*)">
             <xsl:sequence select="js:record-type($schema, $def)"/>
          </xsl:when>
          <xsl:when test="$type eq 'object'">map(*)</xsl:when>

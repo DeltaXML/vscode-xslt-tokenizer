@@ -92,8 +92,9 @@ These limits shaped the sample:
 
 - **No recursive item types.** A `line` can contain `bundle-items` that are themselves lines, but an `xsl:item-type`
   can't refer to itself, directly or through other types: Saxon reports SXTA0001. The generator uses `map(*)` for a
-  reference that leads back to the type being declared, so `bundle-items` is `array(map(*))`, with a comment
-  explaining why. The steps after `$line/bundle-items/*` aren't checked. `xsl:record-type`, which would allow
+  reference that leads back to the type being declared, so `bundle-items` is `array(map(*))`. The field's `@field`
+  documentation explains why, so hovering on `bundle-items` shows it. The steps after `$line/bundle-items/*` aren't
+  checked. `xsl:record-type`, which would allow
   recursion, isn't implemented in Saxon 13.
 - **No extensible records.** `record(a, *)` was dropped from the 4.0 specification, so a record type lists every field
   it allows.
