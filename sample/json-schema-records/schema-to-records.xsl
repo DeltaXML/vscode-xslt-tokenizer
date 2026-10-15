@@ -25,6 +25,10 @@
       e.g. `order-types.xsl` for `order.schema.json`
    </xsl:note>
 
+   <xsl:character-map name="newlines">
+      <xsl:output-character character="&#xA;" string="&#xA;"/>
+   </xsl:character-map>
+
    <xsl:output method="text"/>
 
    <!-- the output is a stylesheet module: literal result elements in the axsl namespace become xsl elements -->
@@ -81,7 +85,7 @@
    </xsl:function>
 
    <xsl:template name="xsl:initial-template">
-      <xsl:result-document href="{resolve-uri($types-uri, static-base-uri())}" method="xml" indent="yes">
+      <xsl:result-document href="{resolve-uri($types-uri, static-base-uri())}" method="xml" indent="yes" use-character-maps="newlines">
          <xsl:comment select="` Generated from {$schema-uri} by schema-to-records.xsl: regenerate this file rather than edit it `"/>
          <axsl:stylesheet version="4.0">
             <!-- the generated types use the xs prefix in their 'as' attributes, where the serializer can't see it -->
@@ -125,7 +129,9 @@
          <xsl:comment select="` map(*) is used for the references to {$refs}, which lead back to {$name}: Saxon 13 doesn't allow recursive item types `"/>
       </xsl:if>
       <!-- an item type can't have an occurrence indicator, as a sequence type can -->
-      <axsl:item-type name="{$name}" as="{replace(js:sequence-type($schema, $def), '\?$', '')}">
+      <xsl:variable name="item-type" as="xs:string" select="replace(js:sequence-type($schema, $def), '\?$', '')"/>
+      <!-- a record type's lines are indented relative to the line it starts on: here, within xsl:item-type -->
+      <axsl:item-type name="{$name}" as="{replace($item-type, '&#10;', '&#10;      ')}">
          <xsl:if test="$schema/description or exists($described-fields)">
             <!-- the note's text is written with its own line breaks and indentation, as for a note in a stylesheet -->
             <axsl:note format="xdoc-md">
@@ -229,8 +235,12 @@
 
    <xsl:function name="js:record-type" as="xs:string">
       <xsl:note format="xdoc-md">
-         The record type for an object schema with properties: one field per property.
+         The record type for an object schema with properties: one field per property, each on a line of its own.
          A property that isn't `required` is an optional field, e.g. `notes? as xs:string`.
+
+         The fields are indented relative to the line the record type starts on, and so are the lines of a record
+         type within a field. The `newlines` character map keeps the line breaks when the `as` attribute is
+         serialized - otherwise they're written as `&amp;#xA;`.
 
          @param $schema the object schema
          @param $def the name of the definition being declared, if any
@@ -241,10 +251,11 @@
       <xsl:variable name="fields" as="xs:string*">
          <xsl:for-each select="$schema/properties/*">
             <xsl:variable name="key" as="xs:string" select="jkey()"/>
-            <xsl:sequence select="js:field-name($key) || ('?'[not($key = $required)]) || ' as ' || js:sequence-type(., $def)"/>
+            <xsl:variable name="type" as="xs:string" select="replace(js:sequence-type(., $def), '&#10;', '&#10;   ')"/>
+            <xsl:sequence select="`   {js:field-name($key)}{'?'[not($key = $required)]} as {$type}`"/>
          </xsl:for-each>
       </xsl:variable>
-      <xsl:sequence select="'record(' || string-join($fields, ', ') || ')'"/>
+      <xsl:sequence select="'record(&#10;' || string-join($fields, ',&#10;') || '&#10;)'"/>
    </xsl:function>
 
    <xsl:function name="js:enum-type" as="xs:string">

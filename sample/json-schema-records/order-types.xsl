@@ -5,15 +5,16 @@
                 version="4.0">
    <xsl:item-type name="order"
                   as="record(
-         id as xs:string, 
-         placed as xs:string, 
-         status as enum('pending', 'paid', 'shipped', 'cancelled'), 
-         currency as xs:string, 
+         id as xs:string,
+         placed as xs:string,
+         status as enum('pending', 'paid', 'shipped', 'cancelled'),
+         currency as xs:string,
          customer as customer,
-         lines as array(line), 
-         shipping-address? as address, 
-         gift? as xs:boolean, 
-         notes? as xs:string?)">
+         lines as array(line),
+         shipping-address? as address,
+         gift? as xs:boolean,
+         notes? as xs:string?
+      )">
       <xsl:note format="xdoc-md">
          A customer order, with its line items.
 
@@ -29,7 +30,12 @@
       </xsl:note>
    </xsl:item-type>
    <xsl:item-type name="customer"
-                  as="record(name as xs:string, email as xs:string, address? as address, loyalty-points? as xs:double)">
+                  as="record(
+         name as xs:string,
+         email as xs:string,
+         address? as address,
+         loyalty-points? as xs:double
+      )">
       <xsl:note format="xdoc-md">
          The person who placed the order.
 
@@ -40,7 +46,12 @@
       </xsl:note>
    </xsl:item-type>
    <xsl:item-type name="address"
-                  as="record(street as xs:string, city as xs:string, post-code? as xs:string, country as xs:string)">
+                  as="record(
+         street as xs:string,
+         city as xs:string,
+         post-code? as xs:string,
+         country as xs:string
+      )">
       <xsl:note format="xdoc-md">
          A postal address.
 
@@ -52,7 +63,13 @@
    </xsl:item-type>
    <!-- map(*) is used for the references to line, which lead back to line: Saxon 13 doesn't allow recursive item types -->
    <xsl:item-type name="line"
-                  as="record(sku as xs:string, description? as xs:string, quantity as xs:double, unit-price as xs:double, bundle-items? as array(map(*)))">
+                  as="record(
+         sku as xs:string,
+         description? as xs:string,
+         quantity as xs:double,
+         unit-price as xs:double,
+         bundle-items? as array(map(*))
+      )">
       <xsl:note format="xdoc-md">
          One line of an order: a quantity of a product, at a unit price.
 
