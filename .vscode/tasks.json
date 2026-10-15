@@ -23,13 +23,11 @@
 			"detail": "eslint -c .eslintrc.js --ext .ts src"
 		},
 		{
-			// CHAIN (1/2)
-			// 1. prompts for input path
-			// 2. uses hard-coded temp file as output
 			"type": "xslt-js",
 			"label": "gen: json from xsl - PICK - CHAIN (1/2)",
 			"xsltFile": "${workspaceFolder}/__tests__/scripts/xslXPathAttributesToJson.xsl",
 			"initialTemplate": "initial",
+			"xmlSource": "",
 			"parameters": [
 				{
 					"name": "testSourceURL",
@@ -45,24 +43,20 @@
 				"clear": false
 			},
 			"group": {
-				"kind": "hidden",
+				"kind": "hidden"
 			},
 			"problemMatcher": [
 				"$saxon-xslt-js"
 			]
 		},
 		{
-			// CHAIN (2/2)
-			// invokes: xpLexerTestGen.js"
-			// 1. uses hard-coded temp out file from CHAIN as input
-			// 2. derives output path from input
 			"label": "gen: expected test json from xsl - PICK input",
 			"type": "shell",
 			"command": "node",
 			"args": [
 				"${workspaceFolder}/out/__tests__/utils/xpLexerTestGen.js",
 				"--file",
-				"${workspaceFolder}/temp/json-from-xml-out.json",
+				"${workspaceFolder}/temp/json-from-xml-out.json"
 			],
 			"dependsOn": [
 				"gen: json from xsl - PICK - CHAIN (1/2)",
@@ -76,7 +70,7 @@
 				"kind": "test",
 				"isDefault": true
 			},
-			"problemMatcher": [],
+			"problemMatcher": []
 		},
 		{
 			"type": "xslt",
