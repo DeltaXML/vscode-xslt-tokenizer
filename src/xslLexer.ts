@@ -12,6 +12,7 @@ import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, Err
 import { SchemaData } from "./xsltSchema";
 import { Snippet} from './xsltSnippets';
 import { HrefPaths } from './hrefPaths';
+import { RecordTypes } from './recordTypes';
 
 export enum DocumentTypes {
     XSLT,
@@ -1178,8 +1179,8 @@ export class XslLexer {
                                 xpLexer.xmlLessThan = XmlLessThan.Allowed;
                                 this.updateNames(result);
                                 if (isTypeDeclarationAttribute) {
-                                    // 'as' attribute value - captured as raw text (not parsed) purely for display on hover
-                                    const declaredType = xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim();
+                                    // 'as' attribute value - captured as raw text (not parsed) for display, e.g. on hover, on one line
+                                    const declaredType = RecordTypes.joinLines(xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim());
                                     if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
                                         this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
                                     } else if (XslLexer.hasDeclaredType(tagGlobalInstructionType)) {

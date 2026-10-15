@@ -1242,6 +1242,13 @@ export class RecordTypes {
 		return reference && (reference.char === '\'' || reference.char === '"') ? reference : undefined;
 	}
 
+	// a type written on more than one line, e.g. a record type with a field on each line, as shown in a hover, signature
+	// or completion: on one line, without the source's indentation - a line break and the whitespace around it are a
+	// space, or nothing after '(' or before ')'. Whitespace without a line break is unchanged
+	public static joinLines(text: string) {
+		return text.replace(/\(\s*\n\s*/g, '(').replace(/\s*\n\s*\)/g, ')').replace(/\s*\n\s*/g, ' ');
+	}
+
 	// the text of an attribute value, e.g. a SequenceType, with its character and entity references replaced - and the
 	// index in the text of each character, and of the end
 	public static decodeReferences(text: string): { text: string, offsets: number[] } {

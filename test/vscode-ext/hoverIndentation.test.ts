@@ -1,7 +1,8 @@
 /**
  * Test suite for the hover of a declaration written on more than one line, e.g. a record type with a field on each line:
  * it's shown on one line, without the source's indentation - a line break and the whitespace around it are a space, or
- * nothing after '(' or before ')'.
+ * nothing after '(' or before ')'. The same applies to a function's parameter and return types, in a hover or signature
+ * help.
  *
  * The cursor position is marked by '¦'.
  */
@@ -13,6 +14,8 @@ import { XSLTHoverProvider } from '../../src/xsltHoverProvider';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 import { XslLexerLight } from '../../src/xslLexerLight';
+import { RecordTypes } from '../../src/recordTypes';
+import { XSLTSignatureHelpProvider } from '../../src/xsltSignatureHelpProvider';
 
 const declarations = `<xsl:item-type name="address"
                   as="record(
@@ -21,12 +24,24 @@ const declarations = `<xsl:item-type name="address"
             lat as xs:double,
             long as xs:double
          )
-      )"/>`;
+      )"/>
+   <xsl:function name="f:move" as="record(
+         x as xs:double,
+         y as xs:double
+      )">
+      <xsl:param name="point" as="record(
+            x as xs:double,
+            y as xs:double
+         )"/>
+      <xsl:sequence select="$point"/>
+   </xsl:function>`;
+
+const pointType = 'record(x as xs:double, y as xs:double)';
 
 const addressType = 'record(street as xs:string, geo? as record(lat as xs:double, long as xs:double))';
 
 function stylesheet(body: string) {
-	return `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="4.0">
+	return `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="f" version="4.0">
    ${declarations}
    ${body}
 </xsl:stylesheet>`;
@@ -60,12 +75,29 @@ suite('Hover: declarations on more than one line', () => {
 	test('a type from an imported or included module, as read by the light lexer', () => {
 		// the light lexer keeps the line breaks in an 'as' value - without them, the indentation would be left in the hover
 		const globals = new XslLexerLight(XSLTConfiguration.configuration).analyseLight(stylesheet(''));
-		const address = globals.find((g) => g.name === 'address');
-		assert.equal(XSLTHoverProvider.joinLines(`type address as ${address?.declaredType}`), `type address as ${addressType}`);
+		assert.equal(globals.find((g) => g.name === 'address')?.declaredType, addressType);
+		const move = globals.find((g) => g.name === 'f:move');
+		assert.equal(move?.returnType, pointType);
+		assert.deepEqual(move?.memberTypes, [pointType]);
+	});
+
+	test('a function: the hover of a call', async () => {
+		assert.equal(await hoverCode(`<xsl:template name="t"><xsl:sequence select="f:mo¦ve({ 'x': 1, 'y': 2 })"/></xsl:template>`),
+			`f:move($point as ${pointType}) as ${pointType}`);
+	});
+
+	test('a function: signature help for a call', async () => {
+		const marked = stylesheet(`<xsl:template name="t"><xsl:sequence select="f:move(¦)"/></xsl:template>`);
+		const document = await vscode.workspace.openTextDocument({ content: marked.replace('¦', ''), language: 'xslt' });
+		const provider = new XSLTSignatureHelpProvider(XSLTConfiguration.configuration, new XsltDefinitionProvider(XSLTConfiguration.configuration));
+		const help = await provider.provideSignatureHelp(document, document.positionAt(marked.indexOf('¦')), new vscode.CancellationTokenSource().token);
+		const signature = help?.signatures[help.activeSignature];
+		assert.equal(signature?.label, `f:move($point as ${pointType}) as ${pointType}`);
+		assert.deepEqual(signature?.parameters.map((p) => p.label), [`$point as ${pointType}`]);
 	});
 
 	test('whitespace without a line break is unchanged', () => {
-		assert.equal(XSLTHoverProvider.joinLines("type t as record(a,  b as enum('x  y'))"), "type t as record(a,  b as enum('x  y'))");
-		assert.equal(XSLTHoverProvider.joinLines('xs:string |\r\n   xs:integer'), 'xs:string | xs:integer');
+		assert.equal(RecordTypes.joinLines("type t as record(a,  b as enum('x  y'))"), "type t as record(a,  b as enum('x  y'))");
+		assert.equal(RecordTypes.joinLines('xs:string |\r\n   xs:integer'), 'xs:string | xs:integer');
 	});
 });

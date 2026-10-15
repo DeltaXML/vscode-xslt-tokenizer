@@ -38,7 +38,9 @@ export function declarationParamLabels(declaration: GlobalInstructionData, docum
 	const isFunction = declaration.type === GlobalInstructionType.Function;
 	const labels = RecordTypes.childElements(text, markup, tagStart, 'xsl:param').map((paramOffset) => {
 		const attribute = (name: string) => RecordTypes.attributeOfElementAt(text, paramOffset + 1, name);
-		const type = attribute('as');
+		// a type on more than one line, e.g. a record type, is shown on one line
+		const asText = attribute('as');
+		const type = asText !== undefined ? RecordTypes.joinLines(asText) : undefined;
 		const required = (attribute('required') ?? '').trim();
 		const isOptional = isFunction ? ['no', 'false', '0'].includes(required) : !['yes', 'true', '1'].includes(required);
 		const select = attribute('select')?.replace(/\s+/g, ' ').trim().replace(/&(lt|gt|amp|quot|apos);/g, (_, name: string) => entities[name]);

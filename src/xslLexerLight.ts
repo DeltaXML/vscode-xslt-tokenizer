@@ -10,6 +10,7 @@
 
 import { XslLexer, XMLCharState, GlobalInstructionType, XSLTokenLevelState, EntityPosition, GlobalInstructionData} from "./xslLexer";
 import { BaseToken, XPathLexer } from "./xpLexer";
+import { RecordTypes } from "./recordTypes";
 import * as vscode from 'vscode';
 
 
@@ -80,7 +81,8 @@ export class XslLexerLight extends XslLexer {
 
                 if (nextState === currentState) {
                     if (isCurrentCharNewLIne) {
-                        // kept only in an 'as' value, e.g. a record type with a field on each line, for its hover
+                        // kept only in an 'as' value, e.g. a record type with a field on each line, so its lines are joined
+                        // without their indentation - see RecordTypes.joinLines
                         if (storeToken && isTypeDeclarationAttribute) {
                             tokenChars.push(currentChar);
                         }
@@ -310,7 +312,7 @@ export class XslLexerLight extends XslLexer {
                                 XslLexer.recordAccumulatorUses(this.globalInstructionData, valueToken, tokenChars.join(''));
                                 isUseAccumulatorsAttribute = false;
                             } else if (isTypeDeclarationAttribute) {
-                                const declaredType = tokenChars.join('').trim();
+                                const declaredType = RecordTypes.joinLines(tokenChars.join('').trim());
                                 if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
                                     this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
                                 } else if (XslLexer.hasDeclaredType(tagGlobalInstructionType)) {
