@@ -129,6 +129,13 @@ suite('Quick Run - tasks with no XML source', () => {
 		});
 	}
 
+	test('param defaults are copied to the task only when the command line gives them the same value', () => {
+		const copied = ["'order.schema.json'", '42', 'true()', '()', "'a $b' || \"c Q{d}\"", "fn:upper-case('x')", 'map:merge(())', "xs:date('2026-10-15')"];
+		const notCopied = ["replace($schema-uri, '\\.json$', '') || '-types.xsl'", 'my:default()', "Q{urn:x}f('a')", "resolve-uri('a.xsl', static-base-uri())"];
+		copied.forEach((select) => assert.isTrue(SaxonTaskProvider.isCommandLineDefault(select), select));
+		notCopied.forEach((select) => assert.isFalse(SaxonTaskProvider.isCommandLineDefault(select), select));
+	});
+
 	test('tasks with an XML source have no initialTemplate', () => {
 		const definition = SaxonTaskProvider.createQuickRunTaskDefinition('xslt', 'report with books.xml', '/work/report.xsl', '/work/books.xml');
 		assert.strictEqual(definition.xmlSource, '/work/books.xml');

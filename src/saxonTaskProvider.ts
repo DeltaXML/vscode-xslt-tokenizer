@@ -279,12 +279,25 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         const seenNames = new Set<string>();
         const parameters: XSLTParameter[] = [];
         globalInstructionData.concat(allImportedGlobals).forEach((g: GlobalInstructionData) => {
-            if (g.type === GlobalInstructionType.Parameter && g.defaultSelect && !seenNames.has(g.name)) {
+            if (g.type === GlobalInstructionType.Parameter && g.defaultSelect && SaxonTaskProvider.isCommandLineDefault(g.defaultSelect) && !seenNames.has(g.name)) {
                 seenNames.add(g.name);
                 parameters.push({ name: '?' + g.name, value: g.defaultSelect });
             }
         });
         return parameters;
+    }
+
+    // whether a param's 'select' default gives the same value when Saxon's CLI evaluates it: there, it has no access to
+    // the stylesheet's variables, parameters or functions, and static-base-uri() is the current directory. A default
+    // that isn't is left out of the task, so the stylesheet's own default applies
+    public static isCommandLineDefault(select: string): boolean {
+        const withoutStrings = select.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'/g, '""');
+        if (withoutStrings.includes('$') || withoutStrings.includes('Q{') || /\bstatic-base-uri\s*\(/.test(withoutStrings)) {
+            return false;
+        }
+        const builtInPrefixes = ['fn', 'xs', 'math', 'map', 'array'];
+        const prefixedCalls = withoutStrings.matchAll(/([\p{L}_][\p{L}\p{N}_.-]*):[\p{L}_][\p{L}\p{N}_.-]*\s*[(#]/gu);
+        return [...prefixedCalls].every((call) => builtInPrefixes.includes(call[1]));
     }
 
     private getTasks(tasks: XSLTTask[]) {
