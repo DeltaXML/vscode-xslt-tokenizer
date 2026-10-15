@@ -183,6 +183,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			noteBaseIndent = noteBaseIndent === Number.MAX_SAFE_INTEGER ? 0 : noteBaseIndent;
 		};
 
+		// for each open string template, the depth of braces within its current enclosed expression: 0 within its text
+		let templateBraceDepths: number[] = [];
+
 		if (this.docType === DocumentTypes.XPath) {
 			complexStateStack = [[0, [], false]];
 			this.xpLexer.reset();
@@ -196,9 +199,14 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			// or a string delimited by entities, or it follows the string's previous part - the lines since the previous
 			// token are within the string, so their indentation is part of its value (in an attribute, the XML parser
 			// replaces each whitespace character with a space, but doesn't collapse them)
-			const isStringContinuation = token.tokenType === TokenLevelState.string && token.startCharacter === 0 &&
+			// A line within a template's text may also start with an enclosed expression, e.g. '{$b}' in `a{$a}⏎{$b}`:
+			// there's no string token for the line break, so the line starts with the '{'
+			const withinTemplateText = templateBraceDepths.length > 0 && templateBraceDepths[templateBraceDepths.length - 1] === 0;
+			const isStringContinuation = token.startCharacter === 0 && ((token.tokenType === TokenLevelState.string &&
 				(XMLDocumentFormattingProvider.stringContinuationCharTypes.includes(<CharLevelState>token.charType) ||
-					(!!prevToken && prevToken.tokenType === TokenLevelState.string && prevToken.line < token.line));
+					(!!prevToken && prevToken.tokenType === TokenLevelState.string && prevToken.line < token.line))) ||
+				(withinTemplateText && !!prevToken && prevToken.line < token.line));
+			XMLDocumentFormattingProvider.trackTemplateBraces(token, templateBraceDepths, withinTemplateText);
 			let stackLength = xmlSpacePreserveStack.length;
 			let addNewLine = false;
 
@@ -620,6 +628,26 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			addNewLine = prevToken?.line === token.line;
 		}
 		return addNewLine;
+	}
+
+	// updates the brace depths for the open string templates with a token: a template starts with its opening part,
+	// or ends with its closing part ('sBt' when it has no enclosed expressions, after a line break), and the braces of
+	// enclosed expressions - which may have map constructors or other templates within them - are counted
+	private static trackTemplateBraces(token: BaseToken, depths: number[], withinTemplateText: boolean) {
+		if (token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber) {
+			depths.length = 0;
+		} else if (token.tokenType === TokenLevelState.string) {
+			const charType = <CharLevelState>token.charType;
+			if (charType === CharLevelState.lBt) {
+				depths.push(0);
+			} else if (charType === CharLevelState.rBt || (charType === CharLevelState.sBt && withinTemplateText)) {
+				depths.pop();
+			}
+		} else if (depths.length > 0 && token.charType === CharLevelState.lBr) {
+			depths[depths.length - 1]++;
+		} else if (depths.length > 0 && token.charType === CharLevelState.rBr && depths[depths.length - 1] > 0) {
+			depths[depths.length - 1]--;
+		}
 	}
 
 	private getReplaceLineIndentTextEdit = (currentLine: vscode.TextLine, indentString: string): vscode.TextEdit => {

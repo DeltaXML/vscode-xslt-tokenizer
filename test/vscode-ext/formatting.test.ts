@@ -131,6 +131,13 @@ suite('Formatting', () => {
 			assert.deepEqual(lines.slice(3, 7), ['    <xsl:select>', '      `Hello {$a},', '        next line`', '    </xsl:select>']);
 		});
 
+		test('the continuation lines of a string template that start with an enclosed expression are kept', async () => {
+			// with nothing else between the line break and the '{', the line has no string token at its start
+			const body = ['<xsl:select>', '`Order {$id}', '', '{$lines}', 'Total: {map{1: `t{$a}`}?1}', '{$b}`', '</xsl:select>', '<a/>'];
+			const { lines } = await format(template(body));
+			assert.deepEqual(lines.slice(3, 11), ['    <xsl:select>', '      `Order {$id}', '', '{$lines}', 'Total: {map{1: `t{$a}`}?1}', '{$b}`', '    </xsl:select>', '    <a/>']);
+		});
+
 		test('lines after a multi-line string are indented as usual', async () => {
 			const { lines } = await format(template([`<xsl:sequence select="'a`, `        b'"/>`, `<a/>`]));
 			assert.deepEqual(lines.slice(3, 6), [`    <xsl:sequence select="'a`, `        b'"/>`, `    <a/>`]);
