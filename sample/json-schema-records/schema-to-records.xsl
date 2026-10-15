@@ -21,8 +21,8 @@
 
       @param $schema-uri the JSON Schema to convert - relative to this stylesheet
       @param $root-name the name of the item type for the root schema - by default, from the schema's `title`
-      @param $types-uri the stylesheet module to write the item types to - by default, from the schema's file name,
-      e.g. `order-types.xsl` for `order.schema.json`
+      @variable $types-uri the stylesheet module to write the item types to - from the schema's file name, e.g.
+      `order-types.xsl` for `order.schema.json`, next to the schema
    </xsl:note>
 
    <xsl:character-map name="newlines">
@@ -36,7 +36,7 @@
 
    <xsl:param name="schema-uri" as="xs:string" select="'order.schema.json'"/>
    <xsl:param name="root-name" as="xs:string?"/>
-   <xsl:param name="types-uri" as="xs:string" select="replace($schema-uri, '(\.schema)?\.json$', '') || '-types.xsl'"/>
+   <xsl:variable name="types-uri" as="xs:string" select="replace($schema-uri, '(\.schema)?\.json$', '') || '-types.xsl'"/>
 
    <!-- the JSON Schema keywords used here: the others are allowed in the schema, but not checked or used -->
    <xsl:item-type name="schema" as="record(

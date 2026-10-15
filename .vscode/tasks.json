@@ -74,25 +74,6 @@
 		},
 		{
 			"type": "xslt",
-			"label": "schema-to-records with xsl:initial-template",
-			"saxonJar": "${config:XSLT.tasks.saxonJar}",
-			"xsltFile": "${workspaceFolder}/sample/json-schema-records/schema-to-records.xsl",
-			"xmlSource": "",
-			"initialTemplate": "",
-			"messageEscaping": "adaptive",
-			"allowSyntaxExtensions40": "auto",
-			"group": {
-				"kind": "build"
-			},
-			"parameters": [
-				{
-					"name": "?schema-uri",
-					"value": "'order.schema.json'"
-				}
-			]
-		},
-		{
-			"type": "xslt",
 			"label": "order-report with xsl:initial-template",
 			"saxonJar": "${config:XSLT.tasks.saxonJar}",
 			"xsltFile": "${workspaceFolder}/sample/json-schema-records/order-report.xsl",
