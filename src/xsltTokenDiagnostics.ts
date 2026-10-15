@@ -1156,7 +1156,8 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
 						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						withinTypeDeclarationAttr = attNameText === 'as';
+						// on a literal result element, e.g. <axsl:item-type as="{$type}"/> with xsl:namespace-alias, 'as' is an AVT
+						withinTypeDeclarationAttr = attNameText === 'as' && (tagType !== TagType.XMLstart || isSchematron);
 						currentAttName = attNameText;
 						let problemReported = false;
 						if (prevToken) {
