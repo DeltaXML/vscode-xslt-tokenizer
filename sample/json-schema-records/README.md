@@ -5,6 +5,23 @@ XPath 4.0 JNodes let you navigate JSON (maps and arrays) with path expressions, 
 editor knows which fields each step can reach. It checks each step, offers the field names as completions, and shows
 each field's type and documentation on hover.
 
+## Requirements
+
+- **Saxon-PE 13 or Saxon-EE 13**, with XPath 4.0 syntax enabled. Saxon-HE 13 rejects XPath 4.0 syntax, so it can't run
+  these stylesheets.
+- **For the editor features:** [XSLT/XPath for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=deltaxml.xslt-xpath).
+  Its Quick Run enables XPath 4.0 syntax for a `version="4.0"` stylesheet. Point its `XSLT.tasks.saxonJar` setting at
+  your Saxon-PE or Saxon-EE jar.
+
+To run the stylesheets from the command line instead (with the jar's `lib` folder and licence next to it):
+
+```
+java -cp saxon-pe-13.0.jar net.sf.saxon.Transform -xsl:schema-to-records.xsl -it --allowSyntaxExtensions:on
+java -cp saxon-pe-13.0.jar net.sf.saxon.Transform -xsl:order-report.xsl -it --allowSyntaxExtensions:on
+```
+
+## How it works
+
 This sample works in two stages:
 
 1. `schema-to-records.xsl` converts a JSON Schema to XSLT 4.0 record types, reading the schema as JNodes.
@@ -18,9 +35,6 @@ json-schema-records/
 ├── order.json               an order, valid against the schema
 └── order-report.xsl         stage 2: includes order-types.xsl, and prints a summary of order.json
 ```
-
-Both stylesheets need Saxon-PE 13 (or EE), with XPath 4.0 syntax enabled. Quick Run turns this on for a `version="4.0"`
-stylesheet. On the command line, add `--allowSyntaxExtensions:on`.
 
 ## Try it
 
