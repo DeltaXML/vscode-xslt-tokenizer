@@ -80,7 +80,10 @@ export class XslLexerLight extends XslLexer {
 
                 if (nextState === currentState) {
                     if (isCurrentCharNewLIne) {
-                        // do nothing
+                        // kept only in an 'as' value, e.g. a record type with a field on each line, for its hover
+                        if (storeToken && isTypeDeclarationAttribute) {
+                            tokenChars.push(currentChar);
+                        }
                     } else if (storeToken) {
                         tokenChars.push(currentChar);
                     }

@@ -44,7 +44,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			// the type as written in an attribute value, with its references replaced, e.g. &quot;
 			const declaration = `${quotedName}${field.optional ? '?' : ''}${field.type ? ' as ' + RecordTypes.decodeReferences(field.type).text : ''}`;
 			const markdown = new MarkdownString();
-			markdown.appendCodeblock(declaration, XSLTHoverProvider.signatureLanguage);
+			markdown.appendCodeblock(XSLTHoverProvider.joinLines(declaration), XSLTHoverProvider.signatureLanguage);
 			const itemTypes = await this.itemTypeGlobals(document, token);
 			const fieldText = /^record\s*\(/.test(record.name) ? undefined : XdocNotes.recordFieldTexts(record.name, itemTypes, document.getText())(field.name);
 			// the values of a field with an enumeration type
@@ -520,7 +520,14 @@ export class XSLTHoverProvider implements HoverProvider {
 	public static readonly signatureLanguage = 'xpath-signature';
 
 	private createHover(signature: string, description: string) {
-		return new Hover(new MarkdownString().appendCodeblock(signature, XSLTHoverProvider.signatureLanguage).appendMarkdown('\n' + description));
+		return new Hover(new MarkdownString().appendCodeblock(XSLTHoverProvider.joinLines(signature), XSLTHoverProvider.signatureLanguage).appendMarkdown('\n' + description));
+	}
+
+	// a declaration on more than one line, e.g. a record type with a field on each line, as written in an 'as' attribute
+	// (the signature is the attribute's text, not its tokens): shown on one line, without the source's indentation - a
+	// line break and the whitespace around it are a space, or nothing after '(' or before ')'
+	public static joinLines(signature: string) {
+		return signature.replace(/\(\s*\n\s*/g, '(').replace(/\s*\n\s*\)/g, ')').replace(/\s*\n\s*/g, ' ');
 	}
 
 	private getFunctionName(line: string, char: number) {
