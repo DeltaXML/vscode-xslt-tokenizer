@@ -20,9 +20,9 @@
    <xsl:param name="order-uri" as="xs:string" select="'order.json'"/>
 
    <!--
-      Converting the parsed JSON to the 'order' type checks it against the schema's types, and drops any properties
-      that the schema doesn't declare. A jnode(*, order) type matches only a JNode whose value is an instance of
-      'order' - which a map with extra keys isn't.
+        Converting the parsed JSON to the 'order' type checks it against the schema's types, and drops any properties
+        that the schema doesn't declare. A jnode(*, order) type matches only a JNode whose value is an instance of
+        'order' - which a map with extra keys isn't.
    -->
    <xsl:variable name="order-value" as="order" select="json-doc($order-uri)"/>
    <xsl:variable name="order" as="jnode(*, order)" select="jtree($order-value)"/>
@@ -61,15 +61,14 @@ Notes: {$notes}
       <xsl:variable name="unit-price" as="xs:string" select="ord:price($line/unit-price, $currency)"/>
       <xsl:variable name="line-total" as="xs:string" select="ord:price(ord:line-total($line), $currency)"/>
       <!-- the type of bundle-items is array(map(*)), so the steps after it aren't checked -->
-      <xsl:variable name="bundle-items" as="xs:string*">
-         <xsl:select>
-            $line/bundle-items/* ! `       includes {quantity} x {string-join((sku, description), ' ')}&#10;`
-         </xsl:select>
-      </xsl:variable>
-      <xsl:select>
-         `{$number}. {$line/quantity} x {$product} @ {$unit-price} = {$line-total}
-{string-join($bundle-items)}`
-      </xsl:select>
+      <xsl:variable name="bundle-items" as="xs:string*" select="
+         $line/bundle-items/* ! `       includes {quantity} x {string-join((sku, description), ' ')}&#10;`"/>
+      
+      <xsl:text expand-text="yes">
+{$number}. {$line/quantity} x {$product} @ {$unit-price} = {$line-total}
+{string-join($bundle-items)}
+      </xsl:text>
+      
    </xsl:function>
 
    <xsl:function name="ord:line-total" as="xs:double">
