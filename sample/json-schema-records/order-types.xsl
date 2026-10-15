@@ -4,7 +4,16 @@
                 xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                 version="4.0">
    <xsl:item-type name="order"
-                  as="record(id as xs:string, placed as xs:string, status as enum('pending', 'paid', 'shipped', 'cancelled'), currency as xs:string, customer as customer, lines as array(line), shipping-address? as address, gift? as xs:boolean, notes? as xs:string?)">
+                  as="record(
+         id as xs:string, 
+         placed as xs:string, 
+         status as enum('pending', 'paid', 'shipped', 'cancelled'), 
+         currency as xs:string, 
+         customer as customer,
+         lines as array(line), 
+         shipping-address? as address, 
+         gift? as xs:boolean, 
+         notes? as xs:string?)">
       <xsl:note format="xdoc-md">
          A customer order, with its line items.
 
