@@ -271,7 +271,9 @@
        processing-instruction()/namespace-node() item with itself,
        unchanged, but likewise wrapped with its location - these kinds
        have nowhere on themselves to hang a location marker the way an
-       element can carry an extra attribute, hence the wrapper. Used by
+       element can carry an extra attribute, hence the wrapper. Likewise
+       every XPath 4.0 JNode: its husked value, wrapped with its path
+       within its tree (LOCAL INTERIM CHANGE - see VENDORED.md). Used by
        zxd:debug-core before handing $labels to plain xdm:to-document(),
        so the tree serialize/render ever see is already bounded in size
        - no limit needs threading through the renderer itself. -->
@@ -284,10 +286,14 @@
         else if ($item instance of attribute() or $item instance of comment()
                  or $item instance of processing-instruction() or $item instance of namespace-node())
              then zxd:with-node-path($item, $item)
+        else if (zxd:is-jnode($item)) then
+          map{ $zxd:NODE-PATH-KEY: zxd:jnode-path($item), $zxd:NODE-VALUE-KEY: zxd:husk-value(zxd:jnode-value($item)) }
         else if ($item instance of map(*)) then
           map:merge(for $k in map:keys($item) return map:entry($k, zxd:husk-value($item($k))))
         else if ($item instance of array(*)) then
-          array:for-each($item, function($x as item()*) as item()* { zxd:husk-value($x) })
+          (: members by position, not with array:for-each: in this XSLT 3.0 module, Saxon 13 passes a JNode
+             member to array:for-each's function as its value (LOCAL INTERIM CHANGE - see VENDORED.md) :)
+          array:join(for $i in 1 to array:size($item) return [zxd:husk-value($item($i))])
         else $item"/>
   </xsl:function>
 
