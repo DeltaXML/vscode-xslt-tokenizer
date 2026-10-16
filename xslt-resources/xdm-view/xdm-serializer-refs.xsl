@@ -59,7 +59,7 @@
        only), so only values need visiting. -->
   <xsl:function name="zxd:collect-doc-refs" as="node()*">
     <xsl:param name="value" as="item()*"/>
-    <xsl:for-each select="$value">
+    <xsl:for-each select="zxd:jnode-values($value)">
       <xsl:sequence select="zxd:collect-doc-refs-from-item(.)"/>
     </xsl:for-each>
   </xsl:function>
@@ -216,7 +216,7 @@
        imported together. -->
   <xsl:function name="zxd:build-item-seq-refs" as="element(xdm:item)*">
     <xsl:param name="items" as="item()*"/>
-    <xsl:for-each select="$items">
+    <xsl:for-each select="zxd:jnode-values($items)">
       <xdm:item>
         <xsl:sequence select="zxd:build-payload-refs(.)"/>
       </xdm:item>

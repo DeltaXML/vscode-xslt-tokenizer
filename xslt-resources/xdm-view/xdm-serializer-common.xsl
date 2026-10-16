@@ -17,6 +17,28 @@
        imported alongside it, same as xdm-serializer.xsl/xdm-parser.xsl.
   -->
 
+  <!-- LOCAL INTERIM CHANGE (vscode-xslt-tokenizer, 2026-10-16) - not
+       in upstream xdm-persistence yet; see VENDORED.md.
+       XPath 4.0 JNodes (e.g. from jtree(), or a path step over a map)
+       replaced by their values, so a JNode shows as the map, array or
+       atomic value it wraps: a JNode isn't a node(), function (maps and
+       arrays are functions) or atomic value, so it would otherwise reach
+       zxd:build-atomic and fail with FOTY0013 when atomized. fn:jvalue
+       is looked up dynamically, so this module still compiles with an
+       XSLT 3.0 processor - there are no JNodes there, the lookup is
+       empty and the items are unchanged. A JNode's key isn't kept. -->
+  <xsl:function name="zxd:jnode-values" as="item()*">
+    <xsl:param name="items" as="item()*"/>
+    <xsl:variable name="jvalue" as="function(*)?"
+                  select="function-lookup(QName('http://www.w3.org/2005/xpath-functions', 'jvalue'), 1)"/>
+    <xsl:sequence select="
+      if (empty($jvalue)) then $items
+      else for $item in $items return
+        if ($item instance of node() or $item instance of function(*) or $item instance of xs:anyAtomicType)
+        then $item
+        else $jvalue($item)"/>
+  </xsl:function>
+
   <xsl:function name="zxd:node-kind" as="xs:string?">
     <xsl:param name="item" as="item()"/>
     <xsl:choose>
