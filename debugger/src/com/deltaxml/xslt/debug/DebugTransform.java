@@ -15,6 +15,7 @@ import net.sf.saxon.s9api.SaxonApiException;
 import net.sf.saxon.s9api.XsltCompiler;
 import net.sf.saxon.s9api.XsltExecutable;
 import net.sf.saxon.s9api.Xslt30Transformer;
+import net.sf.saxon.trace.XSLTTraceCodeInjector;
 import net.sf.saxon.trans.CommandLineOptions;
 
 /**
@@ -41,6 +42,10 @@ class DebugTransform extends Transform {
             if (compiler != null) {
                 final ErrorReporter saxonReporter = compiler.getErrorReporter();
                 compiler.setErrorReporter(error -> debugger.reportError(error, saxonReporter, true));
+                // also tracing xsl:sequence instructions (with -T, Saxon's own XSLT injector is set by now)
+                if (compiler.getUnderlyingCompilerInfo().getCodeInjector() instanceof XSLTTraceCodeInjector) {
+                    compiler.getUnderlyingCompilerInfo().setCodeInjector(new DebugCodeInjector());
+                }
             }
         } catch (ReflectiveOperationException | RuntimeException e) {
             // compile errors are only reported by Saxon

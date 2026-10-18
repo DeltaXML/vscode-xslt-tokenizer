@@ -711,6 +711,40 @@ async function testVariableScopes(saxonJar) {
     await dap.exited;
 }
 
+// every xsl:sequence can be stopped at - Saxon itself only traces an xsl:sequence in some places, e.g. not as one of
+// a template's instructions - whatever its select, and a multi-line select stepped through
+async function testEveryXslSequence(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    const xsl = path.join(fixtures, 'sequences.xsl');
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${xsl}`, '-it'] });
+    const lines = require('fs').readFileSync(xsl, 'utf8').split('\n');
+    const { breakpoints } = await dap.request('setBreakpoints', { source: { path: xsl }, breakpoints: lines.map((_, i) => ({ line: i + 1 })) });
+    const terminated = dap.event('terminated');
+    await dap.request('configurationDone', {});
+    const hits = new Map();
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        hits.set(stop.frames[0].line, (hits.get(stop.frames[0].line) ?? 0) + 1);
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    // each breakpoint where it was asked for (not moved) is stopped at
+    const unhit = breakpoints.map((b, i) => b.verified && b.line === i + 1 && !hits.has(i + 1) ? `${i + 1}: ${lines[i].trim()}` : undefined).filter(Boolean);
+    assert.deepStrictEqual(unhit, []);
+    const sequenceLines = lines.map((l, i) => /<xsl:sequence/.test(l) ? i + 1 : 0).filter(Boolean);
+    assert.ok(sequenceLines.length >= 15 && sequenceLines.every((line) => hits.has(line)), `xsl:sequence lines: ${sequenceLines}`);
+    // 'return $x * 100' in a multi-line select: once each iteration
+    assert.strictEqual(hits.get(20), 2);
+    assert.match(dap.output, /10 20 3 true a 2 3 2 6 8 literal 1 2 10 20 3 a 100 200 2 6 3 61 21 2/);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -719,7 +753,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);
