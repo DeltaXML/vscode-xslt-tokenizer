@@ -15,6 +15,7 @@
      - conditional breakpoints (right-click in the margin: 'Add Conditional Breakpoint...'): on the
        <order ...> line, the expression @customer = 'Grace', or $total gt 30; or the hit count 2
      - a logpoint on the f:line-total($line) line, with the message: {$line/@product} costs {f:line-total($line)}
+     - a dynamic error: change a price in orders.xml to 'n/a' - the debugger pauses in f:line-total, at the error
   The value of each expression stepped through is shown in the Debug Console.
 -->
 <xsl:stylesheet version="3.0"

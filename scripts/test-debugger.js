@@ -207,7 +207,11 @@ async function testStepOverAndLogpoint(saxonJar) {
 async function testInitialTemplateAndError(saxonJar) {
     const dap = new DapClient(saxonJar);
     const ended = Promise.all([dap.event('exited'), dap.event('terminated')]);
+    const stopped = dap.event('stopped');
     await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'error.xsl')}`, '-it'] }, {});
+    // pauses at the error, then ends
+    assert.strictEqual((await stopped).reason, 'exception');
+    await dap.request('continue', { threadId: 1 });
     const [{ exitCode }] = await ended;
     assert.strictEqual(exitCode, 2);
     assert.match(dap.output, /FOAR0001|divide by zero|Integer division by zero/i);
@@ -578,6 +582,98 @@ async function testXPathLoopArrivals(saxonJar) {
     }
 }
 
+// a dynamic error that ends the transform pauses where it's raised, with its code and message and the variables
+// there; an error caught by xsl:try doesn't, by default - and leaves the stack as it was; Saxon's error report is
+// linked to the error's location, and given to the extension for the Problems view
+async function testPauseOnError(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    const xsl = path.join(fixtures, 'errors.xsl');
+    await dap.start({ saxonArgs: [`-xsl:${xsl}`, '-it'] }, { 'errors.xsl': [{ line: 10 }] });
+    let stop = await stopped;
+    // after the caught error: just the template - not f:fail, which the error was raised in
+    assert.strictEqual(stop.reason, 'breakpoint');
+    assert.deepStrictEqual(stop.frames.map((f) => f.name), ['xsl:template name="xsl:initial-template"']);
+
+    stopped = dap.stopped();
+    await dap.request('continue', { threadId: 1 });
+    stop = await stopped;
+    assert.strictEqual(stop.reason, 'exception');
+    assert.strictEqual(stop.frames[0].line, 11);
+    const info = await dap.request('exceptionInfo', { threadId: 1 });
+    assert.strictEqual(info.exceptionId, 'FORG0001');
+    assert.strictEqual(info.breakMode, 'unhandled');
+    assert.match(info.details.message, /Cannot convert string "abc" to xs:decimal/);
+    const locals = byName(await dap.variables(0, 'Locals'));
+    assert.strictEqual(locals.$input.value, '"abc"');
+
+    const terminated = dap.event('terminated');
+    const exited = dap.event('exited');
+    await dap.request('continue', { threadId: 1 });
+    assert.strictEqual((await exited).exitCode, 2);
+    await terminated;
+    const linked = dap.events.filter((e) => e.event === 'output' && e.body.source && e.body.source.path.endsWith('errors.xsl'));
+    assert.ok(linked.some((e) => e.body.line === 11 && /FORG0001/.test(e.body.output)), JSON.stringify(linked));
+    const problems = dap.events.filter((e) => e.event === 'xsltDebugError');
+    assert.deepStrictEqual(problems.map((e) => [e.body.code, e.body.line, e.body.severity]), [['FORG0001', 11, 'error']]);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
+// with the 'caught' filter, an error caught by xsl:try pauses where it was raised; without the 'errors' filter, an
+// uncaught error doesn't pause
+async function testPauseOnCaughtError(saxonJar) {
+    if (/saxon-[hpe]e-12\.[0-4]\b/i.test(saxonJar)) {
+        // Saxon 12.4 and earlier don't report a caught error to the TraceListener
+        return 'skipped';
+    }
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${path.join(fixtures, 'errors.xsl')}`, '-it'] });
+    await dap.request('setExceptionBreakpoints', { filters: ['caught'] });
+    const terminated = dap.event('terminated');
+    await dap.request('configurationDone', {});
+    const stop = await stopped;
+    assert.strictEqual(stop.reason, 'exception');
+    assert.strictEqual(stop.frames[0].name, 'f:fail#1');
+    const info = await dap.request('exceptionInfo', { threadId: 1 });
+    assert.deepStrictEqual([info.exceptionId, info.breakMode, info.description], ['FOAR0001', 'always', 'Error caught by xsl:try']);
+    stopped = dap.stopped();
+    await dap.request('continue', { threadId: 1 });
+    assert.strictEqual(await Promise.race([stopped.then(() => 'stopped'), terminated.then(() => 'terminated')]), 'terminated');
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
+// xsl:message with terminate="yes" pauses, as an error; a static error is reported, linked, but doesn't pause
+async function testMessageTerminateAndStaticError(saxonJar) {
+    let dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'message-terminate.xsl')}`, '-it'] }, {});
+    const stop = await stopped;
+    assert.strictEqual(stop.reason, 'exception');
+    assert.strictEqual(stop.frames[0].line, 4);
+    assert.strictEqual((await dap.request('exceptionInfo', { threadId: 1 })).exceptionId, 'XTMM9000');
+    assert.match(dap.output, /Stopping: no orders/);
+    let terminated = dap.event('terminated');
+    await dap.request('continue', { threadId: 1 });
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+
+    dap = new DapClient(saxonJar);
+    stopped = dap.stopped();
+    terminated = dap.event('terminated');
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'static-error.xsl')}`, '-it'] }, {});
+    assert.strictEqual(await Promise.race([stopped.then(() => 'stopped'), terminated.then(() => 'terminated')]), 'terminated');
+    const linked = dap.events.filter((e) => e.event === 'output' && e.body.source && e.body.source.path.endsWith('static-error.xsl'));
+    assert.ok(linked.some((e) => e.body.line === 3 && /XPST0008/.test(e.body.output)), JSON.stringify(dap.events.filter((e) => e.event === 'output')));
+    assert.deepStrictEqual(dap.events.filter((e) => e.event === 'xsltDebugError').map((e) => [e.body.code, e.body.line]), [['XPST0008', 3]]);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -586,7 +682,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

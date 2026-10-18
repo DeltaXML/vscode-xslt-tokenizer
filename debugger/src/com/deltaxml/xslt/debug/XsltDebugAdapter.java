@@ -18,6 +18,7 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -37,6 +38,7 @@ public final class XsltDebugAdapter {
     private final OutputStream protocolOut;
     private int seq = 1;
     private final Debugger debugger = new Debugger(this);
+    private OutputEventStream stderr;
 
     private XsltDebugAdapter(OutputStream protocolOut) {
         this.protocolOut = protocolOut;
@@ -45,7 +47,8 @@ public final class XsltDebugAdapter {
     public static void main(String[] args) throws IOException {
         XsltDebugAdapter adapter = new XsltDebugAdapter(new BufferedOutputStream(new FileOutputStream(FileDescriptor.out)));
         System.setOut(new PrintStream(new OutputEventStream(adapter, "stdout"), true, "UTF-8"));
-        System.setErr(new PrintStream(new OutputEventStream(adapter, "stderr"), true, "UTF-8"));
+        adapter.stderr = new OutputEventStream(adapter, "stderr");
+        System.setErr(new PrintStream(adapter.stderr, true, "UTF-8"));
         adapter.run(new BufferedInputStream(new FileInputStream(FileDescriptor.in)));
     }
 
@@ -149,7 +152,13 @@ public final class XsltDebugAdapter {
                             .with("supportsConditionalBreakpoints", true)
                             .with("supportsHitConditionalBreakpoints", true)
                             .with("supportsLogPoints", true)
-                            .with("supportsTerminateRequest", true));
+                            .with("supportsTerminateRequest", true)
+                            .with("supportsExceptionInfoRequest", true)
+                            .with("exceptionBreakpointFilters", Arrays.asList(
+                                    Json.obj().with("filter", "errors").with("label", "Dynamic Errors").with("default", true)
+                                            .with("description", "Pause at a dynamic error that ends the transform - including xsl:message with terminate=\"yes\""),
+                                    Json.obj().with("filter", "caught").with("label", "Errors Caught by xsl:try").with("default", false)
+                                            .with("description", "Pause at a dynamic error that an xsl:try catches"))));
                     event("initialized", null);
                     break;
                 case "launch":
@@ -160,6 +169,12 @@ public final class XsltDebugAdapter {
                     respond(request, Json.obj().with("breakpoints", debugger.setBreakpoints(args)));
                     break;
                 case "setExceptionBreakpoints":
+                    debugger.setExceptionBreakpoints(args);
+                    respond(request, Json.obj().with("breakpoints", new ArrayList<Object>()));
+                    break;
+                case "exceptionInfo":
+                    respond(request, debugger.exceptionInfo());
+                    break;
                 case "setFunctionBreakpoints":
                     respond(request, Json.obj().with("breakpoints", new ArrayList<Object>()));
                     break;
@@ -222,11 +237,27 @@ public final class XsltDebugAdapter {
         }
     }
 
-    /** sends each line written to it as a DAP 'output' event */
+    // Saxon's report of an error, written to System.err, as one Debug Console entry linked to the error's location
+    void linkedErrorOutput(String path, int line, int column, Runnable report) {
+        System.err.flush();
+        stderr.link(path, line, column);
+        try {
+            report.run();
+        } finally {
+            System.err.flush();
+            stderr.unlink();
+        }
+    }
+
+    /** sends each line written to it as a DAP 'output' event - or, while linked to a location, all of it as one */
     private static final class OutputEventStream extends OutputStream {
         private final XsltDebugAdapter adapter;
         private final String category;
         private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        private boolean linked;
+        private String linkPath;
+        private int linkLine;
+        private int linkColumn;
 
         OutputEventStream(XsltDebugAdapter adapter, String category) {
             this.adapter = adapter;
@@ -236,9 +267,23 @@ public final class XsltDebugAdapter {
         @Override
         public synchronized void write(int b) {
             buffer.write(b);
-            if (b == '\n') {
+            if (b == '\n' && !linked) {
                 flush();
             }
+        }
+
+        synchronized void link(String path, int line, int column) {
+            emit();
+            linked = true;
+            linkPath = path;
+            linkLine = line;
+            linkColumn = column;
+        }
+
+        synchronized void unlink() {
+            emit();
+            linked = false;
+            linkPath = null;
         }
 
         @Override
@@ -250,10 +295,21 @@ public final class XsltDebugAdapter {
 
         @Override
         public synchronized void flush() {
+            if (!linked) {
+                emit();
+            }
+        }
+
+        private void emit() {
             if (buffer.size() > 0) {
                 String text = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
                 buffer.reset();
-                adapter.event("output", Json.obj().with("category", category).with("output", text));
+                Json.Obj event = Json.obj().with("category", category).with("output", text);
+                if (linked && linkPath != null && linkLine > 0) {
+                    String name = java.nio.file.Paths.get(linkPath).getFileName().toString();
+                    event.with("source", Json.obj().with("name", name).with("path", linkPath)).with("line", linkLine).with("column", Math.max(linkColumn, 1));
+                }
+                adapter.event("output", event);
             }
         }
     }

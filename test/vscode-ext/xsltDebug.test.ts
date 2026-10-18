@@ -15,7 +15,7 @@ import { SaxonTaskProvider, XSLTTask } from '../../src/saxonTaskProvider';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as cp from 'child_process';
-import { XsltDebug, XsltDebugAdapterProcess, XsltDebugLog } from '../../src/xsltDebug';
+import { XsltDebug, XsltDebugAdapterProcess, XsltDebugLog, XsltDebugProblems } from '../../src/xsltDebug';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
 
@@ -262,12 +262,34 @@ suite('XSLT debugger - debug sessions', function () {
 			});
 			const started = await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name: XsltDebug.quickRunConfigurationName, quickRun: true });
 			assert.isTrue(started);
+			// error.xsl's division by zero: paused there, then on to the end
+			const stop = await nextStop();
+			await stop.session.customRequest('continue', { threadId: 1 });
 			const session = await ended;
 			assert.strictEqual(path.basename(session.configuration.xsltFile), 'error.xsl');
 			assert.include(session.configuration.saxonArgs, '-it');
 		} finally {
 			await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
 		}
+	});
+
+	test('a dynamic error: pauses there, and is in the Problems view', async () => {
+		stops = [];
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		const xsltUri = vscode.Uri.file(path.join(fixtures, 'errors.xsl'));
+		const name = 'debug errors.xsl';
+		const ended = terminated(name);
+		assert.isTrue(await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name, saxonJar, xsltFile: xsltUri.fsPath, initialTemplate: '' }));
+		const stop = await nextStop();
+		// 'Dynamic Errors' is on by default
+		assert.strictEqual(stop.reason, 'exception');
+		const info = await stop.session.customRequest('exceptionInfo', { threadId: 1 });
+		assert.strictEqual(info.exceptionId, 'FORG0001');
+		await stop.session.customRequest('continue', { threadId: 1 });
+		await ended;
+		const problems = XsltDebugProblems.get().get(xsltUri) ?? [];
+		assert.deepStrictEqual(problems.map((d) => [d.code, d.range.start.line, d.severity]), [['FORG0001', 10, vscode.DiagnosticSeverity.Error]]);
+		assert.match(problems[0].message, /Cannot convert string "abc" to xs:decimal/);
 	});
 
 	test("the 'Debug Stylesheet' command: the active stylesheet, from xsl:initial-template with no XML context file", async () => {
@@ -283,6 +305,8 @@ suite('XSLT debugger - debug sessions', function () {
 				});
 			});
 			await vscode.commands.executeCommand('xslt-xpath.debugXslt');
+			const stop = await nextStop();
+			await stop.session.customRequest('continue', { threadId: 1 });
 			const session = await ended;
 			assert.strictEqual(session.type, XsltDebug.type);
 			assert.include(session.configuration.saxonArgs, '-it');

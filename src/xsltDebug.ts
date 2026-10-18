@@ -209,6 +209,33 @@ export class XsltDebugLog {
 	}
 }
 
+// the errors Saxon reported in the last debug session - compiling or running the stylesheet - in the Problems view,
+// as for tasks with the Saxon problem matcher; cleared when the next session starts
+export class XsltDebugProblems {
+	private static collection: vscode.DiagnosticCollection | undefined;
+	private static pending = new Map<string, vscode.Diagnostic[]>();
+
+	public static clear() {
+		XsltDebugProblems.pending.clear();
+		XsltDebugProblems.get().clear();
+	}
+
+	public static add(fsPath: string, line: number, code: string, message: string, isWarning: boolean) {
+		const diagnostic = new vscode.Diagnostic(new vscode.Range(line - 1, 0, line - 1, Number.MAX_SAFE_INTEGER), message,
+			isWarning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error);
+		diagnostic.code = code || undefined;
+		diagnostic.source = 'Saxon';
+		const diagnostics = XsltDebugProblems.pending.get(fsPath) ?? [];
+		diagnostics.push(diagnostic);
+		XsltDebugProblems.pending.set(fsPath, diagnostics);
+		XsltDebugProblems.get().set(vscode.Uri.file(fsPath), diagnostics);
+	}
+
+	public static get(): vscode.DiagnosticCollection {
+		return XsltDebugProblems.collection ??= vscode.languages.createDiagnosticCollection('XSLT debugger');
+	}
+}
+
 // Runs the Java debug adapter, relaying Debug Adapter Protocol messages to and from it - rather than VS Code running
 // it (as a DebugAdapterExecutable) - so its stderr and its exit can be logged and reported: e.g. when Java isn't
 // found, or a class isn't on the classpath, the JVM fails before the adapter can say so in the protocol
@@ -224,6 +251,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	constructor(private session: vscode.DebugSession, command: string, args: string[], cwd: string | undefined) {
 		const quote = (arg: string) => /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
 		XsltDebugLog.info(`Debug session '${session.name}': ${command} ${args.map(quote).join(' ')}${cwd ? `\n    in ${cwd}` : ''}`);
+		XsltDebugProblems.clear();
 		this.process = cp.spawn(command, args, { cwd });
 		this.process.stdout?.on('data', (data: Buffer) => this.receive(data));
 		this.process.stderr?.on('data', (data: Buffer) => {
@@ -270,6 +298,11 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			if (message.type === 'event' && message.event === 'xsltDebugLaunch') {
 				const { saxon, java, javaHome, saxonArgs } = message.body ?? {};
 				XsltDebugLog.info(`Debug session '${this.session.name}': ${saxon}, on Java ${java} at ${javaHome}\n    Saxon options: ${(saxonArgs ?? []).join(' ')}`);
+			} else if (message.type === 'event' && message.event === 'xsltDebugError') {
+				const { path: fsPath, line, code, message: text, severity } = message.body ?? {};
+				if (typeof fsPath === 'string' && typeof line === 'number') {
+					XsltDebugProblems.add(fsPath, line, code, text, severity === 'warning');
+				}
 			} else if (message.type === 'event' && message.event === 'terminated') {
 				this.ended = true;
 			}

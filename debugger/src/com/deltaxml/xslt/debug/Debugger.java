@@ -27,7 +27,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 
-import net.sf.saxon.Transform;
+import net.sf.saxon.lib.ErrorReporter;
+import net.sf.saxon.s9api.XmlProcessingError;
+import net.sf.saxon.trans.XPathException;
 import net.sf.saxon.expr.XPathContext;
 import net.sf.saxon.om.GroundedValue;
 import net.sf.saxon.om.Item;
@@ -68,11 +70,18 @@ final class Debugger {
     private String stepPath;
     private int stepLine;
     private volatile boolean pauseRequested;
+    // the exception breakpoint filters: dynamic errors, and errors caught by xsl:try
+    private volatile boolean breakOnErrors = true;
+    private volatile boolean breakOnCaughtErrors;
+    // the error paused at, if any
+    private volatile Map<String, Object> pausedError;
 
     // --- transform-thread state
     private Thread transformThread;
     private boolean runningTask;
     private final Deque<Frame> frames = new ArrayDeque<Frame>();
+    // the xsl:try instructions being evaluated, and the stack depth where each started
+    private final Deque<Map.Entry<Traceable, Integer>> tryDepths = new ArrayDeque<Map.Entry<Traceable, Integer>>();
     private int callDepth;
     // the line last stopped at, where breakpoints are ignored until execution moves to another line or item
     private String stoppedPath;
@@ -176,7 +185,7 @@ final class Debugger {
             public void run() {
                 int exitCode = 0;
                 try {
-                    new Transform().doTransform(args.toArray(new String[0]), "java net.sf.saxon.Transform");
+                    new DebugTransform(Debugger.this).doTransform(args.toArray(new String[0]), "java net.sf.saxon.Transform");
                 } catch (Throwable e) {
                     exitCode = 2;
                     // Saxon has already reported a failure it throws as a plain RuntimeException
@@ -300,6 +309,9 @@ final class Debugger {
             // e.g. a lazily evaluated variable being evaluated for the Variables view
             return;
         }
+        if (traceable.getClass().getSimpleName().equals("TryCatch")) {
+            tryDepths.push(new java.util.AbstractMap.SimpleImmutableEntry<Traceable, Integer>(traceable, frames.size()));
+        }
         boolean isCall = traceable instanceof TraceableComponent;
         if (isCall || isFocusInstruction(traceable)) {
             frames.push(new Frame(traceable, frameName(traceable, properties), isCall));
@@ -390,6 +402,7 @@ final class Debugger {
             frame.systemId = systemId;
             frame.line = attribute.line;
             frame.column = attribute.column;
+            int depthBefore = frames.size();
             frames.push(frame);
             callDepth++;
             xpathDepth++;
@@ -408,8 +421,8 @@ final class Debugger {
             } finally {
                 xpathFrame = null;
                 xpathParts = null;
-                frames.pop();
-                callDepth--;
+                // also the frames of any stylesheet function it was in, if it failed
+                unwindTo(depthBefore);
                 xpathDepth--;
             }
         }
@@ -437,6 +450,12 @@ final class Debugger {
 
     void leave(Traceable traceable) {
         if (Thread.currentThread() != transformThread || runningTask) {
+            return;
+        }
+        // an xsl:try is complete, including any xsl:catch: the frames an error it caught was raised in - which get
+        // no leave() calls - are removed (as also by caughtError, but Saxon 12.4 and earlier don't call that)
+        if (!tryDepths.isEmpty() && tryDepths.peek().getKey() == traceable) {
+            unwindTo(tryDepths.pop().getValue());
             return;
         }
         Frame top = frames.peek();
@@ -529,6 +548,12 @@ final class Debugger {
     // paused in this frame - the frames above it (e.g. a function, while a lazily evaluated argument of its call is
     // being evaluated) aren't shown
     private void pause(String reason, Frame frame, int frameCallDepth) {
+        pause(reason, frame, frameCallDepth, null);
+    }
+
+    // with an error: its code and message, for the stopped event and the exceptionInfo request
+    private void pause(String reason, Frame frame, int frameCallDepth, Map<String, Object> error) {
+        pausedError = error;
         pausedFrames = new ArrayList<Frame>();
         for (Frame f : frames) {
             if (!pausedFrames.isEmpty() || f == frame) {
@@ -544,7 +569,11 @@ final class Debugger {
             paused = true;
             step = Step.NONE;
         }
-        dap.event("stopped", Json.obj().with("reason", reason).with("threadId", XsltDebugAdapter.THREAD_ID).with("allThreadsStopped", true));
+        Json.Obj stopped = Json.obj().with("reason", reason).with("threadId", XsltDebugAdapter.THREAD_ID).with("allThreadsStopped", true);
+        if (error != null) {
+            stopped.with("description", error.get("description")).with("text", error.get("exceptionId") + ": " + Json.object(error, "details").get("message"));
+        }
+        dap.event("stopped", stopped);
         while (true) {
             FutureTask<?> task;
             synchronized (lock) {
@@ -585,6 +614,79 @@ final class Debugger {
 
     private static Map<String, Object> scope(String name, int reference, boolean expensive) {
         return Json.obj().with("name", name).with("variablesReference", reference).with("expensive", expensive);
+    }
+
+    // ---------------------------------------------------------------- errors
+
+    void setExceptionBreakpoints(Map<String, Object> args) {
+        List<Object> filters = Json.array(args, "filters");
+        breakOnErrors = filters.contains("errors");
+        breakOnCaughtErrors = filters.contains("caught");
+    }
+
+    Map<String, Object> exceptionInfo() {
+        Map<String, Object> error = pausedError;
+        if (error == null) {
+            throw new IllegalStateException("not paused at an error");
+        }
+        return error;
+    }
+
+    // an error Saxon reports, compiling or running the stylesheet: Saxon's report, linked to the error's location in
+    // the Debug Console, and the location for the Problems view - and with a dynamic error, a pause where it happened
+    // (Saxon reports it at the top level, but the debugger's stack frames still show where it was raised)
+    void reportError(XmlProcessingError error, ErrorReporter saxonReporter, boolean compiling) {
+        Location location = error.getLocation();
+        String path = location == null || location.getSystemId() == null ? null : pathOf(location.getSystemId());
+        int line = location == null ? -1 : location.getLineNumber();
+        int column = location == null ? -1 : location.getColumnNumber();
+        dap.linkedErrorOutput(path, line, column, () -> {
+            if (saxonReporter != null) {
+                saxonReporter.report(error);
+            }
+        });
+        String code = error.getErrorCode() == null ? "" : error.getErrorCode().getLocalName();
+        if (path != null && line > 0) {
+            dap.event("xsltDebugError", Json.obj().with("path", path).with("line", line).with("column", column)
+                    .with("code", code).with("message", error.getMessage()).with("severity", error.isWarning() ? "warning" : "error"));
+        }
+        if (!error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
+            pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "unhandled", "Dynamic error"));
+        }
+    }
+
+    // the stack depth where an xsl:try starts - from the TraceListener
+    Integer checkpoint() {
+        return Thread.currentThread() == transformThread && !runningTask ? frames.size() : null;
+    }
+
+    // an error caught by xsl:try - from the TraceListener: the frames it was raised in are left without leave()
+    // calls, so they're removed - after pausing there, if that's asked for
+    void caughtError(Object checkpoint, XPathException error) {
+        if (Thread.currentThread() != transformThread || runningTask) {
+            return;
+        }
+        if (breakOnCaughtErrors && !frames.isEmpty()) {
+            String code = error.getErrorCodeQName() == null ? "" : error.getErrorCodeQName().getLocalPart();
+            pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "always", "Error caught by xsl:try"));
+        }
+        if (checkpoint instanceof Integer) {
+            unwindTo((Integer) checkpoint);
+        }
+    }
+
+    // removes the frames above this depth, as their leave() calls would
+    private void unwindTo(int depth) {
+        while (frames.size() > depth) {
+            if (frames.pop().isCall) {
+                callDepth--;
+            }
+        }
+    }
+
+    private static Map<String, Object> errorInfo(String code, String message, String breakMode, String description) {
+        return Json.obj().with("exceptionId", code.isEmpty() ? "error" : code).with("description", description).with("breakMode", breakMode)
+                .with("details", Json.obj().with("message", message).with("typeName", code));
     }
 
     // instructions that change the focus get their own stack frame, showing the context item - unlike calls, they
