@@ -29,6 +29,7 @@ import java.util.regex.Matcher;
 
 import net.sf.saxon.Transform;
 import net.sf.saxon.expr.XPathContext;
+import net.sf.saxon.om.GroundedValue;
 import net.sf.saxon.om.Item;
 import net.sf.saxon.om.StructuredQName;
 import net.sf.saxon.s9api.Location;
@@ -80,6 +81,16 @@ final class Debugger {
     private final Values values = new Values();
     private final Map<String, String> pathCache = new HashMap<String, String>();
     private final Map<String, String> sourceTexts = new HashMap<String, String>();
+    // the line last entered, and the depth of XPath expressions being stepped through (see stepThroughXPath)
+    private String enteredPath;
+    private int enteredLine;
+    private int xpathDepth;
+    // the XPath expression being stepped through: its stack frame, and its parts as reported to the TraceListener
+    private Frame xpathFrame;
+    private Map<Location, Boolean> xpathParts;
+    // the call depth when last paused: that of the frame paused in
+    private int pausedCallDepth;
+    private final Map<String, BreakableLines> sourceLines = new HashMap<String, BreakableLines>();
 
     Debugger(XsltDebugAdapter dap) {
         this.dap = dap;
@@ -174,7 +185,7 @@ final class Debugger {
                 return;
             }
             step = nextStep;
-            stepCallDepth = callDepth;
+            stepCallDepth = pausedCallDepth;
             stepPath = stoppedPath;
             stepLine = stoppedLine;
             paused = false;
@@ -212,7 +223,7 @@ final class Debugger {
                 List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
                 result.add(scope("Locals", values.register(values.locals(frame.context)), false));
                 result.add(scope("Context", values.register(values.focus(frame.context)), false));
-                result.add(scope("Globals", values.register(values.globals(frame.context)), true));
+                result.add(scope("Globals", values.register(values.globals(xsltContext(frame))), true));
                 return result;
             }
         });
@@ -240,7 +251,7 @@ final class Debugger {
                         throw new IllegalArgumentException("not a variable reference");
                     }
                 }
-                XdmValue result = Evaluator.evaluate(frame.current, frame.context, xpath);
+                XdmValue result = Evaluator.evaluate(frame.current, frame.context, xsltContext(frame), xpath);
                 Map<String, Object> variable = values.variable("result", result.getUnderlyingValue());
                 return Json.obj().with("result", variable.get("value")).with("type", variable.get("type"))
                         .with("variablesReference", variable.get("variablesReference"));
@@ -284,7 +295,10 @@ final class Debugger {
         } else if (frames.isEmpty()) {
             frames.push(new Frame(null, "transform", false));
         }
-        Frame top = frames.peek();
+        // a part of the XPath expression being stepped through belongs to its frame - even when, evaluated lazily
+        // (e.g. a function argument), it's evaluated within a function it calls
+        Frame top = xpathParts != null && traceable.getLocation() != null && xpathParts.containsKey(traceable.getLocation()) ? xpathFrame : frames.peek();
+        int depth = top == xpathFrame && xpathFrame != null ? xpathFrame.callDepth : callDepth;
         top.context = context;
         top.current = traceable;
         Location location = traceable.getLocation();
@@ -303,6 +317,9 @@ final class Debugger {
         if (!onStoppedLine) {
             stoppedPath = null;
         }
+        boolean onNewLine = !(top.line == enteredLine && path.equals(enteredPath));
+        enteredPath = path;
+        enteredLine = top.line;
 
         String reason = null;
         if (pauseRequested) {
@@ -311,7 +328,7 @@ final class Debugger {
             reason = "entry";
         } else if (!onStoppedLine && breakpointHit(path, top.line, top)) {
             reason = "breakpoint";
-        } else if (isStepComplete(path, top.line)) {
+        } else if (isStepComplete(path, top.line, depth)) {
             reason = "step";
         }
         if (reason != null) {
@@ -319,8 +336,71 @@ final class Debugger {
             stopOnEntry = false;
             stoppedPath = path;
             stoppedLine = top.line;
-            pause(reason);
+            pause(reason, top, depth);
         }
+        if (onNewLine && xpathDepth == 0) {
+            stepThroughXPath(traceable, context, path, top.line, reason != null && step == Step.INTO);
+        }
+    }
+
+    // Saxon only reports an attribute's XPath expression at its instruction's line, so a multi-line expression in an
+    // instruction's attributes is also evaluated separately - instrumented, so each part reports its own line - when
+    // it's stepped into, or has a breakpoint in it. It's evaluated in the instruction's context, in a stack frame of
+    // its own, before the instruction itself runs. See XPathEngine
+    private void stepThroughXPath(Traceable instruction, XPathContext context, String path, int line, boolean steppingIn) {
+        if (!sourceLines.containsKey(path)) {
+            sourceLines.put(path, BreakableLines.forFile(path));
+        }
+        BreakableLines lines = sourceLines.get(path);
+        if (lines == null) {
+            return;
+        }
+        for (BreakableLines.XPathAttribute attribute : lines.xpathAttributesAt(line)) {
+            if (!steppingIn && !hasBreakpointWithin(path, attribute, line)) {
+                continue;
+            }
+            String name = attribute.elementName + "/@" + attribute.name;
+            String systemId = instruction.getLocation().getSystemId();
+            Frame frame = new Frame(null, name + " (XPath)", true);
+            frame.context = context;
+            frame.xsltContext = context;
+            frame.current = instruction;
+            frame.systemId = systemId;
+            frame.line = attribute.line;
+            frame.column = attribute.column;
+            frames.push(frame);
+            callDepth++;
+            xpathDepth++;
+            frame.callDepth = callDepth;
+            try {
+                XPathEngine.Compiled compiled = XPathEngine.compile(attribute.xpath, instruction, context, context,
+                        new XPathEngine.SourcePosition(systemId, attribute.line, attribute.column));
+                xpathFrame = frame;
+                xpathParts = compiled.instrumented;
+                GroundedValue value = compiled.evaluate();
+                dap.log(name + " on line " + attribute.line + " = " + Values.summary(XdmValue.wrap(value)));
+            } catch (Exception | LinkageError e) {
+                dap.log(name + " on line " + attribute.line + " couldn't be evaluated separately, to step through it: " + message(e));
+            } finally {
+                xpathFrame = null;
+                xpathParts = null;
+                frames.pop();
+                callDepth--;
+                xpathDepth--;
+            }
+        }
+    }
+
+    private boolean hasBreakpointWithin(String path, BreakableLines.XPathAttribute attribute, int instructionLine) {
+        Map<Integer, Breakpoint> lines = breakpoints.get(path);
+        if (lines != null) {
+            for (Integer line : lines.keySet()) {
+                if (line >= attribute.line && line <= attribute.lastLine && line != instructionLine) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     void leave(Traceable traceable) {
@@ -340,10 +420,11 @@ final class Debugger {
         if (Thread.currentThread() == transformThread && !runningTask) {
             // a new iteration: a breakpoint on the line last stopped at applies again
             stoppedPath = null;
+            enteredPath = null;
         }
     }
 
-    private boolean isStepComplete(String path, int line) {
+    private boolean isStepComplete(String path, int line, int callDepth) {
         boolean sameLine = line == stepLine && path.equals(stepPath);
         switch (step) {
             case OVER: return callDepth < stepCallDepth || (callDepth == stepCallDepth && !sameLine);
@@ -363,7 +444,7 @@ final class Debugger {
         try {
             if (bp.condition != null) {
                 try {
-                    if (!Evaluator.effectiveBooleanValue(frame.current, frame.context, bp.condition)) {
+                    if (!Evaluator.effectiveBooleanValue(frame.current, frame.context, xsltContext(frame), bp.condition)) {
                         return false;
                     }
                 } catch (Exception e) {
@@ -390,7 +471,7 @@ final class Debugger {
         while (m.find()) {
             String text;
             try {
-                text = Values.logText(Evaluator.evaluate(frame.current, frame.context, m.group(1)));
+                text = Values.logText(Evaluator.evaluate(frame.current, frame.context, xsltContext(frame), m.group(1)));
             } catch (Exception e) {
                 text = "<" + message(e) + ">";
             }
@@ -400,8 +481,19 @@ final class Debugger {
         return sb.toString();
     }
 
-    private void pause(String reason) {
-        pausedFrames = new ArrayList<Frame>(frames);
+    // paused in this frame - the frames above it (e.g. a function, while a lazily evaluated argument of its call is
+    // being evaluated) aren't shown
+    private void pause(String reason, Frame frame, int frameCallDepth) {
+        pausedFrames = new ArrayList<Frame>();
+        for (Frame f : frames) {
+            if (!pausedFrames.isEmpty() || f == frame) {
+                pausedFrames.add(f);
+            }
+        }
+        if (pausedFrames.isEmpty()) {
+            pausedFrames.addAll(frames);
+        }
+        pausedCallDepth = frameCallDepth;
         values.clear();
         synchronized (lock) {
             paused = true;
@@ -432,6 +524,11 @@ final class Debugger {
             }
         }
         values.clear();
+    }
+
+    // the XSLT context of a frame's XPath: within an XPath expression being stepped through, its instruction's
+    private static XPathContext xsltContext(Frame frame) {
+        return frame.xsltContext != null ? frame.xsltContext : frame.context;
     }
 
     private Frame frame(int frameId) {
@@ -575,6 +672,10 @@ final class Debugger {
         final Traceable owner;
         final String name;
         final boolean isCall;
+        // for an XPath expression's frame: the call depth within it, and its instruction's context - for the
+        // stylesheet's functions and global variables, and current(), current-group() etc.
+        int callDepth;
+        XPathContext xsltContext;
         Traceable current;
         XPathContext context;
         String systemId;

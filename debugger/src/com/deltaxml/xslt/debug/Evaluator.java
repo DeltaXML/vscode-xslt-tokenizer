@@ -39,11 +39,29 @@ final class Evaluator {
 
     private Evaluator() { }
 
-    static XdmValue evaluate(Traceable instruction, XPathContext context, String xpath) throws SaxonApiException {
+    // false once XPathEngine (which uses Saxon's internal classes) turns out not to work with this Saxon version
+    private static boolean engineWorks = true;
+
+    // context: for the variables in scope and the context item; xsltContext: for the stylesheet's functions and
+    // global variables, and current() etc. - the same, except within an XPath expression being stepped through
+    static XdmValue evaluate(Traceable instruction, XPathContext context, XPathContext xsltContext, String xpath) throws Exception {
+        if (engineWorks) {
+            try {
+                // with the stylesheet's functions, and current() etc.
+                return XdmValue.wrap(XPathEngine.evaluate(xpath, instruction, context, xsltContext));
+            } catch (LinkageError | ReflectiveOperationException | IllegalStateException e) {
+                engineWorks = false;
+            }
+        }
         return selector(instruction, context, xpath).evaluate();
     }
 
-    static boolean effectiveBooleanValue(Traceable instruction, XPathContext context, String xpath) throws SaxonApiException {
+    static boolean effectiveBooleanValue(Traceable instruction, XPathContext context, XPathContext xsltContext, String xpath) throws Exception {
+        if (engineWorks) {
+            // the newline ends any trailing XPath comment
+            XdmValue value = evaluate(instruction, context, xsltContext, "boolean((" + xpath + "\n))");
+            return value.size() == 1 && Boolean.parseBoolean(value.itemAt(0).getStringValue());
+        }
         return selector(instruction, context, xpath).effectiveBooleanValue();
     }
 

@@ -63,12 +63,41 @@ final class BreakableLines {
         final String name;
         final String untracedReason;
         int firstChildEndLine;
+        final List<XPathAttribute> xpathAttributes = new ArrayList<XPathAttribute>();
 
         Tag(int startLine, int endLine, String name, String untracedReason) {
             this.startLine = startLine;
             this.endLine = endLine;
             this.name = name;
             this.untracedReason = untracedReason;
+        }
+    }
+
+    // XPath attributes whose expressions are evaluated in the instruction's own context - so they can be evaluated
+    // separately there, for stepping through (others, e.g. group-by, are evaluated for each item)
+    private static final Set<String> XPATH_ATTRIBUTES = new HashSet<String>(Arrays.asList("select", "test", "value"));
+
+    /** a multi-line XPath expression in an instruction's attribute */
+    static final class XPathAttribute {
+        final String elementName;
+        final String name;
+        // the expression, as the XML parser would give it to Saxon - except that newlines outside string literals
+        // are kept, so its line numbers are those of the stylesheet
+        final String xpath;
+        // where the expression starts: the attribute value's first character
+        final int line;
+        final int column;
+        final int lastLine;
+        // the stylesheet lines with the start of an expression on them
+        final Set<Integer> expressionLines = new HashSet<Integer>();
+
+        XPathAttribute(String elementName, String name, String xpath, int line, int column, int lastLine) {
+            this.elementName = elementName;
+            this.name = name;
+            this.xpath = xpath;
+            this.line = line;
+            this.column = column;
+            this.lastLine = lastLine;
         }
     }
 
@@ -154,6 +183,9 @@ final class BreakableLines {
                     reason = "isn't executed";
                 }
                 Tag tag = new Tag(startLine, endLine, isXslt ? "xsl:" + localName : qName, reason);
+                if (isXslt && reason == null && startOffset >= 0 && startLine < endLine) {
+                    addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
+                }
                 if (parent != null && parent.firstChildEndLine == 0) {
                     parent.firstChildEndLine = endLine;
                 }
@@ -193,12 +225,130 @@ final class BreakableLines {
         } else if (best.untracedReason != null) {
             return new Resolution(false, line, new ArrayList<Integer>(), best.name + " " + best.untracedReason);
         }
+        if (line != best.endLine && line != best.startLine) {
+            // within a multi-line XPath expression: stops there when the expression is stepped through (on the
+            // start tag's first or last line, the breakpoint is for the instruction)
+            for (XPathAttribute attribute : best.xpathAttributes) {
+                if (attribute.line <= line && line <= attribute.lastLine) {
+                    return attribute.expressionLines.contains(line) ? new Resolution(true, line, new ArrayList<Integer>(), null) :
+                            new Resolution(false, line, new ArrayList<Integer>(), "No XPath expression starts on this line");
+                }
+            }
+        }
         List<Integer> aliases = new ArrayList<Integer>();
         String localName = best.name.startsWith("xsl:") ? best.name.substring(4) : "";
         if (REPORTED_AT_FIRST_CHILD.contains(localName) && best.firstChildEndLine > 0 && best.firstChildEndLine != best.endLine) {
             aliases.add(best.firstChildEndLine);
         }
         return new Resolution(true, best.endLine, aliases, null);
+    }
+
+    /** the multi-line XPath attributes of the traced instruction whose start tag ends on this line */
+    List<XPathAttribute> xpathAttributesAt(int endLine) {
+        for (Tag tag : tags) {
+            if (tag.endLine == endLine && !tag.xpathAttributes.isEmpty()) {
+                return tag.xpathAttributes;
+            }
+        }
+        return new ArrayList<XPathAttribute>();
+    }
+
+    private static final java.util.regex.Pattern ATTRIBUTE = java.util.regex.Pattern.compile("\\s([\\w.:-]+)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')");
+    // keywords that don't start an expression of their own (an operator's expression starts at its first operand)
+    private static final Set<String> NON_STARTING_KEYWORDS = new HashSet<String>(Arrays.asList(
+            "return", "then", "else", "satisfies", "in", "at", "and", "or", "div", "idiv", "mod", "eq", "ne", "lt",
+            "le", "gt", "ge", "is", "to", "union", "intersect", "except", "instance", "of", "treat", "as",
+            "castable", "cast", "otherwise"));
+    private static final java.util.regex.Pattern TOKEN = java.util.regex.Pattern.compile(
+            "\\(:.*?:\\)|\"(?:[^\"]|\"\")*\"?|'(?:[^']|'')*'?|\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+)?|\\.\\d+|[$@.\\[]|[\\p{L}_][\\p{L}\\p{N}_.\\-]*(?::[\\p{L}_*][\\p{L}\\p{N}_.\\-]*)?");
+
+    // whether an expression (other than a literal, which isn't stopped at) starts on a line of an expression - as
+    // the expression's parts are reported where they start
+    static boolean startsExpression(String line) {
+        java.util.regex.Matcher m = TOKEN.matcher(line);
+        while (m.find()) {
+            String token = m.group();
+            char first = token.charAt(0);
+            if (first == '(' || first == '"' || first == '\'' || Character.isDigit(first) || (first == '.' && token.length() > 1)) {
+                // a comment, string literal or number
+                continue;
+            }
+            // a variable reference, attribute, context item, array constructor or predicate, or a name
+            if (first == '$' || first == '@' || first == '.' || first == '[' || !NON_STARTING_KEYWORDS.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void addXPathAttributes(Tag tag, String text, int[] lineStarts, int startOffset, int endOffset) {
+        java.util.regex.Matcher m = ATTRIBUTE.matcher(text.substring(startOffset, endOffset));
+        while (m.find()) {
+            String value = m.group(2) != null ? m.group(2) : m.group(3);
+            int group = m.group(2) != null ? 2 : 3;
+            if (!XPATH_ATTRIBUTES.contains(m.group(1)) || value.indexOf('\n') < 0) {
+                continue;
+            }
+            int valueOffset = startOffset + m.start(group);
+            int line = lineOf(lineStarts, valueOffset);
+            int column = valueOffset - lineStarts[line - 1] + 1;
+            String[] valueLines = value.split("\n", -1);
+            XPathAttribute attribute = new XPathAttribute(tag.name, m.group(1), xpathText(value), line, column, line + valueLines.length - 1);
+            for (int i = 0; i < valueLines.length; i++) {
+                if (startsExpression(valueLines[i])) {
+                    attribute.expressionLines.add(line + i);
+                }
+            }
+            tag.xpathAttributes.add(attribute);
+        }
+    }
+
+    // an attribute value as the XML parser gives it: character and entity references replaced, and whitespace
+    // characters as spaces - except, outside string literals, newlines, so the expression keeps its line numbers
+    static String xpathText(String value) {
+        String text = value.replace("\r\n", "\n");
+        StringBuilder decoded = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            int semicolon = c == '&' ? text.indexOf(';', i) : -1;
+            if (semicolon > i) {
+                String name = text.substring(i + 1, semicolon);
+                String replacement = name.equals("lt") ? "<" : name.equals("gt") ? ">" : name.equals("amp") ? "&" :
+                        name.equals("quot") ? "\"" : name.equals("apos") ? "'" : null;
+                if (replacement == null && name.startsWith("#")) {
+                    try {
+                        int code = name.startsWith("#x") ? Integer.parseInt(name.substring(2), 16) : Integer.parseInt(name.substring(1));
+                        replacement = new String(Character.toChars(code));
+                    } catch (Exception e) {
+                        replacement = null;
+                    }
+                }
+                if (replacement != null) {
+                    decoded.append(replacement);
+                    i = semicolon;
+                    continue;
+                }
+            }
+            decoded.append(c);
+        }
+        StringBuilder result = new StringBuilder();
+        char quote = 0;
+        for (int i = 0; i < decoded.length(); i++) {
+            char c = decoded.charAt(i);
+            if (quote == 0 && (c == '"' || c == '\'')) {
+                quote = c;
+            } else if (quote != 0 && c == quote) {
+                // a doubled quote is an escaped quote, still in the literal
+                if (i + 1 < decoded.length() && decoded.charAt(i + 1) == quote) {
+                    result.append(c);
+                    i++;
+                } else {
+                    quote = 0;
+                }
+            }
+            result.append(quote == 0 && c == '\n' ? '\n' : Character.isWhitespace(c) ? ' ' : c);
+        }
+        return result.toString();
     }
 
     private static int[] lineStarts(String text) {

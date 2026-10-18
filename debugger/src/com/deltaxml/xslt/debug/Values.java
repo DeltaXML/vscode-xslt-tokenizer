@@ -139,6 +139,28 @@ final class Values {
         return result;
     }
 
+    // the variable with this display name (lexical QName) in scope: a local variable or tunnel parameter, else a
+    // global variable or parameter - evaluated now if it hasn't been used yet - or null if there's none
+    static Map.Entry<StructuredQName, Sequence> variableNamed(XPathContext context, XPathContext xsltContext, String displayName) {
+        Map.Entry<StructuredQName, Sequence> variable = inScopeVariables(context).get(displayName);
+        if (variable == null && xsltContext != context) {
+            variable = inScopeVariables(xsltContext).get(displayName);
+        }
+        if (variable != null) {
+            return variable;
+        }
+        for (GlobalVariable global : globalVariableList(xsltContext)) {
+            if (global.getVariableQName().getDisplayName().equals(displayName)) {
+                try {
+                    return new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(global.getVariableQName(), global.evaluateVariable(xsltContext));
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
     private static List<Map.Entry<StructuredQName, Sequence>> localVariables(XPathContext context) {
         List<Map.Entry<StructuredQName, Sequence>> result = new ArrayList<Map.Entry<StructuredQName, Sequence>>();
         StackFrame frame = context.getStackFrame();
