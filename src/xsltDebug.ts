@@ -26,6 +26,22 @@ export class XsltDebug {
 		return match ? Number.parseInt(match[1]) : undefined;
 	}
 
+	public static readonly quickRunConfigurationName = 'Debug Active Stylesheet';
+
+	// the configurations offered without a launch.json, and written to a new one: the active stylesheet, as Quick Run
+	// runs it, then one for each 'xslt' task
+	public static providedConfigurations(tasks: vscode.TaskDefinition[]): vscode.DebugConfiguration[] {
+		const configurations: vscode.DebugConfiguration[] = [{ type: XsltDebug.type, request: 'launch', name: XsltDebug.quickRunConfigurationName, quickRun: true }];
+		const labels = new Set<string>();
+		for (const task of tasks) {
+			if (task.type === 'xslt' && typeof task.label === 'string' && !labels.has(task.label)) {
+				labels.add(task.label);
+				configurations.push({ type: XsltDebug.type, request: 'launch', name: `Debug ${task.label}`, task: task.label });
+			}
+		}
+		return configurations;
+	}
+
 	// a launch configuration's properties, with those of the 'xslt' task it names (if any) as defaults
 	public static withTaskProperties(config: vscode.DebugConfiguration, tasks: vscode.TaskDefinition[]): vscode.DebugConfiguration | string {
 		if (config.task === undefined) {
@@ -57,13 +73,24 @@ export class XsltDebug {
 
 export class XsltDebugConfigurationProvider implements vscode.DebugConfigurationProvider {
 
-	// configurationForActiveEditor: for F5 with no launch.json - the configuration to debug the active stylesheet as
-	// Quick Run would run it, or undefined (having said why) if it can't be debugged
+	// configurationForActiveEditor: for F5 with no launch.json, or a "quickRun" configuration - the configuration to
+	// debug the active stylesheet as Quick Run would run it, or undefined (having said why) if it can't be debugged
 	constructor(private configurationForActiveEditor: () => Promise<vscode.DebugConfiguration | undefined>) { }
 
+	// for 'create a launch.json file' (Initial) and the Run and Debug view's 'XSLT (Saxon)' configurations with no
+	// launch.json (Dynamic): the active stylesheet, as Quick Run runs it, and each 'xslt' task in tasks.json
+	public async provideDebugConfigurations(_folder: vscode.WorkspaceFolder | undefined): Promise<vscode.DebugConfiguration[]> {
+		const tasks: vscode.TaskDefinition[] = (await SaxonJsTaskProvider.getTasksObject()).tasks || [];
+		return XsltDebug.providedConfigurations(tasks);
+	}
+
 	public async resolveDebugConfiguration(_folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): Promise<vscode.DebugConfiguration | undefined> {
-		if (!config.type && !config.request && !config.name) {
-			return this.configurationForActiveEditor();
+		if ((!config.type && !config.request && !config.name) || config.quickRun) {
+			const forActiveEditor = await this.configurationForActiveEditor();
+			if (!forActiveEditor) {
+				return undefined;
+			}
+			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}) };
 		}
 		const tasksObject = config.task !== undefined ? await SaxonJsTaskProvider.getTasksObject() : { tasks: [] };
 		const resolved = XsltDebug.withTaskProperties(config, tasksObject.tasks || []);

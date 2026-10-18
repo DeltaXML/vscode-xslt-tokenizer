@@ -42,7 +42,9 @@
 		"onLanguage:bpmn",
 		"onCommand:workbench.action.tasks.runTask",
 		"onDebugResolve:xslt-saxon",
-		"onCommand:xslt-xpath.debugXslt"
+		"onCommand:xslt-xpath.debugXslt",
+		"onDebugDynamicConfigurations:xslt-saxon",
+		"onDebugInitialConfigurations"
 	],
 	"license": "MIT",
 	"main": "./out/src/extension.js",
@@ -1591,6 +1593,11 @@
 				"configurationAttributes": {
 					"launch": {
 						"properties": {
+							"quickRun": {
+								"type": "boolean",
+								"default": true,
+								"description": "Debug the stylesheet in the active editor as Quick Run runs it - with the XML context file (or from xsl:initial-template) and the Quick Run task's settings"
+							},
 							"task": {
 								"type": "string",
 								"description": "The label of an 'xslt' task in tasks.json whose settings (xsltFile, xmlSource, parameters etc.) are used - properties set here override them"
@@ -1747,17 +1754,17 @@
 						}
 					}
 				},
-				"initialConfigurations": [
-					{
-						"type": "xslt-saxon",
-						"request": "launch",
-						"name": "Debug XSLT",
-						"xsltFile": "${file}",
-						"xmlSource": "${command:xslt-xpath.pickXmlSourceFile}",
-						"resultPath": "${workspaceFolder}/xsl-out/result1.xml"
-					}
-				],
 				"configurationSnippets": [
+					{
+						"label": "XSLT (Saxon): Debug Active Stylesheet",
+						"description": "Debug the stylesheet in the active editor, as Quick Run runs it",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug Active Stylesheet",
+							"quickRun": true
+						}
+					},
 					{
 						"label": "XSLT (Saxon): Debug a Task",
 						"description": "Debug an 'xslt' task from tasks.json",
@@ -1797,6 +1804,13 @@
 		"breakpoints": [
 			{
 				"language": "xslt"
+			}
+		],
+		"viewsWelcome": [
+			{
+				"view": "debug",
+				"contents": "Debug the XSLT stylesheet in the active editor with SaxonJ, as Quick Run runs it.\n[Debug Stylesheet](command:xslt-xpath.debugXslt)",
+				"when": "debugStartLanguage == xslt"
 			}
 		]
 	},

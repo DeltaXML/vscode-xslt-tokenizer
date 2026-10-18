@@ -188,7 +188,7 @@ Stylesheets can be debugged with SaxonJ (Saxon 12 or later, any edition, includi
 - XPath expressions are evaluated in the Watch view and the Debug Console (with in-scope variables, namespaces and the context item - but not stylesheet functions); hover over a variable to see its value
 - `xsl:message` output, and the result when there is no `resultPath`, appear in the Debug Console
 
-For a `launch.json` configuration, use the `xslt-saxon` debugger type with the same properties as an `xslt` task, or with `"task"` set to the label of an `xslt` task in `tasks.json`:
+With no `launch.json`, the **Run and Debug** view offers **Debug Active Stylesheet** and a configuration for each `xslt` task in `tasks.json` - and **create a launch.json file** adds these to a new `launch.json`. A `launch.json` configuration uses the `xslt-saxon` debugger type with `"quickRun": true` (the active stylesheet, as Quick Run runs it), the same properties as an `xslt` task, or `"task"` set to the label of an `xslt` task in `tasks.json`:
 
 ```json
 {

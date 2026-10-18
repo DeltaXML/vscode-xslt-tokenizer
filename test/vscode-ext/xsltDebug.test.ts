@@ -54,6 +54,20 @@ suite('XSLT debugger - configurations', () => {
 		assert.match(<string>XsltDebug.withTaskProperties({ type: XsltDebug.type, request: 'launch', name: 'x', task: 'missing' }, tasks), /no 'xslt' task labelled 'missing'/);
 	});
 
+	test('configurations without a launch.json: the active stylesheet, then each xslt task', () => {
+		const tasks = [
+			{ type: 'xslt', label: 'report' },
+			{ type: 'xslt-js', label: 'js report' },
+			{ type: 'xslt', label: 'report' },
+			{ type: 'xslt', label: 'summary' },
+		];
+		assert.deepStrictEqual(XsltDebug.providedConfigurations(tasks), [
+			{ type: XsltDebug.type, request: 'launch', name: 'Debug Active Stylesheet', quickRun: true },
+			{ type: XsltDebug.type, request: 'launch', name: 'Debug report', task: 'report' },
+			{ type: XsltDebug.type, request: 'launch', name: 'Debug summary', task: 'summary' },
+		]);
+	});
+
 	test('runs Saxon with the task options, less tracing, timing and the message-escaping AltTransform', () => {
 		const task = <XSLTTask><unknown>{
 			type: 'xslt', label: 'report', saxonJar: '/opt/SaxonPE13-1J/saxon-pe-13.1.jar', xsltFile: 'report.xsl', xmlSource: 'books.xml',
@@ -155,6 +169,28 @@ suite('XSLT debugger - debug sessions', function () {
 
 		await session.customRequest('continue', { threadId: 1 });
 		await ended;
+	});
+
+	test("a 'quickRun' configuration (as offered with no launch.json): the active stylesheet, with its task's settings", async () => {
+		stops = [];
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', saxonJar, vscode.ConfigurationTarget.Global);
+		try {
+			await vscode.window.showTextDocument(vscode.Uri.file(path.join(fixtures, 'error.xsl')));
+			const ended = new Promise<vscode.DebugSession>((resolve) => {
+				const listener = vscode.debug.onDidTerminateDebugSession((session) => {
+					listener.dispose();
+					resolve(session);
+				});
+			});
+			const started = await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name: XsltDebug.quickRunConfigurationName, quickRun: true });
+			assert.isTrue(started);
+			const session = await ended;
+			assert.strictEqual(path.basename(session.configuration.xsltFile), 'error.xsl');
+			assert.include(session.configuration.saxonArgs, '-it');
+		} finally {
+			await vscode.workspace.getConfiguration('XSLT.tasks').update('saxonJar', undefined, vscode.ConfigurationTarget.Global);
+		}
 	});
 
 	test("the 'Debug Stylesheet' command: the active stylesheet, from xsl:initial-template with no XML context file", async () => {

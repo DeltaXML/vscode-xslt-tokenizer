@@ -753,7 +753,13 @@ export function activate(context: vscode.ExtensionContext) {
 			await vscode.debug.startDebugging(folder ?? vscode.workspace.workspaceFolders?.[0], configuration);
 		}
 	}));
-	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider(XsltDebug.type, new XsltDebugConfigurationProvider(debugConfigurationForActiveEditor)));
+	const debugConfigurationProvider = new XsltDebugConfigurationProvider(debugConfigurationForActiveEditor);
+	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider(XsltDebug.type, debugConfigurationProvider));
+	// the configurations offered in the Run and Debug view with no launch.json - only provideDebugConfigurations is
+	// used for these, so a separate provider (resolveDebugConfiguration is called for each registered provider)
+	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider(XsltDebug.type, {
+		provideDebugConfigurations: (folder) => debugConfigurationProvider.provideDebugConfigurations(folder)
+	}, vscode.DebugConfigurationProviderTriggerKind.Dynamic));
 	context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(XsltDebug.type, new XsltDebugAdapterFactory(context.extensionUri)));
 	const debugExitCodes = new XsltDebugExitCodes();
 	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(XsltDebug.type, debugExitCodes));
