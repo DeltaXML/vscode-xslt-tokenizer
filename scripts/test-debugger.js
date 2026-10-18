@@ -548,6 +548,36 @@ async function testConditionErrorsAndXPathConditions(saxonJar) {
     await dap.exited;
 }
 
+// within an XPath loop, a line is arrived at once each iteration - not again for a function argument evaluated
+// lazily, within the function - so a logpoint logs, and a breakpoint stops, once each iteration
+async function testXPathLoopArrivals(saxonJar) {
+    for (const breakpoint of [{ line: 7, logMessage: 'item {$item/@n}' }, { line: 7 }]) {
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'loop-call.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
+            { 'loop-call.xsl': [breakpoint] });
+        const terminated = dap.event('terminated');
+        const items = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            items.push((await dap.request('evaluate', { expression: 'string($item/@n)', frameId: 0, context: 'watch' })).result);
+            stopped = dap.stopped();
+            await dap.request('continue', { threadId: 1 });
+        }
+        if (breakpoint.logMessage) {
+            assert.deepStrictEqual(dap.output.match(/item \d/g), ['item 1', 'item 2', 'item 3']);
+        } else {
+            assert.deepStrictEqual(items, ['"1"', '"2"', '"3"']);
+        }
+        assert.match(dap.output, /<out>2 4 6<\/out>/);
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+    }
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -556,7 +586,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

@@ -81,9 +81,7 @@ final class Debugger {
     private final Values values = new Values();
     private final Map<String, String> pathCache = new HashMap<String, String>();
     private final Map<String, String> sourceTexts = new HashMap<String, String>();
-    // the line last entered, and the depth of XPath expressions being stepped through (see stepThroughXPath)
-    private String enteredPath;
-    private int enteredLine;
+    // the depth of XPath expressions being stepped through (see stepThroughXPath)
     private int xpathDepth;
     // the XPath expression being stepped through: its stack frame, and its parts as reported to the TraceListener
     private Frame xpathFrame;
@@ -332,9 +330,15 @@ final class Debugger {
         if (!onStoppedLine) {
             stoppedPath = null;
         }
-        boolean onNewLine = !(top.line == enteredLine && path.equals(enteredPath));
-        enteredPath = path;
-        enteredLine = top.line;
+        // arriving at a line of this frame: from another line, or again - its first instruction or expression is
+        // entered again, e.g. for the next iteration of a loop - but not returning to it, e.g. after a function call
+        // from it, or for a function argument evaluated lazily, within the function
+        boolean onNewLine = !(top.line == top.enteredLine && path.equals(top.enteredPath)) || traceable == top.lineStart;
+        if (onNewLine) {
+            top.enteredPath = path;
+            top.enteredLine = top.line;
+            top.lineStart = traceable;
+        }
 
         String reason = null;
         if (pauseRequested) {
@@ -444,7 +448,10 @@ final class Debugger {
         if (Thread.currentThread() == transformThread && !runningTask) {
             // a new iteration: a breakpoint on the line last stopped at applies again
             stoppedPath = null;
-            enteredPath = null;
+            Frame top = frames.peek();
+            if (top != null) {
+                top.enteredPath = null;
+            }
         }
     }
 
@@ -740,6 +747,10 @@ final class Debugger {
         // stylesheet's functions and global variables, and current(), current-group() etc.
         int callDepth;
         XPathContext xsltContext;
+        // the line last entered in this frame, and the instruction or expression first entered on it
+        String enteredPath;
+        int enteredLine;
+        Traceable lineStart;
         Traceable current;
         XPathContext context;
         String systemId;
