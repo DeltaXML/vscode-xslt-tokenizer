@@ -467,6 +467,87 @@ async function testStepThroughXPathWithExtensions(saxonJar) {
     await dap.exited;
 }
 
+// hit counts (n, ==n, >n, >=n, <n, <=n, %n) - counted when the condition, if any, is true - with conditions and
+// logpoints; an invalid hit count is rejected
+async function testHitCounts(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${path.join(fixtures, 'basic.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] });
+    const { breakpoints } = await dap.request('setBreakpoints', {
+        source: { path: path.join(fixtures, 'basic.xsl') }, breakpoints: [
+            { line: 10, hitCondition: '2' },
+            { line: 11, condition: '@n != 2', hitCondition: '>=2' },
+            { line: 12, logMessage: 'hit at {@n}', hitCondition: '%2' },
+            { line: 16, hitCondition: 'often' },
+        ]
+    });
+    assert.deepStrictEqual(breakpoints.map((b) => b.verified), [true, true, true, false]);
+    assert.match(breakpoints[3].message, /isn't a number/);
+    const terminated = dap.event('terminated');
+    await dap.request('configurationDone', {});
+    const stops = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        const n = (await dap.request('evaluate', { expression: 'string(@n)', frameId: 0, context: 'watch' })).result;
+        stops.push(`${stop.frames[0].line}:${n}`);
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    // line 10's 2nd hit; line 11's 2nd hit where @n != 2 - item 3
+    assert.deepStrictEqual(stops, ['10:"2"', '11:"3"']);
+    // the logpoint logs on every 2nd hit
+    assert.deepStrictEqual(dap.output.match(/hit at \d/g), ['hit at 2']);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
+// a condition that can't be evaluated stops, as for an error, and is reported once; a condition within a multi-line
+// XPath expression is evaluated in the expression's context
+async function testConditionErrorsAndXPathConditions(saxonJar) {
+    let dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'basic.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
+        { 'basic.xsl': [{ line: 12, condition: '$undeclared = 1' }] });
+    let terminated = dap.event('terminated');
+    let stops = 0;
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        stops++;
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    assert.strictEqual(stops, 3);
+    assert.strictEqual(dap.output.match(/The condition '\$undeclared = 1' of the breakpoint at line 12 failed/g).length, 1);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+
+    dap = new DapClient(saxonJar);
+    stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'multiline.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
+        { 'multiline.xsl': [{ line: 11, condition: '@n = 2' }] });
+    terminated = dap.event('terminated');
+    const lines = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        lines.push(`${stop.frames[0].line} ${stop.frames[0].name}`);
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    assert.deepStrictEqual(lines, ['11 xsl:variable/@select (XPath)']);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -475,7 +556,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

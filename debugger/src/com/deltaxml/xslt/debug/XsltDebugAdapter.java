@@ -147,6 +147,7 @@ public final class XsltDebugAdapter {
                             .with("supportsConfigurationDoneRequest", true)
                             .with("supportsEvaluateForHovers", true)
                             .with("supportsConditionalBreakpoints", true)
+                            .with("supportsHitConditionalBreakpoints", true)
                             .with("supportsLogPoints", true)
                             .with("supportsTerminateRequest", true));
                     event("initialized", null);

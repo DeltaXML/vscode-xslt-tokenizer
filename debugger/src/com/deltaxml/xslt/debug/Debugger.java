@@ -120,6 +120,8 @@ final class Debugger {
         String normalised = normalisePath(path);
         // null if the file can't be parsed: all breakpoints are accepted where they are
         BreakableLines breakable = BreakableLines.forFile(normalised);
+        // VS Code sends all of a file's breakpoints when any of them changes: one that's unchanged keeps its hit count
+        Map<Integer, Breakpoint> previous = breakpoints.get(normalised);
         Map<Integer, Breakpoint> lines = new ConcurrentHashMap<Integer, Breakpoint>();
         for (Object item : Json.array(args, "breakpoints")) {
             @SuppressWarnings("unchecked")
@@ -130,15 +132,25 @@ final class Debugger {
                 result.add(Json.obj().with("verified", false).with("line", line).with("message", resolution.message));
                 continue;
             }
-            Breakpoint breakpoint = new Breakpoint(blankToNull(Json.string(bp, "condition")), blankToNull(Json.string(bp, "logMessage")), false);
-            // moved to the line where Saxon reports the instruction, if it's a multi-line start tag
+            String hitCondition = blankToNull(Json.string(bp, "hitCondition"));
+            if (hitCondition != null && !HIT_CONDITION.matcher(hitCondition).matches()) {
+                result.add(Json.obj().with("verified", false).with("line", line)
+                        .with("message", "The hit count '" + hitCondition + "' isn't a number, optionally after ==, >, >=, <, <= or %"));
+                continue;
+            }
+            // shown, and stopped at, at the first line of an instruction's start tag
             int actualLine = resolution == null ? line : resolution.line;
+            Breakpoint breakpoint = new Breakpoint(blankToNull(Json.string(bp, "condition")), hitCondition, blankToNull(Json.string(bp, "logMessage")), null);
+            Breakpoint old = previous == null ? null : previous.get(actualLine);
+            if (old != null && old.primary == old && old.hasSameSettings(breakpoint)) {
+                breakpoint.hits = old.hits;
+            }
             lines.put(actualLine, breakpoint);
             if (resolution != null) {
                 // e.g. xsl:try, reported at its first child's line - only when it's the instruction reported there
                 for (int alias : resolution.aliasLines) {
                     if (!lines.containsKey(alias)) {
-                        lines.put(alias, new Breakpoint(breakpoint.condition, breakpoint.logMessage, true));
+                        lines.put(alias, new Breakpoint(breakpoint.condition, hitCondition, breakpoint.logMessage, breakpoint));
                     }
                 }
             }
@@ -329,7 +341,8 @@ final class Debugger {
             reason = "pause";
         } else if (stopOnEntry) {
             reason = "entry";
-        } else if (!onStoppedLine && breakpointHit(path, top.line, top)) {
+        } else if (onNewLine && !onStoppedLine && breakpointHit(path, top.line, top)) {
+            // checked once each time execution arrives at the line - not for each instruction Saxon reports on it
             reason = "breakpoint";
         } else if (isStepComplete(path, top.line, depth)) {
             reason = "step";
@@ -448,7 +461,7 @@ final class Debugger {
     private boolean breakpointHit(String path, int line, Frame frame) {
         Map<Integer, Breakpoint> lines = breakpoints.get(path);
         Breakpoint bp = lines == null ? null : lines.get(line);
-        if (bp == null || (bp.isAlias && !REPORTED_AT_FIRST_CHILD.contains(frame.current.getClass().getSimpleName()))) {
+        if (bp == null || (bp.primary != bp && !REPORTED_AT_FIRST_CHILD.contains(frame.current.getClass().getSimpleName()))) {
             return false;
         }
         runningTask = true;
@@ -459,8 +472,18 @@ final class Debugger {
                         return false;
                     }
                 } catch (Exception e) {
-                    dap.log("Breakpoint condition '" + bp.condition + "' at line " + line + " failed: " + message(e));
+                    // stops, as for an error - reported once ('important': VS Code also shows it as a notification)
+                    if (!bp.primary.conditionFailed) {
+                        bp.primary.conditionFailed = true;
+                        dap.event("output", Json.obj().with("category", "important").with("output",
+                                "The condition '" + bp.condition + "' of the breakpoint at line " + line + " failed: " + message(e) + "\n"));
+                    }
                 }
+            }
+            // counted when its condition is true
+            int hits = ++bp.primary.hits;
+            if (bp.hitCondition != null && !isHitConditionMet(bp.hitCondition, hits)) {
+                return false;
             }
             if (bp.logMessage != null) {
                 dap.event("output", Json.obj().with("category", "console").with("output", interpolate(bp.logMessage, frame) + "\n")
@@ -665,16 +688,46 @@ final class Debugger {
     // the instructions (xsl:try, xsl:array and, in Saxon 13, xsl:choose) Saxon reports at their first child's line
     private static final java.util.Set<String> REPORTED_AT_FIRST_CHILD = new java.util.HashSet<String>(java.util.Arrays.asList("TryCatch", "ArrayInstr", "Choose"));
 
+    // a hit count: n (or ==n) for the nth hit, >n, >=n, <n or <=n, or %n for every nth
+    private static final java.util.regex.Pattern HIT_CONDITION = java.util.regex.Pattern.compile("\\s*(==|>=|<=|>|<|%)?\\s*(\\d+)\\s*");
+
+    private static boolean isHitConditionMet(String hitCondition, int hits) {
+        Matcher m = HIT_CONDITION.matcher(hitCondition);
+        if (!m.matches()) {
+            return true;
+        }
+        String operator = m.group(1) == null ? "==" : m.group(1);
+        long n = Long.parseLong(m.group(2));
+        switch (operator) {
+            case ">": return hits > n;
+            case ">=": return hits >= n;
+            case "<": return hits < n;
+            case "<=": return hits <= n;
+            case "%": return n > 0 && hits % n == 0;
+            default: return hits == n;
+        }
+    }
+
     private static final class Breakpoint {
         final String condition;
+        final String hitCondition;
         final String logMessage;
-        // for an instruction reported at its first child's line: only hit by that instruction
-        final boolean isAlias;
+        // the breakpoint itself - or for an instruction reported at its first child's line (an alias, only hit by
+        // that instruction), the breakpoint it's for, whose hits it counts
+        final Breakpoint primary;
+        int hits;
+        boolean conditionFailed;
 
-        Breakpoint(String condition, String logMessage, boolean isAlias) {
+        Breakpoint(String condition, String hitCondition, String logMessage, Breakpoint aliasFor) {
             this.condition = condition;
+            this.hitCondition = hitCondition;
             this.logMessage = logMessage;
-            this.isAlias = isAlias;
+            this.primary = aliasFor != null ? aliasFor : this;
+        }
+
+        boolean hasSameSettings(Breakpoint other) {
+            return java.util.Objects.equals(condition, other.condition) && java.util.Objects.equals(hitCondition, other.hitCondition) &&
+                    java.util.Objects.equals(logMessage, other.logMessage);
         }
     }
 

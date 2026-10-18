@@ -12,6 +12,9 @@
      - a breakpoint on a line inside the multi-line 'test' of the xsl:if
      - in xsl:for-each-group, a breakpoint inside $summary's expression - then watch count(current-group())
      - a breakpoint on a 'then' or 'return' line: shown as unverified - nothing is evaluated starting there
+     - conditional breakpoints (right-click in the margin: 'Add Conditional Breakpoint...'): on the
+       <order ...> line, the expression @customer = 'Grace', or $total gt 30; or the hit count 2
+     - a logpoint on the f:line-total($line) line, with the message: {$line/@product} costs {f:line-total($line)}
   The value of each expression stepped through is shown in the Debug Console.
 -->
 <xsl:stylesheet version="3.0"
