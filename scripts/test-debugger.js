@@ -674,6 +674,43 @@ async function testMessageTerminateAndStaticError(saxonJar) {
     await dap.exited;
 }
 
+// only the local variables in scope are shown - and used by Watch: not one from an xsl:if that has finished, one
+// declared later, or the previous iteration's; the nearest declaration of a name hides any further out - including
+// an XPath range variable, within its expression; parameters first, then variables as declared
+async function testVariableScopes(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    const xsl = path.join(fixtures, 'scopes.xsl');
+    await dap.start({ saxonArgs: [`-xsl:${xsl}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
+        { 'scopes.xsl': [10, 13, 15, 19].map((line) => ({ line })) });
+    const terminated = dap.event('terminated');
+    const stops = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        const locals = (await dap.variables(0, 'Locals')).map((v) => `${v.name}=${v.value}`).join(' ');
+        const x = (await dap.request('evaluate', { expression: '$x', frameId: 0, context: 'watch' })).result;
+        stops.push(`${stop.frames[0].line}: ${locals} | watch $x=${x}`);
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    assert.deepStrictEqual(stops, [
+        '10: $p="param" $x="outer" | watch $x="outer"',
+        '13: $p="param" $later="later-1" $x="inner-1" | watch $x="inner-1"',
+        '10: $p="param" $x="outer" | watch $x="outer"',
+        '13: $p="param" $later="later-2" $x="inner-2" | watch $x="inner-2"',
+        '10: $p="param" $x="outer" | watch $x="outer"',
+        '13: $p="param" $later="later-3" $x="inner-3" | watch $x="inner-3"',
+        '15: $p="param" $x="outer" | watch $x="outer"',
+        '19: $x=1 | watch $x=1',
+        '19: $x=2 | watch $x=2',
+    ]);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -682,7 +719,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

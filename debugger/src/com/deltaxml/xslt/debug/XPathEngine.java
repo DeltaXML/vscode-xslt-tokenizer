@@ -119,7 +119,7 @@ final class XPathEngine {
     // with a source position, the expression is instrumented: each part reports its location in the stylesheet
     // context: for the variables in scope and the context item; xsltContext: for the stylesheet's functions and
     // global variables, and current() etc. - the same, except within an XPath expression being stepped through
-    static Compiled compile(String xpath, Traceable instruction, XPathContext context, XPathContext xsltContext, SourcePosition instrumentAt) throws Exception {
+    static Compiled compile(String xpath, Traceable instruction, XPathContext context, Traceable xsltInstruction, XPathContext xsltContext, SourcePosition instrumentAt) throws Exception {
         Configuration config = context.getConfiguration();
         FunctionLibraryList stylesheetFunctions = xsltContext.getController() == null ? null : xsltContext.getController().getExecutable().getFunctionLibrary();
         RetainedStaticContext staticContext = staticContext(instruction);
@@ -153,7 +153,7 @@ final class XPathEngine {
                 continue;
             }
             declared.put(name, Boolean.TRUE);
-            Map.Entry<StructuredQName, Sequence> variable = Values.variableNamed(context, xsltContext, name);
+            Map.Entry<StructuredQName, Sequence> variable = Values.variableNamed(context, instruction, xsltContext, xsltInstruction, name);
             if (variable != null) {
                 bindings.put(env.declareVariable(variable.getKey()), variable.getValue());
             }
@@ -195,8 +195,8 @@ final class XPathEngine {
         return new Compiled(new CompiledExpression(env, expression, executable, slots, externals), bindings, context.getContextItem(), instrumented);
     }
 
-    static GroundedValue evaluate(String xpath, Traceable instruction, XPathContext context, XPathContext xsltContext) throws Exception {
-        return compile(xpath, instruction, context, xsltContext, null).evaluate();
+    static GroundedValue evaluate(String xpath, Traceable instruction, XPathContext context, Traceable xsltInstruction, XPathContext xsltContext) throws Exception {
+        return compile(xpath, instruction, context, xsltInstruction, xsltContext, null).evaluate();
     }
 
     private static RetainedStaticContext staticContext(Traceable instruction) {

@@ -44,11 +44,11 @@ final class Evaluator {
 
     // context: for the variables in scope and the context item; xsltContext: for the stylesheet's functions and
     // global variables, and current() etc. - the same, except within an XPath expression being stepped through
-    static XdmValue evaluate(Traceable instruction, XPathContext context, XPathContext xsltContext, String xpath) throws Exception {
+    static XdmValue evaluate(Traceable instruction, XPathContext context, Traceable xsltInstruction, XPathContext xsltContext, String xpath) throws Exception {
         if (engineWorks) {
             try {
                 // with the stylesheet's functions, and current() etc.
-                return XdmValue.wrap(XPathEngine.evaluate(xpath, instruction, context, xsltContext));
+                return XdmValue.wrap(XPathEngine.evaluate(xpath, instruction, context, xsltInstruction, xsltContext));
             } catch (LinkageError | ReflectiveOperationException | IllegalStateException e) {
                 engineWorks = false;
             }
@@ -56,10 +56,10 @@ final class Evaluator {
         return selector(instruction, context, xpath).evaluate();
     }
 
-    static boolean effectiveBooleanValue(Traceable instruction, XPathContext context, XPathContext xsltContext, String xpath) throws Exception {
+    static boolean effectiveBooleanValue(Traceable instruction, XPathContext context, Traceable xsltInstruction, XPathContext xsltContext, String xpath) throws Exception {
         if (engineWorks) {
             // the newline ends any trailing XPath comment
-            XdmValue value = evaluate(instruction, context, xsltContext, "boolean((" + xpath + "\n))");
+            XdmValue value = evaluate(instruction, context, xsltInstruction, xsltContext, "boolean((" + xpath + "\n))");
             return value.size() == 1 && Boolean.parseBoolean(value.itemAt(0).getStringValue());
         }
         return selector(instruction, context, xpath).effectiveBooleanValue();
@@ -85,7 +85,7 @@ final class Evaluator {
 
         // only the variables the expression references are bound: binding a variable evaluates it, if it is still
         // lazily evaluated
-        Map<String, Map.Entry<StructuredQName, Sequence>> inScope = Values.inScopeVariables(context);
+        Map<String, Map.Entry<StructuredQName, Sequence>> inScope = Values.inScopeVariables(context, instruction);
         Map<String, Map.Entry<StructuredQName, Sequence>> referenced = new java.util.LinkedHashMap<String, Map.Entry<StructuredQName, Sequence>>();
         Matcher m = VARIABLE_REFERENCE.matcher(xpath);
         while (m.find()) {

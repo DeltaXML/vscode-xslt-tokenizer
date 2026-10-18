@@ -244,7 +244,7 @@ final class Debugger {
             public List<Map<String, Object>> call() {
                 Frame frame = frame(frameId);
                 List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
-                result.add(scope("Locals", values.register(values.locals(frame.context)), false));
+                result.add(scope("Locals", values.register(values.locals(frame.context, frame.current)), false));
                 result.add(scope("Context", values.register(values.focus(frame.context)), false));
                 result.add(scope("Globals", values.register(values.globals(xsltContext(frame))), true));
                 return result;
@@ -274,7 +274,7 @@ final class Debugger {
                         throw new IllegalArgumentException("not a variable reference");
                     }
                 }
-                XdmValue result = Evaluator.evaluate(frame.current, frame.context, xsltContext(frame), xpath);
+                XdmValue result = Evaluator.evaluate(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), xpath);
                 Map<String, Object> variable = values.variable("result", result.getUnderlyingValue());
                 return Json.obj().with("result", variable.get("value")).with("type", variable.get("type"))
                         .with("variablesReference", variable.get("variablesReference"));
@@ -361,8 +361,9 @@ final class Debugger {
             reason = "pause";
         } else if (stopOnEntry) {
             reason = "entry";
-        } else if (onNewLine && !onStoppedLine && breakpointHit(path, top.line, top)) {
-            // checked once each time execution arrives at the line - not for each instruction Saxon reports on it
+        } else if (onNewLine && breakpointHit(path, top.line, top)) {
+            // checked once each time execution arrives at the line - not for each instruction Saxon reports on it -
+            // including again, e.g. for the next iteration of a loop on one line
             reason = "breakpoint";
         } else if (isStepComplete(path, top.line, depth)) {
             reason = "step";
@@ -398,6 +399,7 @@ final class Debugger {
             Frame frame = new Frame(null, name + " (XPath)", true);
             frame.context = context;
             frame.xsltContext = context;
+            frame.xsltCurrent = instruction;
             frame.current = instruction;
             frame.systemId = systemId;
             frame.line = attribute.line;
@@ -408,7 +410,7 @@ final class Debugger {
             xpathDepth++;
             frame.callDepth = callDepth;
             try {
-                XPathEngine.Compiled compiled = XPathEngine.compile(attribute.xpath, instruction, context, context,
+                XPathEngine.Compiled compiled = XPathEngine.compile(attribute.xpath, instruction, context, instruction, context,
                         new XPathEngine.SourcePosition(systemId, attribute.line, attribute.column));
                 xpathFrame = frame;
                 xpathParts = compiled.instrumented;
@@ -498,7 +500,7 @@ final class Debugger {
         try {
             if (bp.condition != null) {
                 try {
-                    if (!Evaluator.effectiveBooleanValue(frame.current, frame.context, xsltContext(frame), bp.condition)) {
+                    if (!Evaluator.effectiveBooleanValue(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), bp.condition)) {
                         return false;
                     }
                 } catch (Exception e) {
@@ -535,7 +537,7 @@ final class Debugger {
         while (m.find()) {
             String text;
             try {
-                text = Values.logText(Evaluator.evaluate(frame.current, frame.context, xsltContext(frame), m.group(1)));
+                text = Values.logText(Evaluator.evaluate(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), m.group(1)));
             } catch (Exception e) {
                 text = "<" + message(e) + ">";
             }
@@ -603,6 +605,10 @@ final class Debugger {
     // the XSLT context of a frame's XPath: within an XPath expression being stepped through, its instruction's
     private static XPathContext xsltContext(Frame frame) {
         return frame.xsltContext != null ? frame.xsltContext : frame.context;
+    }
+
+    private static Traceable xsltCurrent(Frame frame) {
+        return frame.xsltCurrent != null ? frame.xsltCurrent : frame.current;
     }
 
     private Frame frame(int frameId) {
@@ -853,6 +859,7 @@ final class Debugger {
         // stylesheet's functions and global variables, and current(), current-group() etc.
         int callDepth;
         XPathContext xsltContext;
+        Traceable xsltCurrent;
         // the line last entered in this frame, and the instruction or expression first entered on it
         String enteredPath;
         int enteredLine;

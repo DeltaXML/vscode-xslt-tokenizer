@@ -7,6 +7,10 @@
 package com.deltaxml.xslt.debug;
 
 import java.util.AbstractMap;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -15,6 +19,9 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import net.sf.saxon.Controller;
+import net.sf.saxon.expr.Assignation;
+import net.sf.saxon.expr.Expression;
+import net.sf.saxon.expr.Operand;
 import net.sf.saxon.expr.Component;
 import net.sf.saxon.expr.PackageData;
 import net.sf.saxon.expr.StackFrame;
@@ -40,6 +47,7 @@ import net.sf.saxon.s9api.XdmNodeKind;
 import net.sf.saxon.s9api.XdmSequenceIterator;
 import net.sf.saxon.s9api.XdmValue;
 import net.sf.saxon.style.StylesheetPackage;
+import net.sf.saxon.trace.Traceable;
 
 /**
  * Presents XDM values as DAP variables. Expandable values (sequences, nodes, maps and arrays) get a
@@ -72,10 +80,10 @@ final class Values {
 
     // ---------------------------------------------------------------- scopes
 
-    Supplier<List<Map<String, Object>>> locals(final XPathContext context) {
+    Supplier<List<Map<String, Object>>> locals(final XPathContext context, final Traceable current) {
         return () -> {
             List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
-            for (Map.Entry<StructuredQName, Sequence> local : localVariables(context)) {
+            for (Map.Entry<StructuredQName, Sequence> local : localVariables(context, current)) {
                 result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
             }
             for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(context)) {
@@ -128,11 +136,11 @@ final class Values {
     // ---------------------------------------------------------------- variables in scope
 
     // keyed by display name (lexical QName), as written in XPath expressions - locals hide globals
-    static Map<String, Map.Entry<StructuredQName, Sequence>> inScopeVariables(XPathContext context) {
+    static Map<String, Map.Entry<StructuredQName, Sequence>> inScopeVariables(XPathContext context, Traceable current) {
         Map<String, Map.Entry<StructuredQName, Sequence>> result = new LinkedHashMap<String, Map.Entry<StructuredQName, Sequence>>();
         List<Map.Entry<StructuredQName, Sequence>> all = new ArrayList<Map.Entry<StructuredQName, Sequence>>(evaluatedGlobalVariables(context));
         all.addAll(tunnelParameters(context));
-        all.addAll(localVariables(context));
+        all.addAll(localVariables(context, current));
         for (Map.Entry<StructuredQName, Sequence> variable : all) {
             result.put(variable.getKey().getDisplayName(), variable);
         }
@@ -141,10 +149,11 @@ final class Values {
 
     // the variable with this display name (lexical QName) in scope: a local variable or tunnel parameter, else a
     // global variable or parameter - evaluated now if it hasn't been used yet - or null if there's none
-    static Map.Entry<StructuredQName, Sequence> variableNamed(XPathContext context, XPathContext xsltContext, String displayName) {
-        Map.Entry<StructuredQName, Sequence> variable = inScopeVariables(context).get(displayName);
+    // (the XSLT context and instruction: of an XPath expression being stepped through, its instruction's)
+    static Map.Entry<StructuredQName, Sequence> variableNamed(XPathContext context, Traceable current, XPathContext xsltContext, Traceable xsltCurrent, String displayName) {
+        Map.Entry<StructuredQName, Sequence> variable = inScopeVariables(context, current).get(displayName);
         if (variable == null && xsltContext != context) {
-            variable = inScopeVariables(xsltContext).get(displayName);
+            variable = inScopeVariables(xsltContext, xsltCurrent).get(displayName);
         }
         if (variable != null) {
             return variable;
@@ -161,7 +170,13 @@ final class Values {
         return null;
     }
 
-    private static List<Map.Entry<StructuredQName, Sequence>> localVariables(XPathContext context) {
+    // The local variables in scope at an instruction or expression: those bound by an xsl:variable, or a for, let,
+    // some or every in XPath, whose scope contains it - the binding's action, as compiled - with the nearest binding
+    // of a name hiding any further out; and parameters - of the template or function, or xsl:iterate - which are
+    // in scope throughout. Others in the stack frame aren't in scope: e.g. a variable in an xsl:if that has finished,
+    // one declared later, or one from the previous iteration of an xsl:for-each. Without an expression, e.g. at a
+    // template's start, only the parameters with values
+    private static List<Map.Entry<StructuredQName, Sequence>> localVariables(XPathContext context, Traceable current) {
         List<Map.Entry<StructuredQName, Sequence>> result = new ArrayList<Map.Entry<StructuredQName, Sequence>>();
         StackFrame frame = context.getStackFrame();
         SlotManager slots = frame == null ? null : frame.getStackFrameMap();
@@ -169,31 +184,70 @@ final class Values {
             return result;
         }
         List<StructuredQName> names = slots.getVariableMap();
-        // a slot is reused by variables in sibling scopes - the last assigned is the one most likely in scope
-        Map<String, Integer> byName = new HashMap<String, Integer>();
-        for (int i = 0; i < names.size(); i++) {
-            StructuredQName name = names.get(i);
-            if (name == null || isGenerated(name)) {
-                continue;
+        Set<String> seen = new HashSet<String>();
+        // the bindings in scope, found nearest first: each enclosing binding whose action this is within
+        List<Map.Entry<StructuredQName, Sequence>> bindings = new ArrayList<Map.Entry<StructuredQName, Sequence>>();
+        Expression root = current instanceof Expression ? (Expression) current : null;
+        if (root != null) {
+            Expression child = root;
+            for (Expression parent = root.getParentExpression(); parent != null; child = parent, parent = parent.getParentExpression()) {
+                if (parent instanceof Assignation && ((Assignation) parent).getAction() == child) {
+                    Assignation binding = (Assignation) parent;
+                    addLocal(bindings, seen, context, names, binding.getLocalSlotNumber(), binding.getVariableQName());
+                }
+                root = parent;
             }
-            Sequence value;
-            try {
-                value = context.evaluateLocalVariable(i);
-            } catch (Exception e) {
-                value = null;
+        }
+        // parameters: the slots that no binding uses - shown first, then the bindings in the order they're declared
+        Set<Integer> bound = boundSlots(root);
+        for (int slot = 0; slot < names.size(); slot++) {
+            if (!bound.contains(slot)) {
+                addLocal(result, seen, context, names, slot, names.get(slot));
             }
-            if (value != null) {
-                Integer existing = byName.get(name.getDisplayName());
-                Map.Entry<StructuredQName, Sequence> entry = new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(name, value);
-                if (existing != null) {
-                    result.set(existing, entry);
-                } else {
-                    byName.put(name.getDisplayName(), result.size());
-                    result.add(entry);
+        }
+        java.util.Collections.reverse(bindings);
+        result.addAll(bindings);
+        return result;
+    }
+
+    private static void addLocal(List<Map.Entry<StructuredQName, Sequence>> result, Set<String> seen, XPathContext context,
+            List<StructuredQName> names, int slot, StructuredQName name) {
+        if (name == null || isGenerated(name) || slot < 0 || slot >= names.size() || seen.contains(name.getDisplayName())) {
+            return;
+        }
+        Sequence value;
+        try {
+            value = context.evaluateLocalVariable(slot);
+        } catch (Exception e) {
+            value = null;
+        }
+        if (value != null) {
+            // a nearer binding of the name hides this one, even if it's not assigned yet
+            seen.add(name.getDisplayName());
+            result.add(new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(name, value));
+        }
+    }
+
+    // the slots used by the bindings in a compiled template, function or expression
+    private static Set<Integer> boundSlots(Expression root) {
+        Set<Integer> bound = new HashSet<Integer>();
+        if (root == null) {
+            return bound;
+        }
+        Deque<Expression> pending = new ArrayDeque<Expression>();
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            Expression expression = pending.pop();
+            if (expression instanceof Assignation) {
+                bound.add(((Assignation) expression).getLocalSlotNumber());
+            }
+            for (Operand operand : expression.operands()) {
+                if (operand.getChildExpression() != null) {
+                    pending.push(operand.getChildExpression());
                 }
             }
         }
-        return result;
+        return bound;
     }
 
     private static List<Map.Entry<StructuredQName, Sequence>> tunnelParameters(XPathContext context) {
