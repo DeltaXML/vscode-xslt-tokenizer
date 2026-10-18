@@ -294,6 +294,37 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
+		const result = await this.completionItems(document, position, token, context);
+		if (result) {
+			XsltDefinitionProvider.fitToPrefixedWord(Array.isArray(result) ? result : result.items, document, position);
+		}
+		return result;
+	}
+
+	// The language's word pattern takes a QName as one word, prefix and all (e.g. 'fn:co'), and an item without a
+	// range of its own is filtered by - and replaces - the word. An item whose label has no prefix (e.g. the
+	// built-in function 'count') is given a range of the word's local part, after its ':', instead
+	public static fitToPrefixedWord(items: vscode.CompletionItem[], document: vscode.TextDocument, position: vscode.Position) {
+		const wordRange = document.getWordRangeAtPosition(position);
+		if (!wordRange) {
+			return;
+		}
+		const typed = document.getText(new vscode.Range(wordRange.start, position));
+		const colon = typed.lastIndexOf(':');
+		if (colon < 1) {
+			return;
+		}
+		const localStart = wordRange.start.translate(0, colon + 1);
+		const range = { inserting: new vscode.Range(localStart, position), replacing: new vscode.Range(localStart, wordRange.end) };
+		for (const item of items) {
+			const label = typeof item.label === 'string' ? item.label : item.label.label;
+			if (!item.range && !label.includes(':')) {
+				item.range = range;
+			}
+		}
+	}
+
+	private async completionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
 		const keepNameTests = true;
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		let symbolsForXPath: vscode.DocumentSymbol[] = [];
