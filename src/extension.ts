@@ -41,7 +41,7 @@ import { CatalogDocumentProvider } from './catalogDocumentProvider';
 import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
-import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes } from './xsltDebug';
+import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltEvaluatableExpressionProvider } from './xsltDebug';
 
 
 
@@ -761,6 +761,7 @@ export function activate(context: vscode.ExtensionContext) {
 		provideDebugConfigurations: (folder) => debugConfigurationProvider.provideDebugConfigurations(folder)
 	}, vscode.DebugConfigurationProviderTriggerKind.Dynamic));
 	context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(XsltDebug.type, new XsltDebugAdapterFactory(context.extensionUri)));
+	context.subscriptions.push(vscode.languages.registerEvaluatableExpressionProvider({ language: 'xslt' }, new XsltEvaluatableExpressionProvider()));
 	const debugExitCodes = new XsltDebugExitCodes();
 	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(XsltDebug.type, debugExitCodes));
 	// as for tasks: when the transform completes, 'Open' the result

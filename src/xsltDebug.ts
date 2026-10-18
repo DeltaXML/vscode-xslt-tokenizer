@@ -55,6 +55,27 @@ export class XsltDebug {
 		return { ...taskProperties, ...config };
 	}
 
+	// the variable to show when hovering at this character of a line, while debugging: a variable reference ($name),
+	// or the name in an xsl:variable or xsl:param declaration - as '$name', with its range. VS Code would otherwise use
+	// the word at the position, and the language's word pattern breaks names at '-' and ':'
+	public static variableAt(lineText: string, character: number): { start: number; end: number; expression: string } | undefined {
+		const name = '(?:[\\p{L}_][\\p{L}\\p{N}_.\\-]*:)?[\\p{L}_][\\p{L}\\p{N}_.\\-]*';
+		const reference = new RegExp(`\\$\\s*(${name})`, 'gu');
+		for (let m = reference.exec(lineText); m; m = reference.exec(lineText)) {
+			if (character >= m.index && character <= m.index + m[0].length) {
+				return { start: m.index, end: m.index + m[0].length, expression: '$' + m[1] };
+			}
+		}
+		const declaration = new RegExp(`<xsl:(?:variable|param)\\b[^>]*?\\sname\\s*=\\s*(["'])(${name})\\1`, 'gu');
+		for (let m = declaration.exec(lineText); m; m = declaration.exec(lineText)) {
+			const start = m.index + m[0].length - 1 - m[2].length;
+			if (character >= start && character <= start + m[2].length) {
+				return { start, end: start + m[2].length, expression: '$' + m[2] };
+			}
+		}
+		return undefined;
+	}
+
 	// the problem with a configuration (after variable substitution) that would stop it running, if any
 	public static configurationProblem(config: vscode.DebugConfiguration): string | undefined {
 		if (!config.xsltFile) {
@@ -115,6 +136,14 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 		config.classPath = classPath;
 		config.saxonArgs = args;
 		return config;
+	}
+}
+
+// what's evaluated for a hover while debugging: the whole variable reference at the position
+export class XsltEvaluatableExpressionProvider implements vscode.EvaluatableExpressionProvider {
+	public provideEvaluatableExpression(document: vscode.TextDocument, position: vscode.Position): vscode.EvaluatableExpression | undefined {
+		const variable = XsltDebug.variableAt(document.lineAt(position.line).text, position.character);
+		return variable ? new vscode.EvaluatableExpression(new vscode.Range(position.line, variable.start, position.line, variable.end), variable.expression) : undefined;
 	}
 }
 

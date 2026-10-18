@@ -68,6 +68,22 @@ suite('XSLT debugger - configurations', () => {
 		]);
 	});
 
+	test('hovering: the whole variable reference, or the name in a variable declaration', () => {
+		const select = '<xsl:if test="$total ge $discount-threshold and $f:rate-2 gt 0">';
+		// the word pattern would give 'discount' or 'threshold'
+		assert.strictEqual(XsltDebug.variableAt(select, select.indexOf('threshold'))?.expression, '$discount-threshold');
+		assert.strictEqual(XsltDebug.variableAt(select, select.indexOf('discount'))?.expression, '$discount-threshold');
+		assert.strictEqual(XsltDebug.variableAt(select, select.indexOf('$total'))?.expression, '$total');
+		assert.strictEqual(XsltDebug.variableAt(select, select.indexOf('rate'))?.expression, '$f:rate-2');
+		assert.isUndefined(XsltDebug.variableAt(select, select.indexOf('test')));
+		assert.isUndefined(XsltDebug.variableAt(select, select.indexOf(' ge ') + 2));
+		const declaration = '  <xsl:param name="discount-rate" as="xs:decimal" select="0.1"/>';
+		assert.deepStrictEqual(XsltDebug.variableAt(declaration, declaration.indexOf('rate')), { start: 19, end: 32, expression: '$discount-rate' });
+		assert.isUndefined(XsltDebug.variableAt(declaration, declaration.indexOf('decimal')));
+		const template = '<xsl:template name="named">';
+		assert.isUndefined(XsltDebug.variableAt(template, template.indexOf('named')));
+	});
+
 	test('runs Saxon with the task options, less tracing, timing and the message-escaping AltTransform', () => {
 		const task = <XSLTTask><unknown>{
 			type: 'xslt', label: 'report', saxonJar: '/opt/SaxonPE13-1J/saxon-pe-13.1.jar', xsltFile: 'report.xsl', xmlSource: 'books.xml',
