@@ -122,8 +122,11 @@ final class XPathEngine {
     static Compiled compile(String xpath, Traceable instruction, XPathContext context, XPathContext xsltContext, SourcePosition instrumentAt) throws Exception {
         Configuration config = context.getConfiguration();
         FunctionLibraryList stylesheetFunctions = xsltContext.getController() == null ? null : xsltContext.getController().getExecutable().getFunctionLibrary();
-        StaticContextWithFunctions env = new StaticContextWithFunctions(config, stylesheetFunctions);
         RetainedStaticContext staticContext = staticContext(instruction);
+        // as the stylesheet's own expressions: XPath 4.0 for an XSLT 4.0 stylesheet, otherwise 3.1 - with syntax
+        // extensions, Saxon-PE 13 would otherwise use 4.0, where a call to a stylesheet function isn't found
+        int xpathVersion = staticContext != null && staticContext.getPackageData() != null && staticContext.getPackageData().getHostLanguageVersion() >= 40 ? 40 : 31;
+        StaticContextWithFunctions env = new StaticContextWithFunctions(config, stylesheetFunctions, xpathVersion);
         if (staticContext != null) {
             for (Iterator<String> prefixes = staticContext.iteratePrefixes(); prefixes.hasNext(); ) {
                 String prefix = prefixes.next();
@@ -131,14 +134,6 @@ final class XPathEngine {
                 if (uri != null && !prefix.isEmpty()) {
                     env.declareNamespace(prefix, uri);
                 }
-            }
-        }
-        if (staticContext != null && staticContext.getPackageData() != null && staticContext.getPackageData().getHostLanguageVersion() >= 40) {
-            // an XSLT 4.0 stylesheet's expressions are XPath 4.0
-            try {
-                env.setXPathLanguageLevel(40);
-            } catch (RuntimeException e) {
-                // not available with this Saxon edition
             }
         }
         Location location = instruction == null ? null : instruction.getLocation();
@@ -399,8 +394,16 @@ final class XPathEngine {
 
     /** a static context with the stylesheet's functions, as well as the standard ones - addFunctionLibrary is protected */
     private static final class StaticContextWithFunctions extends IndependentContext {
-        StaticContextWithFunctions(Configuration config, FunctionLibraryList stylesheetFunctions) {
+        StaticContextWithFunctions(Configuration config, FunctionLibraryList stylesheetFunctions, int xpathVersion) {
             super(config);
+            if (getXPathVersion() != xpathVersion) {
+                try {
+                    // this resets the function library, so it's done first
+                    setXPathLanguageLevel(xpathVersion);
+                } catch (RuntimeException e) {
+                    // not available with this Saxon edition
+                }
+            }
             if (stylesheetFunctions != null) {
                 addFunctionLibrary(stylesheetFunctions);
             }

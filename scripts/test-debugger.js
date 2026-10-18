@@ -438,6 +438,34 @@ async function testXPath40(saxonJar) {
     await dap.exited;
 }
 
+// with Saxon-PE/EE 13's syntax extensions on (as Quick Run tasks have, by default, for PE/EE), an XSLT 3.0
+// stylesheet's expression is still XPath 3.1 - as XPath 4.0, a call to a stylesheet function wasn't found
+async function testStepThroughXPathWithExtensions(saxonJar) {
+    if (!/saxon-[pe]e-1[3-9]/i.test(saxonJar)) {
+        return 'skipped';
+    }
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'multiline.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, '--allowSyntaxExtensions:on'] },
+        { 'multiline.xsl': [{ line: 11 }] });
+    const terminated = dap.event('terminated');
+    let stops = 0;
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        assert.strictEqual(stop.frames[0].name, 'xsl:variable/@select (XPath)');
+        stops++;
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    assert.doesNotMatch(dap.output, /couldn't be evaluated/, dap.output);
+    assert.strictEqual(stops, 3);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -446,7 +474,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

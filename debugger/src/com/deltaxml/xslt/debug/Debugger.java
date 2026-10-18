@@ -380,7 +380,9 @@ final class Debugger {
                 GroundedValue value = compiled.evaluate();
                 dap.log(name + " on line " + attribute.line + " = " + Values.summary(XdmValue.wrap(value)));
             } catch (Exception | LinkageError e) {
-                dap.log(name + " on line " + attribute.line + " couldn't be evaluated separately, to step through it: " + message(e));
+                // 'important': VS Code also shows it as a notification - it was stepped into, or has a breakpoint
+                dap.event("output", Json.obj().with("category", "important").with("output",
+                        name + " on line " + attribute.line + " couldn't be evaluated separately, to step through it: " + message(e) + "\n"));
             } finally {
                 xpathFrame = null;
                 xpathParts = null;
