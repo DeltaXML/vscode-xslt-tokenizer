@@ -178,6 +178,30 @@ XSLT task JSON properties can reference special commands. The special commands a
 
 For more a full description on using VSCode tasks to run XSLT, see [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html).
 
+## Debugging XSLT
+
+Stylesheets can be debugged with SaxonJ (Saxon 12 or later, any edition, including Saxon-HE): set breakpoints in the stylesheet, then use **XSLT: Debug Stylesheet with SaxonJ** (the debug button in the editor title, or `F5` with no `launch.json`). As with Quick Run, the stylesheet runs with the XML context file - or from `xsl:initial-template` - using the Quick Run task, so parameters added to the task also apply when debugging.
+
+- Breakpoints, including conditional breakpoints (an XPath condition) and logpoints (`{xpath}` in the message is replaced by its value)
+- Step Over, Step Into and Step Out - the call stack shows template rules, named templates, functions and global variables, and `xsl:for-each`, `xsl:for-each-group` and `xsl:iterate` instructions
+- The Variables view shows local variables and parameters (including tunnel parameters), the context item, `position()` and `last()`, and global variables and parameters - nodes, maps, arrays and sequences can be expanded
+- XPath expressions are evaluated in the Watch view and the Debug Console (with in-scope variables, namespaces and the context item - but not stylesheet functions); hover over a variable to see its value
+- `xsl:message` output, and the result when there is no `resultPath`, appear in the Debug Console
+
+For a `launch.json` configuration, use the `xslt-saxon` debugger type with the same properties as an `xslt` task, or with `"task"` set to the label of an `xslt` task in `tasks.json`:
+
+```json
+{
+    "type": "xslt-saxon",
+    "request": "launch",
+    "name": "Debug report",
+    "task": "report with books.xml",
+    "stopOnEntry": false
+}
+```
+
+The stylesheet is compiled without optimization when debugging, so that all variables can be inspected.
+
 # Release Notes
 
 The project changelog is maintained on the project wiki. See [Release Notes](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/Release-Notes).

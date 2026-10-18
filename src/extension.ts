@@ -41,6 +41,7 @@ import { CatalogDocumentProvider } from './catalogDocumentProvider';
 import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
+import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes } from './xsltDebug';
 
 
 
@@ -327,6 +328,34 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	}));
 
+	// reports a completed transform (a task or debug session), offering to 'Open' the result file if it exists
+	const showTransformResult = async (message: string, failed: boolean, resultFsPath: string | undefined) => {
+		let resultUri: vscode.Uri | undefined;
+		if (!failed && resultFsPath) {
+			try {
+				resultUri = vscode.Uri.file(resultFsPath);
+				await vscode.workspace.fs.stat(resultUri);
+			} catch {
+				resultUri = undefined;
+			}
+		}
+		if (resultUri) {
+			// for an HTML result, also 'Open in Browser' - VS Code's integrated browser
+			const actions = SaxonTaskProvider.resultActions(resultUri.fsPath, await vscode.commands.getCommands(true));
+			vscode.window.showInformationMessage(message, ...actions).then((choice) => {
+				if (choice === SaxonTaskProvider.openResultAction) {
+					vscode.commands.executeCommand('vscode.open', resultUri);
+				} else if (choice === SaxonTaskProvider.openResultInBrowserAction) {
+					vscode.commands.executeCommand(SaxonTaskProvider.integratedBrowserOpenFile, resultUri);
+				}
+			});
+		} else if (failed) {
+			vscode.window.showErrorMessage(message);
+		} else {
+			vscode.window.showInformationMessage(message);
+		}
+	};
+
 	// onDidEndTaskProcess (rather than onDidEndTask) provides the exit code, so 'Open' is only offered for a result
 	// written by this run - a failed run can leave an earlier run's result file in place
 	context.subscriptions.push(vscode.tasks.onDidEndTaskProcess(async (event) => {
@@ -335,34 +364,9 @@ export function activate(context: vscode.ExtensionContext) {
 			// exitCode is undefined when VS Code can't determine it (e.g. the task was terminated) - not treated as a failure
 			const failed = event.exitCode !== undefined && event.exitCode !== 0;
 			const message = failed ? `Task '${t.definition.label}' failed (exit code ${event.exitCode})` : `Completed task: '${t.definition.label}'`;
-			let resultUri: vscode.Uri | undefined;
-			if (!failed) {
-				const resultFsPath = await resolveTaskPath(t, 'resultPath');
-				if (resultFsPath) {
-					try {
-						resultUri = vscode.Uri.file(resultFsPath);
-						await vscode.workspace.fs.stat(resultUri);
-					} catch {
-						resultUri = undefined;
-					}
-				}
-			}
+			const resultFsPath = failed ? undefined : await resolveTaskPath(t, 'resultPath');
 			fileSelector.pickedValues.clear();
-			if (resultUri) {
-				// for an HTML result, also 'Open in Browser' - VS Code's integrated browser
-				const actions = SaxonTaskProvider.resultActions(resultUri.fsPath, await vscode.commands.getCommands(true));
-				vscode.window.showInformationMessage(message, ...actions).then((choice) => {
-					if (choice === SaxonTaskProvider.openResultAction) {
-						vscode.commands.executeCommand('vscode.open', resultUri);
-					} else if (choice === SaxonTaskProvider.openResultInBrowserAction) {
-						vscode.commands.executeCommand(SaxonTaskProvider.integratedBrowserOpenFile, resultUri);
-					}
-				});
-			} else if (failed) {
-				vscode.window.showErrorMessage(message);
-			} else {
-				vscode.window.showInformationMessage(message);
-			}
+			await showTransformResult(message, failed, resultFsPath);
 		}
 		fileSelector.completedPick = true; // as fileselector may not be used for next task
 	}));
@@ -675,12 +679,9 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	};
 
-	// runs the stylesheet with the XML context file, with the selected Quick Run processor
-	const quickRunDocument = async (xsltDocument: vscode.TextDocument) => {
-		const taskType = getRunnableQuickRunTaskType(xsltDocument.uri);
-		if (!taskType) {
-			return;
-		}
+	// the XML context file to run the stylesheet with: { xmlSourceFsPath: undefined } for none, starting from
+	// xsl:initial-template - or undefined (having said why) if there's no context file and no initial template
+	const quickRunSource = async (xsltDocument: vscode.TextDocument, commandName: string): Promise<{ xmlSourceFsPath: string | undefined } | undefined> => {
 		const pickContextFileAction = 'Pick XML Context File';
 		const offerContextFilePick = (message: string) => {
 			vscode.window.showErrorMessage(message, pickContextFileAction).then((choice) => {
@@ -695,12 +696,82 @@ export function activate(context: vscode.ExtensionContext) {
 		const xmlSourceFsPath = DocumentChangeHandler.lastActiveXMLNonXSLUri?.fsPath;
 		if (!xmlSourceFsPath && !await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
 			offerContextFilePick(DocumentChangeHandler.contextFileIsNone ?
-				'Quick Run XSLT: the XML context file is \'None\', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.' :
-				'Quick Run XSLT: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar.');
+				`${commandName}: the XML context file is 'None', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.` :
+				`${commandName}: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar.`);
+			return undefined;
+		}
+		return { xmlSourceFsPath };
+	};
+
+	// runs the stylesheet with the XML context file, with the selected Quick Run processor
+	const quickRunDocument = async (xsltDocument: vscode.TextDocument) => {
+		const taskType = getRunnableQuickRunTaskType(xsltDocument.uri);
+		if (!taskType) {
 			return;
 		}
-		await runQuickRunTask(taskType, xsltDocument, xmlSourceFsPath);
+		const source = await quickRunSource(xsltDocument, 'Quick Run XSLT');
+		if (source) {
+			await runQuickRunTask(taskType, xsltDocument, source.xmlSourceFsPath);
+		}
 	};
+
+	// the debug configuration for the active stylesheet (or the top-level stylesheet importing it), run as Quick Run
+	// runs it with SaxonJ: with the XML context file, using the persisted quick-run 'xslt' task for the pair - created
+	// on first use - so parameters etc. added to the task also apply when debugging
+	const debugConfigurationForActiveEditor = async (): Promise<vscode.DebugConfiguration | undefined> => {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
+			vscode.window.showErrorMessage('Debug XSLT: open an XSLT stylesheet in the active editor first.');
+			return undefined;
+		}
+		if (!vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar')) {
+			vscode.window.showErrorMessage('Debug XSLT: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+			return undefined;
+		}
+		const xsltDocument = await stylesheetToRun(activeEditor.document);
+		const source = xsltDocument ? await quickRunSource(xsltDocument, 'Debug XSLT') : undefined;
+		if (!xsltDocument || !source) {
+			return undefined;
+		}
+		try {
+			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask('xslt', xsltDocument, source.xmlSourceFsPath, xsltDefintiionProvider);
+			if (quickRunTask) {
+				return { type: XsltDebug.type, request: 'launch', name: `Debug ${quickRunTask.label}`, task: quickRunTask.label };
+			}
+		} catch (e) {
+			console.warn('Debug XSLT: failed to find/create a persisted task, falling back to an ad hoc configuration.', e);
+		}
+		// no workspace folder to persist a task in - with no resultPath, the result is shown in the Debug Console
+		const { type, label, ...definition } = SaxonTaskProvider.createQuickRunTaskDefinition('xslt', 'Debug XSLT', xsltDocument.uri.fsPath, source.xmlSourceFsPath);
+		return { ...definition, type: XsltDebug.type, request: 'launch', name: 'Debug XSLT' };
+	};
+
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.debugXslt', async () => {
+		const configuration = await debugConfigurationForActiveEditor();
+		if (configuration) {
+			const folder = vscode.window.activeTextEditor ? vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri) : undefined;
+			await vscode.debug.startDebugging(folder ?? vscode.workspace.workspaceFolders?.[0], configuration);
+		}
+	}));
+	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider(XsltDebug.type, new XsltDebugConfigurationProvider(debugConfigurationForActiveEditor)));
+	context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(XsltDebug.type, new XsltDebugAdapterFactory(context.extensionUri)));
+	const debugExitCodes = new XsltDebugExitCodes();
+	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(XsltDebug.type, debugExitCodes));
+	// as for tasks: when the transform completes, 'Open' the result
+	context.subscriptions.push(vscode.debug.onDidTerminateDebugSession(async (session) => {
+		if (session.type === XsltDebug.type) {
+			fileSelector.pickedValues.clear();
+			// undefined if the session was stopped before the transform completed
+			const exitCode = debugExitCodes.take(session);
+			if (exitCode !== undefined) {
+				const failed = exitCode !== 0;
+				const message = failed ? `Debug session '${session.name}' failed (exit code ${exitCode})` : `Completed debug session: '${session.name}'`;
+				const resultPath: string | undefined = session.configuration.resultPath;
+				const resultFsPath = resultPath && !path.isAbsolute(resultPath) && session.workspaceFolder ? path.join(session.workspaceFolder.uri.fsPath, resultPath) : resultPath;
+				await showTransformResult(message, failed, resultFsPath);
+			}
+		}
+	}));
 	// the processor-specific variants exist only so the editor title play button's tooltip names the processor
 	for (const command of ['xslt-xpath.quickRunXslt', 'xslt-xpath.quickRunXsltSaxonJ', 'xslt-xpath.quickRunXsltSaxonJS', 'xslt-xpath.quickRunXsltSaxonC']) {
 		context.subscriptions.push(vscode.commands.registerCommand(command, quickRunXslt));

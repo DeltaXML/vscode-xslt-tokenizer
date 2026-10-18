@@ -1,0 +1,477 @@
+/**
+ *  Copyright (c) 2026 DeltaXignia Ltd. and others.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd. - XSLT debug adapter
+ */
+package com.deltaxml.xslt.debug;
+
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+
+import net.sf.saxon.Controller;
+import net.sf.saxon.expr.Component;
+import net.sf.saxon.expr.PackageData;
+import net.sf.saxon.expr.StackFrame;
+import net.sf.saxon.expr.XPathContext;
+import net.sf.saxon.expr.instruct.GlobalVariable;
+import net.sf.saxon.expr.instruct.ParameterSet;
+import net.sf.saxon.expr.instruct.SlotManager;
+import net.sf.saxon.lib.NamespaceConstant;
+import net.sf.saxon.om.FocusIterator;
+import net.sf.saxon.om.GroundedValue;
+import net.sf.saxon.om.Item;
+import net.sf.saxon.om.Sequence;
+import net.sf.saxon.om.StructuredQName;
+import net.sf.saxon.s9api.Axis;
+import net.sf.saxon.s9api.QName;
+import net.sf.saxon.s9api.XdmArray;
+import net.sf.saxon.s9api.XdmAtomicValue;
+import net.sf.saxon.s9api.XdmFunctionItem;
+import net.sf.saxon.s9api.XdmItem;
+import net.sf.saxon.s9api.XdmMap;
+import net.sf.saxon.s9api.XdmNode;
+import net.sf.saxon.s9api.XdmNodeKind;
+import net.sf.saxon.s9api.XdmSequenceIterator;
+import net.sf.saxon.s9api.XdmValue;
+import net.sf.saxon.style.StylesheetPackage;
+
+/**
+ * Presents XDM values as DAP variables. Expandable values (sequences, nodes, maps and arrays) get a
+ * variablesReference whose children are only worked out when VS Code asks for them; references are only valid while
+ * execution stays paused. Values are explored with the s9api classes, which (unlike Saxon's internal classes) are the
+ * same in Saxon 12 and 13.
+ */
+final class Values {
+
+    private static final int MAX_CHILDREN = 1000;
+    private static final int MAX_TEXT = 200;
+
+    private final List<Supplier<List<Map<String, Object>>>> references = new ArrayList<Supplier<List<Map<String, Object>>>>();
+
+    void clear() {
+        references.clear();
+    }
+
+    int register(Supplier<List<Map<String, Object>>> children) {
+        references.add(children);
+        return references.size();
+    }
+
+    List<Map<String, Object>> children(int reference) {
+        if (reference < 1 || reference > references.size()) {
+            throw new IllegalArgumentException("the variable is no longer available");
+        }
+        return references.get(reference - 1).get();
+    }
+
+    // ---------------------------------------------------------------- scopes
+
+    Supplier<List<Map<String, Object>>> locals(final XPathContext context) {
+        return () -> {
+            List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+            for (Map.Entry<StructuredQName, Sequence> local : localVariables(context)) {
+                result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
+            }
+            for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(context)) {
+                result.add(variable("$" + tunnel.getKey().getDisplayName() + " (tunnel)", tunnel.getValue()));
+            }
+            return result;
+        };
+    }
+
+    Supplier<List<Map<String, Object>>> focus(final XPathContext context) {
+        return () -> {
+            List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+            Item item = context.getContextItem();
+            if (item == null) {
+                result.add(text(".", "(absent)", ""));
+                return result;
+            }
+            result.add(variable(".", item));
+            FocusIterator iterator = context.getCurrentIterator();
+            if (iterator != null) {
+                result.add(text("position()", String.valueOf(iterator.position()), "xs:integer"));
+                try {
+                    result.add(text("last()", String.valueOf(context.getLast()), "xs:integer"));
+                } catch (Exception e) {
+                    // not available
+                }
+            }
+            return result;
+        };
+    }
+
+    Supplier<List<Map<String, Object>>> globals(final XPathContext context) {
+        return () -> {
+            List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+            Controller controller = context.getController();
+            for (GlobalVariable global : globalVariableList(context)) {
+                String name = "$" + global.getVariableQName().getDisplayName();
+                Sequence value = controller.getBindery(global.getPackageData()).getGlobalVariableValue(global);
+                try {
+                    // not yet used: evaluated now, as it would be on first use
+                    result.add(variable(name, value != null ? value : global.evaluateVariable(context)));
+                } catch (Exception e) {
+                    result.add(text(name, "error: " + Debugger.message(e), ""));
+                }
+            }
+            return result;
+        };
+    }
+
+    // ---------------------------------------------------------------- variables in scope
+
+    // keyed by display name (lexical QName), as written in XPath expressions - locals hide globals
+    static Map<String, Map.Entry<StructuredQName, Sequence>> inScopeVariables(XPathContext context) {
+        Map<String, Map.Entry<StructuredQName, Sequence>> result = new LinkedHashMap<String, Map.Entry<StructuredQName, Sequence>>();
+        List<Map.Entry<StructuredQName, Sequence>> all = new ArrayList<Map.Entry<StructuredQName, Sequence>>(evaluatedGlobalVariables(context));
+        all.addAll(tunnelParameters(context));
+        all.addAll(localVariables(context));
+        for (Map.Entry<StructuredQName, Sequence> variable : all) {
+            result.put(variable.getKey().getDisplayName(), variable);
+        }
+        return result;
+    }
+
+    private static List<Map.Entry<StructuredQName, Sequence>> localVariables(XPathContext context) {
+        List<Map.Entry<StructuredQName, Sequence>> result = new ArrayList<Map.Entry<StructuredQName, Sequence>>();
+        StackFrame frame = context.getStackFrame();
+        SlotManager slots = frame == null ? null : frame.getStackFrameMap();
+        if (slots == null) {
+            return result;
+        }
+        List<StructuredQName> names = slots.getVariableMap();
+        // a slot is reused by variables in sibling scopes - the last assigned is the one most likely in scope
+        Map<String, Integer> byName = new HashMap<String, Integer>();
+        for (int i = 0; i < names.size(); i++) {
+            StructuredQName name = names.get(i);
+            if (name == null || isGenerated(name)) {
+                continue;
+            }
+            Sequence value;
+            try {
+                value = context.evaluateLocalVariable(i);
+            } catch (Exception e) {
+                value = null;
+            }
+            if (value != null) {
+                Integer existing = byName.get(name.getDisplayName());
+                Map.Entry<StructuredQName, Sequence> entry = new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(name, value);
+                if (existing != null) {
+                    result.set(existing, entry);
+                } else {
+                    byName.put(name.getDisplayName(), result.size());
+                    result.add(entry);
+                }
+            }
+        }
+        return result;
+    }
+
+    private static List<Map.Entry<StructuredQName, Sequence>> tunnelParameters(XPathContext context) {
+        List<Map.Entry<StructuredQName, Sequence>> result = new ArrayList<Map.Entry<StructuredQName, Sequence>>();
+        ParameterSet tunnel = context.getTunnelParameters();
+        if (tunnel != null) {
+            for (StructuredQName name : tunnel.getParameterNames()) {
+                if (name != null) {
+                    Sequence value = tunnel.getValue(tunnel.getIndex(name));
+                    if (value != null) {
+                        result.add(new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(name, value));
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    // global variables and parameters already evaluated - Saxon evaluates them on first use
+    private static List<Map.Entry<StructuredQName, Sequence>> evaluatedGlobalVariables(XPathContext context) {
+        List<Map.Entry<StructuredQName, Sequence>> result = new ArrayList<Map.Entry<StructuredQName, Sequence>>();
+        Controller controller = context.getController();
+        for (GlobalVariable global : globalVariableList(context)) {
+            Sequence value = controller.getBindery(global.getPackageData()).getGlobalVariableValue(global);
+            if (value != null) {
+                result.add(new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(global.getVariableQName(), value));
+            }
+        }
+        return result;
+    }
+
+    private static List<GlobalVariable> globalVariableList(XPathContext context) {
+        List<GlobalVariable> result = new ArrayList<GlobalVariable>();
+        Controller controller = context.getController();
+        if (controller == null || controller.getExecutable() == null) {
+            return result;
+        }
+        // in the component index: the stylesheet's global variables and params, and those from used packages
+        PackageData pkg = controller.getExecutable().getTopLevelPackage();
+        if (!(pkg instanceof StylesheetPackage)) {
+            return result;
+        }
+        for (Component component : ((StylesheetPackage) pkg).getComponentIndex().values()) {
+            if (component.getActor() instanceof GlobalVariable) {
+                GlobalVariable global = (GlobalVariable) component.getActor();
+                if (global.getVariableQName() != null && !isGenerated(global.getVariableQName())) {
+                    result.add(global);
+                }
+            }
+        }
+        result.sort((a, b) -> a.getVariableQName().getDisplayName().compareTo(b.getVariableQName().getDisplayName()));
+        return result;
+    }
+
+    // variables Saxon introduces itself, e.g. for xsl:for-each-group or optimisations
+    private static boolean isGenerated(StructuredQName name) {
+        String uri = name.getNamespaceUri().toString();
+        return uri.equals(NamespaceConstant.SAXON_GENERATED_VARIABLE) || uri.equals(NamespaceConstant.SAXON);
+    }
+
+    // ---------------------------------------------------------------- values
+
+    static GroundedValue ground(Sequence value) {
+        try {
+            return value.materialize();
+        } catch (Exception e) {
+            throw new IllegalStateException(Debugger.message(e), e);
+        }
+    }
+
+    Map<String, Object> variable(String name, Sequence value) {
+        XdmValue xdm;
+        try {
+            xdm = XdmValue.wrap(ground(value));
+        } catch (Exception e) {
+            return text(name, "error: " + Debugger.message(e), "");
+        }
+        return variable(name, xdm);
+    }
+
+    private Map<String, Object> variable(String name, final XdmValue value) {
+        int size = value.size();
+        if (size == 0) {
+            return text(name, "()", "empty-sequence()");
+        } else if (size == 1) {
+            return item(name, value.itemAt(0));
+        }
+        int reference = register(() -> {
+            List<Map<String, Object>> children = new ArrayList<Map<String, Object>>();
+            int n = 0;
+            for (XdmItem item : value) {
+                if (++n > MAX_CHILDREN) {
+                    children.add(text("...", (value.size() - MAX_CHILDREN) + " more items", ""));
+                    break;
+                }
+                children.add(item("[" + n + "]", item));
+            }
+            return children;
+        });
+        return text(name, summary(value), "sequence of " + size + " items").with("variablesReference", reference)
+                .with("indexedVariables", size);
+    }
+
+    private Json.Obj item(String name, final XdmItem item) {
+        if (item instanceof XdmNode) {
+            final XdmNode node = (XdmNode) item;
+            Json.Obj variable = text(name, nodeSummary(node), nodeType(node));
+            XdmNodeKind kind = node.getNodeKind();
+            if (kind == XdmNodeKind.ELEMENT || kind == XdmNodeKind.DOCUMENT) {
+                variable.with("variablesReference", register(() -> nodeChildren(node)));
+            }
+            return variable;
+        } else if (item instanceof XdmMap) {
+            final XdmMap map = (XdmMap) item;
+            Json.Obj variable = text(name, summary(map), "map(*)");
+            if (map.mapSize() > 0) {
+                variable.with("variablesReference", register(() -> {
+                    List<Map<String, Object>> children = new ArrayList<Map<String, Object>>();
+                    for (XdmAtomicValue key : map.keySet()) {
+                        children.add(variable(atomicSummary(key), map.get(key)));
+                    }
+                    return children;
+                }));
+            }
+            return variable;
+        } else if (item instanceof XdmArray) {
+            final XdmArray array = (XdmArray) item;
+            Json.Obj variable = text(name, summary(array), "array(*)");
+            if (array.arrayLength() > 0) {
+                variable.with("variablesReference", register(() -> {
+                    List<Map<String, Object>> children = new ArrayList<Map<String, Object>>();
+                    List<XdmValue> members = array.asList();
+                    for (int i = 0; i < members.size(); i++) {
+                        children.add(variable("[" + (i + 1) + "]", members.get(i)));
+                    }
+                    return children;
+                })).with("indexedVariables", array.arrayLength());
+            }
+            return variable;
+        } else if (item instanceof XdmFunctionItem) {
+            return text(name, summary(item), "function(*)");
+        } else if (item instanceof XdmAtomicValue) {
+            return text(name, atomicSummary((XdmAtomicValue) item), typeName(((XdmAtomicValue) item).getTypeName()));
+        }
+        return text(name, summary(item), item.getClass().getSimpleName());
+    }
+
+    private List<Map<String, Object>> nodeChildren(XdmNode node) {
+        List<Map<String, Object>> children = new ArrayList<Map<String, Object>>();
+        for (XdmSequenceIterator<XdmNode> attributes = node.axisIterator(Axis.ATTRIBUTE); attributes.hasNext(); ) {
+            XdmNode attribute = attributes.next();
+            children.add(item("@" + attribute.getNodeName(), attribute));
+        }
+        Map<String, Integer> counts = new HashMap<String, Integer>();
+        int n = 0;
+        for (XdmSequenceIterator<XdmNode> nodes = node.axisIterator(Axis.CHILD); nodes.hasNext(); ) {
+            XdmNode child = nodes.next();
+            if (child.getNodeKind() == XdmNodeKind.TEXT && child.getStringValue().trim().isEmpty()) {
+                continue;
+            }
+            if (++n > MAX_CHILDREN) {
+                children.add(text("...", "more child nodes", ""));
+                break;
+            }
+            String step = child.getNodeKind() == XdmNodeKind.ELEMENT ? child.getNodeName().toString() :
+                    child.getNodeKind() == XdmNodeKind.TEXT ? "text()" :
+                    child.getNodeKind() == XdmNodeKind.COMMENT ? "comment()" : "processing-instruction()";
+            Integer count = counts.get(step);
+            count = count == null ? 1 : count + 1;
+            counts.put(step, count);
+            children.add(item(step + "[" + count + "]", child));
+        }
+        return children;
+    }
+
+    // ---------------------------------------------------------------- one-line summaries
+
+    // the value as text for logpoints - like xsl:value-of, atomic values and nodes as their string values
+    static String logText(XdmValue value) {
+        StringBuilder sb = new StringBuilder();
+        for (XdmItem item : value) {
+            if (sb.length() > 0) {
+                sb.append(' ');
+            }
+            sb.append(item instanceof XdmAtomicValue || item instanceof XdmNode ? item.getStringValue() : summary(item));
+        }
+        return sb.toString();
+    }
+
+    static String summary(XdmValue value) {
+        if (value.size() == 1) {
+            XdmItem item = value.itemAt(0);
+            if (item instanceof XdmNode) {
+                return nodeSummary((XdmNode) item);
+            } else if (item instanceof XdmMap) {
+                XdmMap map = (XdmMap) item;
+                return "map{" + map.mapSize() + (map.mapSize() == 1 ? " entry}" : " entries}");
+            } else if (item instanceof XdmArray) {
+                int length = ((XdmArray) item).arrayLength();
+                return "array{" + length + (length == 1 ? " member}" : " members}");
+            } else if (item instanceof XdmFunctionItem) {
+                XdmFunctionItem function = (XdmFunctionItem) item;
+                QName name = function.getName();
+                return (name == null ? "function" : name.toString()) + "#" + function.getArity();
+            } else if (item instanceof XdmAtomicValue) {
+                return atomicSummary((XdmAtomicValue) item);
+            }
+            return truncate(item.toString());
+        }
+        StringBuilder sb = new StringBuilder("(");
+        int n = 0;
+        for (XdmItem item : value) {
+            if (n > 0) {
+                sb.append(", ");
+            }
+            if (++n > 3 || sb.length() > MAX_TEXT) {
+                sb.append("...");
+                break;
+            }
+            sb.append(summary(item));
+        }
+        return sb.append(')').toString();
+    }
+
+    private static String atomicSummary(XdmAtomicValue value) {
+        String text = value.getStringValue();
+        String type = value.getPrimitiveTypeName().getLocalName();
+        boolean isString = type.equals("string") || type.equals("untypedAtomic") || type.equals("anyURI");
+        return isString ? '"' + truncate(text) + '"' : truncate(text);
+    }
+
+    private static String nodeSummary(XdmNode node) {
+        switch (node.getNodeKind()) {
+            case DOCUMENT:
+                return "document-node()" + (node.getBaseURI() != null ? " " + fileName(node.getBaseURI().toString()) : "");
+            case ELEMENT: {
+                StringBuilder sb = new StringBuilder("<").append(node.getNodeName());
+                int n = 0;
+                for (XdmSequenceIterator<XdmNode> attributes = node.axisIterator(Axis.ATTRIBUTE); attributes.hasNext(); ) {
+                    XdmNode attribute = attributes.next();
+                    if (++n > 3) {
+                        sb.append(" ...");
+                        break;
+                    }
+                    sb.append(' ').append(attribute.getNodeName()).append("=\"").append(truncate(attribute.getStringValue(), 40)).append('"');
+                }
+                return sb.append(node.axisIterator(Axis.CHILD).hasNext() ? ">" : "/>").toString();
+            }
+            case ATTRIBUTE:
+                return node.getNodeName() + "=\"" + truncate(node.getStringValue()) + '"';
+            case TEXT:
+                return '"' + truncate(node.getStringValue().replaceAll("\\s+", " ")) + '"';
+            case COMMENT:
+                return "<!--" + truncate(node.getStringValue()) + "-->";
+            case PROCESSING_INSTRUCTION:
+                return "<?" + node.getNodeName() + " " + truncate(node.getStringValue()) + "?>";
+            case NAMESPACE:
+                return "xmlns" + (node.getNodeName() == null || node.getNodeName().getLocalName().isEmpty() ? "" : ":" + node.getNodeName()) +
+                        "=\"" + node.getStringValue() + '"';
+            default:
+                return truncate(node.toString());
+        }
+    }
+
+    private static String nodeType(XdmNode node) {
+        String kind;
+        switch (node.getNodeKind()) {
+            case DOCUMENT: kind = "document-node()"; break;
+            case ELEMENT: kind = "element()"; break;
+            case ATTRIBUTE: kind = "attribute()"; break;
+            case TEXT: kind = "text()"; break;
+            case COMMENT: kind = "comment()"; break;
+            case PROCESSING_INSTRUCTION: kind = "processing-instruction()"; break;
+            default: kind = "namespace-node()";
+        }
+        int line = node.getLineNumber();
+        return line > 0 && node.getNodeKind() != XdmNodeKind.DOCUMENT ? kind + " line " + line : kind;
+    }
+
+    private static String typeName(QName type) {
+        if (type == null) {
+            return "";
+        }
+        return NamespaceConstant.SCHEMA.equals(type.getNamespace()) ? "xs:" + type.getLocalName() : type.getClarkName();
+    }
+
+    private static String fileName(String uri) {
+        int slash = uri.lastIndexOf('/');
+        return slash >= 0 ? uri.substring(slash + 1) : uri;
+    }
+
+    private static String truncate(String text) {
+        return truncate(text, MAX_TEXT);
+    }
+
+    private static String truncate(String text, int max) {
+        return text.length() > max ? text.substring(0, max) + "..." : text;
+    }
+
+    private static Json.Obj text(String name, String value, String type) {
+        return Json.obj().with("name", name).with("value", value).with("type", type).with("variablesReference", 0);
+    }
+}

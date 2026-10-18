@@ -19,3 +19,4 @@ jest.config.js
 tslint.json
 scripts/**
 
+debugger/**

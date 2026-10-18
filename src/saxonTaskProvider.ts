@@ -22,7 +22,7 @@ function pathSeparator() {
     }
 }
 
-interface XSLTTask extends vscode.TaskDefinition {
+export interface XSLTTask extends vscode.TaskDefinition {
     label: string;
     saxonJar: string;
     xsltFile: string;
@@ -97,10 +97,6 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     // e.g. .../SaxonHE13-0J/saxon-he-13.0.jar, saxon9he.jar or .../SaxonCHE-macos-arm64-13-0-0/bin
     public static isSaxonHE(saxonPath: string | undefined) {
         return !!saxonPath && /saxonc?[-\d]*he(?=[-\d._]|j|$)/i.test(saxonPath);
-    }
-
-    private getProp(obj: any, prop: string): string {
-        return obj[prop];
     }
 
     public static async getXdmViewPath(document: vscode.TextDocument) {
@@ -368,154 +364,17 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     public getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt';
-        const saxonJarConfig: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
-        let isPriorToSaxon9902 = false;
 
         if (genericTask.type === 'xslt') {
             let xsltTask: XSLTTask = <XSLTTask>genericTask;
             if (xsltTask.label === 'xslt: ' + this.templateTaskLabel) {
                 this.templateTaskFound = true;
             }
-            const taskSaxonJarPath = xsltTask.saxonJar === '${config:XSLT.tasks.saxonJar}' ? saxonJarConfig : xsltTask.saxonJar;
-            isPriorToSaxon9902 = this.testSaxon9902(taskSaxonJarPath);
-            const altSaxonJarPath = xsltTask.messageEscaping === "on" ? undefined : this.getAltSaxonPath(taskSaxonJarPath);
-            let nogo = xsltTask.execute !== undefined && xsltTask.execute === false;
-            let commandLineArgs: string[] = [];
-
-            let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
-            let xsltParametersCommand: string[] = [];
-            for (const param of xsltParameters) {
-                xsltParametersCommand.push(param.name + '=' + param.value);
-            }
-            let saxonFeatures: XSLTParameter[] = xsltTask.features ? xsltTask.features : [];
-            let saxonFeaturesCommand: string[] = [];
-            for (const feature of saxonFeatures) {
-                saxonFeaturesCommand.push('--' + feature.name + ':' + feature.value);
-            }
-            let classPaths: string[] = altSaxonJarPath ? [altSaxonJarPath, xsltTask.saxonJar] : [xsltTask.saxonJar];
-            if (xsltTask.classPathEntries) {
-                classPaths = classPaths.concat(xsltTask.classPathEntries);
-            }
-            let isXSLT40 = false;
-            let useSaxonTextEmitter = isPriorToSaxon9902 && !altSaxonJarPath;
-
-            for (const propName in xsltTask) {
-                let propValue = this.getProp(xsltTask, propName);
-                switch (propName) {
-                    case 'xsltFile':
-                        commandLineArgs.push('-xsl:' + propValue);
-                        break;
-                    case 'xmlSource':
-                        if (propValue !== "") {
-                            commandLineArgs.push((SaxonJsTaskProvider.isJsonSource(xsltTask) ? '-json:' : '-s:') + propValue);
-                        }
-                        break;
-                    case 'resultPath':
-                        commandLineArgs.push('-o:' + propValue);
-                        break;
-                    case 'initialTemplate':
-                        if (propValue !== "") {
-                            commandLineArgs.push('-it:' + propValue);
-                        } else {
-                            commandLineArgs.push('-it');
-                        }
-                        break;
-                    case 'initialMode':
-                        commandLineArgs.push('-im:' + propValue);
-                        break;
-                    case 'catalogFilenames':
-                        commandLineArgs.push('-catalog:' + propValue);
-                        break;
-                    case 'configFilename':
-                        commandLineArgs.push('-config:' + propValue);
-                        break;
-                    case 'dtd':
-                        commandLineArgs.push('-dtd:' + propValue);
-                        break;
-                    case 'enableAssertions':
-                        commandLineArgs.push('-ea:' + propValue);
-                        break;
-                    case 'expandValues':
-                        commandLineArgs.push('-expand:' + propValue);
-                        break;
-                    case 'explainFilename':
-                        commandLineArgs.push('-explain:' + propValue);
-                        break;
-                    case 'exportFilename':
-                        commandLineArgs.push('-export:' + propValue);
-                        break;
-                    case 'traceOutFilename':
-                        commandLineArgs.push('-traceOut:' + propValue);
-                        break;
-                    case 'traceListener':
-                        if (propValue.length > 0) {
-                        commandLineArgs.push('-T:' + propValue);
-                        } else {
-                            commandLineArgs.push('-T');
-                        }
-                        break;
-                    case 'timing':
-                        if (propValue !== "off") {
-                            commandLineArgs.push('-t');
-                        }
-                        break;
-                    case 'timing':
-                        if (propValue !== "off") {
-                            commandLineArgs.push('-TP');
-                        }
-                        break;
-                    case 'TPfilename':
-                        commandLineArgs.push('-TP:' + propValue);
-                        break;
-                    case 'TPxslFilename':
-                        commandLineArgs.push('-TPxsl:' + propValue);
-                        break;
-                    case 'allowSyntaxExtensions40':
-                        isXSLT40 = true;
-                        commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonJarPath));
-                        break;
-                    case 'messageEscaping':
-                        useSaxonTextEmitter = propValue === "off" || (propValue === "adaptive" && isPriorToSaxon9902);
-                        break;
-                }
-            }
-
-            if (xsltTask.allowSyntaxExtensions40 === undefined && SaxonTaskProvider.syntaxExtensions40Value(undefined, taskSaxonJarPath) === 'on') {
-                // no setting: as for 'auto'
-                isXSLT40 = true;
-                commandLineArgs.push('--allowSyntaxExtensions:on');
-            }
-            const catalogOption = CatalogSetting.taskOption(xsltTask);
-            if (catalogOption) {
-                // the XSLT.resources.catalog setting, as used for the task's hrefs in the editor
-                commandLineArgs.push(catalogOption);
-            }
-            if (nogo) {
-                commandLineArgs.push('-nogo');
-            }
-            if (useSaxonTextEmitter) {
-                commandLineArgs.push('-m:net.sf.saxon.serialize.TEXTEmitter');
-            }
-
-            if (isXSLT40) {
-                const htmlParserJar = classPaths.find((item) => item.includes('nu.validator') || item.includes('htmlparser'));
-
-                if (!htmlParserJar) {
-                    const htmlparserPath = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
-                    if (htmlparserPath) {
-                        classPaths.push(htmlparserPath);
-                    }
-                }
-            }
-
-            const saxonClassName = altSaxonJarPath ? 'com.deltaxml.saxon.perf.AltTransform' : 'net.sf.saxon.Transform';
-
-
-            let rawClassPathString = classPaths.join(pathSeparator());
-            // this is overriden if problemMatcher is set in the tasks.json file      
+            const { classPath, mainClass, args } = SaxonTaskProvider.commandLine(xsltTask, false);
+            // this is overriden if problemMatcher is set in the tasks.json file
             let problemMatcher = "$saxon-xslt";
-            const javaArgs = ['-cp', rawClassPathString, saxonClassName];
-            const processExecution = new vscode.ProcessExecution('java', javaArgs.concat(commandLineArgs).concat(saxonFeaturesCommand).concat(xsltParametersCommand));
+            const javaArgs = ['-cp', classPath.join(pathSeparator()), mainClass];
+            const processExecution = new vscode.ProcessExecution('java', javaArgs.concat(args));
             let newTask = new vscode.Task(xsltTask, SaxonTaskProvider.taskScope(xsltTask.xsltFile), xsltTask.label, source, processExecution, problemMatcher);
             newTask.presentationOptions.clear = false;
             newTask.presentationOptions.showReuseMessage = false;
@@ -526,7 +385,153 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         }
     }
 
-    private testSaxon9902(saxonJarPath: string | undefined) {
+    // the Java classpath, main class and Saxon command-line arguments for an 'xslt' task definition - also used for
+    // 'xslt-saxon' debug configurations, which have the same properties: forDebug leaves out the options that the
+    // debugger's own Transform run can't use (the message-escaping AltTransform, tracing, timing, -nogo)
+    public static commandLine(xsltTask: XSLTTask, forDebug: boolean): { classPath: string[]; mainClass: string; args: string[] } {
+        const saxonJarConfig: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar');
+        const taskSaxonJarPath = xsltTask.saxonJar === '${config:XSLT.tasks.saxonJar}' ? saxonJarConfig : xsltTask.saxonJar;
+        const isPriorToSaxon9902 = SaxonTaskProvider.testSaxon9902(taskSaxonJarPath);
+        const altSaxonJarPath = xsltTask.messageEscaping === "on" || forDebug ? undefined : SaxonTaskProvider.getAltSaxonPath(taskSaxonJarPath);
+        let nogo = xsltTask.execute !== undefined && xsltTask.execute === false && !forDebug;
+        let commandLineArgs: string[] = [];
+
+        let xsltParameters: XSLTParameter[] = xsltTask.parameters ? xsltTask.parameters : [];
+        let xsltParametersCommand: string[] = [];
+        for (const param of xsltParameters) {
+            xsltParametersCommand.push(param.name + '=' + param.value);
+        }
+        let saxonFeatures: XSLTParameter[] = xsltTask.features ? xsltTask.features : [];
+        let saxonFeaturesCommand: string[] = [];
+        for (const feature of saxonFeatures) {
+            saxonFeaturesCommand.push('--' + feature.name + ':' + feature.value);
+        }
+        let classPaths: string[] = altSaxonJarPath ? [altSaxonJarPath, xsltTask.saxonJar] : [xsltTask.saxonJar];
+        if (xsltTask.classPathEntries) {
+            classPaths = classPaths.concat(xsltTask.classPathEntries);
+        }
+        let isXSLT40 = false;
+        let useSaxonTextEmitter = isPriorToSaxon9902 && !altSaxonJarPath;
+        // options that would conflict with the debugger's own tracing
+        const debugExcluded = ['traceOutFilename', 'traceListener', 'timing', 'TPfilename', 'TPxslFilename'];
+
+        for (const propName in xsltTask) {
+            if (forDebug && debugExcluded.includes(propName)) {
+                continue;
+            }
+            let propValue = (<any>xsltTask)[propName];
+            switch (propName) {
+                case 'xsltFile':
+                    commandLineArgs.push('-xsl:' + propValue);
+                    break;
+                case 'xmlSource':
+                    if (propValue !== "") {
+                        commandLineArgs.push((SaxonJsTaskProvider.isJsonSource(xsltTask) ? '-json:' : '-s:') + propValue);
+                    }
+                    break;
+                case 'resultPath':
+                    commandLineArgs.push('-o:' + propValue);
+                    break;
+                case 'initialTemplate':
+                    if (propValue !== "") {
+                        commandLineArgs.push('-it:' + propValue);
+                    } else {
+                        commandLineArgs.push('-it');
+                    }
+                    break;
+                case 'initialMode':
+                    commandLineArgs.push('-im:' + propValue);
+                    break;
+                case 'catalogFilenames':
+                    commandLineArgs.push('-catalog:' + propValue);
+                    break;
+                case 'configFilename':
+                    commandLineArgs.push('-config:' + propValue);
+                    break;
+                case 'dtd':
+                    commandLineArgs.push('-dtd:' + propValue);
+                    break;
+                case 'enableAssertions':
+                    commandLineArgs.push('-ea:' + propValue);
+                    break;
+                case 'expandValues':
+                    commandLineArgs.push('-expand:' + propValue);
+                    break;
+                case 'explainFilename':
+                    commandLineArgs.push('-explain:' + propValue);
+                    break;
+                case 'exportFilename':
+                    commandLineArgs.push('-export:' + propValue);
+                    break;
+                case 'traceOutFilename':
+                    commandLineArgs.push('-traceOut:' + propValue);
+                    break;
+                case 'traceListener':
+                    if (propValue.length > 0) {
+                    commandLineArgs.push('-T:' + propValue);
+                    } else {
+                        commandLineArgs.push('-T');
+                    }
+                    break;
+                case 'timing':
+                    if (propValue !== "off") {
+                        commandLineArgs.push('-t');
+                    }
+                    break;
+                case 'timing':
+                    if (propValue !== "off") {
+                        commandLineArgs.push('-TP');
+                    }
+                    break;
+                case 'TPfilename':
+                    commandLineArgs.push('-TP:' + propValue);
+                    break;
+                case 'TPxslFilename':
+                    commandLineArgs.push('-TPxsl:' + propValue);
+                    break;
+                case 'allowSyntaxExtensions40':
+                    isXSLT40 = true;
+                    commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonJarPath));
+                    break;
+                case 'messageEscaping':
+                    useSaxonTextEmitter = propValue === "off" || (propValue === "adaptive" && isPriorToSaxon9902);
+                    break;
+            }
+        }
+
+        if (xsltTask.allowSyntaxExtensions40 === undefined && SaxonTaskProvider.syntaxExtensions40Value(undefined, taskSaxonJarPath) === 'on') {
+            // no setting: as for 'auto'
+            isXSLT40 = true;
+            commandLineArgs.push('--allowSyntaxExtensions:on');
+        }
+        const catalogOption = CatalogSetting.taskOption(xsltTask);
+        if (catalogOption) {
+            // the XSLT.resources.catalog setting, as used for the task's hrefs in the editor
+            commandLineArgs.push(catalogOption);
+        }
+        if (nogo) {
+            commandLineArgs.push('-nogo');
+        }
+        if (useSaxonTextEmitter) {
+            commandLineArgs.push('-m:net.sf.saxon.serialize.TEXTEmitter');
+        }
+
+        if (isXSLT40) {
+            const htmlParserJar = classPaths.find((item) => item.includes('nu.validator') || item.includes('htmlparser'));
+
+            if (!htmlParserJar) {
+                const htmlparserPath = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
+                if (htmlparserPath) {
+                    classPaths.push(htmlparserPath);
+                }
+            }
+        }
+
+        const saxonClassName = altSaxonJarPath ? 'com.deltaxml.saxon.perf.AltTransform' : 'net.sf.saxon.Transform';
+        return { classPath: classPaths, mainClass: saxonClassName, args: commandLineArgs.concat(saxonFeaturesCommand).concat(xsltParametersCommand) };
+    }
+
+    private static testSaxon9902(saxonJarPath: string | undefined) {
         let result = false;
         if (saxonJarPath) {
             const matches = saxonJarPath.match(SaxonTaskProvider.saxonVersionRgx);
@@ -540,7 +545,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return result;
     }
 
-    private getAltSaxonPath(saxonJarPath: string | undefined) {
+    private static getAltSaxonPath(saxonJarPath: string | undefined) {
         let jarName: string | undefined = "deltaxml-saxon-perf-1.0-SAXON";
         if (saxonJarPath) {
             const matches = saxonJarPath.match(SaxonTaskProvider.saxonVersionRgx);

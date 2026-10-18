@@ -1,0 +1,127 @@
+/**
+ *  Copyright (c) 2026 DeltaXignia Ltd. and others.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd. - XSLT debugger
+ */
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { SaxonTaskProvider, XSLTTask } from './saxonTaskProvider';
+import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
+
+// The step-through debugger for SaxonJ: VS Code runs the debug adapter (xslt-resources/xslt-debugger, built from
+// debugger/src) in a JVM with the user's Saxon jar - it talks the Debug Adapter Protocol over stdin/stdout and runs
+// the transform with the same Saxon command-line options as an 'xslt' task with the same properties
+export class XsltDebug {
+	public static readonly type = 'xslt-saxon';
+	public static readonly adapterMainClass = 'com.deltaxml.xslt.debug.XsltDebugAdapter';
+	public static readonly minimumSaxonVersion = 12;
+
+	// the Saxon major version from the jar's file name or folder, e.g. 13 for .../SaxonPE13-1J/saxon-pe-13.1.jar,
+	// 12 for Saxon-HE-12.9.jar and 9 for saxon9he.jar - undefined if neither says
+	public static saxonMajorVersion(saxonJar: string): number | undefined {
+		const fileMatch = /saxon-?(?:[hpe]e-?)?(\d+)(?:[-.]|[hpe]e)/i.exec(path.basename(saxonJar));
+		const folderMatch = /saxon[hpe]e(\d+)-/i.exec(path.basename(path.dirname(saxonJar)));
+		const match = fileMatch ?? folderMatch;
+		return match ? Number.parseInt(match[1]) : undefined;
+	}
+
+	// a launch configuration's properties, with those of the 'xslt' task it names (if any) as defaults
+	public static withTaskProperties(config: vscode.DebugConfiguration, tasks: vscode.TaskDefinition[]): vscode.DebugConfiguration | string {
+		if (config.task === undefined) {
+			return config;
+		}
+		const task = tasks.find((t) => t.type === 'xslt' && t.label === config.task);
+		if (!task) {
+			return `XSLT debugger: no 'xslt' task labelled '${config.task}' in tasks.json`;
+		}
+		const { type, label, group, problemMatcher, ...taskProperties } = task;
+		return { ...taskProperties, ...config };
+	}
+
+	// the problem with a configuration (after variable substitution) that would stop it running, if any
+	public static configurationProblem(config: vscode.DebugConfiguration): string | undefined {
+		if (!config.xsltFile) {
+			return "XSLT debugger: the launch configuration has no 'xsltFile' (or 'task')";
+		}
+		if (!config.saxonJar) {
+			return 'XSLT debugger: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.';
+		}
+		const version = XsltDebug.saxonMajorVersion(config.saxonJar);
+		if (version !== undefined && version < XsltDebug.minimumSaxonVersion) {
+			return `XSLT debugger: Saxon ${XsltDebug.minimumSaxonVersion} or later is needed - '${path.basename(config.saxonJar)}' is Saxon ${version}`;
+		}
+		return undefined;
+	}
+}
+
+export class XsltDebugConfigurationProvider implements vscode.DebugConfigurationProvider {
+
+	// configurationForActiveEditor: for F5 with no launch.json - the configuration to debug the active stylesheet as
+	// Quick Run would run it, or undefined (having said why) if it can't be debugged
+	constructor(private configurationForActiveEditor: () => Promise<vscode.DebugConfiguration | undefined>) { }
+
+	public async resolveDebugConfiguration(_folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): Promise<vscode.DebugConfiguration | undefined> {
+		if (!config.type && !config.request && !config.name) {
+			return this.configurationForActiveEditor();
+		}
+		const tasksObject = config.task !== undefined ? await SaxonJsTaskProvider.getTasksObject() : { tasks: [] };
+		const resolved = XsltDebug.withTaskProperties(config, tasksObject.tasks || []);
+		if (typeof resolved === 'string') {
+			vscode.window.showErrorMessage(resolved);
+			return undefined;
+		}
+		if (!resolved.saxonJar) {
+			resolved.saxonJar = '${config:XSLT.tasks.saxonJar}';
+		}
+		return resolved;
+	}
+
+	public resolveDebugConfigurationWithSubstitutedVariables(_folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): vscode.DebugConfiguration | undefined {
+		const problem = XsltDebug.configurationProblem(config);
+		if (problem) {
+			vscode.window.showErrorMessage(problem);
+			return undefined;
+		}
+		// read by the adapter factory (classPath) and sent to the adapter in the launch request (saxonArgs)
+		const { classPath, args } = SaxonTaskProvider.commandLine(<XSLTTask><unknown>config, true);
+		config.classPath = classPath;
+		config.saxonArgs = args;
+		return config;
+	}
+}
+
+export class XsltDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+
+	constructor(private extensionUri: vscode.Uri) { }
+
+	public createDebugAdapterDescriptor(session: vscode.DebugSession): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
+		const adapterJar = vscode.Uri.joinPath(this.extensionUri, 'xslt-resources', 'xslt-debugger', 'xslt-debugger.jar').fsPath;
+		const classPath: string[] = [adapterJar].concat(session.configuration.classPath || []);
+		// relative paths in the configuration are relative to the workspace folder, as for tasks
+		const cwd = session.workspaceFolder?.uri.fsPath;
+		return new vscode.DebugAdapterExecutable('java', ['-cp', classPath.join(path.delimiter), XsltDebug.adapterMainClass], cwd ? { cwd } : undefined);
+	}
+}
+
+// the exit code of each debug session's transform (from the adapter's 'exited' event) - undefined if the session
+// ended before the transform did
+export class XsltDebugExitCodes implements vscode.DebugAdapterTrackerFactory {
+	private exitCodes = new Map<string, number>();
+
+	public createDebugAdapterTracker(session: vscode.DebugSession): vscode.DebugAdapterTracker {
+		return {
+			onDidSendMessage: (message: any) => {
+				if (message?.type === 'event' && message.event === 'exited') {
+					this.exitCodes.set(session.id, message.body?.exitCode);
+				}
+			}
+		};
+	}
+
+	public take(session: vscode.DebugSession): number | undefined {
+		const exitCode = this.exitCodes.get(session.id);
+		this.exitCodes.delete(session.id);
+		return exitCode;
+	}
+}
