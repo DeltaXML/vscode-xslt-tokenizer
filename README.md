@@ -203,6 +203,8 @@ With no `launch.json`, the **Run and Debug** view offers **Debug Active Styleshe
 
 The stylesheet is compiled without optimization when debugging, so that all variables can be inspected.
 
+The **XSLT Debugger** log, in the Output panel, shows how each debug session was launched - the Java command line, the Saxon product, the Java runtime and the Saxon options used - and, when a session doesn't start, why: for example, Java isn't on the PATH, or the Saxon jar setting isn't a Saxon jar.
+
 # Release Notes
 
 The project changelog is maintained on the project wiki. See [Release Notes](https://github.com/DeltaXML/vscode-xslt-tokenizer/wiki/Release-Notes).

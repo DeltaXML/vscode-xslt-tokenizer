@@ -168,6 +168,10 @@ final class Debugger {
         args.add("-opt:0");
         args.add("-l:on");
         args.add("-quit:off");
+        // for the extension's log (VS Code ignores events it doesn't know)
+        dap.event("xsltDebugLaunch", Json.obj().with("saxon", net.sf.saxon.Version.getProductTitle())
+                .with("java", System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")")
+                .with("javaHome", System.getProperty("java.home")).with("saxonArgs", args));
         transformThread = new Thread(new Runnable() {
             public void run() {
                 int exitCode = 0;

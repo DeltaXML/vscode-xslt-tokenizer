@@ -12,7 +12,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { assert } from 'chai';
 import { SaxonTaskProvider, XSLTTask } from '../../src/saxonTaskProvider';
-import { XsltDebug } from '../../src/xsltDebug';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as cp from 'child_process';
+import { XsltDebug, XsltDebugAdapterProcess, XsltDebugLog } from '../../src/xsltDebug';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
 
@@ -84,6 +87,14 @@ suite('XSLT debugger - configurations', () => {
 		assert.isUndefined(XsltDebug.variableAt(template, template.indexOf('named')));
 	});
 
+	test('why the debug adapter stopped, from the JVM\'s stderr', () => {
+		assert.match(XsltDebugAdapterProcess.failureReason('Exception in thread "main" java.lang.NoClassDefFoundError: net/sf/saxon/om/Sequence', 1, '/opt/x.jar'),
+			/Saxon's classes weren't found: check that '\/opt\/x.jar' is a Saxon jar/);
+		assert.match(XsltDebugAdapterProcess.failureReason('java.lang.UnsupportedClassVersionError: net/sf/saxon/Transform has been compiled by a more recent version of the Java Runtime (class file version 61.0), this version of the Java Runtime only recognizes class file versions up to 55.0', 1, '/opt/s.jar'),
+			/too old for the Saxon jar '\/opt\/s.jar' \(class file version 61.0\)/);
+		assert.strictEqual(XsltDebugAdapterProcess.failureReason('boom\nline 2', 3, undefined), 'the debug adapter stopped unexpectedly (exit code 3): boom line 2');
+	});
+
 	test('runs Saxon with the task options, less tracing, timing and the message-escaping AltTransform', () => {
 		const task = <XSLTTask><unknown>{
 			type: 'xslt', label: 'report', saxonJar: '/opt/SaxonPE13-1J/saxon-pe-13.1.jar', xsltFile: 'report.xsl', xmlSource: 'books.xml',
@@ -98,6 +109,53 @@ suite('XSLT debugger - configurations', () => {
 		assert.strictEqual(forDebug.mainClass, 'net.sf.saxon.Transform');
 		assert.deepStrictEqual(forDebug.classPath, ['/opt/SaxonPE13-1J/saxon-pe-13.1.jar', '/opt/ext.jar']);
 		assert.deepStrictEqual(forDebug.args, ['-xsl:report.xsl', '-s:books.xml', '-o:out.xml', '-im:m', '--allowSyntaxExtensions:on', '--xsltSchemaAware:false', 'p=1']);
+	});
+});
+
+suite('XSLT debugger - sessions that fail to start', function () {
+	this.timeout(30000);
+	const fixture = path.join(fixtures, 'basic.xsl');
+	// not a jar at all, but with a Saxon jar's name
+	const notAJar = path.join(os.tmpdir(), 'xslt-debug-test', 'saxon-he-13.0.jar');
+
+	suiteSetup(() => {
+		fs.mkdirSync(path.dirname(notAJar), { recursive: true });
+		fs.writeFileSync(notAJar, '');
+	});
+
+	const logged = (pattern: RegExp) => XsltDebugLog.messages.some((m) => pattern.test(m));
+	// a session whose adapter fails before it responds isn't started (startDebugging gives false) - wait for the log
+	const whenLogged = async (pattern: RegExp) => {
+		for (let wait = 0; wait < 100 && !logged(pattern); wait++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		return logged(pattern);
+	};
+
+	test("a Saxon jar that doesn't exist: not started, and logged", async () => {
+		const started = await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name: 'no jar', saxonJar: '/no/such/saxon-he-13.0.jar', xsltFile: fixture });
+		assert.isFalse(started);
+		assert.isTrue(logged(/'no jar' not started: .*the Saxon jar '\/no\/such\/saxon-he-13.0.jar' doesn't exist/));
+	});
+
+	test("Java not found: logged, and the session ends", async () => {
+		XsltDebug.javaCommand = 'no-such-java-for-xslt-tests';
+		try {
+			await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name: 'no java', saxonJar: notAJar, xsltFile: fixture });
+			assert.isTrue(await whenLogged(/'no java': Java wasn't found: 'no-such-java-for-xslt-tests' isn't on the PATH/));
+			assert.isUndefined(vscode.debug.activeDebugSession);
+		} finally {
+			XsltDebug.javaCommand = 'java';
+		}
+	});
+
+	test("not a Saxon jar: the JVM's error is logged, and explained", async function () {
+		if (cp.spawnSync('java', ['-version']).status !== 0) {
+			this.skip();
+		}
+		await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name: 'not saxon', saxonJar: notAJar, xsltFile: fixture });
+		assert.isTrue(await whenLogged(/'not saxon': Saxon's classes weren't found/));
+		assert.isTrue(logged(/NoClassDefFoundError: net\/sf\/saxon/));
 	});
 });
 
@@ -185,6 +243,9 @@ suite('XSLT debugger - debug sessions', function () {
 
 		await session.customRequest('continue', { threadId: 1 });
 		await ended;
+		// the launch, in the 'XSLT Debugger' log
+		assert.isTrue(XsltDebugLog.messages.some((m) => /'debug basic.xsl': java -cp .*xslt-debugger.jar/.test(m)));
+		assert.isTrue(XsltDebugLog.messages.some((m) => /'debug basic.xsl': Saxon.*, on Java [\d.]+.*\n    Saxon options: .*-xsl:.*-T:com.deltaxml.xslt.debug.DebugTraceListener -opt:0/.test(m)));
 	});
 
 	test("a 'quickRun' configuration (as offered with no launch.json): the active stylesheet, with its task's settings", async () => {
