@@ -745,6 +745,52 @@ async function testEveryXslSequence(saxonJar) {
     await dap.exited;
 }
 
+// a copy of each result - the principal one and each xsl:result-document - as written so far, indented, is sent
+// before each pause; the Output scope shows which is being written to, and the end of each
+async function testOutputSoFar(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'outputs.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'result.xml')}`] },
+        { 'outputs.xsl': [{ line: 9 }, { line: 12 }] });
+    const terminated = dap.event('terminated');
+    const text = new Map();
+    const apply = () => {
+        for (const e of dap.events.splice(0).filter((e) => e.event === 'xsltOutputs')) {
+            for (const o of e.body.outputs) {
+                text.set(o.name, (text.get(o.name) ?? '').substring(0, o.offset) + o.text);
+            }
+            dap.current = e.body.current;
+        }
+    };
+    const stops = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        apply();
+        if (!stop) {
+            break;
+        }
+        const output = byName(await dap.variables(0, 'Output'));
+        stops.push({ line: stop.frames[0].line, writingTo: output['writing to'].value, result: text.get('result.xml') ?? '', side: text.get('side.json') });
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    // the 3rd row's pause: the first two rows so far, indented - the stylesheet says indent="no"
+    assert.strictEqual(stops[2].line, 9);
+    assert.match(stops[2].result, /<report>\n {3}<row n="1">text<\/row>\n {3}<row n="2">text<\/row>$/);
+    // the xsl:result-document's pause: being written to
+    assert.strictEqual(stops[3].line, 12);
+    assert.strictEqual(stops[3].writingTo, 'side.json');
+    assert.strictEqual(stops[3].side, '');
+    // at the end, both complete
+    assert.match(text.get('result.xml'), /<row n="3">text<\/row>\n {3}<end\/>\n<\/report>/);
+    assert.match(text.get('side.json'), /"count":3/);
+    // the real result is as the stylesheet says: not indented
+    assert.match(require('fs').readFileSync(path.join(outDir, 'result.xml'), 'utf8'), /<report><row n="1">text<\/row>/);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -753,7 +799,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

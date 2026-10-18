@@ -15,7 +15,7 @@ import { SaxonTaskProvider, XSLTTask } from '../../src/saxonTaskProvider';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as cp from 'child_process';
-import { XsltDebug, XsltDebugAdapterProcess, XsltDebugLog, XsltDebugProblems } from '../../src/xsltDebug';
+import { XsltDebug, XsltDebugAdapterProcess, XsltDebugLog, XsltDebugOutputs, XsltDebugProblems } from '../../src/xsltDebug';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
 
@@ -228,7 +228,7 @@ suite('XSLT debugger - debug sessions', function () {
 		assert.strictEqual(stackFrames[0].name, 'xsl:template match="item"');
 
 		const { scopes } = await session.customRequest('scopes', { frameId: stackFrames[0].id });
-		assert.deepStrictEqual(scopes.map((s: any) => s.name), ['Locals', 'Context', 'Globals']);
+		assert.deepStrictEqual(scopes.map((s: any) => s.name), ['Locals', 'Context', 'Globals', 'Output']);
 		const { variables } = await session.customRequest('variables', { variablesReference: scopes[0].variablesReference });
 		assert.deepInclude(variables.map((v: any) => [v.name, v.value]), ['$doubled', '4']);
 		const evaluated = await session.customRequest('evaluate', { expression: 'string(@n) || "!"', frameId: stackFrames[0].id, context: 'watch' });
@@ -290,6 +290,39 @@ suite('XSLT debugger - debug sessions', function () {
 		const problems = XsltDebugProblems.get().get(xsltUri) ?? [];
 		assert.deepStrictEqual(problems.map((d) => [d.code, d.range.start.line, d.severity]), [['FORG0001', 10, vscode.DiagnosticSeverity.Error]]);
 		assert.match(problems[0].message, /Cannot convert string "abc" to xs:decimal/);
+	});
+
+	test('the output so far: opened at the first pause with output, in the language of its output method', async () => {
+		stops = [];
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		const xsltUri = vscode.Uri.file(path.join(fixtures, 'outputs.xsl'));
+		vscode.debug.addBreakpoints([9, 14].map((line) => new vscode.SourceBreakpoint(new vscode.Location(xsltUri, new vscode.Position(line - 1, 0)))));
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-debug-out-'));
+		const name = 'debug outputs.xsl';
+		const ended = terminated(name);
+		assert.isTrue(await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name, saxonJar, xsltFile: xsltUri.fsPath,
+			xmlSource: path.join(fixtures, 'basic.xml'), resultPath: path.join(outDir, 'result.xml') }));
+		// the 1st row: nothing written yet; the 2nd: the 1st row
+		for (let i = 0; i < 2; i++) {
+			const stop = await nextStop();
+			await stop.session.customRequest('continue', { threadId: 1 });
+		}
+		let stop = await nextStop();
+		assert.match(XsltDebugOutputs.get().text('result.xml') ?? '', /<report>\n {3}<row n="1">text<\/row>\n {3}<row n="2">text<\/row>$/);
+		// opened by itself, beside the stylesheet
+		const opened = vscode.window.visibleTextEditors.find((e) => e.document.uri.scheme === XsltDebugOutputs.scheme);
+		assert.ok(opened, 'the output is open');
+		assert.strictEqual(path.posix.basename(opened!.document.uri.path), 'result.xml');
+		assert.strictEqual(opened!.document.languageId, 'xml');
+		await stop.session.customRequest('continue', { threadId: 1 });
+		stop = await nextStop();
+		assert.match(XsltDebugOutputs.get().text('side.json') ?? '', /"count":3/);
+		await XsltDebugOutputs.get().show('side.json');
+		const side = vscode.window.visibleTextEditors.find((e) => e.document.uri.path.endsWith('side.json'));
+		assert.strictEqual(side?.document.languageId, 'json');
+		await stop.session.customRequest('continue', { threadId: 1 });
+		await ended;
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 	});
 
 	test("the 'Debug Stylesheet' command: the active stylesheet, from xsl:initial-template with no XML context file", async () => {

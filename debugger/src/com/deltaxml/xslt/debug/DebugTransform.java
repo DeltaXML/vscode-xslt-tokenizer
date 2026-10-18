@@ -31,6 +31,13 @@ class DebugTransform extends Transform {
         this.debugger = debugger;
     }
 
+    // a copy of each result, for the extension's view of the output so far
+    @Override
+    protected void initializeConfiguration(Configuration config) {
+        super.initializeConfiguration(config);
+        debugger.outputs.install(config);
+    }
+
     // the compiler exists by now, before the stylesheet is compiled - its field is private, so it's found by reflection
     @Override
     protected void applyLocalOptions(CommandLineOptions options, Configuration config) {

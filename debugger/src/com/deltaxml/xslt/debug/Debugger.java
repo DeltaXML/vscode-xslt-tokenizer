@@ -53,6 +53,8 @@ final class Debugger {
     static volatile Debugger current;
 
     private final XsltDebugAdapter dap;
+    // a copy of each result written so far
+    final OutputCapture outputs = new OutputCapture();
 
     // --- launch configuration (DAP thread, before start)
     private final List<String> saxonArgs = new ArrayList<String>();
@@ -195,6 +197,7 @@ final class Debugger {
                 }
                 System.out.flush();
                 System.err.flush();
+                sendOutputs(null, false);
                 dap.event("exited", Json.obj().with("exitCode", exitCode));
                 dap.event("terminated", Json.obj());
             }
@@ -247,6 +250,7 @@ final class Debugger {
                 result.add(scope("Locals", values.register(values.locals(frame.context, frame.current)), false));
                 result.add(scope("Context", values.register(values.focus(frame.context)), false));
                 result.add(scope("Globals", values.register(values.globals(xsltContext(frame))), true));
+                result.add(scope("Output", values.register(values.output(outputs, xsltContext(frame))), false));
                 return result;
             }
         });
@@ -575,6 +579,8 @@ final class Debugger {
         if (error != null) {
             stopped.with("description", error.get("description")).with("text", error.get("exceptionId") + ": " + Json.object(error, "details").get("message"));
         }
+        XPathContext pausedContext = frame == null ? null : xsltContext(frame);
+        sendOutputs(pausedContext == null ? null : pausedContext.getCurrentOutputUri(), pausedContext != null && pausedContext.getTemporaryOutputState() != 0);
         dap.event("stopped", stopped);
         while (true) {
             FutureTask<?> task;
@@ -620,6 +626,15 @@ final class Debugger {
 
     private static Map<String, Object> scope(String name, int reference, boolean expensive) {
         return Json.obj().with("name", name).with("variablesReference", reference).with("expensive", expensive);
+    }
+
+    // the text written to each result since the extension was last sent it - before a pause, so the view of the output
+    // is up to date when VS Code shows the pause, and when the transform ends
+    private void sendOutputs(String currentUri, boolean inTemporaryTree) {
+        Map<String, Object> unsent = outputs.unsent(currentUri, inTemporaryTree);
+        if (unsent != null) {
+            dap.event("xsltOutputs", unsent);
+        }
     }
 
     // ---------------------------------------------------------------- errors

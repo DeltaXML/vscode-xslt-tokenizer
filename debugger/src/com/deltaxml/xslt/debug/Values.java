@@ -133,6 +133,31 @@ final class Values {
         };
     }
 
+    // the results written so far: which one is being written to (or a temporary tree), and the end of each
+    Supplier<List<Map<String, Object>>> output(final OutputCapture outputs, final XPathContext context) {
+        return () -> {
+            List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+            List<OutputCapture.Output> all = outputs.all();
+            String current = context.getCurrentOutputUri();
+            String writingTo = context.getTemporaryOutputState() != 0 ? "a temporary tree (e.g. an xsl:variable's content)" : null;
+            for (OutputCapture.Output output : all) {
+                if (writingTo == null && current != null && current.equals(output.uri)) {
+                    writingTo = output.name;
+                }
+            }
+            if (writingTo == null && !all.isEmpty() && current == null) {
+                writingTo = all.get(0).name;
+            }
+            result.add(text("writing to", writingTo == null ? "(nothing yet)" : writingTo, ""));
+            for (OutputCapture.Output output : all) {
+                String tail = output.tail(120).replaceAll("\\s+", " ");
+                result.add(text(output.name, (output.length() > 120 ? "..." : "") + tail,
+                        output.method + ", " + output.length() + " characters" + (output.isTruncated() ? " (truncated)" : "")));
+            }
+            return result;
+        };
+    }
+
     // ---------------------------------------------------------------- variables in scope
 
     // keyed by display name (lexical QName), as written in XPath expressions - locals hide globals

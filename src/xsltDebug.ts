@@ -209,6 +209,111 @@ export class XsltDebugLog {
 	}
 }
 
+// The output each debug session's transform has written so far - its principal result and each
+// xsl:result-document - as read-only virtual documents ('xslt-debug-output:' URIs, nothing on disk), updated at each
+// pause. The adapter sends each output's new text before it pauses, serialized as the result is but indented, and the
+// document's language is from its output method. A document is reused for an output of the same name in the next
+// session, so a rerun refreshes the same tab
+export class XsltDebugOutputs implements vscode.TextDocumentContentProvider {
+	public static readonly scheme = 'xslt-debug-output';
+	private static instance: XsltDebugOutputs | undefined;
+	private readonly changed = new vscode.EventEmitter<vscode.Uri>();
+	public readonly onDidChange = this.changed.event;
+	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean }>();
+	// the output being written to at the last pause, and whether the output has been opened this session
+	private current: string | undefined;
+	private openedThisSession = false;
+
+	public static get(): XsltDebugOutputs {
+		return XsltDebugOutputs.instance ??= new XsltDebugOutputs();
+	}
+
+	public static uri(name: string): vscode.Uri {
+		return vscode.Uri.from({ scheme: XsltDebugOutputs.scheme, path: `/debug output/${name}` });
+	}
+
+	// the output's language, from its output method
+	public static languageId(method: string): string {
+		return method === 'xml' || method === 'xhtml' ? 'xml' : method === 'html' ? 'html' : method === 'json' ? 'json' : 'plaintext';
+	}
+
+	public provideTextDocumentContent(uri: vscode.Uri): string {
+		const output = this.outputs.get(path.posix.basename(uri.path));
+		if (!output) {
+			return '';
+		}
+		return output.truncated ? output.text + '\n... (only the first part of the output is shown)' : output.text;
+	}
+
+	public text(name: string): string | undefined {
+		return this.outputs.get(name)?.text;
+	}
+
+	public names(): string[] {
+		return [...this.outputs.keys()];
+	}
+
+	public startSession() {
+		for (const [name, output] of this.outputs) {
+			output.text = '';
+			this.changed.fire(XsltDebugOutputs.uri(name));
+		}
+		this.outputs.clear();
+		this.current = undefined;
+		this.openedThisSession = false;
+	}
+
+	// an 'xsltOutputs' event from the adapter: each output's text from an offset
+	public update(body: { outputs?: { name: string; method: string; offset: number; text: string; truncated?: boolean; uri?: string }[]; current?: string }) {
+		for (const update of body.outputs ?? []) {
+			const output = this.outputs.get(update.name) ?? { text: '', method: update.method, truncated: false };
+			output.text = update.offset > 0 && update.offset <= output.text.length ? output.text.substring(0, update.offset) + update.text : update.text;
+			output.method = update.method;
+			output.truncated = !!update.truncated;
+			this.outputs.set(update.name, output);
+			this.changed.fire(XsltDebugOutputs.uri(update.name));
+		}
+		const currentOutput = (body.outputs ?? []).find((o) => o.uri && o.uri === body.current);
+		this.current = currentOutput?.name ?? (body.current ? [...this.outputs.keys()].find((name) => body.current?.endsWith('/' + name)) : undefined) ?? this.current;
+		if (!this.openedThisSession && vscode.workspace.getConfiguration('XSLT.debug').get('openOutput', true)) {
+			const name = this.current && this.outputs.get(this.current)?.text ? this.current : this.names().find((n) => this.outputs.get(n)?.text);
+			if (name) {
+				this.openedThisSession = true;
+				this.show(name);
+			}
+		}
+	}
+
+	// opens the output (by default, the one being written to), beside the active editor, leaving the focus there
+	public async show(name?: string) {
+		const names = this.names();
+		let chosen = name ?? (names.length > 1 ? undefined : names[0]) ?? this.current;
+		if (!chosen && names.length > 1) {
+			chosen = await vscode.window.showQuickPick(names, { placeHolder: 'The output to show' });
+		}
+		if (!chosen) {
+			vscode.window.showInformationMessage('XSLT debugger: there is no output yet - it\'s shown once a debug session has written some.');
+			return;
+		}
+		const document = await vscode.workspace.openTextDocument(XsltDebugOutputs.uri(chosen));
+		await vscode.languages.setTextDocumentLanguage(document, XsltDebugOutputs.languageId(this.outputs.get(chosen)?.method ?? 'xml'));
+		await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, preview: false });
+	}
+
+	// a visible output document is kept scrolled to its end, where output is being added
+	public static revealEnd(document: vscode.TextDocument) {
+		if (document.uri.scheme !== XsltDebugOutputs.scheme) {
+			return;
+		}
+		const end = new vscode.Range(document.lineCount - 1, 0, document.lineCount - 1, 0);
+		for (const editor of vscode.window.visibleTextEditors) {
+			if (editor.document === document) {
+				editor.revealRange(end, vscode.TextEditorRevealType.Default);
+			}
+		}
+	}
+}
+
 // the errors Saxon reported in the last debug session - compiling or running the stylesheet - in the Problems view,
 // as for tasks with the Saxon problem matcher; cleared when the next session starts
 export class XsltDebugProblems {
@@ -252,6 +357,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		const quote = (arg: string) => /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
 		XsltDebugLog.info(`Debug session '${session.name}': ${command} ${args.map(quote).join(' ')}${cwd ? `\n    in ${cwd}` : ''}`);
 		XsltDebugProblems.clear();
+		XsltDebugOutputs.get().startSession();
 		this.process = cp.spawn(command, args, { cwd });
 		this.process.stdout?.on('data', (data: Buffer) => this.receive(data));
 		this.process.stderr?.on('data', (data: Buffer) => {
@@ -298,6 +404,8 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			if (message.type === 'event' && message.event === 'xsltDebugLaunch') {
 				const { saxon, java, javaHome, saxonArgs } = message.body ?? {};
 				XsltDebugLog.info(`Debug session '${this.session.name}': ${saxon}, on Java ${java} at ${javaHome}\n    Saxon options: ${(saxonArgs ?? []).join(' ')}`);
+			} else if (message.type === 'event' && message.event === 'xsltOutputs') {
+				XsltDebugOutputs.get().update(message.body ?? {});
 			} else if (message.type === 'event' && message.event === 'xsltDebugError') {
 				const { path: fsPath, line, code, message: text, severity } = message.body ?? {};
 				if (typeof fsPath === 'string' && typeof line === 'number') {

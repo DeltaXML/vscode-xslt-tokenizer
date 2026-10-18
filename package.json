@@ -265,6 +265,12 @@
 				"title": "Debug Stylesheet with SaxonJ",
 				"category": "XSLT",
 				"icon": "$(debug-alt)"
+			},
+			{
+				"command": "xslt-xpath.showDebugOutput",
+				"title": "Show Debug Output",
+				"category": "XSLT",
+				"icon": "$(output)"
 			}
 		],
 		"views": {
@@ -394,6 +400,12 @@
 					"command": "xslt-xpath.debugXslt",
 					"when": "resourceLangId == xslt",
 					"group": "navigation@1"
+				}
+			],
+			"debug/toolbar": [
+				{
+					"command": "xslt-xpath.showDebugOutput",
+					"when": "debugType == 'xslt-saxon'"
 				}
 			]
 		},
@@ -579,6 +591,12 @@
 							"path"
 						]
 					}
+				},
+				"XSLT.debug.openOutput": {
+					"type": "boolean",
+					"default": true,
+					"scope": "window",
+					"description": "When debugging with SaxonJ, open the output written so far - beside the stylesheet - at the first pause where there is some. 'XSLT: Show Debug Output' opens it at any time."
 				}
 			}
 		},
