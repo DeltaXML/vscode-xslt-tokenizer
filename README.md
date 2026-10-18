@@ -182,7 +182,7 @@ For more a full description on using VSCode tasks to run XSLT, see [Running XSLT
 
 Stylesheets can be debugged with SaxonJ (Saxon 12 or later, any edition, including Saxon-HE): set breakpoints in the stylesheet, then use **XSLT: Debug Stylesheet with SaxonJ** (the debug button in the editor title, or `F5` with no `launch.json`). As with Quick Run, the stylesheet runs with the XML context file - or from `xsl:initial-template` - using the Quick Run task, so parameters added to the task also apply when debugging.
 
-- Breakpoints, including conditional breakpoints (an XPath condition) and logpoints (`{xpath}` in the message is replaced by its value)
+- Breakpoints, including conditional breakpoints (an XPath condition) and logpoints (`{xpath}` in the message is replaced by its value). Saxon stops at the end of an instruction's start tag, so a breakpoint elsewhere in a multi-line start tag - including within a multi-line XPath expression - moves there; one where there's no instruction to stop at (a comment, text, `xsl:note`, a declaration, or a child such as `xsl:sort`) is shown as unverified
 - Step Over, Step Into and Step Out - the call stack shows template rules, named templates, functions and global variables, and `xsl:for-each`, `xsl:for-each-group` and `xsl:iterate` instructions
 - The Variables view shows local variables and parameters (including tunnel parameters), the context item, `position()` and `last()`, and global variables and parameters - nodes, maps, arrays and sequences can be expanded
 - XPath expressions are evaluated in the Watch view and the Debug Console (with in-scope variables, namespaces and the context item - but not stylesheet functions); hover over a variable to see its value

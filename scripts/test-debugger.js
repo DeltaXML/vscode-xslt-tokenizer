@@ -210,6 +210,60 @@ async function testInitialTemplateAndError(saxonJar) {
     await dap.exited;
 }
 
+// breakpoints are moved to where Saxon reports an instruction - the end of its start tag - or rejected where no
+// instruction is traced
+async function testBreakpointVerification(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    const requested = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 23, 24, 27, 28, 32, 33, 34];
+    const { breakpoints } = await dap.request('setBreakpoints', {
+        source: { path: path.join(fixtures, 'breakpoints.xsl') }, breakpoints: requested.map((line) => ({ line }))
+    });
+    const actual = Object.fromEntries(requested.map((line, i) => [line, breakpoints[i].verified ? breakpoints[i].line : 'x']));
+    assert.deepStrictEqual(actual, {
+        1: 'x', 2: 'x', 3: 'x', 4: 'x', 5: 'x', 6: 'x', 7: 7, 8: 11, 9: 11, 10: 11, 11: 11, 12: 12, 13: 14, 14: 14,
+        15: 'x', 16: 'x', 17: 'x', 19: 19, 20: 'x', 21: 21, 23: 'x', 24: 24, 27: 27, 28: 'x', 32: 32, 33: 'x', 34: 34
+    });
+    const message = (line) => breakpoints[requested.indexOf(line)].message;
+    assert.match(message(3), /xsl:output isn't an instruction/);
+    assert.match(message(4), /top-level data element/);
+    assert.match(message(6), /No XSLT instruction/);
+    assert.match(message(17), /isn't executed/);
+    assert.match(message(28), /xsl:sort isn't an instruction/);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
+// a breakpoint within a multi-line XPath expression stops at its instruction; one on xsl:choose stops once for each
+// item, whether Saxon reports it at its own line (Saxon 12) or its first xsl:when (Saxon 13)
+async function testMovedBreakpointsStop(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${path.join(fixtures, 'multiline.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] });
+    const { breakpoints } = await dap.request('setBreakpoints', { source: { path: path.join(fixtures, 'multiline.xsl') }, breakpoints: [{ line: 10 }, { line: 13 }] });
+    assert.deepStrictEqual(breakpoints.map((b) => b.line), [12, 13]);
+    const terminated = dap.event('terminated');
+    await dap.request('configurationDone', {});
+    const lines = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        lines.push(stop.frames[0].line);
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    assert.strictEqual(lines.length, 6, `stops: ${lines}`);
+    for (let i = 0; i < 6; i += 2) {
+        assert.strictEqual(lines[i], 12);
+        assert.ok(lines[i + 1] === 13 || lines[i + 1] === 14, `stops: ${lines}`);
+    }
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -218,7 +272,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop]) {
             try {
                 await test(jar);
                 console.log(`ok   ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

@@ -106,15 +106,34 @@ final class Debugger {
         if (path == null) {
             return result;
         }
+        String normalised = normalisePath(path);
+        // null if the file can't be parsed: all breakpoints are accepted where they are
+        BreakableLines breakable = BreakableLines.forFile(normalised);
         Map<Integer, Breakpoint> lines = new ConcurrentHashMap<Integer, Breakpoint>();
         for (Object item : Json.array(args, "breakpoints")) {
             @SuppressWarnings("unchecked")
             Map<String, Object> bp = (Map<String, Object>) item;
             int line = (int) Json.number(bp, "line", 0);
-            lines.put(line, new Breakpoint(blankToNull(Json.string(bp, "condition")), blankToNull(Json.string(bp, "logMessage"))));
-            result.add(Json.obj().with("verified", true).with("line", line));
+            BreakableLines.Resolution resolution = breakable == null ? null : breakable.resolve(line);
+            if (resolution != null && !resolution.verified) {
+                result.add(Json.obj().with("verified", false).with("line", line).with("message", resolution.message));
+                continue;
+            }
+            Breakpoint breakpoint = new Breakpoint(blankToNull(Json.string(bp, "condition")), blankToNull(Json.string(bp, "logMessage")), false);
+            // moved to the line where Saxon reports the instruction, if it's a multi-line start tag
+            int actualLine = resolution == null ? line : resolution.line;
+            lines.put(actualLine, breakpoint);
+            if (resolution != null) {
+                // e.g. xsl:try, reported at its first child's line - only when it's the instruction reported there
+                for (int alias : resolution.aliasLines) {
+                    if (!lines.containsKey(alias)) {
+                        lines.put(alias, new Breakpoint(breakpoint.condition, breakpoint.logMessage, true));
+                    }
+                }
+            }
+            result.add(Json.obj().with("verified", true).with("line", actualLine));
         }
-        breakpoints.put(normalisePath(path), lines);
+        breakpoints.put(normalised, lines);
         return result;
     }
 
@@ -337,7 +356,7 @@ final class Debugger {
     private boolean breakpointHit(String path, int line, Frame frame) {
         Map<Integer, Breakpoint> lines = breakpoints.get(path);
         Breakpoint bp = lines == null ? null : lines.get(line);
-        if (bp == null) {
+        if (bp == null || (bp.isAlias && !REPORTED_AT_FIRST_CHILD.contains(frame.current.getClass().getSimpleName()))) {
             return false;
         }
         runningTask = true;
@@ -535,13 +554,19 @@ final class Debugger {
         return e.getMessage() != null ? e.getMessage() : e.toString();
     }
 
+    // the instructions (xsl:try, xsl:array and, in Saxon 13, xsl:choose) Saxon reports at their first child's line
+    private static final java.util.Set<String> REPORTED_AT_FIRST_CHILD = new java.util.HashSet<String>(java.util.Arrays.asList("TryCatch", "ArrayInstr", "Choose"));
+
     private static final class Breakpoint {
         final String condition;
         final String logMessage;
+        // for an instruction reported at its first child's line: only hit by that instruction
+        final boolean isAlias;
 
-        Breakpoint(String condition, String logMessage) {
+        Breakpoint(String condition, String logMessage, boolean isAlias) {
             this.condition = condition;
             this.logMessage = logMessage;
+            this.isAlias = isAlias;
         }
     }
 
