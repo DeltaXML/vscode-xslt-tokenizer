@@ -60,14 +60,17 @@ final class BreakableLines {
     private static final class Tag {
         final int startLine;
         final int endLine;
+        // where the start tag ends: the location Saxon reports for an instruction
+        final int endColumn;
         final String name;
         final String untracedReason;
-        int firstChildEndLine;
+        int firstChildStartLine;
         final List<XPathAttribute> xpathAttributes = new ArrayList<XPathAttribute>();
 
-        Tag(int startLine, int endLine, String name, String untracedReason) {
+        Tag(int startLine, int endLine, int endColumn, String name, String untracedReason) {
             this.startLine = startLine;
             this.endLine = endLine;
+            this.endColumn = endColumn;
             this.name = name;
             this.untracedReason = untracedReason;
         }
@@ -118,6 +121,7 @@ final class BreakableLines {
     }
 
     private final List<Tag> tags = new ArrayList<Tag>();
+    private final java.util.Map<Integer, List<Tag>> tagsEndingOn = new java.util.HashMap<Integer, List<Tag>>();
 
     private BreakableLines() { }
 
@@ -182,12 +186,12 @@ final class BreakableLines {
                 } else if (isXslt && UNEXECUTED_CONTENT.contains(localName)) {
                     reason = "isn't executed";
                 }
-                Tag tag = new Tag(startLine, endLine, isXslt ? "xsl:" + localName : qName, reason);
+                Tag tag = new Tag(startLine, endLine, locator.getColumnNumber(), isXslt ? "xsl:" + localName : qName, reason);
                 if (isXslt && reason == null && startOffset >= 0 && startLine < endLine) {
                     addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
                 }
-                if (parent != null && parent.firstChildEndLine == 0) {
-                    parent.firstChildEndLine = endLine;
+                if (parent != null && parent.firstChildStartLine == 0) {
+                    parent.firstChildStartLine = startLine;
                 }
                 result.tags.add(tag);
                 open.push(tag);
@@ -204,43 +208,86 @@ final class BreakableLines {
         InputSource source = new InputSource(new StringReader(text));
         source.setSystemId(systemId);
         parser.parse(source, handler);
+        for (Tag tag : result.tags) {
+            List<Tag> ending = result.tagsEndingOn.get(tag.endLine);
+            if (ending == null) {
+                ending = new ArrayList<Tag>();
+                result.tagsEndingOn.put(tag.endLine, ending);
+            }
+            ending.add(tag);
+        }
         return result;
     }
 
+    // An instruction is shown, and its breakpoints set, at the first line of its start tag - where users expect it -
+    // though Saxon reports it at the tag's end (see displayLine). A line of a multi-line XPath expression, other than
+    // the tag's first, is the expression's: it's stopped at when the expression is stepped through
     Resolution resolve(int line) {
-        Tag best = null;
+        List<Integer> noAliases = new ArrayList<Integer>();
         for (Tag tag : tags) {
-            if (tag.startLine <= line && line <= tag.endLine) {
-                // a breakable tag ending on this line, else the first that does from a start tag spanning it
-                if (best == null || (tag.untracedReason == null && (best.untracedReason != null || tag.endLine < best.endLine))) {
-                    best = tag;
-                }
-                if (tag.untracedReason == null && tag.endLine == line) {
-                    break;
+            if (tag.untracedReason == null && tag.startLine < line && line <= tag.endLine) {
+                for (XPathAttribute attribute : tag.xpathAttributes) {
+                    if (attribute.line <= line && line <= attribute.lastLine && attribute.expressionLines.contains(line)) {
+                        return new Resolution(true, line, noAliases, null);
+                    }
                 }
             }
         }
-        if (best == null) {
-            return new Resolution(false, line, new ArrayList<Integer>(), "No XSLT instruction or literal result element starts on this line");
-        } else if (best.untracedReason != null) {
-            return new Resolution(false, line, new ArrayList<Integer>(), best.name + " " + best.untracedReason);
+        // the start tag on the line: a traced one, one starting on the line, else the innermost
+        Tag best = null;
+        for (Tag tag : tags) {
+            if (tag.startLine <= line && line <= tag.endLine && (best == null || isBetter(tag, best, line))) {
+                best = tag;
+            }
         }
-        if (line != best.endLine && line != best.startLine) {
-            // within a multi-line XPath expression: stops there when the expression is stepped through (on the
-            // start tag's first or last line, the breakpoint is for the instruction)
+        if (best == null) {
+            return new Resolution(false, line, noAliases, "No XSLT instruction or literal result element starts on this line");
+        } else if (best.untracedReason != null) {
+            return new Resolution(false, line, noAliases, best.name + " " + best.untracedReason);
+        }
+        if (line != best.startLine && line != best.endLine) {
             for (XPathAttribute attribute : best.xpathAttributes) {
                 if (attribute.line <= line && line <= attribute.lastLine) {
-                    return attribute.expressionLines.contains(line) ? new Resolution(true, line, new ArrayList<Integer>(), null) :
-                            new Resolution(false, line, new ArrayList<Integer>(), "No XPath expression starts on this line");
+                    return new Resolution(false, line, noAliases, "No XPath expression starts on this line");
                 }
             }
         }
         List<Integer> aliases = new ArrayList<Integer>();
         String localName = best.name.startsWith("xsl:") ? best.name.substring(4) : "";
-        if (REPORTED_AT_FIRST_CHILD.contains(localName) && best.firstChildEndLine > 0 && best.firstChildEndLine != best.endLine) {
-            aliases.add(best.firstChildEndLine);
+        if (REPORTED_AT_FIRST_CHILD.contains(localName) && best.firstChildStartLine > 0 && best.firstChildStartLine != best.startLine) {
+            aliases.add(best.firstChildStartLine);
         }
-        return new Resolution(true, best.endLine, aliases, null);
+        return new Resolution(true, best.startLine, aliases, null);
+    }
+
+    private static boolean isBetter(Tag tag, Tag best, int line) {
+        if ((tag.untracedReason == null) != (best.untracedReason == null)) {
+            return tag.untracedReason == null;
+        }
+        if ((tag.startLine == line) != (best.startLine == line)) {
+            return tag.startLine == line;
+        }
+        return tag.endLine - tag.startLine < best.endLine - best.startLine;
+    }
+
+    // the line an instruction Saxon reports at this location is shown at: the first line of its start tag. The
+    // location is the tag's end, which identifies the tag; where Saxon gives no column, it's the first instruction
+    // whose start tag ends on the line
+    int displayLine(int line, int column) {
+        List<Tag> ending = tagsEndingOn.get(line);
+        if (ending == null) {
+            return line;
+        }
+        Tag fallback = null;
+        for (Tag tag : ending) {
+            if (column > 0 && tag.endColumn == column) {
+                return tag.startLine;
+            }
+            if (fallback == null && tag.untracedReason == null) {
+                fallback = tag;
+            }
+        }
+        return fallback != null ? fallback.startLine : line;
     }
 
     /** the multi-line XPath attributes of the traced instruction whose start tag ends on this line */

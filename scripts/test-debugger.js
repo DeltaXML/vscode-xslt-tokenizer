@@ -215,8 +215,8 @@ async function testInitialTemplateAndError(saxonJar) {
     await dap.exited;
 }
 
-// breakpoints are moved to where Saxon reports an instruction - the end of its start tag - or rejected where no
-// instruction is traced
+// breakpoints on an instruction's start tag are shown at its first line - though Saxon reports it at the tag's end -
+// lines of a multi-line XPath expression are the expression's, and breakpoints are rejected where nothing is traced
 async function testBreakpointVerification(saxonJar) {
     const dap = new DapClient(saxonJar);
     await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
@@ -226,7 +226,7 @@ async function testBreakpointVerification(saxonJar) {
     });
     const actual = Object.fromEntries(requested.map((line, i) => [line, breakpoints[i].verified ? breakpoints[i].line : 'x']));
     assert.deepStrictEqual(actual, {
-        1: 'x', 2: 'x', 3: 'x', 4: 'x', 5: 'x', 6: 'x', 7: 7, 8: 11, 9: 9, 10: 10, 11: 11, 12: 12, 13: 14, 14: 14,
+        1: 'x', 2: 'x', 3: 'x', 4: 'x', 5: 'x', 6: 'x', 7: 7, 8: 8, 9: 9, 10: 10, 11: 8, 12: 12, 13: 13, 14: 13,
         15: 'x', 16: 'x', 17: 'x', 19: 19, 20: 'x', 21: 21, 23: 'x', 24: 24, 27: 27, 28: 'x', 32: 32, 33: 'x', 34: 34
     });
     const message = (line) => breakpoints[requested.indexOf(line)].message;
@@ -239,15 +239,16 @@ async function testBreakpointVerification(saxonJar) {
     await dap.exited;
 }
 
-// a breakpoint on the first line of a multi-line start tag stops at its instruction; one on xsl:choose stops once for
-// each item, whether Saxon reports it at its own line (Saxon 12) or its first xsl:when (Saxon 13)
+// a breakpoint on the first line of a multi-line start tag stops there, at its instruction - Saxon reports it at the
+// tag's end; one on xsl:choose stops once for each item, whether Saxon reports it at its own line (Saxon 12) or its
+// first xsl:when (Saxon 13)
 async function testMovedBreakpointsStop(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
     await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
     await dap.request('launch', { saxonArgs: [`-xsl:${path.join(fixtures, 'multiline.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] });
     const { breakpoints } = await dap.request('setBreakpoints', { source: { path: path.join(fixtures, 'multiline.xsl') }, breakpoints: [{ line: 9 }, { line: 13 }] });
-    assert.deepStrictEqual(breakpoints.map((b) => b.line), [12, 13]);
+    assert.deepStrictEqual(breakpoints.map((b) => b.line), [9, 13]);
     const terminated = dap.event('terminated');
     await dap.request('configurationDone', {});
     const lines = [];
@@ -262,7 +263,7 @@ async function testMovedBreakpointsStop(saxonJar) {
     }
     assert.strictEqual(lines.length, 6, `stops: ${lines}`);
     for (let i = 0; i < 6; i += 2) {
-        assert.strictEqual(lines[i], 12);
+        assert.strictEqual(lines[i], 9);
         assert.ok(lines[i + 1] === 13 || lines[i + 1] === 14, `stops: ${lines}`);
     }
     await dap.request('disconnect', {}).catch(() => undefined);
@@ -275,9 +276,9 @@ async function testStepThroughXPath(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
     await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'multiline.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
-        { 'multiline.xsl': [{ line: 12 }] });
+        { 'multiline.xsl': [{ line: 9 }] });
     let stop = await stopped;
-    assert.strictEqual(stop.frames[0].line, 12);
+    assert.strictEqual(stop.frames[0].line, 9);
 
     stopped = dap.stopped();
     await dap.request('stepIn', { threadId: 1 });
@@ -318,7 +319,7 @@ async function testStepThroughXPath(saxonJar) {
         }
         lines.push(stop.frames[0].line);
     }
-    assert.deepStrictEqual(lines, [12, 12]);
+    assert.deepStrictEqual(lines, [9, 9]);
     assert.match(dap.output, /xsl:variable\/@select on line 9 = 2/);
     assert.match(dap.output, /<other total="4"\/>/);
     await dap.request('disconnect', {}).catch(() => undefined);

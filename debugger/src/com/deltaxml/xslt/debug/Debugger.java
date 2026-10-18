@@ -305,14 +305,17 @@ final class Debugger {
         if (location == null || location.getSystemId() == null || location.getLineNumber() <= 0) {
             return;
         }
-        top.systemId = location.getSystemId();
-        top.line = location.getLineNumber();
-        top.column = location.getColumnNumber();
-
-        String path = pathOf(top.systemId);
+        String path = pathOf(location.getSystemId());
         if (path == null) {
             return;
         }
+        // an instruction is shown at the first line of its start tag, though Saxon reports it at the tag's end;
+        // the parts of an XPath expression being stepped through have their own lines already
+        int reportedLine = location.getLineNumber();
+        BreakableLines lines = top == xpathFrame && xpathFrame != null ? null : sourceLines(path);
+        top.systemId = location.getSystemId();
+        top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, location.getColumnNumber());
+        top.column = location.getColumnNumber();
         boolean onStoppedLine = top.line == stoppedLine && path.equals(stoppedPath);
         if (!onStoppedLine) {
             stoppedPath = null;
@@ -339,7 +342,7 @@ final class Debugger {
             pause(reason, top, depth);
         }
         if (onNewLine && xpathDepth == 0) {
-            stepThroughXPath(traceable, context, path, top.line, reason != null && step == Step.INTO);
+            stepThroughXPath(traceable, context, path, reportedLine, top.line, reason != null && step == Step.INTO);
         }
     }
 
@@ -347,15 +350,13 @@ final class Debugger {
     // instruction's attributes is also evaluated separately - instrumented, so each part reports its own line - when
     // it's stepped into, or has a breakpoint in it. It's evaluated in the instruction's context, in a stack frame of
     // its own, before the instruction itself runs. See XPathEngine
-    private void stepThroughXPath(Traceable instruction, XPathContext context, String path, int line, boolean steppingIn) {
-        if (!sourceLines.containsKey(path)) {
-            sourceLines.put(path, BreakableLines.forFile(path));
-        }
-        BreakableLines lines = sourceLines.get(path);
+    // reportedLine: the instruction's start tag's end, where Saxon reports it; line: its first line, where it's shown
+    private void stepThroughXPath(Traceable instruction, XPathContext context, String path, int reportedLine, int line, boolean steppingIn) {
+        BreakableLines lines = sourceLines(path);
         if (lines == null) {
             return;
         }
-        for (BreakableLines.XPathAttribute attribute : lines.xpathAttributesAt(line)) {
+        for (BreakableLines.XPathAttribute attribute : lines.xpathAttributesAt(reportedLine)) {
             if (!steppingIn && !hasBreakpointWithin(path, attribute, line)) {
                 continue;
             }
@@ -391,6 +392,14 @@ final class Debugger {
                 xpathDepth--;
             }
         }
+    }
+
+    // the stylesheet's start tags - null if it can't be parsed
+    private BreakableLines sourceLines(String path) {
+        if (!sourceLines.containsKey(path)) {
+            sourceLines.put(path, BreakableLines.forFile(path));
+        }
+        return sourceLines.get(path);
     }
 
     private boolean hasBreakpointWithin(String path, BreakableLines.XPathAttribute attribute, int instructionLine) {
