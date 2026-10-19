@@ -352,11 +352,15 @@ final class Debugger {
         // entered again, e.g. for the next iteration of a loop - but not returning to it, e.g. after a function call
         // from it, or for a function argument evaluated lazily, within the function
         boolean onNewLine = !(top.line == top.enteredLine && path.equals(top.enteredPath)) || traceable == top.lineStart;
+        // another instruction on the line, whose start tag ends on another line - e.g. <out><xsl:sequence select="
+        // ...multi-line..."/>: its XPath attributes can be stepped through too
+        boolean onNewReportedLine = onNewLine || reportedLine != top.enteredReportedLine;
         if (onNewLine) {
             top.enteredPath = path;
             top.enteredLine = top.line;
             top.lineStart = traceable;
         }
+        top.enteredReportedLine = reportedLine;
 
         String reason = null;
         if (pauseRequested) {
@@ -377,8 +381,9 @@ final class Debugger {
             stoppedLine = top.line;
             pause(reason, top, depth);
         }
-        if (onNewLine && xpathDepth == 0) {
-            stepThroughXPath(traceable, context, path, reportedLine, top.line, reason != null && step == Step.INTO);
+        if (onNewReportedLine && xpathDepth == 0) {
+            // stepping into: from here, or from an instruction before it on the same line
+            stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO);
         }
     }
 
@@ -876,6 +881,8 @@ final class Debugger {
         // the line last entered in this frame, and the instruction or expression first entered on it
         String enteredPath;
         int enteredLine;
+        // the line where Saxon reported the instruction last entered: where its start tag ends
+        int enteredReportedLine;
         Traceable lineStart;
         Traceable current;
         XPathContext context;

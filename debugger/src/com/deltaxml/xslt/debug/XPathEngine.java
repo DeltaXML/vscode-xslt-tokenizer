@@ -26,6 +26,7 @@ import net.sf.saxon.expr.XPathContext;
 import net.sf.saxon.expr.instruct.Executable;
 import net.sf.saxon.expr.instruct.SlotManager;
 import net.sf.saxon.expr.instruct.TraceExpression;
+import net.sf.saxon.expr.instruct.UserFunction;
 import net.sf.saxon.expr.parser.ContextItemStaticInfo;
 import net.sf.saxon.expr.parser.ExpressionTool;
 import net.sf.saxon.expr.parser.ExpressionVisitor;
@@ -34,6 +35,7 @@ import net.sf.saxon.expr.parser.XPathParser;
 import net.sf.saxon.expr.parser.RetainedStaticContext;
 import net.sf.saxon.expr.sort.GroupIterator;
 import net.sf.saxon.functions.FunctionLibraryList;
+import net.sf.saxon.functions.hof.UserFunctionReference;
 import net.sf.saxon.lib.Feature;
 import net.sf.saxon.lib.NamespaceConstant;
 import net.sf.saxon.om.GroundedValue;
@@ -354,6 +356,14 @@ final class XPathEngine {
                 offset = childOffset;
             }
             operand.setChildExpression(instrument(child, instrumented, starts, xpath, lineStarts, start));
+        }
+        // an inline function: its body isn't an operand, but the function's - so it can be stepped through when it's
+        // called, e.g. by fold-left()
+        if (expression instanceof UserFunctionReference) {
+            UserFunction function = ((UserFunctionReference) expression).getNominalTarget();
+            if (function != null && function.getBody() != null) {
+                function.setBody(instrument(function.getBody(), instrumented, starts, xpath, lineStarts, start));
+            }
         }
         if (expression instanceof Literal || expression instanceof TraceExpression || offset == null) {
             return expression;

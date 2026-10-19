@@ -380,6 +380,49 @@ async function testBreakpointInXPath(saxonJar) {
 
 // breakpoints on every line of a stylesheet with many forms of multi-line XPath: each stops within its expression,
 // each expression can be evaluated separately, and the result is unchanged
+// an inline function's body is stepped through when it's called, e.g. by fold-left() - stepping into it from the
+// function's own line, and stopping at a breakpoint in it, with its parameters (and a variable it captures) as locals
+async function testInlineFunctions(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'inline-functions.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'result.xml')}`] },
+        { 'inline-functions.xsl': [{ line: 7 }, { line: 12 }] });
+    const terminated = dap.event('terminated');
+
+    let stop = await stopped;
+    assert.strictEqual(stop.reason, 'breakpoint');
+    assert.strictEqual(stop.frames[0].line, 7);
+    assert.strictEqual(stop.frames[0].name, 'xsl:sequence/@select (XPath)');
+    // into the body, called by fold-left()
+    stopped = dap.stopped();
+    await dap.request('stepIn', { threadId: 1 });
+    stop = await stopped;
+    assert.strictEqual(stop.reason, 'step');
+    assert.strictEqual(stop.frames[0].line, 8);
+    let locals = byName(await dap.variables(0, 'Locals'));
+    assert.strictEqual(locals.$sum.value, '0');
+    assert.match(locals.$item.value, /^<item n="1"/);
+
+    const scaled = [];
+    while (true) {
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+        stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        // the function that captures $factor
+        assert.strictEqual(stop.frames[0].line, 12);
+        locals = byName(await dap.variables(0, 'Locals'));
+        scaled.push(`${(await dap.request('evaluate', { expression: 'string($item/@n)', frameId: 0, context: 'watch' })).result}*${locals.$factor ? locals.$factor.value : '?'}`);
+    }
+    assert.deepStrictEqual(scaled, ['"1"*3', '"2"*3', '"3"*3']);
+    assert.match(require('fs').readFileSync(path.join(outDir, 'result.xml'), 'utf8'), /<sum>6<\/sum><scaled>3 6 9<\/scaled>/);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function testXPathForms(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -819,7 +862,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);
