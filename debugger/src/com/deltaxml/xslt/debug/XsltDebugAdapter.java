@@ -222,6 +222,11 @@ public final class XsltDebugAdapter {
                     respond(request, null);
                     break;
                 case "terminate":
+                    // VS Code ends the session at the 'terminated' event, then disconnects - the transform runs in
+                    // this JVM, so it's stopped when the adapter exits then
+                    respond(request, null);
+                    event("terminated", Json.obj());
+                    break;
                 case "disconnect":
                     respond(request, null);
                     System.out.flush();

@@ -309,6 +309,25 @@ suite('XSLT debugger - debug sessions', function () {
 		assert.isTrue(XsltDebugLog.messages.some((m) => /'debug basic.xsl': Saxon.*, on Java [\d.]+.*\n    Saxon options: .*-xsl:.*-T:com.deltaxml.xslt.debug.DebugTraceListener -opt:0/.test(m)));
 	});
 
+	// VS Code waits for a response to each request before it ends a session - up to 500ms
+	test('stopping while paused: the session ends at once, with one stop', async () => {
+		stops = [];
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		const xsltUri = vscode.Uri.file(path.join(fixtures, 'basic.xsl'));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(xsltUri, new vscode.Position(11, 0)))]);
+		const name = 'stop basic.xsl';
+		const ended = terminated(name);
+		assert.isTrue(await vscode.debug.startDebugging(undefined, {
+			type: XsltDebug.type, request: 'launch', name, saxonJar, xsltFile: xsltUri.fsPath, xmlSource: path.join(fixtures, 'basic.xml')
+		}));
+		const stop = await nextStop();
+		const start = Date.now();
+		await vscode.debug.stopDebugging(stop.session);
+		const timedOut = new Promise<string>((resolve) => setTimeout(() => resolve('timed out'), 500));
+		assert.strictEqual(await Promise.race([ended.then(() => 'ended'), timedOut]), 'ended', `not ended ${Date.now() - start}ms after one stop`);
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+	});
+
 	test("a 'quickRun' configuration (as offered with no launch.json): the active stylesheet, with its task's settings", async () => {
 		stops = [];
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);

@@ -493,6 +493,15 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	private stderr = '';
 	// the session has ended, or is being ended by VS Code: the adapter exiting is expected
 	private ended = false;
+	// VS Code has been sent the 'terminated' event, which ends the session
+	private terminatedSent = false;
+	private exited = false;
+	// VS Code has asked for the session to end - rather than the adapter failing
+	private endedByVsCode = false;
+	// 'disconnect' has been sent: the adapter exits without answering any later request
+	private disconnected = false;
+	// the requests sent to the adapter that it hasn't answered, by seq
+	private readonly pending = new Map<number, string>();
 
 	constructor(private session: vscode.DebugSession, command: string, args: string[], cwd: string | undefined) {
 		const quote = (arg: string) => /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
@@ -511,19 +520,50 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		});
 		this.process.on('exit', (code, signal) => {
 			XsltDebugLog.info(`Debug session '${session.name}': the debug adapter exited${code !== null ? ` with code ${code}` : ` (${signal})`}`);
+			this.exited = true;
+			if (this.endedByVsCode) {
+				this.pending.forEach((command, seq) => this.respondHere({ command, seq }));
+				this.pending.clear();
+			}
 			if (!this.ended) {
 				this.fail(XsltDebugAdapterProcess.failureReason(this.stderr, code, session.configuration.saxonJar));
+			} else if (!this.terminatedSent) {
+				// VS Code only knows the session has ended from this event
+				this.fireTerminated();
 			}
 		});
 	}
 
 	public handleMessage(message: vscode.DebugProtocolMessage): void {
-		const request = message as { type?: string; command?: string };
-		if (request.type === 'request' && (request.command === 'disconnect' || request.command === 'terminate')) {
-			this.ended = true;
+		const request = message as { type?: string; command?: string; seq: number };
+		if (request.type === 'request') {
+			if (this.disconnected || (this.exited && this.endedByVsCode)) {
+				// the adapter has gone, or is going: answered here - VS Code waits for a response to each request
+				// before it ends the session
+				this.respondHere(request);
+				if (!this.terminatedSent) {
+					this.fireTerminated();
+				}
+				return;
+			}
+			if (request.command === 'disconnect' || request.command === 'terminate') {
+				this.ended = true;
+				this.endedByVsCode = true;
+			}
+			this.pending.set(request.seq, request.command ?? '');
 		}
 		const json = JSON.stringify(message);
 		this.process.stdin?.write(`Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`, 'utf8');
+		if (request.type === 'request' && request.command === 'disconnect') {
+			this.disconnected = true;
+		}
+	}
+
+	// a response for a request the adapter won't answer: success for ending the session, otherwise an error
+	private respondHere(request: { command?: string; seq: number }) {
+		const ending = request.command === 'disconnect' || request.command === 'terminate';
+		this.messages.fire({ seq: 0, type: 'response', request_seq: request.seq, success: ending, command: request.command,
+			...(ending ? {} : { message: 'the debug session has ended' }) } as vscode.DebugProtocolMessage);
 	}
 
 	public dispose() {
@@ -542,6 +582,9 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			const body = this.buffer.subarray(headerEnd + 4, headerEnd + 4 + Number(length)).toString('utf8');
 			this.buffer = this.buffer.subarray(headerEnd + 4 + Number(length));
 			const message = JSON.parse(body);
+			if (message.type === 'response') {
+				this.pending.delete(message.request_seq);
+			}
 			if (message.type === 'event' && message.event === 'xsltDebugLaunch') {
 				const { saxon, java, javaHome, saxonArgs } = message.body ?? {};
 				XsltDebugLog.info(`Debug session '${this.session.name}': ${saxon}, on Java ${java} at ${javaHome}\n    Saxon options: ${(saxonArgs ?? []).join(' ')}`);
@@ -554,10 +597,20 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 				}
 			} else if (message.type === 'event' && message.event === 'terminated') {
 				this.ended = true;
+				this.terminatedSent = true;
+			} else if (message.type === 'response' && message.command === 'disconnect') {
+				// VS Code ends the session at this response - waiting 500ms first if any request is unanswered, e.g. a
+				// stackTrace it sends just after the disconnect - so it's held back briefly, while later requests are
+				// answered here
+				setTimeout(() => this.messages.fire(message), XsltDebugAdapterProcess.disconnectDelay);
+				continue;
 			}
 			this.messages.fire(message);
 		}
 	}
+
+	// how long the response to 'disconnect' is held back
+	public static disconnectDelay = 50;
 
 	// why the adapter stopped before it could say, from what the JVM wrote to stderr
 	public static failureReason(stderr: string, exitCode: number | null, saxonJar: string | undefined): string {
@@ -582,6 +635,11 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		XsltDebugLog.error(`Debug session '${this.session.name}': ${reason}`);
 		XsltDebugLog.showError(`XSLT debugger: ${reason}`);
 		this.messages.fire({ seq: 0, type: 'event', event: 'output', body: { category: 'stderr', output: `XSLT debugger: ${reason}\n` } } as vscode.DebugProtocolMessage);
+		this.fireTerminated();
+	}
+
+	private fireTerminated() {
+		this.terminatedSent = true;
 		this.messages.fire({ seq: 0, type: 'event', event: 'terminated', body: {} } as vscode.DebugProtocolMessage);
 	}
 }
