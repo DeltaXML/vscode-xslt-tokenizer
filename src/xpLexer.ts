@@ -1028,7 +1028,7 @@ export class XPathLexer {
                 }
             }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
-            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration);
+            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration, result);
             if (prevToken && newToken.charType === CharLevelState.sep && newToken.value === '|' && XPathLexer.isChoiceSeparator(result, prevToken, poppedContext, isTypeDeclaration)) {
                 // XPath 4.0 choice item type, e.g. (xs:date | xs:time) - the item type before '|' may have been labelled as a name test
                 newToken.choiceSeparator = true;
@@ -1199,6 +1199,26 @@ export class XPathLexer {
         return !!ctx && ctx.tokenType === TokenLevelState.operator && (ctx.value === 'as' || ctx.value === 'of');
     }
 
+    private static isKindTestInType(result: Token[], isTypeDeclaration: boolean) {
+        // the kind test before the '*', '+' or '?' at the end of result, e.g. node() - in a sequence type: in an 'as'
+        // attribute, after 'as' or 'of' (e.g. instance of, or an inline function's parameter or return type), in a
+        // choice item type, or within the brackets of a map, array or function type
+        if (isTypeDeclaration) {
+            return true;
+        }
+        const beforeKindTest = result[result.length - 4];
+        if (beforeKindTest && ((beforeKindTest.tokenType === TokenLevelState.operator && (beforeKindTest.value === 'as' || beforeKindTest.value === 'of')) || beforeKindTest.choiceSeparator)) {
+            return true;
+        }
+        const index = XPathLexer.enclosingParenIndex(result);
+        if (index < 0) {
+            return false;
+        }
+        const typeToken = result[index].context;
+        return XPathLexer.isTypeParen(result[index]) || !!result[index - 1]?.choiceSeparator ||
+            (!!typeToken && (typeToken.tokenType === TokenLevelState.simpleType || typeToken.tokenType === TokenLevelState.nodeType));
+    }
+
     private static isInTypeParen(result: Token[]) {
         // the unclosed '(' before the '|' at the end of result
         const index = XPathLexer.enclosingParenIndex(result);
@@ -1346,7 +1366,7 @@ export class XPathLexer {
         }
     }
 
-    private setLabelsUsingCurrentToken(poppedContext: Token | null | undefined, prevToken: Token | null, currentToken: Token, isTypeDeclaration: boolean) {
+    private setLabelsUsingCurrentToken(poppedContext: Token | null | undefined, prevToken: Token | null, currentToken: Token, isTypeDeclaration: boolean, result: Token[]) {
         if (!(prevToken)) {
             prevToken = new BasicToken(',', CharLevelState.sep);
             prevToken.tokenType = TokenLevelState.operator;
@@ -1425,10 +1445,17 @@ export class XPathLexer {
             case CharLevelState.sep:
                 let prevTokenT = prevToken.tokenType;
                 let isStar = currentToken.value === '*';
-                if (isStar && (
+                // after a kind test, e.g. node(): an occurrence indicator in a type, e.g. instance of node()*, otherwise
+                // an operator, e.g. text() * 2
+                const afterKindTest = prevTokenT === TokenLevelState.nodeType && prevToken.value === '()';
+                if (afterKindTest && (isStar || currentToken.value === '?' || currentToken.value === '+')) {
+                    if (XPathLexer.isKindTestInType(result, isTypeDeclaration)) {
+                        currentToken.charType = CharLevelState.lName;
+                        currentToken.tokenType = TokenLevelState.nodeType;
+                    }
+                } else if (isStar && (
                     prevTokenT === TokenLevelState.attributeNameTest ||
-                    prevTokenT === TokenLevelState.uriLiteral ||
-                    prevTokenT === TokenLevelState.nodeType && prevToken.value === '()')
+                    prevTokenT === TokenLevelState.uriLiteral)
                 ) {
                     // @* or {example.com}*
                     currentToken.charType = CharLevelState.lName;

@@ -1670,8 +1670,10 @@ export class XsltTokenDiagnostics {
 					}
 				} else if (XsltTokenDiagnostics.isAnonymousFunctionParams(stackItem)) {
 					let invalidTokenForAnonFunction = !XsltTokenDiagnostics.anonFunctionTokenTypes.has(token.tokenType);
-					// nodeType is also permitted except when value is '*'
-					if (invalidTokenForAnonFunction && token.tokenType === TokenLevelState.nodeType && token.value !== '*') {
+					// nodeType is also permitted except when value is '*' - other than as an occurrence indicator, after
+					// a type's brackets, e.g. function($m as map(*)*, $n as node()*)
+					const isOccurrenceIndicator = token.value === '*' && (prevToken?.value === ')' || prevToken?.value === '()');
+					if (invalidTokenForAnonFunction && token.tokenType === TokenLevelState.nodeType && (token.value !== '*' || isOccurrenceIndicator)) {
 						invalidTokenForAnonFunction = false;
 					}
 					if (invalidTokenForAnonFunction && !stackItem.anonFnSyntaxErrorReported) {
@@ -3599,6 +3601,9 @@ export class XsltTokenDiagnostics {
 				} else if (prevToken.tokenType === TokenLevelState.nodeType) {
 					if (token.value === '()') {
 						isXPathError = prevToken.value.charAt(0) === '.';
+					} else if (prevToken.value === '()' && tokenType === TokenLevelState.nodeType && (token.value === '*' || token.value === '+' || token.value === '?')) {
+						// an occurrence indicator on a kind test in a type, e.g. instance of node()* - the lexer labels
+						// '*' as an operator elsewhere, e.g. text() * 2
 					} else {
 						isXPathError = true;
 					}
