@@ -403,6 +403,14 @@ async function testInlineFunctions(saxonJar) {
     let locals = byName(await dap.variables(0, 'Locals'));
     assert.strictEqual(locals.$sum.value, '0');
     assert.match(locals.$item.value, /^<item n="1"/);
+    // the body is on one line: stepping into it again stops there for a later call - the next, or with Saxon 12,
+    // whose fold-left evaluates $sum lazily, the last, within which the one before it is evaluated
+    stopped = dap.stopped();
+    await dap.request('stepIn', { threadId: 1 });
+    stop = await stopped;
+    assert.strictEqual(stop.frames[0].line, 8);
+    locals = byName(await dap.variables(0, 'Locals'));
+    assert.match(locals.$item.value, /^<item n="[23]"/);
 
     const scaled = [];
     while (true) {
@@ -481,6 +489,34 @@ async function testPositionalVariable(saxonJar) {
     assert.deepStrictEqual(stops, ['7: $i=5 $pos=1', '7: $i=6 $pos=2', '9: $after=1']);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
+}
+
+// an xsl:for-each on one line: a breakpoint there stops at the instruction, then for each item, as stepping over does
+async function testOneLineLoop(saxonJar) {
+    for (const command of ['continue', 'next']) {
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'one-line-loop.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
+            { 'one-line-loop.xsl': [{ line: 4 }] });
+        const terminated = dap.event('terminated');
+        const stops = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            const n = (await dap.request('evaluate', { expression: 'string(@n)', frameId: 0, context: 'watch' })).result;
+            stops.push(`${stop.frames[0].line}:${stop.frames[0].column} ${n}`);
+            stopped = dap.stopped();
+            await dap.request(command, { threadId: 1 });
+        }
+        // the instruction, at its start tag's '<', then its body - at the body's first instruction - for each item;
+        // stepping over, then on to the next line
+        const expected = ['4:7 ""', '4:41 "1"', '4:41 "2"', '4:41 "3"'].concat(command === 'next' ? ['5:7 ""'] : []);
+        assert.deepStrictEqual(stops, expected, command);
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+    }
 }
 
 async function testXPathForms(saxonJar) {
@@ -922,7 +958,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

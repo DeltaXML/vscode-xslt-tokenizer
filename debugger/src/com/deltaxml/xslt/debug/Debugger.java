@@ -311,6 +311,11 @@ final class Debugger {
             // e.g. a lazily evaluated variable being evaluated for the Variables view
             return;
         }
+        if (isSequenceConstructor(traceable)) {
+            // which Saxon 12 traces at its first instruction's location (Saxon 13 doesn't) - not an instruction of
+            // its own: stopping at it would stop twice where the first instruction is
+            return;
+        }
         if (traceable.getClass().getSimpleName().equals("TryCatch")) {
             tryDepths.push(new java.util.AbstractMap.SimpleImmutableEntry<Traceable, Integer>(traceable, frames.size()));
         }
@@ -351,14 +356,23 @@ final class Debugger {
         // arriving at a line of this frame: from another line, or again - its first instruction or expression is
         // entered again, e.g. for the next iteration of a loop - but not returning to it, e.g. after a function call
         // from it, or for a function argument evaluated lazily, within the function
-        boolean onNewLine = !(top.line == top.enteredLine && path.equals(top.enteredPath)) || traceable == top.lineStart;
+        boolean onSameLine = top.line == top.enteredLine && path.equals(top.enteredPath);
+        // arriving at the line again: its first instruction or expression entered again - the next iteration of a
+        // loop, or call of an inline function, on one line
+        // the first instruction within an xsl:for-each (or other focus instruction) on its own line, e.g.
+        // <xsl:for-each select="item"><x/></xsl:for-each>: arrived at for each item, as the body on a line of its own is
+        boolean firstInFocus = onSameLine && top.lineStart == null && traceable != top.owner;
+        boolean arrivingAgain = onSameLine && (traceable == top.lineStart || top.newIteration || firstInFocus);
+        boolean onNewLine = !onSameLine || arrivingAgain;
+        top.newIteration = false;
         // another instruction on the line, whose start tag ends on another line - e.g. <out><xsl:sequence select="
         // ...multi-line..."/>: its XPath attributes can be stepped through too
         boolean onNewReportedLine = onNewLine || reportedLine != top.enteredReportedLine;
         if (onNewLine) {
             top.enteredPath = path;
             top.enteredLine = top.line;
-            top.lineStart = traceable;
+            // not the focus instruction itself, which is entered once, not for each item
+            top.lineStart = traceable == top.owner ? null : traceable;
         }
         top.enteredReportedLine = reportedLine;
 
@@ -371,7 +385,7 @@ final class Debugger {
             // checked once each time execution arrives at the line - not for each instruction Saxon reports on it -
             // including again, e.g. for the next iteration of a loop on one line
             reason = "breakpoint";
-        } else if (isStepComplete(path, top.line, depth)) {
+        } else if (isStepComplete(path, top.line, depth, arrivingAgain)) {
             reason = "step";
         }
         if (reason != null) {
@@ -385,6 +399,17 @@ final class Debugger {
             // stepping into: from here, or from an instruction before it on the same line
             stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO);
         }
+    }
+
+    // a block of instructions, e.g. an element's content - not a block in an XPath expression, e.g. ($a, $b), whose
+    // location is within an attribute (or, being stepped through, the expression's own)
+    private boolean isSequenceConstructor(Traceable traceable) {
+        if (!traceable.getClass().getSimpleName().equals("Block")) {
+            return false;
+        }
+        Location location = traceable.getLocation();
+        return !(location instanceof net.sf.saxon.expr.parser.XPathParser.NestedLocation || location instanceof net.sf.saxon.tree.AttributeLocation ||
+                (xpathParts != null && location != null && xpathParts.containsKey(location)));
     }
 
     // Saxon only reports an attribute's XPath expression at its instruction's line, so a multi-line expression in an
@@ -482,13 +507,15 @@ final class Debugger {
             stoppedPath = null;
             Frame top = frames.peek();
             if (top != null) {
-                top.enteredPath = null;
+                top.newIteration = true;
             }
         }
     }
 
-    private boolean isStepComplete(String path, int line, int callDepth) {
-        boolean sameLine = line == stepLine && path.equals(stepPath);
+    // a step over or into completes at another line - or at the same line, arrived at again, e.g. the next iteration of
+    // a loop on one line, or the next call of an inline function whose body is on one line
+    private boolean isStepComplete(String path, int line, int callDepth, boolean arrivingAgain) {
+        boolean sameLine = line == stepLine && path.equals(stepPath) && !arrivingAgain;
         switch (step) {
             case OVER: return callDepth < stepCallDepth || (callDepth == stepCallDepth && !sameLine);
             case INTO: return callDepth != stepCallDepth || !sameLine;
@@ -883,6 +910,8 @@ final class Debugger {
         int enteredLine;
         // the line where Saxon reported the instruction last entered: where its start tag ends
         int enteredReportedLine;
+        // a new item is being processed, e.g. by xsl:for-each: the line is arrived at again
+        boolean newIteration;
         Traceable lineStart;
         Traceable current;
         XPathContext context;
