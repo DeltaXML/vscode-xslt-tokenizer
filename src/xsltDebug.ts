@@ -219,7 +219,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider {
 	private static instance: XsltDebugOutputs | undefined;
 	private readonly changed = new vscode.EventEmitter<vscode.Uri>();
 	public readonly onDidChange = this.changed.event;
-	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean }>();
+	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean; uri?: string }>();
 	// the output being written to at the last pause, and whether the output has been opened this session
 	private current: string | undefined;
 	private openedThisSession = false;
@@ -270,11 +270,13 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider {
 			output.text = update.offset > 0 && update.offset <= output.text.length ? output.text.substring(0, update.offset) + update.text : update.text;
 			output.method = update.method;
 			output.truncated = !!update.truncated;
+			output.uri = update.uri ?? output.uri;
 			this.outputs.set(update.name, output);
 			this.changed.fire(XsltDebugOutputs.uri(update.name));
 		}
-		const currentOutput = (body.outputs ?? []).find((o) => o.uri && o.uri === body.current);
-		this.current = currentOutput?.name ?? (body.current ? [...this.outputs.keys()].find((name) => body.current?.endsWith('/' + name)) : undefined) ?? this.current;
+		// the output being written to - by its URI, as in the event (a name is decoded, e.g. a space for %20)
+		const currentName = body.current ? [...this.outputs.entries()].find(([, o]) => o.uri === body.current)?.[0] : undefined;
+		this.current = currentName ?? this.current;
 		if (!this.openedThisSession && vscode.workspace.getConfiguration('XSLT.debug').get('openOutput', true)) {
 			const name = this.current && this.outputs.get(this.current)?.text ? this.current : this.names().find((n) => this.outputs.get(n)?.text);
 			if (name) {

@@ -128,10 +128,43 @@ final class BreakableLines {
     /** the stylesheet's breakable lines - null if it can't be parsed, when all breakpoints are accepted */
     static BreakableLines forFile(String path) {
         try {
-            return parse(new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8), new File(path).toURI().toString());
+            return parse(sourceText(path), new File(path).toURI().toString());
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static final java.util.regex.Pattern ENCODING_DECLARATION = java.util.regex.Pattern.compile("^<\\?xml\\s[^>]*?encoding\\s*=\\s*[\"']([A-Za-z][A-Za-z0-9._-]*)[\"']");
+
+    /**
+     * A source file's text, decoded as the XML parser does - by its byte order mark, else its encoding declaration,
+     * else as UTF-8 - and without the byte order mark, which isn't part of its text (and which, e.g., Windows editors
+     * often add to UTF-8)
+     */
+    static String sourceText(String path) throws java.io.IOException {
+        byte[] bytes = Files.readAllBytes(Paths.get(path));
+        int b0 = bytes.length > 0 ? bytes[0] & 0xFF : -1;
+        int b1 = bytes.length > 1 ? bytes[1] & 0xFF : -1;
+        if (b0 == 0xEF && b1 == 0xBB && bytes.length > 2 && (bytes[2] & 0xFF) == 0xBF) {
+            return new String(bytes, 3, bytes.length - 3, StandardCharsets.UTF_8);
+        }
+        if (b0 == 0xFE && b1 == 0xFF) {
+            return new String(bytes, 2, bytes.length - 2, StandardCharsets.UTF_16BE);
+        }
+        if (b0 == 0xFF && b1 == 0xFE) {
+            return new String(bytes, 2, bytes.length - 2, StandardCharsets.UTF_16LE);
+        }
+        // the declaration is ASCII in any encoding without a byte order mark that a stylesheet is likely to use
+        String start = new String(bytes, 0, Math.min(bytes.length, 200), StandardCharsets.ISO_8859_1);
+        java.util.regex.Matcher m = ENCODING_DECLARATION.matcher(start);
+        if (m.find()) {
+            try {
+                return new String(bytes, java.nio.charset.Charset.forName(m.group(1)));
+            } catch (RuntimeException e) {
+                // not an encoding Java knows: as UTF-8
+            }
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     static BreakableLines parse(final String text, String systemId) throws Exception {

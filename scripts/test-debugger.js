@@ -221,18 +221,38 @@ async function testInitialTemplateAndError(saxonJar) {
 
 // breakpoints on an instruction's start tag are shown at its first line - though Saxon reports it at the tag's end -
 // lines of a multi-line XPath expression are the expression's, and breakpoints are rejected where nothing is traced
+// the same with Windows line ends, and a byte order mark (as Windows editors often add) - in UTF-8 or UTF-16
 async function testBreakpointVerification(saxonJar) {
     const dap = new DapClient(saxonJar);
     await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
     const requested = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 23, 24, 27, 28, 32, 33, 34];
-    const { breakpoints } = await dap.request('setBreakpoints', {
-        source: { path: path.join(fixtures, 'breakpoints.xsl') }, breakpoints: requested.map((line) => ({ line }))
-    });
-    const actual = Object.fromEntries(requested.map((line, i) => [line, breakpoints[i].verified ? breakpoints[i].line : 'x']));
-    assert.deepStrictEqual(actual, {
+    const expected = {
         1: 'x', 2: 'x', 3: 'x', 4: 'x', 5: 'x', 6: 'x', 7: 7, 8: 8, 9: 9, 10: 10, 11: 8, 12: 12, 13: 13, 14: 13,
         15: 'x', 16: 'x', 17: 'x', 19: 19, 20: 'x', 21: 21, 23: 'x', 24: 24, 27: 27, 28: 'x', 32: 32, 33: 'x', 34: 34
-    });
+    };
+    const verify = async (file, variant) => {
+        const { breakpoints } = await dap.request('setBreakpoints', { source: { path: file }, breakpoints: requested.map((line) => ({ line })) });
+        const actual = Object.fromEntries(requested.map((line, i) => [line, breakpoints[i].verified ? breakpoints[i].line : 'x']));
+        assert.deepStrictEqual(actual, expected, variant);
+        return breakpoints;
+    };
+    const breakpoints = await verify(path.join(fixtures, 'breakpoints.xsl'), 'as is');
+    const fs = require('fs');
+    const text = fs.readFileSync(path.join(fixtures, 'breakpoints.xsl'), 'utf8').replace(/\r?\n/g, '\r\n');
+    const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-'));
+    try {
+        const variants = {
+            'UTF-8 with a byte order mark': Buffer.from('\ufeff' + text, 'utf8'),
+            'UTF-16 with a byte order mark': Buffer.from('\ufeff' + text.replace('encoding="UTF-8"', 'encoding="UTF-16"'), 'utf16le')
+        };
+        for (const [variant, bytes] of Object.entries(variants)) {
+            const file = path.join(dir, 'breakpoints.xsl');
+            fs.writeFileSync(file, bytes);
+            await verify(file, variant);
+        }
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
     const message = (line) => breakpoints[requested.indexOf(line)].message;
     assert.match(message(3), /xsl:output isn't an instruction/);
     assert.match(message(4), /top-level data element/);

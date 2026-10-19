@@ -8,8 +8,6 @@ package com.deltaxml.xslt.debug;
 
 import java.io.IOException;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayDeque;
@@ -756,7 +754,7 @@ final class Debugger {
         String text = sourceTexts.get(path);
         if (text == null) {
             try {
-                text = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+                text = BreakableLines.sourceText(path);
             } catch (IOException e) {
                 text = "";
             }
