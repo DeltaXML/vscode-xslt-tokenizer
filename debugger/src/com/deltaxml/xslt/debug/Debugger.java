@@ -343,7 +343,7 @@ final class Debugger {
         BreakableLines lines = top == xpathFrame && xpathFrame != null ? null : sourceLines(path);
         top.systemId = location.getSystemId();
         top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, location.getColumnNumber());
-        top.column = location.getColumnNumber();
+        top.column = lines == null ? location.getColumnNumber() : lines.displayColumn(reportedLine, location.getColumnNumber());
         boolean onStoppedLine = top.line == stoppedLine && path.equals(stoppedPath);
         if (!onStoppedLine) {
             stoppedPath = null;

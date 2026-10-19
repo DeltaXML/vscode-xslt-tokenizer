@@ -59,6 +59,8 @@ final class BreakableLines {
     /** a start tag: the lines it spans, and whether execution can stop at it */
     private static final class Tag {
         final int startLine;
+        // where the start tag starts: its '<' (1-based)
+        int startColumn = 1;
         final int endLine;
         // where the start tag ends: the location Saxon reports for an instruction
         final int endColumn;
@@ -220,6 +222,9 @@ final class BreakableLines {
                     reason = "isn't executed";
                 }
                 Tag tag = new Tag(startLine, endLine, locator.getColumnNumber(), isXslt ? "xsl:" + localName : qName, reason);
+                if (startOffset >= 0) {
+                    tag.startColumn = startOffset - lineStarts[startLine - 1] + 1;
+                }
                 if (isXslt && reason == null && startOffset >= 0 && startLine < endLine) {
                     addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
                 }
@@ -307,20 +312,32 @@ final class BreakableLines {
     // location is the tag's end, which identifies the tag; where Saxon gives no column, it's the first instruction
     // whose start tag ends on the line
     int displayLine(int line, int column) {
+        Tag tag = reportedTag(line, column);
+        return tag != null ? tag.startLine : line;
+    }
+
+    // the column it's shown at: its start tag's '<' - VS Code shows the paused position within the line where it isn't
+    // the line's first character, so Saxon's column, at the tag's end (often on a later line), would be misplaced
+    int displayColumn(int line, int column) {
+        Tag tag = reportedTag(line, column);
+        return tag != null ? tag.startColumn : column;
+    }
+
+    private Tag reportedTag(int line, int column) {
         List<Tag> ending = tagsEndingOn.get(line);
         if (ending == null) {
-            return line;
+            return null;
         }
         Tag fallback = null;
         for (Tag tag : ending) {
             if (column > 0 && tag.endColumn == column) {
-                return tag.startLine;
+                return tag;
             }
             if (fallback == null && tag.untracedReason == null) {
                 fallback = tag;
             }
         }
-        return fallback != null ? fallback.startLine : line;
+        return fallback;
     }
 
     /** the multi-line XPath attributes of the traced instruction whose start tag ends on this line */
