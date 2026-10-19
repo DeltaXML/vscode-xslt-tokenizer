@@ -21,6 +21,8 @@ import java.util.function.Supplier;
 import net.sf.saxon.Controller;
 import net.sf.saxon.expr.Assignation;
 import net.sf.saxon.expr.Expression;
+import net.sf.saxon.expr.ForExpression;
+import net.sf.saxon.expr.LocalBinding;
 import net.sf.saxon.expr.Operand;
 import net.sf.saxon.expr.Component;
 import net.sf.saxon.expr.PackageData;
@@ -246,6 +248,11 @@ final class Values {
             for (Expression parent = root.getParentExpression(); parent != null; child = parent, parent = parent.getParentExpression()) {
                 if (parent instanceof Assignation && ((Assignation) parent).getAction() == child) {
                     Assignation binding = (Assignation) parent;
+                    // nearest first, so a positional variable ('for $i at $pos') before the variable it counts
+                    LocalBinding position = positionVariable(parent);
+                    if (position != null) {
+                        addLocal(bindings, seen, context, names, position.getLocalSlotNumber(), position.getVariableQName());
+                    }
                     addLocal(bindings, seen, context, names, binding.getLocalSlotNumber(), binding.getVariableQName());
                 }
                 root = parent;
@@ -281,6 +288,20 @@ final class Values {
         }
     }
 
+    // the positional variable of an XPath 4.0 'for $i at $pos' - not an Assignation of its own, but in scope where the
+    // for expression's variable is. ForExpression.getPositionVariable() is new in Saxon 13, so it's called by reflection
+    private static LocalBinding positionVariable(Expression expression) {
+        if (!(expression instanceof ForExpression)) {
+            return null;
+        }
+        try {
+            Object position = expression.getClass().getMethod("getPositionVariable").invoke(expression);
+            return position instanceof LocalBinding ? (LocalBinding) position : null;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
     // the slots used by the bindings in a compiled template, function or expression
     private static Set<Integer> boundSlots(Expression root) {
         Set<Integer> bound = new HashSet<Integer>();
@@ -293,6 +314,10 @@ final class Values {
             Expression expression = pending.pop();
             if (expression instanceof Assignation) {
                 bound.add(((Assignation) expression).getLocalSlotNumber());
+                LocalBinding position = positionVariable(expression);
+                if (position != null) {
+                    bound.add(position.getLocalSlotNumber());
+                }
             }
             for (Operand operand : expression.operands()) {
                 if (operand.getChildExpression() != null) {
