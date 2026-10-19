@@ -110,6 +110,15 @@ suite('XSLT debugger - configurations', () => {
 		assert.deepStrictEqual(forDebug.classPath, ['/opt/SaxonPE13-1J/saxon-pe-13.1.jar', '/opt/ext.jar']);
 		assert.deepStrictEqual(forDebug.args, ['-xsl:report.xsl', '-s:books.xml', '-o:out.xml', '-im:m', '--allowSyntaxExtensions:on', '--xsltSchemaAware:false', 'p=1']);
 	});
+
+	test("a Saxon jar path with quotes around it, as Windows Explorer's 'Copy as path' gives", () => {
+		assert.strictEqual(SaxonTaskProvider.unquotedPath('"C:\\Users\\A B\\saxon jar\\saxon-pe-13.1.jar"'), 'C:\\Users\\A B\\saxon jar\\saxon-pe-13.1.jar');
+		assert.strictEqual(SaxonTaskProvider.unquotedPath(' "/opt/saxon-he-13.0.jar" '), '/opt/saxon-he-13.0.jar');
+		assert.strictEqual(SaxonTaskProvider.unquotedPath('/opt/saxon-he-13.0.jar'), '/opt/saxon-he-13.0.jar');
+		assert.isUndefined(SaxonTaskProvider.unquotedPath(undefined));
+		const task = <XSLTTask><unknown>{ type: 'xslt', label: 'quoted', saxonJar: '"C:\\saxon jar\\saxon-pe-13.1.jar"', xsltFile: 'a.xsl' };
+		assert.deepStrictEqual(SaxonTaskProvider.commandLine(task, true).classPath, ['C:\\saxon jar\\saxon-pe-13.1.jar']);
+	});
 });
 
 suite('XSLT debugger - sessions that fail to start', function () {

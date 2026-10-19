@@ -94,6 +94,12 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return SaxonTaskProvider.isSaxonHE(saxonPath) ? 'off' : 'on';
     }
 
+    // a path setting without quotes around it - as Windows Explorer's 'Copy as path' adds - which aren't part of the path
+    public static unquotedPath<T extends string | undefined>(fsPath: T): T {
+        const match = typeof fsPath === 'string' ? /^\s*"(.*)"\s*$/.exec(fsPath) : null;
+        return <T>(match ? match[1] : fsPath);
+    }
+
     // e.g. .../SaxonHE13-0J/saxon-he-13.0.jar, saxon9he.jar or .../SaxonCHE-macos-arm64-13-0-0/bin
     public static isSaxonHE(saxonPath: string | undefined) {
         return !!saxonPath && /saxonc?[-\d]*he(?=[-\d._]|j|$)/i.test(saxonPath);
@@ -406,7 +412,10 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         for (const feature of saxonFeatures) {
             saxonFeaturesCommand.push('--' + feature.name + ':' + feature.value);
         }
-        let classPaths: string[] = altSaxonJarPath ? [altSaxonJarPath, xsltTask.saxonJar] : [xsltTask.saxonJar];
+        // the setting's variable is kept for VS Code to substitute, unless the setting has quotes around it
+        const saxonJar = xsltTask.saxonJar === '${config:XSLT.tasks.saxonJar}' && saxonJarConfig !== SaxonTaskProvider.unquotedPath(saxonJarConfig) ?
+            SaxonTaskProvider.unquotedPath(saxonJarConfig)! : SaxonTaskProvider.unquotedPath(xsltTask.saxonJar);
+        let classPaths: string[] = altSaxonJarPath ? [altSaxonJarPath, saxonJar] : [saxonJar];
         if (xsltTask.classPathEntries) {
             classPaths = classPaths.concat(xsltTask.classPathEntries);
         }

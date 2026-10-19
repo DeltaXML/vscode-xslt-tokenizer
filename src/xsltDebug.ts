@@ -130,6 +130,7 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 	}
 
 	public resolveDebugConfigurationWithSubstitutedVariables(folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): vscode.DebugConfiguration | undefined {
+		config.saxonJar = SaxonTaskProvider.unquotedPath(config.saxonJar);
 		let problem = XsltDebug.configurationProblem(config);
 		// a relative path is relative to the workspace folder, as for tasks
 		const saxonJar = typeof config.saxonJar === 'string' && folder && !path.isAbsolute(config.saxonJar) ? path.join(folder.uri.fsPath, config.saxonJar) : config.saxonJar;
