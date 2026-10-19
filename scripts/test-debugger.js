@@ -519,6 +519,60 @@ async function testOneLineLoop(saxonJar) {
     }
 }
 
+// function breakpoints: stylesheet functions (with an optional arity) and named templates, by name - in any module;
+// names not in the stylesheet are reported once it has compiled; conditions and hit counts as for line breakpoints
+async function testFunctionBreakpoints(saxonJar) {
+    const run = async (breakpoints) => {
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        const initialized = await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+        assert.strictEqual(initialized.supportsFunctionBreakpoints, true);
+        await dap.request('launch', { saxonArgs: [`-xsl:${path.join(fixtures, 'function-breakpoints.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] });
+        const set = await dap.request('setFunctionBreakpoints', { breakpoints });
+        await dap.request('configurationDone', {});
+        const terminated = dap.event('terminated');
+        const stops = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            assert.strictEqual(stop.reason, 'function breakpoint');
+            const locals = (await dap.variables(0, 'Locals')).map((v) => `${v.name}=${v.value}`).join(' ');
+            stops.push(`${stop.frames[0].name} ${path.basename(stop.frames[0].source.path)}:${stop.frames[0].line} ${locals}`);
+            stopped = dap.stopped();
+            await dap.request('continue', { threadId: 1 });
+        }
+        const changed = dap.events.filter((e) => e.event === 'breakpoint').map((e) => e.body.breakpoint);
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return { set: set.breakpoints, changed, stops };
+    };
+
+    let { set, changed, stops } = await run([{ name: 'cell' }, { name: 'f:total#2' }, { name: 'f:nope' }, { name: 'f:total#3' }, { name: '1bad' }]);
+    assert.deepStrictEqual(set.map((b) => b.verified), [true, true, true, true, false]);
+    assert.match(set[4].message, /isn't the name of a function/);
+    // checked against the compiled stylesheet
+    assert.deepStrictEqual(changed.map((b) => [b.id, b.verified, b.message]), [
+        [set[2].id, false, 'The stylesheet has no function or named template named f:nope'],
+        [set[3].id, false, 'The stylesheet has no version of f:total with 3 arguments']]);
+    // a named template's parameters: the values passed to it, before its xsl:param runs; f:total#2 in an imported
+    // module, called directly and by f:total#1 - not f:total#1 itself
+    assert.deepStrictEqual(stops, [
+        'xsl:template name="cell" function-breakpoints.xsl:14 $n=1',
+        'xsl:template name="cell" function-breakpoints.xsl:14 $n=2',
+        'xsl:template name="cell" function-breakpoints.xsl:14 $n=3',
+        'f:total#2 function-breakpoints-lib.xsl:11 $values=(n="1", n="2", n="3") $extra=0',
+        'f:total#2 function-breakpoints-lib.xsl:11 $values=(n="1", n="2", n="3") $extra=10']);
+
+    // a condition, a hit count, '()' after the name, and an EQName
+    ({ stops } = await run([{ name: 'cell', condition: '$n = 2' }, { name: 'f:square()', hitCondition: '3' }, { name: 'Q{urn:f}total#1' }]));
+    assert.deepStrictEqual(stops, [
+        'xsl:template name="cell" function-breakpoints.xsl:14 $n=2',
+        'f:square#1 function-breakpoints-lib.xsl:3 $x=3',
+        'f:total#1 function-breakpoints-lib.xsl:7 $values=(n="1", n="2", n="3")']);
+}
+
 async function testXPathForms(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -958,7 +1012,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

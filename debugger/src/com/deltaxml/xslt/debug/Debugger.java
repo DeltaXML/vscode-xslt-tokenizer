@@ -36,6 +36,7 @@ import net.sf.saxon.s9api.Location;
 import net.sf.saxon.s9api.XdmValue;
 import net.sf.saxon.trace.Traceable;
 import net.sf.saxon.trace.TraceableComponent;
+import net.sf.saxon.style.StylesheetPackage;
 
 /**
  * The debugger's state, shared by the DAP thread (requests from VS Code) and the transform thread (TraceListener
@@ -60,6 +61,12 @@ final class Debugger {
 
     // --- breakpoints: normalised file path -> line -> breakpoint (written by the DAP thread at any time)
     private final Map<String, Map<Integer, Breakpoint>> breakpoints = new ConcurrentHashMap<String, Map<Integer, Breakpoint>>();
+
+    // --- function breakpoints: functions and named templates, by name (replaced by the DAP thread at any time); the
+    // compiled stylesheet, which their names are checked against, once it's compiled
+    private volatile List<FunctionBreakpoint> functionBreakpoints = new ArrayList<FunctionBreakpoint>();
+    private volatile StylesheetPackage compiledPackage;
+    private int nextFunctionBreakpointId = 1;
 
     // --- run control, guarded by lock
     private final Object lock = new Object();
@@ -165,6 +172,57 @@ final class Debugger {
         }
         breakpoints.put(normalised, lines);
         return result;
+    }
+
+    synchronized List<Map<String, Object>> setFunctionBreakpoints(Map<String, Object> args) {
+        List<FunctionBreakpoint> previous = functionBreakpoints;
+        List<FunctionBreakpoint> list = new ArrayList<FunctionBreakpoint>();
+        List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+        for (Object item : Json.array(args, "breakpoints")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> bp = (Map<String, Object>) item;
+            String spec = Json.string(bp, "name");
+            String hitCondition = blankToNull(Json.string(bp, "hitCondition"));
+            int id = nextFunctionBreakpointId++;
+            if (hitCondition != null && !HIT_CONDITION.matcher(hitCondition).matches()) {
+                result.add(Json.obj().with("id", id).with("verified", false)
+                        .with("message", "The hit count '" + hitCondition + "' isn't a number, optionally after ==, >, >=, <, <= or %"));
+                continue;
+            }
+            FunctionBreakpoint breakpoint = FunctionBreakpoint.parse(id, spec, blankToNull(Json.string(bp, "condition")), hitCondition);
+            if (breakpoint == null) {
+                result.add(Json.obj().with("id", id).with("verified", false).with("message", FunctionBreakpoint.syntaxMessage(spec)));
+                continue;
+            }
+            // VS Code sends all of them when any changes: one that's unchanged keeps its hit count
+            for (FunctionBreakpoint old : previous) {
+                if (old.hasSameSettings(breakpoint)) {
+                    breakpoint.hits = old.hits;
+                }
+            }
+            list.add(breakpoint);
+            result.add(functionBreakpointStatus(breakpoint, compiledPackage));
+        }
+        functionBreakpoints = list;
+        return result;
+    }
+
+    // a function breakpoint's name is checked once the stylesheet has compiled
+    private static Json.Obj functionBreakpointStatus(FunctionBreakpoint bp, StylesheetPackage pkg) {
+        String problem = pkg == null ? null : bp.problem(pkg);
+        Json.Obj status = Json.obj().with("id", bp.id).with("verified", problem == null);
+        return problem == null ? status : status.with("message", problem);
+    }
+
+    // the stylesheet has compiled (on the transform thread): the function breakpoints' names are checked
+    synchronized void stylesheetCompiled(StylesheetPackage pkg) {
+        compiledPackage = pkg;
+        for (FunctionBreakpoint bp : functionBreakpoints) {
+            Json.Obj status = functionBreakpointStatus(bp, pkg);
+            if (!Boolean.TRUE.equals(status.get("verified"))) {
+                dap.event("breakpoint", Json.obj().with("reason", "changed").with("breakpoint", status));
+            }
+        }
     }
 
     void start() {
@@ -381,6 +439,8 @@ final class Debugger {
             reason = "pause";
         } else if (stopOnEntry) {
             reason = "entry";
+        } else if (isCall && functionBreakpointHit(traceable, properties, top)) {
+            reason = "function breakpoint";
         } else if (onNewLine && breakpointHit(path, top.line, top)) {
             // checked once each time execution arrives at the line - not for each instruction Saxon reports on it -
             // including again, e.g. for the next iteration of a loop on one line
@@ -532,23 +592,7 @@ final class Debugger {
         }
         runningTask = true;
         try {
-            if (bp.condition != null) {
-                try {
-                    if (!Evaluator.effectiveBooleanValue(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), bp.condition)) {
-                        return false;
-                    }
-                } catch (Exception e) {
-                    // stops, as for an error - reported once ('important': VS Code also shows it as a notification)
-                    if (!bp.primary.conditionFailed) {
-                        bp.primary.conditionFailed = true;
-                        dap.event("output", Json.obj().with("category", "important").with("output",
-                                "The condition '" + bp.condition + "' of the breakpoint at line " + line + " failed: " + message(e) + "\n"));
-                    }
-                }
-            }
-            // counted when its condition is true
-            int hits = ++bp.primary.hits;
-            if (bp.hitCondition != null && !isHitConditionMet(bp.hitCondition, hits)) {
+            if (!conditionsMet(bp.primary, frame, "the breakpoint at line " + line)) {
                 return false;
             }
             if (bp.logMessage != null) {
@@ -560,6 +604,44 @@ final class Debugger {
         } finally {
             runningTask = false;
         }
+    }
+
+    // whether a breakpoint's condition is true where execution is (or it fails - reported once), and its hit count
+    // is met - counting the hit, when the condition is true
+    private boolean conditionsMet(Conditional bp, Frame frame, String description) {
+        if (bp.condition != null) {
+            try {
+                if (!Evaluator.effectiveBooleanValue(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), bp.condition)) {
+                    return false;
+                }
+            } catch (Exception e) {
+                // stops, as for an error - reported once ('important': VS Code also shows it as a notification)
+                if (!bp.conditionFailed) {
+                    bp.conditionFailed = true;
+                    dap.event("output", Json.obj().with("category", "important").with("output",
+                            "The condition '" + bp.condition + "' of " + description + " failed: " + message(e) + "\n"));
+                }
+            }
+        }
+        int hits = ++bp.hits;
+        return bp.hitCondition == null || isHitConditionMet(bp.hitCondition, hits);
+    }
+
+    // a function breakpoint for the function or named template being entered, whose conditions are met
+    private boolean functionBreakpointHit(Traceable traceable, Map<String, Object> properties, Frame frame) {
+        for (FunctionBreakpoint bp : functionBreakpoints) {
+            if (bp.matches(traceable, properties)) {
+                runningTask = true;
+                try {
+                    if (conditionsMet(bp, frame, "the function breakpoint " + bp.spec.trim())) {
+                        return true;
+                    }
+                } finally {
+                    runningTask = false;
+                }
+            }
+        }
+        return false;
     }
 
     private static final java.util.regex.Pattern LOG_EXPRESSION = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
@@ -872,26 +954,37 @@ final class Debugger {
         }
     }
 
-    private static final class Breakpoint {
+    /** a breakpoint's condition and hit count, and its hits so far */
+    abstract static class Conditional {
         final String condition;
         final String hitCondition;
+        int hits;
+        boolean conditionFailed;
+
+        Conditional(String condition, String hitCondition) {
+            this.condition = condition;
+            this.hitCondition = hitCondition;
+        }
+
+        boolean hasSameConditions(Conditional other) {
+            return java.util.Objects.equals(condition, other.condition) && java.util.Objects.equals(hitCondition, other.hitCondition);
+        }
+    }
+
+    private static final class Breakpoint extends Conditional {
         final String logMessage;
         // the breakpoint itself - or for an instruction reported at its first child's line (an alias, only hit by
         // that instruction), the breakpoint it's for, whose hits it counts
         final Breakpoint primary;
-        int hits;
-        boolean conditionFailed;
 
         Breakpoint(String condition, String hitCondition, String logMessage, Breakpoint aliasFor) {
-            this.condition = condition;
-            this.hitCondition = hitCondition;
+            super(condition, hitCondition);
             this.logMessage = logMessage;
             this.primary = aliasFor != null ? aliasFor : this;
         }
 
         boolean hasSameSettings(Breakpoint other) {
-            return java.util.Objects.equals(condition, other.condition) && java.util.Objects.equals(hitCondition, other.hitCondition) &&
-                    java.util.Objects.equals(logMessage, other.logMessage);
+            return hasSameConditions(other) && java.util.Objects.equals(logMessage, other.logMessage);
         }
     }
 

@@ -600,17 +600,26 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 				this.terminatedSent = true;
 			} else if (message.type === 'response' && message.command === 'disconnect') {
 				// VS Code ends the session at this response - waiting 500ms first if any request is unanswered, e.g. a
-				// stackTrace it sends just after the disconnect - so it's held back briefly, while later requests are
-				// answered here
-				setTimeout(() => this.messages.fire(message), XsltDebugAdapterProcess.disconnectDelay);
+				// stackTrace it sends just after the disconnect - so it's held back until none is: those sent later are
+				// answered here, and those the adapter exits without answering, when it exits
+				const held = Date.now();
+				const release = () => {
+					if (this.pending.size === 0 || Date.now() - held >= XsltDebugAdapterProcess.disconnectMaxDelay) {
+						this.messages.fire(message);
+					} else {
+						setTimeout(release, 10);
+					}
+				};
+				setTimeout(release, XsltDebugAdapterProcess.disconnectDelay);
 				continue;
 			}
 			this.messages.fire(message);
 		}
 	}
 
-	// how long the response to 'disconnect' is held back
+	// how long the response to 'disconnect' is held back: at least, and at most while requests are unanswered
 	public static disconnectDelay = 50;
+	public static disconnectMaxDelay = 300;
 
 	// why the adapter stopped before it could say, from what the JVM wrote to stderr
 	public static failureReason(stderr: string, exitCode: number | null, saxonJar: string | undefined): string {

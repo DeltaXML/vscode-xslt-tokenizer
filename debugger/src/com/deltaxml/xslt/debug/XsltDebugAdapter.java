@@ -152,6 +152,7 @@ public final class XsltDebugAdapter {
                             .with("supportsConditionalBreakpoints", true)
                             .with("supportsHitConditionalBreakpoints", true)
                             .with("supportsLogPoints", true)
+                            .with("supportsFunctionBreakpoints", true)
                             .with("supportsTerminateRequest", true)
                             .with("supportsExceptionInfoRequest", true)
                             .with("exceptionBreakpointFilters", Arrays.asList(
@@ -176,7 +177,7 @@ public final class XsltDebugAdapter {
                     respond(request, debugger.exceptionInfo());
                     break;
                 case "setFunctionBreakpoints":
-                    respond(request, Json.obj().with("breakpoints", new ArrayList<Object>()));
+                    respond(request, Json.obj().with("breakpoints", debugger.setFunctionBreakpoints(args)));
                     break;
                 case "configurationDone":
                     respond(request, null);

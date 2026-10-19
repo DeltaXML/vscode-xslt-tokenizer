@@ -262,12 +262,29 @@ final class Values {
         Set<Integer> bound = boundSlots(root);
         for (int slot = 0; slot < names.size(); slot++) {
             if (!bound.contains(slot)) {
-                addLocal(result, seen, context, names, slot, names.get(slot));
+                addParameter(result, seen, context, names, slot, names.get(slot));
             }
         }
         java.util.Collections.reverse(bindings);
         result.addAll(bindings);
         return result;
+    }
+
+    // a parameter: before its xsl:param has run - e.g. paused at the start of a named template - the value passed to it
+    // (by xsl:call-template, or xsl:apply-templates or xsl:next-match with xsl:with-param)
+    private static void addParameter(List<Map.Entry<StructuredQName, Sequence>> result, Set<String> seen, XPathContext context,
+            List<StructuredQName> names, int slot, StructuredQName name) {
+        int before = result.size();
+        addLocal(result, seen, context, names, slot, name);
+        ParameterSet supplied = context.getLocalParameters();
+        if (result.size() == before && name != null && !isGenerated(name) && supplied != null && !seen.contains(name.getDisplayName())) {
+            int index = supplied.getIndex(name);
+            Sequence value = index < 0 ? null : supplied.getValue(index);
+            if (value != null) {
+                seen.add(name.getDisplayName());
+                result.add(new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(name, value));
+            }
+        }
     }
 
     private static void addLocal(List<Map.Entry<StructuredQName, Sequence>> result, Set<String> seen, XPathContext context,
