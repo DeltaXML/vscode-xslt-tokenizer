@@ -11,6 +11,17 @@ import * as cp from 'child_process';
 import { SaxonTaskProvider, XSLTTask } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import { unquotedPath } from './settingPaths';
+import { BaseToken, TokenLevelState } from './xpLexer';
+import { XslLexer, XSLTokenLevelState } from './xslLexer';
+import { XSLTConfiguration } from './languageConfigurations';
+
+// a variable declared before the line execution is paused at: its name (with '$') and the range of the name
+export interface InlineDeclaration {
+	name: string;
+	line: number;
+	start: number;
+	end: number;
+}
 
 // The step-through debugger for SaxonJ: the extension runs the debug adapter (xslt-resources/xslt-debugger, built from
 // debugger/src) in a JVM with the user's Saxon jar - it talks the Debug Adapter Protocol over stdin/stdout and runs
@@ -79,6 +90,121 @@ export class XsltDebug {
 			}
 		}
 		return undefined;
+	}
+
+	// the variables whose values are shown inline, while paused at this (0-based) line: those declared on earlier
+	// lines of the template, function or other top-level declaration paused in, and still in scope - the names of
+	// xsl:variable and xsl:param elements, and in XPath, the variables bound by let, for, some, every (and 'at') and
+	// an inline function's parameters. Only the last declaration of a name is given, as it's the one in scope
+	public static inlineDeclarations(text: string, stopLine: number): InlineDeclaration[] {
+		const tokens = new XslLexer(XSLTConfiguration.configuration).analyse(text);
+		const xslStart = XslLexer.getXsltStartTokenNumber();
+		const lines = text.split('\n');
+		const tokenText = (token: BaseToken) => lines[token.line]?.substr(token.startCharacter, token.length) ?? '';
+		// the open elements: each with the declarations among its children so far - those of a child element are
+		// out of scope when it ends
+		const stack: { name: string; declarations: InlineDeclaration[] }[] = [{ name: '', declarations: [] }];
+		// the XPath declarations of the attribute (or text value template) being read - out of scope when it ends
+		let xpathDeclarations: InlineDeclaration[] = [];
+		let elementName: string | undefined;
+		let isEndTag = false;
+		let attributeName: string | undefined;
+		let nameDeclaration: InlineDeclaration | undefined;
+		// the nesting of brackets in an inline function's parameter list, and where it started
+		let paramDepth = 0;
+		const declaration = (token: BaseToken, name: string): InlineDeclaration => ({ name, line: token.line, start: token.startCharacter, end: token.startCharacter + token.length });
+		// the XPath tokens either side, in the same expression
+		const previous = (i: number) => i > 0 && tokens[i - 1].tokenType < xslStart ? tokens[i - 1] : undefined;
+		const next = (i: number) => i + 1 < tokens.length && tokens[i + 1].tokenType < xslStart ? tokens[i + 1] : undefined;
+
+		for (let i = 0; i < tokens.length && tokens[i].line < stopLine; i++) {
+			const token = tokens[i];
+			if (token.tokenType < xslStart) {
+				const value = token.value;
+				if (token.tokenType === TokenLevelState.anonymousFunction && next(i)?.value === '(') {
+					paramDepth = 1;
+					i++;
+				} else if (paramDepth > 0) {
+					if (value === '(') {
+						paramDepth++;
+					} else if (value === ')') {
+						paramDepth--;
+					} else if (paramDepth === 1 && token.tokenType === TokenLevelState.variable) {
+						xpathDeclarations.push(declaration(token, value));
+					}
+				} else if (token.tokenType === TokenLevelState.variable) {
+					const before = previous(i)?.value;
+					const after = next(i)?.value;
+					if (['let', 'for', 'some', 'every', 'at', 'member', 'key', 'value'].includes(before ?? '') ||
+						(before === ',' && [':=', 'in', 'at', 'as'].includes(after ?? ''))) {
+						xpathDeclarations.push(declaration(token, value));
+					}
+				}
+				continue;
+			}
+			const type = token.tokenType - xslStart;
+			if (type === XSLTokenLevelState.attributeValue || type === XSLTokenLevelState.entityRef || type === XSLTokenLevelState.attributeEquals) {
+				if (type === XSLTokenLevelState.attributeValue && attributeName === 'name' && (elementName === 'xsl:variable' || elementName === 'xsl:param')) {
+					const written = tokenText(token);
+					const name = written.replace(/^["']|["']$/g, '').trim();
+					if (name) {
+						const start = token.startCharacter + written.indexOf(name);
+						nameDeclaration = { name: '$' + name, line: token.line, start, end: start + name.length };
+					}
+				}
+				continue;
+			}
+			// the attribute, or text, with any XPath expression, has ended
+			xpathDeclarations = [];
+			paramDepth = 0;
+			attributeName = undefined;
+			switch (type) {
+				case XSLTokenLevelState.elementName:
+				case XSLTokenLevelState.xslElementName:
+					if (isEndTag) {
+						if (stack.length > 1) {
+							stack.pop();
+						}
+					} else {
+						elementName = tokenText(token);
+						nameDeclaration = undefined;
+					}
+					break;
+				case XSLTokenLevelState.attributeName:
+					attributeName = elementName !== undefined ? tokenText(token) : undefined;
+					break;
+				case XSLTokenLevelState.xmlPunctuation: {
+					const punctuation = tokenText(token);
+					if (punctuation === '<' || punctuation === '</') {
+						isEndTag = punctuation === '</';
+						elementName = undefined;
+					} else if ((punctuation === '>' || punctuation === '/>') && elementName !== undefined && !isEndTag) {
+						// in scope for the element's following siblings
+						if (nameDeclaration) {
+							stack[stack.length - 1].declarations.push(nameDeclaration);
+						}
+						if (punctuation === '>') {
+							stack.push({ name: elementName, declarations: [] });
+						}
+						elementName = undefined;
+						nameDeclaration = undefined;
+					}
+					break;
+				}
+			}
+		}
+		// from the template or function paused in - or the top-level declaration, not the stylesheet's globals
+		// (stack[1] is the xsl:stylesheet element)
+		let scopeStart = 2;
+		stack.forEach((element, index) => {
+			if (element.name === 'xsl:template' || element.name === 'xsl:function') {
+				scopeStart = index;
+			}
+		});
+		const inScope = stack.slice(scopeStart).flatMap((element) => element.declarations).concat(xpathDeclarations);
+		const last = new Map<string, InlineDeclaration>();
+		inScope.forEach((d) => { last.delete(d.name); last.set(d.name, d); });
+		return [...last.values()];
 	}
 
 	// the problem with a configuration (after variable substitution) that would stop it running, if any
@@ -156,6 +282,17 @@ export class XsltEvaluatableExpressionProvider implements vscode.EvaluatableExpr
 	public provideEvaluatableExpression(document: vscode.TextDocument, position: vscode.Position): vscode.EvaluatableExpression | undefined {
 		const variable = XsltDebug.variableAt(document.lineAt(position.line).text, position.character);
 		return variable ? new vscode.EvaluatableExpression(new vscode.Range(position.line, variable.start, position.line, variable.end), variable.expression) : undefined;
+	}
+}
+
+// while paused: the values of the variables declared before the line, shown at their declarations - looked up by
+// VS Code in the paused frame's variables, so they're the Variables view's summaries, and a variable that isn't in
+// scope there isn't shown
+export class XsltInlineValuesProvider implements vscode.InlineValuesProvider {
+	public provideInlineValues(document: vscode.TextDocument, viewPort: vscode.Range, context: vscode.InlineValueContext): vscode.InlineValue[] {
+		return XsltDebug.inlineDeclarations(document.getText(), context.stoppedLocation.start.line)
+			.filter((d) => d.line >= viewPort.start.line && d.line <= viewPort.end.line)
+			.map((d) => new vscode.InlineValueVariableLookup(new vscode.Range(d.line, d.start, d.line, d.end), d.name, true));
 	}
 }
 

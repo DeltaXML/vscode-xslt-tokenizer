@@ -88,6 +88,54 @@ suite('XSLT debugger - configurations', () => {
 		assert.isUndefined(XsltDebug.variableAt(template, template.indexOf('named')));
 	});
 
+	test('inline values: the variables declared before the paused line, in scope there', () => {
+		const text = [
+			/* 1 */ '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">',
+			/* 2 */ '  <xsl:variable name="global" select="1"/>',
+			/* 3 */ '  <xsl:template match="item">',
+			/* 4 */ '    <xsl:param name="p"',
+			/* 5 */ '      select="2"/>',
+			/* 6 */ '    <xsl:if test="@n">',
+			/* 7 */ '      <xsl:variable name="inner" select="3"/>',
+			/* 8 */ '    </xsl:if>',
+			/* 9 */ '    <xsl:variable name="x" select="',
+			/* 10 */ '      for $i at $pos in 1 to 3, $j in 2',
+			/* 11 */ '      return fold-left($i, 0, function($acc as xs:integer, $n) {',
+			/* 12 */ '        let $sum := $acc + $n, $t as xs:integer := 1',
+			/* 13 */ '        return $sum + $j * $t',
+			/* 14 */ '      })"/>',
+			/* 15 */ '    <!-- <xsl:variable name="commented"/> -->',
+			/* 16 */ '    <out a="{let $avt := 1 return $avt}">{$x}</out>',
+			/* 17 */ '    <xsl:variable name="x" select="$x + 1"/>',
+			/* 18 */ '    <xsl:sequence select="$x, $p"/>',
+			/* 19 */ '  </xsl:template>',
+			/* 20 */ '  <xsl:function name="f:f">',
+			/* 21 */ '    <xsl:param name="a"/>',
+			/* 22 */ '    <xsl:sequence select="$a"/>',
+			/* 23 */ '  </xsl:function>',
+			/* 24 */ '</xsl:stylesheet>'
+		].join('\n');
+		// at a 1-based line: the names, with the 1-based lines of their declarations
+		const at = (line: number) => XsltDebug.inlineDeclarations(text, line - 1).map((d) => `${d.name}@${d.line + 1}`);
+		// the template's param, but not the stylesheet's global variable
+		assert.deepStrictEqual(at(6), ['$p@4']);
+		// not a variable in an element that has ended
+		assert.deepStrictEqual(at(9), ['$p@4']);
+		// within the multi-line select: its for, 'at', inline function parameters, and let bindings
+		assert.deepStrictEqual(at(12), ['$p@4', '$i@10', '$pos@10', '$j@10', '$acc@11', '$n@11']);
+		assert.deepStrictEqual(at(13), ['$p@4', '$i@10', '$pos@10', '$j@10', '$acc@11', '$n@11', '$sum@12', '$t@12']);
+		// after the select: only the variable, not the bindings within it - nor those in a comment or a completed AVT
+		assert.deepStrictEqual(at(17), ['$p@4', '$x@9']);
+		// a variable declared again: the later declaration
+		assert.deepStrictEqual(at(18), ['$p@4', '$x@17']);
+		assert.deepStrictEqual(at(22), ['$a@21']);
+		// the range of the name
+		const sum = XsltDebug.inlineDeclarations(text, 12).find((d) => d.name === '$sum')!;
+		assert.strictEqual(text.split('\n')[sum.line].substring(sum.start, sum.end), '$sum');
+		const p = XsltDebug.inlineDeclarations(text, 5).find((d) => d.name === '$p')!;
+		assert.strictEqual(text.split('\n')[p.line].substring(p.start, p.end), 'p');
+	});
+
 	test('why the debug adapter stopped, from the JVM\'s stderr', () => {
 		assert.match(XsltDebugAdapterProcess.failureReason('Exception in thread "main" java.lang.NoClassDefFoundError: net/sf/saxon/om/Sequence', 1, '/opt/x.jar'),
 			/Saxon's classes weren't found: check that '\/opt\/x.jar' is a Saxon jar/);
