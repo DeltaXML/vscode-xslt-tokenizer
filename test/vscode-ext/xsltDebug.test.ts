@@ -16,6 +16,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as cp from 'child_process';
 import { XsltDebug, XsltDebugAdapterProcess, XsltDebugLog, XsltDebugOutputs, XsltDebugProblems } from '../../src/xsltDebug';
+import { unquotedPath, unquotedPaths } from '../../src/settingPaths';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
 
@@ -112,10 +113,13 @@ suite('XSLT debugger - configurations', () => {
 	});
 
 	test("a Saxon jar path with quotes around it, as Windows Explorer's 'Copy as path' gives", () => {
-		assert.strictEqual(SaxonTaskProvider.unquotedPath('"C:\\Users\\A B\\saxon jar\\saxon-pe-13.1.jar"'), 'C:\\Users\\A B\\saxon jar\\saxon-pe-13.1.jar');
-		assert.strictEqual(SaxonTaskProvider.unquotedPath(' "/opt/saxon-he-13.0.jar" '), '/opt/saxon-he-13.0.jar');
-		assert.strictEqual(SaxonTaskProvider.unquotedPath('/opt/saxon-he-13.0.jar'), '/opt/saxon-he-13.0.jar');
-		assert.isUndefined(SaxonTaskProvider.unquotedPath(undefined));
+		assert.strictEqual(unquotedPath('"C:\\Users\\A B\\saxon jar\\saxon-pe-13.1.jar"'), 'C:\\Users\\A B\\saxon jar\\saxon-pe-13.1.jar');
+		assert.strictEqual(unquotedPath(' "/opt/saxon-he-13.0.jar" '), '/opt/saxon-he-13.0.jar');
+		assert.strictEqual(unquotedPath('/opt/saxon-he-13.0.jar'), '/opt/saxon-he-13.0.jar');
+		assert.isUndefined(unquotedPath(undefined));
+		// e.g. the XSLT.tasks.saxonCLibraryPaths setting
+		assert.deepStrictEqual(unquotedPaths(['"C:\\Saxon C\\lib"', 'C:\\other']), ['C:\\Saxon C\\lib', 'C:\\other']);
+		assert.isUndefined(unquotedPaths(undefined));
 		const task = <XSLTTask><unknown>{ type: 'xslt', label: 'quoted', saxonJar: '"C:\\saxon jar\\saxon-pe-13.1.jar"', xsltFile: 'a.xsl' };
 		assert.deepStrictEqual(SaxonTaskProvider.commandLine(task, true).classPath, ['C:\\saxon jar\\saxon-pe-13.1.jar']);
 	});

@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as cp from 'child_process';
 import { SaxonTaskProvider, XSLTTask } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
+import { unquotedPath } from './settingPaths';
 
 // The step-through debugger for SaxonJ: the extension runs the debug adapter (xslt-resources/xslt-debugger, built from
 // debugger/src) in a JVM with the user's Saxon jar - it talks the Debug Adapter Protocol over stdin/stdout and runs
@@ -130,7 +131,7 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 	}
 
 	public resolveDebugConfigurationWithSubstitutedVariables(folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): vscode.DebugConfiguration | undefined {
-		config.saxonJar = SaxonTaskProvider.unquotedPath(config.saxonJar);
+		config.saxonJar = unquotedPath(config.saxonJar);
 		let problem = XsltDebug.configurationProblem(config);
 		// a relative path is relative to the workspace folder, as for tasks
 		const saxonJar = typeof config.saxonJar === 'string' && folder && !path.isAbsolute(config.saxonJar) ? path.join(folder.uri.fsPath, config.saxonJar) : config.saxonJar;

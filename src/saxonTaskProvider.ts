@@ -13,6 +13,7 @@ import { GlobalInstructionType, GlobalInstructionData } from './xslLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { LexPosition } from './xpLexer';
 import { CatalogSetting } from './catalogSetting';
+import { unquotedPath } from './settingPaths';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -92,12 +93,6 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             return setting;
         }
         return SaxonTaskProvider.isSaxonHE(saxonPath) ? 'off' : 'on';
-    }
-
-    // a path setting without quotes around it - as Windows Explorer's 'Copy as path' adds - which aren't part of the path
-    public static unquotedPath<T extends string | undefined>(fsPath: T): T {
-        const match = typeof fsPath === 'string' ? /^\s*"(.*)"\s*$/.exec(fsPath) : null;
-        return <T>(match ? match[1] : fsPath);
     }
 
     // e.g. .../SaxonHE13-0J/saxon-he-13.0.jar, saxon9he.jar or .../SaxonCHE-macos-arm64-13-0-0/bin
@@ -413,8 +408,8 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             saxonFeaturesCommand.push('--' + feature.name + ':' + feature.value);
         }
         // the setting's variable is kept for VS Code to substitute, unless the setting has quotes around it
-        const saxonJar = xsltTask.saxonJar === '${config:XSLT.tasks.saxonJar}' && saxonJarConfig !== SaxonTaskProvider.unquotedPath(saxonJarConfig) ?
-            SaxonTaskProvider.unquotedPath(saxonJarConfig)! : SaxonTaskProvider.unquotedPath(xsltTask.saxonJar);
+        const saxonJar = xsltTask.saxonJar === '${config:XSLT.tasks.saxonJar}' && saxonJarConfig !== unquotedPath(saxonJarConfig) ?
+            unquotedPath(saxonJarConfig)! : unquotedPath(xsltTask.saxonJar);
         let classPaths: string[] = altSaxonJarPath ? [altSaxonJarPath, saxonJar] : [saxonJar];
         if (xsltTask.classPathEntries) {
             classPaths = classPaths.concat(xsltTask.classPathEntries);
@@ -529,7 +524,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             const htmlParserJar = classPaths.find((item) => item.includes('nu.validator') || item.includes('htmlparser'));
 
             if (!htmlParserJar) {
-                const htmlparserPath = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
+                const htmlparserPath = unquotedPath(vscode.workspace.getConfiguration('XSLT.tasks').get<string>('htmlParserJar'));
                 if (htmlparserPath) {
                     classPaths.push(htmlparserPath);
                 }
