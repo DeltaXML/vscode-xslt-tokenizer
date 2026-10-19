@@ -9,6 +9,7 @@
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
+import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 
 const stylesheet = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f"
 		xmlns:map="http://www.w3.org/2005/xpath-functions/map" xmlns:math="http://www.w3.org/2005/xpath-functions/math">
@@ -21,11 +22,16 @@ const stylesheet = `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1
 </xsl:stylesheet>`;
 
 // the line after typing 'typed' at CURSOR and accepting the first completion item whose label starts with 'label'
-async function accept(language: string, content: string, typed: string, label: string): Promise<string> {
-	const doc = await vscode.workspace.openTextDocument({ language, content: content.replace('CURSOR', typed) });
+// - 'triggeredBy' as the typed character that triggered the completions, as the document change handler sees it
+async function accept(language: string, content: string, typed: string, label: string, triggeredBy?: string): Promise<string> {
+	const doc = await vscode.workspace.openTextDocument({ language, content: content.replace('CURSOR', () => typed) });
 	await vscode.window.showTextDocument(doc);
 	const line = content.split('\n').findIndex((l) => l.includes('CURSOR'));
 	const position = new vscode.Position(line, doc.lineAt(line).text.indexOf(typed) + typed.length);
+	if (triggeredBy && [',', '{'].includes(triggeredBy)) {
+		// in an XSLT 4.0 stylesheet, as for a map constructor
+		DocumentChangeHandler.setCommaTrigger(doc, doc.offsetAt(position));
+	}
 	try {
 		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', doc.uri, position);
 		const labelOf = (item: vscode.CompletionItem) => typeof item.label === 'string' ? item.label : item.label.label;
@@ -75,6 +81,9 @@ suite('Completion - word pattern and replaced text', function () {
 
 	const xsltCases: [string, string, string][] = [
 		['$discount-th', '$discount-threshold', '<xsl:value-of select="$discount-threshold"/>'],
+		// just the '$' typed: it's replaced too
+		['$', '$discount-threshold', '<xsl:value-of select="$discount-threshold"/>'],
+		['count($', '$discount-threshold', '<xsl:value-of select="count($discount-threshold"/>'],
 		['count($discount-th', '$discount-threshold', '<xsl:value-of select="count($discount-threshold"/>'],
 		['f:line-', 'f:line-total', '<xsl:value-of select="f:line-total()"/>'],
 		['map:ke', 'map:keys', '<xsl:value-of select="map:keys()"/>'],
@@ -88,6 +97,34 @@ suite('Completion - word pattern and replaced text', function () {
 			assert.strictEqual(await accept('xslt', stylesheet, typed, label), expected);
 		});
 	}
+
+	// an attribute value template, just begun - its '}' is added when '{' is typed
+	const avt = stylesheet.replace('<xsl:value-of select="CURSOR"/>', '<out total="CURSOR}"/>');
+	const avtCases: [string, string, string][] = [
+		['{', '$discount-threshold', '<out total="{$discount-threshold}"/>'],
+		['{$', '$discount-threshold', '<out total="{$discount-threshold}"/>'],
+		['{string-j', 'string-join', '<out total="{string-join()}"/>'],
+	];
+	for (const [typed, label, expected] of avtCases) {
+		test(`XSLT attribute value template: '${typed}', then '${label}'`, async () => {
+			assert.strictEqual(await accept('xslt', avt, typed, label), expected);
+		});
+	}
+
+	// in XSLT 4.0, a typed '{' triggers completions - for a map constructor, only a record type's entries, but an
+	// attribute or text value template's '{' has them all
+	const avt40 = avt.replace('version="3.0"', 'version="4.0"');
+	test(`XSLT 4.0 attribute value template: '{' typed, then '$discount-threshold'`, async () => {
+		assert.strictEqual(await accept('xslt', avt40, '{', '$discount-threshold', '{'), '<out total="{$discount-threshold}"/>');
+	});
+	test(`XSLT 4.0 text value template: '{' typed, then '$discount-threshold'`, async () => {
+		const tvt = avt40.replace('<out total="CURSOR}"/>', '<out xsl:expand-text="yes">CURSOR}</out>');
+		assert.strictEqual(await accept('xslt', tvt, '{', '$discount-threshold', '{'), '<out xsl:expand-text="yes">{$discount-threshold}</out>');
+	});
+	test(`XSLT 4.0 map constructor: '{' typed - no completions without a record type`, async () => {
+		const map = avt40.replace('<out total="CURSOR}"/>', '<xsl:sequence select="map CURSOR}"/>');
+		assert.strictEqual(await accept('xslt', map, '{', '$discount-threshold', '{'), `(no '$discount-threshold' item)`);
+	});
 
 	const xpathCases: [string, string, string][] = [
 		['string-j', 'string-join', 'string-join()'],

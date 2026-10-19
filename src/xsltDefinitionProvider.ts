@@ -445,7 +445,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			// XPath 4.0 keyword arguments, e.g. ex:area(2, scale := 2) - the names of the called function's parameters
 			const keywordArguments = (isXSLT40 || this.docType === DocumentTypes.XPath) && !recordEntries && !argumentValues?.inString ?
 				XsltTokenCompletions.getKeywordArgumentCompletions(document, allTokens, position, this.docType === DocumentTypes.XPath, globalInstructionData, allImportedGlobals) : undefined;
-			if (recordEntries || selectValues || isCommaTrigger || argumentValues?.inString) {
+			// a '{' that starts an attribute or text value template - not an XPath token, as one in an expression is,
+			// e.g. of a map constructor - is followed by any XPath expression, so it has all the completions
+			const braceStart = position.character > 0 ? position.translate(0, -1) : undefined;
+			const isValueTemplateStart = !!braceStart && document.getText(new vscode.Range(braceStart, position)) === '{' &&
+				!allTokens.some((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && t.line === braceStart.line && t.startCharacter === braceStart.character);
+			if (recordEntries || selectValues || (isCommaTrigger && !isValueTemplateStart) || argumentValues?.inString) {
 				// triggered by a ',', '{', ':' or quote, or within a string literal: only these completions
 				const items = recordEntries ?? selectValues ?? (argumentValues?.items ?? []).concat(keywordArguments?.items ?? []);
 				resolve(items && items.length > 0 ? new vscode.CompletionList(items, true) : undefined);
