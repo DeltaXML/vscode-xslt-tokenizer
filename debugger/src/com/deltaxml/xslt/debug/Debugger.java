@@ -246,7 +246,7 @@ final class Debugger {
                 Frame frame = frame(frameId);
                 List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
                 result.add(scope("Locals", values.register(values.locals(frame.context, frame.current)), false));
-                result.add(scope("Context", values.register(values.focus(frame.context)), false));
+                result.add(scope("Context", values.register(values.focus(frame.context, xsltContext(frame))), false));
                 result.add(scope("Globals", values.register(values.globals(xsltContext(frame))), true));
                 result.add(scope("Output", values.register(values.output(outputs, xsltContext(frame))), false));
                 return result;

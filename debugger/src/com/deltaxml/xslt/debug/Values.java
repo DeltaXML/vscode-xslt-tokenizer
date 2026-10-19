@@ -29,12 +29,16 @@ import net.sf.saxon.expr.XPathContext;
 import net.sf.saxon.expr.instruct.GlobalVariable;
 import net.sf.saxon.expr.instruct.ParameterSet;
 import net.sf.saxon.expr.instruct.SlotManager;
+import net.sf.saxon.expr.sort.GroupIterator;
 import net.sf.saxon.lib.NamespaceConstant;
 import net.sf.saxon.om.FocusIterator;
 import net.sf.saxon.om.GroundedValue;
 import net.sf.saxon.om.Item;
 import net.sf.saxon.om.Sequence;
 import net.sf.saxon.om.StructuredQName;
+import net.sf.saxon.regex.RegexIterator;
+import net.sf.saxon.str.UnicodeString;
+import net.sf.saxon.value.StringValue;
 import net.sf.saxon.s9api.Axis;
 import net.sf.saxon.s9api.QName;
 import net.sf.saxon.s9api.XdmArray;
@@ -93,20 +97,44 @@ final class Values {
         };
     }
 
-    Supplier<List<Map<String, Object>>> focus(final XPathContext context) {
+    // the focus; and from the XSLT instruction's context (which, within an XPath expression being stepped through, is
+    // that of its instruction), the current group and grouping key in xsl:for-each-group, and the captured groups in
+    // xsl:analyze-string - as current-group(), current-grouping-key() and regex-group() would give them
+    Supplier<List<Map<String, Object>>> focus(final XPathContext context, final XPathContext xsltContext) {
         return () -> {
             List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
             Item item = context.getContextItem();
             if (item == null) {
                 result.add(text(".", "(absent)", ""));
-                return result;
+            } else {
+                result.add(variable(".", item));
+                FocusIterator iterator = context.getCurrentIterator();
+                if (iterator != null) {
+                    result.add(text("position()", String.valueOf(iterator.position()), "xs:integer"));
+                    try {
+                        result.add(text("last()", String.valueOf(context.getLast()), "xs:integer"));
+                    } catch (Exception e) {
+                        // not available
+                    }
+                }
             }
-            result.add(variable(".", item));
-            FocusIterator iterator = context.getCurrentIterator();
-            if (iterator != null) {
-                result.add(text("position()", String.valueOf(iterator.position()), "xs:integer"));
+            GroupIterator groups = xsltContext.getCurrentGroupIterator();
+            if (groups != null) {
                 try {
-                    result.add(text("last()", String.valueOf(context.getLast()), "xs:integer"));
+                    result.add(variable("current-group()", groups.currentGroup()));
+                    result.add(variable("current-grouping-key()", groups.getCurrentGroupingKey().materialize()));
+                } catch (Exception e) {
+                    // not available, e.g. before the first group
+                }
+            }
+            RegexIterator regex = xsltContext.getCurrentRegexIterator();
+            if (regex != null) {
+                try {
+                    // regex-group(0) is the whole match - none for xsl:non-matching-substring
+                    for (int i = 0; i <= regex.getNumberOfGroups(); i++) {
+                        UnicodeString group = regex.getRegexGroup(i);
+                        result.add(variable("regex-group(" + i + ")", group == null ? StringValue.EMPTY_STRING : new StringValue(group)));
+                    }
                 } catch (Exception e) {
                     // not available
                 }

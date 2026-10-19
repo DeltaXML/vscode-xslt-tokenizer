@@ -423,6 +423,38 @@ async function testInlineFunctions(saxonJar) {
     await dap.exited;
 }
 
+// the Context scope: current-group() and current-grouping-key() in xsl:for-each-group, and regex-group() in
+// xsl:analyze-string
+async function testGroupsInContext(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'groups.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
+        { 'groups.xsl': [{ line: 5 }, { line: 9 }] });
+    const terminated = dap.event('terminated');
+    const stops = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        const context = byName(await dap.variables(0, 'Context'));
+        stops.push(Object.fromEntries(Object.entries(context).filter(([name]) => name !== '.').map(([name, v]) => [name, v.value])));
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    // groups for @n mod 2: 1 (items 1 and 3), then 0 (item 2)
+    assert.strictEqual(stops[0]['current-grouping-key()'], '1');
+    assert.match(stops[0]['current-group()'], /^\(<item n="1"\/>, <item n="3"\/>\)$/);
+    assert.strictEqual(stops[1]['current-grouping-key()'], '0');
+    assert.match(stops[1]['current-group()'], /^<item n="2">/);
+    // matches of ([a-z]+)(\d) in 'item1 item2 item3' - the groups in xsl:for-each-group are no longer current
+    assert.deepStrictEqual([2, 3, 4].map((i) => [stops[i]['regex-group(0)'], stops[i]['regex-group(1)'], stops[i]['regex-group(2)']]),
+        [['"item1"', '"item"', '"1"'], ['"item2"', '"item"', '"2"'], ['"item3"', '"item"', '"3"']]);
+    assert.strictEqual(stops[2]['current-group()'], undefined);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function testXPathForms(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -862,7 +894,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);
