@@ -781,7 +781,8 @@ final class Debugger {
         String code = error.getErrorCode() == null ? "" : error.getErrorCode().getLocalName();
         if (path != null && line > 0) {
             dap.event("xsltDebugError", Json.obj().with("path", path).with("line", line).with("column", column)
-                    .with("code", code).with("message", error.getMessage()).with("severity", error.isWarning() ? "warning" : "error"));
+                    .with("code", code).with("message", error.getMessage()).with("severity", error.isWarning() ? "warning" : "error")
+                    .with("compiling", compiling));
         }
         if (!error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
             pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "unhandled", "Dynamic error"));

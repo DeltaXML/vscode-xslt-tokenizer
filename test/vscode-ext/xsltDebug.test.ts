@@ -136,6 +136,16 @@ suite('XSLT debugger - configurations', () => {
 		assert.strictEqual(text.split('\n')[p.line].substring(p.start, p.end), 'p');
 	});
 
+	test('the notification at the end of a session: for a stylesheet with static errors, the first of them', () => {
+		assert.strictEqual(XsltDebug.sessionEndMessage('report', 0, []), "Completed debug session: 'report'");
+		assert.strictEqual(XsltDebug.sessionEndMessage('report', 2, []), "Debug session 'report' failed (exit code 2)");
+		const error = { path: path.join('/ws', 'count.xsl'), line: 16, code: 'XTTE0570' };
+		assert.strictEqual(XsltDebug.sessionEndMessage('report', 2, [error]),
+			"XSLT debugger: the stylesheet has a static error, so it can't be debugged - XTTE0570 at line 16 of count.xsl (see the Problems view)");
+		assert.strictEqual(XsltDebug.sessionEndMessage('report', 2, [error, { ...error, line: 20 }, { ...error, line: 30 }]),
+			"XSLT debugger: the stylesheet has static errors, so it can't be debugged - XTTE0570 at line 16 of count.xsl, and 2 more (see the Problems view)");
+	});
+
 	test('why the debug adapter stopped, from the JVM\'s stderr', () => {
 		assert.match(XsltDebugAdapterProcess.failureReason('Exception in thread "main" java.lang.NoClassDefFoundError: net/sf/saxon/om/Sequence', 1, '/opt/x.jar'),
 			/Saxon's classes weren't found: check that '\/opt\/x.jar' is a Saxon jar/);

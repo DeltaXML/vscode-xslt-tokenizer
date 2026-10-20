@@ -882,7 +882,8 @@ async function testMessageTerminateAndStaticError(saxonJar) {
     assert.strictEqual(await Promise.race([stopped.then(() => 'stopped'), terminated.then(() => 'terminated')]), 'terminated');
     const linked = dap.events.filter((e) => e.event === 'output' && e.body.source && e.body.source.path.endsWith('static-error.xsl'));
     assert.ok(linked.some((e) => e.body.line === 3 && /XPST0008/.test(e.body.output)), JSON.stringify(dap.events.filter((e) => e.event === 'output')));
-    assert.deepStrictEqual(dap.events.filter((e) => e.event === 'xsltDebugError').map((e) => [e.body.code, e.body.line]), [['XPST0008', 3]]);
+    // found when compiling: the extension's notification says so
+    assert.deepStrictEqual(dap.events.filter((e) => e.event === 'xsltDebugError').map((e) => [e.body.code, e.body.line, e.body.compiling]), [['XPST0008', 3, true]]);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
 }

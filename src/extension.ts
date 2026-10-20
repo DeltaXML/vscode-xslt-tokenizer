@@ -776,9 +776,10 @@ export function activate(context: vscode.ExtensionContext) {
 			fileSelector.pickedValues.clear();
 			// undefined if the session was stopped before the transform completed
 			const exitCode = debugExitCodes.take(session);
+			const staticErrors = debugExitCodes.takeStaticErrors(session);
 			if (exitCode !== undefined) {
 				const failed = exitCode !== 0;
-				const message = failed ? `Debug session '${session.name}' failed (exit code ${exitCode})` : `Completed debug session: '${session.name}'`;
+				const message = XsltDebug.sessionEndMessage(session.name, exitCode, staticErrors);
 				const resultPath: string | undefined = session.configuration.resultPath;
 				const resultFsPath = resultPath && !path.isAbsolute(resultPath) && session.workspaceFolder ? path.join(session.workspaceFolder.uri.fsPath, resultPath) : resultPath;
 				await showTransformResult(message, failed, resultFsPath);
