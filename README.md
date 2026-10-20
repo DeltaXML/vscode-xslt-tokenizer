@@ -114,9 +114,10 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html">Debugging &amp; tools</a></h4>
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/debugger.html">Debugging &amp; tools</a></h4>
     <ul>
-      <li><code>xsl:message</code> for all in-scope variables</li>
+      <li>Step-through <a href="https://deltaxml.github.io/vscode-xslt-xpath/debugger.html">XSLT debugger</a> for SaxonJ</li>
+      <li><a href="https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html"><code>xsl:message</code></a> for all in-scope variables</li>
       <li>Formatted, colored output with <code>xdm:debug()</code></li>
       <li>Companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension</li>
       <li>Test XPath against the current XML file</li>
@@ -180,35 +181,15 @@ For more a full description on using VSCode tasks to run XSLT, see [Running XSLT
 
 ## Debugging XSLT
 
-Stylesheets can be debugged with SaxonJ (Saxon 12 or later, any edition, including Saxon-HE): set breakpoints in the stylesheet, then use **XSLT: Debug Stylesheet with SaxonJ** (the debug button in the editor title, or `F5` with no `launch.json`). As with Quick Run, the stylesheet runs with the XML context file - or from `xsl:initial-template` - using the Quick Run task, so parameters added to the task also apply when debugging.
+Stylesheets can be debugged with SaxonJ (Saxon 12 or later, any edition, including Saxon-HE): set breakpoints in the stylesheet, then use **XSLT: Debug Stylesheet with SaxonJ** (the debug button in the editor title, or `F5` with no `launch.json`). The stylesheet runs as Quick Run runs it - with the XML context file, or from `xsl:initial-template` - using the Quick Run task's settings.
 
-- Breakpoints, including conditional breakpoints - an XPath condition, evaluated where the breakpoint is, and/or a hit count: `5` (the 5th hit), `>5`, `>=5`, `<5`, `<=5` or `%5` (every 5th), counting hits where the condition is true - and logpoints (`{xpath}` in the message is replaced by its value). A breakpoint anywhere on a multi-line start tag is shown, and stops, at the tag's first line; one where there's no instruction to stop at (a comment, text, `xsl:note`, a declaration, or a child such as `xsl:sort`) is shown as unverified
-- Multi-line XPath expressions (in `select`, `test` and `value` attributes) can be stepped through: **Step Into** at the instruction, or set a breakpoint on a line of the expression. The expression is evaluated separately, in the instruction's context, so that each part reports its own line - it appears in the call stack as, for example, `xsl:variable/@select (XPath)`, and its result is shown in the Debug Console. The instruction itself then runs as usual. An inline function's body is stepped through each time it's called, e.g. by `fold-left()`
-- Function breakpoints (**+** in the Breakpoints view): stop when a stylesheet function or named template is called, wherever it's declared - by name, as written where it's declared, e.g. `f:total` or `cell`, or as an EQName, e.g. `Q{urn:f}total` - with an arity for one version of a function, e.g. `f:total#2`. Conditions and hit counts work as for line breakpoints; at a named template's start, its parameters show the values passed to it. A name that isn't in the stylesheet is shown as unverified once it has compiled
-- Step Over, Step Into and Step Out - the call stack shows template rules, named templates, functions and global variables, and `xsl:for-each`, `xsl:for-each-group` and `xsl:iterate` instructions
-- The Variables view shows local variables and parameters (including tunnel parameters), the context item, `position()` and `last()` - and in `xsl:for-each-group` and `xsl:analyze-string`, `current-group()`, `current-grouping-key()` and each `regex-group()` - and global variables and parameters - nodes, maps, arrays and sequences can be expanded
-- Inline values: while paused, the value of each variable declared earlier in the template or function - `xsl:variable` and `xsl:param`, and in XPath, `let`, `for`, `some` and `every` bindings and inline function parameters - is shown at the end of its declaration's line (the `debug.inlineValues` setting turns this off)
-- XPath expressions are evaluated in the Watch view and the Debug Console, with the in-scope variables, namespaces, context item and the stylesheet's functions - `current()`, `current-group()`, `current-grouping-key()` and `regex-group()` give their values where execution is paused; hover over a variable to see its value
-- Dynamic errors - including `xsl:message` with `terminate="yes"` - pause where they're raised, with the error's code and message and the variables there (**Dynamic Errors**, in the Breakpoints view); errors caught by `xsl:try` can pause too (**Errors Caught by xsl:try** - not with Saxon 12.4 or earlier)
-- Saxon's error messages are linked to their location in the Debug Console, and the errors are listed in the Problems view, as for tasks. A static error - one Saxon finds when it compiles the stylesheet, including a type error it can tell will always happen, e.g. `count(...)` as an `xs:string` - stops the stylesheet running at all, so there's nothing to pause at: the notification says so, with the first error
-- The output written so far - the principal result and each `xsl:result-document` - opens beside the stylesheet at the first pause where there is some, and is updated at each pause (**XSLT: Show Debug Output**, or the debug toolbar, opens it at any time; the `XSLT.debug.openOutput` setting turns off opening it automatically). It's serialized as the result is, by Saxon, but indented for readability, in the language of its output method (XML, HTML, JSON or plain text); the result itself is written as the stylesheet says. The Variables view's **Output** scope shows which result is being written to - or that a temporary tree is being built - and the end of each
-- `xsl:message` output, and the result when there is no `resultPath`, appear in the Debug Console
+- Line breakpoints, with conditions, hit counts and logpoints - and function breakpoints, for stylesheet functions and named templates
+- Step Over, Step Into and Step Out - including line by line through multi-line XPath expressions, and into inline functions
+- Local and global variables, the context item, `current-group()` and `regex-group()` - and their values inline, while paused
+- XPath evaluation in the Watch view, the Debug Console and on hover, where execution is paused
+- Pausing on dynamic errors, and the output written so far
 
-With no `launch.json`, the **Run and Debug** view offers **Debug Active Stylesheet** and a configuration for each `xslt` task in `tasks.json` - and **create a launch.json file** adds these to a new `launch.json`. A `launch.json` configuration uses the `xslt-saxon` debugger type with `"quickRun": true` (the active stylesheet, as Quick Run runs it), the same properties as an `xslt` task, or `"task"` set to the label of an `xslt` task in `tasks.json`:
-
-```json
-{
-    "type": "xslt-saxon",
-    "request": "launch",
-    "name": "Debug report",
-    "task": "report with books.xml",
-    "stopOnEntry": false
-}
-```
-
-The stylesheet is compiled without optimization when debugging, so that all variables can be inspected. Saxon still evaluates constant expressions when it compiles - e.g. an `xsl:if` whose test uses only constant values - and an instruction it removes that way can't be stopped at.
-
-The **XSLT Debugger** log, in the Output panel, shows how each debug session was launched - the Java command line, the Saxon product, the Java runtime and the Saxon options used - and, when a session doesn't start, why: for example, Java isn't on the PATH, or the Saxon jar setting isn't a Saxon jar.
+See [XSLT Debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html) in the User Guide for the full description - including `launch.json` configurations, limitations and troubleshooting.
 
 # Release Notes
 
@@ -375,7 +356,8 @@ The main documentation pages are linked below:
 - [Code Navigation](https://deltaxml.github.io/vscode-xslt-xpath/navigation.html)
 - [Quick Run](https://deltaxml.github.io/vscode-xslt-xpath/quick-run.html)
 - [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html)
-- [Debugging](https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html)
+- [XSLT Debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html)
+- [Debugging with xsl:message](https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html)
 - [Settings](https://deltaxml.github.io/vscode-xslt-xpath/settings.html)
 - [XSLT 4.0](https://deltaxml.github.io/vscode-xslt-xpath/xslt40.html)
 - [Records and Enums](https://deltaxml.github.io/vscode-xslt-xpath/xslt40-records.html)
