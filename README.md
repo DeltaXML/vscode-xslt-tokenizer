@@ -14,7 +14,8 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 
 # Features
 
-This release includes an [XSLT step-through debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugging.html).
+This release adds a [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html) for SaxonJ: set breakpoints, step through templates, functions and multi-line XPath expressions - inspect variables as you go.
+
 
 <table>
 <tr>
