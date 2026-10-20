@@ -6,15 +6,15 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 ---
 
 <p align="center">
-  <em>XSLT 4.0 with a documentation note, its hover help where the function is called, and the XSLT Imports view:</em>
-  <img alt="XSLT Editor" src="vscode-xslt-notes.png">
+  <em>Debugging XSLT with SaxonJ: paused within an XPath expression, with its range variable,<br> the context and global variables, inline values and the call stack:</em>
+  <img alt="XSLT Debugger" src="debugger-xpath-step.jpg">
 </p>
 
 
 
 # Features
 
-This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highlights](https://deltaxml.github.io/vscode-xslt-xpath/new-release.html).
+This release includes an [XSLT step-through debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugging.html).
 
 <table>
 <tr>
@@ -138,6 +138,11 @@ This release adds full support for XSLT 4.0 in Saxon 13 - see [Release 2.0 Highl
 </table>
 
 \* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
+
+<p align="center">
+  <em>XSLT 4.0 with a documentation note, its hover help where the function is called, and the XSLT Imports view:</em>
+  <img alt="XSLT Editor" src="vscode-xslt-notes.png">
+</p>
 
 # XML Commands
 
