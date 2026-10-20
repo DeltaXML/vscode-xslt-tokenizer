@@ -689,7 +689,7 @@ final class Debugger {
         }
         Json.Obj stopped = Json.obj().with("reason", reason).with("threadId", XsltDebugAdapter.THREAD_ID).with("allThreadsStopped", true);
         if (error != null) {
-            stopped.with("description", error.get("description")).with("text", error.get("exceptionId") + ": " + Json.object(error, "details").get("message"));
+            stopped.with("description", errorCategory(error)).with("text", error.get("exceptionId") + ": " + Json.object(error, "details").get("message"));
         }
         XPathContext pausedContext = frame == null ? null : xsltContext(frame);
         sendOutputs(pausedContext == null ? null : pausedContext.getCurrentOutputUri(), pausedContext != null && pausedContext.getTemporaryOutputState() != 0);
@@ -785,7 +785,7 @@ final class Debugger {
                     .with("compiling", compiling));
         }
         if (!error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
-            pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "unhandled", "Dynamic error"));
+            pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "unhandled", DYNAMIC_ERROR));
         }
     }
 
@@ -802,7 +802,7 @@ final class Debugger {
         }
         if (breakOnCaughtErrors && !frames.isEmpty()) {
             String code = error.getErrorCodeQName() == null ? "" : error.getErrorCodeQName().getLocalPart();
-            pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "always", "Error caught by xsl:try"));
+            pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "always", CAUGHT_ERROR));
         }
         if (checkpoint instanceof Integer) {
             unwindTo((Integer) checkpoint);
@@ -818,9 +818,21 @@ final class Debugger {
         }
     }
 
-    private static Map<String, Object> errorInfo(String code, String message, String breakMode, String description) {
+    private static final String DYNAMIC_ERROR = "Dynamic error";
+    private static final String CAUGHT_ERROR = "Error caught by xsl:try";
+
+    // for the exceptionInfo request: VS Code's exception widget shows the code as its title, and the description below
+    // it - Saxon's message, for an error caught by xsl:try after saying so (else, with no message, the category)
+    private static Map<String, Object> errorInfo(String code, String message, String breakMode, String category) {
+        String description = message == null || message.trim().isEmpty() ? category :
+                category.equals(CAUGHT_ERROR) ? "Caught by xsl:try: " + message : message;
         return Json.obj().with("exceptionId", code.isEmpty() ? "error" : code).with("description", description).with("breakMode", breakMode)
                 .with("details", Json.obj().with("message", message).with("typeName", code));
+    }
+
+    // the stopped event's short description, e.g. for the call stack: the category
+    private static String errorCategory(Map<String, Object> error) {
+        return "always".equals(error.get("breakMode")) ? CAUGHT_ERROR : DYNAMIC_ERROR;
     }
 
     // instructions that change the focus get their own stack frame, showing the context item - unlike calls, they

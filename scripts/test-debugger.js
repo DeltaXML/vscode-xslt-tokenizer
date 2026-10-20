@@ -817,6 +817,8 @@ async function testPauseOnError(saxonJar) {
     assert.strictEqual(info.exceptionId, 'FORG0001');
     assert.strictEqual(info.breakMode, 'unhandled');
     assert.match(info.details.message, /Cannot convert string "abc" to xs:decimal/);
+    // shown below the code in VS Code's exception widget
+    assert.strictEqual(info.description, info.details.message);
     const locals = byName(await dap.variables(0, 'Locals'));
     assert.strictEqual(locals.$input.value, '"abc"');
 
@@ -851,7 +853,9 @@ async function testPauseOnCaughtError(saxonJar) {
     assert.strictEqual(stop.reason, 'exception');
     assert.strictEqual(stop.frames[0].name, 'f:fail#1');
     const info = await dap.request('exceptionInfo', { threadId: 1 });
-    assert.deepStrictEqual([info.exceptionId, info.breakMode, info.description], ['FOAR0001', 'always', 'Error caught by xsl:try']);
+    assert.deepStrictEqual([info.exceptionId, info.breakMode], ['FOAR0001', 'always']);
+    // the exception widget's description: Saxon's message
+    assert.match(info.description, /^Caught by xsl:try: Integer division by zero/);
     stopped = dap.stopped();
     await dap.request('continue', { threadId: 1 });
     assert.strictEqual(await Promise.race([stopped.then(() => 'stopped'), terminated.then(() => 'terminated')]), 'terminated');
