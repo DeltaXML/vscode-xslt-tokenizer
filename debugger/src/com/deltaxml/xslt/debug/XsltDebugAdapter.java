@@ -226,6 +226,8 @@ public final class XsltDebugAdapter {
                     // VS Code ends the session at the 'terminated' event, then disconnects - the transform runs in
                     // this JVM, so it's stopped when the adapter exits then
                     respond(request, null);
+                    // no longer paused: VS Code stops asking for the call stack
+                    event("continued", Json.obj().with("threadId", THREAD_ID).with("allThreadsContinued", true));
                     event("terminated", Json.obj());
                     break;
                 case "disconnect":

@@ -573,6 +573,35 @@ async function testFunctionBreakpoints(saxonJar) {
         'f:total#1 function-breakpoints-lib.xsl:7 $values=(n="1", n="2", n="3")']);
 }
 
+// within a multi-line XPath expression being stepped through: Locals has the instruction's local variables and the
+// expression's range variables - not a global variable it references, which is in Globals; position() and last()
+// are the instruction's
+async function testXPathFrameScopes(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'xpath-frame.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
+        { 'xpath-frame.xsl': [{ line: 12 }] });
+    const terminated = dap.event('terminated');
+    const stops = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        const scope = async (name) => (await dap.variables(0, name)).filter((v) => v.name !== '.').map((v) => `${v.name}=${v.value}`).join(' ');
+        stops.push(`${await scope('Locals')} | ${await scope('Context')} | ${await scope('Globals')}`);
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    assert.deepStrictEqual(stops.slice(0, 3), [
+        '$n=1 $i=1 | position()=1 last()=3 | $factor=10',
+        '$n=2 $i=1 | position()=2 last()=3 | $factor=10',
+        '$n=2 $i=2 | position()=2 last()=3 | $factor=10']);
+    assert.strictEqual(stops.length, 6);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function testXPathForms(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -922,8 +951,8 @@ async function testVariableScopes(saxonJar) {
         '10: $p="param" $x="outer" | watch $x="outer"',
         '13: $p="param" $later="later-3" $x="inner-3" | watch $x="inner-3"',
         '15: $p="param" $x="outer" | watch $x="outer"',
-        '19: $x=1 | watch $x=1',
-        '19: $x=2 | watch $x=2',
+        '19: $p="param" $x=1 | watch $x=1',
+        '19: $p="param" $x=2 | watch $x=2',
     ]);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
@@ -1017,7 +1046,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

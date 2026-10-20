@@ -183,6 +183,38 @@ suite('XSLT debugger - configurations', () => {
 	});
 });
 
+suite('XSLT debugger - Saxon\'s problems', () => {
+	test('cleared for a file when it is edited - those of other files are kept', async () => {
+		// the extension's handler for document changes
+		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+		// os.tmpdir() on macOS is under /var, a symbolic link to /private/var: the adapter reports the resolved path
+		const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-debug-problems-'));
+		const edited = path.join(folder, 'edited.xsl');
+		const other = path.join(folder, 'other.xsl');
+		fs.writeFileSync(edited, '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>\n');
+		fs.writeFileSync(other, '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>\n');
+		XsltDebugProblems.clear();
+		XsltDebugProblems.add(fs.realpathSync(edited), 1, 'XTTE0570', 'a type error', false);
+		XsltDebugProblems.add(fs.realpathSync(other), 1, 'FOAR0001', 'division by zero', false);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(edited));
+		const otherUri = vscode.Uri.file(fs.realpathSync(other));
+		assert.strictEqual(XsltDebugProblems.get().get(vscode.Uri.file(fs.realpathSync(edited)))?.length, 1);
+
+		const edit = new vscode.WorkspaceEdit();
+		edit.insert(document.uri, new vscode.Position(0, 0), '<!-- fixed -->');
+		await vscode.workspace.applyEdit(edit);
+		// the change event can follow the edit
+		const editedProblems = () => XsltDebugProblems.get().get(vscode.Uri.file(fs.realpathSync(edited)))?.length ?? 0;
+		for (let i = 0; i < 50 && editedProblems() > 0; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		assert.strictEqual(editedProblems(), 0);
+		assert.strictEqual(XsltDebugProblems.get().get(otherUri)?.length, 1);
+		XsltDebugProblems.clear();
+		await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+	});
+});
+
 suite('XSLT debugger - sessions that fail to start', function () {
 	this.timeout(30000);
 	const fixture = path.join(fixtures, 'basic.xsl');
@@ -331,6 +363,8 @@ suite('XSLT debugger - debug sessions', function () {
 			type: XsltDebug.type, request: 'launch', name, saxonJar, xsltFile: xsltUri.fsPath, xmlSource: path.join(fixtures, 'basic.xml')
 		}));
 		const stop = await nextStop();
+		// as a user would: not within the moment after the pause when VS Code fetches the call stack
+		await new Promise((resolve) => setTimeout(resolve, 300));
 		const start = Date.now();
 		await vscode.debug.stopDebugging(stop.session);
 		const timedOut = new Promise<string>((resolve) => setTimeout(() => resolve('timed out'), 500));

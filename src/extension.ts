@@ -41,7 +41,7 @@ import { CatalogDocumentProvider } from './catalogDocumentProvider';
 import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
-import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
+import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 
 
 
@@ -766,7 +766,13 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerInlineValuesProvider({ language: 'xslt' }, new XsltInlineValuesProvider()));
 	// the output written so far, while debugging
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(XsltDebugOutputs.scheme, XsltDebugOutputs.get()));
-	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => XsltDebugOutputs.revealEnd(e.document)));
+	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
+		XsltDebugOutputs.revealEnd(e.document);
+		if (e.contentChanges.length > 0) {
+			// Saxon's errors from the last debug session, for a file that's now been edited
+			XsltDebugProblems.clearDocument(e.document.uri);
+		}
+	}));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showDebugOutput', () => XsltDebugOutputs.get().show()));
 	const debugExitCodes = new XsltDebugExitCodes();
 	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(XsltDebug.type, debugExitCodes));

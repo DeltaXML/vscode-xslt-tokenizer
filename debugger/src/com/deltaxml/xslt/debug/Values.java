@@ -86,6 +86,33 @@ final class Values {
 
     // ---------------------------------------------------------------- scopes
 
+    // within an XPath expression being stepped through: its instruction's local variables, then the expression's own
+    // range variables, which hide any of the same name - not the variables it references, passed to it from where
+    // it's evaluated (which may be global variables)
+    Supplier<List<Map<String, Object>>> xpathLocals(final XPathContext context, final Traceable current, final int externals,
+            final XPathContext xsltContext, final Traceable xsltCurrent) {
+        return () -> {
+            List<Map.Entry<StructuredQName, Sequence>> own = localVariables(context, current, externals);
+            Set<String> ownNames = new HashSet<String>();
+            for (Map.Entry<StructuredQName, Sequence> local : own) {
+                ownNames.add(local.getKey().getDisplayName());
+            }
+            List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+            for (Map.Entry<StructuredQName, Sequence> local : localVariables(xsltContext, xsltCurrent, 0)) {
+                if (!ownNames.contains(local.getKey().getDisplayName())) {
+                    result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
+                }
+            }
+            for (Map.Entry<StructuredQName, Sequence> local : own) {
+                result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
+            }
+            for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(xsltContext)) {
+                result.add(variable("$" + tunnel.getKey().getDisplayName() + " (tunnel)", tunnel.getValue()));
+            }
+            return result;
+        };
+    }
+
     Supplier<List<Map<String, Object>>> locals(final XPathContext context, final Traceable current) {
         return () -> {
             List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
@@ -102,7 +129,9 @@ final class Values {
     // the focus; and from the XSLT instruction's context (which, within an XPath expression being stepped through, is
     // that of its instruction), the current group and grouping key in xsl:for-each-group, and the captured groups in
     // xsl:analyze-string - as current-group(), current-grouping-key() and regex-group() would give them
-    Supplier<List<Map<String, Object>>> focus(final XPathContext context, final XPathContext xsltContext) {
+    // xpathFocus: within an XPath expression being stepped through, the focus it's evaluated with - where that's the
+    // focus, position() and last() are its instruction's
+    Supplier<List<Map<String, Object>>> focus(final XPathContext context, final XPathContext xsltContext, final FocusIterator xpathFocus) {
         return () -> {
             List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
             Item item = context.getContextItem();
@@ -110,11 +139,12 @@ final class Values {
                 result.add(text(".", "(absent)", ""));
             } else {
                 result.add(variable(".", item));
-                FocusIterator iterator = context.getCurrentIterator();
+                XPathContext focusContext = xpathFocus != null && context.getCurrentIterator() == xpathFocus ? xsltContext : context;
+                FocusIterator iterator = focusContext.getCurrentIterator();
                 if (iterator != null) {
                     result.add(text("position()", String.valueOf(iterator.position()), "xs:integer"));
                     try {
-                        result.add(text("last()", String.valueOf(context.getLast()), "xs:integer"));
+                        result.add(text("last()", String.valueOf(focusContext.getLast()), "xs:integer"));
                     } catch (Exception e) {
                         // not available
                     }
@@ -232,6 +262,11 @@ final class Values {
     // one declared later, or one from the previous iteration of an xsl:for-each. Without an expression, e.g. at a
     // template's start, only the parameters with values
     private static List<Map.Entry<StructuredQName, Sequence>> localVariables(XPathContext context, Traceable current) {
+        return localVariables(context, current, 0);
+    }
+
+    // firstParameterSlot: the first slot that may be a parameter - the slots before it aren't shown
+    private static List<Map.Entry<StructuredQName, Sequence>> localVariables(XPathContext context, Traceable current, int firstParameterSlot) {
         List<Map.Entry<StructuredQName, Sequence>> result = new ArrayList<Map.Entry<StructuredQName, Sequence>>();
         StackFrame frame = context.getStackFrame();
         SlotManager slots = frame == null ? null : frame.getStackFrameMap();
@@ -260,7 +295,7 @@ final class Values {
         }
         // parameters: the slots that no binding uses - shown first, then the bindings in the order they're declared
         Set<Integer> bound = boundSlots(root);
-        for (int slot = 0; slot < names.size(); slot++) {
+        for (int slot = firstParameterSlot; slot < names.size(); slot++) {
             if (!bound.contains(slot)) {
                 addParameter(result, seen, context, names, slot, names.get(slot));
             }

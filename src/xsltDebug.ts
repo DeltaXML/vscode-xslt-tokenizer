@@ -492,6 +492,28 @@ export class XsltDebugProblems {
 		XsltDebugProblems.get().set(vscode.Uri.file(fsPath), diagnostics);
 	}
 
+	// the file has been edited: its problems, from when Saxon ran it, may no longer apply - e.g. the error has been
+	// fixed - so they're removed (those of other files are kept)
+	public static clearDocument(uri: vscode.Uri) {
+		if (uri.scheme !== 'file' || XsltDebugProblems.pending.size === 0) {
+			return;
+		}
+		// the adapter's paths have symbolic links resolved (e.g. /tmp on macOS), and on Windows, are lower-cased
+		let realPath = uri.fsPath;
+		try {
+			realPath = fs.realpathSync(uri.fsPath);
+		} catch {
+			// not found: the path as it is
+		}
+		const same = (a: string, b: string) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+		for (const fsPath of [...XsltDebugProblems.pending.keys()]) {
+			if (same(fsPath, uri.fsPath) || same(fsPath, realPath)) {
+				XsltDebugProblems.pending.delete(fsPath);
+				XsltDebugProblems.get().delete(vscode.Uri.file(fsPath));
+			}
+		}
+	}
+
 	public static get(): vscode.DiagnosticCollection {
 		return XsltDebugProblems.collection ??= vscode.languages.createDiagnosticCollection('XSLT debugger');
 	}
@@ -574,12 +596,15 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		}
 	}
 
-	// a response for a request the adapter won't answer: success for ending the session, otherwise an error
+	// a response for a request the adapter won't answer: success - with nothing, for requests about the paused state,
+	// e.g. no stack frames - so VS Code doesn't retry them
 	private respondHere(request: { command?: string; seq: number }) {
-		const ending = request.command === 'disconnect' || request.command === 'terminate';
-		this.messages.fire({ seq: 0, type: 'response', request_seq: request.seq, success: ending, command: request.command,
-			...(ending ? {} : { message: 'the debug session has ended' }) } as vscode.DebugProtocolMessage);
+		const empty: { [command: string]: object } = { threads: { threads: [] }, stackTrace: { stackFrames: [], totalFrames: 0 }, scopes: { scopes: [] }, variables: { variables: [] } };
+		const succeeds = request.command === 'disconnect' || request.command === 'terminate' || (request.command ?? '') in empty;
+		this.messages.fire({ seq: 0, type: 'response', request_seq: request.seq, success: succeeds, command: request.command,
+			...(succeeds ? { body: empty[request.command ?? ''] } : { message: 'the debug session has ended' }) } as vscode.DebugProtocolMessage);
 	}
+
 
 	public dispose() {
 		this.ended = true;

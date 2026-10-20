@@ -83,23 +83,37 @@ final class XPathEngine {
         private final XPathExpression expression;
         private final Map<XPathVariable, Sequence> bindings;
         private final Item contextItem;
+        // the number of slots for the variables the expression references, bound from where it's evaluated - before
+        // those of its own range variables
+        final int externals;
         // the locations of the expression's own parts (not those in stylesheet functions it calls): those Saxon
         // reports, as type checking may replace a part by another, with the same location
         final Map<Location, Boolean> instrumented;
 
-        Compiled(XPathExpression expression, Map<XPathVariable, Sequence> bindings, Item contextItem, Map<Location, Boolean> instrumented) {
+        Compiled(XPathExpression expression, Map<XPathVariable, Sequence> bindings, Item contextItem, int externals, Map<Location, Boolean> instrumented) {
             this.expression = expression;
             this.bindings = bindings;
             this.contextItem = contextItem;
+            this.externals = externals;
             this.instrumented = instrumented;
         }
 
-        GroundedValue evaluate() throws Exception {
+        // the dynamic context to evaluate it in: its focus is the context item alone - so position() and last() are
+        // those of the instruction, where it's at the top level of the expression
+        XPathDynamicContext prepare() throws Exception {
             XPathDynamicContext dynamicContext = expression.createDynamicContext(contextItem);
             for (Map.Entry<XPathVariable, Sequence> binding : bindings.entrySet()) {
                 dynamicContext.setVariable(binding.getKey(), binding.getValue());
             }
+            return dynamicContext;
+        }
+
+        GroundedValue evaluate(XPathDynamicContext dynamicContext) throws Exception {
             return SequenceTool.toGroundedValue(expression.iterate(dynamicContext));
+        }
+
+        GroundedValue evaluate() throws Exception {
+            return evaluate(prepare());
         }
     }
 
@@ -194,7 +208,7 @@ final class XPathEngine {
         SlotManager slots = env.getStackFrameMap();
         int externals = slots.getNumberOfVariables();
         ExpressionTool.allocateSlots(expression, externals, slots);
-        return new Compiled(new CompiledExpression(env, expression, executable, slots, externals), bindings, context.getContextItem(), instrumented);
+        return new Compiled(new CompiledExpression(env, expression, executable, slots, externals), bindings, context.getContextItem(), externals, instrumented);
     }
 
     static GroundedValue evaluate(String xpath, Traceable instruction, XPathContext context, Traceable xsltInstruction, XPathContext xsltContext) throws Exception {

@@ -303,8 +303,9 @@ final class Debugger {
             public List<Map<String, Object>> call() {
                 Frame frame = frame(frameId);
                 List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
-                result.add(scope("Locals", values.register(values.locals(frame.context, frame.current)), false));
-                result.add(scope("Context", values.register(values.focus(frame.context, xsltContext(frame))), false));
+                result.add(scope("Locals", values.register(frame.xsltContext == null ? values.locals(frame.context, frame.current) :
+                        values.xpathLocals(frame.context, frame.current, frame.xpathExternals, frame.xsltContext, frame.xsltCurrent)), false));
+                result.add(scope("Context", values.register(values.focus(frame.context, xsltContext(frame), frame.xpathFocus)), false));
                 result.add(scope("Globals", values.register(values.globals(xsltContext(frame))), true));
                 result.add(scope("Output", values.register(values.output(outputs, xsltContext(frame))), false));
                 return result;
@@ -506,7 +507,10 @@ final class Debugger {
                         new XPathEngine.SourcePosition(systemId, attribute.line, attribute.column));
                 xpathFrame = frame;
                 xpathParts = compiled.instrumented;
-                GroundedValue value = compiled.evaluate();
+                frame.xpathExternals = compiled.externals;
+                net.sf.saxon.sxpath.XPathDynamicContext dynamicContext = compiled.prepare();
+                frame.xpathFocus = dynamicContext.getXPathContextObject().getCurrentIterator();
+                GroundedValue value = compiled.evaluate(dynamicContext);
                 dap.log(name + " on line " + attribute.line + " = " + Values.summary(XdmValue.wrap(value)));
             } catch (Exception | LinkageError e) {
                 // 'important': VS Code also shows it as a notification - it was stepped into, or has a breakpoint
@@ -1011,6 +1015,10 @@ final class Debugger {
         int callDepth;
         XPathContext xsltContext;
         Traceable xsltCurrent;
+        // for an XPath expression's frame: the number of slots for the variables it references (not its own), and
+        // the focus it's evaluated with - at its top level, that of its instruction
+        int xpathExternals;
+        net.sf.saxon.om.FocusIterator xpathFocus;
         // the line last entered in this frame, and the instruction or expression first entered on it
         String enteredPath;
         int enteredLine;
