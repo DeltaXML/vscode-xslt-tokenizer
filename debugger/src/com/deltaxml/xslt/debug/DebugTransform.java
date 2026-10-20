@@ -11,7 +11,12 @@ import java.lang.reflect.Field;
 import net.sf.saxon.Configuration;
 import net.sf.saxon.Transform;
 import net.sf.saxon.lib.ErrorReporter;
+import net.sf.saxon.s9api.Axis;
+import net.sf.saxon.s9api.Message;
 import net.sf.saxon.s9api.SaxonApiException;
+import net.sf.saxon.s9api.XdmNode;
+import net.sf.saxon.s9api.XdmNodeKind;
+import net.sf.saxon.s9api.XdmSequenceIterator;
 import net.sf.saxon.s9api.XsltCompiler;
 import net.sf.saxon.s9api.XsltExecutable;
 import net.sf.saxon.s9api.Xslt30Transformer;
@@ -59,6 +64,20 @@ class DebugTransform extends Transform {
         }
     }
 
+    // an xsl:message as it is - as for an 'xslt' task (com.deltaxml.saxon.perf.AltTransform) - rather than as Saxon
+    // writes it, as XML, where e.g. the ANSI color codes of xdm:debug-color() become character references such as
+    // &#x1B;[0;33m; the Debug Console shows ANSI colors. A message with elements in it is still written as XML
+    private static void printMessage(Message message) {
+        XdmNode content = message.getContent();
+        boolean hasElements = false;
+        if (content != null) {
+            for (XdmSequenceIterator<XdmNode> nodes = content.axisIterator(Axis.DESCENDANT); nodes.hasNext() && !hasElements; ) {
+                hasElements = nodes.next().getNodeKind() == XdmNodeKind.ELEMENT;
+            }
+        }
+        System.err.println(hasElements ? content.toString() : message.getStringValue());
+    }
+
     @Override
     protected Xslt30Transformer newTransformer(XsltExecutable executable, CommandLineOptions options) throws SaxonApiException {
         // the function breakpoints' names are checked against the compiled stylesheet
@@ -66,6 +85,9 @@ class DebugTransform extends Transform {
         Xslt30Transformer transformer = super.newTransformer(executable, options);
         final ErrorReporter saxonReporter = transformer.getErrorReporter();
         transformer.setErrorReporter(error -> debugger.reportError(error, saxonReporter, false));
+        if (!debugger.isMessageEscaping()) {
+            transformer.setMessageHandler(DebugTransform::printMessage);
+        }
         return transformer;
     }
 }

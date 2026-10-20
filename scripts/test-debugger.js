@@ -344,7 +344,8 @@ async function testStepThroughXPath(saxonJar) {
         lines.push(stop.frames[0].line);
     }
     assert.deepStrictEqual(lines, [9, 9]);
-    assert.match(dap.output, /xsl:variable\/@select on line 9 = 2/);
+    // its result, in the Debug Console, marked as the debugger's: the variable, the attribute and its lines
+    assert.match(dap.output, /\u25B8 \$total \(xsl:variable\/@select, lines 9-12\) returned 2/);
     assert.match(dap.output, /<other total="4"\/>/);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
@@ -600,6 +601,26 @@ async function testXPathFrameScopes(saxonJar) {
     assert.strictEqual(stops.length, 6);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
+}
+
+// xsl:message output as it is, as for an 'xslt' task: ANSI color codes, e.g. from xdm:debug-color(), are kept for the
+// Debug Console - not written as character references - and a message with elements is still written as XML; with
+// "messageEscaping": "on", Saxon's own output
+async function testMessageOutput(saxonJar) {
+    const messages = async (launchArgs) => {
+        const dap = new DapClient(saxonJar);
+        await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'messages.xsl')}`, '-it'], ...launchArgs }, {});
+        const terminated = dap.event('terminated');
+        await terminated;
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return dap.events.filter((e) => e.event === 'output' && e.body.category === 'stderr').map((e) => e.body.output).join('');
+    };
+    let text = await messages({});
+    assert.ok(text.includes('\u001b[0;32mgreen\u001b[0m <text> &'), JSON.stringify(text));
+    assert.match(text, /<item n="1">with markup<\/item>/);
+    text = await messages({ messageEscaping: 'on' });
+    assert.match(text, /&#x1b;\[0;32mgreen/i);
 }
 
 async function testXPathForms(saxonJar) {
@@ -1046,7 +1067,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

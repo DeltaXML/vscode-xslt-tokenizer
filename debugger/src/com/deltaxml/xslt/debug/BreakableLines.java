@@ -95,6 +95,8 @@ final class BreakableLines {
         final int lastLine;
         // the stylesheet lines with the start of an expression on them
         final Set<Integer> expressionLines = new HashSet<Integer>();
+        // the instruction's name attribute, if it has one - e.g. an xsl:variable's
+        String instructionName;
 
         XPathAttribute(String elementName, String name, String xpath, int line, int column, int lastLine) {
             this.elementName = elementName;
@@ -379,6 +381,14 @@ final class BreakableLines {
     }
 
     private static void addXPathAttributes(Tag tag, String text, int[] lineStarts, int startOffset, int endOffset) {
+        // the instruction's name attribute, e.g. of an xsl:variable
+        String instructionName = null;
+        java.util.regex.Matcher names = ATTRIBUTE.matcher(text.substring(startOffset, endOffset));
+        while (names.find() && instructionName == null) {
+            if (names.group(1).equals("name")) {
+                instructionName = (names.group(2) != null ? names.group(2) : names.group(3)).trim();
+            }
+        }
         java.util.regex.Matcher m = ATTRIBUTE.matcher(text.substring(startOffset, endOffset));
         while (m.find()) {
             String value = m.group(2) != null ? m.group(2) : m.group(3);
@@ -391,6 +401,7 @@ final class BreakableLines {
             int column = valueOffset - lineStarts[line - 1] + 1;
             String[] valueLines = value.split("\n", -1);
             XPathAttribute attribute = new XPathAttribute(tag.name, m.group(1), xpathText(value), line, column, line + valueLines.length - 1);
+            attribute.instructionName = instructionName;
             for (int i = 0; i < valueLines.length; i++) {
                 if (startsExpression(valueLines[i])) {
                     attribute.expressionLines.add(line + i);

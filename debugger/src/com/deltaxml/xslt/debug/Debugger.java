@@ -58,6 +58,7 @@ final class Debugger {
     // --- launch configuration (DAP thread, before start)
     private final List<String> saxonArgs = new ArrayList<String>();
     private boolean stopOnEntry;
+    private boolean messageEscaping;
 
     // --- breakpoints: normalised file path -> line -> breakpoint (written by the DAP thread at any time)
     private final Map<String, Map<Integer, Breakpoint>> breakpoints = new ConcurrentHashMap<String, Map<Integer, Breakpoint>>();
@@ -122,6 +123,8 @@ final class Debugger {
             throw new IllegalArgumentException("the launch request has no 'saxonArgs'");
         }
         stopOnEntry = Json.bool(args, "stopOnEntry");
+        // as for an 'xslt' task: "on" keeps Saxon's own xsl:message output, which escapes characters XML doesn't allow
+        messageEscaping = "on".equals(Json.string(args, "messageEscaping"));
     }
 
     List<Map<String, Object>> setBreakpoints(Map<String, Object> args) {
@@ -223,6 +226,10 @@ final class Debugger {
                 dap.event("breakpoint", Json.obj().with("reason", "changed").with("breakpoint", status));
             }
         }
+    }
+
+    boolean isMessageEscaping() {
+        return messageEscaping;
     }
 
     void start() {
@@ -511,7 +518,7 @@ final class Debugger {
                 net.sf.saxon.sxpath.XPathDynamicContext dynamicContext = compiled.prepare();
                 frame.xpathFocus = dynamicContext.getXPathContextObject().getCurrentIterator();
                 GroundedValue value = compiled.evaluate(dynamicContext);
-                dap.log(name + " on line " + attribute.line + " = " + Values.summary(XdmValue.wrap(value)));
+                dap.log(resultDescription(attribute, name) + " returned " + Values.summary(XdmValue.wrap(value)));
             } catch (Exception | LinkageError e) {
                 // 'important': VS Code also shows it as a notification - it was stepped into, or has a breakpoint
                 dap.event("output", Json.obj().with("category", "important").with("output",
@@ -524,6 +531,14 @@ final class Debugger {
                 xpathDepth--;
             }
         }
+    }
+
+    // the Debug Console's note of an XPath expression's result, once it has been stepped through - marked as the
+    // debugger's, with the variable or parameter it's for, if any, e.g. '▸ $totals (xsl:variable/@select, lines 25-28)'
+    private static String resultDescription(BreakableLines.XPathAttribute attribute, String name) {
+        String variable = attribute.elementName.matches("xsl:(variable|param|with-param)") ? attribute.instructionName : null;
+        String lines = attribute.lastLine > attribute.line ? "lines " + attribute.line + "-" + attribute.lastLine : "line " + attribute.line;
+        return "\u25B8 " + (variable != null ? "$" + variable + " (" + name + ", " + lines + ")" : name + " (" + lines + ")");
     }
 
     // the stylesheet's start tags - null if it can't be parsed
