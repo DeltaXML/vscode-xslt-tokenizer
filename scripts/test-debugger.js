@@ -699,6 +699,102 @@ async function testXslt40Structures(saxonJar) {
     assert.strictEqual(stops[4], '20 xsl:select (XPath)');
 }
 
+// accumulators: a rule is stopped at, with $value, when Saxon computes the accumulator's values - for the whole
+// document, the first time one is needed - and a multi-line select is stepped through; xsl:accumulator itself isn't
+// stopped at. accumulator-before() and accumulator-after() can be used in Watch and conditions: within the transform
+async function testAccumulators(saxonJar) {
+    const xsl = path.join(fixtures, 'accumulators.xsl');
+    const run = async (breakpoints, watch) => {
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+        await dap.request('launch', { saxonArgs: [`-xsl:${xsl}`, `-s:${path.join(fixtures, 'basic.xml')}`] });
+        const set = await dap.request('setBreakpoints', { source: { path: xsl }, breakpoints });
+        const terminated = dap.event('terminated');
+        await dap.request('configurationDone', {});
+        const stops = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            const locals = (await dap.variables(0, 'Locals')).map((v) => `${v.name}=${v.value}`).join(' ');
+            const watched = watch ? ' | ' + (await dap.request('evaluate', { expression: watch, frameId: 0, context: 'watch' })).result : '';
+            stops.push([stop.frames[0].line, stop.frames[0].name, locals].filter((part) => part !== '').join(' ') + watched);
+            stopped = dap.stopped();
+            await dap.request('continue', { threadId: 1 });
+        }
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return { breakpoints: set.breakpoints, stops, output: dap.output };
+    };
+
+    let { breakpoints, stops, output } = await run([4, 5, 7, 11].map((line) => ({ line })));
+    if (/saxon-[hpe]e-12\.[0-7]\b/i.test(saxonJar)) {
+        // Saxon 12.7 and earlier don't report accumulator rules: their breakpoints are unverified, and say why
+        assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]), [[4, false], [5, false], [7, false], [11, false]]);
+        assert.match(breakpoints[1].message, /Saxon 12\.8 or later reports accumulator rules/);
+        assert.deepStrictEqual(stops, []);
+    } else {
+        assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]), [[4, false], [5, true], [7, true], [11, true]]);
+        assert.match(breakpoints[0].message, /xsl:accumulator isn't an instruction Saxon can stop at/);
+        // the values for all the items, at the first accumulator-before() - then at the first accumulator-after()
+        assert.deepStrictEqual(stops, [
+            '5 xsl:accumulator-rule $value=0', '7 xsl:accumulator-rule/@select (XPath) $value=0',
+            '5 xsl:accumulator-rule $value=1', '7 xsl:accumulator-rule/@select (XPath) $value=1',
+            '5 xsl:accumulator-rule $value=3', '7 xsl:accumulator-rule/@select (XPath) $value=3',
+            '11 xsl:accumulator-rule $value=0', '11 xsl:accumulator-rule $value=1', '11 xsl:accumulator-rule $value=2']);
+    }
+    assert.match(output, /<item n="1" total="1" count="1"\/><item n="2" total="3" count="2"\/><item n="3" total="6" count="3"\/>/);
+
+    // in a condition, and in Watch
+    ({ stops } = await run([{ line: 18, condition: "accumulator-before('running-total') ge 3" }], "accumulator-before('running-total'), accumulator-after('count')"));
+    assert.deepStrictEqual(stops, ['18 xsl:template match="item" | (3, 2)', '18 xsl:template match="item" | (6, 3)']);
+}
+
+// multi-line XPath in xsl:iterate's select, xsl:on-completion's select, xsl:with-param's select (evaluated by the
+// instruction it's in, here xsl:next-iteration) and xsl:evaluate's xpath: each stopped at and stepped through; an
+// xsl:iterate's parameters are in scope only within it
+async function testIterateAndEvaluate(saxonJar) {
+    const xsl = path.join(fixtures, 'iterate-evaluate.xsl');
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${xsl}`, `-s:${path.join(fixtures, 'basic.xml')}`] });
+    const { breakpoints } = await dap.request('setBreakpoints', { source: { path: xsl }, breakpoints: [7, 9, 10, 11, 14, 15, 16, 19, 21, 22].map((line) => ({ line })) });
+    const terminated = dap.event('terminated');
+    await dap.request('configurationDone', {});
+    const stops = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        const locals = (await dap.variables(0, 'Locals')).map((v) => `${v.name}=${v.value}`).join(' ');
+        stops.push([stop.frames[0].line, stop.frames[0].name, locals].filter((part) => part !== '').join(' '));
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    // not xsl:with-param itself, nor a line with only a literal
+    assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]),
+        [[7, true], [9, true], [10, false], [11, true], [14, false], [15, true], [16, true], [19, true], [21, true], [22, false]]);
+    const withParam = (total) => [`15 xsl:with-param/@select (XPath) $total=${total}`, `16 xsl:with-param/@select (XPath) $total=${total}`];
+    assert.deepStrictEqual(stops, [
+        '7 xsl:iterate/@select (XPath)', '7 xsl:iterate/@select (XPath)', '7 xsl:iterate/@select (XPath)',
+        ...withParam(0), ...withParam(1), ...withParam(3),
+        // the frame's name - with Saxon 12, which reports xsl:iterate at its start tag, with its select on one line
+        /^9 xsl:iterate/.test(stops[9]) ? stops[9] : '9 xsl:iterate', '11 xsl:on-completion/@select (XPath) $total=6',
+        // after the xsl:iterate: not its parameter
+        '19 xsl:template match="/"',
+        '21 xsl:evaluate/@xpath (XPath) $use-sum=true']);
+    assert.match(stops[9], /^9 xsl:iterate( select="items\/item \[@n ne '0'\]")? \$total=6$/);
+    assert.match(dap.output, /\u25B8 \$total \(xsl:with-param\/@select, lines 14-16\) returned 6/);
+    assert.match(dap.output, /\u25B8 xsl:on-completion\/@select \(lines 9-11\) returned "total: 6"/);
+    assert.match(dap.output, /total: 6 60<\/out>/);
+}
+
 async function testXPathForms(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -1143,7 +1239,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

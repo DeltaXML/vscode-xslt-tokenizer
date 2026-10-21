@@ -886,7 +886,12 @@ final class Debugger {
         String className = traceable.getClass().getSimpleName();
         String tag = className.equals("ForEachGroup") ? "xsl:for-each-group" : className.equals("IterateInstr") ? "xsl:iterate" : "xsl:for-each";
         String select = sourceAttribute(traceable.getLocation(), "select");
-        return select != null ? tag + " select=\"" + select + "\"" : tag;
+        if (select == null) {
+            return tag;
+        }
+        // on one line, as a call stack frame's name is shown
+        String oneLine = select.trim().replaceAll("\\s+", " ");
+        return tag + " select=\"" + (oneLine.length() > 60 ? oneLine.substring(0, 57) + "..." : oneLine) + "\"";
     }
 
     // an attribute of the start tag of the instruction at this location, as written in the stylesheet - a Saxon

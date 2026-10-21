@@ -17,6 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import net.sf.saxon.Configuration;
+import net.sf.saxon.Controller;
 import net.sf.saxon.expr.Expression;
 import net.sf.saxon.expr.FunctionCall;
 import net.sf.saxon.expr.Literal;
@@ -83,6 +84,8 @@ final class XPathEngine {
         private final XPathExpression expression;
         private final Map<XPathVariable, Sequence> bindings;
         private final Item contextItem;
+        // the paused transform's: its accumulator values, key indexes and documents are those of the transform
+        private final Controller controller;
         // the number of slots for the variables the expression references, bound from where it's evaluated - before
         // those of its own range variables
         final int externals;
@@ -90,8 +93,10 @@ final class XPathEngine {
         // reports, as type checking may replace a part by another, with the same location
         final Map<Location, Boolean> instrumented;
 
-        Compiled(XPathExpression expression, Map<XPathVariable, Sequence> bindings, Item contextItem, int externals, Map<Location, Boolean> instrumented) {
+        Compiled(XPathExpression expression, Map<XPathVariable, Sequence> bindings, Item contextItem, Controller controller, int externals,
+                Map<Location, Boolean> instrumented) {
             this.expression = expression;
+            this.controller = controller;
             this.bindings = bindings;
             this.contextItem = contextItem;
             this.externals = externals;
@@ -101,7 +106,9 @@ final class XPathEngine {
         // the dynamic context to evaluate it in: its focus is the context item alone - so position() and last() are
         // those of the instruction, where it's at the top level of the expression
         XPathDynamicContext prepare() throws Exception {
-            XPathDynamicContext dynamicContext = expression.createDynamicContext(contextItem);
+            // within the paused transform - e.g. accumulator-before() needs the accumulator values Saxon has computed
+            XPathDynamicContext dynamicContext = controller != null ? expression.createDynamicContext(controller, contextItem) :
+                    expression.createDynamicContext(contextItem);
             for (Map.Entry<XPathVariable, Sequence> binding : bindings.entrySet()) {
                 dynamicContext.setVariable(binding.getKey(), binding.getValue());
             }
@@ -143,6 +150,11 @@ final class XPathEngine {
         // extensions, Saxon-PE 13 would otherwise use 4.0, where a call to a stylesheet function isn't found
         int xpathVersion = staticContext != null && staticContext.getPackageData() != null && staticContext.getPackageData().getHostLanguageVersion() >= 40 ? 40 : 31;
         StaticContextWithFunctions env = new StaticContextWithFunctions(config, stylesheetFunctions, xpathVersion);
+        Controller controller = xsltContext.getController();
+        if (controller != null && controller.getExecutable().getTopLevelPackage() != null) {
+            // the stylesheet's accumulators, for accumulator-before() and accumulator-after()
+            env.getPackageData().setAccumulatorRegistry(controller.getExecutable().getTopLevelPackage().getAccumulatorRegistry());
+        }
         if (staticContext != null) {
             for (Iterator<String> prefixes = staticContext.iteratePrefixes(); prefixes.hasNext(); ) {
                 String prefix = prefixes.next();
@@ -208,7 +220,8 @@ final class XPathEngine {
         SlotManager slots = env.getStackFrameMap();
         int externals = slots.getNumberOfVariables();
         ExpressionTool.allocateSlots(expression, externals, slots);
-        return new Compiled(new CompiledExpression(env, expression, executable, slots, externals), bindings, context.getContextItem(), externals, instrumented);
+        return new Compiled(new CompiledExpression(env, expression, executable, slots, externals), bindings, context.getContextItem(), xsltContext.getController(),
+                externals, instrumented);
     }
 
     static GroundedValue evaluate(String xpath, Traceable instruction, XPathContext context, Traceable xsltInstruction, XPathContext xsltContext) throws Exception {

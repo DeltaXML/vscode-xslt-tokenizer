@@ -48,7 +48,20 @@ final class BreakableLines {
             "use-package", "expose", "accept", "override", "global-context-item", "item-type", "record-type",
             "sort", "with-param", "when", "otherwise", "catch", "fallback", "map", "map-entry", "perform-sort",
             "matching-substring", "non-matching-substring", "on-completion", "context-item", "merge-source",
-            "merge-key"));
+            "merge-key", "accumulator"));
+
+    // Saxon 12.7 and earlier don't report accumulator rules, or the instructions in them, to the TraceListener
+    private static final String ACCUMULATOR_RULES_UNTRACED = saxonReportsAccumulatorRules() ? null :
+            "isn't reported to the debugger by Saxon " + net.sf.saxon.Version.getProductVersion() + " - Saxon 12.8 or later reports accumulator rules";
+
+    private static boolean saxonReportsAccumulatorRules() {
+        try {
+            int[] version = net.sf.saxon.Version.getStructuredVersionNumber();
+            return version[0] > 12 || (version[0] == 12 && version.length > 1 && version[1] >= 8);
+        } catch (RuntimeException | LinkageError e) {
+            return true;
+        }
+    }
 
     // XSLT elements whose content is never executed as instructions
     private static final Set<String> UNEXECUTED_CONTENT = new HashSet<String>(Arrays.asList("note", "attribute-set"));
@@ -63,6 +76,8 @@ final class BreakableLines {
         int startColumn = 1;
         // where its content starts (after the start tag), and its name attribute, if any
         int contentOffset = -1;
+        // it's an xsl:accumulator-rule, or within one
+        boolean inAccumulatorRule;
         String nameAttribute;
         final int endLine;
         // where the start tag ends: the location Saxon reports for an instruction
@@ -83,7 +98,9 @@ final class BreakableLines {
 
     // XPath attributes whose expressions are evaluated in the instruction's own context - so they can be evaluated
     // separately there, for stepping through (others, e.g. group-by, are evaluated for each item)
-    private static final Set<String> XPATH_ATTRIBUTES = new HashSet<String>(Arrays.asList("select", "test", "value"));
+    private static final Set<String> XPATH_ATTRIBUTES = new HashSet<String>(Arrays.asList("select", "test", "value",
+            // xsl:evaluate's
+            "xpath", "context-item", "with-params"));
 
     /** a multi-line XPath expression in an instruction's attribute */
     static final class XPathAttribute {
@@ -212,10 +229,15 @@ final class BreakableLines {
 
                 Tag parent = open.peek();
                 boolean parentExecuted = executed.isEmpty() || executed.peek();
+                boolean inAccumulatorRule = (isXsltElement(uri, localName, "accumulator-rule")) || (parent != null && parent.inAccumulatorRule);
                 boolean isXslt = XSLT_NS.equals(uri);
                 String reason = null;
                 if (!parentExecuted) {
                     reason = "isn't executed";
+                } else if (inAccumulatorRule && ACCUMULATOR_RULES_UNTRACED != null) {
+                    reason = ACCUMULATOR_RULES_UNTRACED;
+                } else if (isXslt && localName.equals("on-completion") && attributes.getValue("select") != null) {
+                    // its select is traced (see DebugCodeInjector) - its content's instructions are traced anyway
                 } else if (isXslt && UNTRACED.contains(localName)) {
                     reason = "isn't an instruction Saxon can stop at";
                 } else if (isXslt && localName.equals("param") && parent != null &&
@@ -231,9 +253,17 @@ final class BreakableLines {
                     tag.startColumn = startOffset - lineStarts[startLine - 1] + 1;
                 }
                 tag.contentOffset = endOffset;
+                tag.inAccumulatorRule = inAccumulatorRule;
                 tag.nameAttribute = attributes.getValue("name");
                 if (isXslt && reason == null && startOffset >= 0 && startLine < endLine) {
                     addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
+                } else if (isXslt && localName.equals("with-param") && parent != null && parent.untracedReason == null && startOffset >= 0 && startLine < endLine) {
+                    // xsl:with-param isn't traced: its select is evaluated by the instruction it's in, e.g.
+                    // xsl:call-template or xsl:next-iteration, in that instruction's context - so it's stepped through
+                    // as one of that instruction's expressions
+                    addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
+                    parent.xpathAttributes.addAll(tag.xpathAttributes);
+                    tag.xpathAttributes.clear();
                 }
                 if (parent != null && parent.firstChildStartLine == 0) {
                     parent.firstChildStartLine = startLine;
@@ -399,6 +429,10 @@ final class BreakableLines {
 
     // a multi-line XPath expression in an element's content, e.g. xsl:select's - variable: the name of the variable it's
     // the value of, if any
+    private static boolean isXsltElement(String uri, String localName, String name) {
+        return XSLT_NS.equals(uri) && localName.equals(name);
+    }
+
     private static void addXPathContent(Tag tag, String content, int contentOffset, int[] lineStarts, String variable) {
         // without the whitespace around it, e.g. the line break after the start tag
         int leading = 0;

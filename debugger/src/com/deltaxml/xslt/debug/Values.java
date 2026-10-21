@@ -29,6 +29,8 @@ import net.sf.saxon.expr.PackageData;
 import net.sf.saxon.expr.StackFrame;
 import net.sf.saxon.expr.XPathContext;
 import net.sf.saxon.expr.instruct.GlobalVariable;
+import net.sf.saxon.expr.instruct.IterateInstr;
+import net.sf.saxon.expr.instruct.LocalParam;
 import net.sf.saxon.expr.instruct.ParameterSet;
 import net.sf.saxon.expr.instruct.SlotManager;
 import net.sf.saxon.expr.sort.GroupIterator;
@@ -281,6 +283,13 @@ final class Values {
         if (root != null) {
             Expression child = root;
             for (Expression parent = root.getParentExpression(); parent != null; child = parent, parent = parent.getParentExpression()) {
+                if (parent instanceof IterateInstr && child != ((IterateInstr) parent).getSelectExpression()) {
+                    // an xsl:iterate's parameters: in scope within it - in its body and xsl:on-completion
+                    List<LocalParam> params = iterateParams((IterateInstr) parent);
+                    for (int i = params.size() - 1; i >= 0; i--) {
+                        addLocal(bindings, seen, context, names, params.get(i).getSlotNumber(), params.get(i).getVariableQName());
+                    }
+                }
                 if (parent instanceof Assignation && ((Assignation) parent).getAction() == child) {
                     Assignation binding = (Assignation) parent;
                     // nearest first, so a positional variable ('for $i at $pos') before the variable it counts
@@ -340,6 +349,18 @@ final class Values {
         }
     }
 
+    private static List<LocalParam> iterateParams(IterateInstr iterate) {
+        List<LocalParam> params = new ArrayList<LocalParam>();
+        if (iterate.getInitiallyExp() != null) {
+            for (Operand operand : iterate.getInitiallyExp().operands()) {
+                if (operand.getChildExpression() instanceof LocalParam) {
+                    params.add((LocalParam) operand.getChildExpression());
+                }
+            }
+        }
+        return params;
+    }
+
     // the positional variable of an XPath 4.0 'for $i at $pos' - not an Assignation of its own, but in scope where the
     // for expression's variable is. ForExpression.getPositionVariable() is new in Saxon 13, so it's called by reflection
     private static LocalBinding positionVariable(Expression expression) {
@@ -364,6 +385,12 @@ final class Values {
         pending.push(root);
         while (!pending.isEmpty()) {
             Expression expression = pending.pop();
+            if (expression instanceof IterateInstr) {
+                // not the template's or function's parameters
+                for (LocalParam param : iterateParams((IterateInstr) expression)) {
+                    bound.add(param.getSlotNumber());
+                }
+            }
             if (expression instanceof Assignation) {
                 bound.add(((Assignation) expression).getLocalSlotNumber());
                 LocalBinding position = positionVariable(expression);

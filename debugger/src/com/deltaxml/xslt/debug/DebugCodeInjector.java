@@ -81,13 +81,14 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
         return null;
     }
 
-    // the xsl:sequence select attribute an expression is part of, if it is
+    // the select attribute of xsl:sequence or xsl:on-completion that an expression is part of, if it is - Saxon's
+    // injector traces neither
     private static AttributeLocation sequenceSelect(Location location) {
         Location containing = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
         if (containing instanceof AttributeLocation) {
             AttributeLocation attribute = (AttributeLocation) containing;
             if (attribute.getElementName() != null && attribute.getAttributeName() != null &&
-                    "sequence".equals(attribute.getElementName().getLocalPart()) &&
+                    ("sequence".equals(attribute.getElementName().getLocalPart()) || "on-completion".equals(attribute.getElementName().getLocalPart())) &&
                     "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString()) &&
                     "select".equals(attribute.getAttributeName().getLocalPart())) {
                 return attribute;
