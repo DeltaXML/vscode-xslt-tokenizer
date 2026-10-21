@@ -9,7 +9,10 @@ package com.deltaxml.xslt.debug;
 import net.sf.saxon.expr.Expression;
 import net.sf.saxon.expr.Literal;
 import net.sf.saxon.expr.instruct.TraceExpression;
+import net.sf.saxon.expr.Operand;
 import net.sf.saxon.expr.parser.Loc;
+import net.sf.saxon.expr.sort.SortKeyDefinition;
+import net.sf.saxon.trace.TraceableComponent;
 import net.sf.saxon.expr.parser.XPathParser;
 import net.sf.saxon.om.NodeInfo;
 import net.sf.saxon.s9api.Location;
@@ -67,6 +70,45 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
     private static boolean sameLocation(Location a, Location b) {
         return a == b || (a.getLineNumber() == b.getLineNumber() && a.getColumnNumber() == b.getColumnNumber() &&
                 java.util.Objects.equals(a.getSystemId(), b.getSystemId()));
+    }
+
+    // a compiled template, function or global variable: its sort keys - which aren't passed to inject() - are traced
+    // at their xsl:sort, so they can be stopped at for each item sorted, and a multi-line select stepped through
+    @Override
+    public void process(TraceableComponent component) {
+        if (component.getBody() != null) {
+            traceSortKeys(component.getBody());
+        }
+        super.process(component);
+    }
+
+    private static void traceSortKeys(Expression expression) {
+        for (Operand operand : expression.operands()) {
+            if (operand.getChildExpression() != null) {
+                traceSortKeys(operand.getChildExpression());
+            }
+        }
+        if (expression instanceof SortKeyDefinition) {
+            SortKeyDefinition sortKey = (SortKeyDefinition) expression;
+            Expression key = sortKey.getSortKey();
+            Location location = key == null ? null : key.getLocation();
+            Location attribute = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
+            if (key != null && !(key instanceof TraceExpression) && attribute instanceof AttributeLocation && isSortSelect((AttributeLocation) attribute)) {
+                // the TraceListener is given the wrapped expression: so that's at the xsl:sort's start tag
+                key.setLocation(attribute);
+                TraceExpression trace = new TraceExpression(key);
+                trace.setRetainedStaticContext(key.getRetainedStaticContext());
+                trace.setLocation(attribute);
+                sortKey.setSortKey(trace, sortKey.isSetContextForSortKey());
+            }
+        }
+    }
+
+    private static boolean isSortSelect(AttributeLocation attribute) {
+        return attribute.getElementName() != null && attribute.getAttributeName() != null &&
+                "sort".equals(attribute.getElementName().getLocalPart()) &&
+                "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString()) &&
+                "select".equals(attribute.getAttributeName().getLocalPart());
     }
 
     // the xsl:select element (XSLT 4.0) whose content an expression is part of, if it is

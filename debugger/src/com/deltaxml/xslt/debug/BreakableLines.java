@@ -78,6 +78,8 @@ final class BreakableLines {
         int contentOffset = -1;
         // it's an xsl:accumulator-rule, or within one
         boolean inAccumulatorRule;
+        // its parent element's tag, if any
+        Tag parent;
         String nameAttribute;
         final int endLine;
         // where the start tag ends: the location Saxon reports for an instruction
@@ -236,8 +238,8 @@ final class BreakableLines {
                     reason = "isn't executed";
                 } else if (inAccumulatorRule && ACCUMULATOR_RULES_UNTRACED != null) {
                     reason = ACCUMULATOR_RULES_UNTRACED;
-                } else if (isXslt && localName.equals("on-completion") && attributes.getValue("select") != null) {
-                    // its select is traced (see DebugCodeInjector) - its content's instructions are traced anyway
+                } else if (isXslt && (localName.equals("on-completion") || localName.equals("sort")) && attributes.getValue("select") != null) {
+                    // their select is traced (see DebugCodeInjector) - an xsl:on-completion's content is traced anyway
                 } else if (isXslt && UNTRACED.contains(localName)) {
                     reason = "isn't an instruction Saxon can stop at";
                 } else if (isXslt && localName.equals("param") && parent != null &&
@@ -254,6 +256,7 @@ final class BreakableLines {
                 }
                 tag.contentOffset = endOffset;
                 tag.inAccumulatorRule = inAccumulatorRule;
+                tag.parent = parent;
                 tag.nameAttribute = attributes.getValue("name");
                 if (isXslt && reason == null && startOffset >= 0 && startLine < endLine) {
                     addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
@@ -380,7 +383,13 @@ final class BreakableLines {
         Tag fallback = null;
         for (Tag tag : ending) {
             if (column > 0 && tag.endColumn == column) {
-                return tag;
+                // an element Saxon doesn't report itself - e.g. Saxon 13 reports an xsl:variable whose content is
+                // an xsl:perform-sort at the xsl:perform-sort's select - is reported for its nearest traced ancestor
+                Tag reported = tag;
+                while (reported.untracedReason != null && reported.parent != null) {
+                    reported = reported.parent;
+                }
+                return reported.untracedReason == null ? reported : tag;
             }
             if (fallback == null && tag.untracedReason == null) {
                 fallback = tag;

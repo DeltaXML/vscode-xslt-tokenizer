@@ -410,11 +410,14 @@ final class Debugger {
         }
         // an instruction is shown at the first line of its start tag, though Saxon reports it at the tag's end;
         // the parts of an XPath expression being stepped through have their own lines already
-        int reportedLine = location.getLineNumber();
         BreakableLines lines = top == xpathFrame && xpathFrame != null ? null : sourceLines(path);
+        // Saxon 13 gives an instruction a location within that of one of its attributes: the attribute's is where
+        // the start tag ends, as Saxon 12 reports it, and identifies the tag
+        Location tagLocation = lines == null ? location : startTagLocation(location);
+        int reportedLine = tagLocation.getLineNumber();
         top.systemId = location.getSystemId();
-        top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, location.getColumnNumber());
-        top.column = lines == null ? location.getColumnNumber() : lines.displayColumn(reportedLine, location.getColumnNumber());
+        top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, tagLocation.getColumnNumber());
+        top.column = lines == null ? location.getColumnNumber() : lines.displayColumn(reportedLine, tagLocation.getColumnNumber());
         boolean onStoppedLine = top.line == stoppedLine && path.equals(stoppedPath);
         if (!onStoppedLine) {
             stoppedPath = null;
@@ -467,6 +470,16 @@ final class Debugger {
             // stepping into: from here, or from an instruction before it on the same line
             stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO);
         }
+    }
+
+    private static Location startTagLocation(Location location) {
+        if (location instanceof net.sf.saxon.expr.parser.XPathParser.NestedLocation) {
+            Location containing = ((net.sf.saxon.expr.parser.XPathParser.NestedLocation) location).getContainingLocation();
+            if (containing instanceof net.sf.saxon.tree.AttributeLocation && containing.getLineNumber() > 0) {
+                return containing;
+            }
+        }
+        return location;
     }
 
     // a block of instructions, e.g. an element's content - not a block in an XPath expression, e.g. ($a, $b), whose
@@ -870,7 +883,7 @@ final class Debugger {
             Object match = properties == null ? null : properties.get("match");
             if (match != null) {
                 // as written, rather than Saxon's canonical form, e.g. element(Q{}item)
-                String written = sourceAttribute(traceable.getLocation(), "match");
+                String written = sourceAttribute(startTagLocation(traceable.getLocation()), "match");
                 return tag + " match=\"" + (written != null ? written : match) + "\"" + modeSuffix(properties);
             } else if (name != null) {
                 if (tag.equals("xsl:function")) {
@@ -885,7 +898,7 @@ final class Debugger {
         }
         String className = traceable.getClass().getSimpleName();
         String tag = className.equals("ForEachGroup") ? "xsl:for-each-group" : className.equals("IterateInstr") ? "xsl:iterate" : "xsl:for-each";
-        String select = sourceAttribute(traceable.getLocation(), "select");
+        String select = sourceAttribute(startTagLocation(traceable.getLocation()), "select");
         if (select == null) {
             return tag;
         }
