@@ -57,11 +57,12 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
         if (injected instanceof TraceExpression || Literal.isEmptySequence(expression)) {
             return injected;
         }
-        AttributeLocation select = sequenceSelect(location);
+        AttributeLocation select = tracedAttribute(location);
         if (select != null) {
-            // an xsl:sequence's select: its top-level expression, whose parent isn't part of the same select
-            AttributeLocation parentSelect = sequenceSelect(parentLocation);
-            boolean isTopLevel = parentSelect == null || !sameLocation(parentSelect, select);
+            // e.g. an xsl:sequence's select: its top-level expression, whose parent isn't part of the same attribute -
+            // or an xsl:when's test, a condition of its xsl:choose (which Saxon 13 gives its first test's location)
+            AttributeLocation parentSelect = tracedAttribute(parentLocation);
+            boolean isTopLevel = parentSelect == null || !sameLocation(parentSelect, select) || parent.getClass().getSimpleName().equals("Choose");
             return isTopLevel ? new TraceExpression(expression) : injected;
         }
         return injected;
@@ -123,16 +124,21 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
         return null;
     }
 
-    // the select attribute of xsl:sequence or xsl:on-completion that an expression is part of, if it is - Saxon's
-    // injector traces neither
-    private static AttributeLocation sequenceSelect(Location location) {
+    // the attributes whose expressions Saxon's injector doesn't trace, as element/attribute: they're traced where
+    // they're evaluated - an xsl:when's test only if it's reached. (Not xsl:with-param's select: it's often evaluated
+    // lazily, within the template it's passed to - so it's stepped through with the instruction it's in, see
+    // BreakableLines)
+    private static final java.util.Set<String> TRACED_ATTRIBUTES = new java.util.HashSet<String>(java.util.Arrays.asList(
+            "sequence/select", "on-completion/select", "when/test", "map-entry/key", "map-entry/select"));
+
+    // the attribute (one of TRACED_ATTRIBUTES) that an expression is part of, if it is
+    private static AttributeLocation tracedAttribute(Location location) {
         Location containing = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
         if (containing instanceof AttributeLocation) {
             AttributeLocation attribute = (AttributeLocation) containing;
             if (attribute.getElementName() != null && attribute.getAttributeName() != null &&
-                    ("sequence".equals(attribute.getElementName().getLocalPart()) || "on-completion".equals(attribute.getElementName().getLocalPart())) &&
-                    "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString()) &&
-                    "select".equals(attribute.getAttributeName().getLocalPart())) {
+                    TRACED_ATTRIBUTES.contains(attribute.getElementName().getLocalPart() + "/" + attribute.getAttributeName().getLocalPart()) &&
+                    "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString())) {
                 return attribute;
             }
         }

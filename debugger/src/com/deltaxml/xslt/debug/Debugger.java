@@ -416,8 +416,9 @@ final class Debugger {
         Location tagLocation = lines == null ? location : startTagLocation(location);
         int reportedLine = tagLocation.getLineNumber();
         top.systemId = location.getSystemId();
-        top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, tagLocation.getColumnNumber());
-        top.column = lines == null ? location.getColumnNumber() : lines.displayColumn(reportedLine, tagLocation.getColumnNumber());
+        String element = reportedElement(traceable);
+        top.line = lines == null ? reportedLine : lines.displayLine(reportedLine, tagLocation.getColumnNumber(), element);
+        top.column = lines == null ? location.getColumnNumber() : lines.displayColumn(reportedLine, tagLocation.getColumnNumber(), element);
         boolean onStoppedLine = top.line == stoppedLine && path.equals(stoppedPath);
         if (!onStoppedLine) {
             stoppedPath = null;
@@ -470,6 +471,22 @@ final class Debugger {
             // stepping into: from here, or from an instruction before it on the same line
             stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO);
         }
+    }
+
+    // the element an instruction Saxon reports is, where Saxon may report it at the location of an instruction in its
+    // content (its first one's select): a local variable, an xsl:variable, in Saxon 13; an xsl:map, a call of
+    // map:merge(), in Saxon 12
+    private static String reportedElement(Traceable traceable) {
+        String className = traceable.getClass().getSimpleName();
+        if (className.equals("LetExpression")) {
+            return "xsl:variable";
+        } else if (traceable instanceof net.sf.saxon.expr.SystemFunctionCall) {
+            StructuredQName name = ((net.sf.saxon.expr.SystemFunctionCall) traceable).getFunctionName();
+            if (name != null && name.getLocalPart().equals("merge") && name.getNamespaceUri().toString().equals("http://www.w3.org/2005/xpath-functions/map")) {
+                return "xsl:map";
+            }
+        }
+        return null;
     }
 
     private static Location startTagLocation(Location location) {
@@ -543,6 +560,15 @@ final class Debugger {
                 // also the frames of any stylesheet function it was in, if it failed
                 unwindTo(depthBefore);
                 xpathDepth--;
+                // a step into or over that's still going: from the instruction's line, as if it had started there -
+                // so the instruction's own evaluation of the expression, just stepped through, isn't stopped at
+                synchronized (lock) {
+                    if (step == Step.INTO || step == Step.OVER) {
+                        stepCallDepth = callDepth;
+                        stepPath = path;
+                        stepLine = line;
+                    }
+                }
             }
         }
     }

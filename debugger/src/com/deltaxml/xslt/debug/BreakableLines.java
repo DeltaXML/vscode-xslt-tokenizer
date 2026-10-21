@@ -46,7 +46,7 @@ final class BreakableLines {
             "stylesheet", "transform", "package", "output", "key", "import", "include", "mode", "decimal-format",
             "namespace-alias", "preserve-space", "strip-space", "character-map", "output-character", "import-schema",
             "use-package", "expose", "accept", "override", "global-context-item", "item-type", "record-type",
-            "sort", "with-param", "when", "otherwise", "catch", "fallback", "map", "map-entry", "perform-sort",
+            "sort", "with-param", "otherwise", "catch", "fallback", "map", "perform-sort",
             "matching-substring", "non-matching-substring", "on-completion", "context-item", "merge-source",
             "merge-key", "accumulator"));
 
@@ -101,8 +101,8 @@ final class BreakableLines {
     // XPath attributes whose expressions are evaluated in the instruction's own context - so they can be evaluated
     // separately there, for stepping through (others, e.g. group-by, are evaluated for each item)
     private static final Set<String> XPATH_ATTRIBUTES = new HashSet<String>(Arrays.asList("select", "test", "value",
-            // xsl:evaluate's
-            "xpath", "context-item", "with-params"));
+            // xsl:evaluate's, and xsl:map-entry's
+            "xpath", "context-item", "with-params", "key"));
 
     /** a multi-line XPath expression in an instruction's attribute */
     static final class XPathAttribute {
@@ -261,9 +261,9 @@ final class BreakableLines {
                 if (isXslt && reason == null && startOffset >= 0 && startLine < endLine) {
                     addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
                 } else if (isXslt && localName.equals("with-param") && parent != null && parent.untracedReason == null && startOffset >= 0 && startLine < endLine) {
-                    // xsl:with-param isn't traced: its select is evaluated by the instruction it's in, e.g.
-                    // xsl:call-template or xsl:next-iteration, in that instruction's context - so it's stepped through
-                    // as one of that instruction's expressions
+                    // xsl:with-param isn't traced: its select is evaluated for the instruction it's in, e.g.
+                    // xsl:call-template or xsl:next-iteration, in that instruction's context (often lazily, within
+                    // the template called) - so it's stepped through as one of that instruction's expressions
                     addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
                     parent.xpathAttributes.addAll(tag.xpathAttributes);
                     tag.xpathAttributes.clear();
@@ -364,15 +364,37 @@ final class BreakableLines {
     // location is the tag's end, which identifies the tag; where Saxon gives no column, it's the first instruction
     // whose start tag ends on the line
     int displayLine(int line, int column) {
-        Tag tag = reportedTag(line, column);
+        return displayLine(line, column, null);
+    }
+
+    // element: a pattern for the element the instruction is - e.g. a local variable is an xsl:variable, which Saxon 13
+    // may report at the location of an instruction in its content (the first one's select)
+    int displayLine(int line, int column, String element) {
+        Tag tag = reportedTag(line, column, element);
         return tag != null ? tag.startLine : line;
     }
 
     // the column it's shown at: its start tag's '<' - VS Code shows the paused position within the line where it isn't
     // the line's first character, so Saxon's column, at the tag's end (often on a later line), would be misplaced
     int displayColumn(int line, int column) {
-        Tag tag = reportedTag(line, column);
+        return displayColumn(line, column, null);
+    }
+
+    int displayColumn(int line, int column, String element) {
+        Tag tag = reportedTag(line, column, element);
         return tag != null ? tag.startColumn : column;
+    }
+
+    private Tag reportedTag(int line, int column, String element) {
+        Tag tag = reportedTag(line, column);
+        if (tag != null && element != null && !tag.name.matches(element)) {
+            for (Tag ancestor = tag.parent; ancestor != null; ancestor = ancestor.parent) {
+                if (ancestor.name.matches(element)) {
+                    return ancestor;
+                }
+            }
+        }
+        return tag;
     }
 
     private Tag reportedTag(int line, int column) {
