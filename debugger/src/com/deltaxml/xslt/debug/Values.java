@@ -12,6 +12,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +26,9 @@ import net.sf.saxon.expr.ForExpression;
 import net.sf.saxon.expr.LocalBinding;
 import net.sf.saxon.expr.Operand;
 import net.sf.saxon.expr.Component;
+import net.sf.saxon.expr.ComponentBinding;
+import net.sf.saxon.expr.instruct.Actor;
+import net.sf.saxon.expr.instruct.UserFunction;
 import net.sf.saxon.expr.PackageData;
 import net.sf.saxon.expr.StackFrame;
 import net.sf.saxon.expr.XPathContext;
@@ -178,16 +182,62 @@ final class Values {
         };
     }
 
+    // the global variables being evaluated where execution is paused - set by the debugger, which knows from its stack
+    // frames
+    static volatile Supplier<Set<GlobalVariable>> evaluatingGlobals = () -> Collections.emptySet();
+
+    // Whether a global variable that isn't evaluated yet can be evaluated now: not if it might use one being evaluated
+    // - that would be a circularity, and Saxon would keep the error as that variable's value. It's known not to when
+    // the global variables and functions it refers to, and those they refer to in turn, don't include one being
+    // evaluated, or a template, mode, accumulator etc. (whose use depends on the data)
+    private static boolean canEvaluate(GlobalVariable global, Set<GlobalVariable> evaluating) {
+        if (evaluating.isEmpty()) {
+            return true;
+        }
+        Component start = global.getDeclaringComponent();
+        if (start == null || evaluating.contains(global)) {
+            return false;
+        }
+        Set<Component> seen = new HashSet<Component>();
+        Deque<Component> pending = new ArrayDeque<Component>();
+        pending.add(start);
+        seen.add(start);
+        while (!pending.isEmpty()) {
+            Component component = pending.remove();
+            List<ComponentBinding> bindings = component.getComponentBindings();
+            if (bindings == null) {
+                continue;
+            }
+            for (ComponentBinding binding : bindings) {
+                Component target = binding.getTarget();
+                if (target == null || !seen.add(target)) {
+                    continue;
+                }
+                Actor actor = target.getActor();
+                if (actor instanceof GlobalVariable ? evaluating.contains(actor) : !(actor instanceof UserFunction)) {
+                    return false;
+                }
+                pending.add(target);
+            }
+        }
+        return true;
+    }
+
     Supplier<List<Map<String, Object>>> globals(final XPathContext context) {
         return () -> {
             List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
             Controller controller = context.getController();
+            Set<GlobalVariable> evaluating = evaluatingGlobals.get();
             for (GlobalVariable global : globalVariableList(context)) {
                 String name = "$" + global.getVariableQName().getDisplayName();
                 Sequence value = controller.getBindery(global.getPackageData()).getGlobalVariableValue(global);
+                if (value == null && !canEvaluate(global, evaluating)) {
+                    result.add(text(name, "(not evaluated yet)", ""));
+                    continue;
+                }
                 try {
                     // not yet used: evaluated now, as it would be on first use
-                    result.add(variable(name, value != null ? value : global.evaluateVariable(context)));
+                    result.add(variable(name, value != null ? value : evaluateGlobal(global, context)));
                 } catch (Exception e) {
                     result.add(text(name, "error: " + Debugger.message(e), ""));
                 }
@@ -238,7 +288,7 @@ final class Values {
     // the variable with this display name (lexical QName) in scope: a local variable or tunnel parameter, else a
     // global variable or parameter - evaluated now if it hasn't been used yet - or null if there's none
     // (the XSLT context and instruction: of an XPath expression being stepped through, its instruction's)
-    static Map.Entry<StructuredQName, Sequence> variableNamed(XPathContext context, Traceable current, XPathContext xsltContext, Traceable xsltCurrent, String displayName) {
+    static Map.Entry<StructuredQName, Sequence> variableNamed(XPathContext context, Traceable current, XPathContext xsltContext, Traceable xsltCurrent, String displayName) throws net.sf.saxon.trans.XPathException {
         Map.Entry<StructuredQName, Sequence> variable = inScopeVariables(context, current).get(displayName);
         if (variable == null && xsltContext != context) {
             variable = inScopeVariables(xsltContext, xsltCurrent).get(displayName);
@@ -248,14 +298,25 @@ final class Values {
         }
         for (GlobalVariable global : globalVariableList(xsltContext)) {
             if (global.getVariableQName().getDisplayName().equals(displayName)) {
+                Sequence value = xsltContext.getController().getBindery(global.getPackageData()).getGlobalVariableValue(global);
+                if (value == null && !canEvaluate(global, evaluatingGlobals.get())) {
+                    // an evaluation error (not IllegalStateException, which Evaluator takes as XPathEngine not working)
+                    throw new net.sf.saxon.trans.XPathException("$" + displayName + " isn't evaluated yet: it might use a global variable being evaluated");
+                }
                 try {
-                    return new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(global.getVariableQName(), global.evaluateVariable(xsltContext));
+                    return new AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(global.getVariableQName(), value != null ? value : evaluateGlobal(global, xsltContext));
                 } catch (Exception e) {
                     return null;
                 }
             }
         }
         return null;
+    }
+
+    // as Saxon evaluates a global variable on its first use: with its own component, for the global variables it refers
+    // to - not that of where execution is paused
+    private static Sequence evaluateGlobal(GlobalVariable global, XPathContext context) throws net.sf.saxon.trans.XPathException {
+        return global.getDeclaringComponent() != null ? global.evaluateVariable(context, global.getDeclaringComponent()) : global.evaluateVariable(context);
     }
 
     // The local variables in scope at an instruction or expression: those bound by an xsl:variable, or a for, let,

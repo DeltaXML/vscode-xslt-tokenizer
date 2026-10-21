@@ -498,6 +498,31 @@ async function testPositionalVariable(saxonJar) {
     await dap.exited;
 }
 
+// paused in a global variable's evaluation: globals still to be evaluated are shown only when they can't use it -
+// directly or through a function - as evaluating them would be a circularity, and change the result
+async function testGlobalsWhileEvaluatingGlobal(saxonJar) {
+    const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
+    const dap = new DapClient(saxonJar);
+    const stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'globals.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'result.xml')}`] },
+        { 'globals.xsl': [{ line: 5 }] });
+    const terminated = dap.event('terminated');
+    const stop = await stopped;
+    assert.strictEqual(stop.frames[0].line, 5);
+    const globals = (await dap.variables(0, 'Globals')).map((v) => `${v.name}=${v.value}`).sort();
+    assert.deepStrictEqual(globals, ['$a=(not evaluated yet)', '$b=true', '$c=3', '$d=(not evaluated yet)', '$e=(not evaluated yet)']);
+    const result = await dap.request('evaluate', { expression: '$d', frameId: 0, context: 'watch' }).catch((e) => e);
+    assert.ok(result instanceof Error && /isn't evaluated yet/.test(result.message), String(result.message || result.result));
+    assert.strictEqual((await dap.request('evaluate', { expression: '$c + 1', frameId: 0, context: 'watch' })).result, '4');
+    await dap.request('continue', { threadId: 1 });
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    const stderr = dap.events.filter((e) => e.event === 'output' && e.body.category === 'stderr').map((e) => e.body.output).join('');
+    assert.ok(!/Exception/.test(stderr), stderr);
+    assert.match(require('fs').readFileSync(path.join(outDir, 'result.xml'), 'utf8'), /<out c="3" a="1" b="true" d="1!" e="1"\/>/);
+}
+
 // an xsl:for-each on one line: a breakpoint there stops at the instruction, then for each item, as stepping over does
 async function testOneLineLoop(saxonJar) {
     for (const command of ['continue', 'next']) {
@@ -1483,7 +1508,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

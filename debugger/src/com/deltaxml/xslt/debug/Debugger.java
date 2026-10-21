@@ -14,9 +14,11 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -110,6 +112,16 @@ final class Debugger {
     Debugger(XsltDebugAdapter dap) {
         this.dap = dap;
         current = this;
+        // a global variable's frame: it's being evaluated (only read on the transform thread, as are the frames)
+        Values.evaluatingGlobals = () -> {
+            Set<net.sf.saxon.expr.instruct.GlobalVariable> result = new HashSet<net.sf.saxon.expr.instruct.GlobalVariable>();
+            for (Frame frame : frames) {
+                if (frame.owner instanceof net.sf.saxon.expr.instruct.GlobalVariable) {
+                    result.add((net.sf.saxon.expr.instruct.GlobalVariable) frame.owner);
+                }
+            }
+            return result;
+        };
     }
 
     // ---------------------------------------------------------------- DAP thread
