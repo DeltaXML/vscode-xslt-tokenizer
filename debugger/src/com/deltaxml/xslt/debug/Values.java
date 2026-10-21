@@ -482,9 +482,27 @@ final class Values {
     }
 
     private Json.Obj item(String name, final XdmItem item) {
+        return item(name, item, true);
+    }
+
+    // withPath: a node's path is shown, as xdm:debug() shows it - for an attribute or text node in its summary, for
+    // an element in its type - except as a child of an element being expanded, whose path is already shown
+    private Json.Obj item(String name, final XdmItem item, boolean withPath) {
+        if (isJNode(item)) {
+            final XdmValue content = XdmValue.wrap((Sequence) jnodeCall(item.getUnderlyingValue(), "getContent"));
+            Json.Obj variable = text(name, summary(item), "jnode()");
+            List<Map<String, Object>> children = contentChildren(content);
+            if (!children.isEmpty()) {
+                variable.with("variablesReference", register(() -> contentChildren(content)));
+            }
+            return variable;
+        }
         if (item instanceof XdmNode) {
             final XdmNode node = (XdmNode) item;
-            Json.Obj variable = text(name, nodeSummary(node), nodeType(node));
+            XdmNodeKind nodeKind = node.getNodeKind();
+            boolean pathInSummary = withPath && (nodeKind == XdmNodeKind.ATTRIBUTE || nodeKind == XdmNodeKind.TEXT);
+            boolean pathInType = withPath && !pathInSummary && nodeKind != XdmNodeKind.DOCUMENT;
+            Json.Obj variable = text(name, pathInSummary ? pathSummary(node) : nodeSummary(node), nodeType(node, pathInType));
             XdmNodeKind kind = node.getNodeKind();
             if (kind == XdmNodeKind.ELEMENT || kind == XdmNodeKind.DOCUMENT) {
                 variable.with("variablesReference", register(() -> nodeChildren(node)));
@@ -525,11 +543,73 @@ final class Values {
         return text(name, summary(item), item.getClass().getSimpleName());
     }
 
+    // a JNode's value, expanded: a map's entries, an array's members, or the items of a sequence
+    private List<Map<String, Object>> contentChildren(XdmValue content) {
+        List<Map<String, Object>> children = new ArrayList<Map<String, Object>>();
+        if (content.size() == 1 && content.itemAt(0) instanceof XdmMap) {
+            XdmMap map = (XdmMap) content.itemAt(0);
+            for (XdmAtomicValue key : map.keySet()) {
+                children.add(variable(atomicSummary(key), map.get(key)));
+            }
+        } else if (content.size() == 1 && content.itemAt(0) instanceof XdmArray) {
+            List<XdmValue> members = ((XdmArray) content.itemAt(0)).asList();
+            for (int i = 0; i < members.size(); i++) {
+                children.add(variable("[" + (i + 1) + "]", members.get(i)));
+            }
+        } else if (content.size() > 1) {
+            int n = 0;
+            for (XdmItem item : content) {
+                children.add(item("[" + (++n) + "]", item));
+            }
+        }
+        return children;
+    }
+
+    // XPath 4.0 JNodes - a node in a tree of maps and arrays, e.g. from jtree() - are new in Saxon 13: found by
+    // reflection, so the debugger still runs with Saxon 12
+    private static final Class<?> JNODE_CLASS = classNamed("net.sf.saxon.ma.jnode.JNode");
+
+    private static Class<?> classNamed(String name) {
+        try {
+            return Class.forName(name);
+        } catch (ClassNotFoundException | LinkageError e) {
+            return null;
+        }
+    }
+
+    private static boolean isJNode(XdmItem item) {
+        return JNODE_CLASS != null && JNODE_CLASS.isInstance(item.getUnderlyingValue());
+    }
+
+    private static Object jnodeCall(Object jnode, String method) {
+        try {
+            return jnode.getClass().getMethod(method).invoke(jnode);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    // e.g. '/orders/*[1] map{2 entries}', or for the root of the tree, '/ map{1 entry}' - its path, as xdm:debug()
+    // shows it, then its value
+    private static String jnodeSummary(XdmItem item) {
+        Object jnode = item.getUnderlyingValue();
+        Object content = jnodeCall(jnode, "getContent");
+        String value = content instanceof Sequence ? summary(XdmValue.wrap((Sequence) content)) : "";
+        Deque<String> steps = new ArrayDeque<String>();
+        for (Object node = jnode; node != null && jnodeCall(node, "getParent") != null; node = jnodeCall(node, "getParent")) {
+            Object selector = jnodeCall(node, "getSelector");
+            String key = selector == null ? "?" : ((net.sf.saxon.value.AtomicValue) selector).getStringValue();
+            boolean isMember = node.getClass().getSimpleName().contains("ArrayMember");
+            steps.push(isMember ? "*[" + key + "]" : key.matches("[\\p{L}_][\\p{L}\\p{N}_.\\-]*") ? key : "get('" + key.replace("'", "''") + "')");
+        }
+        return "/" + String.join("/", steps) + " " + value;
+    }
+
     private List<Map<String, Object>> nodeChildren(XdmNode node) {
         List<Map<String, Object>> children = new ArrayList<Map<String, Object>>();
         for (XdmSequenceIterator<XdmNode> attributes = node.axisIterator(Axis.ATTRIBUTE); attributes.hasNext(); ) {
             XdmNode attribute = attributes.next();
-            children.add(item("@" + attribute.getNodeName(), attribute));
+            children.add(item("@" + attribute.getNodeName(), attribute, false));
         }
         Map<String, Integer> counts = new HashMap<String, Integer>();
         int n = 0;
@@ -548,7 +628,7 @@ final class Values {
             Integer count = counts.get(step);
             count = count == null ? 1 : count + 1;
             counts.put(step, count);
-            children.add(item(step + "[" + count + "]", child));
+            children.add(item(step + "[" + count + "]", child, false));
         }
         return children;
     }
@@ -570,7 +650,9 @@ final class Values {
     static String summary(XdmValue value) {
         if (value.size() == 1) {
             XdmItem item = value.itemAt(0);
-            if (item instanceof XdmNode) {
+            if (isJNode(item)) {
+                return jnodeSummary(item);
+            } else if (item instanceof XdmNode) {
                 return nodeSummary((XdmNode) item);
             } else if (item instanceof XdmMap) {
                 XdmMap map = (XdmMap) item;
@@ -609,6 +691,51 @@ final class Values {
         return isString ? '"' + truncate(text) + '"' : truncate(text);
     }
 
+    // an attribute or text node, after its path - e.g. '/order/@id="A-100"', '/order/line/text() "widget"'
+    private static String pathSummary(XdmNode node) {
+        String path = nodePath(node);
+        return node.getNodeKind() == XdmNodeKind.ATTRIBUTE ? path + "=\"" + truncate(node.getStringValue(), 40) + '"' : path + " " + nodeSummary(node);
+    }
+
+    // a node's path, as xdm:debug() shows it (xdm:path in xdm-view-common.xsl): a step for each ancestor - a name,
+    // text(), comment() or processing-instruction(target), with a position only where a sibling has the same step,
+    // and @name for an attribute - starting with '/' within a document
+    static String nodePath(XdmNode node) {
+        Deque<String> steps = new ArrayDeque<String>();
+        for (XdmNode n = node; n != null; n = n.getParent()) {
+            steps.push(n.getNodeKind() == XdmNodeKind.DOCUMENT ? "" : step(n));
+        }
+        return steps.size() == 1 && node.getNodeKind() == XdmNodeKind.DOCUMENT ? "/" : String.join("/", steps);
+    }
+
+    private static String step(XdmNode node) {
+        XdmNodeKind kind = node.getNodeKind();
+        if (kind == XdmNodeKind.ATTRIBUTE) {
+            return "@" + node.getNodeName();
+        } else if (kind == XdmNodeKind.NAMESPACE) {
+            return "namespace::" + (node.getNodeName() == null || node.getNodeName().getLocalName().isEmpty() ? "*default*" : node.getNodeName().getLocalName());
+        }
+        String label = kind == XdmNodeKind.ELEMENT ? node.getNodeName().toString() : kind == XdmNodeKind.TEXT ? "text()" :
+                kind == XdmNodeKind.COMMENT ? "comment()" : "processing-instruction(" + node.getNodeName() + ")";
+        XdmNode parent = node.getParent();
+        if (parent == null) {
+            return label;
+        }
+        int position = 0;
+        int same = 0;
+        for (XdmSequenceIterator<XdmNode> siblings = parent.axisIterator(Axis.CHILD); siblings.hasNext(); ) {
+            XdmNode sibling = siblings.next();
+            if (sibling.getNodeKind() == kind && (kind != XdmNodeKind.ELEMENT && kind != XdmNodeKind.PROCESSING_INSTRUCTION ||
+                    sibling.getNodeName().equals(node.getNodeName()))) {
+                same++;
+                if (sibling.equals(node)) {
+                    position = same;
+                }
+            }
+        }
+        return same > 1 ? label + "[" + position + "]" : label;
+    }
+
     private static String nodeSummary(XdmNode node) {
         switch (node.getNodeKind()) {
             case DOCUMENT:
@@ -643,6 +770,11 @@ final class Values {
     }
 
     private static String nodeType(XdmNode node) {
+        return nodeType(node, false);
+    }
+
+    // e.g. 'element() /orders/order[1] line 3'
+    private static String nodeType(XdmNode node, boolean withPath) {
         String kind;
         switch (node.getNodeKind()) {
             case DOCUMENT: kind = "document-node()"; break;
@@ -654,7 +786,8 @@ final class Values {
             default: kind = "namespace-node()";
         }
         int line = node.getLineNumber();
-        return line > 0 && node.getNodeKind() != XdmNodeKind.DOCUMENT ? kind + " line " + line : kind;
+        String path = withPath ? " " + nodePath(node) : "";
+        return line > 0 && node.getNodeKind() != XdmNodeKind.DOCUMENT ? kind + path + " line " + line : kind + path;
     }
 
     private static String typeName(QName type) {

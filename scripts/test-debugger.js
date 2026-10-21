@@ -122,11 +122,17 @@ async function testBreakpointsAndInspection(saxonJar) {
     assert.strictEqual(locals.$doubled.type, 'xs:double');
     const context = byName(await dap.variables(0, 'Context'));
     assert.match(context['.'].value, /^<item n="2">/);
-    assert.match(context['.'].type, /^element\(\) line 3/);
+    // its path, as xdm:debug() shows it, and its line
+    assert.strictEqual(context['.'].type, 'element() /items/item[2] line 3');
     assert.strictEqual(context['position()'].value, '2');
     assert.strictEqual(context['last()'].value, '3');
     const item = byName((await dap.request('variables', { variablesReference: context['.'].variablesReference })).variables);
     assert.strictEqual(item['@n'].value, 'n="2"');
+    // an attribute or text node: its path in the summary; an element's child nodes, without
+    let atPath = await dap.request('evaluate', { expression: '@n', frameId: 0, context: 'watch' });
+    assert.strictEqual(atPath.result, '/items/item[2]/@n="2"');
+    atPath = await dap.request('evaluate', { expression: 'text()', frameId: 0, context: 'watch' });
+    assert.strictEqual(atPath.result, '/items/item[2]/text() "two"');
     assert.strictEqual(item['text()[1]'].value, '"two"');
 
     const globals = byName(await dap.variables(0, 'Globals'));
@@ -623,6 +629,76 @@ async function testMessageOutput(saxonJar) {
     assert.match(text, /&#x1b;\[0;32mgreen/i);
 }
 
+// XSLT 4.0 structures: xsl:switch (a branch is stopped in, and stepped into, as for xsl:choose - xsl:when and
+// xsl:otherwise aren't stopped at); xsl:select, whose content is a multi-line XPath expression (stopped at, and
+// stepped through, as an attribute's is); and JNodes, from jtree(), as local and global variables
+async function testXslt40Structures(saxonJar) {
+    if (!/saxon-[pe]e-1[3-9]/i.test(saxonJar)) {
+        return 'skipped';
+    }
+    const xsl = path.join(fixtures, 'xslt40-structures.xsl');
+    const run = async (lines, command, onStop) => {
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+        await dap.request('launch', { saxonArgs: [`-xsl:${xsl}`, '-it', '--allowSyntaxExtensions:on'] });
+        const { breakpoints } = await dap.request('setBreakpoints', { source: { path: xsl }, breakpoints: lines.map((line) => ({ line })) });
+        const terminated = dap.event('terminated');
+        await dap.request('configurationDone', {});
+        const stops = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            stops.push(`${stop.frames[0].line} ${stop.frames[0].name}`);
+            if (onStop) {
+                await onStop(dap, stops.length);
+            }
+            // enough of them - no stop is then waited for
+            if (stops.length === 12) {
+                break;
+            }
+            stopped = dap.stopped();
+            await dap.request(command, { threadId: 1 });
+        }
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return { breakpoints, stops, output: dap.output };
+    };
+    const loop = 'xsl:for-each select="$tree/orders/*"';
+
+    // breakpoints: xsl:switch and the instructions in its branches; xsl:select and the lines of its expression
+    // that start a part of it - not xsl:when, xsl:otherwise, or a line with only a literal
+    let { breakpoints, stops, output } = await run([10, 11, 12, 14, 15, 19, 20, 21], 'continue', async (dap, n) => {
+        if (n === 1) {
+            const locals = byName(await dap.variables(0, 'Locals'));
+            // its path, as xdm:debug() shows it, and its value
+            assert.strictEqual(locals.$order.value, '/orders/*[1] map{2 entries}');
+            assert.strictEqual(locals.$order.type, 'jnode()');
+            const order = byName((await dap.request('variables', { variablesReference: locals.$order.variablesReference })).variables);
+            assert.strictEqual(order['"id"'].value, '"A-100"');
+            assert.strictEqual(order['"total"'].value, '33.3');
+            const globals = byName(await dap.variables(0, 'Globals'));
+            assert.strictEqual(globals.$tree.value, '/ map{1 entry}');
+            const tree = byName((await dap.request('variables', { variablesReference: globals.$tree.variablesReference })).variables);
+            assert.strictEqual(tree['"orders"'].value, 'array{2 members}');
+        }
+    });
+    assert.deepStrictEqual(breakpoints.map((b) => [b.line, b.verified]), [[10, true], [11, false], [12, true], [14, false], [15, true], [19, true], [20, true], [21, false]]);
+    assert.match(breakpoints[1].message, /xsl:when isn't an instruction Saxon can stop at/);
+    // A-100 takes the xsl:when branch, B-200 the xsl:otherwise
+    assert.deepStrictEqual(stops, [`10 ${loop}`, `12 ${loop}`, `19 ${loop}`, '20 xsl:select (XPath)',
+        `10 ${loop}`, `15 ${loop}`, `19 ${loop}`, '20 xsl:select (XPath)']);
+    // the xsl:select's result, for the variable it's the value of
+    assert.match(output, /\u25B8 \$band \(xsl:select, lines 20-22\) returned "high"/);
+
+    // stepping into: xsl:switch's branch, and xsl:select's expression
+    ({ stops } = await run([10], 'stepIn'));
+    assert.deepStrictEqual(stops.slice(0, 4), [`10 ${loop}`, `12 ${loop}`, `18 ${loop}`, `19 ${loop}`]);
+    assert.strictEqual(stops[4], '20 xsl:select (XPath)');
+}
+
 async function testXPathForms(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -1067,7 +1143,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

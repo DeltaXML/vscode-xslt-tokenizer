@@ -494,7 +494,8 @@ final class Debugger {
             if (!steppingIn && !hasBreakpointWithin(path, attribute, line)) {
                 continue;
             }
-            String name = attribute.elementName + "/@" + attribute.name;
+            // e.g. xsl:variable/@select, or for an expression in an element's content, xsl:select
+            String name = attribute.name == null ? attribute.elementName : attribute.elementName + "/@" + attribute.name;
             String systemId = instruction.getLocation().getSystemId();
             Frame frame = new Frame(null, name + " (XPath)", true);
             frame.context = context;
@@ -536,7 +537,8 @@ final class Debugger {
     // the Debug Console's note of an XPath expression's result, once it has been stepped through - marked as the
     // debugger's, with the variable or parameter it's for, if any, e.g. '▸ $totals (xsl:variable/@select, lines 25-28)'
     private static String resultDescription(BreakableLines.XPathAttribute attribute, String name) {
-        String variable = attribute.elementName.matches("xsl:(variable|param|with-param)") ? attribute.instructionName : null;
+        // an xsl:select's variable is that of the xsl:variable (or parameter) it's in
+        String variable = attribute.elementName.matches("xsl:(variable|param|with-param|select)") ? attribute.instructionName : null;
         String lines = attribute.lastLine > attribute.line ? "lines " + attribute.line + "-" + attribute.lastLine : "line " + attribute.line;
         return "\u25B8 " + (variable != null ? "$" + variable + " (" + name + ", " + lines + ")" : name + " (" + lines + ")");
     }

@@ -61,6 +61,9 @@ final class BreakableLines {
         final int startLine;
         // where the start tag starts: its '<' (1-based)
         int startColumn = 1;
+        // where its content starts (after the start tag), and its name attribute, if any
+        int contentOffset = -1;
+        String nameAttribute;
         final int endLine;
         // where the start tag ends: the location Saxon reports for an instruction
         final int endColumn;
@@ -227,6 +230,8 @@ final class BreakableLines {
                 if (startOffset >= 0) {
                     tag.startColumn = startOffset - lineStarts[startLine - 1] + 1;
                 }
+                tag.contentOffset = endOffset;
+                tag.nameAttribute = attributes.getValue("name");
                 if (isXslt && reason == null && startOffset >= 0 && startLine < endLine) {
                     addXPathAttributes(tag, text, lineStarts, startOffset, endOffset);
                 }
@@ -241,8 +246,19 @@ final class BreakableLines {
 
             @Override
             public void endElement(String uri, String localName, String qName) {
-                open.pop();
+                Tag tag = open.pop();
                 executed.pop();
+                if (XSLT_NS.equals(uri) && localName.equals("select") && tag.untracedReason == null && tag.contentOffset >= 0) {
+                    // XSLT 4.0 xsl:select: its content is an XPath expression - stepped through as an attribute's is
+                    int endLine = locator.getLineNumber();
+                    int endOffset = Math.min(text.length(), lineStarts[Math.min(endLine, lineStarts.length) - 1] + Math.max(locator.getColumnNumber() - 1, 0));
+                    int endTagStart = text.lastIndexOf("</", Math.max(endOffset - 1, 0));
+                    Tag parent = open.peek();
+                    String variable = parent != null && parent.name.matches("xsl:(variable|param|with-param)") ? parent.nameAttribute : null;
+                    if (endTagStart > tag.contentOffset) {
+                        addXPathContent(tag, text.substring(tag.contentOffset, endTagStart), tag.contentOffset, lineStarts, variable);
+                    }
+                }
             }
         };
         InputSource source = new InputSource(new StringReader(text));
@@ -265,7 +281,8 @@ final class BreakableLines {
     Resolution resolve(int line) {
         List<Integer> noAliases = new ArrayList<Integer>();
         for (Tag tag : tags) {
-            if (tag.untracedReason == null && tag.startLine < line && line <= tag.endLine) {
+            // within the start tag - or for an expression in an element's content, e.g. xsl:select's, after it
+            if (tag.untracedReason == null && tag.startLine < line) {
                 for (XPathAttribute attribute : tag.xpathAttributes) {
                     if (attribute.line <= line && line <= attribute.lastLine && attribute.expressionLines.contains(line)) {
                         return new Resolution(true, line, noAliases, null);
@@ -378,6 +395,32 @@ final class BreakableLines {
             }
         }
         return false;
+    }
+
+    // a multi-line XPath expression in an element's content, e.g. xsl:select's - variable: the name of the variable it's
+    // the value of, if any
+    private static void addXPathContent(Tag tag, String content, int contentOffset, int[] lineStarts, String variable) {
+        // without the whitespace around it, e.g. the line break after the start tag
+        int leading = 0;
+        while (leading < content.length() && Character.isWhitespace(content.charAt(leading))) {
+            leading++;
+        }
+        contentOffset += leading;
+        content = content.substring(leading).replaceAll("\\s+$", "");
+        if (content.indexOf('\n') < 0 || content.indexOf('<') >= 0) {
+            return;
+        }
+        int line = lineOf(lineStarts, contentOffset);
+        int column = contentOffset - lineStarts[line - 1] + 1;
+        String[] contentLines = content.split("\n", -1);
+        XPathAttribute expression = new XPathAttribute(tag.name, null, xpathText(content), line, column, line + contentLines.length - 1);
+        expression.instructionName = variable;
+        for (int i = 0; i < contentLines.length; i++) {
+            if (startsExpression(contentLines[i])) {
+                expression.expressionLines.add(line + i);
+            }
+        }
+        tag.xpathAttributes.add(expression);
     }
 
     private static void addXPathAttributes(Tag tag, String text, int[] lineStarts, int startOffset, int endOffset) {
