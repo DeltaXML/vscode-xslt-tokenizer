@@ -1011,6 +1011,34 @@ async function testAnalyzeString(saxonJar) {
     assert.match(dap.output, /<d>1<\/d><s>-<\/s><d>2<\/d><s>-<\/s><d>3<\/d><s>-x<\/s><w>two<\/w>/);
 }
 
+// a logpoint's {$*}: the local variables in scope, one per line, names aligned - as the Locals scope shows them,
+// including an XPath expression's range variables; after other text, on the lines below it
+async function testLogpointLocals(saxonJar) {
+    const log = async (file, line, logMessage) => {
+        const dap = new DapClient(saxonJar);
+        await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, file)}`, `-s:${path.join(fixtures, 'basic.xml')}`] }, { [file]: [{ line, logMessage }] });
+        const terminated = dap.event('terminated');
+        await terminated;
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return dap.events.filter((e) => e.event === 'output' && e.body.category === 'console' && e.body.line === line).map((e) => e.body.output);
+    };
+    // the nearer $x hides the outer one
+    let logged = await log('scopes.xsl', 13, 'item {@n}: {$*}');
+    assert.deepStrictEqual(logged, ['1', '2', '3'].map((n) => `item ${n}:\n  $p     = "param"\n  $later = "later-${n}"\n  $x     = "inner-${n}"\n`));
+    // within a multi-line XPath expression being stepped through
+    logged = await log('xpath-frame.xsl', 12, '{$*}');
+    assert.deepStrictEqual(logged.slice(0, 3), ['$n = 1\n$i = 1\n', '$n = 2\n$i = 1\n', '$n = 2\n$i = 2\n']);
+    // none in scope
+    logged = await log('scopes.xsl', 4, '{$*}');
+    assert.deepStrictEqual(logged, ['$p = "param"\n']);
+    logged = await log('basic.xsl', 5, 'start {$*}');
+    assert.strictEqual(logged[0], 'start\n  (no local variables)\n');
+    // {*} is XPath, as any other {xpath}: the context item's child elements - here, the document's, <items>
+    logged = await log('basic.xsl', 5, 'children: {*}');
+    assert.match(logged[0], /^children:\s*two\s*$/);
+}
+
 async function testXPathForms(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -1455,7 +1483,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

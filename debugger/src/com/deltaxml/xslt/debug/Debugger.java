@@ -730,12 +730,19 @@ final class Debugger {
 
     private static final java.util.regex.Pattern LOG_EXPRESSION = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
 
-    // a logpoint message, with each {xpath} replaced by its value
+    // a logpoint message, with each {xpath} replaced by its value - and {$*} by the local variables in scope (not
+    // valid XPath, so it can't be mistaken for an expression, as {*}, the context item's child elements, would be)
     private String interpolate(String message, Frame frame) {
         StringBuffer sb = new StringBuffer();
         Matcher m = LOG_EXPRESSION.matcher(message);
         while (m.find()) {
             String text;
+            if (m.group(1).replaceAll("\\s+", "").equals("$*")) {
+                // after other text, on the lines below it
+                text = m.start() > 0 ? "\n" + localsText(frame).replaceAll("(?m)^", "  ") : localsText(frame);
+                m.appendReplacement(sb, Matcher.quoteReplacement(text));
+                continue;
+            }
             try {
                 text = Values.logText(Evaluator.evaluate(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), m.group(1)));
             } catch (Exception e) {
@@ -744,6 +751,37 @@ final class Debugger {
             m.appendReplacement(sb, Matcher.quoteReplacement(text));
         }
         m.appendTail(sb);
+        // e.g. 'item 1: {$*}' - not a space at the end of the first line
+        return sb.toString().replaceAll("[ \t]+\n", "\n");
+    }
+
+    // the local variables in scope - as the Locals scope shows them - one per line, with their names aligned, e.g.
+    // '$customer = "Ada"', for a logpoint's {$*}
+    private String localsText(Frame frame) {
+        List<Map<String, Object>> locals;
+        try {
+            locals = (frame.xsltContext == null ? values.locals(frame.context, frame.current) :
+                    values.xpathLocals(frame.context, frame.current, frame.xpathExternals, frame.xsltContext, frame.xsltCurrent)).get();
+        } finally {
+            // not paused: nothing to expand
+            values.clear();
+        }
+        if (locals.isEmpty()) {
+            return "(no local variables)";
+        }
+        int width = 0;
+        for (Map<String, Object> local : locals) {
+            width = Math.max(width, String.valueOf(local.get("name")).length());
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map<String, Object> local : locals) {
+            String name = String.valueOf(local.get("name"));
+            sb.append(sb.length() > 0 ? "\n" : "").append(name);
+            for (int i = name.length(); i < width; i++) {
+                sb.append(' ');
+            }
+            sb.append(" = ").append(local.get("value"));
+        }
         return sb.toString();
     }
 
