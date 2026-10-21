@@ -182,6 +182,9 @@ final class XPathEngine {
             }
             declared.put(name, Boolean.TRUE);
             Map.Entry<StructuredQName, Sequence> variable = Values.variableNamed(context, instruction, xsltContext, xsltInstruction, name);
+            if (variable == null) {
+                variable = catchVariable(name, env, xsltContext);
+            }
             if (variable != null) {
                 bindings.put(env.declareVariable(variable.getKey()), variable.getValue());
             }
@@ -222,6 +225,49 @@ final class XPathEngine {
         ExpressionTool.allocateSlots(expression, externals, slots);
         return new Compiled(new CompiledExpression(env, expression, executable, slots, externals), bindings, context.getContextItem(), xsltContext.getController(),
                 externals, instrumented);
+    }
+
+    // within xsl:catch: the error caught, as $err:code, $err:description, $err:value, $err:module, $err:line-number
+    // or $err:column-number - null for another name, or outside xsl:catch
+    private static Map.Entry<StructuredQName, Sequence> catchVariable(String name, StaticContextWithFunctions env, XPathContext context) {
+        XPathException error = context.getCurrentException();
+        int colon = name.indexOf(':');
+        if (error == null || colon < 0) {
+            return null;
+        }
+        String prefix = name.substring(0, colon);
+        String local = name.substring(colon + 1);
+        NamespaceUri uri = env.getNamespaceResolver().getURIForPrefix(prefix, false);
+        if (uri == null || !NamespaceConstant.ERR.equals(uri.toString())) {
+            return null;
+        }
+        Location location = error.getLocator();
+        Sequence value;
+        switch (local) {
+            case "code":
+                // through s9api: QNameValue's constructors differ in Saxon 12 and 13
+                value = error.getErrorCodeQName() == null ? EmptySequence.getInstance() :
+                        new net.sf.saxon.s9api.XdmAtomicValue(new net.sf.saxon.s9api.QName(error.getErrorCodeQName())).getUnderlyingValue();
+                break;
+            case "description":
+                value = new StringValue(error.getMessage() == null ? "" : error.getMessage());
+                break;
+            case "value":
+                value = error.getErrorObject() == null ? EmptySequence.getInstance() : error.getErrorObject();
+                break;
+            case "module":
+                value = location == null || location.getSystemId() == null ? EmptySequence.getInstance() : new StringValue(location.getSystemId());
+                break;
+            case "line-number":
+                value = location == null || location.getLineNumber() < 0 ? EmptySequence.getInstance() : new Int64Value(location.getLineNumber());
+                break;
+            case "column-number":
+                value = location == null || location.getColumnNumber() < 0 ? EmptySequence.getInstance() : new Int64Value(location.getColumnNumber());
+                break;
+            default:
+                return null;
+        }
+        return new java.util.AbstractMap.SimpleImmutableEntry<StructuredQName, Sequence>(new StructuredQName(prefix, NamespaceConstant.ERR, local), value);
     }
 
     static GroundedValue evaluate(String xpath, Traceable instruction, XPathContext context, Traceable xsltInstruction, XPathContext xsltContext) throws Exception {

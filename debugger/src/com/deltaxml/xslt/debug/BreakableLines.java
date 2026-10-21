@@ -137,12 +137,19 @@ final class BreakableLines {
         // further lines where Saxon may report the same instruction
         final List<Integer> aliasLines;
         final String message;
+        // the element the breakpoint is for, e.g. xsl:assert - null where there's none
+        String element;
 
         Resolution(boolean verified, int line, List<Integer> aliasLines, String message) {
             this.verified = verified;
             this.line = line;
             this.aliasLines = aliasLines;
             this.message = message;
+        }
+
+        Resolution forElement(String name) {
+            element = name;
+            return this;
         }
     }
 
@@ -238,8 +245,9 @@ final class BreakableLines {
                     reason = "isn't executed";
                 } else if (inAccumulatorRule && ACCUMULATOR_RULES_UNTRACED != null) {
                     reason = ACCUMULATOR_RULES_UNTRACED;
-                } else if (isXslt && (localName.equals("on-completion") || localName.equals("sort")) && attributes.getValue("select") != null) {
-                    // their select is traced (see DebugCodeInjector) - an xsl:on-completion's content is traced anyway
+                } else if (isXslt && (localName.equals("on-completion") || localName.equals("sort") || localName.equals("catch")) && attributes.getValue("select") != null) {
+                    // their select is traced (see DebugCodeInjector) - the content of xsl:on-completion and xsl:catch
+                    // is traced anyway
                 } else if (isXslt && UNTRACED.contains(localName)) {
                     reason = "isn't an instruction Saxon can stop at";
                 } else if (isXslt && localName.equals("param") && parent != null &&
@@ -318,7 +326,7 @@ final class BreakableLines {
             if (tag.untracedReason == null && tag.startLine < line) {
                 for (XPathAttribute attribute : tag.xpathAttributes) {
                     if (attribute.line <= line && line <= attribute.lastLine && attribute.expressionLines.contains(line)) {
-                        return new Resolution(true, line, noAliases, null);
+                        return new Resolution(true, line, noAliases, null).forElement(tag.name);
                     }
                 }
             }
@@ -347,7 +355,7 @@ final class BreakableLines {
         if (REPORTED_AT_FIRST_CHILD.contains(localName) && best.firstChildStartLine > 0 && best.firstChildStartLine != best.startLine) {
             aliases.add(best.firstChildStartLine);
         }
-        return new Resolution(true, best.startLine, aliases, null);
+        return new Resolution(true, best.startLine, aliases, null).forElement(best.name);
     }
 
     private static boolean isBetter(Tag tag, Tag best, int line) {

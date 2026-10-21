@@ -129,7 +129,8 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
     // lazily, within the template it's passed to - so it's stepped through with the instruction it's in, see
     // BreakableLines)
     private static final java.util.Set<String> TRACED_ATTRIBUTES = new java.util.HashSet<String>(java.util.Arrays.asList(
-            "sequence/select", "on-completion/select", "when/test", "map-entry/key", "map-entry/select"));
+            "sequence/select", "on-completion/select", "when/test", "map-entry/key", "map-entry/select", "catch/select",
+            "assert/test"));
 
     // the attribute (one of TRACED_ATTRIBUTES) that an expression is part of, if it is
     private static AttributeLocation tracedAttribute(Location location) {

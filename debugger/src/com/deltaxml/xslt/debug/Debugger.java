@@ -145,6 +145,12 @@ final class Debugger {
             Map<String, Object> bp = (Map<String, Object>) item;
             int line = (int) Json.number(bp, "line", 0);
             BreakableLines.Resolution resolution = breakable == null ? null : breakable.resolve(line);
+            if (resolution != null && resolution.verified && "xsl:assert".equals(resolution.element) && !assertionsEnabled()) {
+                // Saxon only evaluates xsl:assert with assertions enabled
+                result.add(Json.obj().with("verified", false).with("line", line).with("message",
+                        "xsl:assert isn't evaluated: assertions aren't enabled - set \"enableAssertions\": \"on\" in the xslt task (Saxon's -ea:on option)"));
+                continue;
+            }
             if (resolution != null && !resolution.verified) {
                 result.add(Json.obj().with("verified", false).with("line", line).with("message", resolution.message));
                 continue;
@@ -230,6 +236,16 @@ final class Debugger {
 
     boolean isMessageEscaping() {
         return messageEscaping;
+    }
+
+    // -ea:on in the Saxon options (an 'xslt' task's enableAssertions)
+    private boolean assertionsEnabled() {
+        for (String arg : saxonArgs) {
+            if (arg.matches("-ea:(on|yes|true|1)")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void start() {
@@ -548,8 +564,16 @@ final class Debugger {
                 frame.xpathExternals = compiled.externals;
                 net.sf.saxon.sxpath.XPathDynamicContext dynamicContext = compiled.prepare();
                 frame.xpathFocus = dynamicContext.getXPathContextObject().getCurrentIterator();
-                GroundedValue value = compiled.evaluate(dynamicContext);
-                dap.log(resultDescription(attribute, name) + " returned " + Values.summary(XdmValue.wrap(value)));
+                GroundedValue value = null;
+                XPathException raised = null;
+                try {
+                    value = compiled.evaluate(dynamicContext);
+                } catch (XPathException e) {
+                    // a dynamic error is its result, as when the instruction evaluates it - e.g. one an xsl:try catches
+                    raised = e;
+                }
+                dap.log(resultDescription(attribute, name) + (raised == null ? " returned " + Values.summary(XdmValue.wrap(value)) :
+                        " raised " + (raised.getErrorCodeQName() == null ? "an error" : raised.getErrorCodeQName().getLocalPart()) + ": " + message(raised)));
             } catch (Exception | LinkageError e) {
                 // 'important': VS Code also shows it as a notification - it was stepped into, or has a breakpoint
                 dap.event("output", Json.obj().with("category", "important").with("output",
