@@ -13,6 +13,7 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -92,10 +93,13 @@ final class XPathEngine {
         // the locations of the expression's own parts (not those in stylesheet functions it calls): those Saxon
         // reports, as type checking may replace a part by another, with the same location
         final Map<Location, Boolean> instrumented;
+        // whether stepping through it shows more than its result - see worthSteppingThrough
+        final boolean worthSteppingThrough;
 
         Compiled(XPathExpression expression, Map<XPathVariable, Sequence> bindings, Item contextItem, Controller controller, int externals,
-                Map<Location, Boolean> instrumented) {
+                Map<Location, Boolean> instrumented, boolean worthSteppingThrough) {
             this.expression = expression;
+            this.worthSteppingThrough = worthSteppingThrough;
             this.controller = controller;
             this.bindings = bindings;
             this.contextItem = contextItem;
@@ -215,8 +219,11 @@ final class XPathEngine {
         Expression expression = parser.parse(xpath, env);
         expression = replaceXsltContextFunctions(expression, xsltContext);
         Map<Location, Boolean> instrumented = new IdentityHashMap<Location, Boolean>();
+        boolean worthSteppingThrough = true;
         if (instrumentAt != null) {
             expression = instrument(expression, instrumented, parser.starts, xpath, lineStarts(xpath), instrumentAt);
+            // as parsed: before simplifying and type checking, which may rewrite parts
+            worthSteppingThrough = worthSteppingThrough(expression);
         }
         expression = expression.simplify();
         expression.setRetainedStaticContext(env.makeRetainedStaticContext());
@@ -225,7 +232,41 @@ final class XPathEngine {
         int externals = slots.getNumberOfVariables();
         ExpressionTool.allocateSlots(expression, externals, slots);
         return new Compiled(new CompiledExpression(env, expression, executable, slots, externals), bindings, context.getContextItem(), xsltContext.getController(),
-                externals, instrumented);
+                externals, instrumented, worthSteppingThrough);
+    }
+
+    // Whether stepping through an expression shows more than its result: it binds variables, shown in the Locals as
+    // it's stepped through (for, let, some, every, and a for's 'at' variable); calls a stylesheet function, an inline
+    // function or a dynamic function, to step into; or has a conditional (if, switch, typeswitch) with a branch on a
+    // line other than its condition's, so the line stopped at shows which branch is taken. Otherwise - e.g. steps and
+    // comparisons joined by 'or' - stepping through only moves between its lines, in the order Saxon evaluates them
+    private static boolean worthSteppingThrough(Expression expression) {
+        if (expression instanceof net.sf.saxon.expr.Assignation || expression instanceof net.sf.saxon.expr.UserFunctionCall ||
+                expression instanceof net.sf.saxon.expr.DynamicFunctionCall || expression instanceof UserFunctionReference ||
+                expression.getClass().getSimpleName().equals("FLWORExpression")) {
+            return true;
+        }
+        if (expression instanceof net.sf.saxon.expr.instruct.Choose) {
+            net.sf.saxon.expr.instruct.Choose choose = (net.sf.saxon.expr.instruct.Choose) expression;
+            int conditionLine = lineOf(choose.getCondition(0));
+            for (int i = 0; i < choose.size(); i++) {
+                // not a literal that isn't instrumented, e.g. the () of an if with no else
+                Expression action = choose.getAction(i);
+                if (!(action instanceof Literal) && lineOf(action) > 0 && lineOf(action) != conditionLine) {
+                    return true;
+                }
+            }
+        }
+        for (Operand operand : expression.operands()) {
+            if (worthSteppingThrough(operand.getChildExpression())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int lineOf(Expression expression) {
+        return expression.getLocation() == null ? -1 : expression.getLocation().getLineNumber();
     }
 
     // within xsl:catch: the error caught, as $err:code, $err:description, $err:value, $err:module, $err:line-number
@@ -423,13 +464,26 @@ final class XPathEngine {
             String xpath, int[] lineStarts, SourcePosition start) {
         // where it starts in the text: as recorded by the parser, else where its first part does
         Integer offset = starts.get(expression);
+        // a conditional's branches (if, braced if, typeswitch): a literal one is instrumented too, so the line stopped
+        // at shows which branch is taken - e.g. then 'high' else 'low'
+        Set<Expression> branches = java.util.Collections.newSetFromMap(new IdentityHashMap<Expression, Boolean>());
+        if (expression instanceof net.sf.saxon.expr.instruct.Choose) {
+            net.sf.saxon.expr.instruct.Choose choose = (net.sf.saxon.expr.instruct.Choose) expression;
+            for (int i = 0; i < choose.size(); i++) {
+                branches.add(choose.getAction(i));
+            }
+        }
         for (Operand operand : expression.operands()) {
             Expression child = operand.getChildExpression();
             Integer childOffset = starts.get(child);
             if (!starts.containsKey(expression) && childOffset != null && (offset == null || childOffset < offset)) {
                 offset = childOffset;
             }
-            operand.setChildExpression(instrument(child, instrumented, starts, xpath, lineStarts, start));
+            if (child instanceof Literal && branches.contains(child) && childOffset != null) {
+                operand.setChildExpression(trace(child, childOffset, instrumented, lineStarts, start));
+            } else {
+                operand.setChildExpression(instrument(child, instrumented, starts, xpath, lineStarts, start));
+            }
         }
         // an inline function: its body isn't an operand, but the function's - so it can be stepped through when it's
         // called, e.g. by fold-left()
@@ -442,6 +496,10 @@ final class XPathEngine {
         if (expression instanceof Literal || expression instanceof TraceExpression || offset == null) {
             return expression;
         }
+        return trace(expression, offset, instrumented, lineStarts, start);
+    }
+
+    private static Expression trace(Expression expression, int offset, Map<Location, Boolean> instrumented, int[] lineStarts, SourcePosition start) {
         // the TraceListener is given the wrapped expression, so that has the stylesheet location (as do Saxon's
         // error messages, then)
         Location location = sourceLocation(offset, lineStarts, start);

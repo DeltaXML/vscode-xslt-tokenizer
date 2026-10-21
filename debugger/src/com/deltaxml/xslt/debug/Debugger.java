@@ -549,7 +549,8 @@ final class Debugger {
             return;
         }
         for (BreakableLines.XPathAttribute attribute : lines.xpathAttributesAt(reportedLine)) {
-            if (!steppingIn && !hasBreakpointWithin(path, attribute, line)) {
+            boolean breakpointWithin = hasBreakpointWithin(path, attribute, line);
+            if (!steppingIn && !breakpointWithin) {
                 continue;
             }
             // e.g. xsl:variable/@select, or for an expression in an element's content, xsl:select
@@ -571,6 +572,12 @@ final class Debugger {
             try {
                 XPathEngine.Compiled compiled = XPathEngine.compile(attribute.xpath, instruction, context, instruction, context,
                         new XPathEngine.SourcePosition(systemId, attribute.line, attribute.column));
+                // an xsl:when's test is always stopped at: which tests are evaluated, until one is true, shows the
+                // branch taken
+                if (!breakpointWithin && !compiled.worthSteppingThrough && !"xsl:when".equals(attribute.elementName)) {
+                    // stepping into it is stepping over it: the instruction evaluates it as usual
+                    continue;
+                }
                 xpathFrame = frame;
                 xpathParts = compiled.instrumented;
                 frame.xpathExternals = compiled.externals;

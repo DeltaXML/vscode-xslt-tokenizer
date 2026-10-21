@@ -523,6 +523,39 @@ async function testGlobalsWhileEvaluatingGlobal(saxonJar) {
     assert.match(require('fs').readFileSync(path.join(outDir, 'result.xml'), 'utf8'), /<out c="3" a="1" b="true" d="1!" e="1"\/>/);
 }
 
+// Step Into goes through an expression only when that shows more than its result: not for comparisons joined by
+// 'or' (line 5), but for an 'if' with its branches on their own lines - literal (9) or not (13) - stopping at the
+// branch taken, a 'let' (17) and a function call (20). A breakpoint inside an expression still stops there
+async function testStepIntoOnlyUsefulXPath(saxonJar) {
+    const xsl = path.join(fixtures, 'step-worth.xsl');
+    const run = async (breakpoints, command) => {
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.start({ saxonArgs: [`-xsl:${xsl}`, '-it'] }, { 'step-worth.xsl': breakpoints });
+        const terminated = dap.event('terminated');
+        const seen = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            const frame = stop.frames[0];
+            seen.push(frame.line + (frame.name.endsWith('(XPath)') ? 'x' : frame.name === 'f:twice#1' ? 'f' : ''));
+            stopped = dap.stopped();
+            stopped.catch(() => undefined);
+            await dap.request(command, { threadId: 1 });
+        }
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return seen;
+    };
+    const stepped = await run([{ line: 4 }], 'stepIn');
+    assert.deepStrictEqual(stepped.slice(0, 9), ['4', '5', '9', '10x', '11x', '13', '14x', '15x', '17'], stepped.join(' '));
+    assert.ok(stepped.includes('18x') && stepped.includes('21x') && stepped.includes('2f'), stepped.join(' '));
+    const atBreakpoint = await run([{ line: 7 }], 'continue');
+    assert.ok(atBreakpoint.length > 0 && atBreakpoint.every((stop) => stop === '7x'), atBreakpoint.join(' '));
+}
+
 // an xsl:for-each on one line: a breakpoint there stops at the instruction, then for each item, as stepping over does
 async function testOneLineLoop(saxonJar) {
     for (const command of ['continue', 'next']) {
@@ -1508,7 +1541,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);
