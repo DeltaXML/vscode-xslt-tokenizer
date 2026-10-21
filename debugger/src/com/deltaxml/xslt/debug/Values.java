@@ -162,10 +162,11 @@ final class Values {
                 }
             }
             RegexIterator regex = xsltContext.getCurrentRegexIterator();
-            if (regex != null) {
+            // in xsl:matching-substring - not xsl:non-matching-substring, where there's no match
+            if (regex != null && regex.isMatching()) {
                 try {
-                    // regex-group(0) is the whole match - none for xsl:non-matching-substring
-                    for (int i = 0; i <= regex.getNumberOfGroups(); i++) {
+                    // regex-group(0) is the whole match: the number of groups includes it
+                    for (int i = 0; i < regex.getNumberOfGroups(); i++) {
                         UnicodeString group = regex.getRegexGroup(i);
                         result.add(variable("regex-group(" + i + ")", group == null ? StringValue.EMPTY_STRING : new StringValue(group)));
                     }

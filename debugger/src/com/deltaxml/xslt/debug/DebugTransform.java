@@ -82,6 +82,7 @@ class DebugTransform extends Transform {
     protected Xslt30Transformer newTransformer(XsltExecutable executable, CommandLineOptions options) throws SaxonApiException {
         // the function breakpoints' names are checked against the compiled stylesheet
         debugger.stylesheetCompiled(executable.getUnderlyingCompiledStylesheet().getTopLevelPackage());
+        DebugCodeInjector.traceKeys(executable.getUnderlyingCompiledStylesheet().getTopLevelPackage());
         Xslt30Transformer transformer = super.newTransformer(executable, options);
         final ErrorReporter saxonReporter = transformer.getErrorReporter();
         transformer.setErrorReporter(error -> debugger.reportError(error, saxonReporter, false));

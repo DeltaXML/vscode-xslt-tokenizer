@@ -923,7 +923,7 @@ final class Debugger {
     // aren't stepped over
     private static boolean isFocusInstruction(Traceable traceable) {
         String className = traceable.getClass().getSimpleName();
-        return className.equals("ForEach") || className.equals("ForEachGroup") || className.equals("IterateInstr");
+        return className.equals("ForEach") || className.equals("ForEachGroup") || className.equals("IterateInstr") || className.equals("AnalyzeString");
     }
 
     private String frameName(Traceable traceable, Map<String, Object> properties) {
@@ -947,7 +947,8 @@ final class Debugger {
             return tag;
         }
         String className = traceable.getClass().getSimpleName();
-        String tag = className.equals("ForEachGroup") ? "xsl:for-each-group" : className.equals("IterateInstr") ? "xsl:iterate" : "xsl:for-each";
+        String tag = className.equals("ForEachGroup") ? "xsl:for-each-group" : className.equals("IterateInstr") ? "xsl:iterate" :
+                className.equals("AnalyzeString") ? "xsl:analyze-string" : "xsl:for-each";
         String select = sourceAttribute(startTagLocation(traceable.getLocation()), "select");
         if (select == null) {
             return tag;

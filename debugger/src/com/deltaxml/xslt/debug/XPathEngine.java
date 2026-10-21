@@ -152,8 +152,9 @@ final class XPathEngine {
         StaticContextWithFunctions env = new StaticContextWithFunctions(config, stylesheetFunctions, xpathVersion);
         Controller controller = xsltContext.getController();
         if (controller != null && controller.getExecutable().getTopLevelPackage() != null) {
-            // the stylesheet's accumulators, for accumulator-before() and accumulator-after()
+            // the stylesheet's accumulators, for accumulator-before() and accumulator-after(), and its keys, for key()
             env.getPackageData().setAccumulatorRegistry(controller.getExecutable().getTopLevelPackage().getAccumulatorRegistry());
+            env.getPackageData().setKeyManager(controller.getExecutable().getTopLevelPackage().getKeyManager());
         }
         if (staticContext != null) {
             for (Iterator<String> prefixes = staticContext.iteratePrefixes(); prefixes.hasNext(); ) {

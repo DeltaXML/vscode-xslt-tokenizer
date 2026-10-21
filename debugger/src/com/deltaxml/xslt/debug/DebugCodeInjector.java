@@ -105,6 +105,35 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
         }
     }
 
+    // a compiled stylesheet's keys: their use expressions - which no CodeInjector method is given - are traced at their
+    // xsl:key, so they can be stopped at for each node indexed, when the index is built (on the first call of key())
+    static void traceKeys(net.sf.saxon.expr.PackageData pkg) {
+        if (pkg == null || pkg.getKeyManager() == null) {
+            return;
+        }
+        for (net.sf.saxon.trans.KeyDefinitionSet set : pkg.getKeyManager().getAllKeyDefinitionSets()) {
+            for (net.sf.saxon.trans.KeyDefinition key : set.getKeyDefinitions()) {
+                Expression use = key.getBody();
+                Location location = use == null ? null : use.getLocation();
+                Location attribute = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
+                if (use != null && !(use instanceof TraceExpression) && attribute instanceof AttributeLocation && isXsltAttribute((AttributeLocation) attribute, "key", "use")) {
+                    use.setLocation(attribute);
+                    TraceExpression trace = new TraceExpression(use);
+                    trace.setRetainedStaticContext(use.getRetainedStaticContext());
+                    trace.setLocation(attribute);
+                    key.setBody(trace);
+                }
+            }
+        }
+    }
+
+    private static boolean isXsltAttribute(AttributeLocation attribute, String element, String name) {
+        return attribute.getElementName() != null && attribute.getAttributeName() != null &&
+                element.equals(attribute.getElementName().getLocalPart()) &&
+                "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString()) &&
+                name.equals(attribute.getAttributeName().getLocalPart());
+    }
+
     private static boolean isSortSelect(AttributeLocation attribute) {
         return attribute.getElementName() != null && attribute.getAttributeName() != null &&
                 "sort".equals(attribute.getElementName().getLocalPart()) &&

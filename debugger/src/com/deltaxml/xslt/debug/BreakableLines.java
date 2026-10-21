@@ -101,8 +101,8 @@ final class BreakableLines {
     // XPath attributes whose expressions are evaluated in the instruction's own context - so they can be evaluated
     // separately there, for stepping through (others, e.g. group-by, are evaluated for each item)
     private static final Set<String> XPATH_ATTRIBUTES = new HashSet<String>(Arrays.asList("select", "test", "value",
-            // xsl:evaluate's, and xsl:map-entry's
-            "xpath", "context-item", "with-params", "key"));
+            // xsl:evaluate's, xsl:map-entry's and xsl:key's
+            "xpath", "context-item", "with-params", "key", "use"));
 
     /** a multi-line XPath expression in an instruction's attribute */
     static final class XPathAttribute {
@@ -245,6 +245,8 @@ final class BreakableLines {
                     reason = "isn't executed";
                 } else if (inAccumulatorRule && ACCUMULATOR_RULES_UNTRACED != null) {
                     reason = ACCUMULATOR_RULES_UNTRACED;
+                } else if (isXslt && localName.equals("key") && attributes.getValue("use") != null) {
+                    // its use is traced (see DebugCodeInjector.traceKeys)
                 } else if (isXslt && (localName.equals("on-completion") || localName.equals("sort") || localName.equals("catch")) && attributes.getValue("select") != null) {
                     // their select is traced (see DebugCodeInjector) - the content of xsl:on-completion and xsl:catch
                     // is traced anyway
