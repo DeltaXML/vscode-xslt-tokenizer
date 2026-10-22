@@ -1962,7 +1962,7 @@ async function testPrincipalJsonOutput(saxonJar) {
 }
 
 // an XML output's parts, with where each came from: the start tag of the instruction that wrote it (a literal result
-// element, xsl:element, xsl:value-of - for a temporary tree, the literal result element that made it, in its module -
+// element, xsl:element, xsl:value-of, xsl:attribute - for a temporary tree, the literal result element that made it, in its module -
 // and for a node copied from the source document, the instruction that copied it); or literal text, as Saxon reports it
 // (where the text starts or ends)
 async function testOutputMap(saxonJar) {
@@ -2005,10 +2005,33 @@ async function testOutputMap(saxonJar) {
     assert.strictEqual(at('<built-in-variable'), 'instruction output-map.xsl:6:5');
     // an included module's - copied by xsl:copy-of, which is reported for the nodes it copies
     assert.strictEqual(at('<from-lib'), 'instruction output-map-lib.xsl:7:5');
-    assert.strictEqual(at('<lib-variable'), 'instruction output-map-lib.xsl:8:7');
+    // an attribute: a literal one is its element's, one made by xsl:attribute that instruction's
+    assert.strictEqual(at('kind="literal"'), 'instruction output-map-lib.xsl:7:5');
+    assert.strictEqual(at('made-by='), 'instruction output-map-lib.xsl:8:7');
+    assert.strictEqual(at('<lib-variable'), 'instruction output-map-lib.xsl:9:7');
     // copied by a built-in template rule: the xsl:apply-templates
-    assert.strictEqual(at('<item n="3"'), 'instruction output-map-lib.xsl:9:7');
+    assert.strictEqual(at('<item n="3"'), 'instruction output-map-lib.xsl:10:7');
     assert.strictEqual(at('</report>'), 'instruction output-map.xsl:9:5');
+    // text: of a temporary tree with no element, the instruction writing it; within an element, the element's location,
+    // as Saxon copies it - the extension goes from there to the instruction after the start tag
+    assert.strictEqual(at('text only'), 'instruction output-map.xsl:19:18');
+    assert.strictEqual(at('wrapped text'), 'text output-map.xsl:21:18');
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
+// with no xsl:output, Saxon decides the output method from the first element (an 'uncommitted' serializer): the copy's
+// XML emitter is made then, and records where the output came from too
+async function testOutputMapWithoutXslOutput(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    const terminated = dap.event('terminated');
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'output-map-default.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] }, {});
+    await terminated;
+    const outputs = dap.events.filter((e) => e.event === 'xsltOutputs').flatMap((e) => e.body.outputs);
+    const locations = outputs.flatMap((o) => o.locations ?? []);
+    assert.ok(outputs.some((o) => (o.runs ?? []).length > 0), 'runs');
+    assert.deepStrictEqual(locations.map((l) => `${l.kind} ${path.basename(l.path)}:${l.line}:${l.column}`).sort(),
+        ['instruction output-map-default.xsl:4:5', 'instruction output-map-default.xsl:5:7']);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
 }
@@ -2021,7 +2044,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

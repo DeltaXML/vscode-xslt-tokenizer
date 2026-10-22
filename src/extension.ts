@@ -782,6 +782,9 @@ export function activate(context: vscode.ExtensionContext) {
 	// a hint at the cursor's line, of the keys for that
 	context.subscriptions.push(vscode.languages.registerInlayHintsProvider({ scheme: XsltDebugOutputs.scheme }, XsltDebugOutputs.get()));
 	context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection((e) => XsltDebugOutputs.get().selectionChanged(e)));
+	// output views restored from the last window, which would be empty
+	XsltDebugOutputs.get().closeRestoredTabs(vscode.window.tabGroups.all.flatMap((group) => group.tabs));
+	context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs((e) => XsltDebugOutputs.get().closeRestoredTabs(e.opened)));
 	const debugExitCodes = new XsltDebugExitCodes();
 	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(XsltDebug.type, debugExitCodes));
 	// as for tasks: when the transform completes, 'Open' the result

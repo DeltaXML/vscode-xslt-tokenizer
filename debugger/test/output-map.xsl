@@ -15,6 +15,12 @@ second literal line</literal>
       <xsl:sequence select="items/item[2]"/>
       <xsl:sequence select="$built"/>
       <xsl:call-template name="from-lib"/>
+      <xsl:variable name="text-only"><xsl:value-of select="'text only'"/></xsl:variable>
+      <only-text><xsl:sequence select="$text-only"/></only-text>
+      <xsl:variable name="wrapped">
+        <wrapped><xsl:value-of select="'wrapped text'"/></wrapped>
+      </xsl:variable>
+      <xsl:sequence select="$wrapped"/>
     </report>
   </xsl:template>
 </xsl:stylesheet>

@@ -4,7 +4,8 @@
     <xsl:variable name="lib-variable">
       <lib-variable/>
     </xsl:variable>
-    <from-lib>
+    <from-lib kind="literal">
+      <xsl:attribute name="made-by" select="'xsl:attribute'"/>
       <xsl:copy-of select="$lib-variable"/>
       <xsl:apply-templates select="/items/item[3]" mode="copy"/>
     </from-lib>

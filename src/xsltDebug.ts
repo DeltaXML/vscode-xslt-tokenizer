@@ -487,11 +487,12 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 	}
 
 	// where the part of an output's text at the offset came from: the location of the run of text the offset is in - for
-	// an offset within a tag, the tag's, as an emitter writes the '>' of a start tag with the next event's text.
-	// runs: [offset, location id, ...], each run from its offset to the next run's
+	// the end of a tag ('>' or '/>'), the tag's, as an emitter writes the '>' of a start tag with the next event's text.
+	// runs: [offset, location id, ...], each run from its offset to the next run's - an attribute has its own
 	public static locationAt(text: string, runs: number[], locations: Map<number, XsltOutputLocation>, offset: number): { location: XsltOutputLocation, start: number, end: number } | undefined {
 		const tagStart = text.lastIndexOf('<', offset);
-		const at = tagStart > text.lastIndexOf('>', offset - 1) ? tagStart : offset;
+		const isTagEnd = text.charAt(offset) === '>' || text.startsWith('/>', offset);
+		const at = isTagEnd && tagStart > text.lastIndexOf('>', offset - 1) ? tagStart : offset;
 		let low = 0;
 		let high = runs.length / 2 - 1;
 		let found = -1;
@@ -513,7 +514,9 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 
 	// the position in the source file's text for a location: an instruction's start tag; for a node copied from a source
 	// document, its start tag, before where Saxon reports it (the tag's end); for literal text, where the output text
-	// found is within the text node Saxon reports it for, at its start or end - else the reported position
+	// found is within the text node Saxon reports it for, at its start or end - else the text node's first character,
+	// e.g. for a text value template, or for text in a temporary tree, which has its parent element's location, the
+	// instruction after the element's start tag, e.g. xsl:value-of
 	public static sourceOffset(sourceText: string, location: XsltOutputLocation, lineOffset: (line: number, character: number) => number, outputText: string): number {
 		const reported = lineOffset(location.line! - 1, Math.max(location.column! - 1, 0));
 		if (location.kind === 'source') {
@@ -525,7 +528,11 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 			const next = sourceText.indexOf('<', reported);
 			const end = next > -1 ? next : sourceText.length;
 			const index = found ? sourceText.indexOf(found, start) : -1;
-			return index > -1 && index + found.length <= end ? index : reported;
+			if (index > -1 && index + found.length <= end) {
+				return index;
+			}
+			const firstCharacter = sourceText.substring(start, end).search(/\S/);
+			return firstCharacter > -1 ? start + firstCharacter : end;
 		}
 		return reported;
 	}
@@ -602,8 +609,10 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		if (column === undefined || !tab) {
 			return;
 		}
-		await vscode.window.showTextDocument(editor.document, { viewColumn: column, selection: jump.range, preview: false });
+		// closed first, so that the editor shown last has the focus
+		const document = editor.document;
 		await vscode.window.tabGroups.close(tab, true);
+		await vscode.window.showTextDocument(document, { viewColumn: column, selection: jump.range, preview: false });
 	}
 
 	// the 'Go to XSLT Source' command: shows the source of the output at the cursor, in another editor group from the
@@ -666,6 +675,16 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		hint.paddingLeft = true;
 		hint.tooltip = 'Jump to XSLT source with: ' + XsltDebugOutputs.goToSourceKeys();
 		return [hint];
+	}
+
+	// an output view restored by VS Code from the last window is empty - outputs are only kept while VS Code runs - so
+	// a tab for an output that isn't known is closed: when the extension starts, and when the tab is opened
+	public closeRestoredTabs(tabs: readonly vscode.Tab[]) {
+		const restored = tabs.filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.scheme === XsltDebugOutputs.scheme &&
+			!this.outputs.has(XsltDebugOutputs.nameOf(tab.input.uri)));
+		if (restored.length > 0) {
+			vscode.window.tabGroups.close(restored, true).then(undefined, () => undefined);
+		}
 	}
 
 	// a visible output document is kept scrolled to its end, where output is being added

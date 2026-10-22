@@ -200,10 +200,18 @@ final class OutputCapture {
             }
 
             private Receiver copied(Result result, SerializationProperties properties, PipelineConfiguration pipe) throws XPathException {
-                Receiver serializer = super.getReceiver(result, properties, pipe);
                 // a result that's already copied is asked for again when Saxon decides its output method (an
-                // 'uncommitted' serializer, when the stylesheet doesn't say) - as is the copy itself
+                // 'uncommitted' serializer, when the stylesheet doesn't say) - as is the copy itself, whose emitter, if
+                // it's XML, records where its text comes from
                 boolean isCopy = result instanceof StreamResult && ((StreamResult) result).getWriter() instanceof OutputWriter;
+                Output copyOutput = isCopy ? ((OutputWriter) ((StreamResult) result).getWriter()).output : null;
+                building = copyOutput != null && copyOutput.mapped ? copyOutput : null;
+                Receiver serializer;
+                try {
+                    serializer = super.getReceiver(result, properties, pipe);
+                } finally {
+                    building = null;
+                }
                 if (itemDepth > 0 || !(result instanceof StreamResult) || isCopy || copied.containsKey(result)) {
                     return serializer;
                 }
@@ -316,6 +324,8 @@ final class OutputCapture {
         private final Output output;
         private final LocationResolver resolver;
         private final java.util.ArrayDeque<Location> elements = new java.util.ArrayDeque<Location>();
+        // the attributes of the start tag being written, for their own locations, e.g. an xsl:attribute's
+        private net.sf.saxon.om.AttributeMap attributes;
 
         LocatingXMLEmitter(Output output, LocationResolver resolver) {
             this.output = output;
@@ -337,7 +347,26 @@ final class OutputCapture {
                 net.sf.saxon.om.NamespaceMap namespaces, Location location, int properties) throws XPathException {
             at(location, false);
             elements.push(location == null ? net.sf.saxon.expr.parser.Loc.NONE : location);
-            super.startElement(elemName, type, attributes, namespaces, location, properties);
+            this.attributes = attributes;
+            try {
+                super.startElement(elemName, type, attributes, namespaces, location, properties);
+            } finally {
+                this.attributes = null;
+            }
+        }
+
+        // an attribute, with its own location - written within startElement, after the space before it
+        @Override
+        protected void writeAttribute(net.sf.saxon.om.NodeName elCode, String attname, String value, int properties) throws XPathException {
+            if (attributes != null) {
+                for (net.sf.saxon.om.AttributeInfo attribute : attributes) {
+                    if (attribute.getNodeName().getDisplayName().equals(attname)) {
+                        at(attribute.getLocation(), false);
+                        break;
+                    }
+                }
+            }
+            super.writeAttribute(elCode, attname, value, properties);
         }
 
         @Override
@@ -347,9 +376,17 @@ final class OutputCapture {
             super.endElement();
         }
 
+        // text: a text node of a temporary tree has its parent element's location, as Saxon copies it - or, with no
+        // element, none: that's the instruction's writing it, e.g. xsl:sequence select="$text"
         @Override
         public void characters(net.sf.saxon.str.UnicodeString chars, Location location, int properties) throws XPathException {
-            at(location, true);
+            boolean isUnknown = location == null || location.getLineNumber() <= 0;
+            Location instruction = isUnknown && resolver != null && !chars.toString().trim().isEmpty() ? resolver.currentInstruction() : null;
+            if (instruction != null) {
+                at(instruction, false);
+            } else {
+                at(location, true);
+            }
             super.characters(chars, location, properties);
         }
 

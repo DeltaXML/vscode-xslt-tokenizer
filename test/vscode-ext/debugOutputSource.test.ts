@@ -52,6 +52,15 @@ suite('XSLT debugger: from the output to its source', () => {
 	const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-output-source-')), 'report.xsl');
 	fs.writeFileSync(file, stylesheet);
 	const byId = new Map(locations(file).map((l) => [l.id, l]));
+	// the tests show the outputs themselves: an output isn't opened when it's updated, which could take the focus
+	const debugSettings = vscode.workspace.getConfiguration('XSLT.debug');
+	const openOutput = debugSettings.inspect<boolean>('openOutput')?.globalValue;
+	suiteSetup(async () => {
+		await debugSettings.update('openOutput', false, vscode.ConfigurationTarget.Global);
+	});
+	suiteTeardown(async () => {
+		await debugSettings.update('openOutput', openOutput, vscode.ConfigurationTarget.Global);
+	});
 	const idAt = (found: string, delta = 0) => XsltDebugOutputs.locationAt(output, runs, byId, output.indexOf(found) + delta)?.location.id;
 
 	test('the run at an offset', () => {
@@ -65,6 +74,19 @@ suite('XSLT debugger: from the output to its source', () => {
 	test("a start tag's '>' is the tag's", () => {
 		assert.strictEqual(idAt('<made>', 5), 1);
 		assert.strictEqual(idAt('<literal>', 8), 3);
+	});
+
+	test("an attribute's own location: not its element's, except for the tag's end", () => {
+		const text = '<a x="1" y="2"/>';
+		// <a x="1"  - y="2" - />, as the emitter writes them: the start tag's end with the next event
+		const attributeRuns = [0, 0, text.indexOf('y='), 1, text.indexOf('/>'), 0];
+		const attributeLocations = new Map<number, XsltOutputLocation>([[0, { id: 0, path: file, line: 3, column: 5 }], [1, { id: 1, path: file, line: 4, column: 7 }]]);
+		const idOf = (found: string, delta = 0) => XsltDebugOutputs.locationAt(text, attributeRuns, attributeLocations, text.indexOf(found) + delta)?.location.id;
+		assert.strictEqual(idOf('x='), 0);
+		assert.strictEqual(idOf('y='), 1);
+		assert.strictEqual(idOf('"2"', 1), 1);
+		assert.strictEqual(idOf('/>'), 0);
+		assert.strictEqual(idOf('/>', 1), 0);
 	});
 
 	test('no location for a run without one', () => {
@@ -115,27 +137,35 @@ suite('XSLT debugger: from the output to its source', () => {
 		const outputEditor = await vscode.window.showTextDocument(XsltDebugOutputs.uri(name), { viewColumn: vscode.ViewColumn.Two, preview: false });
 		const at = outputEditor.document.positionAt(output.indexOf('by') + 1);
 		outputEditor.selection = new vscode.Selection(at, at);
-		await vscode.commands.executeCommand('editor.action.revealDefinition');
+		const definitions = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', outputEditor.document.uri, at);
+		assert.lengthOf(definitions, 1, 'a definition');
 		const isStylesheet = (uri?: vscode.Uri) => uri?.fsPath === vscode.Uri.file(file).fsPath;
 		const tabsInOutputGroup = () => vscode.window.tabGroups.all.find((g) => g.viewColumn === vscode.ViewColumn.Two)?.tabs
 			.filter((tab) => tab.input instanceof vscode.TabInputText && isStylesheet(tab.input.uri)).length;
-		for (let i = 0; i < 60 && !(isStylesheet(vscode.window.activeTextEditor?.document.uri) && (!openStylesheetFirst || tabsInOutputGroup() === 0)); i++) {
-			await new Promise((resolve) => setTimeout(resolve, 50));
+		const isDone = () => isStylesheet(vscode.window.activeTextEditor?.document.uri) && (!openStylesheetFirst || tabsInOutputGroup() === 0);
+		// from the output editor, as F12 is - again if it didn't navigate, when the test host is busy
+		for (let attempt = 0; attempt < 2 && !isDone(); attempt++) {
+			await vscode.window.showTextDocument(outputEditor.document, { viewColumn: vscode.ViewColumn.Two, selection: new vscode.Selection(at, at), preview: false });
+			await vscode.commands.executeCommand('editor.action.revealDefinition');
+			for (let i = 0; i < 60 && !isDone(); i++) {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+			}
 		}
 		const editor = vscode.window.activeTextEditor!;
-		assert.isTrue(isStylesheet(editor.document.uri), 'the stylesheet is shown');
+		const layout = vscode.window.tabGroups.all.map((g) => `${g.viewColumn}: ${g.tabs.map((tab) => `${tab.label}${tab.isActive ? '*' : ''}`).join(', ')}`).join('; ');
+		assert.isTrue(isStylesheet(editor.document.uri), `the stylesheet is shown - active: ${editor.document.uri.toString()} in ${editor.viewColumn}; ${layout}`);
 		assert.strictEqual(`${editor.selection.start.line + 1}:${editor.selection.start.character + 1}`, '4:13');
 		return { column: editor.viewColumn, tabsInOutputGroup: tabsInOutputGroup() };
 	}
 
 	test('go to definition: the stylesheet already open in another group is shown there', async () => {
 		assert.deepEqual(await goToDefinition(true), { column: vscode.ViewColumn.One, tabsInOutputGroup: 0 });
-	});
+	}).timeout(10000);
 
 	test('go to definition: a stylesheet not open is opened as VS Code does, in the output\'s group', async () => {
 		assert.deepEqual(await goToDefinition(false), { column: vscode.ViewColumn.Two, tabsInOutputGroup: 1 });
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-	});
+	}).timeout(10000);
 
 	test('the keys for going to the source, for the platform and multi-cursor modifier', () => {
 		assert.strictEqual(XsltDebugOutputs.goToSourceKeys('darwin', 'alt'), 'Cmd-click or F12');
@@ -150,6 +180,17 @@ suite('XSLT debugger: from the output to its source', () => {
 		assert.strictEqual(path.posix.basename(uri.path), '[XSLT OUT] result.xml');
 		assert.strictEqual(XsltDebugOutputs.nameOf(uri), 'result.xml');
 	});
+
+	test('an output view restored from the last window, with no output, is closed', async () => {
+		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+		const uri = XsltDebugOutputs.uri('restored.xml');
+		await vscode.window.showTextDocument(uri, { preview: false }).then(undefined, () => undefined);
+		const isOpen = () => vscode.window.tabGroups.all.some((g) => g.tabs.some((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === uri.toString()));
+		for (let i = 0; i < 60 && isOpen(); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		assert.isFalse(isOpen(), 'the empty output view is closed');
+	}).timeout(10000);
 
 	test("an inlay hint at the end of the cursor's line: where the output at the cursor came from, with the keys in its tooltip", async () => {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
@@ -174,11 +215,17 @@ suite('XSLT debugger: from the output to its source', () => {
 		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'text', offset: 0, text: output }] });
 		assert.deepEqual(await hintsAt('by', 1), []);
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-	});
+	}).timeout(10000);
 
-	test('literal text not found: where Saxon reports it', () => {
-		const source = '<x>abc</x>';
-		const location: XsltOutputLocation = { id: 0, path: 'x.xsl', line: 1, column: 4, kind: 'text' };
-		assert.strictEqual(XsltDebugOutputs.sourceOffset(source, location, () => 3, 'something else'), 3);
+	test('text not found in the stylesheet: the text node\'s first character, or the instruction after it', () => {
+		const offsetFor = (source: string, reported: number, found: string) =>
+			XsltDebugOutputs.sourceOffset(source, { id: 0, path: 'x.xsl', line: 1, column: 1, kind: 'text' }, () => reported, found);
+		// a text value template: reported where its text ends (Saxon 13) or starts (12)
+		const template = '<e expand-text="yes">count {count(items/item)} items</e>';
+		assert.strictEqual(offsetFor(template, template.indexOf('</e>'), 'count 3 items'), template.indexOf('count'));
+		assert.strictEqual(offsetFor(template, template.indexOf('count'), 'count 3 items'), template.indexOf('count'));
+		// text in a temporary tree, with its element's location: the instruction that made it
+		const wrapped = '<wrapped>\n  <xsl:value-of select="\'wrapped text\'"/></wrapped>';
+		assert.strictEqual(offsetFor(wrapped, wrapped.indexOf('\n'), 'wrapped text'), wrapped.indexOf('<xsl:value-of'));
 	});
 });
