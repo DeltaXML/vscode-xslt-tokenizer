@@ -102,7 +102,9 @@ final class BreakableLines {
     // separately there, for stepping through (others, e.g. group-by, are evaluated for each item)
     private static final Set<String> XPATH_ATTRIBUTES = new HashSet<String>(Arrays.asList("select", "test", "value",
             // xsl:evaluate's, xsl:map-entry's and xsl:key's
-            "xpath", "context-item", "with-params", "key", "use"));
+            "xpath", "context-item", "with-params", "key", "use",
+            // XSLT 4.0 xsl:if's branches (xsl:when's and xsl:otherwise's are select)
+            "then", "else"));
 
     /** a multi-line XPath expression in an instruction's attribute */
     static final class XPathAttribute {
@@ -250,9 +252,10 @@ final class BreakableLines {
                     reason = ACCUMULATOR_RULES_UNTRACED;
                 } else if (isXslt && localName.equals("key") && attributes.getValue("use") != null) {
                     // its use is traced (see DebugCodeInjector.traceKeys)
-                } else if (isXslt && (localName.equals("on-completion") || localName.equals("sort") || localName.equals("catch")) && attributes.getValue("select") != null) {
-                    // their select is traced (see DebugCodeInjector) - the content of xsl:on-completion and xsl:catch
-                    // is traced anyway
+                } else if (isXslt && (localName.equals("on-completion") || localName.equals("sort") || localName.equals("catch") ||
+                        localName.equals("otherwise")) && attributes.getValue("select") != null) {
+                    // their select is traced (see DebugCodeInjector) - the content of xsl:on-completion, xsl:catch and
+                    // xsl:otherwise is traced anyway
                 } else if (isXslt && UNTRACED.contains(localName)) {
                     reason = "isn't an instruction Saxon can stop at";
                 } else if (isXslt && localName.equals("param") && parent != null &&
@@ -532,7 +535,9 @@ final class BreakableLines {
         while (m.find()) {
             String value = m.group(2) != null ? m.group(2) : m.group(3);
             int group = m.group(2) != null ? 2 : 3;
-            if (!XPATH_ATTRIBUTES.contains(m.group(1)) || value.indexOf('\n') < 0) {
+            // an XSLT 4.0 xsl:record's attributes - other than namespaced ones, e.g. xsl:as - are its fields' expressions
+            boolean recordField = tag.name.equals("xsl:record") && m.group(1).indexOf(':') < 0;
+            if (!(XPATH_ATTRIBUTES.contains(m.group(1)) || recordField) || value.indexOf('\n') < 0) {
                 continue;
             }
             int valueOffset = startOffset + m.start(group);

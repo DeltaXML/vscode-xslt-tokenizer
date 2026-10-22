@@ -501,9 +501,14 @@ final class Debugger {
             stoppedLine = top.line;
             pause(reason, top, depth);
         }
-        if (onNewReportedLine && xpathDepth == 0) {
+        String branch = branchAttribute(location);
+        if (branch != null && xpathDepth == 0) {
+            // an XSLT 4.0 branch (xsl:when's or xsl:otherwise's select, xsl:if's then or else), now it's taken: only
+            // that attribute - its test was stepped through where it was evaluated, maybe on the same line
+            stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO, branch);
+        } else if (onNewReportedLine && xpathDepth == 0) {
             // stepping into: from here, or from an instruction before it on the same line
-            stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO);
+            stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO, null);
         }
     }
 
@@ -549,12 +554,42 @@ final class Debugger {
     // it's stepped into, or has a breakpoint in it. It's evaluated in the instruction's context, in a stack frame of
     // its own, before the instruction itself runs. See XPathEngine
     // reportedLine: the instruction's start tag's end, where Saxon reports it; line: its first line, where it's shown
-    private void stepThroughXPath(Traceable instruction, XPathContext context, String path, int reportedLine, int line, boolean steppingIn) {
+    // XSLT 4.0 branches: an xsl:when's or xsl:otherwise's select, and an xsl:if's then and else - each evaluated only
+    // if that branch is taken
+    private static boolean isBranch(String element, String attribute) {
+        return ("select".equals(attribute) && (element.equals("when") || element.equals("otherwise"))) ||
+                (element.equals("if") && ("then".equals(attribute) || "else".equals(attribute)));
+    }
+
+    private static boolean isBranch(BreakableLines.XPathAttribute attribute) {
+        return isBranch(attribute.elementName.substring(attribute.elementName.indexOf(':') + 1), attribute.name);
+    }
+
+    // the branch attribute a traced expression is in, if it is (see DebugCodeInjector)
+    private static String branchAttribute(Location location) {
+        Location containing = location instanceof net.sf.saxon.expr.parser.XPathParser.NestedLocation ?
+                ((net.sf.saxon.expr.parser.XPathParser.NestedLocation) location).getContainingLocation() : null;
+        if (containing instanceof net.sf.saxon.tree.AttributeLocation) {
+            net.sf.saxon.tree.AttributeLocation attribute = (net.sf.saxon.tree.AttributeLocation) containing;
+            if (attribute.getElementName() != null && attribute.getAttributeName() != null &&
+                    "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString()) &&
+                    isBranch(attribute.getElementName().getLocalPart(), attribute.getAttributeName().getLocalPart())) {
+                return attribute.getAttributeName().getLocalPart();
+            }
+        }
+        return null;
+    }
+
+    // branch: only that branch attribute (see isBranch), when it's taken; null: the others - not branches
+    private void stepThroughXPath(Traceable instruction, XPathContext context, String path, int reportedLine, int line, boolean steppingIn, String branch) {
         BreakableLines lines = sourceLines(path);
         if (lines == null) {
             return;
         }
         for (BreakableLines.XPathAttribute attribute : lines.xpathAttributesAt(reportedLine)) {
+            if (branch == null ? isBranch(attribute) : !(isBranch(attribute) && branch.equals(attribute.name))) {
+                continue;
+            }
             boolean breakpointWithin = hasBreakpointWithin(path, attribute, line);
             if (!steppingIn && !breakpointWithin) {
                 continue;

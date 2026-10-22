@@ -248,15 +248,23 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
     // BreakableLines)
     private static final java.util.Set<String> TRACED_ATTRIBUTES = new java.util.HashSet<String>(java.util.Arrays.asList(
             "sequence/select", "on-completion/select", "when/test", "map-entry/key", "map-entry/select", "catch/select",
-            "assert/test"));
+            "assert/test",
+            // XSLT 4.0 branches: traced where they're evaluated - only when the branch is taken
+            "when/select", "otherwise/select", "if/then", "if/else"));
 
-    // the attribute (one of TRACED_ATTRIBUTES) that an expression is part of, if it is
+    // an XSLT 4.0 xsl:record's attribute - not a namespaced one, e.g. xsl:as - whose value is a field's expression
+    private static boolean isRecordField(AttributeLocation attribute) {
+        return "record".equals(attribute.getElementName().getLocalPart()) && attribute.getAttributeName().getNamespaceUri().isEmpty();
+    }
+
+    // the attribute (one of TRACED_ATTRIBUTES, or an xsl:record's field) that an expression is part of, if it is
     private static AttributeLocation tracedAttribute(Location location) {
         Location containing = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
         if (containing instanceof AttributeLocation) {
             AttributeLocation attribute = (AttributeLocation) containing;
             if (attribute.getElementName() != null && attribute.getAttributeName() != null &&
-                    TRACED_ATTRIBUTES.contains(attribute.getElementName().getLocalPart() + "/" + attribute.getAttributeName().getLocalPart()) &&
+                    (TRACED_ATTRIBUTES.contains(attribute.getElementName().getLocalPart() + "/" + attribute.getAttributeName().getLocalPart()) ||
+                            isRecordField(attribute)) &&
                     "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString())) {
                 return attribute;
             }
