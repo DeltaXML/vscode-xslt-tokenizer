@@ -1776,6 +1776,8 @@ export enum ErrorType {
     FixedNamespacesToken,
     RecordFieldUnknown,
     RecordFieldValueType,
+    RecordInstructionFieldMissing,
+    RecordInstructionFieldUnknown,
     RecordLookupUnknown,
     AccumulatorNotApplicable,
     ItemTypeDuplicate,
@@ -1818,7 +1820,21 @@ export interface BaseToken {
     // XPath 4.0: the '|' separating the item types of a choice item type, e.g. (xs:date | xs:time)
     choiceSeparator?: boolean;
     // XPath 4.0 record types: for a quick fix, the text that adds the missing fields to a map constructor
-    recordFix?: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } };
+    recordFix?: RecordFix;
+}
+
+// a quick fix's edit: inserting the text at the position, or replacing the text up to the end, or replaceLength characters
+// - altText is the text for an alternative fix, and alternatives the texts for a fix each, e.g. a field name for an unknown
+// one - isMarkup is true for XSLT markup, e.g. attributes, whose quotes are not adjusted for an enclosing attribute value
+export interface RecordFix {
+    line: number;
+    character: number;
+    text: string;
+    replaceLength?: number;
+    altText?: string;
+    end?: { line: number, character: number };
+    alternatives?: string[];
+    isMarkup?: boolean;
 }
 
 export interface Token extends BaseToken {

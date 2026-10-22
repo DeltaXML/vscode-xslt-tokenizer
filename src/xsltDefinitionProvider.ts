@@ -456,6 +456,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				resolve(items && items.length > 0 ? new vscode.CompletionList(items, true) : undefined);
 				return;
 			}
+			// XSLT 4.0: an attribute of an xsl:record for a field of its record type, before the other completions
+			const recordAttributes = isXSLT40 ? XsltTokenCompletions.getRecordAttributeCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			// the key attribute of an xsl:map-entry for a record type
 			const mapEntryKeys = hasItemTypes ? XsltTokenCompletions.getMapEntryKeyCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (mapEntryKeys) {
@@ -484,7 +486,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				// after a keyword argument, only keyword arguments can follow
 				completions = keywordArguments.keywordsOnly ? keywordArguments.items : keywordArguments.items.concat(completions ?? []);
 			}
-			// an xsl:map for a record type, before the other element completions
+			if (recordAttributes && recordAttributes.length > 0) {
+				completions = recordAttributes.concat(completions ?? []);
+			}
+			// an xsl:map or xsl:record for a record type, before the other element completions
 			const recordMaps = isXSLT40 ? XsltTokenCompletions.getRecordMapElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (recordMaps) {
 				completions = recordMaps.concat(completions ?? []);

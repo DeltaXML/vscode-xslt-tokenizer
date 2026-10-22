@@ -4,7 +4,7 @@ import { XPathSemanticTokensProvider } from './extension';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SchemaQuery } from './schemaQuery';
-import { Data, XPathLexer } from './xpLexer';
+import { Data, RecordFix, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
@@ -116,6 +116,10 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private inlineRecordExtraction: { document: vscode.TextDocument, plan: InlineRecordExtractionPlan } | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
+	private static changeFieldNameTitle(name: string) {
+		return `Change to '${name}'`;
+	}
+
 	private static useRecordTypeTitle(name: string) {
 		return `Use record type '${name}'`;
 	}
@@ -175,7 +179,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	}
 
 	// XSLT 4.0: adds an xsl:when for each enumeration value that an xsl:switch doesn't test
-	private static createSwitchCasesAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }, title: string, text: string) {
+	private static createSwitchCasesAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: RecordFix, title: string, text: string) {
 		const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
 		action.diagnostics = [diagnostic];
 		action.edit = new vscode.WorkspaceEdit();
@@ -192,11 +196,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return action;
 	}
 
-	private static createRecordFieldsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }) {
+	private static createRecordFieldsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: RecordFix) {
 		const position = new vscode.Position(fix.line, fix.character);
 		// the string literal keys use the quote character that isn't the attribute value's delimiter
+		// - unless the text is markup, e.g. the attributes of an xsl:record
 		const textBefore = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
-		const isApostropheAttribute = textBefore.lastIndexOf('=\'') > textBefore.lastIndexOf('="');
+		const isApostropheAttribute = !fix.isMarkup && textBefore.lastIndexOf('=\'') > textBefore.lastIndexOf('="');
 		const text = isApostropheAttribute ? fix.text.replace(/'/g, '"') : fix.text;
 		const action = new vscode.CodeAction(XsltCodeActionKind.addMissingRecordFields, vscode.CodeActionKind.QuickFix);
 		action.diagnostics = [diagnostic];
@@ -232,11 +237,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			action.command = { command: 'xslt-xpath.convertSaxonTypeAliases', title: XsltCodeActionKind.convertSaxonTypeAliases };
 			codeActions.push(action);
 		});
-		// XPath 4.0 record types: one fix adds all the missing fields of a map constructor
+		// XPath 4.0 record types: one fix adds all the missing fields of a map constructor or xsl:record - and for an unknown
+		// field, a fix for each field name that could replace it
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();
 		context.diagnostics
-			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing || diagnostic.code === DiagnosticCode.noteRequiresXSLT40 || diagnostic.code === DiagnosticCode.enumValueDuplicate)
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.recordFieldUnknown || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing || diagnostic.code === DiagnosticCode.noteRequiresXSLT40 || diagnostic.code === DiagnosticCode.enumValueDuplicate)
 			.forEach(diagnostic => {
 				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
 				if (fix && !addedFixes.has(fix)) {
@@ -248,6 +254,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						action.edit = new vscode.WorkspaceEdit();
 						action.edit.insert(document.uri, new vscode.Position(fix.line, fix.character), fix.text);
 						codeActions.push(action);
+					} else if (diagnostic.code === DiagnosticCode.recordFieldUnknown) {
+						// a fix for each field name that could replace the unknown one, closest first
+						(fix.alternatives ?? []).forEach((name) => {
+							const action = new vscode.CodeAction(XSLTCodeActions.changeFieldNameTitle(name), vscode.CodeActionKind.QuickFix);
+							action.diagnostics = [diagnostic];
+							action.edit = new vscode.WorkspaceEdit();
+							action.edit.replace(document.uri, new vscode.Range(fix.line, fix.character, fix.end!.line, fix.end!.character), name);
+							codeActions.push(action);
+						});
 					} else if (diagnostic.code === DiagnosticCode.enumValueDuplicate) {
 						const action = new vscode.CodeAction(XsltCodeActionKind.removeDuplicateEnumValue, vscode.CodeActionKind.QuickFix);
 						action.diagnostics = [diagnostic];

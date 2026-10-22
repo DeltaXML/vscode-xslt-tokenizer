@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer, ExitCondition } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer, ExitCondition, RecordFix } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
@@ -147,7 +147,8 @@ export enum DiagnosticCode {
 	noteVariablesMissing,
 	noteRequiresXSLT40,
 	saxonTypeAlias,
-	enumValueDuplicate
+	enumValueDuplicate,
+	recordFieldUnknown
 }
 
 export class XsltTokenDiagnostics {
@@ -1214,6 +1215,10 @@ export class XsltTokenDiagnostics {
 						}
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt ? AttributeType.Variable : AttributeType.None;
+						} else if (tagType === TagType.XSLTstart && tagElementName === 'xsl:record') {
+							// XSLT 4.0: an attribute in no namespace is a record field, e.g. name="'Ann'" - the standard attributes
+							// are in the XSLT namespace
+							attType = attNameText === XsltTokenDiagnostics.xslExcludePrefixes ? AttributeType.ExcludeResultPrefixes : AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
 							if (docType === DocumentTypes.DCP && (attNameText === 'parameterRef' || attNameText === 'if' || attNameText === 'unless')) {
 								attType = AttributeType.VariableRef;
@@ -3045,6 +3050,10 @@ export class XsltTokenDiagnostics {
 				// the values of XSLT instructions - an XPath document has none
 				XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
 			}
+			if (docType === DocumentTypes.XSLT40 && documentText.includes('<xsl:record')) {
+				// xsl:record is XSLT 4.0
+				XsltTokenDiagnostics.checkRecordInstructions(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
+			}
 			if (XsltTokenDiagnostics.isXPath40(docType)) {
 				// xsl:switch is XSLT 4.0
 				XsltTokenDiagnostics.checkSwitches(document, allTokens, argumentVariableTypes, allGlobals, itemTypeDeclarations, problemTokens);
@@ -3069,10 +3078,10 @@ export class XsltTokenDiagnostics {
 		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		// the quick fixes for missing record fields
-		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
+		const recordFixes = new Map<string, RecordFix>();
 		problemTokens.forEach((token) => {
 			if (token.recordFix) {
-				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.noteVariablesMissing || d.code === DiagnosticCode.noteRequiresXSLT40 || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.recordFieldUnknown || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.noteVariablesMissing || d.code === DiagnosticCode.noteRequiresXSLT40 || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
 					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
 			}
 		});
@@ -4414,6 +4423,20 @@ export class XsltTokenDiagnostics {
 					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XPath: '${field}' is not a field of the record type: ${recordName}`;
 					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.recordFieldUnknown;
+					break;
+				}
+				case ErrorType.RecordInstructionFieldMissing: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: Record field '${field}' is missing from the xsl:record - it's required by the record type: ${recordName}`;
+					errCode = DiagnosticCode.recordFieldMissing;
+					break;
+				}
+				case ErrorType.RecordInstructionFieldUnknown: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: The xsl:record attribute '${field}' is not a field of the record type: ${recordName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.recordFieldUnknown;
 					break;
 				}
 				case ErrorType.SwitchCaseNotEnumValue: {
@@ -5405,7 +5428,7 @@ export class XsltTokenDiagnostics {
 				const namePosition = document.positionAt(switchStart + 1);
 				const token: BaseToken = { line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:switch'.length, value: '', tokenType: 0 };
 				// two forms of fix, with the same edit position: xsl:when elements with a select attribute, or with content
-				let recordFix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } } | undefined;
+				let recordFix: RecordFix | undefined;
 				const lineIndent = (offset: number) => {
 					const lineStart = text.lastIndexOf('\n', offset) + 1;
 					return /^[ \t]*$/.test(text.substring(lineStart, offset)) ? text.substring(lineStart, offset) : undefined;
@@ -5500,10 +5523,10 @@ export class XsltTokenDiagnostics {
 		const openElements = RecordTypes.openElementsAt(RecordTypes.blankMarkup(text), candidates.map((c) => c.tagStart));
 		candidates.forEach((candidate, index) => {
 			if (candidate.name === 'key') {
-				// the record field for an xsl:map-entry key in an xsl:map with a record type
+				// the record field for an xsl:map-entry key in an xsl:map or xsl:record with a record type
 				const mapAncestors = openElements[index];
 				const mapIndex = mapAncestors.length - 1;
-				const record = mapIndex > -1 && mapAncestors[mapIndex].name === 'xsl:map' ? RecordTypes.xslMapRecord(text, mapAncestors, mapIndex, itemTypes, templateParamType) : undefined;
+				const record = mapIndex > -1 && RecordTypes.isMapInstruction(mapAncestors[mapIndex].name) ? RecordTypes.xslMapRecord(text, mapAncestors, mapIndex, itemTypes, templateParamType) : undefined;
 				const keyToken = candidate.tokens[0];
 				const field = record?.fields.find((f) => f.name === keyToken.value.substring(1, keyToken.value.length - 1));
 				if (record && field) {
@@ -5527,6 +5550,87 @@ export class XsltTokenDiagnostics {
 		});
 	}
 
+	// XSLT 4.0: checks each xsl:record against its record type - its xsl:as, or the declared type of its value from the
+	// containing instruction, e.g. an xsl:variable with an 'as'. Each attribute in no namespace is a field: it must be a
+	// field of the record type, and a literal value must suit the field's type. Each required field must be an attribute
+	// or the literal key of an xsl:map-entry child - unless other content may add entries
+	private static checkRecordInstructions(document: vscode.TextDocument, allTokens: BaseToken[], globals: GlobalInstructionData[], itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const markup = RecordTypes.blankMarkup(text);
+		const instructions = RecordTypes.recordInstructions(text, markup);
+		if (instructions.length === 0) {
+			return;
+		}
+		const templateParamType = (template: string, param: string) => XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Template, template, undefined, -1, param);
+		const openElements = RecordTypes.openElementsAt(markup, instructions.map((instruction) => instruction.offset));
+		// the XPath tokens, for the values of the attributes - by their offsets, in ascending order
+		const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && t.tokenType !== TokenLevelState.comment);
+		const tokenOffsets = xpathTokens.map((t) => document.offsetAt(new vscode.Position(t.line, t.startCharacter)));
+		const firstTokenFrom = (offset: number) => {
+			let low = 0;
+			let high = tokenOffsets.length;
+			while (low < high) {
+				const mid = (low + high) >> 1;
+				if (tokenOffsets[mid] < offset) {
+					low = mid + 1;
+				} else {
+					high = mid;
+				}
+			}
+			return low;
+		};
+		const nameToken = (offset: number, name: string): BaseToken => {
+			const position = document.positionAt(offset);
+			return { line: position.line, startCharacter: position.character, length: name.length, value: name, tokenType: 0 };
+		};
+		instructions.forEach((instruction, index) => {
+			const ancestors = openElements[index].concat([{ name: 'xsl:record', offset: instruction.offset }]);
+			const record = RecordTypes.xslMapRecord(text, ancestors, ancestors.length - 1, itemTypes, templateParamType);
+			if (!record) {
+				return;
+			}
+			const fieldAttributes = instruction.attributes.filter((attribute) => RecordTypes.isFieldAttribute(attribute.name));
+			const entryKeys = instruction.isEmpty ? [] : RecordTypes.mapEntryKeys(text, markup, instruction.offset).map((k) => k.key);
+			const usedNames = fieldAttributes.map((attribute) => attribute.name).concat(entryKeys);
+			fieldAttributes.forEach((attribute) => {
+				const token = nameToken(attribute.nameOffset, attribute.name);
+				const field = record.fields.find((f) => f.name === attribute.name);
+				if (!field) {
+					// the fix replaces the attribute's name with the name of a field not yet used
+					const alternatives = RecordTypes.closestNames(attribute.name, record.fields.map((f) => f.name).filter((name) => RecordTypes.isNCName(name) && !usedNames.includes(name)));
+					const recordFix = alternatives.length > 0 ? { line: token.line, character: token.startCharacter, text: '', end: { line: token.line, character: token.startCharacter + token.length }, alternatives, isMarkup: true } : undefined;
+					problemTokens.push({ ...RecordTypes.problemToken(token, ErrorType.RecordInstructionFieldUnknown, attribute.name, record.name), recordFix });
+					return;
+				}
+				RecordTypes.fieldReferences.push({ token, field, record });
+				const valueStart = firstTokenFrom(attribute.valueOffset);
+				const valueEnd = firstTokenFrom(attribute.valueOffset + attribute.value.length) - 1;
+				if (valueStart <= valueEnd) {
+					RecordTypes.checkFieldValue(xpathTokens, valueStart, valueEnd, field, itemTypes, problemTokens);
+				}
+			});
+			// content other than xsl:map-entry elements with literal keys may add any entries
+			const childNames = instruction.isEmpty ? [] : RecordTypes.childElementNames(markup, instruction.offset);
+			if (childNames.some((name) => name !== 'xsl:map-entry') || childNames.length > entryKeys.length) {
+				return;
+			}
+			const missingFields = record.fields.filter((field) => !field.optional && !usedNames.includes(field.name));
+			if (missingFields.length === 0) {
+				return;
+			}
+			// the fix adds the fields whose names are NCNames as attributes, after the last attribute
+			const lastAttribute = instruction.attributes[instruction.attributes.length - 1];
+			const insertOffset = lastAttribute ? lastAttribute.valueOffset + lastAttribute.value.length + 1 : instruction.offset + '<xsl:record'.length;
+			const insertPosition = document.positionAt(insertOffset);
+			const attributeFields = missingFields.filter((field) => RecordTypes.isNCName(field.name));
+			const recordFix = attributeFields.length > 0 ? { line: insertPosition.line, character: insertPosition.character, text: RecordTypes.fieldAttributesText(attributeFields, itemTypes), isMarkup: true } : undefined;
+			const token = nameToken(instruction.offset + 1, 'xsl:record');
+			missingFields.forEach((field) => {
+				problemTokens.push({ ...RecordTypes.problemToken(token, ErrorType.RecordInstructionFieldMissing, field.name, record.name), recordFix });
+			});
+		});
+	}
+
 	// the declared type of a parameter of a user-defined function (with the arity) or a named template, by keyword or position
 	public static parameterType(globals: GlobalInstructionData[], type: GlobalInstructionType, name: string, arity: number | undefined, position: number, keyword?: string) {
 		const declaration = globals.find((g) => g.type === type && g.name === name && (arity === undefined || type !== GlobalInstructionType.Function || XslLexer.functionArityMatches(g, arity)));
@@ -5537,7 +5641,7 @@ export class XsltTokenDiagnostics {
 	// a placeholder for a value, e.g. __TODO.city - inserted by the completion for a map constructor with a record type
 	public static readonly placeholderPrefix = RecordTypes.placeholderPrefix;
 	// XPath 4.0 record types: the quick fixes for missing fields, for each document - by the diagnostic's position and message
-	public static readonly recordFixes = new Map<string, Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>>();
+	public static readonly recordFixes = new Map<string, Map<string, RecordFix>>();
 
 	// XPath 4.0 record types: the tokens that refer to record fields, for each document
 	public static readonly recordFieldReferences = new Map<string, FieldReference[]>();
