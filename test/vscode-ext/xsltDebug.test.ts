@@ -436,7 +436,9 @@ suite('XSLT debugger - debug sessions', function () {
 		// opened by itself, beside the stylesheet
 		const opened = vscode.window.visibleTextEditors.find((e) => e.document.uri.scheme === XsltDebugOutputs.scheme);
 		assert.ok(opened, 'the output is open');
-		assert.strictEqual(path.posix.basename(opened!.document.uri.path), 'result.xml');
+		assert.strictEqual(XsltDebugOutputs.nameOf(opened!.document.uri), 'result.xml');
+		// its title shows it's the debugger's view, not the result file
+		assert.strictEqual(path.posix.basename(opened!.document.uri.path), '[XSLT OUT] result.xml');
 		assert.strictEqual(opened!.document.languageId, 'xml');
 		await stop.session.customRequest('continue', { threadId: 1 });
 		stop = await nextStop();

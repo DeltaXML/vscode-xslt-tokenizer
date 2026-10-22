@@ -381,7 +381,7 @@ export interface XsltOutputLocation {
 	kind?: 'instruction' | 'source' | 'text';
 }
 
-export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vscode.DefinitionProvider {
+export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vscode.DefinitionProvider, vscode.InlayHintsProvider {
 	public static readonly scheme = 'xslt-debug-output';
 	private static instance: XsltDebugOutputs | undefined;
 	private readonly changed = new vscode.EventEmitter<vscode.Uri>();
@@ -395,8 +395,17 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		return XsltDebugOutputs.instance ??= new XsltDebugOutputs();
 	}
 
+	// the start of an output document's name, its tab's title - so it isn't taken for the file the result is written to
+	public static readonly titlePrefix = '[XSLT OUT] ';
+
 	public static uri(name: string): vscode.Uri {
-		return vscode.Uri.from({ scheme: XsltDebugOutputs.scheme, path: `/debug output/${name}` });
+		return vscode.Uri.from({ scheme: XsltDebugOutputs.scheme, path: `/debug output/${XsltDebugOutputs.titlePrefix}${name}` });
+	}
+
+	// the name of the output an output document is for
+	public static nameOf(uri: vscode.Uri): string {
+		const title = path.posix.basename(uri.path);
+		return title.startsWith(XsltDebugOutputs.titlePrefix) ? title.substring(XsltDebugOutputs.titlePrefix.length) : title;
 	}
 
 	// the output's language, from its output method
@@ -405,7 +414,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 	}
 
 	public provideTextDocumentContent(uri: vscode.Uri): string {
-		const output = this.outputs.get(path.posix.basename(uri.path));
+		const output = this.outputs.get(XsltDebugOutputs.nameOf(uri));
 		if (!output) {
 			return '';
 		}
@@ -523,7 +532,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 
 	// the source location for the position in an output document - undefined if it isn't known
 	public async sourceLocation(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Location | undefined> {
-		return document.uri.scheme === XsltDebugOutputs.scheme ? this.sourceLocationAt(path.posix.basename(document.uri.path), document.offsetAt(position)) : undefined;
+		return document.uri.scheme === XsltDebugOutputs.scheme ? this.sourceLocationAt(XsltDebugOutputs.nameOf(document.uri), document.offsetAt(position)) : undefined;
 	}
 
 	// the source location for the offset in the named output's text
@@ -606,13 +615,57 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		}
 		const location = await this.sourceLocation(editor.document, editor.selection.active);
 		if (!location) {
-			const method = this.outputs.get(path.posix.basename(editor.document.uri.path))?.method;
+			const method = this.outputs.get(XsltDebugOutputs.nameOf(editor.document.uri))?.method;
 			vscode.window.showInformationMessage(method && method !== 'xml' ? `XSLT debugger: only XML output can be traced back to the stylesheet - this output's method is '${method}'.` :
 				'XSLT debugger: where this part of the output came from isn\'t known.');
 			return;
 		}
 		const column = XsltDebugOutputs.otherGroup(location.uri.toString(), editor.viewColumn) ?? vscode.ViewColumn.Beside;
 		await vscode.window.showTextDocument(location.uri, { viewColumn: column, selection: location.range, preview: false });
+	}
+
+	// the keys for going to the source from an output: the modifier for go to definition with the mouse - Cmd/Ctrl, or
+	// Option/Alt when multiple cursors are added with Cmd/Ctrl (editor.multiCursorModifier) - or F12
+	public static goToSourceKeys(platform: string = process.platform, multiCursorModifier = vscode.workspace.getConfiguration('editor').get<string>('multiCursorModifier', 'alt')): string {
+		const isMac = platform === 'darwin';
+		const modifier = multiCursorModifier === 'ctrlCmd' ? (isMac ? 'Option' : 'Alt') : (isMac ? 'Cmd' : 'Ctrl');
+		return `${modifier}${isMac ? '-' : '+'}click or F12`;
+	}
+
+	private readonly inlayHintsChanged = new vscode.EventEmitter<void>();
+	public readonly onDidChangeInlayHints = this.inlayHintsChanged.event;
+
+	// the cursor has moved in an output document: its hint follows it
+	public selectionChanged(event: vscode.TextEditorSelectionChangeEvent) {
+		if (event.textEditor.document.uri.scheme === XsltDebugOutputs.scheme) {
+			this.inlayHintsChanged.fire();
+		}
+	}
+
+	// at the end of the cursor's line in an XML output: where the output at the cursor came from - or the line's first
+	// part, with the cursor in its indentation or at its end - e.g. '→ report.xsl:4', with the keys for going there in
+	// its tooltip
+	public async provideInlayHints(document: vscode.TextDocument): Promise<vscode.InlayHint[]> {
+		const editor = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find((e) => e?.document === document);
+		const output = this.outputs.get(XsltDebugOutputs.nameOf(document.uri));
+		if (!editor || !output || output.method !== 'xml') {
+			return [];
+		}
+		const cursor = editor.selection.active;
+		const line = document.lineAt(cursor.line);
+		const isOnText = cursor.character >= line.firstNonWhitespaceCharacterIndex && cursor.character < line.text.trimEnd().length;
+		if (line.isEmptyOrWhitespace) {
+			return [];
+		}
+		const offset = document.offsetAt(isOnText ? cursor : new vscode.Position(cursor.line, line.firstNonWhitespaceCharacterIndex));
+		const location = await this.sourceLocationAt(XsltDebugOutputs.nameOf(document.uri), offset);
+		if (!location) {
+			return [];
+		}
+		const hint = new vscode.InlayHint(line.range.end, `→ ${path.basename(location.uri.fsPath)}:${location.range.start.line + 1}`);
+		hint.paddingLeft = true;
+		hint.tooltip = 'Jump to XSLT source with: ' + XsltDebugOutputs.goToSourceKeys();
+		return [hint];
 	}
 
 	// a visible output document is kept scrolled to its end, where output is being added

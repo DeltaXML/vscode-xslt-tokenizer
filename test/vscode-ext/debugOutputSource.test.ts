@@ -137,6 +137,45 @@ suite('XSLT debugger: from the output to its source', () => {
 		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 	});
 
+	test('the keys for going to the source, for the platform and multi-cursor modifier', () => {
+		assert.strictEqual(XsltDebugOutputs.goToSourceKeys('darwin', 'alt'), 'Cmd-click or F12');
+		assert.strictEqual(XsltDebugOutputs.goToSourceKeys('win32', 'alt'), 'Ctrl+click or F12');
+		assert.strictEqual(XsltDebugOutputs.goToSourceKeys('linux', 'alt'), 'Ctrl+click or F12');
+		assert.strictEqual(XsltDebugOutputs.goToSourceKeys('darwin', 'ctrlCmd'), 'Option-click or F12');
+		assert.strictEqual(XsltDebugOutputs.goToSourceKeys('win32', 'ctrlCmd'), 'Alt+click or F12');
+	});
+
+	test("an output document's title shows it's the debugger's view of the output", () => {
+		const uri = XsltDebugOutputs.uri('result.xml');
+		assert.strictEqual(path.posix.basename(uri.path), '[XSLT OUT] result.xml');
+		assert.strictEqual(XsltDebugOutputs.nameOf(uri), 'result.xml');
+	});
+
+	test("an inlay hint at the end of the cursor's line: where the output at the cursor came from, with the keys in its tooltip", async () => {
+		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		const name = 'hints.xml';
+		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'xml', offset: 0, text: output, runs, locations: locations(file) }] });
+		const editor = await vscode.window.showTextDocument(XsltDebugOutputs.uri(name), { preview: false });
+		const document = editor.document;
+		const hintsAt = async (found: string, delta: number) => {
+			const at = document.positionAt(output.indexOf(found) + delta);
+			editor.selection = new vscode.Selection(at, at);
+			const hints = await vscode.commands.executeCommand<vscode.InlayHint[]>('vscode.executeInlayHintProvider', document.uri, new vscode.Range(0, 0, document.lineCount, 0));
+			return hints.map((hint) => `${hint.position.line}:${hint.position.character} ${hint.label} (${hint.tooltip})`);
+		};
+		const keys = `Jump to XSLT source with: ${XsltDebugOutputs.goToSourceKeys()}`;
+		const line2End = document.lineAt(1).range.end.character;
+		assert.deepEqual(await hintsAt('by', 1), [`1:${line2End} → report.xsl:4 (${keys})`]);
+		// in the indentation: the line's first part, the <made> tag
+		assert.deepEqual(await hintsAt('<made', -2), [`1:${line2End} → report.xsl:4 (${keys})`]);
+		assert.deepEqual(await hintsAt('second line', 3), [`3:${document.lineAt(3).range.end.character} → report.xsl:6 (${keys})`]);
+		// not for an output that isn't XML
+		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'text', offset: 0, text: output }] });
+		assert.deepEqual(await hintsAt('by', 1), []);
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+	});
+
 	test('literal text not found: where Saxon reports it', () => {
 		const source = '<x>abc</x>';
 		const location: XsltOutputLocation = { id: 0, path: 'x.xsl', line: 1, column: 4, kind: 'text' };

@@ -110,13 +110,33 @@ final class Debugger {
     private final Map<String, BreakableLines> sourceLines = new HashMap<String, BreakableLines>();
     // the paths of the stylesheet modules with instructions executed so far
     private final Set<String> modulePaths = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    // the instruction entered last - for output written by it, e.g. nodes it copies (only used on the transform thread)
+    private Traceable lastEntered;
 
     Debugger(XsltDebugAdapter dap) {
         this.dap = dap;
         current = this;
         SteppedResult.discardAll();
         // where the parts of an XML output came from, for going from the output to the stylesheet
-        outputs.setLocationResolver(this::outputLocation);
+        outputs.setLocationResolver(new OutputCapture.LocationResolver() {
+            public Map<String, Object> resolve(Location location, boolean isText) {
+                return outputLocation(location, isText);
+            }
+
+            public boolean isStylesheetLocation(Location location) {
+                String systemId = location.getSystemId();
+                if (systemId == null || systemId.isEmpty()) {
+                    return true;
+                }
+                String path = pathOf(systemId);
+                return path != null && modulePaths.contains(path);
+            }
+
+            public Location currentInstruction() {
+                Traceable traceable = lastEntered;
+                return traceable == null ? null : traceable.getLocation();
+            }
+        });
         // a global variable's frame: it's being evaluated (only read on the transform thread, as are the frames)
         Values.evaluatingGlobals = () -> {
             Set<net.sf.saxon.expr.instruct.GlobalVariable> result = new HashSet<net.sf.saxon.expr.instruct.GlobalVariable>();
@@ -438,6 +458,7 @@ final class Debugger {
         int depth = top == xpathFrame && xpathFrame != null ? xpathFrame.callDepth : callDepth;
         top.context = context;
         top.current = traceable;
+        lastEntered = traceable;
         Location location = traceable.getLocation();
         if (location == null || location.getSystemId() == null || location.getLineNumber() <= 0) {
             return;
@@ -704,8 +725,9 @@ final class Debugger {
     }
 
     // Where a part of an XML output came from (see OutputCapture): the start tag of the instruction that wrote it, e.g. a
-    // literal result element or xsl:value-of, in its stylesheet module ('instruction') - or, for a node copied from a
-    // source document, where its start tag ends ('source'). Saxon reports the text of a literal text node where the
+    // literal result element or xsl:value-of, or for a node copied from a source document the instruction that copied it,
+    // in its stylesheet module ('instruction') - or, for a source document location (if no instruction was known), where
+    // its start tag ends ('source'). Saxon reports the text of a literal text node where the
     // text ends (or, for some, where it starts), so its location is given as it is ('text'). A node of a temporary tree,
     // e.g. a variable's, has the line and column of the literal result element that made it, but not its module: it's
     // the module with a start tag ending there

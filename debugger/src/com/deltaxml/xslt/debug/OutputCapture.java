@@ -159,6 +159,12 @@ final class OutputCapture {
     interface LocationResolver {
         // null if it isn't known; isText: the location of text, e.g. a literal text node's (where the text ends)
         Map<String, Object> resolve(Location location, boolean isText);
+
+        // whether it's a location in the stylesheet - a node of a temporary tree has no module, but is made there
+        boolean isStylesheetLocation(Location location);
+
+        // the location of the instruction being executed - null if there's none
+        Location currentInstruction();
     }
 
     private LocationResolver resolver;
@@ -227,7 +233,7 @@ final class OutputCapture {
             // the copy of an XML result: an emitter that records where its text comes from
             @Override
             protected net.sf.saxon.serialize.Emitter newXMLEmitter(Properties properties) {
-                return building != null ? new LocatingXMLEmitter(building) : super.newXMLEmitter(properties);
+                return building != null ? new LocatingXMLEmitter(building, resolver) : super.newXMLEmitter(properties);
             }
         });
     }
@@ -308,17 +314,21 @@ final class OutputCapture {
      */
     private static final class LocatingXMLEmitter extends net.sf.saxon.serialize.XMLEmitter {
         private final Output output;
+        private final LocationResolver resolver;
         private final java.util.ArrayDeque<Location> elements = new java.util.ArrayDeque<Location>();
 
-        LocatingXMLEmitter(Output output) {
+        LocatingXMLEmitter(Output output, LocationResolver resolver) {
             this.output = output;
+            this.resolver = resolver;
         }
 
-        // an event with no location, e.g. the indenter's whitespace, is part of the text before
+        // an event with no location, e.g. the indenter's whitespace, is part of the text before - and a node copied from
+        // a source document, which has its location there, is the instruction's that copied it, e.g. xsl:copy-of
         private void at(Location location, boolean isText) {
             if (location != null && location.getLineNumber() > 0) {
-                output.current = location;
-                output.currentIsText = isText;
+                Location instruction = resolver == null || resolver.isStylesheetLocation(location) ? null : resolver.currentInstruction();
+                output.current = instruction != null ? instruction : location;
+                output.currentIsText = isText && instruction == null;
             }
         }
 

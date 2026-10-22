@@ -1962,8 +1962,9 @@ async function testPrincipalJsonOutput(saxonJar) {
 }
 
 // an XML output's parts, with where each came from: the start tag of the instruction that wrote it (a literal result
-// element, xsl:element, xsl:value-of - or for a temporary tree, the literal result element that made it, in its module);
-// a node copied from the source document; or literal text, as Saxon reports it (where the text starts or ends)
+// element, xsl:element, xsl:value-of - for a temporary tree, the literal result element that made it, in its module -
+// and for a node copied from the source document, the instruction that copied it); or literal text, as Saxon reports it
+// (where the text starts or ends)
 async function testOutputMap(saxonJar) {
     const dap = new DapClient(saxonJar);
     const terminated = dap.event('terminated');
@@ -1997,13 +1998,16 @@ async function testOutputMap(saxonJar) {
     assert.strictEqual(at('<literal'), 'instruction output-map.xsl:13:7');
     // where the text starts (Saxon 12) or ends (13)
     assert.match(at('first literal line'), /^text output-map\.xsl:(13:16|14:20)$/);
-    assert.strictEqual(at('<item n="2"'), 'source basic.xml:3:15');
-    assert.strictEqual(at('two'), 'source basic.xml:3:15');
+    // copied from the source document: the xsl:sequence that copied it
+    assert.strictEqual(at('<item n="2"'), 'instruction output-map.xsl:15:7');
+    assert.strictEqual(at('two'), 'instruction output-map.xsl:15:7');
     // a global variable's temporary tree
     assert.strictEqual(at('<built-in-variable'), 'instruction output-map.xsl:6:5');
     // an included module's - copied by xsl:copy-of, which is reported for the nodes it copies
     assert.strictEqual(at('<from-lib'), 'instruction output-map-lib.xsl:7:5');
     assert.strictEqual(at('<lib-variable'), 'instruction output-map-lib.xsl:8:7');
+    // copied by a built-in template rule: the xsl:apply-templates
+    assert.strictEqual(at('<item n="3"'), 'instruction output-map-lib.xsl:9:7');
     assert.strictEqual(at('</report>'), 'instruction output-map.xsl:9:5');
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
