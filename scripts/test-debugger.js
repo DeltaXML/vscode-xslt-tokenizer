@@ -660,6 +660,52 @@ async function testXPathLoops(saxonJar) {
     assert.deepStrictEqual(stepped.slice(stepped.indexOf('15')), ['15', '18', '19']);
 }
 
+// a function called with the arrow operator (=>) is stopped at on the arrow's line, before it's called - a
+// breakpoint there stops - not where the expression before the arrow starts; in a chain, each arrow's line. Its
+// parameters are those passed, its messages written once. XPath 4.0's mapping arrow (=!>, Saxon-PE 13) calls it for
+// each item
+async function testArrowCalls(saxonJar) {
+    const run = async (file, breakpoints, command, extraArgs) => {
+        const xsl = path.join(fixtures, file);
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.start({ saxonArgs: [`-xsl:${xsl}`, '-it'].concat(extraArgs) }, { [file]: breakpoints.map((line) => ({ line })) });
+        const terminated = dap.event('terminated');
+        const stops = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            const frame = stop.frames[0];
+            const locals = /^f:/.test(frame.name) ? ' ' + (await dap.variables(0, 'Locals')).map((v) => `${v.name}=${v.value}`).join(' ') : '';
+            stops.push(`${frame.line}${frame.name.endsWith('(XPath)') ? 'x' : /^f:/.test(frame.name) ? frame.name.replace(/#\d$/, '') : ''}${locals}`);
+            stopped = dap.stopped();
+            stopped.catch(() => undefined);
+            await dap.request(command, { threadId: 1 });
+        }
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return { stops, messages: dap.output.split('\n').filter((line) => /^twice \d$/.test(line)), output: dap.output };
+    };
+    let result = await run('arrow.xsl', [8, 11, 12, 15], 'continue', []);
+    assert.deepStrictEqual(result.stops, ['8x', '12x', '11x', '15x']);
+    result = await run('arrow.xsl', [5], 'stepIn', []);
+    const calls = result.stops.filter((stop, i) => /^\d+f:/.test(stop) && !(i > 0 && result.stops[i - 1].split(' ')[0] === stop.split(' ')[0]));
+    assert.deepStrictEqual(result.stops.slice(0, 3), ['5', '6', '8x']);
+    assert.deepStrictEqual(calls, ['2f:twice $x=3', '2f:twice $x=3', '3f:add $x=6 $y=100']);
+    assert.deepStrictEqual(result.messages, ['twice 3', 'twice 3']);
+    assert.match(result.output, /<out one="6" chain="106" builtin="1-2-3"\/>/);
+    if (/saxon-pe-1[3-9]/i.test(saxonJar)) {
+        result = await run('arrow40.xsl', [18], 'continue', ['--allowSyntaxExtensions:on']);
+        assert.deepStrictEqual(result.stops, ['18x']);
+        result = await run('arrow40.xsl', [16], 'stepIn', ['--allowSyntaxExtensions:on']);
+        assert.ok(result.stops.includes('2f:twice $x=1') && result.stops.some((stop) => /^2f:twice \$x=2$/.test(stop)), result.stops.join(' | '));
+        assert.deepStrictEqual(result.messages, ['twice 3', 'twice 3', 'twice 1', 'twice 2']);
+        assert.match(result.output, /map="2 4"/);
+    }
+}
+
 // an xsl:for-each on one line: a breakpoint there stops at the instruction, then for each item, as stepping over does
 async function testOneLineLoop(saxonJar) {
     for (const command of ['continue', 'next']) {
@@ -1645,7 +1691,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

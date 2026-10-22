@@ -405,6 +405,28 @@ final class XPathEngine {
             return started(start, super.parseRelativePath());
         }
 
+        // an arrow (=>, or XPath 4.0's mapping arrow =!>): the function call it makes starts there, not where its
+        // first argument - the expression before the arrow - does, so it's stopped at on the arrow's line, before the
+        // function is called
+        @Override
+        protected Expression parseArrowPostfix(Expression lhs) throws XPathException {
+            int start = getTokenizer().currentTokenStartOffset;
+            return arrowStarted(start, super.parseArrowPostfix(lhs));
+        }
+
+        @Override
+        protected Expression parseMappingArrowPostfix(Expression lhs) throws XPathException {
+            int start = getTokenizer().currentTokenStartOffset;
+            return arrowStarted(start, super.parseMappingArrowPostfix(lhs));
+        }
+
+        private Expression arrowStarted(int offset, Expression expression) {
+            if (expression != null) {
+                starts.put(expression, offset);
+            }
+            return expression;
+        }
+
         @Override
         public Expression parseBinaryExpression(Expression lhs, int precedence) throws XPathException {
             Integer start = starts.get(lhs);
