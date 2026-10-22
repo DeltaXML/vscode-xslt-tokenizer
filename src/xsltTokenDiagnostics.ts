@@ -417,6 +417,11 @@ export class XsltTokenDiagnostics {
 		let prologUriToken: BaseToken | null = null;
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
+		// an attribute value on more than one line has a token for each line, after the first starting at the line's
+		// start: only the first starts with the value's quote, and only the last ends with it - the quote, while the
+		// value continues on the next line, and the line of its last part
+		let openAttributeQuote: string | undefined;
+		let openAttributeLine = -1;
 		let tagElementName = '';
 		let tagElementId: number = -1;
 		let tagElementAttributes: string[] | undefined = [];
@@ -486,7 +491,8 @@ export class XsltTokenDiagnostics {
 		let lookupRecords = new Map<BaseToken, { record: RecordType, isJNode: boolean }>();
 		let globalAccumulatorNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
-		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
+		// the prefixes, each with the token of the line it's on, for a value on more than one line
+		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[]; prefixTokens: BaseToken[] } | null = null;
 		let ifThenStack: BaseToken[] = [];
 		let currentXSLTIterateParams: string[][] = [];
 		let schemaQuery: SchemaQuery | undefined;
@@ -851,10 +857,10 @@ export class XsltTokenDiagnostics {
 										});
 									}
 									if (missingPrefix) {
-										let xToken = tagExcludeResultPrefixes.token;
+										let xToken = tagExcludeResultPrefixes.prefixTokens[tagExcludeResultPrefixes.prefixes.indexOf(missingPrefix)] ?? tagExcludeResultPrefixes.token;
 										xToken['error'] = ErrorType.MissingPrefixInList;
 										xToken.value = missingPrefix;
-										problemTokens.push(tagExcludeResultPrefixes.token);
+										problemTokens.push(xToken);
 										problem = true;
 									}
 								}
@@ -1252,7 +1258,13 @@ export class XsltTokenDiagnostics {
 								tagAttributeSymbols[tagAttributeSymbols.length - 1].kind = vscode.SymbolKind.Event;
 							}
 						}
-						let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
+						const isContinuation = openAttributeQuote !== undefined && token.line > openAttributeLine && token.startCharacter === 0;
+						const valueQuote = isContinuation ? openAttributeQuote! : fullVariableName.charAt(0);
+						const valueStart = isContinuation ? 0 : 1;
+						const isLastPart = fullVariableName.length > valueStart && fullVariableName.endsWith(valueQuote);
+						let variableName = fullVariableName.substring(valueStart, isLastPart ? fullVariableName.length - 1 : fullVariableName.length);
+						openAttributeQuote = isLastPart ? undefined : valueQuote;
+						openAttributeLine = token.line;
 						let hasProblem = false;
 						if (rootXmlnsName !== null) {
 							let prefix = rootXmlnsName.length === 5 ? '' : rootXmlnsName.substr(6);
@@ -1290,8 +1302,11 @@ export class XsltTokenDiagnostics {
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
-								let excludePrefixes = variableName.split(/\s+/);
-								tagExcludeResultPrefixes = { token: token, prefixes: excludePrefixes };
+								let excludePrefixes = variableName.split(/\s+/).filter((prefix) => prefix.length > 0);
+								// on more than one line: the prefixes on each line, with that line's token
+								const earlierPrefixes = isContinuation && tagExcludeResultPrefixes ? tagExcludeResultPrefixes : { token: token, prefixes: [] as string[], prefixTokens: [] as BaseToken[] };
+								tagExcludeResultPrefixes = { token: earlierPrefixes.token, prefixes: earlierPrefixes.prefixes.concat(excludePrefixes),
+									prefixTokens: earlierPrefixes.prefixTokens.concat(excludePrefixes.map(() => token)) };
 								break;
 							case AttributeType.None:
 								const tagAttributeName = tagAttributeNames.length > 0 ? tagAttributeNames[tagAttributeNames.length - 1] : undefined;
@@ -1323,7 +1338,7 @@ export class XsltTokenDiagnostics {
 										}
 									}
 								}
-								if (prevToken && prevToken.length === 1 && prevToken.tokenType === XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.attributeValue) {
+								if (!isContinuation && prevToken && prevToken.length === 1 && prevToken.tokenType === XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.attributeValue) {
 									token['error'] = ErrorType.XPathEmpty;
 								}
 								break;
@@ -1412,7 +1427,10 @@ export class XsltTokenDiagnostics {
 								}
 							}
 						}
-						attType = AttributeType.None;
+						// the list attributes stay so for the rest of a value on more than one line
+						if (isLastPart || !(attType === AttributeType.ExcludeResultPrefixes || attType === AttributeType.UseAccumulators)) {
+							attType = AttributeType.None;
+						}
 						break;
 					case XSLTokenLevelState.processingInstrName:
 						let piName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
