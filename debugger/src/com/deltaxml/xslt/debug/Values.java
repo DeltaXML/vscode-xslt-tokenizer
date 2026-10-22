@@ -637,6 +637,44 @@ final class Values {
         return text(name, summary(item), item.getClass().getSimpleName());
     }
 
+    // a partially applied function, as it was written - e.g. f:add(?, 10) - or null for another function item, or
+    // if its parts can't be read: Saxon's CurriedFunction has the function and the values bound to its arguments (null
+    // for a placeholder), in private fields with the same names in Saxon 12 and 13. A value Saxon hasn't evaluated
+    // yet isn't evaluated for this: it's shown as ...
+    private static String partialApplication(Object function) {
+        if (function == null || !function.getClass().getSimpleName().equals("CurriedFunction")) {
+            return null;
+        }
+        try {
+            java.lang.reflect.Field targetField = function.getClass().getDeclaredField("targetFunction");
+            java.lang.reflect.Field boundField = function.getClass().getDeclaredField("boundValues");
+            targetField.setAccessible(true);
+            boundField.setAccessible(true);
+            net.sf.saxon.om.FunctionItem target = (net.sf.saxon.om.FunctionItem) targetField.get(function);
+            net.sf.saxon.om.Sequence[] bound = (net.sf.saxon.om.Sequence[]) boundField.get(function);
+            String name = partialApplication(target);
+            if (name == null) {
+                net.sf.saxon.om.StructuredQName targetName = target.getFunctionName();
+                name = targetName == null || net.sf.saxon.lib.NamespaceConstant.ANONYMOUS.equals(targetName.getNamespaceUri().toString()) ?
+                        "function" : targetName.getDisplayName();
+            }
+            StringBuilder sb = new StringBuilder(name).append('(');
+            for (int i = 0; i < bound.length; i++) {
+                sb.append(i > 0 ? ", " : "");
+                if (bound[i] == null) {
+                    sb.append('?');
+                } else if (bound[i] instanceof net.sf.saxon.om.GroundedValue) {
+                    sb.append(summary(XdmValue.wrap((net.sf.saxon.om.GroundedValue) bound[i])));
+                } else {
+                    sb.append("...");
+                }
+            }
+            return sb.append(')').toString();
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
     // a JNode's value, expanded: a map's entries, an array's members, or the items of a sequence
     private List<Map<String, Object>> contentChildren(XdmValue content) {
         List<Map<String, Object>> children = new ArrayList<Map<String, Object>>();
@@ -756,8 +794,14 @@ final class Values {
                 return "array{" + length + (length == 1 ? " member}" : " members}");
             } else if (item instanceof XdmFunctionItem) {
                 XdmFunctionItem function = (XdmFunctionItem) item;
+                String partial = partialApplication(function.getUnderlyingValue());
+                if (partial != null) {
+                    return partial;
+                }
                 QName name = function.getName();
-                return (name == null ? "function" : name.toString()) + "#" + function.getArity();
+                // an inline function: Saxon names it, in its anonymous namespace - function-name() is ()
+                boolean anonymous = name == null || net.sf.saxon.lib.NamespaceConstant.ANONYMOUS.equals(name.getNamespace());
+                return (anonymous ? "function" : name.toString()) + "#" + function.getArity();
             } else if (item instanceof XdmAtomicValue) {
                 return atomicSummary((XdmAtomicValue) item);
             }
