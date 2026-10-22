@@ -636,6 +636,15 @@
 						]
 					}
 				},
+				"XSLT.validation.externalFunctionPrefixes": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"scope": "resource",
+					"markdownDescription": "Prefixes of functions that the stylesheet's processing system provides, e.g. Java extension functions, such as `ext` for `ext:lookup()`. Calls of functions with these prefixes aren't checked. The quick fix for a function that isn't found adds its prefix here, in the workspace's settings."
+				},
 				"XSLT.debug.openOutput": {
 					"type": "boolean",
 					"default": false,

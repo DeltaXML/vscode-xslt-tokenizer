@@ -230,6 +230,21 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix));
 				}
 			});
+		// a function with a prefix that isn't found, e.g. ext:lookup(): a fix that adds the prefix to the functions the
+		// processing system provides, which aren't checked
+		const prefixes = new Set<string>();
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.prefixedFunctionNotFound).forEach((diagnostic) => {
+			const prefix = /Function: '([^':{}]+):/.exec(diagnostic.message)?.[1];
+			if (!prefix || prefixes.has(prefix)) {
+				return;
+			}
+			prefixes.add(prefix);
+			const where = vscode.workspace.workspaceFolders ? 'this workspace' : 'user settings';
+			const action = new vscode.CodeAction(`Don't report unknown '${prefix}:' functions in ${where}`, vscode.CodeActionKind.QuickFix);
+			action.diagnostics = [diagnostic];
+			action.command = { command: 'xslt-xpath.addExternalFunctionPrefix', title: action.title, arguments: [prefix, document.uri] };
+			codeActions.push(action);
+		});
 		// Saxon type aliases: a fix that runs the command to convert them in the workspace
 		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.saxonTypeAlias).slice(0, 1).forEach((diagnostic) => {
 			const action = new vscode.CodeAction(XsltCodeActionKind.convertSaxonTypeAliases, vscode.CodeActionKind.QuickFix);
@@ -518,6 +533,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 							const diagnostics = this.xpathTokenProvider.provideXPathProblems(new CodeActionDocument(document.uri, xpathText));
 							const blockingIssue = diagnostics.find((item) => item.severity !== vscode.DiagnosticSeverity.Hint &&
 								item.code !== DiagnosticCode.unresolvedGenericRef &&
+								item.code !== DiagnosticCode.prefixedFunctionNotFound &&
 								item.code !== DiagnosticCode.unresolvedVariableRef &&
 								item.code !== DiagnosticCode.xdmDebugRef &&
 								item.code !== DiagnosticCode.parseHtmlRef);

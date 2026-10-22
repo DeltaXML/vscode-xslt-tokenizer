@@ -148,7 +148,9 @@ export enum DiagnosticCode {
 	noteRequiresXSLT40,
 	saxonTypeAlias,
 	enumValueDuplicate,
-	recordFieldUnknown
+	recordFieldUnknown,
+	// a function in a namespace with a prefix, e.g. ext:lookup(), not found - see XSLT.validation.externalFunctionPrefixes
+	prefixedFunctionNotFound
 }
 
 export class XsltTokenDiagnostics {
@@ -232,6 +234,17 @@ export class XsltTokenDiagnostics {
 	public static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 	public static readonly brackets = [CharLevelState.lB, CharLevelState.lBr, CharLevelState.lPr, CharLevelState.rB, CharLevelState.rBr, CharLevelState.rPr];
 	private static isHtmlParserJarSet = false;
+	// the prefixes of functions that the stylesheet's processing system provides, e.g. Java extension functions: calls
+	// of functions with these prefixes aren't checked (the XSLT.validation.externalFunctionPrefixes setting)
+	private static externalFunctionPrefixes: string[] = [];
+	public static readonly externalFunctionPrefixesSection = 'XSLT.validation';
+	public static readonly externalFunctionPrefixesSetting = 'externalFunctionPrefixes';
+
+	// the setting's prefixes for a document, without any ':' after them, e.g. 'ext' for 'ext:'
+	public static externalFunctionPrefixesFor(uri?: vscode.Uri): string[] {
+		const prefixes = vscode.workspace.getConfiguration(XsltTokenDiagnostics.externalFunctionPrefixesSection, uri).get<string[]>(XsltTokenDiagnostics.externalFunctionPrefixesSetting, []);
+		return Array.isArray(prefixes) ? prefixes.filter((p) => typeof p === 'string').map((p) => p.trim().replace(/:$/, '')).filter((p) => p.length > 0) : [];
+	}
 
 	public static isBracket(charState: CharLevelState) {
 		return XsltTokenDiagnostics.brackets.indexOf(charState) !== -1;
@@ -506,6 +519,7 @@ export class XsltTokenDiagnostics {
 		let pendingTemplateParamErrors: BaseToken[] = [];
 		const htmlParserString = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
 		XsltTokenDiagnostics.isHtmlParserJarSet = !!htmlParserString && htmlParserString.trim().length > 0;
+		XsltTokenDiagnostics.externalFunctionPrefixes = XsltTokenDiagnostics.externalFunctionPrefixesFor(document.uri);
 
 		if (languageConfig.isVersion4) {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
@@ -3844,6 +3858,9 @@ export class XsltTokenDiagnostics {
 				// prefix is not declared
 				fErrorType = ErrorType.XPathFunctionNamespace;
 				isValid = false;
+			} else if (XsltTokenDiagnostics.externalFunctionPrefixes.includes(fNameParts[0])) {
+				// provided by the processing system, e.g. a Java extension function
+				isValid = true;
 			} else if (xsltType === XSLTnamespaces.NotDefined || xsltType === undefined) {
 				isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
 			} else if (useXPath40) {
@@ -4762,6 +4779,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunction:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					let parts = tokenValue.split('#');
+					if (parts[0].includes(':') && !parts[0].startsWith('Q{')) {
+						// a prefixed function, e.g. ext:lookup - the quick fix adds the prefix to the setting
+						errCode = DiagnosticCode.prefixedFunctionNotFound;
+					}
 					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
 					break;
 				case ErrorType.XPathTypeFullArity:

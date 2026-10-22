@@ -531,9 +531,24 @@ export function activate(context: vscode.ExtensionContext) {
 		if (e.affectsConfiguration('XSLT.tasks.quickRunProcessor')) {
 			updateQuickRunProcessorIndicators();
 		}
-		// item types and notes before XSLT 4.0: check the open modules again
-		if (e.affectsConfiguration(`${ItemTypeSupport.section}.${ItemTypeSupport.setting}`)) {
+		// item types and notes before XSLT 4.0, or functions provided by the processing system: check the open modules again
+		if (e.affectsConfiguration(`${ItemTypeSupport.section}.${ItemTypeSupport.setting}`) ||
+			e.affectsConfiguration(`${XsltTokenDiagnostics.externalFunctionPrefixesSection}.${XsltTokenDiagnostics.externalFunctionPrefixesSetting}`)) {
 			relintXsltModules();
+		}
+	}));
+
+	// the quick fix for a function with a prefix that isn't found: the prefix is added to those of functions the processing
+	// system provides - in the workspace folder's settings, the workspace's, or with no workspace, the user's
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addExternalFunctionPrefix', async (prefix: string, uri?: vscode.Uri) => {
+		const config = vscode.workspace.getConfiguration(XsltTokenDiagnostics.externalFunctionPrefixesSection, uri);
+		const target = uri && vscode.workspace.getWorkspaceFolder(uri) ? vscode.ConfigurationTarget.WorkspaceFolder
+			: vscode.workspace.workspaceFolders ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+		const inspected = config.inspect<string[]>(XsltTokenDiagnostics.externalFunctionPrefixesSetting);
+		const current = (target === vscode.ConfigurationTarget.WorkspaceFolder ? inspected?.workspaceFolderValue :
+			target === vscode.ConfigurationTarget.Workspace ? inspected?.workspaceValue : inspected?.globalValue) ?? [];
+		if (!current.includes(prefix)) {
+			await config.update(XsltTokenDiagnostics.externalFunctionPrefixesSetting, current.concat([prefix]), target);
 		}
 	}));
 
