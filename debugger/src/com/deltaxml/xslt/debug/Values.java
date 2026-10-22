@@ -136,8 +136,9 @@ final class Values {
     // that of its instruction), the current group and grouping key in xsl:for-each-group, and the captured groups in
     // xsl:analyze-string - as current-group(), current-grouping-key() and regex-group() would give them
     // xpathFocus: within an XPath expression being stepped through, the focus it's evaluated with - where that's the
-    // focus, position() and last() are its instruction's
-    Supplier<List<Map<String, Object>>> focus(final XPathContext context, final XPathContext xsltContext, final FocusIterator xpathFocus) {
+    // focus, position() and last() are its instruction's; lazyPart: a part of it evaluated lazily, within a function it
+    // calls - Saxon keeps only the context item for that, so position() and last() aren't known
+    Supplier<List<Map<String, Object>>> focus(final XPathContext context, final XPathContext xsltContext, final FocusIterator xpathFocus, final boolean lazyPart) {
         return () -> {
             List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
             Item item = context.getContextItem();
@@ -147,7 +148,11 @@ final class Values {
                 result.add(variable(".", item));
                 XPathContext focusContext = xpathFocus != null && context.getCurrentIterator() == xpathFocus ? xsltContext : context;
                 FocusIterator iterator = focusContext.getCurrentIterator();
-                if (iterator != null) {
+                if (iterator != null && lazyPart) {
+                    String why = "evaluated lazily, within a function the expression calls";
+                    result.add(text("position()", "(not known)", why));
+                    result.add(text("last()", "(not known)", why));
+                } else if (iterator != null) {
                     result.add(text("position()", String.valueOf(iterator.position()), "xs:integer"));
                     try {
                         result.add(text("last()", String.valueOf(focusContext.getLast()), "xs:integer"));

@@ -341,7 +341,7 @@ final class Debugger {
                 List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
                 result.add(scope("Locals", values.register(frame.xsltContext == null ? values.locals(frame.context, frame.current) :
                         values.xpathLocals(frame.context, frame.current, frame.xpathExternals, frame.xsltContext, frame.xsltCurrent)), false));
-                result.add(scope("Context", values.register(values.focus(frame.context, xsltContext(frame), frame.xpathFocus)), false));
+                result.add(scope("Context", values.register(values.focus(frame.context, xsltContext(frame), frame.xpathFocus, frame.lazyPart)), false));
                 result.add(scope("Globals", values.register(values.globals(xsltContext(frame))), true));
                 result.add(scope("Output", values.register(values.output(outputs, xsltContext(frame))), false));
                 return result;
@@ -428,6 +428,9 @@ final class Debugger {
         // a part of the XPath expression being stepped through belongs to its frame - even when, evaluated lazily
         // (e.g. a function argument), it's evaluated within a function it calls
         Frame top = xpathParts != null && traceable.getLocation() != null && xpathParts.containsKey(traceable.getLocation()) ? xpathFrame : frames.peek();
+        if (top == xpathFrame && xpathFrame != null) {
+            xpathFrame.lazyPart = frames.peek() != xpathFrame;
+        }
         int depth = top == xpathFrame && xpathFrame != null ? xpathFrame.callDepth : callDepth;
         top.context = context;
         top.current = traceable;
@@ -624,7 +627,7 @@ final class Debugger {
             }
             if (stepped != null) {
                 String element = attribute.elementName.substring(attribute.elementName.indexOf(':') + 1);
-                SteppedResult.stepped(SteppedResult.key(systemId, attribute.tagEndLine, attribute.tagEndColumn, element, attribute.name), instruction, context);
+                SteppedResult.stepped(SteppedResult.key(systemId, attribute.tagEndLine, attribute.tagEndColumn, element, attribute.name), instruction, frames.peek(), context);
             }
         }
     }
@@ -674,7 +677,6 @@ final class Debugger {
         if (Thread.currentThread() != transformThread || runningTask) {
             return;
         }
-        SteppedResult.discard(traceable);
         // an xsl:try is complete, including any xsl:catch: the frames an error it caught was raised in - which get
         // no leave() calls - are removed (as also by caughtError, but Saxon 12.4 and earlier don't call that)
         if (!tryDepths.isEmpty() && tryDepths.peek().getKey() == traceable) {
@@ -684,6 +686,7 @@ final class Debugger {
         Frame top = frames.peek();
         if (top != null && top.owner == traceable) {
             frames.pop();
+            SteppedResult.discardFrame(top);
             if (top.isCall) {
                 callDepth--;
             }
@@ -979,7 +982,9 @@ final class Debugger {
     // removes the frames above this depth, as their leave() calls would
     private void unwindTo(int depth) {
         while (frames.size() > depth) {
-            if (frames.pop().isCall) {
+            Frame frame = frames.pop();
+            SteppedResult.discardFrame(frame);
+            if (frame.isCall) {
                 callDepth--;
             }
         }
@@ -1188,6 +1193,9 @@ final class Debugger {
         // the focus it's evaluated with - at its top level, that of its instruction
         int xpathExternals;
         net.sf.saxon.om.FocusIterator xpathFocus;
+        // where it's paused, a part of the XPath expression is evaluated lazily, within a function it calls (e.g. an
+        // argument, when the function uses it): Saxon keeps only the context item for it, not position() and last()
+        boolean lazyPart;
         // the line last entered in this frame, and the instruction or expression first entered on it
         String enteredPath;
         int enteredLine;

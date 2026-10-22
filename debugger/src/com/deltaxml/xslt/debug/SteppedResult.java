@@ -44,20 +44,24 @@ final class SteppedResult extends Expression {
 
     private static final class Pending {
         final Object owner;
+        // the debugger's frame (template, function etc.) it was stepped through in
+        final Object debuggerFrame;
         // the stack frame's variables: an expression evaluated lazily - e.g. an xsl:with-param's select, in the
         // template called - has a copy of the frame
         final Object frameMap;
         final Item contextItem;
 
-        Pending(Object owner, Object frameMap, Item contextItem) {
+        Pending(Object owner, Object debuggerFrame, Object frameMap, Item contextItem) {
             this.owner = owner;
+            this.debuggerFrame = debuggerFrame;
             this.frameMap = frameMap;
             this.contextItem = contextItem;
         }
     }
 
-    // by key: the expressions just stepped through, not yet evaluated by their instruction - only ever accessed on the
-    // transform's thread
+    // by key: the expressions just stepped through, while their instruction runs - only ever accessed on the
+    // transform's thread. Not removed when used: Saxon may evaluate an expression in parts - e.g. a sequence's items,
+    // each in a TraceExpression of its own - each with a SteppedResult
     private static final Map<String, Pending> pending = new HashMap<String, Pending>();
     // the depth of quiet evaluations
     private static int quiet;
@@ -77,15 +81,24 @@ final class SteppedResult extends Expression {
         return systemId + "#" + line + ":" + column + " " + element + "/" + (attribute == null ? "" : attribute);
     }
 
-    // the expression with this key has been stepped through, for the instruction (owner) about to evaluate it
-    static void stepped(String key, Object owner, XPathContext context) {
-        pending.put(key, new Pending(owner, frameMap(context), context.getContextItem()));
+    // the expression with this key has been stepped through, for the instruction (owner) about to evaluate it - in
+    // the debugger's frame given. (The owner may be only a part of it, e.g. its first function call, which Saxon
+    // traces: so it applies until the frame is left, or the owner is entered again - e.g. in the next iteration.)
+    static void stepped(String key, Object owner, Object debuggerFrame, XPathContext context) {
+        pending.put(key, new Pending(owner, debuggerFrame, frameMap(context), context.getContextItem()));
     }
 
-    // when the instruction is entered again, or is complete
+    // the instruction is entered again
     static void discard(Object owner) {
         if (!pending.isEmpty()) {
             pending.values().removeIf((p) -> p.owner == owner);
+        }
+    }
+
+    // the debugger's frame is left
+    static void discardFrame(Object debuggerFrame) {
+        if (!pending.isEmpty()) {
+            pending.values().removeIf((p) -> p.debuggerFrame == debuggerFrame);
         }
     }
 
@@ -99,16 +112,12 @@ final class SteppedResult extends Expression {
         return quiet > 0;
     }
 
-    private boolean takeStepped(XPathContext context) {
+    private boolean isStepped(XPathContext context) {
         if (pending.isEmpty()) {
             return false;
         }
         Pending stepped = pending.get(key);
-        if (stepped == null || stepped.frameMap != frameMap(context) || !sameItem(stepped.contextItem, context.getContextItem())) {
-            return false;
-        }
-        pending.remove(key);
-        return true;
+        return stepped != null && stepped.frameMap == frameMap(context) && sameItem(stepped.contextItem, context.getContextItem());
     }
 
     private static Object frameMap(XPathContext context) {
@@ -180,7 +189,7 @@ final class SteppedResult extends Expression {
 
     @Override
     public SequenceIterator iterate(XPathContext context) throws XPathException {
-        if (!takeStepped(context)) {
+        if (!isStepped(context)) {
             return getChild().iterate(context);
         }
         quiet++;
@@ -194,7 +203,7 @@ final class SteppedResult extends Expression {
 
     @Override
     public Item evaluateItem(XPathContext context) throws XPathException {
-        if (!takeStepped(context)) {
+        if (!isStepped(context)) {
             return getChild().evaluateItem(context);
         }
         quiet++;
@@ -207,7 +216,7 @@ final class SteppedResult extends Expression {
 
     @Override
     public boolean effectiveBooleanValue(XPathContext context) throws XPathException {
-        if (!takeStepped(context)) {
+        if (!isStepped(context)) {
             return getChild().effectiveBooleanValue(context);
         }
         quiet++;
@@ -220,7 +229,7 @@ final class SteppedResult extends Expression {
 
     @Override
     public UnicodeString evaluateAsString(XPathContext context) throws XPathException {
-        if (!takeStepped(context)) {
+        if (!isStepped(context)) {
             return getChild().evaluateAsString(context);
         }
         quiet++;
@@ -233,7 +242,7 @@ final class SteppedResult extends Expression {
 
     @Override
     public void process(Outputter output, XPathContext context) throws XPathException {
-        if (!takeStepped(context)) {
+        if (!isStepped(context)) {
             getChild().process(output, context);
             return;
         }

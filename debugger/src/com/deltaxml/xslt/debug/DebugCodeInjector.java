@@ -82,11 +82,15 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
     }
 
     // An attribute's expression, as the instruction evaluates it (with any conversions Saxon adds): its topmost
-    // expression that isn't an instruction - e.g. not an xsl:evaluate, which Saxon gives the location of its xpath
-    // attribute's expression - and isn't (like the LetExpression of an xsl:variable) partly elsewhere. Its parent
-    // isn't part of the same attribute, or is an instruction
+    // expression that's all part of the attribute - not (like the LetExpression of an xsl:variable) partly elsewhere -
+    // and isn't an instruction, except those an XPath expression compiles to: a simple map (!), a ForEach; an if, a
+    // Choose; a sequence (,), a Block. (Not, e.g., an xsl:evaluate, which Saxon gives the location of its xpath
+    // attribute's expression.) Its parent isn't part of the same attribute, or is an instruction
     private static boolean isAttributeExpression(Expression expression, AttributeLocation attribute) {
-        if (expression instanceof Literal || expression instanceof net.sf.saxon.expr.instruct.Instruction) {
+        if (expression instanceof Literal) {
+            return false;
+        }
+        if (expression instanceof net.sf.saxon.expr.instruct.Instruction && !XPATH_INSTRUCTIONS.contains(expression.getClass().getSimpleName())) {
             return false;
         }
         for (Operand operand : expression.operands()) {
@@ -99,12 +103,32 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
             }
         }
         Expression parent = expression.getParentExpression();
-        if (parent == null || parent instanceof net.sf.saxon.expr.instruct.Instruction) {
+        if (parent == null) {
             return true;
         }
         AttributeLocation parentAttribute = xsltAttribute(parent.getLocation());
-        return parentAttribute == null || !sameLocation(parentAttribute, attribute);
+        if (parentAttribute == null || !sameLocation(parentAttribute, attribute)) {
+            return true;
+        }
+        // within the attribute's expression: only if its parent is an instruction that isn't - e.g. an xsl:evaluate
+        return parent instanceof net.sf.saxon.expr.instruct.Instruction && !(XPATH_INSTRUCTIONS.contains(parent.getClass().getSimpleName()) &&
+                isAllInAttribute(parent, attribute));
     }
+
+    private static boolean isAllInAttribute(Expression expression, AttributeLocation attribute) {
+        for (Operand operand : expression.operands()) {
+            Expression child = operand.getChildExpression();
+            if (child != null && !(child instanceof Literal)) {
+                AttributeLocation childAttribute = xsltAttribute(child.getLocation());
+                if (childAttribute == null || !sameLocation(childAttribute, attribute)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static final java.util.Set<String> XPATH_INSTRUCTIONS = new java.util.HashSet<String>(java.util.Arrays.asList("ForEach", "Choose", "Block"));
 
     // a multi-line expression that can be stepped through: one that uses the result of stepping through it, rather
     // than evaluating the expression again (see SteppedResult)

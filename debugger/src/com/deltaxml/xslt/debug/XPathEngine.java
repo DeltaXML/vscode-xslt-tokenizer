@@ -489,15 +489,18 @@ final class XPathEngine {
         }
         for (Operand operand : expression.operands()) {
             Expression child = operand.getChildExpression();
+            Expression instrumentedChild = child instanceof Literal && branches.contains(child) && starts.get(child) != null ?
+                    trace(child, starts.get(child), instrumented, lineStarts, start) : instrument(child, instrumented, starts, xpath, lineStarts, start);
+            // as recorded, or as found when the child was instrumented: e.g. the start of $doc/r, within $doc/r/a
             Integer childOffset = starts.get(child);
             if (!starts.containsKey(expression) && childOffset != null && (offset == null || childOffset < offset)) {
                 offset = childOffset;
             }
-            if (child instanceof Literal && branches.contains(child) && childOffset != null) {
-                operand.setChildExpression(trace(child, childOffset, instrumented, lineStarts, start));
-            } else {
-                operand.setChildExpression(instrument(child, instrumented, starts, xpath, lineStarts, start));
-            }
+            operand.setChildExpression(instrumentedChild);
+        }
+        if (offset != null && !starts.containsKey(expression)) {
+            // for its parent: e.g. $doc/r/a, which the parser doesn't record within $doc/r/a/@n
+            starts.put(expression, offset);
         }
         // an inline function: its body isn't an operand, but the function's - so it can be stepped through when it's
         // called, e.g. by fold-left()

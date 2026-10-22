@@ -18,6 +18,13 @@
       </xsl:call-template>
       <xsl:sequence select="
         f:t(6)"/>
+      <xsl:sequence select="
+        f:t(7),
+        f:t(8)"/>
+      <xsl:sequence select="
+        if (f:t(9) gt 0)
+        then f:t(10)
+        else 0"/>
     </out>
   </xsl:template>
   <xsl:template name="t"><xsl:param name="p"/><p><xsl:value-of select="$p"/></p></xsl:template>
