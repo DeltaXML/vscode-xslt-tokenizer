@@ -1925,6 +1925,42 @@ async function testOutputSoFar(saxonJar) {
     await dap.exited;
 }
 
+// a principal result with method="json", whose xsl:output properties Saxon gives the serializer as defaults: the copy
+// for the output view is JSON too, so the map is written (before, the copy had no method and the transform failed with
+// SENR0001) - indented, while the result itself is as the stylesheet says
+async function testPrincipalJsonOutput(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
+    const terminated = dap.event('terminated');
+    // an error would pause the session
+    const stopped = dap.stopped().then((stop) => { throw new Error(`stopped: ${stop.reason}`); });
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'json-output.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'result.json')}`] }, {});
+    try {
+        await Promise.race([terminated, stopped]);
+    } catch (e) {
+        await dap.request('disconnect', {}).catch(() => undefined);
+        throw e;
+    }
+    const errors = dap.events.filter((e) => e.event === 'output' && /SENR0001|Cannot serialize/.test(e.body.output));
+    assert.deepStrictEqual(errors, []);
+    let text = '';
+    for (const e of dap.events.filter((e) => e.event === 'xsltOutputs')) {
+        for (const o of e.body.outputs.filter((o) => o.name === 'result.json')) {
+            assert.strictEqual(o.method, 'json');
+            text = text.substring(0, o.offset) + o.text;
+        }
+    }
+    // the entries' order differs in Saxon 12 and 13
+    assert.match(text, /^\{\n {2}"/);
+    assert.match(text, /\n {2}"count": 3/);
+    assert.match(text, /\n {2}"values": \[/);
+    const result = require('fs').readFileSync(path.join(outDir, 'result.json'), 'utf8');
+    assert.match(result, /^\{"/);
+    assert.match(result, /"count":3/);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -1933,7 +1969,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

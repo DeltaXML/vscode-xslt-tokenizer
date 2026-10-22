@@ -122,8 +122,12 @@ final class OutputCapture {
                 }
                 copied.put(result, Boolean.TRUE);
                 Output output = newOutput(result.getSystemId(), properties.getProperties().getProperty("method"));
+                // each property by name, including the defaults - where Saxon puts the principal result's xsl:output
+                // properties, e.g. method="json" (putAll would leave the copy with no method, so it couldn't write a map)
                 Properties copyProperties = new Properties();
-                copyProperties.putAll(properties.getProperties());
+                for (String name : properties.getProperties().stringPropertyNames()) {
+                    copyProperties.setProperty(name, properties.getProperties().getProperty(name));
+                }
                 String method = output.method;
                 if (method.equals("xml") || method.equals("xhtml") || method.equals("html") || method.equals("json")) {
                     copyProperties.setProperty("indent", "yes");
