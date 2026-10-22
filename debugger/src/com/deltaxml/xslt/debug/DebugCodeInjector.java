@@ -48,13 +48,26 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
             // their own)
             Loc elementLocation = new Loc(selectElement.getSystemId(), selectElement.getLineNumber(), selectElement.getColumnNumber());
             expression.setLocation(elementLocation);
-            TraceExpression trace = new TraceExpression(expression);
+            TraceExpression trace = new TraceExpression(stepped(expression, selectElement.getSystemId(), selectElement.getLineNumber(),
+                    selectElement.getColumnNumber(), "select", null));
             trace.setRetainedStaticContext(expression.getRetainedStaticContext());
             trace.setLocation(elementLocation);
             return trace;
         }
         Expression injected = super.inject(expression);
-        if (injected instanceof TraceExpression || Literal.isEmptySequence(expression)) {
+        AttributeLocation attribute = xsltAttribute(location);
+        boolean stepped = attribute != null && isAttributeExpression(expression, attribute);
+        if (injected instanceof TraceExpression) {
+            if (stepped && ((TraceExpression) injected).getChild() == expression) {
+                for (Operand operand : injected.operands()) {
+                    if (operand.getChildExpression() == expression) {
+                        operand.setChildExpression(stepped(expression, attribute));
+                    }
+                }
+            }
+            return injected;
+        }
+        if (Literal.isEmptySequence(expression)) {
             return injected;
         }
         AttributeLocation select = tracedAttribute(location);
@@ -63,9 +76,61 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
             // or an xsl:when's test, a condition of its xsl:choose (which Saxon 13 gives its first test's location)
             AttributeLocation parentSelect = tracedAttribute(parentLocation);
             boolean isTopLevel = parentSelect == null || !sameLocation(parentSelect, select) || parent.getClass().getSimpleName().equals("Choose");
-            return isTopLevel ? new TraceExpression(expression) : injected;
+            return isTopLevel ? new TraceExpression(stepped ? stepped(expression, attribute) : expression) : injected;
         }
-        return injected;
+        return stepped && injected == expression ? stepped(expression, attribute) : injected;
+    }
+
+    // An attribute's expression, as the instruction evaluates it (with any conversions Saxon adds): its topmost
+    // expression that isn't an instruction - e.g. not an xsl:evaluate, which Saxon gives the location of its xpath
+    // attribute's expression - and isn't (like the LetExpression of an xsl:variable) partly elsewhere. Its parent
+    // isn't part of the same attribute, or is an instruction
+    private static boolean isAttributeExpression(Expression expression, AttributeLocation attribute) {
+        if (expression instanceof Literal || expression instanceof net.sf.saxon.expr.instruct.Instruction) {
+            return false;
+        }
+        for (Operand operand : expression.operands()) {
+            Expression child = operand.getChildExpression();
+            if (child != null && !(child instanceof Literal)) {
+                AttributeLocation childAttribute = xsltAttribute(child.getLocation());
+                if (childAttribute == null || !sameLocation(childAttribute, attribute)) {
+                    return false;
+                }
+            }
+        }
+        Expression parent = expression.getParentExpression();
+        if (parent == null || parent instanceof net.sf.saxon.expr.instruct.Instruction) {
+            return true;
+        }
+        AttributeLocation parentAttribute = xsltAttribute(parent.getLocation());
+        return parentAttribute == null || !sameLocation(parentAttribute, attribute);
+    }
+
+    // a multi-line expression that can be stepped through: one that uses the result of stepping through it, rather
+    // than evaluating the expression again (see SteppedResult)
+    private static Expression stepped(Expression expression, AttributeLocation attribute) {
+        return stepped(expression, attribute.getSystemId(), attribute.getLineNumber(), attribute.getColumnNumber(),
+                attribute.getElementName().getLocalPart(), attribute.getAttributeName().getLocalPart());
+    }
+
+    private static Expression stepped(Expression expression, String systemId, int line, int column, String element, String attribute) {
+        if (!Debugger.isSteppable(systemId, line, column, element, attribute)) {
+            return expression;
+        }
+        return new SteppedResult(expression, SteppedResult.key(systemId, line, column, element, attribute));
+    }
+
+    // the XSLT attribute - one whose value is an expression - that an expression is part of, if it is
+    private static AttributeLocation xsltAttribute(Location location) {
+        Location containing = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
+        if (containing instanceof AttributeLocation) {
+            AttributeLocation attribute = (AttributeLocation) containing;
+            if (attribute.getElementName() != null && attribute.getAttributeName() != null &&
+                    "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString())) {
+                return attribute;
+            }
+        }
+        return null;
     }
 
     private static boolean sameLocation(Location a, Location b) {

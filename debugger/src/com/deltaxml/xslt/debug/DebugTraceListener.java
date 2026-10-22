@@ -24,14 +24,15 @@ public class DebugTraceListener implements TraceListener {
 
     @Override
     public void enter(Traceable traceable, Map<String, Object> properties, XPathContext context) {
-        if (debugger != null) {
+        // not while an expression just stepped through is evaluated again, by its instruction (see SteppedResult)
+        if (debugger != null && !SteppedResult.isQuiet()) {
             debugger.enter(traceable, properties, context);
         }
     }
 
     @Override
     public void leave(Traceable traceable) {
-        if (debugger != null) {
+        if (debugger != null && !SteppedResult.isQuiet()) {
             debugger.leave(traceable);
         }
     }
@@ -39,20 +40,20 @@ public class DebugTraceListener implements TraceListener {
     // where an xsl:try starts
     @Override
     public Object checkpoint() {
-        return debugger != null ? debugger.checkpoint() : null;
+        return debugger != null && !SteppedResult.isQuiet() ? debugger.checkpoint() : null;
     }
 
     // an error caught by xsl:try
     @Override
     public void recover(Object checkpoint, XPathException error) {
-        if (debugger != null) {
+        if (debugger != null && !SteppedResult.isQuiet()) {
             debugger.caughtError(checkpoint, error);
         }
     }
 
     @Override
     public void startCurrentItem(Item item) {
-        if (debugger != null) {
+        if (debugger != null && !SteppedResult.isQuiet()) {
             debugger.startCurrentItem(item);
         }
     }

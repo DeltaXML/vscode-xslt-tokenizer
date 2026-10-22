@@ -68,6 +68,10 @@ class DebugTransform extends Transform {
     // writes it, as XML, where e.g. the ANSI color codes of xdm:debug-color() become character references such as
     // &#x1B;[0;33m; the Debug Console shows ANSI colors. A message with elements in it is still written as XML
     private static void printMessage(Message message) {
+        if (SteppedResult.isQuiet()) {
+            // already written, when the expression whose evaluation it's part of was stepped through
+            return;
+        }
         XdmNode content = message.getContent();
         boolean hasElements = false;
         if (content != null) {

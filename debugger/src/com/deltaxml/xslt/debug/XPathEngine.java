@@ -169,6 +169,20 @@ final class XPathEngine {
                 }
             }
         }
+        if (staticContext != null) {
+            // as the instruction's own expressions: e.g. xpath-default-namespace, [xsl:]default-collation, named
+            // xsl:decimal-formats, and a 1.0 stylesheet's backwards compatible mode
+            if (staticContext.getDefaultElementNamespace() != null) {
+                env.setDefaultElementNamespace(staticContext.getDefaultElementNamespace());
+            }
+            if (staticContext.getDefaultCollationName() != null) {
+                env.setDefaultCollationName(staticContext.getDefaultCollationName());
+            }
+            if (staticContext.getDecimalFormatManager() != null) {
+                env.setDecimalFormatManager(staticContext.getDecimalFormatManager());
+            }
+            env.setBackwardsCompatibilityMode(staticContext.isBackwardsCompatibility());
+        }
         Location location = instruction == null ? null : instruction.getLocation();
         if (location != null && location.getSystemId() != null) {
             // e.g. for document('')

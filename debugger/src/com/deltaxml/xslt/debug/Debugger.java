@@ -112,6 +112,7 @@ final class Debugger {
     Debugger(XsltDebugAdapter dap) {
         this.dap = dap;
         current = this;
+        SteppedResult.discardAll();
         // a global variable's frame: it's being evaluated (only read on the transform thread, as are the frames)
         Values.evaluatingGlobals = () -> {
             Set<net.sf.saxon.expr.instruct.GlobalVariable> result = new HashSet<net.sf.saxon.expr.instruct.GlobalVariable>();
@@ -405,6 +406,8 @@ final class Debugger {
             // e.g. a lazily evaluated variable being evaluated for the Variables view
             return;
         }
+        // entered again: a result of stepping through its expression that wasn't used is out of date
+        SteppedResult.discard(traceable);
         if (isSequenceConstructor(traceable)) {
             // which Saxon 12 traces at its first instruction's location (Saxon 13 doesn't) - not an instruction of
             // its own: stopping at it would stop twice where the first instruction is
@@ -565,6 +568,7 @@ final class Debugger {
             frame.line = attribute.line;
             frame.column = attribute.column;
             int depthBefore = frames.size();
+            GroundedValue stepped = null;
             frames.push(frame);
             callDepth++;
             xpathDepth++;
@@ -591,6 +595,11 @@ final class Debugger {
                     // a dynamic error is its result, as when the instruction evaluates it - e.g. one an xsl:try catches
                     raised = e;
                 }
+                if (raised == null) {
+                    // the instruction's own evaluation of it is quiet - not after an error, which the instruction may
+                    // not raise, if it evaluates the expression lazily
+                    stepped = value;
+                }
                 dap.log(resultDescription(attribute, name) + (raised == null ? " returned " + Values.summary(XdmValue.wrap(value)) :
                         " raised " + (raised.getErrorCodeQName() == null ? "an error" : raised.getErrorCodeQName().getLocalPart()) + ": " + message(raised)));
             } catch (Exception | LinkageError e) {
@@ -613,6 +622,10 @@ final class Debugger {
                     }
                 }
             }
+            if (stepped != null) {
+                String element = attribute.elementName.substring(attribute.elementName.indexOf(':') + 1);
+                SteppedResult.stepped(SteppedResult.key(systemId, attribute.tagEndLine, attribute.tagEndColumn, element, attribute.name), instruction, context);
+            }
         }
     }
 
@@ -626,7 +639,19 @@ final class Debugger {
     }
 
     // the stylesheet's start tags - null if it can't be parsed
-    private BreakableLines sourceLines(String path) {
+    // for DebugCodeInjector, as the stylesheet is compiled: whether an attribute (null: the element's content) of the
+    // element whose start tag ends here is a multi-line XPath expression, which can be stepped through
+    static boolean isSteppable(String systemId, int tagEndLine, int tagEndColumn, String elementLocalName, String attributeName) {
+        Debugger debugger = current;
+        if (debugger == null || systemId == null) {
+            return false;
+        }
+        String path = debugger.pathOf(systemId);
+        BreakableLines lines = path == null ? null : debugger.sourceLines(path);
+        return lines != null && lines.xpathAttribute(tagEndLine, tagEndColumn, elementLocalName, attributeName) != null;
+    }
+
+    private synchronized BreakableLines sourceLines(String path) {
         if (!sourceLines.containsKey(path)) {
             sourceLines.put(path, BreakableLines.forFile(path));
         }
@@ -649,6 +674,7 @@ final class Debugger {
         if (Thread.currentThread() != transformThread || runningTask) {
             return;
         }
+        SteppedResult.discard(traceable);
         // an xsl:try is complete, including any xsl:catch: the frames an error it caught was raised in - which get
         // no leave() calls - are removed (as also by caughtError, but Saxon 12.4 and earlier don't call that)
         if (!tryDepths.isEmpty() && tryDepths.peek().getKey() == traceable) {

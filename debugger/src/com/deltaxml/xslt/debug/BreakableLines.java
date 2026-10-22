@@ -119,6 +119,9 @@ final class BreakableLines {
         final Set<Integer> expressionLines = new HashSet<Integer>();
         // the instruction's name attribute, if it has one - e.g. an xsl:variable's
         String instructionName;
+        // where its element's start tag ends: the location Saxon gives the element, and the attribute's expression
+        int tagEndLine;
+        int tagEndColumn;
 
         XPathAttribute(String elementName, String name, String xpath, int line, int column, int lastLine) {
             this.elementName = elementName;
@@ -431,6 +434,21 @@ final class BreakableLines {
     }
 
     /** the multi-line XPath attributes of the traced instruction whose start tag ends on this line */
+    // the multi-line XPath expression in this attribute (null: the element's content) of the element whose start tag
+    // ends here, if there is one
+    XPathAttribute xpathAttribute(int endLine, int endColumn, String elementLocalName, String attributeName) {
+        // by its own tag: an xsl:with-param's is listed with the instruction it's in
+        for (Tag tag : tags) {
+            for (XPathAttribute attribute : tag.xpathAttributes) {
+                if (attribute.tagEndLine == endLine && attribute.tagEndColumn == endColumn && java.util.Objects.equals(attribute.name, attributeName) &&
+                        attribute.elementName.substring(attribute.elementName.indexOf(':') + 1).equals(elementLocalName)) {
+                    return attribute;
+                }
+            }
+        }
+        return null;
+    }
+
     List<XPathAttribute> xpathAttributesAt(int endLine) {
         for (Tag tag : tags) {
             if (tag.endLine == endLine && !tag.xpathAttributes.isEmpty()) {
@@ -490,6 +508,8 @@ final class BreakableLines {
         String[] contentLines = content.split("\n", -1);
         XPathAttribute expression = new XPathAttribute(tag.name, null, xpathText(content), line, column, line + contentLines.length - 1);
         expression.instructionName = variable;
+        expression.tagEndLine = tag.endLine;
+        expression.tagEndColumn = tag.endColumn;
         for (int i = 0; i < contentLines.length; i++) {
             if (startsExpression(contentLines[i])) {
                 expression.expressionLines.add(line + i);
@@ -520,6 +540,8 @@ final class BreakableLines {
             String[] valueLines = value.split("\n", -1);
             XPathAttribute attribute = new XPathAttribute(tag.name, m.group(1), xpathText(value), line, column, line + valueLines.length - 1);
             attribute.instructionName = instructionName;
+            attribute.tagEndLine = tag.endLine;
+            attribute.tagEndColumn = tag.endColumn;
             for (int i = 0; i < valueLines.length; i++) {
                 if (startsExpression(valueLines[i])) {
                     attribute.expressionLines.add(line + i);
