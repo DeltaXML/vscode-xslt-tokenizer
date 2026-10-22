@@ -465,7 +465,7 @@ final class BreakableLines {
             "le", "gt", "ge", "is", "to", "union", "intersect", "except", "instance", "of", "treat", "as",
             "castable", "cast", "otherwise"));
     private static final java.util.regex.Pattern TOKEN = java.util.regex.Pattern.compile(
-            "\\(:.*?:\\)|\"(?:[^\"]|\"\")*\"?|'(?:[^']|'')*'?|\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+)?|\\.\\d+|[$@.\\[]|[\\p{L}_][\\p{L}\\p{N}_.\\-]*(?::[\\p{L}_*][\\p{L}\\p{N}_.\\-]*)?");
+            "\\(:.*?:\\)|\"(?:[^\"]|\"\")*\"?|'(?:[^']|'')*'?|\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+)?|\\.\\d+|[$@.\\[?]|[\\p{L}_][\\p{L}\\p{N}_.\\-]*(?::[\\p{L}_*][\\p{L}\\p{N}_.\\-]*)?");
 
     // whether an expression (other than a literal, which isn't stopped at) starts on a line of an expression - as
     // the expression's parts are reported where they start
@@ -478,8 +478,9 @@ final class BreakableLines {
                 // a comment, string literal or number
                 continue;
             }
-            // a variable reference, attribute, context item, array constructor or predicate, or a name
-            if (first == '$' || first == '@' || first == '.' || first == '[' || !NON_STARTING_KEYWORDS.contains(token)) {
+            // a variable reference, attribute, context item, array constructor or predicate, lookup (e.g. ?name, ?*
+            // or ?2), or a name
+            if (first == '$' || first == '@' || first == '.' || first == '[' || first == '?' || !NON_STARTING_KEYWORDS.contains(token)) {
                 return true;
             }
         }

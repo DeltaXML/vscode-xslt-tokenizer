@@ -123,6 +123,11 @@ final class XPathEngine {
             return SequenceTool.toGroundedValue(expression.iterate(dynamicContext));
         }
 
+        // as a test is evaluated: only as far as needed for its effective boolean value - e.g. to its first node
+        boolean effectiveBooleanValue(XPathDynamicContext dynamicContext) throws Exception {
+            return expression.effectiveBooleanValue(dynamicContext);
+        }
+
         GroundedValue evaluate() throws Exception {
             return evaluate(prepare());
         }
@@ -420,6 +425,31 @@ final class XPathEngine {
             return arrowStarted(start, super.parseMappingArrowPostfix(lhs));
         }
 
+        // a lookup (?name, ?*, ?2, ?(...)): it starts at its '?', not where the expression before it does, so it's
+        // stopped at on that line
+        @Override
+        protected Expression parseLookup(Expression lhs) throws XPathException {
+            int start = getTokenizer().currentTokenStartOffset;
+            return arrowStarted(start, super.parseLookup(lhs));
+        }
+
+        // XPath 4.0's method call (=?>), in Saxon 13: likewise. Saxon 12's parser has no parseMethodCall, so this isn't
+        // an @Override, and Saxon 13's is called through a method handle - as super.parseMethodCall() would be
+        protected Expression parseMethodCall(Expression lhs) throws XPathException {
+            int start = getTokenizer().currentTokenStartOffset;
+            Expression expression;
+            try {
+                java.lang.invoke.MethodHandle method = java.lang.invoke.MethodHandles.lookup().findSpecial(XPathParser.class, "parseMethodCall",
+                        java.lang.invoke.MethodType.methodType(Expression.class, Expression.class), LocatingParser.class);
+                expression = (Expression) method.invoke(this, lhs);
+            } catch (XPathException | RuntimeException | Error e) {
+                throw e;
+            } catch (Throwable e) {
+                throw new XPathException(e.getMessage());
+            }
+            return arrowStarted(start, expression);
+        }
+
         private Expression arrowStarted(int offset, Expression expression) {
             if (expression != null) {
                 starts.put(expression, offset);
@@ -500,6 +530,10 @@ final class XPathEngine {
             String xpath, int[] lineStarts, SourcePosition start) {
         // where it starts in the text: as recorded by the parser, else where its first part does
         Integer offset = starts.get(expression);
+        boolean recorded = offset != null;
+        // a part the parser made that isn't in the text (no start recorded, nor for any of its own parts), e.g. the
+        // reference to an XPath 4.0 focus function's argument, in the simple map that sets it as the context item
+        boolean synthesized = false;
         // a conditional's branches (if, braced if, typeswitch): a literal one is instrumented too, so the line stopped
         // at shows which branch is taken - e.g. then 'high' else 'low'
         Set<Expression> branches = java.util.Collections.newSetFromMap(new IdentityHashMap<Expression, Boolean>());
@@ -515,6 +549,7 @@ final class XPathEngine {
                     trace(child, starts.get(child), instrumented, lineStarts, start) : instrument(child, instrumented, starts, xpath, lineStarts, start);
             // as recorded, or as found when the child was instrumented: e.g. the start of $doc/r, within $doc/r/a
             Integer childOffset = starts.get(child);
+            synthesized |= childOffset == null && !(child instanceof Literal);
             if (!starts.containsKey(expression) && childOffset != null && (offset == null || childOffset < offset)) {
                 offset = childOffset;
             }
@@ -533,6 +568,11 @@ final class XPathEngine {
             }
         }
         if (expression instanceof Literal || expression instanceof TraceExpression || offset == null) {
+            return expression;
+        }
+        if (!recorded && synthesized) {
+            // e.g. a focus function's simple map: stopped at, it would be with the function's own focus (none), before
+            // the argument is the context item - its parts, in the text, are stopped at
             return expression;
         }
         return trace(expression, offset, instrumented, lineStarts, start);

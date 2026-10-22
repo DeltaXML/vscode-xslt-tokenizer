@@ -744,6 +744,71 @@ async function testForSomeEvery(saxonJar) {
         '10x $x=1', '10x $x=2', '13x $x=1', '13x $x=2', '16x $x=1']);
 }
 
+// a generic run: stops (line, x for an XPath frame, f for a stylesheet function, and the context item where asked
+// for), and the xsl:message output
+async function runStops(saxonJar, file, breakpoints, command, extraArgs, contextLines) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, file)}`, '-it'].concat(extraArgs || []) }, { [file]: breakpoints.map((line) => ({ line })) });
+    const terminated = dap.event('terminated');
+    const stops = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        const frame = stop.frames[0];
+        const xpath = frame.name.endsWith('(XPath)');
+        let focus = '';
+        if (xpath && (contextLines || []).includes(frame.line)) {
+            focus = ' .=' + byName(await dap.variables(0, 'Context'))['.'].value;
+        }
+        stops.push(`${frame.line}${xpath ? 'x' : /^f:/.test(frame.name) ? 'f' : ''}${focus}`);
+        stopped = dap.stopped();
+        stopped.catch(() => undefined);
+        await dap.request(command, { threadId: 1 });
+    }
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    return { stops, output: dap.output, messages: dap.output.split('\n').filter((line) => /^[a-z]+ -?\d+$/.test(line)) };
+}
+
+// a test stepped through is evaluated as its instruction evaluates it: only as far as needed for true or false - so
+// only the functions a normal run calls are called, and their messages written (xsl:if stops at the first node that
+// matches; xsl:when too); its result is shown as true or false
+async function testTestsEvaluatedAsNeeded(saxonJar) {
+    const result = await runStops(saxonJar, 'tests-as-needed.xsl', [4], 'stepIn');
+    assert.deepStrictEqual(result.messages, ['check 1', 'check 2', 'check 10']);
+    assert.match(result.output, /\u25B8 xsl:if\/@test \(lines 6-7\) returned true/);
+    assert.match(result.output, /\u25B8 xsl:when\/@test \(lines 9-10\) returned true/);
+    assert.match(result.output, /<out>ifwhen<\/out>/);
+}
+
+// a lookup (?name, ?*, ?2, ?(...)) on a line of its own: a breakpoint there stops at it - in a chain, the last one
+// first, as Saxon evaluates them; a computed key's function call too. Saxon-PE 13: likewise for a method call (=?>);
+// and within an XPath 4.0 focus function, the context item is the argument - not stopped at with the function's own
+// focus, before it's set
+async function testLookupsAndMethodCalls(saxonJar) {
+    let result = await runStops(saxonJar, 'lookups.xsl', [7, 10, 11, 14, 17], 'continue');
+    assert.deepStrictEqual(result.stops, ['7x', '11x', '10x', '14x', '17x', '17x']);
+    assert.match(result.output, /<out name="Ada" all="xslt xpath" second="xpath" computed="Ada"\/>/);
+    if (!/saxon-pe-1[3-9]/i.test(saxonJar)) {
+        return;
+    }
+    result = await runStops(saxonJar, 'method-call40.xsl', [7], 'continue', ['--allowSyntaxExtensions:on']);
+    assert.deepStrictEqual(result.stops, ['7x']);
+    result = await runStops(saxonJar, 'method-call40.xsl', [5], 'stepIn', ['--allowSyntaxExtensions:on']);
+    assert.deepStrictEqual(result.stops.slice(0, 4), ['5', '7x', '6x', '2f']);
+    assert.deepStrictEqual(result.messages, ['double 3']);
+    result = await runStops(saxonJar, 'focus-function40.xsl', [4], 'stepIn', ['--allowSyntaxExtensions:on'], [6]);
+    // the function item is created in the caller's context (absent: an initial template), then its body is evaluated
+    // for each item - an item's first stop on line 6, before f:twice is called, has it as the context item
+    assert.strictEqual(result.stops.filter((stop) => stop === '6x .=(absent)').length, 1, result.stops.join(' | '));
+    assert.ok(result.stops.join(' ').includes('6x .=5 2f') && result.stops.join(' ').includes('6x .=9 2f'), result.stops.join(' | '));
+    assert.deepStrictEqual(result.messages, ['twice 1', 'twice 5', 'twice 9']);
+    assert.match(result.output, /<out focus="5 9"\/>/);
+}
+
 // an xsl:for-each on one line: a breakpoint there stops at the instruction, then for each item, as stepping over does
 async function testOneLineLoop(saxonJar) {
     for (const command of ['continue', 'next']) {
@@ -1729,7 +1794,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

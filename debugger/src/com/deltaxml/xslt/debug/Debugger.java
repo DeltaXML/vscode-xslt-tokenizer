@@ -593,7 +593,10 @@ final class Debugger {
                 GroundedValue value = null;
                 XPathException raised = null;
                 try {
-                    value = compiled.evaluate(dynamicContext);
+                    // a test, as its instruction evaluates it: only as far as needed for true or false - not all of it,
+                    // which would call more functions (and write their messages) than the stylesheet does
+                    value = isTest(attribute) ? net.sf.saxon.value.BooleanValue.get(compiled.effectiveBooleanValue(dynamicContext)) :
+                            compiled.evaluate(dynamicContext);
                 } catch (XPathException e) {
                     // a dynamic error is its result, as when the instruction evaluates it - e.g. one an xsl:try catches
                     raised = e;
@@ -630,6 +633,12 @@ final class Debugger {
                 SteppedResult.stepped(SteppedResult.key(systemId, attribute.tagEndLine, attribute.tagEndColumn, element, attribute.name), instruction, frames.peek(), context);
             }
         }
+    }
+
+    // an attribute evaluated for its effective boolean value: an xsl:if's, xsl:when's or xsl:assert's test
+    private static boolean isTest(BreakableLines.XPathAttribute attribute) {
+        String element = attribute.elementName.substring(attribute.elementName.indexOf(':') + 1);
+        return "test".equals(attribute.name) && (element.equals("if") || element.equals("when") || element.equals("assert"));
     }
 
     // the Debug Console's note of an XPath expression's result, once it has been stepped through - marked as the
