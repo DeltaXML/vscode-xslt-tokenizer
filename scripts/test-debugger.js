@@ -832,6 +832,46 @@ async function testPartialApplication(saxonJar) {
     assert.match(result.output, /<out direct="15" mapped="101 102" builtin="a! b!"\/>/);
 }
 
+// XSLT 4.0 fixed-namespaces (Saxon-PE 13.1 or later - 13.0 ignores it in an included module): Watch, conditions,
+// logpoints and expressions stepped through use the prefixes of the module they're in - #standard ones, ones bound
+// there (prefix=uri) and a document's (./fixed-ns.xml) - and not another module's
+async function testFixedNamespaces(saxonJar) {
+    if (!/saxon-pe-13\.[1-9]|saxon-pe-1[4-9]/i.test(saxonJar)) {
+        return 'skipped';
+    }
+    const main = path.join(fixtures, 'fixed-ns40.xsl');
+    const lib = path.join(fixtures, 'fixed-ns-lib.xsl');
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${main}`, '-it', '--allowSyntaxExtensions:on'] });
+    await dap.request('setBreakpoints', { source: { path: main }, breakpoints: [{ line: 6, condition: 'map:size($m) = 2 and f:twice(1) = 2' },
+        { line: 10, logMessage: 'v={$v} twice={f:twice(4)} three={g:three()} d={d:name()}' }] });
+    await dap.request('setBreakpoints', { source: { path: lib }, breakpoints: [{ line: 5, condition: 'array:size([0]) = 1' }] });
+    const terminated = dap.event('terminated');
+    await dap.request('configurationDone', {});
+    const watch = async (expression) => dap.request('evaluate', { expression, frameId: 0, context: 'watch' }).then((r) => r.result, (e) => 'error: ' + e.message);
+    let stop = await stopped;
+    assert.strictEqual(stop.frames[0].line, 6);
+    for (const [expression, value] of [['f:twice(2)', '4'], ['map:size($m)', '2'], ['xs:integer("4")', '4'], ['math:pi() gt 3', 'true'], ['g:three()', '3'], ['d:name()', '"d"']]) {
+        assert.strictEqual(await watch(expression), value, expression);
+    }
+    stopped = dap.stopped();
+    await dap.request('continue', { threadId: 1 });
+    stop = await stopped;
+    assert.strictEqual(stop.frames[0].name, 'xsl:sequence/@select (XPath)');
+    assert.ok(stop.frames[0].source.path.endsWith('fixed-ns-lib.xsl'));
+    assert.strictEqual(await watch('h:three()'), '3');
+    assert.strictEqual(await watch('d:name()'), '"d"');
+    assert.match(await watch('f:twice(1)'), /Namespace prefix 'f' has not been declared/);
+    await dap.request('continue', { threadId: 1 });
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    assert.match(dap.output, /^v=10 twice=8 three=3 d=d$/m);
+    assert.match(dap.output, /<out v="10" d="d"\/>/);
+}
+
 // an xsl:for-each on one line: a breakpoint there stops at the instruction, then for each item, as stepping over does
 async function testOneLineLoop(saxonJar) {
     for (const command of ['continue', 'next']) {
@@ -1817,7 +1857,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);
