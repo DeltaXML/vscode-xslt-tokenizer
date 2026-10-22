@@ -1,7 +1,9 @@
 /**
  * Test suite for attribute values on more than one line, e.g. an xsl:strip-space elements list with a name on each line:
  * the lexer gives a token for each line, and only the first starts with the value's quote and only the last ends with
- * it - each line's names are checked, and a problem is reported on its line, not for a quote or a name's lost characters
+ * it - each line's names are checked, and a problem is reported on its line, not for a quote or a name's lost characters.
+ * A single name, e.g. a mode or a template's name, may have whitespace around it, or be on a line of its own, as Saxon
+ * allows - and a use-attribute-sets value is a list of names
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
@@ -16,6 +18,7 @@ async function lint(body: string, rootAttributes = '') {
 	lexer.provideCharLevelState = true;
 	const tokens = lexer.analyse(xslt);
 	return XsltTokenDiagnostics.calculateDiagnostics(XSLTConfiguration.configuration, DocumentTypes.XSLT, document, tokens, lexer.globalInstructionData, [], [])
+		.filter((d) => d.message !== 'variable is unused')
 		.map((d) => `${d.range.start.line}: ${d.message}`);
 }
 
@@ -35,6 +38,29 @@ suite('Attribute values on more than one line', () => {
 		test(label, async () => {
 			assert.deepEqual(await lint(body), expected);
 		});
+	});
+
+	const template = (body: string) => `  <xsl:template match="x" mode="a"/>\n  <xsl:template name="t"><xsl:param name="p"/><xsl:sequence select="$p"/></xsl:template>\n  <xsl:attribute-set name="s"/>\n  <xsl:attribute-set name="r"/>\n  <xsl:template match="/">\n${body}\n  </xsl:template>`;
+	const nameCases: [string, string, string[]][] = [
+		['a mode with spaces', '    <xsl:apply-templates mode=" a "/>', []],
+		['a mode on a line of its own', '    <xsl:apply-templates mode="\n      a\n    "/>', []],
+		['an undeclared mode on a line of its own, reported there', '    <xsl:apply-templates mode="\n      z\n    "/>', ['7: XSLT: Template mode \'z\' not used']],
+		['a template name with spaces, and a parameter name', '    <xsl:call-template name=" t "><xsl:with-param name=" p " select="1"/></xsl:call-template>', []],
+		['a template name on a line of its own', '    <xsl:call-template name="\n      t\n    "/>', []],
+		['an unknown template name on a line of its own, reported there', '    <xsl:call-template name="\n      u\n    "/>', ['7: XSLT: xsl:template with name \'u\' not found']],
+		['a variable name with spaces', '    <xsl:variable name=" v " select="1"/>\n    <xsl:sequence select="$v"/>', []],
+		['use-attribute-sets with spaces', '    <out xsl:use-attribute-sets=" s "/>', []],
+		['use-attribute-sets: a list', '    <out xsl:use-attribute-sets="s r"/>', []],
+		['use-attribute-sets: an unknown name in a list, on a later line', '    <out xsl:use-attribute-sets="s\n      x r"/>', ['7: XSLT: xsl:attribute-set with name \'x\' not found']],
+	];
+	nameCases.forEach(([label, body, expected]) => {
+		test(label, async () => {
+			assert.deepEqual(await lint(template(body)), expected);
+		});
+	});
+
+	test('a declaration\'s name with spaces', async () => {
+		assert.deepEqual(await lint('  <xsl:template name=" t "/>\n  <xsl:template match="/"><xsl:call-template name="t"/></xsl:template>'), []);
 	});
 
 	test('exclude-result-prefixes: each line\'s prefixes, an undeclared one reported on its line', async () => {

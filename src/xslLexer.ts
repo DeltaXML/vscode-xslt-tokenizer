@@ -1413,7 +1413,8 @@ export class XslLexer {
     // xsl:include, or a package name, with its references decoded, e.g. a&amp;b.xsl is a&b.xsl
     public static globalName(type: GlobalInstructionType, attValue: string) {
         const isHref = type === GlobalInstructionType.Import || type === GlobalInstructionType.Include || type === GlobalInstructionType.UsePackage;
-        return isHref ? HrefPaths.fromAttribute(attValue) : attValue;
+        // a name may have whitespace around it, e.g. name=" t ", as Saxon allows
+        return isHref ? HrefPaths.fromAttribute(attValue) : attValue.trim();
     }
 
     public static tokensInsideToken(token: BaseToken, attValue: string) {

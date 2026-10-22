@@ -422,6 +422,10 @@ export class XsltTokenDiagnostics {
 		// value continues on the next line, and the line of its last part
 		let openAttributeQuote: string | undefined;
 		let openAttributeLine = -1;
+		// a single name within a value on more than one line, e.g. mode="&#10;  m&#10;": its text so far, and the token of
+		// the line with the name
+		let pendingNameText = '';
+		let pendingNameToken: BaseToken | undefined;
 		let tagElementName = '';
 		let tagElementId: number = -1;
 		let tagElementAttributes: string[] | undefined = [];
@@ -1265,6 +1269,29 @@ export class XsltTokenDiagnostics {
 						let variableName = fullVariableName.substring(valueStart, isLastPart ? fullVariableName.length - 1 : fullVariableName.length);
 						openAttributeQuote = isLastPart ? undefined : valueQuote;
 						openAttributeLine = token.line;
+						// a single name, e.g. a mode or template name, may have whitespace around it, or be on a line of its
+						// own within the value: it's checked at the value's last part, as the value's text trimmed - with a
+						// problem reported on the line with the name
+						const isSingleName = attType === AttributeType.Variable || attType === AttributeType.VariableRef ||
+							attType === AttributeType.InstructionName || attType === AttributeType.InstructionMode;
+						if (isSingleName && !isLastPart) {
+							pendingNameText = (isContinuation ? pendingNameText : '') + variableName;
+							if (!isContinuation || variableName.trim() !== '') {
+								pendingNameToken = token;
+							}
+							break;
+						}
+						let valueToken = token;
+						if (isSingleName && isContinuation) {
+							valueToken = variableName.trim() === '' && pendingNameToken ? pendingNameToken : token;
+							variableName = pendingNameText + variableName;
+						}
+						if (isSingleName) {
+							variableName = variableName.trim();
+						}
+						// a list's names, e.g. of use-accumulators, are found within the token, which starts with the value's
+						// quote except on a later line
+						const namesToken = isContinuation ? { ...valueToken, startCharacter: valueToken.startCharacter - 1 } : valueToken;
 						let hasProblem = false;
 						if (rootXmlnsName !== null) {
 							let prefix = rootXmlnsName.length === 5 ? '' : rootXmlnsName.substr(6);
@@ -1279,10 +1306,10 @@ export class XsltTokenDiagnostics {
 										currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push(variableName);
 									}
 								}
-								variableData = { token: token, name: variableName };
+								variableData = { token: valueToken, name: variableName };
 								break;
 							case AttributeType.VariableRef:
-								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference('', document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
+								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference('', document, importedGlobalVarNames, valueToken, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
 								if (unResolvedToken !== null) {
 									unresolvedXsltVariableReferences.push(unResolvedToken);
@@ -1304,13 +1331,13 @@ export class XsltTokenDiagnostics {
 							case AttributeType.ExcludeResultPrefixes:
 								let excludePrefixes = variableName.split(/\s+/).filter((prefix) => prefix.length > 0);
 								// on more than one line: the prefixes on each line, with that line's token
-								const earlierPrefixes = isContinuation && tagExcludeResultPrefixes ? tagExcludeResultPrefixes : { token: token, prefixes: [] as string[], prefixTokens: [] as BaseToken[] };
+								const earlierPrefixes = isContinuation && tagExcludeResultPrefixes ? tagExcludeResultPrefixes : { token: valueToken, prefixes: [] as string[], prefixTokens: [] as BaseToken[] };
 								tagExcludeResultPrefixes = { token: earlierPrefixes.token, prefixes: earlierPrefixes.prefixes.concat(excludePrefixes),
-									prefixTokens: earlierPrefixes.prefixTokens.concat(excludePrefixes.map(() => token)) };
+									prefixTokens: earlierPrefixes.prefixTokens.concat(excludePrefixes.map(() => valueToken)) };
 								break;
 							case AttributeType.None:
 								const tagAttributeName = tagAttributeNames.length > 0 ? tagAttributeNames[tagAttributeNames.length - 1] : undefined;
-								let isAVTbracket = token.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
+								let isAVTbracket = valueToken.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
 								if (!isAVTbracket && schemaQuery && tagAttributeName && variableName.indexOf('{') === -1) {
 									const expectedValues = schemaQuery.getExpected(tagElementName, tagAttributeName);
 									const expectedSimpleType = schemaQuery.lastEnumSimpleType;
@@ -1322,53 +1349,53 @@ export class XsltTokenDiagnostics {
 												const invalidNames = XsltTokenDiagnostics.findInvalidNames(variableName, docType, xpathPrefixes());
 												if (invalidNames.length > 0) {
 													const quotedNames = invalidNames.map((uName) => '\'' + uName + '\'');
-													token['error'] = ErrorType.XMLNameList;
-													token.value = tagAttributeName + ' ' + quotedNames.join(',');
+													valueToken['error'] = ErrorType.XMLNameList;
+													valueToken.value = tagAttributeName + ' ' + quotedNames.join(',');
 												}
 											} else {
 												const isHashedExpected = expectedValues.attributeValues[0][0].charAt(0) === '#';
 												const isHashedValue = (variableName.charAt(0) === '#');
 												const ignoreHashNoMatch = isHashedExpected && !isHashedValue;
 												if (!ignoreHashNoMatch) {
-													token['error'] = ErrorType.XMLAttributeValueUnexpected;
+													valueToken['error'] = ErrorType.XMLAttributeValueUnexpected;
 													const expectedNames = expectedValues.attributeValues.map(arr => arr[0]);
-													token.value = variableName + '!' + tagAttributeName + '!' + expectedNames.join(', ');
+													valueToken.value = variableName + '!' + tagAttributeName + '!' + expectedNames.join(', ');
 												}
 											}
 										}
 									}
 								}
 								if (!isContinuation && prevToken && prevToken.length === 1 && prevToken.tokenType === XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.attributeValue) {
-									token['error'] = ErrorType.XPathEmpty;
+									valueToken['error'] = ErrorType.XPathEmpty;
 								}
 								break;
 						}
 
-						if (token.error) {
-							problemTokens.push(token);
+						if (valueToken.error) {
+							problemTokens.push(valueToken);
 							hasProblem = true;
 						}
 						if (!hasProblem && attType === AttributeType.UseAttributeSets) {
-							if (globalAttributeSetNames.indexOf(variableName) < 0 && variableName !== 'xsl:original') {
-								token['error'] = ErrorType.AttributeSetUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
-								hasProblem = true;
-							}
+							// each name must be a declared attribute set
+							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
+								if (!globalAttributeSetNames.includes(nameToken.value) && nameToken.value !== 'xsl:original') {
+									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.AttributeSetUnresolved });
+								}
+							});
 						}
 						if (!hasProblem && attType === AttributeType.UseAccumulators) {
 							// each name must be a declared accumulator (XTSE3300)
-							XslLexer.tokensInsideToken(token, variableName).forEach((nameToken) => {
+							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
 								if (nameToken.value !== '#all' && !globalAccumulatorNames.includes(nameToken.value)) {
-									problemTokens.push({ ...nameToken, tokenType: token.tokenType, error: ErrorType.AccumulatorNameUnresolved });
+									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.AccumulatorNameUnresolved });
 								}
 							});
 						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
 							if (!namedTemplates.get(variableName)) {
-								token['error'] = ErrorType.TemplateNameUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
+								valueToken['error'] = ErrorType.TemplateNameUnresolved;
+								valueToken.value = variableName;
+								problemTokens.push(valueToken);
 								hasProblem = true;
 							}
 						}
@@ -1379,18 +1406,18 @@ export class XsltTokenDiagnostics {
 							if (!localName.includes(':') && !localName.startsWith('Q{')) {
 								const reason = !XsltTokenDiagnostics.isXPath40(docType) ? 'XSLT 4.0' : XsltTokenDiagnostics.isSaxonHEConfigured() ? 'Saxon-HE' : undefined;
 								if (reason) {
-									token['error'] = ErrorType.XSLTFunctionNamePrefix;
-									token.value = variableName + RecordTypes.valueSeparator + reason;
-									problemTokens.push(token);
+									valueToken['error'] = ErrorType.XSLTFunctionNamePrefix;
+									valueToken.value = variableName + RecordTypes.valueSeparator + reason;
+									problemTokens.push(valueToken);
 									hasProblem = true;
 								}
 							}
 						}
 						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
 							if (globalModes.indexOf(variableName) < 0) {
-								token['error'] = ErrorType.TemplateModeUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
+								valueToken['error'] = ErrorType.TemplateModeUnresolved;
+								valueToken.value = variableName;
+								problemTokens.push(valueToken);
 								hasProblem = true;
 							}
 						}
@@ -1399,16 +1426,16 @@ export class XsltTokenDiagnostics {
 							let templateParams = namedTemplates.get(callTemplateName);
 							if (templateParams) {
 								if (templateParams?.indexOf(variableName) < 0) {
-									token['error'] = ErrorType.MissingTemplateParam;
-									token.value = `${callTemplateName}#${variableName}`;
-									pendingTemplateParamErrors.push(token);
+									valueToken['error'] = ErrorType.MissingTemplateParam;
+									valueToken.value = `${callTemplateName}#${variableName}`;
+									pendingTemplateParamErrors.push(valueToken);
 								}
 							} else if (currentXSLTIterateParams.length > 0 && elementStack.length > 2 && elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration') {
 								const params = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
 								if (params.indexOf(variableName) < 0) {
-									token['error'] = ErrorType.IterateParamInvalid;
-									token.value = variableName;
-									problemTokens.push(token);
+									valueToken['error'] = ErrorType.IterateParamInvalid;
+									valueToken.value = variableName;
+									problemTokens.push(valueToken);
 									hasProblem = true;
 								}
 							}
@@ -1420,15 +1447,15 @@ export class XsltTokenDiagnostics {
 								const nameToTest = tagElementName === "xsl:namespace" && variableName === '' ? 'empty' : variableName;
 								let validateResult = XsltTokenDiagnostics.validateName(nameToTest, vType, docType, xpathPrefixes());
 								if (validateResult !== NameValidationError.None) {
-									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
-									token['value'] = variableName;
-									token.tagElementId = tagElementId;
-									problemTokens.push(token);
+									valueToken['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
+									valueToken['value'] = variableName;
+									valueToken.tagElementId = tagElementId;
+									problemTokens.push(valueToken);
 								}
 							}
 						}
 						// the list attributes stay so for the rest of a value on more than one line
-						if (isLastPart || !(attType === AttributeType.ExcludeResultPrefixes || attType === AttributeType.UseAccumulators)) {
+						if (isLastPart || !(attType === AttributeType.ExcludeResultPrefixes || attType === AttributeType.UseAccumulators || attType === AttributeType.UseAttributeSets)) {
 							attType = AttributeType.None;
 						}
 						break;
