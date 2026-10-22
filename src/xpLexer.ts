@@ -259,6 +259,14 @@ export class XPathLexer {
         return code === 34 ? '"' : code === 39 ? '\'' : undefined;
     }
 
+    // a character reference to whitespace - a space, tab, newline or carriage return, e.g. &#xA; or &#10; - which, as the
+    // XML parser replaces it, is whitespace in the XPath expression
+    public static isWhitespaceReference(reference: string): boolean {
+        const numeric = /^&#(?:x([0-9a-fA-F]+)|([0-9]+));$/.exec(reference);
+        const code = numeric ? (numeric[1] !== undefined ? parseInt(numeric[1], 16) : parseInt(numeric[2], 10)) : undefined;
+        return code === 9 || code === 10 || code === 13 || code === 32;
+    }
+
     // the text so far of a reference may be the start of one to the quote
     private static isQuoteReferencePrefix(text: string, quote: string): boolean {
         if ((quote === '"' ? '&quot;' : '&apos;').startsWith(text)) {
@@ -802,6 +810,9 @@ export class XPathLexer {
                                 nextState = [CharLevelState.lDqEnt, 0];
                             } else if (entQuote === '\'') {
                                 nextState = [CharLevelState.lSqEnt, 0];
+                            } else if (XPathLexer.isWhitespaceReference(ent)) {
+                                // e.g. 'a,&#xA;b' - whitespace, which isn't a token, but takes up its characters on the line
+                                this.update(poppedContext, result, tokenChars, CharLevelState.lWs, isTypeDeclaration);
                             } else {
                                 let entToken: Token = new BasicToken(ent, CharLevelState.lName);
                                 this.updateResult(poppedContext, result, entToken, isTypeDeclaration);
