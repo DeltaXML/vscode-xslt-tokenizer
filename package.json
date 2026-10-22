@@ -276,6 +276,11 @@
 				"command": "xslt-xpath.goToDebugOutputSource",
 				"title": "Go to XSLT Source",
 				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.showDebugOutputFromVariable",
+				"title": "Show Output",
+				"category": "XSLT"
 			}
 		],
 		"views": {
@@ -393,6 +398,10 @@
 					"when": "resourceScheme == xslt-debug-output"
 				},
 				{
+					"command": "xslt-xpath.showDebugOutputFromVariable",
+					"when": "false"
+				},
+				{
 					"command": "xslt-xpath.quickRunXsltSaxonJ",
 					"when": "false"
 				},
@@ -416,10 +425,17 @@
 					"group": "navigation@1"
 				}
 			],
-			"debug/toolbar": [
+			"debug/toolBar": [
 				{
 					"command": "xslt-xpath.showDebugOutput",
 					"when": "debugType == 'xslt-saxon'"
+				}
+			],
+			"debug/variables/context": [
+				{
+					"command": "xslt-xpath.showDebugOutputFromVariable",
+					"when": "debugType == 'xslt-saxon' && debugProtocolVariableMenuContext == 'xsltOutput'",
+					"group": "navigation"
 				}
 			]
 		},
@@ -608,9 +624,9 @@
 				},
 				"XSLT.debug.openOutput": {
 					"type": "boolean",
-					"default": true,
+					"default": false,
 					"scope": "window",
-					"description": "When debugging with SaxonJ, open the output written so far - beside the stylesheet - at the first pause where there is some. 'XSLT: Show Debug Output' opens it at any time."
+					"description": "When debugging with SaxonJ, open the output written so far - beside the stylesheet - at the first pause where there is some. Otherwise, it's opened with the 'Show Debug Output' button on the debug toolbar, 'Show Output' on an output in the Variables view's Output section, or 'XSLT: Show Debug Output'."
 				}
 			}
 		},

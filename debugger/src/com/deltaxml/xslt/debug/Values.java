@@ -251,7 +251,9 @@ final class Values {
         };
     }
 
-    // the results written so far: which one is being written to (or a temporary tree), and the end of each
+    // the results written so far: which one is being written to (or a temporary tree), and the end of each - each, and
+    // the one being written to, with a context menu item in the Variables view to show it (see the extension's
+    // xslt-xpath.showDebugOutputFromVariable)
     Supplier<List<Map<String, Object>>> output(final OutputCapture outputs, final XPathContext context) {
         return () -> {
             List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
@@ -266,11 +268,16 @@ final class Values {
             if (writingTo == null && !all.isEmpty() && current == null) {
                 writingTo = all.get(0).name;
             }
-            result.add(text("writing to", writingTo == null ? "(nothing yet)" : writingTo, ""));
+            Json.Obj writingToItem = text("writing to", writingTo == null ? "(nothing yet)" : writingTo, "");
+            boolean isWritingToOutput = false;
+            for (OutputCapture.Output output : all) {
+                isWritingToOutput |= output.name.equals(writingTo);
+            }
+            result.add(isWritingToOutput ? writingToItem.with(OUTPUT_MENU_CONTEXT, "xsltOutput") : writingToItem);
             for (OutputCapture.Output output : all) {
                 String tail = output.tail(120).replaceAll("\\s+", " ");
                 result.add(text(output.name, (output.length() > 120 ? "..." : "") + tail,
-                        output.method + ", " + output.length() + " characters" + (output.isTruncated() ? " (truncated)" : "")));
+                        output.method + ", " + output.length() + " characters" + (output.isTruncated() ? " (truncated)" : "")).with(OUTPUT_MENU_CONTEXT, "xsltOutput"));
             }
             return result;
         };
@@ -947,6 +954,9 @@ final class Values {
     private static String truncate(String text, int max) {
         return text.length() > max ? text.substring(0, max) + "..." : text;
     }
+
+    // a variable's context for the menus of VS Code's Variables view - its 'debugProtocolVariableMenuContext'
+    private static final String OUTPUT_MENU_CONTEXT = "__vscodeVariableMenuContext";
 
     private static Json.Obj text(String name, String value, String type) {
         return Json.obj().with("name", name).with("value", value).with("type", type).with("variablesReference", 0);

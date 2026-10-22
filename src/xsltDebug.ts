@@ -461,13 +461,24 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		// the output being written to - by its URI, as in the event (a name is decoded, e.g. a space for %20)
 		const currentName = body.current ? [...this.outputs.entries()].find(([, o]) => o.uri === body.current)?.[0] : undefined;
 		this.current = currentName ?? this.current;
-		if (!this.openedThisSession && vscode.workspace.getConfiguration('XSLT.debug').get('openOutput', true)) {
+		if (!this.openedThisSession && vscode.workspace.getConfiguration('XSLT.debug').get('openOutput', false)) {
 			const name = this.current && this.outputs.get(this.current)?.text ? this.current : this.names().find((n) => this.outputs.get(n)?.text);
 			if (name) {
 				this.openedThisSession = true;
 				this.show(name);
 			}
 		}
+	}
+
+	// from the Variables view's context menu, for an output in the Output scope - or 'writing to', whose value is an
+	// output's name
+	public showFromVariable(context: { variable?: { name?: string; value?: string } } | undefined) {
+		const variable = context?.variable;
+		const name = variable?.name === 'writing to' ? variable.value : variable?.name;
+		if (name && this.outputs.has(name)) {
+			return this.show(name);
+		}
+		return this.show();
 	}
 
 	// opens the output (by default, the one being written to), beside the active editor, leaving the focus there

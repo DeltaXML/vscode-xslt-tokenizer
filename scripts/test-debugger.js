@@ -1905,7 +1905,8 @@ async function testOutputSoFar(saxonJar) {
             break;
         }
         const output = byName(await dap.variables(0, 'Output'));
-        stops.push({ line: stop.frames[0].line, writingTo: output['writing to'].value, result: text.get('result.xml') ?? '', side: text.get('side.json') });
+        stops.push({ line: stop.frames[0].line, writingTo: output['writing to'].value, result: text.get('result.xml') ?? '', side: text.get('side.json'),
+            menus: Object.fromEntries(Object.entries(output).map(([name, v]) => [name, v.__vscodeVariableMenuContext])) });
         stopped = dap.stopped();
         await dap.request('continue', { threadId: 1 });
     }
@@ -1916,6 +1917,8 @@ async function testOutputSoFar(saxonJar) {
     assert.strictEqual(stops[3].line, 12);
     assert.strictEqual(stops[3].writingTo, 'side.json');
     assert.strictEqual(stops[3].side, '');
+    // each output, and 'writing to' one, has the context for the Variables view's 'Show Output' menu item
+    assert.deepStrictEqual(stops[3].menus, { 'writing to': 'xsltOutput', 'result.xml': 'xsltOutput', 'side.json': 'xsltOutput' });
     // at the end, both complete
     assert.match(text.get('result.xml'), /<row n="3">text<\/row>\n {3}<end\/>\n<\/report>/);
     assert.match(text.get('side.json'), /"count":3/);

@@ -416,7 +416,7 @@ suite('XSLT debugger - debug sessions', function () {
 		assert.match(problems[0].message, /Cannot convert string "abc" to xs:decimal/);
 	});
 
-	test('the output so far: opened at the first pause with output, in the language of its output method', async () => {
+	test('the output so far: not opened by itself (XSLT.debug.openOutput is off by default), and shown in the language of its output method', async () => {
 		stops = [];
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
 		const xsltUri = vscode.Uri.file(path.join(fixtures, 'outputs.xsl'));
@@ -433,7 +433,9 @@ suite('XSLT debugger - debug sessions', function () {
 		}
 		let stop = await nextStop();
 		assert.match(XsltDebugOutputs.get().text('result.xml') ?? '', /<report>\n {3}<row n="1">text<\/row>\n {3}<row n="2">text<\/row>$/);
-		// opened by itself, beside the stylesheet
+		// not opened by itself - as with the debug toolbar's 'Show Debug Output' button, it's opened beside the stylesheet
+		assert.isUndefined(vscode.window.visibleTextEditors.find((e) => e.document.uri.scheme === XsltDebugOutputs.scheme), 'the output isn\'t opened by itself');
+		await vscode.commands.executeCommand('xslt-xpath.showDebugOutput');
 		const opened = vscode.window.visibleTextEditors.find((e) => e.document.uri.scheme === XsltDebugOutputs.scheme);
 		assert.ok(opened, 'the output is open');
 		assert.strictEqual(XsltDebugOutputs.nameOf(opened!.document.uri), 'result.xml');

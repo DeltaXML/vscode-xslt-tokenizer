@@ -774,6 +774,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showDebugOutput', () => XsltDebugOutputs.get().show()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showDebugOutputFromVariable', (variableContext) => XsltDebugOutputs.get().showFromVariable(variableContext)));
 	// from a part of an XML output to the stylesheet instruction that wrote it: go to definition, and a command that keeps
 	// the output in view
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ scheme: XsltDebugOutputs.scheme }, XsltDebugOutputs.get()));

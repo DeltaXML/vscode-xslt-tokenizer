@@ -52,6 +52,13 @@ suite('XSLT debugger: from the output to its source', () => {
 	const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-output-source-')), 'report.xsl');
 	fs.writeFileSync(file, stylesheet);
 	const byId = new Map(locations(file).map((l) => [l.id, l]));
+	// closes the tabs these tests open - the stylesheet and output views - not others: closing all editors would stop at
+	// a 'save changes?' prompt for an untitled document another test left open
+	const closeOwnTabs = async () => {
+		const own = vscode.window.tabGroups.all.flatMap((g) => g.tabs).filter((tab) => tab.input instanceof vscode.TabInputText &&
+			(tab.input.uri.scheme === XsltDebugOutputs.scheme || tab.input.uri.fsPath === vscode.Uri.file(file).fsPath));
+		await vscode.window.tabGroups.close(own);
+	};
 	// the tests show the outputs themselves: an output isn't opened when it's updated, which could take the focus
 	const debugSettings = vscode.workspace.getConfiguration('XSLT.debug');
 	const openOutput = debugSettings.inspect<boolean>('openOutput')?.globalValue;
@@ -124,11 +131,12 @@ suite('XSLT debugger: from the output to its source', () => {
 		assert.strictEqual(XsltDebugOutputs.sourceOffset(source, location, () => reported, '<item n="2"'), source.indexOf('<item '));
 	});
 
-	// go to definition (F12, or cmd/ctrl-click) in the output, in editor group 2: the stylesheet, where it's open in group 1,
-	// is shown there at the instruction - not opened again in the output's group
+	// go to definition (F12, or cmd/ctrl-click) in the output, in editor group 2: VS Code asks for the definition, then
+	// opens it in the output's group - done here as VS Code does, as the editor command depends on the test host's focus.
+	// The stylesheet, where it's open in group 1, is shown there at the instruction - not left open in the output's group
 	async function goToDefinition(openStylesheetFirst: boolean) {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
-		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		await closeOwnTabs();
 		if (openStylesheetFirst) {
 			await vscode.window.showTextDocument(vscode.Uri.file(file), { viewColumn: vscode.ViewColumn.One, selection: new vscode.Range(0, 0, 0, 0) });
 		}
@@ -136,23 +144,18 @@ suite('XSLT debugger: from the output to its source', () => {
 		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'xml', offset: 0, text: output, runs, locations: locations(file) }] });
 		const outputEditor = await vscode.window.showTextDocument(XsltDebugOutputs.uri(name), { viewColumn: vscode.ViewColumn.Two, preview: false });
 		const at = outputEditor.document.positionAt(output.indexOf('by') + 1);
-		outputEditor.selection = new vscode.Selection(at, at);
-		const definitions = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', outputEditor.document.uri, at);
-		assert.lengthOf(definitions, 1, 'a definition');
+		const definition = await XsltDebugOutputs.get().provideDefinition(outputEditor.document, at) as vscode.Location;
+		assert.isDefined(definition, 'a definition');
+		await vscode.window.showTextDocument(definition.uri, { viewColumn: vscode.ViewColumn.Two, selection: definition.range, preview: false });
 		const isStylesheet = (uri?: vscode.Uri) => uri?.fsPath === vscode.Uri.file(file).fsPath;
 		const tabsInOutputGroup = () => vscode.window.tabGroups.all.find((g) => g.viewColumn === vscode.ViewColumn.Two)?.tabs
 			.filter((tab) => tab.input instanceof vscode.TabInputText && isStylesheet(tab.input.uri)).length;
 		const isDone = () => isStylesheet(vscode.window.activeTextEditor?.document.uri) && (!openStylesheetFirst || tabsInOutputGroup() === 0);
-		// from the output editor, as F12 is - again if it didn't navigate, when the test host is busy
-		for (let attempt = 0; attempt < 2 && !isDone(); attempt++) {
-			await vscode.window.showTextDocument(outputEditor.document, { viewColumn: vscode.ViewColumn.Two, selection: new vscode.Selection(at, at), preview: false });
-			await vscode.commands.executeCommand('editor.action.revealDefinition');
-			for (let i = 0; i < 60 && !isDone(); i++) {
-				await new Promise((resolve) => setTimeout(resolve, 50));
-			}
+		for (let i = 0; i < 100 && !isDone(); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
 		}
 		const editor = vscode.window.activeTextEditor!;
-		const layout = vscode.window.tabGroups.all.map((g) => `${g.viewColumn}: ${g.tabs.map((tab) => `${tab.label}${tab.isActive ? '*' : ''}`).join(', ')}`).join('; ');
+		const layout = vscode.window.tabGroups.all.map((g) => `${g.viewColumn}: ${g.tabs.filter((tab) => tab.isActive || (tab.input instanceof vscode.TabInputText && tab.input.uri.scheme !== 'untitled')).map((tab) => `${tab.label}${tab.isActive ? '*' : ''}`).join(', ')}`).join('; ');
 		assert.isTrue(isStylesheet(editor.document.uri), `the stylesheet is shown - active: ${editor.document.uri.toString()} in ${editor.viewColumn}; ${layout}`);
 		assert.strictEqual(`${editor.selection.start.line + 1}:${editor.selection.start.character + 1}`, '4:13');
 		return { column: editor.viewColumn, tabsInOutputGroup: tabsInOutputGroup() };
@@ -160,12 +163,27 @@ suite('XSLT debugger: from the output to its source', () => {
 
 	test('go to definition: the stylesheet already open in another group is shown there', async () => {
 		assert.deepEqual(await goToDefinition(true), { column: vscode.ViewColumn.One, tabsInOutputGroup: 0 });
+		await closeOwnTabs();
 	}).timeout(10000);
 
-	test('go to definition: a stylesheet not open is opened as VS Code does, in the output\'s group', async () => {
+	test('go to definition: a stylesheet not open elsewhere stays in the output\'s group, where VS Code opens it', async () => {
 		assert.deepEqual(await goToDefinition(false), { column: vscode.ViewColumn.Two, tabsInOutputGroup: 1 });
-		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		await closeOwnTabs();
 	}).timeout(10000);
+
+	// a menu id VS Code doesn't know is ignored, without a warning - e.g. 'debug/toolbar' for 'debug/toolBar'
+	test('the menus: the debug toolbar button, and the output view\'s context menu item', () => {
+		const contributes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).contributes;
+		const knownMenus = ['editor/context', 'editor/title', 'editor/title/run', 'view/title', 'view/item/context', 'commandPalette', 'debug/toolBar', 'debug/variables/context'];
+		const submenus = (contributes.submenus ?? []).map((s: { id: string }) => s.id);
+		assert.deepEqual(Object.keys(contributes.menus).filter((id) => !knownMenus.includes(id) && !submenus.includes(id)), []);
+		assert.deepEqual(contributes.menus['debug/toolBar'], [{ command: 'xslt-xpath.showDebugOutput', when: 'debugType == \'xslt-saxon\'' }]);
+		// for an output in the Variables view's Output scope, which the adapter gives this menu context
+		assert.deepEqual(contributes.menus['debug/variables/context'], [{ command: 'xslt-xpath.showDebugOutputFromVariable',
+			when: 'debugType == \'xslt-saxon\' && debugProtocolVariableMenuContext == \'xsltOutput\'', group: 'navigation' }]);
+		assert.isTrue(contributes.menus['editor/context'].some((m: { command?: string, when?: string }) =>
+			m.command === 'xslt-xpath.goToDebugOutputSource' && m.when === 'resourceScheme == xslt-debug-output'));
+	});
 
 	test('the keys for going to the source, for the platform and multi-cursor modifier', () => {
 		assert.strictEqual(XsltDebugOutputs.goToSourceKeys('darwin', 'alt'), 'Cmd-click or F12');
@@ -192,9 +210,22 @@ suite('XSLT debugger: from the output to its source', () => {
 		assert.isFalse(isOpen(), 'the empty output view is closed');
 	}).timeout(10000);
 
+	test('Show Output, from the Variables view: the output named, or for \'writing to\', the one it names', async () => {
+		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+		await closeOwnTabs();
+		XsltDebugOutputs.get().update({ outputs: [{ name: 'first.xml', method: 'xml', offset: 0, text: '<first/>' }, { name: 'second.xml', method: 'xml', offset: 0, text: '<second/>' }] });
+		const shown = async (variable: { name: string, value: string }) => {
+			await vscode.commands.executeCommand('xslt-xpath.showDebugOutputFromVariable', { container: { name: 'Output' }, variable });
+			return vscode.window.visibleTextEditors.filter((e) => e.document.uri.scheme === XsltDebugOutputs.scheme).map((e) => XsltDebugOutputs.nameOf(e.document.uri));
+		};
+		assert.include(await shown({ name: 'second.xml', value: '<second/>' }), 'second.xml');
+		assert.include(await shown({ name: 'writing to', value: 'first.xml' }), 'first.xml');
+		await closeOwnTabs();
+	}).timeout(10000);
+
 	test("an inlay hint at the end of the cursor's line: where the output at the cursor came from, with the keys in its tooltip", async () => {
 		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
-		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		await closeOwnTabs();
 		const name = 'hints.xml';
 		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'xml', offset: 0, text: output, runs, locations: locations(file) }] });
 		const editor = await vscode.window.showTextDocument(XsltDebugOutputs.uri(name), { preview: false });
@@ -214,7 +245,7 @@ suite('XSLT debugger: from the output to its source', () => {
 		// not for an output that isn't XML
 		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'text', offset: 0, text: output }] });
 		assert.deepEqual(await hintsAt('by', 1), []);
-		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		await closeOwnTabs();
 	}).timeout(10000);
 
 	test('text not found in the stylesheet: the text node\'s first character, or the instruction after it', () => {
