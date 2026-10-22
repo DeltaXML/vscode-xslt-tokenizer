@@ -97,6 +97,11 @@
 		},
 		"keybindings": [
 			{
+				"command": "xslt-xpath.tabToIndentation",
+				"key": "tab",
+				"when": "editorTextFocus && !editorReadonly && !editorHasSelection && !editorHasMultipleSelections && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible && !inlineEditIsVisible && !hasOtherSuggestions && !editorTabMovesFocus && editorLangId =~ /^(xslt|xml|bpmn)$/"
+			},
+			{
 				"command": "xslt-xpath.selectCurrentElement",
 				"key": "ctrl+shift+0",
 				"mac": "shift+cmd+0",
@@ -278,6 +283,11 @@
 				"category": "XSLT"
 			},
 			{
+				"command": "xslt-xpath.tabToIndentation",
+				"title": "Tab: Indent an Empty Line for Its Context",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.showDebugOutputFromVariable",
 				"title": "Show Output",
 				"category": "XSLT"
@@ -399,6 +409,10 @@
 				},
 				{
 					"command": "xslt-xpath.showDebugOutputFromVariable",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.tabToIndentation",
 					"when": "false"
 				},
 				{
