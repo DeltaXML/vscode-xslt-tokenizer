@@ -706,6 +706,44 @@ async function testArrowCalls(saxonJar) {
     }
 }
 
+// for with two bindings (nested, as XPath evaluates them), some and every (stopping once the result is known) and a
+// for whose return calls a function - entered, and its xsl:message written, once for each item: each stop has the
+// range variables bound at that point
+async function testForSomeEvery(saxonJar) {
+    const xsl = path.join(fixtures, 'for-some-every.xsl');
+    const run = async (breakpoints, command) => {
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.start({ saxonArgs: [`-xsl:${xsl}`, '-it'] }, { 'for-some-every.xsl': breakpoints.map((line) => ({ line })) });
+        const terminated = dap.event('terminated');
+        const stops = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            const frame = stop.frames[0];
+            const xpath = frame.name.endsWith('(XPath)');
+            const locals = xpath || frame.name === 'f:twice#1' ?
+                ' ' + (await dap.variables(0, 'Locals')).filter((v) => /^\$(a|b|x)$/.test(v.name)).map((v) => `${v.name}=${v.value}`).join(' ') : '';
+            stops.push(`${frame.line}${xpath ? 'x' : frame.name === 'f:twice#1' ? 'f' : ''}${locals}`.trim());
+            stopped = dap.stopped();
+            stopped.catch(() => undefined);
+            await dap.request(command, { threadId: 1 });
+        }
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        assert.deepStrictEqual(dap.output.split('\n').filter((line) => /^twice \d$/.test(line)), ['twice 1', 'twice 2']);
+        assert.match(dap.output, /<out pairs="11 21 12 22" calls="2 4" some="true" every="false"\/>/);
+        return stops;
+    };
+    assert.deepStrictEqual(await run([4], 'stepIn'), ['4', '5x', '6x $a=1', '7x $a=1 $b=10', '7x $a=1 $b=20', '6x $a=2', '7x $a=2 $b=10',
+        '7x $a=2 $b=20', '8', '9x', '10x $x=1', '2f $x=1', '2f $x=1', '10x $x=2', '2f $x=2', '2f $x=2', '11', '12x', '13x $x=1', '13x $x=2',
+        '14', '15x', '16x $x=1', '17', '18']);
+    assert.deepStrictEqual(await run([7, 10, 13, 16], 'continue'), ['7x $a=1 $b=10', '7x $a=1 $b=20', '7x $a=2 $b=10', '7x $a=2 $b=20',
+        '10x $x=1', '10x $x=2', '13x $x=1', '13x $x=2', '16x $x=1']);
+}
+
 // an xsl:for-each on one line: a breakpoint there stops at the instruction, then for each item, as stepping over does
 async function testOneLineLoop(saxonJar) {
     for (const command of ['continue', 'next']) {
@@ -1691,7 +1729,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);
