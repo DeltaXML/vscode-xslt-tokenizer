@@ -401,6 +401,20 @@ final class BreakableLines {
         return tag != null ? tag.startColumn : column;
     }
 
+    // the start tag ending at this line and column (just after its '>'): [its start line, its start column, 1 if it's an
+    // XSLT element else 0] - null if no start tag ends there
+    int[] tagEndingAt(int line, int column) {
+        List<Tag> ending = tagsEndingOn.get(line);
+        if (ending != null) {
+            for (Tag tag : ending) {
+                if (tag.endColumn == column) {
+                    return new int[] { tag.startLine, tag.startColumn, tag.name.startsWith("xsl:") ? 1 : 0 };
+                }
+            }
+        }
+        return null;
+    }
+
     private Tag reportedTag(int line, int column, String element) {
         Tag tag = reportedTag(line, column);
         if (tag != null && element != null && !tag.name.matches(element)) {

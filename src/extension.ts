@@ -774,6 +774,10 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showDebugOutput', () => XsltDebugOutputs.get().show()));
+	// from a part of an XML output to the stylesheet instruction that wrote it: go to definition, and a command that keeps
+	// the output in view
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ scheme: XsltDebugOutputs.scheme }, XsltDebugOutputs.get()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.goToDebugOutputSource', () => XsltDebugOutputs.get().goToSource()));
 	const debugExitCodes = new XsltDebugExitCodes();
 	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(XsltDebug.type, debugExitCodes));
 	// as for tasks: when the transform completes, 'Open' the result

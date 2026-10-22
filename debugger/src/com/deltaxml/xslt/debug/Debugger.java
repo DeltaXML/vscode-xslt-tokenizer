@@ -108,11 +108,15 @@ final class Debugger {
     // the call depth when last paused: that of the frame paused in
     private int pausedCallDepth;
     private final Map<String, BreakableLines> sourceLines = new HashMap<String, BreakableLines>();
+    // the paths of the stylesheet modules with instructions executed so far
+    private final Set<String> modulePaths = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     Debugger(XsltDebugAdapter dap) {
         this.dap = dap;
         current = this;
         SteppedResult.discardAll();
+        // where the parts of an XML output came from, for going from the output to the stylesheet
+        outputs.setLocationResolver(this::outputLocation);
         // a global variable's frame: it's being evaluated (only read on the transform thread, as are the frames)
         Values.evaluatingGlobals = () -> {
             Set<net.sf.saxon.expr.instruct.GlobalVariable> result = new HashSet<net.sf.saxon.expr.instruct.GlobalVariable>();
@@ -442,6 +446,7 @@ final class Debugger {
         if (path == null) {
             return;
         }
+        modulePaths.add(path);
         // an instruction is shown at the first line of its start tag, though Saxon reports it at the tag's end;
         // the parts of an XPath expression being stepped through have their own lines already
         BreakableLines lines = top == xpathFrame && xpathFrame != null ? null : sourceLines(path);
@@ -696,6 +701,55 @@ final class Debugger {
         String path = debugger.pathOf(systemId);
         BreakableLines lines = path == null ? null : debugger.sourceLines(path);
         return lines != null && lines.xpathAttribute(tagEndLine, tagEndColumn, elementLocalName, attributeName) != null;
+    }
+
+    // Where a part of an XML output came from (see OutputCapture): the start tag of the instruction that wrote it, e.g. a
+    // literal result element or xsl:value-of, in its stylesheet module ('instruction') - or, for a node copied from a
+    // source document, where its start tag ends ('source'). Saxon reports the text of a literal text node where the
+    // text ends (or, for some, where it starts), so its location is given as it is ('text'). A node of a temporary tree,
+    // e.g. a variable's, has the line and column of the literal result element that made it, but not its module: it's
+    // the module with a start tag ending there
+    Map<String, Object> outputLocation(Location location, boolean isText) {
+        if (location == null) {
+            return null;
+        }
+        Location tag = startTagLocation(location);
+        int line = tag.getLineNumber();
+        int column = tag.getColumnNumber();
+        if (line <= 0) {
+            return null;
+        }
+        String systemId = tag.getSystemId();
+        String path = null;
+        BreakableLines lines = null;
+        if (systemId == null || systemId.isEmpty()) {
+            for (String module : modulePaths) {
+                BreakableLines moduleLines = sourceLines(module);
+                if (moduleLines != null && moduleLines.tagEndingAt(line, column) != null) {
+                    path = module;
+                    lines = moduleLines;
+                    break;
+                }
+            }
+        } else {
+            path = pathOf(systemId);
+            lines = path != null && modulePaths.contains(path) ? sourceLines(path) : null;
+        }
+        if (path == null) {
+            return null;
+        }
+        Json.Obj result = Json.obj().with("path", path).with("line", line).with("column", column);
+        if (lines == null) {
+            return result.with("kind", "source");
+        }
+        int[] start = lines.tagEndingAt(line, column);
+        if (isText && (start == null || start[2] == 0)) {
+            return result.with("kind", "text");
+        }
+        if (start != null) {
+            result.with("line", start[0]).with("column", start[1]);
+        }
+        return result.with("kind", "instruction");
     }
 
     private synchronized BreakableLines sourceLines(String path) {

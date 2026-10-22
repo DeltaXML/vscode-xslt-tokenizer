@@ -271,6 +271,11 @@
 				"title": "Show Debug Output",
 				"category": "XSLT",
 				"icon": "$(output)"
+			},
+			{
+				"command": "xslt-xpath.goToDebugOutputSource",
+				"title": "Go to XSLT Source",
+				"category": "XSLT"
 			}
 		],
 		"views": {
@@ -293,6 +298,11 @@
 		],
 		"menus": {
 			"editor/context": [
+				{
+					"command": "xslt-xpath.goToDebugOutputSource",
+					"when": "resourceScheme == xslt-debug-output",
+					"group": "navigation@1"
+				},
 				{
 					"submenu": "xslt-xpath.xmlSelection",
 					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/",
@@ -377,6 +387,10 @@
 				{
 					"command": "xslt-xpath.wrapWith",
 					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.goToDebugOutputSource",
+					"when": "resourceScheme == xslt-debug-output"
 				},
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonJ",

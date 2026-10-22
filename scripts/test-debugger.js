@@ -1961,6 +1961,54 @@ async function testPrincipalJsonOutput(saxonJar) {
     await dap.exited;
 }
 
+// an XML output's parts, with where each came from: the start tag of the instruction that wrote it (a literal result
+// element, xsl:element, xsl:value-of - or for a temporary tree, the literal result element that made it, in its module);
+// a node copied from the source document; or literal text, as Saxon reports it (where the text starts or ends)
+async function testOutputMap(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    const terminated = dap.event('terminated');
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'output-map.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] }, {});
+    await terminated;
+    let text = '';
+    const runs = [];
+    const locations = new Map();
+    for (const e of dap.events.filter((e) => e.event === 'xsltOutputs')) {
+        for (const o of e.body.outputs) {
+            text = text.substring(0, o.offset) + o.text;
+            (o.locations ?? []).forEach((l) => locations.set(l.id, l));
+            runs.push(...(o.runs ?? []));
+        }
+    }
+    // where the text found came from
+    const at = (found) => {
+        const offset = text.indexOf(found);
+        assert.ok(offset > -1, `${found} in ${text}`);
+        let location;
+        for (let i = 0; i < runs.length && runs[i] <= offset; i += 2) {
+            location = locations.get(runs[i + 1]);
+        }
+        assert.ok(location, `a location for ${found}`);
+        return `${location.kind} ${path.basename(location.path)}:${location.line}:${location.column}`;
+    };
+    assert.strictEqual(at('<report'), 'instruction output-map.xsl:9:5');
+    assert.strictEqual(at('<made'), 'instruction output-map.xsl:10:7');
+    assert.strictEqual(at('by value-of'), 'instruction output-map.xsl:11:9');
+    assert.strictEqual(at('</made>'), 'instruction output-map.xsl:10:7');
+    assert.strictEqual(at('<literal'), 'instruction output-map.xsl:13:7');
+    // where the text starts (Saxon 12) or ends (13)
+    assert.match(at('first literal line'), /^text output-map\.xsl:(13:16|14:20)$/);
+    assert.strictEqual(at('<item n="2"'), 'source basic.xml:3:15');
+    assert.strictEqual(at('two'), 'source basic.xml:3:15');
+    // a global variable's temporary tree
+    assert.strictEqual(at('<built-in-variable'), 'instruction output-map.xsl:6:5');
+    // an included module's - copied by xsl:copy-of, which is reported for the nodes it copies
+    assert.strictEqual(at('<from-lib'), 'instruction output-map-lib.xsl:7:5');
+    assert.strictEqual(at('<lib-variable'), 'instruction output-map-lib.xsl:8:7');
+    assert.strictEqual(at('</report>'), 'instruction output-map.xsl:9:5');
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -1969,7 +2017,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

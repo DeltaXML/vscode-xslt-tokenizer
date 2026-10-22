@@ -367,13 +367,26 @@ export class XsltDebugLog {
 // xsl:result-document - as read-only virtual documents ('xslt-debug-output:' URIs, nothing on disk), updated at each
 // pause. The adapter sends each output's new text before it pauses, serialized as the result is but indented, and the
 // document's language is from its output method. A document is reused for an output of the same name in the next
-// session, so a rerun refreshes the same tab
-export class XsltDebugOutputs implements vscode.TextDocumentContentProvider {
+// session, so a rerun refreshes the same tab.
+// For an XML output, the adapter also sends where each part of the text came from (see XsltDebugOutputs.locationAt), so
+// a position in the output can be taken to the stylesheet instruction that wrote it, also after the session ends
+// where a part of an XML output came from (from the adapter's OutputCapture and Debugger.outputLocation): the start tag
+// of the instruction that wrote it; for a node copied from a source document, where its start tag ends; or for literal
+// text, where Saxon reports it - where the text starts or ends
+export interface XsltOutputLocation {
+	id: number;
+	path?: string;
+	line?: number;
+	column?: number;
+	kind?: 'instruction' | 'source' | 'text';
+}
+
+export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vscode.DefinitionProvider {
 	public static readonly scheme = 'xslt-debug-output';
 	private static instance: XsltDebugOutputs | undefined;
 	private readonly changed = new vscode.EventEmitter<vscode.Uri>();
 	public readonly onDidChange = this.changed.event;
-	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean; uri?: string }>();
+	private readonly outputs = new Map<string, { text: string; method: string; truncated: boolean; uri?: string; runs: number[]; locations: Map<number, XsltOutputLocation> }>();
 	// the output being written to at the last pause, and whether the output has been opened this session
 	private current: string | undefined;
 	private openedThisSession = false;
@@ -418,10 +431,18 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider {
 	}
 
 	// an 'xsltOutputs' event from the adapter: each output's text from an offset
-	public update(body: { outputs?: { name: string; method: string; offset: number; text: string; truncated?: boolean; uri?: string }[]; current?: string }) {
+	public update(body: { outputs?: { name: string; method: string; offset: number; text: string; truncated?: boolean; uri?: string; runs?: number[]; locations?: XsltOutputLocation[] }[]; current?: string }) {
 		for (const update of body.outputs ?? []) {
-			const output = this.outputs.get(update.name) ?? { text: '', method: update.method, truncated: false };
-			output.text = update.offset > 0 && update.offset <= output.text.length ? output.text.substring(0, update.offset) + update.text : update.text;
+			const output = this.outputs.get(update.name) ?? { text: '', method: update.method, truncated: false, runs: [], locations: new Map<number, XsltOutputLocation>() };
+			const isReplaced = !(update.offset > 0 && update.offset <= output.text.length);
+			output.text = isReplaced ? update.text : output.text.substring(0, update.offset) + update.text;
+			// the runs within the text that's been replaced no longer apply
+			const kept = output.runs.findIndex((offset, i) => i % 2 === 0 && offset >= (isReplaced ? 0 : update.offset));
+			if (kept > -1) {
+				output.runs.length = kept;
+			}
+			output.runs.push(...(update.runs ?? []));
+			(update.locations ?? []).forEach((location) => output.locations.set(location.id, location));
 			output.method = update.method;
 			output.truncated = !!update.truncated;
 			output.uri = update.uri ?? output.uri;
@@ -454,6 +475,100 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider {
 		const document = await vscode.workspace.openTextDocument(XsltDebugOutputs.uri(chosen));
 		await vscode.languages.setTextDocumentLanguage(document, XsltDebugOutputs.languageId(this.outputs.get(chosen)?.method ?? 'xml'));
 		await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, preview: false });
+	}
+
+	// where the part of an output's text at the offset came from: the location of the run of text the offset is in - for
+	// an offset within a tag, the tag's, as an emitter writes the '>' of a start tag with the next event's text.
+	// runs: [offset, location id, ...], each run from its offset to the next run's
+	public static locationAt(text: string, runs: number[], locations: Map<number, XsltOutputLocation>, offset: number): { location: XsltOutputLocation, start: number, end: number } | undefined {
+		const tagStart = text.lastIndexOf('<', offset);
+		const at = tagStart > text.lastIndexOf('>', offset - 1) ? tagStart : offset;
+		let low = 0;
+		let high = runs.length / 2 - 1;
+		let found = -1;
+		while (low <= high) {
+			const mid = (low + high) >> 1;
+			if (runs[mid * 2] <= at) {
+				found = mid;
+				low = mid + 1;
+			} else {
+				high = mid - 1;
+			}
+		}
+		const location = found > -1 ? locations.get(runs[found * 2 + 1]) : undefined;
+		if (!location?.path || !location.line) {
+			return undefined;
+		}
+		return { location, start: runs[found * 2], end: found * 2 + 2 < runs.length ? runs[found * 2 + 2] : text.length };
+	}
+
+	// the position in the source file's text for a location: an instruction's start tag; for a node copied from a source
+	// document, its start tag, before where Saxon reports it (the tag's end); for literal text, where the output text
+	// found is within the text node Saxon reports it for, at its start or end - else the reported position
+	public static sourceOffset(sourceText: string, location: XsltOutputLocation, lineOffset: (line: number, character: number) => number, outputText: string): number {
+		const reported = lineOffset(location.line! - 1, Math.max(location.column! - 1, 0));
+		if (location.kind === 'source') {
+			const tagStart = sourceText.lastIndexOf('<', reported - 1);
+			return tagStart > -1 ? tagStart : reported;
+		} else if (location.kind === 'text') {
+			const found = outputText.trim();
+			const start = sourceText.lastIndexOf('>', reported - 1) + 1;
+			const next = sourceText.indexOf('<', reported);
+			const end = next > -1 ? next : sourceText.length;
+			const index = found ? sourceText.indexOf(found, start) : -1;
+			return index > -1 && index + found.length <= end ? index : reported;
+		}
+		return reported;
+	}
+
+	// the source location for the position in an output document - undefined if it isn't known
+	public async sourceLocation(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Location | undefined> {
+		return document.uri.scheme === XsltDebugOutputs.scheme ? this.sourceLocationAt(path.posix.basename(document.uri.path), document.offsetAt(position)) : undefined;
+	}
+
+	// the source location for the offset in the named output's text
+	public async sourceLocationAt(name: string, offset: number): Promise<vscode.Location | undefined> {
+		const output = this.outputs.get(name);
+		const found = output && offset < output.text.length ? XsltDebugOutputs.locationAt(output.text, output.runs, output.locations, offset) : undefined;
+		if (!output || !found) {
+			return undefined;
+		}
+		const { location, start, end } = found;
+		// literal text: the part of the run on the line - without a start tag's '>' written with it
+		const lineStart = output.text.lastIndexOf('\n', offset - 1) + 1;
+		const lineEnd = output.text.indexOf('\n', offset);
+		const outputText = output.text.substring(Math.max(start, lineStart), Math.min(end, lineEnd > -1 ? lineEnd : output.text.length)).replace(/^\s*>/, '');
+		try {
+			const source = await vscode.workspace.openTextDocument(vscode.Uri.file(location.path!));
+			const sourceOffset = XsltDebugOutputs.sourceOffset(source.getText(), location, (line, character) => source.offsetAt(new vscode.Position(line, character)), outputText);
+			return new vscode.Location(source.uri, source.positionAt(sourceOffset));
+		} catch {
+			return undefined;
+		}
+	}
+
+	// go to definition: the source of the output at the position
+	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Definition | undefined> {
+		return this.sourceLocation(document, position);
+	}
+
+	// the 'Go to XSLT Source' command: shows the source of the output at the cursor, in another editor group from the
+	// output's, where the file is already shown if it is
+	public async goToSource() {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor || editor.document.uri.scheme !== XsltDebugOutputs.scheme) {
+			return;
+		}
+		const location = await this.sourceLocation(editor.document, editor.selection.active);
+		if (!location) {
+			const method = this.outputs.get(path.posix.basename(editor.document.uri.path))?.method;
+			vscode.window.showInformationMessage(method && method !== 'xml' ? `XSLT debugger: only XML output can be traced back to the stylesheet - this output's method is '${method}'.` :
+				'XSLT debugger: where this part of the output came from isn\'t known.');
+			return;
+		}
+		const others = vscode.window.visibleTextEditors.filter((e) => e.viewColumn !== editor.viewColumn);
+		const column = others.find((e) => e.document.uri.toString() === location.uri.toString())?.viewColumn ?? others[0]?.viewColumn ?? vscode.ViewColumn.Beside;
+		await vscode.window.showTextDocument(location.uri, { viewColumn: column, selection: location.range, preview: false });
 	}
 
 	// a visible output document is kept scrolled to its end, where output is being added
