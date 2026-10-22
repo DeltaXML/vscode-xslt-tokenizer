@@ -778,6 +778,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// the output in view
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ scheme: XsltDebugOutputs.scheme }, XsltDebugOutputs.get()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.goToDebugOutputSource', () => XsltDebugOutputs.get().goToSource()));
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => XsltDebugOutputs.get().revealInOtherGroup(editor)));
 	const debugExitCodes = new XsltDebugExitCodes();
 	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(XsltDebug.type, debugExitCodes));
 	// as for tasks: when the transform completes, 'Open' the result

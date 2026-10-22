@@ -547,9 +547,54 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 		}
 	}
 
-	// go to definition: the source of the output at the position
+	// go to definition: the source of the output at the position. VS Code opens it in the output's editor group - so if
+	// it's open in another group, the new tab is replaced by that editor (see revealInOtherGroup). This is also asked for
+	// as the cursor moves over the output with the modifier key down, so it's only noted here
 	public async provideDefinition(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Definition | undefined> {
-		return this.sourceLocation(document, position);
+		const location = await this.sourceLocation(document, position);
+		const column = vscode.window.visibleTextEditors.find((e) => e.document === document)?.viewColumn;
+		if (location && column !== undefined) {
+			const uri = location.uri.toString();
+			const isOpenInGroup = vscode.window.tabGroups.all.some((g) => g.viewColumn === column && g.tabs.some((tab) => XsltDebugOutputs.tabUri(tab) === uri));
+			this.definitionJump = { uri, range: location.range, column, isOpenInGroup, until: Date.now() + 3000 };
+		}
+		return location;
+	}
+
+	// the last definition given for an output: its file and range, and the output's editor group - whether the file was
+	// open in that group then, and until when an editor opened for it is taken to be for it
+	private definitionJump: { uri: string; range: vscode.Range; column: vscode.ViewColumn; isOpenInGroup: boolean; until: number } | undefined;
+
+	private static tabUri(tab: vscode.Tab): string | undefined {
+		return tab.input instanceof vscode.TabInputText ? tab.input.uri.toString() : undefined;
+	}
+
+	// the editor group to show a source file in, from the output's group: one showing it, else one with it open, else
+	// another group with an editor - undefined if there's none
+	private static otherGroup(uri: string, outputColumn: vscode.ViewColumn | undefined, withFileOnly = false): vscode.ViewColumn | undefined {
+		const others = vscode.window.tabGroups.all.filter((g) => g.viewColumn !== outputColumn);
+		const showing = others.find((g) => g.activeTab && XsltDebugOutputs.tabUri(g.activeTab) === uri);
+		const withFile = others.find((g) => g.tabs.some((tab) => XsltDebugOutputs.tabUri(tab) === uri));
+		return showing?.viewColumn ?? withFile?.viewColumn ?? (withFileOnly ? undefined : others.find((g) => g.tabs.length > 0)?.viewColumn);
+	}
+
+	// after a go to definition from an output: an editor opened for the source file in the output's group, where the file
+	// wasn't open, is closed if the file is open in another group, where it's shown instead - at the definition (the new
+	// editor's selection isn't set yet)
+	public async revealInOtherGroup(editor: vscode.TextEditor | undefined) {
+		const jump = this.definitionJump;
+		if (!editor || !jump || Date.now() > jump.until || editor.viewColumn !== jump.column || jump.isOpenInGroup || editor.document.uri.toString() !== jump.uri) {
+			return;
+		}
+		this.definitionJump = undefined;
+		const column = XsltDebugOutputs.otherGroup(jump.uri, jump.column, true);
+		const group = vscode.window.tabGroups.all.find((g) => g.viewColumn === jump.column);
+		const tab = group?.tabs.find((t) => XsltDebugOutputs.tabUri(t) === jump.uri);
+		if (column === undefined || !tab) {
+			return;
+		}
+		await vscode.window.showTextDocument(editor.document, { viewColumn: column, selection: jump.range, preview: false });
+		await vscode.window.tabGroups.close(tab, true);
 	}
 
 	// the 'Go to XSLT Source' command: shows the source of the output at the cursor, in another editor group from the
@@ -566,8 +611,7 @@ export class XsltDebugOutputs implements vscode.TextDocumentContentProvider, vsc
 				'XSLT debugger: where this part of the output came from isn\'t known.');
 			return;
 		}
-		const others = vscode.window.visibleTextEditors.filter((e) => e.viewColumn !== editor.viewColumn);
-		const column = others.find((e) => e.document.uri.toString() === location.uri.toString())?.viewColumn ?? others[0]?.viewColumn ?? vscode.ViewColumn.Beside;
+		const column = XsltDebugOutputs.otherGroup(location.uri.toString(), editor.viewColumn) ?? vscode.ViewColumn.Beside;
 		await vscode.window.showTextDocument(location.uri, { viewColumn: column, selection: location.range, preview: false });
 	}
 

@@ -102,6 +102,41 @@ suite('XSLT debugger: from the output to its source', () => {
 		assert.strictEqual(XsltDebugOutputs.sourceOffset(source, location, () => reported, '<item n="2"'), source.indexOf('<item '));
 	});
 
+	// go to definition (F12, or cmd/ctrl-click) in the output, in editor group 2: the stylesheet, where it's open in group 1,
+	// is shown there at the instruction - not opened again in the output's group
+	async function goToDefinition(openStylesheetFirst: boolean) {
+		await vscode.extensions.getExtension('deltaxml.xslt-xpath')?.activate();
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		if (openStylesheetFirst) {
+			await vscode.window.showTextDocument(vscode.Uri.file(file), { viewColumn: vscode.ViewColumn.One, selection: new vscode.Range(0, 0, 0, 0) });
+		}
+		const name = `definition-${openStylesheetFirst}.xml`;
+		XsltDebugOutputs.get().update({ outputs: [{ name, method: 'xml', offset: 0, text: output, runs, locations: locations(file) }] });
+		const outputEditor = await vscode.window.showTextDocument(XsltDebugOutputs.uri(name), { viewColumn: vscode.ViewColumn.Two, preview: false });
+		const at = outputEditor.document.positionAt(output.indexOf('by') + 1);
+		outputEditor.selection = new vscode.Selection(at, at);
+		await vscode.commands.executeCommand('editor.action.revealDefinition');
+		const isStylesheet = (uri?: vscode.Uri) => uri?.fsPath === vscode.Uri.file(file).fsPath;
+		const tabsInOutputGroup = () => vscode.window.tabGroups.all.find((g) => g.viewColumn === vscode.ViewColumn.Two)?.tabs
+			.filter((tab) => tab.input instanceof vscode.TabInputText && isStylesheet(tab.input.uri)).length;
+		for (let i = 0; i < 60 && !(isStylesheet(vscode.window.activeTextEditor?.document.uri) && (!openStylesheetFirst || tabsInOutputGroup() === 0)); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		const editor = vscode.window.activeTextEditor!;
+		assert.isTrue(isStylesheet(editor.document.uri), 'the stylesheet is shown');
+		assert.strictEqual(`${editor.selection.start.line + 1}:${editor.selection.start.character + 1}`, '4:13');
+		return { column: editor.viewColumn, tabsInOutputGroup: tabsInOutputGroup() };
+	}
+
+	test('go to definition: the stylesheet already open in another group is shown there', async () => {
+		assert.deepEqual(await goToDefinition(true), { column: vscode.ViewColumn.One, tabsInOutputGroup: 0 });
+	});
+
+	test('go to definition: a stylesheet not open is opened as VS Code does, in the output\'s group', async () => {
+		assert.deepEqual(await goToDefinition(false), { column: vscode.ViewColumn.Two, tabsInOutputGroup: 1 });
+		await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+	});
+
 	test('literal text not found: where Saxon reports it', () => {
 		const source = '<x>abc</x>';
 		const location: XsltOutputLocation = { id: 0, path: 'x.xsl', line: 1, column: 4, kind: 'text' };
