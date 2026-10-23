@@ -1,7 +1,17 @@
 [<img src="deltaxigniaLogoSmall.png">](https://www.deltaxml.com/?utm_source=VisualStudio&utm_medium=Dev-Tools&utm_campaign=XSLT-XPATH)
 # XSLT/XPath for Visual Studio Code
 
-The XSLT/XPath extension for VSCode provides comprehensive language support for XSLT 3.0 and XPath 3.1, and for the XSLT 4.0 and XPath 4.0 features implemented in Saxon 13. This ReadMe is merely a 'quick start' guide, see the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for more comprehensive help.
+The XSLT/XPath extension for VS Code provides comprehensive language support for XSLT 3.0 and XPath 3.1, and for the XSLT 4.0 and XPath 4.0 features implemented in Saxon 13.
+
+The aim is to make writing, reviewing and debugging XSLT easier. The extension understands each XPath expression - which names are variables, functions or node tests, and where each is declared, including in imported modules - so problems show as you type, and you can go from any name to its declaration, rename it safely, or step through the expression in the debugger.
+
+**Getting started:**
+
+1. Install the extension and open an XSLT file - editing, highlighting and linting need no setup.
+2. To run or debug stylesheets, set `XSLT.tasks.saxonJar` to the path of your Saxon jar (Saxon-HE is fine), with a Java runtime on the PATH.
+3. Press **Quick Run** (`⌘⌥R` / `Ctrl+Alt+R`) to run the stylesheet with the XML file you last had open - shown in the status bar, where you can pick another.
+
+See the [XSLT/XPath User Guide](https://deltaxml.github.io/vscode-xslt-xpath/) for the full description of each feature.
 
 ---
 
@@ -14,7 +24,7 @@ The XSLT/XPath extension for VSCode provides comprehensive language support for 
 
 # Features
 
-This release adds a [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html) for SaxonJ: set breakpoints, step through templates, functions and multi-line XPath expressions - inspect variables as you go.
+The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html) for SaxonJ sets breakpoints and steps through templates, functions and multi-line XPath expressions - including inline functions passed to functions such as `fold-left` - showing variables and the context item as you go.
 
 
 <table>
@@ -108,7 +118,7 @@ This release adds a [step-through XSLT debugger](https://deltaxml.github.io/vsco
     <ul>
       <li><strong>Quick Run</strong> (<code>⌘⌥R</code> / <code>Ctrl+Alt+R</code>)</li>
       <li>Tasks for SaxonJ, SaxonJS and SaxonC</li>
-      <li><code>xsl:param</code> defaults pre-filled by Quick Run</li>
+      <li>Required <code>xsl:param</code> values asked for when a task runs</li>
       <li><code>xsl:param</code> values controlled by tasks</li>
       <li>XML catalogs for <code>xsl:import</code> URIs</li>
       <li>File pickers for task inputs</li>
@@ -162,14 +172,13 @@ The XML selection commands are also in the **XML Selection** submenu of the edit
 | XML: Select first child element | ⇧⌘8 / Ctrl+Shift+8 | Includes start/end tags |
 | XML: Select following element | ⇧⌘7 / Ctrl+Shift+7 | Includes start/end tags |
 | XML: Select preceding element | ⇧⌘6 / Ctrl+Shift+6 | Includes start/end tags |
-| XSLT: Add XSLT Inputs to Tasks File ||For file-selection prompt when running XSLT|
 | New XPath Notebook | - | DeltaXignia's [XPath Notebook extension](https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook) is required
 
  # Introduction
  
 For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. Avoiding the much more common use of regular expressions on a line-by-line basis brings significant benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and greater integrity for syntax highlighting.
 
-**Auto-completion** is provided for XSLT and XPath. This includes context-aware completion items for all code symbol names. XSLT and XPATH function signatures and descriptions are shown in the description alongside function completion items. The last active non-XSLT file is used as the source to compute available node names for XPath location steps.
+**Auto-completion** is provided for XSLT and XPath. This includes context-aware completion items for all code symbol names. XSLT and XPath function signatures and descriptions are shown in the description alongside function completion items. The last active non-XSLT file is used as the source to compute available node names for XPath location steps.
 
 This extension's linter performs a comprehensive set of checks on the code. The linter ensures that any code symbols within XSLT or XPath with problems are accurately identified at the symbol-level. Asynchronous processing for xsl:include/xsl:import dependencies allows checking of references to symbol definitions regardless of the location of the definition.
 
@@ -181,13 +190,13 @@ This extension's linter performs a comprehensive set of checks on the code. The 
 
 The quickest way to run the stylesheet in the active editor is [Quick Run](https://deltaxml.github.io/vscode-xslt-xpath/quick-run.html) (`⌘⌥R` / `Ctrl+Alt+R`): the first run creates a task for you, which later runs reuse.
 
-XSLT transforms for SaxonJava, SaxonJS and SaxonC are configured and run as special VSCode Tasks. 
+XSLT transforms for SaxonJ, SaxonJS and SaxonC are configured and run as special VS Code tasks. 
 
-XSLT task JSON properties can reference special commands. The special commands allow file-selection via a File Explorer or 'Recent Files' list, an example using: `"xsltFile": "${command:xslt-xpath:pickXsltFile}"`. A sample screenshot is shown below:
+XSLT task JSON properties can reference special commands. The special commands allow file-selection via a File Explorer or 'Recent Files' list, an example using: `"xsltFile": "${command:xslt-xpath.pickXsltFile}"`. The **XSLT: Add XSLT Inputs to Tasks File** command adds inputs for file-selection prompts to `tasks.json`. A sample screenshot is shown below:
 
 ![xslt-tasks](xslt-tasks-file.png)
 
-For more a full description on using VSCode tasks to run XSLT, see [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html).
+For a full description of using VS Code tasks to run XSLT, see [Running XSLT](https://deltaxml.github.io/vscode-xslt-xpath/run-xslt.html).
 
 ## Debugging XSLT
 
@@ -207,10 +216,10 @@ The project changelog is maintained on the project wiki. See [Release Notes](htt
 
 # Extension Settings
 
-To benefit from this extension, it's essential to make a few updates to VS Code's User or Workspace settings to your specific needs and environment.
+Editing and linting need no settings. Running and debugging stylesheets need the path of a Saxon processor (see below).
 This section outlines the main settings associated with XSLT features.
 
-For more details on how these settings are managed within VS Code see: [VSCode Settings](https://code.visualstudio.com/docs/getstarted/settings)
+For more details on how these settings are managed within VS Code see: [VS Code Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
 ## XSLT Tasks
 
@@ -266,7 +275,7 @@ If file paths are relative they are resolved from the first Visual Studio Code W
 
 This extension supports special XSLT code formatting. This can be invoked with a VS Code command and/or as you type, depending on your settings.
 
-### VSCode Formatting Command Keyboard Shortcuts
+### VS Code Formatting Command Keyboard Shortcuts
 1. *On Windows* - ```Shift + Alt + F```.
 2. *On Mac* - ```Shift + Option + F```.
 3. *On Ubuntu* - ```Ctrl + Shift + I```.
@@ -295,16 +304,16 @@ You should start with something like the following in the `settings.json` file:
 ```
 
 ## Refactoring
-A range of [code refactoring](https://deltaxml.github.io/vscode-xslt-xpath/editing-xslt.html#refactoring) features are supported, including **Rename Symbol**, **Extract Function** and, for XSLT 4.0, **Extract record type**. 
+A range of [code refactoring](https://deltaxml.github.io/vscode-xslt-xpath/refactoring-xslt.html) features are supported, including **Rename Symbol**, **Extract Function** and, for XSLT 4.0, **Extract record type**. 
 
 When XSLT code is refactored, instructions and expressions are revised when necessary to
 ensure the code behaviour remains unchanged. For example, the **Extract Function** refactor revises all expressions requiring the context-item so the code compiles and runs as before.
 
 ## Editor Settings for Highlighting in Color Theme Extensions
 
-Syntax highlighting is currently only enabled by default in VSCode's built-in themes. This is because some extension themes may not yet have specific language support for VSCode's 'Semantic Highlighting' as used by this extension.
+Syntax highlighting is currently only enabled by default in VS Code's built-in themes. This is because some extension themes may not yet have specific language support for VS Code's 'Semantic Highlighting' as used by this extension.
 
-To enable syntax highighting for a custom theme you need to change User Settings. A set of dark color themes, specially enhanced
+To enable syntax highlighting for a custom theme you need to change User Settings. A set of dark color themes, specially enhanced
 for XSLT, are provided by the [XSLT Dark Themes](https://marketplace.visualstudio.com/items?itemName=deltaxml.xslt-dark-themes) extension. 
 
 You can also customize
@@ -334,11 +343,11 @@ Or, to enable syntax highlighting for all themes:
 
 As in XPath, a name like `$two-parts`, `f:line-total` or `xsl:value-of` is one word for completion, the debugger's hovers, highlighting its other occurrences and finding it (e.g. `Cmd+D` / `Ctrl+D`).
 
-For word selection and navigation (e.g. double-click, or `Alt`/`Ctrl` + arrow keys), the extension's default `editor.wordSeparators` setting keeps names like `two-parts` together, but separates `$` and a prefix's `:`. This behaviour can be altered using the VSCode setting:
+For word selection and navigation (e.g. double-click, or `Alt`/`Ctrl` + arrow keys), the extension's default `editor.wordSeparators` setting keeps names like `two-parts` together, but separates `$` and a prefix's `:`. This behaviour can be altered using the VS Code setting:
 
 `editor.wordSeparators`
 
-See: [VSCode Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
+See: [VS Code Documentation on Settings](https://code.visualstudio.com/docs/getstarted/settings)
 
 ## Code Folding
 
@@ -379,7 +388,10 @@ The main documentation pages are linked below:
 
 ## Support for other languages with embedded XPath
 
-In addition to XSLT, other XML-based languages/vocabularies with embedded XPath will be supported in future in this extension. Currently, DeltaXignia's [Document Comparison Pipeline (DCP)](https://docs.deltaxml.com/xml-compare/latest/dcp-user-guide-9340381.html) format is supported, acting as a pilot for other languages.
+In addition to XSLT, XPath embedded in these XML vocabularies is highlighted, checked and auto-completed:
+
+- Schematron (`.sch`) - basic support, for the XPath in attributes such as `context` and `test`
+- DeltaXignia's [Document Comparison Pipeline (DCP)](https://docs.deltaxml.com/xml-compare/latest/dcp-user-guide-9340381.html) format (`.dcp`)
 
 ---
 _Project Sponsor Message:_
