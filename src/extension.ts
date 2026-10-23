@@ -617,6 +617,9 @@ export function activate(context: vscode.ExtensionContext) {
 		const xsltFsPath = xsltDocument.uri.fsPath;
 		try {
 			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask(taskType, xsltDocument, xmlSourceFsPath, xsltDefintiionProvider);
+			if (quickRunTask === 'cancelled') {
+				return;
+			}
 			if (quickRunTask) {
 				const { label, created } = quickRunTask;
 				if (created && xmlSourceFsPath && await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
@@ -632,7 +635,8 @@ export function activate(context: vscode.ExtensionContext) {
 					persistedTasks = await vscode.tasks.fetchTasks({ type: taskType });
 					const persistedTask = persistedTasks.find((t) => {
 						const folder = typeof t.scope === 'object' ? t.scope : vscode.workspace.workspaceFolders?.[0];
-						return !!folder && SaxonTaskProvider.isQuickRunTaskFor(t.definition, taskType, xsltFsPath, xmlSourceFsPath, folder.uri.fsPath);
+						// by label too: the one picked, if several tasks are for the pair
+						return !!folder && t.name === label && SaxonTaskProvider.isQuickRunTaskFor(t.definition, taskType, xsltFsPath, xmlSourceFsPath, folder.uri.fsPath);
 					});
 					if (persistedTask) {
 						await vscode.tasks.executeTask(persistedTask);
@@ -756,6 +760,9 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		try {
 			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask('xslt', xsltDocument, source.xmlSourceFsPath, xsltDefintiionProvider);
+			if (quickRunTask === 'cancelled') {
+				return undefined;
+			}
 			if (quickRunTask) {
 				return { type: XsltDebug.type, request: 'launch', name: `Debug ${quickRunTask.label}`, task: quickRunTask.label };
 			}

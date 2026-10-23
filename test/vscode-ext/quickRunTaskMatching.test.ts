@@ -66,6 +66,15 @@ suite('Quick Run - persisted task matching', () => {
 		const task = definition('${command:xslt-xpath.pickXsltFile}', '${command:xslt-xpath.pickXmlSourceFile}');
 		assert.isFalse(SaxonTaskProvider.isQuickRunTaskFor(task, 'xslt', fsPath('report.xsl'), fsPath('books.xml'), workspaceFolder));
 	});
+
+	test('several tasks for the pair are offered by label, the most recently picked first', () => {
+		const task = (label: string) => ({ ...definition('${workspaceFolder}/report.xsl', '${workspaceFolder}/books.xml'), label });
+		const tasks = [task('report with books.xml'), task('report (draft)'), task('report (fr)')];
+		assert.deepEqual(SaxonTaskProvider.quickRunTaskChoices(tasks, []), ['report with books.xml', 'report (draft)', 'report (fr)']);
+		assert.deepEqual(SaxonTaskProvider.quickRunTaskChoices(tasks, ['report (fr)', 'report (draft)']), ['report (fr)', 'report (draft)', 'report with books.xml']);
+		// a task picked before but since removed or renamed is ignored
+		assert.deepEqual(SaxonTaskProvider.quickRunTaskChoices(tasks, ['report (old)', 'report (draft)']), ['report (draft)', 'report with books.xml', 'report (fr)']);
+	});
 });
 
 suite('Quick Run - tasks listed for the active XML file', () => {

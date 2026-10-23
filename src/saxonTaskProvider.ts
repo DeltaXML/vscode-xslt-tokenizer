@@ -111,8 +111,9 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
     // .vscode/tasks.json for this xsltFile/xmlSource pair, so the user can subsequently add xslt parameters etc. by
     // hand - an undefined xmlSourceFsPath means no source document, starting from xsl:initial-template instead.
     // Returns the task's label and whether it was just created, or undefined if there is no workspace folder to
-    // persist into (caller should fall back to an ad hoc, non-persisted task)
-    public static async findOrCreateQuickRunTask(taskType: QuickRunTaskType, xsltDocument: vscode.TextDocument, xmlSourceFsPath: string | undefined, definitionProvider: XsltDefinitionProvider): Promise<{ label: string; created: boolean } | undefined> {
+    // persist into (caller should fall back to an ad hoc, non-persisted task). If several tasks are for the pair (e.g.
+    // copies with different parameters), the user picks one - 'cancelled' if they didn't
+    public static async findOrCreateQuickRunTask(taskType: QuickRunTaskType, xsltDocument: vscode.TextDocument, xmlSourceFsPath: string | undefined, definitionProvider: XsltDefinitionProvider): Promise<{ label: string; created: boolean } | 'cancelled' | undefined> {
         const xsltFsPath = xsltDocument.uri.fsPath;
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
@@ -137,9 +138,21 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 
         const parsed = jsc.parse(text) || {};
         const existingTasks: vscode.TaskDefinition[] = parsed.tasks || [];
-        const match = existingTasks.find((t) => SaxonTaskProvider.isQuickRunTaskFor(t, taskType, xsltFsPath, xmlSourceFsPath, workspaceFolder.uri.fsPath));
-        if (match) {
-            return { label: match.label, created: false };
+        const matches = existingTasks.filter((t) => SaxonTaskProvider.isQuickRunTaskFor(t, taskType, xsltFsPath, xmlSourceFsPath, workspaceFolder.uri.fsPath));
+        if (matches.length === 1) {
+            return { label: matches[0].label, created: false };
+        }
+        if (matches.length > 1) {
+            const key = [taskType, xsltFsPath, xmlSourceFsPath ?? ''].join('\n');
+            const sourceName = xmlSourceFsPath ? path.basename(xmlSourceFsPath) : 'xsl:initial-template';
+            const recentlyPicked = SaxonTaskProvider.pickedTasks.get(key) ?? [];
+            const picked = await vscode.window.showQuickPick(SaxonTaskProvider.quickRunTaskChoices(matches, recentlyPicked),
+                { placeHolder: `${matches.length} tasks run ${path.basename(xsltFsPath)} with ${sourceName} - pick one` });
+            if (!picked) {
+                return 'cancelled';
+            }
+            SaxonTaskProvider.pickedTasks.set(key, [picked, ...recentlyPicked.filter((label) => label !== picked)]);
+            return { label: picked, created: false };
         }
 
         // the Saxon (Java) label is unsuffixed so tasks persisted before quick-run became switchable still match.
@@ -176,6 +189,17 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         const newText = jsc.applyEdits(text, edits);
         await vscode.workspace.fs.writeFile(workspaceTaskUri, Buffer.from(newText, 'utf8'));
         return { label, created: true };
+    }
+
+    // the labels of the tasks picked for each quick-run type, stylesheet and source, when several tasks are for them -
+    // most recently picked first
+    private static pickedTasks = new Map<string, string[]>();
+
+    // the labels to pick from when several tasks are for the same stylesheet and source: the most recently picked
+    // first (so the last one is picked again with Enter), then those not picked yet, in tasks.json order
+    public static quickRunTaskChoices(matches: vscode.TaskDefinition[], recentlyPicked: string[]): string[] {
+        const rank = (label: string) => recentlyPicked.includes(label) ? recentlyPicked.indexOf(label) : recentlyPicked.length;
+        return matches.map((t) => t.label).sort((a, b) => rank(a) - rank(b));
     }
 
     // quick-run tasks are identified by their xsltFile + xmlSource pair (not their label, which the user may
