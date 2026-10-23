@@ -9,6 +9,8 @@
        'for ... return' expression, line by line, and into f:line-total - see $line in the Variables view
      - a breakpoint on the 'f:line-total($line)' line inside that expression: it stops for each line
        element, with the order as the context item
+     - a breakpoint on the <xsl:variable name="largest"> line, then Step Into: the steps go into the inline
+       function passed to fold-left - $largest and $line change for each line element
      - a breakpoint on a line inside the multi-line 'test' of the xsl:if
      - in xsl:for-each-group, a breakpoint inside $summary's expression - then watch count(current-group())
      - a breakpoint on a 'then' or 'return' line: shown as unverified - nothing is evaluated starting there
@@ -49,7 +51,14 @@
         round($total * $discount-rate, 2)
       else
         0"/>
-    <order id="{@id}" customer="{@customer}" total="{$total - $discount}">
+    <xsl:variable name="largest" as="element(line)" select="
+      fold-left(tail(line), head(line),
+        function($largest, $line) {
+          if (f:line-total($line) gt f:line-total($largest))
+          then $line
+          else $largest
+        })"/>
+    <order id="{@id}" customer="{@customer}" total="{$total - $discount}" largest="{$largest/@product}">
       <xsl:if test="
           $discount gt 0
           and count(line) gt 1">
