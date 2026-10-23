@@ -71,6 +71,82 @@ export class XsltDebug {
 		return { ...taskProperties, ...config };
 	}
 
+	// a configuration with the ${input:id} variables in its string values (e.g. its task's parameter values) replaced,
+	// for those of tasks.json's inputs that launch.json doesn't define (VS Code resolves a launch configuration's
+	// variables with launch.json's inputs) - each asked for once. undefined if one was cancelled
+	public static async withTaskInputs(config: vscode.DebugConfiguration, taskInputs: { id?: string }[], launchInputIds: string[], resolveInput: (input: any) => Promise<string | undefined>): Promise<vscode.DebugConfiguration | undefined> {
+		const inputs = new Map(taskInputs.filter((input) => typeof input.id === 'string' && !launchInputIds.includes(input.id)).map((input) => [input.id!, input]));
+		const values = new Map<string, string>();
+		let cancelled = false;
+		const resolveValue = async (value: any): Promise<any> => {
+			if (cancelled) {
+				return value;
+			} else if (typeof value === 'string') {
+				for (const [, id] of value.matchAll(/\$\{input:([^}]+)\}/g)) {
+					if (inputs.has(id) && !values.has(id)) {
+						const inputValue = await resolveInput(inputs.get(id));
+						if (inputValue === undefined) {
+							cancelled = true;
+							return value;
+						}
+						values.set(id, inputValue);
+					}
+				}
+				return value.replace(/\$\{input:([^}]+)\}/g, (match, id) => values.get(id) ?? match);
+			} else if (Array.isArray(value)) {
+				const result = [];
+				for (const item of value) {
+					result.push(await resolveValue(item));
+				}
+				return result;
+			} else if (value && typeof value === 'object') {
+				const result: { [key: string]: any } = {};
+				for (const key of Object.keys(value)) {
+					result[key] = await resolveValue(value[key]);
+				}
+				return result;
+			}
+			return value;
+		};
+		const resolved = await resolveValue(config);
+		return cancelled ? undefined : resolved;
+	}
+
+	// the ids of the ${input:id} variables in a configuration's string values that neither tasks.json nor launch.json
+	// defines - VS Code would say so, but offer to open launch.json, when a task's are for tasks.json
+	public static undefinedInputs(config: vscode.DebugConfiguration, definedIds: string[]): string[] {
+		const ids = new Set<string>();
+		const find = (value: any) => {
+			if (typeof value === 'string') {
+				for (const [, id] of value.matchAll(/\$\{input:([^}]+)\}/g)) {
+					if (!definedIds.includes(id)) {
+						ids.add(id);
+					}
+				}
+			} else if (value && typeof value === 'object') {
+				Object.values(value).forEach(find);
+			}
+		};
+		find(config);
+		return [...ids];
+	}
+
+	// a tasks.json input's value, asked for as VS Code would when running the task - undefined if cancelled
+	public static async inputValue(input: { type?: string; command?: string; args?: any; description?: string; default?: string; password?: boolean; options?: (string | { label?: string; value: string })[] }): Promise<string | undefined> {
+		switch (input.type) {
+			case 'command':
+				return input.command ? vscode.commands.executeCommand<string | undefined>(input.command, input.args) : undefined;
+			case 'promptString':
+				return vscode.window.showInputBox({ prompt: input.description, value: input.default, password: input.password });
+			case 'pickString': {
+				const items = (input.options ?? []).map((option) => typeof option === 'string' ? { label: option, value: option } : { label: option.label ?? option.value, value: option.value });
+				const picked = await vscode.window.showQuickPick(items, { placeHolder: input.description });
+				return picked?.value;
+			}
+		}
+		return undefined;
+	}
+
 	// the variable to show when hovering at this character of a line, while debugging: a variable reference ($name),
 	// or the name in an xsl:variable or xsl:param declaration - as '$name', with its range. VS Code would otherwise use
 	// the word at the position, and the language's word pattern breaks names at '-' and ':'
@@ -263,7 +339,7 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 		return XsltDebug.providedConfigurations(tasks);
 	}
 
-	public async resolveDebugConfiguration(_folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): Promise<vscode.DebugConfiguration | undefined> {
+	public async resolveDebugConfiguration(folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): Promise<vscode.DebugConfiguration | undefined> {
 		if ((!config.type && !config.request && !config.name) || config.quickRun) {
 			const forActiveEditor = await this.configurationForActiveEditor();
 			if (!forActiveEditor) {
@@ -272,9 +348,27 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 			config = { ...forActiveEditor, ...(config.stopOnEntry !== undefined ? { stopOnEntry: config.stopOnEntry } : {}) };
 		}
 		const tasksObject = config.task !== undefined ? await SaxonJsTaskProvider.getTasksObject() : { tasks: [] };
-		const resolved = XsltDebug.withTaskProperties(config, tasksObject.tasks || []);
-		if (typeof resolved === 'string') {
-			vscode.window.showErrorMessage(resolved);
+		const withTask = XsltDebug.withTaskProperties(config, tasksObject.tasks || []);
+		if (typeof withTask === 'string') {
+			vscode.window.showErrorMessage(withTask);
+			return undefined;
+		}
+		// e.g. the values of required stylesheet parameters, asked for as when the task runs
+		const launchInputIds = (vscode.workspace.getConfiguration('launch', folder?.uri).get<{ id?: string }[]>('inputs') ?? []).map((input) => input.id ?? '');
+		const taskInputIds = ((tasksObject.inputs || []) as { id?: string }[]).map((input) => input.id ?? '');
+		const [undefinedInput] = config.task !== undefined ? XsltDebug.undefinedInputs(withTask, launchInputIds.concat(taskInputIds)) : [];
+		if (undefinedInput) {
+			const openTasks = 'Open tasks.json';
+			vscode.window.showErrorMessage(`XSLT debugger: the task '${config.task}' uses \${input:${undefinedInput}}, but there's no input with the id '${undefinedInput}' in the "inputs" of tasks.json.`, openTasks).then((choice) => {
+				const workspaceFolder = folder ?? vscode.workspace.workspaceFolders?.[0];
+				if (choice === openTasks && workspaceFolder) {
+					vscode.window.showTextDocument(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'));
+				}
+			});
+			return undefined;
+		}
+		const resolved = await XsltDebug.withTaskInputs(withTask, tasksObject.inputs || [], launchInputIds, XsltDebug.inputValue);
+		if (!resolved) {
 			return undefined;
 		}
 		if (!resolved.saxonJar) {

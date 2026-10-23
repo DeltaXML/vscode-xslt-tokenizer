@@ -72,6 +72,24 @@ suite('XSLT debugger - configurations', () => {
 		]);
 	});
 
+	test('a task\'s tasks.json inputs are asked for once, unless launch.json defines them', async () => {
+		const config = {
+			type: XsltDebug.type, request: 'launch', name: 'Debug report', task: 'report', resultPath: '${input:out}',
+			parameters: [{ name: 'lang', value: '${input:xsltParam-lang}' }, { name: '?doc', value: 'doc("${input:xsltParam-lang}.xml")' }]
+		};
+		const taskInputs = [{ id: 'xsltParam-lang', type: 'command' }, { id: 'out', type: 'command' }];
+		const asked: string[] = [];
+		const resolved = await XsltDebug.withTaskInputs(config, taskInputs, ['out'], async (input) => { asked.push(input.id); return 'fr'; });
+		assert.deepStrictEqual(asked, ['xsltParam-lang']);
+		assert.deepStrictEqual(resolved?.parameters, [{ name: 'lang', value: 'fr' }, { name: '?doc', value: 'doc("fr.xml")' }]);
+		// launch.json's, for VS Code to resolve
+		assert.strictEqual(resolved?.resultPath, '${input:out}');
+		assert.isUndefined(await XsltDebug.withTaskInputs(config, taskInputs, [], async () => undefined));
+		// one that neither defines: reported, with tasks.json to open
+		assert.deepStrictEqual(XsltDebug.undefinedInputs(config, ['out']), ['xsltParam-lang']);
+		assert.deepStrictEqual(XsltDebug.undefinedInputs(config, ['out', 'xsltParam-lang']), []);
+	});
+
 	test('configurations without a launch.json are given once: for the first workspace folder (or none, without one)', async () => {
 		const provider = new XsltDebugConfigurationProvider(async () => undefined);
 		const firstFolder = vscode.workspace.workspaceFolders?.[0];

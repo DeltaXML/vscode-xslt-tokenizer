@@ -54,6 +54,14 @@ interface XSLTParameter {
     value: string;
 }
 
+// a tasks.json input that asks for a stylesheet parameter's value when the task runs
+export interface ParameterInput {
+    id: string;
+    type: 'command';
+    command: string;
+    args: { name: string; type: string; xpath: boolean };
+}
+
 export class SaxonTaskProvider implements vscode.TaskProvider {
     // the command that opens a file in VS Code's integrated browser - the 'Open in Integrated Browser' menu item for an
     // HTML file. It isn't documented, so it's only used if VS Code has it
@@ -166,7 +174,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         for (let n = 2; existingLabels.has(label); n++) {
             label = `${baseLabel} ${n}`;
         }
-        const parameters = await SaxonTaskProvider.extractTopLevelParameters(xsltDocument, definitionProvider);
+        const { parameters, inputs } = await SaxonTaskProvider.extractTopLevelParameters(xsltDocument, definitionProvider);
         const newTask = SaxonTaskProvider.createQuickRunTaskDefinition(taskType, label, toStoredPath(xsltFsPath), xmlSourceFsPath ? toStoredPath(xmlSourceFsPath) : undefined, '${command:xslt-xpath.pickResultFile}');
         newTask.group = { kind: 'build' };
         if (parameters.length > 0) {
@@ -186,8 +194,14 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             formattingOptions,
             isArrayInsertion: true,
         });
-        const newText = jsc.applyEdits(text, edits);
-        await vscode.workspace.fs.writeFile(workspaceTaskUri, Buffer.from(newText, 'utf8'));
+        text = jsc.applyEdits(text, edits);
+        // the inputs for required parameters' values - shared by tasks for the same parameter name
+        const existingInputIds = new Set(((parsed.inputs || []) as { id?: string }[]).map((input) => input.id));
+        for (const input of inputs.filter((input) => !existingInputIds.has(input.id))) {
+            const inputInsertionIndex = (jsc.parse(text)?.inputs || []).length;
+            text = jsc.applyEdits(text, jsc.modify(text, ['inputs', inputInsertionIndex], input, { formattingOptions, isArrayInsertion: true }));
+        }
+        await vscode.workspace.fs.writeFile(workspaceTaskUri, Buffer.from(text, 'utf8'));
         return { label, created: true };
     }
 
@@ -289,37 +303,150 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return definition;
     }
 
-    // top-level xsl:param declarations (in this stylesheet, or anything it imports/includes) with a 'select'
-    // default become '?name=<the same xpath>' overrides - the leading '?' tells Saxon's CLI to evaluate the
-    // value as XPath rather than treat it as a literal string, so reusing the declared select expression
-    // verbatim reproduces the param's own default, not an empty override
-    private static async extractTopLevelParameters(xsltDocument: vscode.TextDocument, definitionProvider: XsltDefinitionProvider): Promise<XSLTParameter[]> {
+    // the stylesheet parameters (in this stylesheet, or anything it imports/includes) that a run needs a value for:
+    // those that are required. Each value comes from a tasks.json input, which asks for it when the task runs (offering
+    // the values used before) - parameters with defaults are left out, so the stylesheet's own defaults apply (a
+    // stylesheet such as DocBook xsltng has over 100)
+    private static async extractTopLevelParameters(xsltDocument: vscode.TextDocument, definitionProvider: XsltDefinitionProvider): Promise<{ parameters: XSLTParameter[]; inputs: ParameterInput[] }> {
         const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
         const { globalInstructionData, allImportedGlobals } = await definitionProvider.getImportedGlobals(xsltDocument, lexPosition);
 
+        const moduleTexts = new Map<string, string | undefined>();
+        const moduleText = async (href: string | undefined) => {
+            if (!href || href === xsltDocument.uri.fsPath) {
+                return xsltDocument.getText();
+            }
+            if (!moduleTexts.has(href)) {
+                moduleTexts.set(href, await vscode.workspace.openTextDocument(vscode.Uri.file(href)).then((d) => d.getText(), () => undefined));
+            }
+            return moduleTexts.get(href);
+        };
+        // the declaration in the importing module has the higher import precedence
         const seenNames = new Set<string>();
         const parameters: XSLTParameter[] = [];
-        globalInstructionData.concat(allImportedGlobals).forEach((g: GlobalInstructionData) => {
-            if (g.type === GlobalInstructionType.Parameter && g.defaultSelect && SaxonTaskProvider.isCommandLineDefault(g.defaultSelect) && !seenNames.has(g.name)) {
-                seenNames.add(g.name);
-                parameters.push({ name: '?' + g.name, value: g.defaultSelect });
+        const inputs: ParameterInput[] = [];
+        for (const g of globalInstructionData.concat(allImportedGlobals)) {
+            if (g.type !== GlobalInstructionType.Parameter || seenNames.has(g.name)) {
+                continue;
             }
-        });
-        return parameters;
+            seenNames.add(g.name);
+            if (g.defaultSelect !== undefined) {
+                continue;
+            }
+            const text = await moduleText(g.href);
+            const declaration = text !== undefined ? SaxonTaskProvider.parameterDeclaration(text, g.token.line, g.token.startCharacter) : undefined;
+            if (!declaration || !SaxonTaskProvider.isRequiredParameter(declaration.attributes, declaration.hasContent)) {
+                continue;
+            }
+            const type = declaration.attributes.get('as');
+            const asXPath = !SaxonTaskProvider.isPlainValueType(type);
+            const input: ParameterInput = { id: SaxonTaskProvider.parameterInputPrefix + g.name, type: 'command', command: SaxonTaskProvider.parameterValueCommand, args: { name: g.name, type: type ?? '', xpath: asXPath } };
+            inputs.push(input);
+            parameters.push({ name: (asXPath ? '?' : '') + g.name, value: '${input:' + input.id + '}' });
+        }
+        return { parameters, inputs };
     }
 
-    // whether a param's 'select' default gives the same value when Saxon's CLI evaluates it: there, it has no access to
-    // the stylesheet's variables, parameters or functions, and static-base-uri() is the current directory. A default
-    // that isn't is left out of the task, so the stylesheet's own default applies
-    public static isCommandLineDefault(select: string): boolean {
-        const withoutStrings = select.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'/g, '""');
-        if (withoutStrings.includes('$') || withoutStrings.includes('Q{') || /\bstatic-base-uri\s*\(/.test(withoutStrings)) {
+    public static readonly parameterValueCommand = 'xslt-xpath.enterParameterValue';
+    public static readonly parameterInputPrefix = 'xsltParam-';
+
+    // the attributes of the xsl:param element whose start tag includes the given position (e.g. its name), and whether
+    // it has content - a default value, as a select attribute is. Comments aren't content
+    public static parameterDeclaration(text: string, line: number, character: number): { attributes: Map<string, string>; hasContent: boolean } | undefined {
+        let offset = 0;
+        for (let l = 0; l < line; l++) {
+            offset = text.indexOf('\n', offset) + 1;
+            if (offset === 0) {
+                return undefined;
+            }
+        }
+        offset += character;
+        // attribute values can't contain '<', so the last one before the name starts the tag
+        const tagStart = text.lastIndexOf('<', offset);
+        if (tagStart < 0 || !text.startsWith('<xsl:param', tagStart)) {
+            return undefined;
+        }
+        let tagEnd = -1;
+        let quote = '';
+        for (let i = tagStart; i < text.length && tagEnd < 0; i++) {
+            const c = text.charAt(i);
+            if (quote) {
+                quote = c === quote ? '' : quote;
+            } else if (c === '"' || c === '\'') {
+                quote = c;
+            } else if (c === '>') {
+                tagEnd = i;
+            }
+        }
+        if (tagEnd < 0) {
+            return undefined;
+        }
+        const startTag = text.substring(tagStart, tagEnd + 1);
+        const attributes = new Map<string, string>();
+        for (const m of startTag.matchAll(/([\p{L}_][\p{L}\p{N}_.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/gu)) {
+            attributes.set(m[1], m[2] ?? m[3]);
+        }
+        let hasContent = false;
+        if (!startTag.endsWith('/>')) {
+            const endTag = text.indexOf('</xsl:param', tagEnd);
+            const content = text.substring(tagEnd + 1, endTag < 0 ? text.length : endTag);
+            hasContent = content.replace(/<!--[\s\S]*?-->/g, '').trim() !== '';
+        }
+        return { attributes, hasContent };
+    }
+
+    // whether a stylesheet parameter must be supplied: required="yes", or (XSLT 3.0) implicitly - with no default
+    // ('select' or content), and an 'as' type that doesn't allow the empty sequence. Without 'as', the default is ''
+    public static isRequiredParameter(attributes: Map<string, string>, hasContent: boolean): boolean {
+        const required = attributes.get('required')?.trim();
+        if (required !== undefined && ['yes', 'true', '1', 'no', 'false', '0'].includes(required)) {
+            return ['yes', 'true', '1'].includes(required);
+        }
+        const type = attributes.get('as');
+        if (attributes.has('select') || hasContent || type === undefined || type.trim() === 'empty-sequence()') {
             return false;
         }
-        const builtInPrefixes = ['fn', 'xs', 'math', 'map', 'array'];
-        const prefixedCalls = withoutStrings.matchAll(/([\p{L}_][\p{L}\p{N}_.-]*):[\p{L}_][\p{L}\p{N}_.-]*\s*[(#]/gu);
-        return [...prefixedCalls].every((call) => builtInPrefixes.includes(call[1]));
+        const occurrence = SaxonTaskProvider.occurrenceIndicator(type);
+        return occurrence === '' || occurrence === '+';
     }
+
+    // the occurrence indicator ('?', '*', '+' or '') of a sequence type as a whole - not a function type's return
+    // type's, as in 'function(xs:string) as xs:integer?' (written '(function(xs:string) as xs:integer)?' for the whole)
+    public static occurrenceIndicator(type: string): string {
+        const t = type.trim();
+        const last = t.charAt(t.length - 1);
+        if (!'?*+'.includes(last)) {
+            return '';
+        }
+        let depth = 0;
+        let quote = '';
+        for (let i = 0; i < t.length; i++) {
+            const c = t.charAt(i);
+            if (quote) {
+                quote = c === quote ? '' : quote;
+            } else if (c === '"' || c === '\'') {
+                quote = c;
+            } else if (c === '(' || c === '[') {
+                depth++;
+            } else if (c === ')' || c === ']') {
+                depth--;
+            } else if (depth === 0 && /^\sas\s/.test(t.substring(i, i + 4))) {
+                return '';
+            }
+        }
+        return last;
+    }
+
+    // whether a value for this type can be given on the command line as it's typed (name=value): Saxon passes it as
+    // xs:untypedAtomic, which converts to most atomic types - for other types, it's an XPath expression (?name=value)
+    public static isPlainValueType(type: string | undefined): boolean {
+        if (type === undefined) {
+            return true;
+        }
+        const itemType = type.trim().replace(/[?*+]$/, '').trim();
+        return /^(xs:[\p{L}_][\p{L}\p{N}_.-]*|enum\s*\(.*\))$/u.test(itemType) && !['xs:QName', 'xs:NOTATION', 'xs:error'].includes(itemType);
+    }
+
 
     private getTasks(tasks: XSLTTask[]) {
         let result: vscode.Task[] = [];

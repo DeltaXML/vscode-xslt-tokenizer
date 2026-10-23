@@ -116,6 +116,36 @@ export class FileSelection {
     this.context.workspaceState.update(workspaceLabel, fileListForLabel);
   }
 
+  // a stylesheet parameter's value, for a task's tasks.json input: typed, or one used before for the parameter (the
+  // last first, so it's used again with Enter) - undefined if cancelled, which cancels the run
+  public async enterParameterValue(args: { name?: string; type?: string; xpath?: boolean } | undefined): Promise<string | undefined> {
+    const name = args?.name ?? '';
+    const workspaceLabel = FileSelection.MMO_PREFIX + 'parameter:' + name;
+    const recentValues: string[] = this.context.workspaceState.get(workspaceLabel) ?? [];
+    const quickPick = vscode.window.createQuickPick();
+    quickPick.title = `Value for $${name}${args?.type ? ' as ' + args.type : ''}`;
+    quickPick.placeholder = args?.xpath ? "an XPath expression, e.g. 'text', 42 or doc('data.xml')" : 'a value, as it would be typed (no quotes)';
+    const recentItems = recentValues.map((value) => ({ label: value, description: 'used before' }));
+    quickPick.items = recentItems;
+    // what's typed is the first item, so Enter uses it
+    quickPick.onDidChangeValue((typed) => {
+      quickPick.items = typed === '' || recentValues.includes(typed) ? recentItems : [{ label: typed, description: '' }, ...recentItems];
+    });
+    const value = await new Promise<string | undefined>((resolve) => {
+      quickPick.onDidAccept(() => {
+        resolve(quickPick.activeItems[0]?.label ?? quickPick.value);
+        quickPick.hide();
+      });
+      quickPick.onDidHide(() => resolve(undefined));
+      quickPick.show();
+    });
+    quickPick.dispose();
+    if (value !== undefined) {
+      this.addToRecentlyUsedPickFile(workspaceLabel, value);
+    }
+    return value;
+  }
+
   public async pickFile(obj: { label: string; extensions?: string[]; isResult?: boolean; prevStageLabel?: string; prevStageGroup?: string; xmlStylesheetPI?: boolean; noneItemDescription?: string; clearIncludesPrevStage?: boolean }) {
     // <?xml-stylesheet type="text/xsl" href="02list11.xsl"?>
     this.completedPick = true;

@@ -395,6 +395,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickFile', async (...args) => await fileSelector.pickFile(args[0])));
+	context.subscriptions.push(vscode.commands.registerCommand(SaxonTaskProvider.parameterValueCommand, async (...args) => await fileSelector.enterParameterValue(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXsltFile', async () => await fileSelector.pickXsltFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXsltContextFile', async () => await fileSelector.pickXsltContextFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXmlSourceFile', async () => await fileSelector.pickXmlSourceFile()));
