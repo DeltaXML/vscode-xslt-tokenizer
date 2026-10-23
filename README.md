@@ -51,17 +51,19 @@ This release adds a [step-through XSLT debugger](https://deltaxml.github.io/vsco
       <li>Formatting of instructions and multi-line XPath</li>
       <li>Rename symbol, across imported modules</li>
       <li>Semantic highlighting from a full XPath parser</li>
+      <li>Code actions for Quick-Fix and Refactoring</li>
     </ul>
   </td>
   <td width="50%" valign="top">
-    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html">Code documentation</a></h4>
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/debugger.html">Debugging</a></h4>
     <ul>
-      <li><code>xsl:note</code> with Markdown and xqDoc-style tags</li>
-      <li>Shown in hover and signature help</li>
-      <li><code>@see</code> references, with navigation and rename</li>
-      <li>Checks of <code>@param</code> and <code>@field</code> tags</li>
-      <li>Module notes for stylesheets</li>
-      <li>Highlighting and auto completion for tags or references</li>
+      <li>Step-through <a href="https://deltaxml.github.io/vscode-xslt-xpath/debugger.html">XSLT debugger</a> (SaxonJ)</li>
+      <li>Per-line tracing of multi-line XPaths</li>
+      <li>Conditional Breakpoints or Logpoints</li>
+      <li>Views for globals, locals, context and output</li>
+      <li>Watch expressions and debug console</li>
+      <li>Output node mapping to its XSLT origin</li>
+      <li>Formatted and colorised print debugging</li>
     </ul>
   </td>
 </tr>
@@ -114,15 +116,15 @@ This release adds a [step-through XSLT debugger](https://deltaxml.github.io/vsco
   </td>
 </tr>
 <tr>
-  <td width="50%" valign="top">
-    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/debugger.html">Debugging &amp; tools</a></h4>
+ <td width="50%" valign="top">
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xslt40-notes.html">Code documentation</a></h4>
     <ul>
-      <li>Step-through <a href="https://deltaxml.github.io/vscode-xslt-xpath/debugger.html">XSLT debugger</a> for SaxonJ</li>
-      <li><a href="https://deltaxml.github.io/vscode-xslt-xpath/code-diagnostics.html"><code>xsl:message</code></a> for all in-scope variables</li>
-      <li>Formatted, colored output with <code>xdm:debug()</code></li>
-      <li>Companion <a href="https://marketplace.visualstudio.com/items?itemName=deltaxml.xpath-notebook">XPath Notebook</a> extension</li>
-      <li>Test XPath against the current XML file</li>
-      <li>The full <a href="https://deltaxml.github.io/vscode-xslt-xpath/">User Guide</a></li>
+      <li><code>xsl:note</code> with Markdown and xqDoc-style tags</li>
+      <li>Shown in hover and signature help</li>
+      <li><code>@see</code> references, with navigation and rename</li>
+      <li>Checks of <code>@param</code> and <code>@field</code> tags</li>
+      <li>Module notes for stylesheets</li>
+      <li>Highlighting and auto completion for tags or references</li>
     </ul>
   </td>
   <td width="50%" valign="top">
@@ -133,6 +135,8 @@ This release adds a [step-through XSLT debugger](https://deltaxml.github.io/vsco
       <li>Auto tag-close, tag rename and self-close</li>
       <li>Comment command (<code>⌘/</code>)</li>
       <li>XML snippets</li>
+      <li>Breadcrumb Navigation</li>
+      <li>Sticky scroll view</li>
     </ul>
   </td>
 </tr>
