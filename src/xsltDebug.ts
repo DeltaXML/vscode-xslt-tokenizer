@@ -252,7 +252,13 @@ export class XsltDebugConfigurationProvider implements vscode.DebugConfiguration
 
 	// for 'create a launch.json file' (Initial) and the Run and Debug view's 'XSLT (Saxon)' configurations with no
 	// launch.json (Dynamic): the active stylesheet, as Quick Run runs it, and each 'xslt' task in tasks.json
-	public async provideDebugConfigurations(_folder: vscode.WorkspaceFolder | undefined): Promise<vscode.DebugConfiguration[]> {
+	public async provideDebugConfigurations(folder: vscode.WorkspaceFolder | undefined): Promise<vscode.DebugConfiguration[]> {
+		// VS Code asks for each workspace folder and for the user settings (no folder) - the tasks are the first
+		// folder's, as for Quick Run, so they're given for that folder alone (else each is listed twice)
+		const firstFolder = vscode.workspace.workspaceFolders?.[0];
+		if (firstFolder ? folder?.uri.toString() !== firstFolder.uri.toString() : folder !== undefined) {
+			return [];
+		}
 		const tasks: vscode.TaskDefinition[] = (await SaxonJsTaskProvider.getTasksObject()).tasks || [];
 		return XsltDebug.providedConfigurations(tasks);
 	}

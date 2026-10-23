@@ -15,7 +15,7 @@ import { SaxonTaskProvider, XSLTTask } from '../../src/saxonTaskProvider';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as cp from 'child_process';
-import { XsltDebug, XsltDebugAdapterProcess, XsltDebugLog, XsltDebugOutputs, XsltDebugProblems } from '../../src/xsltDebug';
+import { XsltDebug, XsltDebugAdapterProcess, XsltDebugConfigurationProvider, XsltDebugLog, XsltDebugOutputs, XsltDebugProblems } from '../../src/xsltDebug';
 import { unquotedPath, unquotedPaths } from '../../src/settingPaths';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
@@ -70,6 +70,19 @@ suite('XSLT debugger - configurations', () => {
 			{ type: XsltDebug.type, request: 'launch', name: 'Debug report', task: 'report' },
 			{ type: XsltDebug.type, request: 'launch', name: 'Debug summary', task: 'summary' },
 		]);
+	});
+
+	test('configurations without a launch.json are given once: for the first workspace folder (or none, without one)', async () => {
+		const provider = new XsltDebugConfigurationProvider(async () => undefined);
+		const firstFolder = vscode.workspace.workspaceFolders?.[0];
+		const otherFolder: vscode.WorkspaceFolder = { uri: vscode.Uri.file(path.resolve('/elsewhere')), name: 'elsewhere', index: 1 };
+		const names = async (folder: vscode.WorkspaceFolder | undefined) => (await provider.provideDebugConfigurations(folder)).map((c) => c.name);
+		assert.include(await names(firstFolder), 'Debug Active Stylesheet');
+		assert.deepStrictEqual(await names(otherFolder), []);
+		if (firstFolder) {
+			// for the user settings
+			assert.deepStrictEqual(await names(undefined), []);
+		}
 	});
 
 	test('hovering: the whole variable reference, or the name in a variable declaration', () => {

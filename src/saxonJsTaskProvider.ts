@@ -113,6 +113,10 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
     }
 
     public static async getTasksObject() {
+        // with no folder open, there's no tasks.json (and '/' would give the invalid path '//.vscode/tasks.json')
+        if (!vscode.workspace.workspaceFolders) {
+            return { tasks: [] };
+        }
         let workspaceUri = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri : vscode.Uri.file('/');
         let workspaceTaskUri = workspaceUri.with({ path: workspaceUri.path + '/.vscode/tasks.json' });
         let tasksObject = undefined;
