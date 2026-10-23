@@ -176,7 +176,7 @@ The XML selection commands are also in the **XML Selection** submenu of the edit
 
  # Introduction
  
-For lexical analysis, this extension processes code character-by-character. This analysis is exploited for all features including *all* syntax highlighting. Avoiding the much more common use of regular expressions on a line-by-line basis brings significant benefits. These benefits include improved responsiveness, lower CPU load, improved code maintainability and greater integrity for syntax highlighting.
+For lexical analysis, this extension processes code character-by-character, and every feature - including *all* syntax highlighting - uses the result. This keeps editing responsive, and the highlighting accurate even in long, multi-line XPath expressions.
 
 **Auto-completion** is provided for XSLT and XPath. This includes context-aware completion items for all code symbol names. XSLT and XPath function signatures and descriptions are shown in the description alongside function completion items. The last active non-XSLT file is used as the source to compute available node names for XPath location steps.
 
@@ -201,6 +201,8 @@ For a full description of using VS Code tasks to run XSLT, see [Running XSLT](ht
 ## Debugging XSLT
 
 Stylesheets can be debugged with SaxonJ (Saxon 12 or later, any edition, including Saxon-HE): set breakpoints in the stylesheet, then use **XSLT: Debug Stylesheet with SaxonJ** (the debug button in the editor title, or `F5` with no `launch.json`). The stylesheet runs as Quick Run runs it - with the XML context file, or from `xsl:initial-template` - using the Quick Run task's settings.
+
+Where Saxon's standard tracing stops at XSLT instructions, this debugger uses Saxon's own APIs to inject extra trace points and re-parse XPath to locate sub-expressions, so it can stop deep inside multi-line expressions and inline functions.
 
 - Line breakpoints, with conditions, hit counts and logpoints (`{$*}` in a logpoint's message logs the local variables) - and function breakpoints, for stylesheet functions and named templates
 - Step Over, Step Into and Step Out - including line by line through multi-line XPath expressions, and into inline functions
