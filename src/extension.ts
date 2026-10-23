@@ -708,8 +708,14 @@ export function activate(context: vscode.ExtensionContext) {
 		// without an XML context file - 'None' deliberately chosen, or none chosen yet - the stylesheet runs with no
 		// source document, starting from xsl:initial-template ('-it') - an undefined xmlSourceFsPath selects this
 		// throughout - so it must declare one
-		const xmlSourceFsPath = DocumentChangeHandler.lastActiveXMLNonXSLUri?.fsPath;
-		if (!xmlSourceFsPath && !await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
+		const xmlSourceUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+		const xmlSourceFsPath = xmlSourceUri?.fsPath;
+		// a context file remembered from earlier may since have been deleted or moved
+		if (xmlSourceUri?.scheme === 'file' && !await vscode.workspace.fs.stat(xmlSourceUri).then(() => true, () => false)) {
+			offerContextFilePick(`${commandName}: the XML context file '${path.basename(xmlSourceUri.fsPath)}' no longer exists - pick another XML context file.`);
+			return undefined;
+		}
+		if (!xmlSourceFsPath &&!await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
 			offerContextFilePick(DocumentChangeHandler.contextFileIsNone ?
 				`${commandName}: the XML context file is 'None', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.` :
 				`${commandName}: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar.`);
@@ -810,9 +816,10 @@ export function activate(context: vscode.ExtensionContext) {
 			// undefined if the session was stopped before the transform completed
 			const exitCode = debugExitCodes.take(session);
 			const staticErrors = debugExitCodes.takeStaticErrors(session);
+			const failure = debugExitCodes.takeFailure(session);
 			if (exitCode !== undefined) {
 				const failed = exitCode !== 0;
-				const message = XsltDebug.sessionEndMessage(session.name, exitCode, staticErrors);
+				const message = XsltDebug.sessionEndMessage(session.name, exitCode, staticErrors, failure);
 				const resultPath: string | undefined = session.configuration.resultPath;
 				const resultFsPath = resultPath && !path.isAbsolute(resultPath) && session.workspaceFolder ? path.join(session.workspaceFolder.uri.fsPath, resultPath) : resultPath;
 				await showTransformResult(message, failed, resultFsPath);

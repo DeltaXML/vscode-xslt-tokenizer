@@ -23,6 +23,25 @@
 					"value": "0.1"
 				}
 			]
+		},
+		{
+			"type": "xslt",
+			"label": "range-variables with orders.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/range-variables.xsl",
+			"xmlSource": "${workspaceFolder}/orders.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			},
+			"parameters": [
+				{
+					"name": "?discount",
+					"value": "0.1"
+				}
+			]
 		}
 	]
 }

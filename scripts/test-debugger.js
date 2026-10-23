@@ -221,6 +221,9 @@ async function testInitialTemplateAndError(saxonJar) {
     const [{ exitCode }] = await ended;
     assert.strictEqual(exitCode, 2);
     assert.match(dap.output, /FOAR0001|divide by zero|Integer division by zero/i);
+    // for the extension's notification: the same message as the error (so it's given the error's location)
+    const error = dap.events.find((e) => e.event === 'xsltDebugError');
+    assert.deepStrictEqual(dap.events.filter((e) => e.event === 'xsltDebugFailure').map((e) => e.body.message), [error.body.message]);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
 }
@@ -1804,6 +1807,17 @@ async function testMessageTerminateAndStaticError(saxonJar) {
     assert.ok(linked.some((e) => e.body.line === 3 && /XPST0008/.test(e.body.output)), JSON.stringify(dap.events.filter((e) => e.event === 'output')));
     // found when compiling: the extension's notification says so
     assert.deepStrictEqual(dap.events.filter((e) => e.event === 'xsltDebugError').map((e) => [e.body.code, e.body.line, e.body.compiling]), [['XPST0008', 3, true]]);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+
+    // a failure before the transform runs (e.g. a task's xmlSource since deleted): the extension's notification says why
+    dap = new DapClient(saxonJar);
+    terminated = dap.event('terminated');
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'basic.xsl')}`, `-s:${path.join(fixtures, 'no-such-file.xml')}`] }, {});
+    await terminated;
+    const failures = dap.events.filter((e) => e.event === 'xsltDebugFailure').map((e) => e.body.message);
+    assert.strictEqual(failures.length, 1);
+    assert.match(failures[0], /Source file .*no-such-file\.xml does not exist/);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
 }

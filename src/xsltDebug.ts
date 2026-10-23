@@ -208,8 +208,9 @@ export class XsltDebug {
 	}
 
 	// the notification when a debug session ends - for a stylesheet that didn't compile, its first static error: it
-	// can't be paused at, as the stylesheet never ran
-	public static sessionEndMessage(name: string, exitCode: number, staticErrors: XsltStaticError[]): string {
+	// can't be paused at, as the stylesheet never ran; for another failure, why, if Saxon said (e.g. a source file
+	// that doesn't exist, or a dynamic error)
+	public static sessionEndMessage(name: string, exitCode: number, staticErrors: XsltStaticError[], failure?: XsltDebugFailure): string {
 		if (exitCode === 0) {
 			return `Completed debug session: '${name}'`;
 		}
@@ -218,6 +219,11 @@ export class XsltDebug {
 			const more = staticErrors.length > 1 ? `, and ${staticErrors.length - 1} more` : '';
 			const errors = staticErrors.length > 1 ? 'static errors' : 'a static error';
 			return `XSLT debugger: the stylesheet has ${errors}, so it can't be debugged - ${first.code ? first.code + ' ' : ''}at line ${first.line} of ${path.basename(first.path)}${more} (see the Problems view)`;
+		}
+		if (failure) {
+			const { message, error } = failure;
+			const at = error ? ` (${error.code ? error.code + ' ' : ''}at line ${error.line} of ${path.basename(error.path)})` : '';
+			return `Debug session '${name}' failed: ${message}${at}`;
 		}
 		return `Debug session '${name}' failed (exit code ${exitCode})`;
 	}
@@ -944,18 +950,35 @@ export interface XsltStaticError {
 	code: string;
 }
 
+// why a transform failed, from Saxon - with the error's location, for a dynamic error
+export interface XsltDebugFailure {
+	message: string;
+	error?: XsltStaticError;
+}
+
 export class XsltDebugExitCodes implements vscode.DebugAdapterTrackerFactory {
 	private exitCodes = new Map<string, number>();
 	private staticErrors = new Map<string, XsltStaticError[]>();
+	private failures = new Map<string, XsltDebugFailure>();
+	// the last dynamic error reported - the failure's, if it has the same message (not one caught by xsl:try)
+	private lastErrors = new Map<string, XsltStaticError & { message: string }>();
 
 	public createDebugAdapterTracker(session: vscode.DebugSession): vscode.DebugAdapterTracker {
 		return {
 			onDidSendMessage: (message: any) => {
 				if (message?.type === 'event' && message.event === 'exited') {
 					this.exitCodes.set(session.id, message.body?.exitCode);
-				} else if (message?.type === 'event' && message.event === 'xsltDebugError' && message.body?.compiling && message.body.severity === 'error') {
+				} else if (message?.type === 'event' && message.event === 'xsltDebugError' && message.body?.severity === 'error') {
 					const { path: fsPath, line, code } = message.body;
-					this.staticErrors.set(session.id, [...(this.staticErrors.get(session.id) ?? []), { path: fsPath, line, code }]);
+					if (message.body.compiling) {
+						this.staticErrors.set(session.id, [...(this.staticErrors.get(session.id) ?? []), { path: fsPath, line, code }]);
+					} else {
+						this.lastErrors.set(session.id, { path: fsPath, line, code, message: message.body.message });
+					}
+				} else if (message?.type === 'event' && message.event === 'xsltDebugFailure' && message.body?.message) {
+					const lastError = this.lastErrors.get(session.id);
+					const error = lastError && lastError.message === message.body.message ?{ path: lastError.path, line: lastError.line, code: lastError.code } : undefined;
+					this.failures.set(session.id, { message: message.body.message, error });
 				}
 			}
 		};
@@ -971,5 +994,12 @@ export class XsltDebugExitCodes implements vscode.DebugAdapterTrackerFactory {
 		const errors = this.staticErrors.get(session.id) ?? [];
 		this.staticErrors.delete(session.id);
 		return errors;
+	}
+
+	public takeFailure(session: vscode.DebugSession): XsltDebugFailure | undefined {
+		const failure = this.failures.get(session.id);
+		this.failures.delete(session.id);
+		this.lastErrors.delete(session.id);
+		return failure;
 	}
 }

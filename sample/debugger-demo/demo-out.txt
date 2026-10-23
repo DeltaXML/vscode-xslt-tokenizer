@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<totals currency="GBP">
+   <order id="A-100" customer="Ada" total="33.3"/>
+   <order id="B-200" customer="Grace" total="17.1"/>
+   <order id="C-300" customer="Linus" total="11.7"/>
+</totals>

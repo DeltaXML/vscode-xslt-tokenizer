@@ -146,6 +146,15 @@ suite('XSLT debugger - configurations', () => {
 			"XSLT debugger: the stylesheet has static errors, so it can't be debugged - XTTE0570 at line 16 of count.xsl, and 2 more (see the Problems view)");
 	});
 
+	test('the notification at the end of a failed session: why, as Saxon said', () => {
+		const missing = path.join('/ws', 'gone.xml');
+		assert.strictEqual(XsltDebug.sessionEndMessage('report', 2, [], { message: `Source file ${missing} does not exist` }),
+			`Debug session 'report' failed: Source file ${missing} does not exist`);
+		const error = { path: path.join('/ws', 'count.xsl'), line: 4, code: 'FOAR0001' };
+		assert.strictEqual(XsltDebug.sessionEndMessage('report', 2, [], { message: 'Integer division by zero', error }),
+			"Debug session 'report' failed: Integer division by zero (FOAR0001 at line 4 of count.xsl)");
+	});
+
 	test('why the debug adapter stopped, from the JVM\'s stderr', () => {
 		assert.match(XsltDebugAdapterProcess.failureReason('Exception in thread "main" java.lang.NoClassDefFoundError: net/sf/saxon/om/Sequence', 1, '/opt/x.jar'),
 			/Saxon's classes weren't found: check that '\/opt\/x.jar' is a Saxon jar/);

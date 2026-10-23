@@ -310,6 +310,8 @@ final class Debugger {
                     if (e.getClass() != RuntimeException.class) {
                         System.err.println(message(e));
                     }
+                    // why, for the extension's notification: e.g. 'Source file ... does not exist'
+                    dap.event("xsltDebugFailure", Json.obj().with("message", message(e)));
                 }
                 System.out.flush();
                 System.err.flush();
