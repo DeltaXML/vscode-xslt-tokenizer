@@ -552,7 +552,21 @@ final class Values {
         }
     }
 
-    Map<String, Object> variable(String name, Sequence value) {
+    // a value Saxon hasn't evaluated (all of) yet, whose evaluation would run stylesheet code, is shown as such, with
+    // VS Code's button to evaluate it: evaluating it to show it would run that code now, where it isn't traced - and
+    // Saxon would keep the result, so it never runs where its breakpoints are. E.g. Saxon 12's fold-left passes the
+    // accumulator to each call as one: the previous call - its function's body - still to be evaluated. Others, e.g.
+    // a parameter's value xs:integer(@n), are evaluated to show them, as before
+    Map<String, Object> variable(final String name, final Sequence value) {
+        if (isUnevaluated(value)) {
+            int reference = register(() -> java.util.Collections.singletonList(evaluatedVariable(name, value)));
+            return text(name, "(not evaluated yet)", "").with("variablesReference", reference)
+                    .with("presentationHint", Json.obj().with("lazy", true));
+        }
+        return evaluatedVariable(name, value);
+    }
+
+    private Map<String, Object> evaluatedVariable(String name, Sequence value) {
         XdmValue xdm;
         try {
             xdm = XdmValue.wrap(ground(value));
@@ -960,6 +974,62 @@ final class Values {
 
     // a variable's context for the menus of VS Code's Variables view - its 'debugProtocolVariableMenuContext'
     private static final String OUTPUT_MENU_CONTEXT = "__vscodeVariableMenuContext";
+
+    // a lazily evaluated value (a Closure) whose expression runs stylesheet code, and that Saxon hasn't read in full: a
+    // MemoClosure not started, or partly read - its MemoSequence's state is private (the same in Saxon 12 and 13); any
+    // other Closure evaluates its expression again each time it's read
+    static boolean isUnevaluated(Sequence value) {
+        if (!(value instanceof net.sf.saxon.value.Closure) || !runsStylesheetCode(((net.sf.saxon.value.Closure) value).getExpression())) {
+            return false;
+        }
+        if (!(value instanceof net.sf.saxon.value.MemoClosure)) {
+            return true;
+        }
+        Sequence read = ((net.sf.saxon.value.MemoClosure) value).getSequenceAsIs();
+        if (read == null) {
+            return true;
+        }
+        if (read instanceof GroundedValue || !(read instanceof net.sf.saxon.om.MemoSequence)) {
+            return false;
+        }
+        try {
+            java.lang.reflect.Field state = net.sf.saxon.om.MemoSequence.class.getDeclaredField("state");
+            state.setAccessible(true);
+            String name = String.valueOf(state.get(read));
+            return !(name.equals("ALL_READ") || name.equals("EMPTY") || name.equals("ERROR"));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return true;
+        }
+    }
+
+    private static final Set<String> CALLING_EXPRESSIONS = new HashSet<String>(java.util.Arrays.asList(
+            "UserFunctionCall", "DynamicFunctionCall", "UserFunctionReference", "FunctionLiteral", "PartialApply", "DynamicPartialApply"));
+
+    // whether evaluating the expression runs stylesheet code: it calls a stylesheet function or a function item (e.g.
+    // passes one to fold-left), or it has more than one traced part - e.g. it's an inline function's body
+    private static boolean runsStylesheetCode(Expression expression) {
+        if (expression == null) {
+            return false;
+        }
+        int traced = 0;
+        Deque<Expression> pending = new ArrayDeque<Expression>();
+        pending.push(expression);
+        while (!pending.isEmpty()) {
+            Expression e = pending.pop();
+            if (CALLING_EXPRESSIONS.contains(e.getClass().getSimpleName())) {
+                return true;
+            }
+            if (e instanceof net.sf.saxon.expr.instruct.TraceExpression && ++traced > 1) {
+                return true;
+            }
+            for (Operand operand : e.operands()) {
+                if (operand.getChildExpression() != null) {
+                    pending.push(operand.getChildExpression());
+                }
+            }
+        }
+        return false;
+    }
 
     private static Json.Obj text(String name, String value, String type) {
         return Json.obj().with("name", name).with("value", value).with("type", type).with("variablesReference", 0);

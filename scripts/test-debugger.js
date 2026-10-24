@@ -448,11 +448,12 @@ async function testInlineFunctions(saxonJar) {
 
 // a let in an inline function, whose value Saxon evaluates lazily - when it's first used, with only the variables it
 // uses: a breakpoint on the let's line stops once for each call, with the function's parameters as locals - not again
-// when the value is evaluated - and Step Over doesn't go back to the line for it either, though Step Into does
-// (Locals are checked at the first call only: with Saxon 12, whose fold-left passes its accumulator as a closure,
-// showing $totals at a later call evaluates the closure - the previous call - where it isn't traced)
+// when the value is evaluated - and Step Over doesn't go back to the line for it either, though Step Into does.
+// Saxon 12's fold-left passes its accumulator to each call unevaluated (the previous call's result): Locals shows it
+// as not evaluated yet - evaluating it to show it would run the previous call where it isn't traced, so its stop
+// would be missed - and VS Code's button for a lazy variable evaluates it
 async function testLazyLet(saxonJar) {
-    const run = async (command) => {
+    const run = async (command, expand) => {
         const dap = new DapClient(saxonJar);
         let stopped = dap.stopped();
         const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
@@ -465,12 +466,19 @@ async function testLazyLet(saxonJar) {
             if (!stop) {
                 break;
             }
-            if (stops.length === 0) {
+            if (stop.frames[0].line === 7) {
                 const locals = byName(await dap.variables(0, 'Locals'));
-                assert.match(locals.$item ? locals.$item.value : '(no $item)', /^<item n="1"/);
-                assert.strictEqual(locals.$totals ? locals.$totals.value : '(no $totals)', '()');
+                const item = locals.$item ? locals.$item.value.replace(/^<item n="(\d)".*/, '$1') : '-';
+                const totals = locals.$totals ? locals.$totals.value : '(no $totals)';
+                stops.push(`7:${item}=${totals}`);
+                if (expand && totals === '(not evaluated yet)') {
+                    assert.strictEqual(locals.$totals.presentationHint.lazy, true);
+                    const { variables } = await dap.request('variables', { variablesReference: locals.$totals.variablesReference });
+                    stops.push(`evaluated ${variables.map((v) => v.name + '=' + v.value).join(' ')}`);
+                }
+            } else {
+                stops.push(String(stop.frames[0].line));
             }
-            stops.push(String(stop.frames[0].line));
             stopped = dap.stopped();
             stopped.catch(() => undefined);
             await dap.request(command, { threadId: 1 });
@@ -480,14 +488,20 @@ async function testLazyLet(saxonJar) {
         assert.match(require('fs').readFileSync(path.join(outDir, 'result.xml'), 'utf8'), /<out>1 7 16<\/out>/);
         return stops;
     };
-    // once for each of the 3 calls
-    assert.deepStrictEqual(await run('continue'), ['7', '7', '7']);
-    // Step Over: at the let once for each call too - not again for its value (with Saxon 12, a call can start within
-    // another, where the accumulator is used)
-    const stepped = (await run('next')).filter((line) => ['7', '8', '9', '10'].includes(line));
+    // once for each of the 3 calls, with its parameters (Saxon 12 starts the second call within the third)
+    const saxon12 = /saxon-he-12|saxon-pe-12|saxon-ee-12/i.test(saxonJar);
+    assert.deepStrictEqual(await run('continue'), saxon12 ?
+        ['7:1=()', '7:3=(not evaluated yet)', '7:2=1'] : ['7:1=()', '7:2=1', '7:3=(1, 7)']);
+    if (saxon12) {
+        // evaluated on request: the second call runs then, so it isn't stopped at
+        assert.deepStrictEqual(await run('continue', true), ['7:1=()', '7:3=(not evaluated yet)', 'evaluated $totals=(1, 7)']);
+    }
+    const lines = (stops) => stops.map((stop) => stop.replace(/:.*/, '')).filter((line) => ['7', '8', '9', '10'].includes(line));
+    // Step Over: at the let once for each call too - not again for its value
+    const stepped = lines(await run('next'));
     assert.strictEqual(stepped.filter((line) => line === '7').length, 3, stepped.join(' '));
     // Step Into stops where the let's value is evaluated too
-    const steppedInto = (await run('stepIn')).filter((line) => ['7', '8', '9', '10'].includes(line));
+    const steppedInto = lines(await run('stepIn'));
     assert.ok(steppedInto.some((line, i) => line === '7' && ['9', '7'].includes(steppedInto[i - 1])), steppedInto.join(' '));
 }
 
