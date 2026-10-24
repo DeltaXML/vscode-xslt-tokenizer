@@ -416,6 +416,8 @@ async function testInlineFunctions(saxonJar) {
     let locals = byName(await dap.variables(0, 'Locals'));
     assert.strictEqual(locals.$sum.value, '0');
     assert.match(locals.$item.value, /^<item n="1"/);
+    // the template's $factor isn't used by this function, so it's not one of its locals
+    assert.deepStrictEqual(Object.keys(locals).sort(), ['$item', '$sum']);
     // the body is on one line: stepping into it again stops there for a later call - the next, or with Saxon 12,
     // whose fold-left evaluates $sum lazily, the last, within which the one before it is evaluated
     stopped = dap.stopped();

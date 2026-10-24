@@ -95,7 +95,8 @@ final class Values {
     // within an XPath expression being stepped through: its instruction's local variables, then the expression's own
     // range variables, which hide any of the same name - not the variables it references, passed to it from where
     // it's evaluated (which may be global variables), in the first slots of its stack frame (slots). Within an inline
-    // function, the stack frame is the function's: its parameters, then its range variables
+    // function, the stack frame is the function's: its parameters - including the variables from outside it that it
+    // uses, which Saxon passes to it - then its range variables; the instruction's other variables aren't shown
     Supplier<List<Map<String, Object>>> xpathLocals(final XPathContext context, final Traceable current, final int externals,
             final SlotManager slots, final XPathContext xsltContext, final Traceable xsltCurrent) {
         return () -> {
@@ -107,16 +108,20 @@ final class Values {
                 ownNames.add(local.getKey().getDisplayName());
             }
             List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
-            for (Map.Entry<StructuredQName, Sequence> local : localVariables(xsltContext, xsltCurrent, 0)) {
-                if (!ownNames.contains(local.getKey().getDisplayName())) {
-                    result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
+            if (expressionFrame) {
+                for (Map.Entry<StructuredQName, Sequence> local : localVariables(xsltContext, xsltCurrent, 0)) {
+                    if (!ownNames.contains(local.getKey().getDisplayName())) {
+                        result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
+                    }
                 }
             }
             for (Map.Entry<StructuredQName, Sequence> local : own) {
                 result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
             }
-            for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(xsltContext)) {
-                result.add(variable("$" + tunnel.getKey().getDisplayName() + " (tunnel)", tunnel.getValue()));
+            if (expressionFrame) {
+                for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(xsltContext)) {
+                    result.add(variable("$" + tunnel.getKey().getDisplayName() + " (tunnel)", tunnel.getValue()));
+                }
             }
             return result;
         };
