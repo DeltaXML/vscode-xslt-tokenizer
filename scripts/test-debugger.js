@@ -507,6 +507,54 @@ async function testLazyLet(saxonJar) {
     assert.ok(steppedInto.some((line, i) => line === '7' && ['9', '7'].includes(steppedInto[i - 1])), steppedInto.join(' '));
 }
 
+// a function with cache="yes": a breakpoint in it stops only where it runs - not for a call with the same arguments
+// as one before. A call by a watch expression has a cache of its own: the stylesheet's call with those arguments
+// still runs the function, and stops in it - and the stylesheet's cache is kept: its earlier calls aren't run again
+async function testCachedFunction(saxonJar) {
+    const start = async (breakpoints) => {
+        const dap = new DapClient(saxonJar);
+        const stopped = dap.stopped();
+        await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'cached-function.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
+            { 'cached-function.xsl': breakpoints.map((line) => ({ line })) });
+        return { dap, stopped, terminated: dap.event('terminated') };
+    };
+    const stopsUntilEnd = async (dap, stopped, terminated) => {
+        const stops = [];
+        while (true) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            stops.push(stop.frames.slice(0, 2).map((frame) => frame.line).join('<'));
+            stopped = dap.stopped();
+            stopped.catch(() => undefined);
+            await dap.request('continue', { threadId: 1 });
+        }
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return stops;
+    };
+    const messages = (dap) => dap.output.split('\n').filter((line) => line.startsWith('computing'));
+
+    let { dap, stopped, terminated } = await start([5]);
+    // called on lines 9, 10 and 11 with 2, 2 and 3
+    assert.deepStrictEqual(await stopsUntilEnd(dap, stopped, terminated), ['5<9', '5<11']);
+    assert.deepStrictEqual(messages(dap), ['computing 2', 'computing 3']);
+
+    ({ dap, stopped, terminated } = await start([10]));
+    const stop = await stopped;
+    assert.strictEqual(stop.frames[0].line, 10);
+    for (const [expression, value] of [['f:square(3)', '9'], ['f:square(2)', '4']]) {
+        assert.strictEqual((await dap.request('evaluate', { expression, frameId: 0, context: 'watch' })).result, value);
+    }
+    await dap.request('setBreakpoints', { source: { path: path.join(fixtures, 'cached-function.xsl') }, breakpoints: [{ line: 5 }] });
+    stopped = dap.stopped();
+    await dap.request('continue', { threadId: 1 });
+    // line 10's call is the stylesheet's second with 2 - from its cache - and line 11's runs the function
+    assert.deepStrictEqual(await stopsUntilEnd(dap, stopped, terminated), ['5<11']);
+    assert.deepStrictEqual(messages(dap), ['computing 2', 'computing 3', 'computing 2', 'computing 3']);
+}
+
 // the Context scope: current-group() and current-grouping-key() in xsl:for-each-group, and regex-group() in
 // xsl:analyze-string
 async function testGroupsInContext(saxonJar) {
@@ -2126,7 +2174,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testCachedFunction, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

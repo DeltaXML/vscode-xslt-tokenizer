@@ -564,7 +564,15 @@ final class Values {
     // a parameter's value xs:integer(@n), are evaluated to show them, as before
     Map<String, Object> variable(final String name, final Sequence value) {
         if (isUnevaluated(value)) {
-            int reference = register(() -> java.util.Collections.singletonList(evaluatedVariable(name, value)));
+            // evaluated on request - with its own function caches, as for a watch expression
+            XPathContext saved = ((net.sf.saxon.value.Closure) value).getSavedXPathContext();
+            int reference = register(() -> {
+                try {
+                    return java.util.Collections.singletonList(Evaluator.withOwnFunctionCaches(saved, () -> evaluatedVariable(name, value)));
+                } catch (Exception e) {
+                    return java.util.Collections.singletonList(text(name, "error: " + Debugger.message(e), ""));
+                }
+            });
             return text(name, "(not evaluated yet)", "").with("variablesReference", reference)
                     .with("presentationHint", Json.obj().with("lazy", true));
         }

@@ -10,7 +10,12 @@
       "Bash(javap -c -p -cp debugger/lib/Saxon-HE-12.9.jar net.sf.saxon.value.MemoClosure)",
       "Bash(javap -p -cp debugger/lib/Saxon-HE-12.9.jar net.sf.saxon.om.MemoSequence)",
       "Bash(sed -i '' 's/for \\(let i = 0; i < 5; i++\\)/for \\(let i = 0; i < 12; i++\\)/' /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/fold-test.js)",
-      "Bash(node /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/fold-test.js debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)"
+      "Bash(node /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/fold-test.js debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)",
+      "Bash(java -cp ~/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform -xsl:/private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/memo/cached.xsl -s:debugger/test/basic.xml)",
+      "Bash(sed -i '' 's/cache=\"full\"/cache=\"yes\"/' /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/memo/cached.xsl)",
+      "Bash(sed -i '' 's#console.log\\('\\\\''  output: '\\\\'' + dap.output.slice\\(0, 400\\)\\); ##' /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/memo-run.js)",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -n \"^    [a-zA-Z].*\\(.*{$\\\\|^    //\" Evaluator.java)"
     ]
   }
 }
