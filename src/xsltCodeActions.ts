@@ -15,6 +15,7 @@ import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
 import * as path from 'path';
 import { wrapTarget, wrappersFor } from './xsltWrap';
+import { TraceActions } from './traceActions';
 
 
 enum ElementSelectionType {
@@ -62,7 +63,7 @@ enum XsltCodeActionKind {
 	extractXsltFunctionPartial = 'xsl:function - partial refactor',
 	extractXsltTemplate = 'xsl:template',
 	extractXsltVariable = 'xsl:variable',
-	fixXdmDebugRef = 'include XSLT module for xdm:debug',
+	fixXdmDebugRef = 'include XSLT module for xdm:debug and xdm:trace',
 	copyXdmViewToWorkspace = 'copy xdm-view library into workspace',
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
@@ -122,6 +123,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 	private static useRecordTypeTitle(name: string) {
 		return `Use record type '${name}'`;
+	}
+
+	public static wrapWithTraceTitle(functionName: string) {
+		return `Wrap with ${functionName}()`;
+	}
+
+	public static removeTraceTitle(functionName: string) {
+		return `Remove ${functionName}() - keep the expression`;
 	}
 
 	// the edits for 'Extract record type', adding an xsl:item-type for the record type and setting the declaration's 'as',
@@ -353,6 +362,19 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			}
 		}
 
+		// 'Remove trace()': the expression traced by the trace(), fn:trace() or xdm:trace() call whose name is at the cursor -
+		// in an XPath attribute or attribute value template
+		const traceCall = TraceActions.traceCallAt(document.getText(), document.offsetAt(range.start));
+		if (traceCall && range.end.isBeforeOrEqual(document.positionAt(traceCall.end))) {
+			const attribute = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, undefined, document.uri);
+			if (attribute && (attribute.kind === vscode.SymbolKind.Event || attribute.kind === vscode.SymbolKind.Field)) {
+				const action = new vscode.CodeAction(XSLTCodeActions.removeTraceTitle(traceCall.name), vscode.CodeActionKind.RefactorInline);
+				action.edit = new vscode.WorkspaceEdit();
+				action.edit.replace(document.uri, new vscode.Range(document.positionAt(traceCall.start), document.positionAt(traceCall.end)), TraceActions.unwrapped(document.getText(), traceCall));
+				codeActions.push(action);
+			}
+		}
+
 		let roughSelectionType : RangeTagType = RangeTagType.unknown;
 		let firstTagName: string = '';
 		let lastTagName: string = '';
@@ -362,6 +384,24 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				roughSelectionType = result.rangeTagType;
 				firstTagName = result.firstTagName;
 				lastTagName = result.lastTagName;
+				// 'Wrap with xdm:trace()' and 'Wrap with trace()': for a whole XPath expression - not part of a name, which
+				// may be one on its own, e.g. 'tot' of '$total'
+				const fullText = document.getText();
+				const startOffset = document.offsetAt(range.start);
+				const endOffset = document.offsetAt(range.end);
+				const nameChar = /[\w.:-]/;
+				const splitsName = (nameChar.test(fullText.charAt(startOffset)) && /[\w.:$-]/.test(fullText.charAt(startOffset - 1))) ||
+					(nameChar.test(fullText.charAt(endOffset - 1)) && nameChar.test(fullText.charAt(endOffset)));
+				if (result.isXPathExpression && !splitsName) {
+					for (const functionName of ['xdm:trace', 'trace']) {
+						const action = new vscode.CodeAction(XSLTCodeActions.wrapWithTraceTitle(functionName), vscode.CodeActionKind.RefactorRewrite);
+						const { prefix, label, suffix } = TraceActions.wrapSnippet(document.getText(range), functionName, result.attributeQuote);
+						const snippet = new vscode.SnippetString().appendText(prefix).appendPlaceholder(label).appendText(suffix);
+						action.edit = new vscode.WorkspaceEdit();
+						action.edit.set(document.uri, [new vscode.SnippetTextEdit(range, snippet)]);
+						codeActions.push(action);
+					}
+				}
 			} catch (e: any) {
 				console.error("Error on estimateSelectionType: " + e);
 				return codeActions;
@@ -491,12 +531,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return ancestorOrSelfSymbol;
 	}
 
-	private estimateSelectionType(document: vscode.TextDocument, initRange: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string } {
+	// isXPathExpression: the selection is a whole XPath expression, within an attribute (or value template) whose value
+	// is delimited by attributeQuote - though rangeTagType is only xpathAttribute for one that isn't just a name
+	private estimateSelectionType(document: vscode.TextDocument, initRange: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string; isXPathExpression: boolean; attributeQuote: string } {
 		let rangeTagType = RangeTagType.unknown,
 			firstTagName = '',
 			lastTagName = '',
 			firstSymbol: possDocumentSymbol | undefined,
-			lastSymbol: possDocumentSymbol | undefined;
+			lastSymbol: possDocumentSymbol | undefined,
+			isXPathExpression = false,
+			attributeQuote = '"';
 		let range = initRange;
 
 		const startPosition = range.start;
@@ -538,6 +582,9 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 								item.code !== DiagnosticCode.xdmDebugRef &&
 								item.code !== DiagnosticCode.parseHtmlRef);
 							if (!blockingIssue) {
+								// a whole expression, if only a name - it can be wrapped in a trace() call
+								isXPathExpression = true;
+								attributeQuote = document.getText(new vscode.Range(document.positionAt(startCharOfAttrValue - 1), document.positionAt(startCharOfAttrValue)));
 								let pass = xpathText.length > 30;
 								if (!pass) {
 									// we need an expression other than just a name or whitespace
@@ -631,7 +678,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		this.actionProps = { document, range, firstSymbol, lastSymbol, expandTextVal };
 
-		return { rangeTagType, firstTagName, lastTagName };
+		return { rangeTagType, firstTagName, lastTagName, isXPathExpression, attributeQuote };
 	}
 
 	public static getAttrStartFromSymbol(document: vscode.TextDocument, docSymbol: vscode.DocumentSymbol) {

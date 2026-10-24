@@ -152,12 +152,23 @@
        a value came from without dumping the node itself. -->
   <xsl:function name="xdm:path" as="xs:string">
     <xsl:param name="node" as="node()"/>
+    <!-- A document-rooted node's own ancestor-or-self::node() includes
+         the document-node() itself, and zxd:step-label-for-node returns
+         '' for one (it has no branch of its own, and a document-node
+         can never have siblings for the "otherwise"/element branch's
+         disambiguation check to find) - so $joined already comes out
+         leading-slashed for free ('' || '/' || 'books' = '/books'). A
+         standalone (document-less) node has no such ancestor, so
+         $joined has no leading slash on its own; adding one only when
+         it's missing (rather than unconditionally, which would double
+         it in the document-rooted case) makes every non-document path
+         read as a path consistently, standalone or not. -->
+    <xsl:variable name="joined" as="xs:string" select="
+      string-join(for $n in $node/ancestor-or-self::node() return zxd:step-label-for-node($n), '/')"/>
     <xsl:sequence select="
       if ($node instance of document-node())
       then '(whole document)'
-      else string-join(
-        for $n in $node/ancestor-or-self::node()
-        return zxd:step-label-for-node($n), '/')"/>
+      else if (starts-with($joined, '/')) then $joined else '/' || $joined"/>
   </xsl:function>
 
   <!-- The one-line, uncolored location text shown above a resolved

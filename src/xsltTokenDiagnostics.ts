@@ -3951,7 +3951,8 @@ export class XsltTokenDiagnostics {
 			isValid = !isParseHTMLFnWarning;
 		}
 		fErrorType = isParseHTMLFnWarning ? ErrorType.XPathFunctionParseHtml : isValid ? ErrorType.None : fErrorType;
-		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && tokenValue.startsWith('xdm:debug')) {
+		// a function of the xdm-view library (bundled with the extension) whose module isn't included - the quick fix includes it
+		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && (tokenValue.startsWith('xdm:debug') || tokenValue === 'xdm:trace')) {
 			fErrorType = ErrorType.XPathFunctionXdmDebug;
 		}
 		return { isValid, qFunctionName, fErrorType };
@@ -4800,7 +4801,7 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunctionXdmDebug:
 					errCode = DiagnosticCode.xdmDebugRef;
 					severity = vscode.DiagnosticSeverity.Warning;
-					msg = `XPath: 'xdm:debug/debug-color' function not defined - use QuickFix`;
+					msg = `XPath: '${tokenValue.split('#')[0]}' function not defined - use QuickFix to include the xdm-view module`;
 					break;
 				case ErrorType.XPathTypeName:
 					msg = `XPath: Invalid type: '${tokenValue}'`;

@@ -2330,8 +2330,24 @@ export class XsltTokenCompletions {
 			item.sortText = '~' + String(index).padStart(2, '0');
 			return item;
 		});
+		// xdm:trace, from the xdm-view library bundled with the extension - unless it's included already, when it's one of
+		// the stylesheet's functions; if not, the quick fix for its warning includes it
+		if (!completions.some((item) => item.label === 'xdm:trace')) {
+			const trace = new vscode.CompletionItem(XsltTokenCompletions.xdmTraceSnippetLabel, vscode.CompletionItemKind.Snippet);
+			trace.insertText = new vscode.SnippetString("xdm:trace(${1:value}, '${2:label}')$0");
+			trace.filterText = 'xdm:trace';
+			trace.detail = 'xdm:trace($value, $label?, $useColor?) as item()*';
+			trace.documentation = new vscode.MarkdownString('As `trace()`, it returns `$value` unchanged - and writes `label: value` with `xsl:message`, ' +
+				'pretty-printed and colored (unless the `NO_COLOR` environment variable is set, or `$useColor` is `false()`). ' +
+				'From the xdm-view library bundled with the extension: the quick fix for its warning includes the library\'s module.');
+			trace.range = range;
+			trace.sortText = '~' + String(snippets.length).padStart(2, '0');
+			snippets.push(trace);
+		}
 		return completions.concat(snippets);
 	}
+
+	public static readonly xdmTraceSnippetLabel = 'xdm:trace(…, label) - pretty-printed trace';
 
 	// an xsl:with-param for each parameter not already passed, for an element name after '<' in an xsl:call-template - the
 	// called template's parameters - or in an xsl:next-iteration - the xsl:iterate's parameters - undefined if it's not such

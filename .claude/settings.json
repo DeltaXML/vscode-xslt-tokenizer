@@ -16,7 +16,17 @@
       "Bash(sed -i '' 's#console.log\\('\\\\''  output: '\\\\'' + dap.output.slice\\(0, 400\\)\\); ##' /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/memo-run.js)",
       "Bash(grep -v \"^$\")",
       "Bash(grep -n \"^    [a-zA-Z].*\\(.*{$\\\\|^    //\" Evaluator.java)",
-      "Bash(node -e 'const p=require\\(\"./package.json\"\\);const t=p.contributes.taskDefinitions.find\\(d=>d.type===\"xslt\"\\);console.log\\(Object.keys\\(t.properties\\).join\\(\", \"\\)\\)')"
+      "Bash(node -e 'const p=require\\(\"./package.json\"\\);const t=p.contributes.taskDefinitions.find\\(d=>d.type===\"xslt\"\\);console.log\\(Object.keys\\(t.properties\\).join\\(\", \"\\)\\)')",
+      "Bash(ls xslt-resources/xdm-view/)",
+      "Bash(grep -n \"xsl:function\" xslt-resources/xdm-view/*.xsl)",
+      "Read(//Users/phil.fearon/dev-research/**)",
+      "Bash(sed -i '' 's#http://github.com/pgfearo/xdm-viewer#http://deltaxignia.com/ns/xdm-persistence#' /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/trace/trace-proto.xsl)",
+      "Bash(java -cp ~/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform -xsl:/private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/trace/trace-proto.xsl -s:debugger/test/basic.xml)",
+      "Read(//Users/phil.fearon/Documents/github/xdm-viewer/**)",
+      "Bash(sed -n 90,150p tests/test-debug.xsl)"
+    ],
+    "additionalDirectories": [
+      "/Users/phil.fearon/Documents/github/xdm-viewer/tests"
     ]
   }
 }
