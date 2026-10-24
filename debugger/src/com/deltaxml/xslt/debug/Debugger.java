@@ -366,7 +366,7 @@ final class Debugger {
                 Frame frame = frame(frameId);
                 List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
                 result.add(scope("Locals", values.register(frame.xsltContext == null ? values.locals(frame.context, frame.current) :
-                        values.xpathLocals(frame.context, frame.current, frame.xpathExternals, frame.xsltContext, frame.xsltCurrent)), false));
+                        values.xpathLocals(frame.context, frame.current, frame.xpathExternals, frame.xpathSlots, frame.xsltContext, frame.xsltCurrent)), false));
                 result.add(scope("Context", values.register(values.focus(frame.context, xsltContext(frame), frame.xpathFocus, frame.lazyPart)), false));
                 result.add(scope("Globals", values.register(values.globals(xsltContext(frame))), true));
                 result.add(scope("Output", values.register(values.output(outputs, xsltContext(frame))), false));
@@ -651,6 +651,7 @@ final class Debugger {
                 xpathFrame = frame;
                 xpathParts = compiled.instrumented;
                 frame.xpathExternals = compiled.externals;
+                frame.xpathSlots = compiled.slots;
                 net.sf.saxon.sxpath.XPathDynamicContext dynamicContext = compiled.prepare();
                 frame.xpathFocus = dynamicContext.getXPathContextObject().getCurrentIterator();
                 GroundedValue value = null;
@@ -931,7 +932,7 @@ final class Debugger {
         List<Map<String, Object>> locals;
         try {
             locals = (frame.xsltContext == null ? values.locals(frame.context, frame.current) :
-                    values.xpathLocals(frame.context, frame.current, frame.xpathExternals, frame.xsltContext, frame.xsltCurrent)).get();
+                    values.xpathLocals(frame.context, frame.current, frame.xpathExternals, frame.xpathSlots, frame.xsltContext, frame.xsltCurrent)).get();
         } finally {
             // not paused: nothing to expand
             values.clear();
@@ -1311,9 +1312,11 @@ final class Debugger {
         int callDepth;
         XPathContext xsltContext;
         Traceable xsltCurrent;
-        // for an XPath expression's frame: the number of slots for the variables it references (not its own), and
-        // the focus it's evaluated with - at its top level, that of its instruction
+        // for an XPath expression's frame: the number of slots for the variables it references (not its own), in
+        // its stack frame (xpathSlots - not an inline function's), and the focus it's evaluated with - at its top
+        // level, that of its instruction
         int xpathExternals;
+        net.sf.saxon.expr.instruct.SlotManager xpathSlots;
         net.sf.saxon.om.FocusIterator xpathFocus;
         // where it's paused, a part of the XPath expression is evaluated lazily, within a function it calls (e.g. an
         // argument, when the function uses it): Saxon keeps only the context item for it, not position() and last()

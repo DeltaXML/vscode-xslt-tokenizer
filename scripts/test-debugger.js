@@ -433,9 +433,11 @@ async function testInlineFunctions(saxonJar) {
         if (!stop) {
             break;
         }
-        // the function that captures $factor
+        // the function that captures $factor: its own parameter is a local too - the expression's first stack slots
+        // are for the variables it references, but not the function's, whose first slots are its parameters
         assert.strictEqual(stop.frames[0].line, 12);
         locals = byName(await dap.variables(0, 'Locals'));
+        assert.match(locals.$item ? locals.$item.value : '(no $item)', /^<item n="[123]"/);
         scaled.push(`${(await dap.request('evaluate', { expression: 'string($item/@n)', frameId: 0, context: 'watch' })).result}*${locals.$factor ? locals.$factor.value : '?'}`);
     }
     assert.deepStrictEqual(scaled, ['"1"*3', '"2"*3', '"3"*3']);

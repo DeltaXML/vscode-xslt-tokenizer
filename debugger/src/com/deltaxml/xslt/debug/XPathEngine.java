@@ -88,8 +88,10 @@ final class XPathEngine {
         // the paused transform's: its accumulator values, key indexes and documents are those of the transform
         private final Controller controller;
         // the number of slots for the variables the expression references, bound from where it's evaluated - before
-        // those of its own range variables
+        // those of its own range variables - in its stack frame, which has these slots (an inline function within it
+        // has a stack frame of its own, without them)
         final int externals;
+        final SlotManager slots;
         // the locations of the expression's own parts (not those in stylesheet functions it calls): those Saxon
         // reports, as type checking may replace a part by another, with the same location
         final Map<Location, Boolean> instrumented;
@@ -97,8 +99,9 @@ final class XPathEngine {
         final boolean worthSteppingThrough;
 
         Compiled(XPathExpression expression, Map<XPathVariable, Sequence> bindings, Item contextItem, Controller controller, int externals,
-                Map<Location, Boolean> instrumented, boolean worthSteppingThrough) {
+                SlotManager slots, Map<Location, Boolean> instrumented, boolean worthSteppingThrough) {
             this.expression = expression;
+            this.slots = slots;
             this.worthSteppingThrough = worthSteppingThrough;
             this.controller = controller;
             this.bindings = bindings;
@@ -251,7 +254,7 @@ final class XPathEngine {
         int externals = slots.getNumberOfVariables();
         ExpressionTool.allocateSlots(expression, externals, slots);
         return new Compiled(new CompiledExpression(env, expression, executable, slots, externals), bindings, context.getContextItem(), xsltContext.getController(),
-                externals, instrumented, worthSteppingThrough);
+                externals, slots, instrumented, worthSteppingThrough);
     }
 
     // Whether stepping through an expression shows more than its result: it binds variables, shown in the Locals as

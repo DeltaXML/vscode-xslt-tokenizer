@@ -94,11 +94,14 @@ final class Values {
 
     // within an XPath expression being stepped through: its instruction's local variables, then the expression's own
     // range variables, which hide any of the same name - not the variables it references, passed to it from where
-    // it's evaluated (which may be global variables)
+    // it's evaluated (which may be global variables), in the first slots of its stack frame (slots). Within an inline
+    // function, the stack frame is the function's: its parameters, then its range variables
     Supplier<List<Map<String, Object>>> xpathLocals(final XPathContext context, final Traceable current, final int externals,
-            final XPathContext xsltContext, final Traceable xsltCurrent) {
+            final SlotManager slots, final XPathContext xsltContext, final Traceable xsltCurrent) {
         return () -> {
-            List<Map.Entry<StructuredQName, Sequence>> own = localVariables(context, current, externals);
+            StackFrame stackFrame = context.getStackFrame();
+            boolean expressionFrame = stackFrame != null && stackFrame.getStackFrameMap() == slots;
+            List<Map.Entry<StructuredQName, Sequence>> own = localVariables(context, current, expressionFrame ? externals : 0);
             Set<String> ownNames = new HashSet<String>();
             for (Map.Entry<StructuredQName, Sequence> local : own) {
                 ownNames.add(local.getKey().getDisplayName());
