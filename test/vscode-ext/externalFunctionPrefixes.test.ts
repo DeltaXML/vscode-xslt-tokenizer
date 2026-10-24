@@ -14,12 +14,12 @@ import { XSLTCodeActions } from '../../src/xsltCodeActions';
 const section = 'XSLT.validation';
 const setting = 'externalFunctionPrefixes';
 
-function stylesheet(select: string) {
-	return `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:ext="http://example.com/ext" version="3.0">\n  <xsl:template match="/"><xsl:sequence select="${select}"/></xsl:template>\n</xsl:stylesheet>`;
+function stylesheet(select: string, namespaces = '') {
+	return `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:ext="http://example.com/ext"${namespaces} version="3.0">\n  <xsl:template match="/"><xsl:sequence select="${select}"/></xsl:template>\n</xsl:stylesheet>`;
 }
 
-async function lint(select: string) {
-	const xslt = stylesheet(select);
+async function lint(select: string, namespaces = '') {
+	const xslt = stylesheet(select, namespaces);
 	const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'xslt' });
 	const lexer = new XslLexer(XSLTConfiguration.configuration);
 	lexer.provideCharLevelState = true;
@@ -54,6 +54,15 @@ suite('Functions the processing system provides: XSLT.validation.externalFunctio
 	test('a prefix in the setting may be written with its colon', async () => {
 		await config().update(setting, ['ext:'], vscode.ConfigurationTarget.Global);
 		assert.deepEqual(await messages('ext:lookup(1)'), []);
+	});
+
+	test('a \'java:\' namespace\'s functions - Saxon calls the Java class\'s methods - aren\'t checked, without the setting', async () => {
+		await config().update(setting, undefined, vscode.ConfigurationTarget.Global);
+		// including 'math', when it's bound to a Java class rather than the XPath math functions
+		const namespaces = ' xmlns:g="java:demo.Greeter" xmlns:math="java:java.lang.Math"';
+		assert.deepEqual((await lint('g:greet(\'a\'), g:greet#1, math:abs(-1), math:floorMod(7, 2)', namespaces)).diagnostics.map((d) => d.message), []);
+		// a namespace that isn't 'java:' is still checked
+		assert.lengthOf((await lint('ext:lookup(1)', namespaces)).diagnostics, 1);
 	});
 
 	test('still reported: a prefix that isn\'t declared, and an unknown function without one', async () => {

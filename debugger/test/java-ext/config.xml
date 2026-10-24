@@ -1,0 +1,5 @@
+<configuration xmlns="http://saxon.sf.net/ns/configuration" edition="HE">
+  <resources>
+    <extensionFunction>demo.Shout</extensionFunction>
+  </resources>
+</configuration>

@@ -843,7 +843,7 @@ export class XsltTokenDiagnostics {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
 										let pfx = prefixNsPair[0];
 										let namespaceURI = prefixNsPair[1];
-										let xsltType = FunctionData.namespaces.get(namespaceURI);
+										let xsltType = FunctionData.namespaceType(namespaceURI);
 										if (xsltType !== undefined) {
 											xsltPrefixesToURIs.set(pfx, xsltType);
 										}
@@ -858,7 +858,7 @@ export class XsltTokenDiagnostics {
 										// the prefixes for the known namespaces, e.g. fn and xs, are those of the fixed bindings
 										xsltPrefixesToURIs = new Map();
 										fixedNamespaces.bindings.forEach((uri, pfx) => {
-											const xsltType = FunctionData.namespaces.get(uri);
+											const xsltType = FunctionData.namespaceType(uri);
 											if (xsltType !== undefined) {
 												xsltPrefixesToURIs.set(pfx, xsltType);
 											}
@@ -1818,7 +1818,7 @@ export class XsltTokenDiagnostics {
 								xsltPrefixesToURIs = new Map(xsltPrefixesToURIs);
 							}
 							inheritedPrefixes = inheritedPrefixes.includes(prefix) ? inheritedPrefixes : inheritedPrefixes.concat([prefix]);
-							const nsType = FunctionData.namespaces.get(token.value.substring(1, token.value.length - 1));
+							const nsType = FunctionData.namespaceType(token.value.substring(1, token.value.length - 1));
 							if (nsType === undefined) {
 								xsltPrefixesToURIs.delete(prefix);
 							} else {
@@ -3858,8 +3858,8 @@ export class XsltTokenDiagnostics {
 				// prefix is not declared
 				fErrorType = ErrorType.XPathFunctionNamespace;
 				isValid = false;
-			} else if (XsltTokenDiagnostics.externalFunctionPrefixes.includes(fNameParts[0])) {
-				// provided by the processing system, e.g. a Java extension function
+			} else if (XsltTokenDiagnostics.externalFunctionPrefixes.includes(fNameParts[0]) || xsltType === XSLTnamespaces.Java) {
+				// provided by the processing system, e.g. a Java extension function - a 'java:' namespace's always are
 				isValid = true;
 			} else if (xsltType === XSLTnamespaces.NotDefined || xsltType === undefined) {
 				isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;

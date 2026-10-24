@@ -555,6 +555,56 @@ async function testCachedFunction(saxonJar) {
     assert.deepStrictEqual(messages(dap), ['computing 2', 'computing 3', 'computing 2', 'computing 3']);
 }
 
+// Java extension functions, from classes on the class path (an xslt task's classPathEntries): an integrated one,
+// registered by a configuration file (configFilename: -config), with any Saxon edition; and Java methods called
+// reflexively, through a 'java:' namespace, with Saxon-PE or EE. The stylesheet runs as it does without the
+// debugger, a breakpoint on the call's line - within a multi-line expression - stops for each item, Step Into goes
+// through the expression, and Watch can call the functions
+async function testJavaExtensionFunctions(saxonJar) {
+    const fs = require('fs');
+    const classes = fs.mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-java-'));
+    const sources = path.join(fixtures, 'java-ext', 'demo');
+    const javac = require('child_process').spawnSync('javac', ['--release', '8', '-Xlint:-options', '-cp', saxonJar, '-d', classes,
+        path.join(sources, 'Greeter.java'), path.join(sources, 'Shout.java')], { encoding: 'utf8' });
+    assert.strictEqual(javac.status, 0, javac.stderr);
+    const cases = [['java-integrated.xsl', [`-config:${path.join(fixtures, 'java-ext', 'config.xml')}`], "d:shout('watch')", '"WATCH!"',
+        'ITEM 1!, ITEM 2!, ITEM 3!']];
+    if (/saxon-(pe|ee)/i.test(saxonJar)) {
+        cases.push(['java-reflexive.xsl', [], "g:greet('watch') || ' ' || math:sqrt(9)", '"Hello, watch 3"',
+            'Hello, 1 2, Hello, 2 2.8284271247461903, Hello, 3 3.4641016151377544']);
+    }
+    for (const [file, extraArgs, watch, watched, result] of cases) {
+        for (const command of ['continue', 'stepIn']) {
+            const dap = new DapClient(saxonJar + path.delimiter + classes);
+            let stopped = dap.stopped();
+            const outFile = path.join(classes, 'result.xml');
+            await dap.start({ saxonArgs: extraArgs.concat([`-xsl:${path.join(fixtures, file)}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${outFile}`]) },
+                { [file]: [{ line: command === 'continue' ? 8 : 5 }] });
+            const terminated = dap.event('terminated');
+            const stops = [];
+            while (true) {
+                const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+                if (!stop) {
+                    break;
+                }
+                const locals = byName(await dap.variables(0, 'Locals'));
+                stops.push(`${stop.frames[0].line}${locals.$n ? ':' + locals.$n.value : ''}`);
+                if (stops.length === 1 && command === 'continue') {
+                    assert.strictEqual((await dap.request('evaluate', { expression: watch, frameId: 0, context: 'watch' })).result, watched);
+                }
+                stopped = dap.stopped();
+                stopped.catch(() => undefined);
+                await dap.request(command, { threadId: 1 });
+            }
+            await dap.request('disconnect', {}).catch(() => undefined);
+            await dap.exited;
+            assert.deepStrictEqual(stops, command === 'continue' ? ['8:"1"', '8:"2"', '8:"3"'] : ['5', '6', '8:"1"', '8:"2"', '8:"3"', '9'], file);
+            assert.strictEqual(fs.readFileSync(outFile, 'utf8').replace(/<\?xml[^>]*>/, '').trim(), `<out>${result}</out>`);
+        }
+    }
+    fs.rmSync(classes, { recursive: true, force: true });
+}
+
 // the Context scope: current-group() and current-grouping-key() in xsl:for-each-group, and regex-group() in
 // xsl:analyze-string
 async function testGroupsInContext(saxonJar) {
@@ -2174,7 +2224,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testCachedFunction, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);
