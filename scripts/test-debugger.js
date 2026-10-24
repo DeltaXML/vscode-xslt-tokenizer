@@ -446,6 +446,51 @@ async function testInlineFunctions(saxonJar) {
     await dap.exited;
 }
 
+// a let in an inline function, whose value Saxon evaluates lazily - when it's first used, with only the variables it
+// uses: a breakpoint on the let's line stops once for each call, with the function's parameters as locals - not again
+// when the value is evaluated - and Step Over doesn't go back to the line for it either, though Step Into does
+// (Locals are checked at the first call only: with Saxon 12, whose fold-left passes its accumulator as a closure,
+// showing $totals at a later call evaluates the closure - the previous call - where it isn't traced)
+async function testLazyLet(saxonJar) {
+    const run = async (command) => {
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
+        await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'lazy-let.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'result.xml')}`] },
+            { 'lazy-let.xsl': [{ line: 7 }] });
+        const terminated = dap.event('terminated');
+        const stops = [];
+        for (let i = 0; i < 30; i++) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            if (stops.length === 0) {
+                const locals = byName(await dap.variables(0, 'Locals'));
+                assert.match(locals.$item ? locals.$item.value : '(no $item)', /^<item n="1"/);
+                assert.strictEqual(locals.$totals ? locals.$totals.value : '(no $totals)', '()');
+            }
+            stops.push(String(stop.frames[0].line));
+            stopped = dap.stopped();
+            stopped.catch(() => undefined);
+            await dap.request(command, { threadId: 1 });
+        }
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        assert.match(require('fs').readFileSync(path.join(outDir, 'result.xml'), 'utf8'), /<out>1 7 16<\/out>/);
+        return stops;
+    };
+    // once for each of the 3 calls
+    assert.deepStrictEqual(await run('continue'), ['7', '7', '7']);
+    // Step Over: at the let once for each call too - not again for its value (with Saxon 12, a call can start within
+    // another, where the accumulator is used)
+    const stepped = (await run('next')).filter((line) => ['7', '8', '9', '10'].includes(line));
+    assert.strictEqual(stepped.filter((line) => line === '7').length, 3, stepped.join(' '));
+    // Step Into stops where the let's value is evaluated too
+    const steppedInto = (await run('stepIn')).filter((line) => ['7', '8', '9', '10'].includes(line));
+    assert.ok(steppedInto.some((line, i) => line === '7' && ['9', '7'].includes(steppedInto[i - 1])), steppedInto.join(' '));
+}
+
 // the Context scope: current-group() and current-grouping-key() in xsl:for-each-group, and regex-group() in
 // xsl:analyze-string
 async function testGroupsInContext(saxonJar) {
@@ -794,8 +839,10 @@ async function testTestsEvaluatedAsNeeded(saxonJar) {
 // and within an XPath 4.0 focus function, the context item is the argument - not stopped at with the function's own
 // focus, before it's set
 async function testLookupsAndMethodCalls(saxonJar) {
+    // line 17 once: the lookup is entered there, then $m on line 16 - returning to line 17 for the key isn't
+    // arriving at it again
     let result = await runStops(saxonJar, 'lookups.xsl', [7, 10, 11, 14, 17], 'continue');
-    assert.deepStrictEqual(result.stops, ['7x', '11x', '10x', '14x', '17x', '17x']);
+    assert.deepStrictEqual(result.stops, ['7x', '11x', '10x', '14x', '17x']);
     assert.match(result.output, /<out name="Ada" all="xslt xpath" second="xpath" computed="Ada"\/>/);
     if (!/saxon-pe-1[3-9]/i.test(saxonJar)) {
         return;
@@ -2063,7 +2110,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

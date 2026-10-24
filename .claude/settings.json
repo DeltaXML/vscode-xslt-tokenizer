@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(awk '{print $1}')"
+      "Bash(awk '{print $1}')",
+      "Bash(node /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/one-test.js debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)",
+      "Bash(git stash *)",
+      "Bash(NO_LOCALS=1 node /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/one-test.js debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)",
+      "Bash(node /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/one-test.js ~/opt/SaxonPE13-1J/saxon-pe-13.1.jar debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)",
+      "Bash(tee /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/suite.txt)"
     ]
   }
 }

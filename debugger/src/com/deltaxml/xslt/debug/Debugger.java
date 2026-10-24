@@ -500,7 +500,19 @@ final class Debugger {
         // another instruction on the line, whose start tag ends on another line - e.g. <out><xsl:sequence select="
         // ...multi-line..."/>: its XPath attributes can be stepped through too
         boolean onNewReportedLine = onNewLine || reportedLine != top.enteredReportedLine;
-        if (onNewLine) {
+        // within an XPath expression being stepped through: coming back to a line by another part than the one first
+        // entered on it is returning to the line, not arriving at it - a part evaluated lazily, e.g. a let's value
+        // when it's first used (with only the variables it uses), or after an operand on another line, e.g. a
+        // lookup's key after the map before it. The line was stopped at already, so a breakpoint, Step Over or Step
+        // Out doesn't stop there again; Step Into does, as it stops at each evaluation. A new call of an inline
+        // function enters its lines' first parts again - even within a lazy evaluation (Saxon 12's fold-left
+        // evaluates its accumulator lazily), so returning isn't where the frame is: the line arrived at before is
+        boolean lazyArrival = false;
+        if (top == xpathFrame && xpathFrame != null && onNewLine && !arrivingAgain) {
+            Traceable first = top.firstOnLine.putIfAbsent(path + ':' + top.line, traceable);
+            lazyArrival = first != null && first != traceable;
+        }
+        if (onNewLine && !lazyArrival) {
             top.enteredPath = path;
             top.enteredLine = top.line;
             // not the focus instruction itself, which is entered once, not for each item
@@ -515,11 +527,11 @@ final class Debugger {
             reason = "entry";
         } else if (isCall && functionBreakpointHit(traceable, properties, top)) {
             reason = "function breakpoint";
-        } else if (onNewLine && breakpointHit(path, top.line, top)) {
+        } else if (onNewLine && !lazyArrival && breakpointHit(path, top.line, top)) {
             // checked once each time execution arrives at the line - not for each instruction Saxon reports on it -
             // including again, e.g. for the next iteration of a loop on one line
             reason = "breakpoint";
-        } else if (isStepComplete(path, top.line, depth, arrivingAgain)) {
+        } else if ((!lazyArrival || step == Step.INTO) && isStepComplete(path, top.line, depth, arrivingAgain)) {
             reason = "step";
         }
         if (reason != null) {
@@ -649,6 +661,7 @@ final class Debugger {
                     continue;
                 }
                 xpathFrame = frame;
+                frame.firstOnLine.clear();
                 xpathParts = compiled.instrumented;
                 frame.xpathExternals = compiled.externals;
                 frame.xpathSlots = compiled.slots;
@@ -1329,6 +1342,9 @@ final class Debugger {
         // a new item is being processed, e.g. by xsl:for-each: the line is arrived at again
         boolean newIteration;
         Traceable lineStart;
+        // for an XPath expression's frame: the part of the expression first entered on each line ('path:line') - a
+        // line arrived at by another part is a part of it evaluated lazily
+        final Map<String, Traceable> firstOnLine = new HashMap<String, Traceable>();
         Traceable current;
         XPathContext context;
         String systemId;
