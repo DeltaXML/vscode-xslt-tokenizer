@@ -133,6 +133,21 @@ final class BreakableLines {
             this.column = column;
             this.lastLine = lastLine;
         }
+
+        // the stylesheet line and column of an offset in the expression - as XPathEngine gives its parts: on the
+        // expression's first line, from where it starts
+        int[] position(int offset) {
+            int lineIndex = 0;
+            int lineStart = 0;
+            for (int i = 0; i < offset && i < xpath.length(); i++) {
+                if (xpath.charAt(i) == '\n') {
+                    lineIndex++;
+                    lineStart = i + 1;
+                }
+            }
+            int textColumn = offset - lineStart;
+            return new int[] { line + lineIndex, lineIndex == 0 ? column + textColumn : textColumn + 1 };
+        }
     }
 
     /** where a breakpoint requested at a line goes */

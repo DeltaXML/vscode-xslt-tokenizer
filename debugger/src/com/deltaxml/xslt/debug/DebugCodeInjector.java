@@ -33,6 +33,9 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
 
     @Override
     public Expression inject(Expression expression) {
+        if (expression instanceof net.sf.saxon.functions.hof.UserFunctionReference) {
+            traceInlineFunction((net.sf.saxon.functions.hof.UserFunctionReference) expression);
+        }
         Location location = expression.getLocation();
         Expression parent = expression.getParentExpression();
         Location parentLocation = parent == null ? null : parent.getLocation();
@@ -79,6 +82,38 @@ class DebugCodeInjector extends XSLTTraceCodeInjector {
             return isTopLevel ? new TraceExpression(stepped ? stepped(expression, attribute) : expression) : injected;
         }
         return stepped && injected == expression ? stepped(expression, attribute) : injected;
+    }
+
+    // An inline function in a multi-line XPath expression: its body - which isn't an operand, so isn't given to inject() -
+    // is traced, so that each call can be stepped through, wherever it's made. A function item can be called after the
+    // expression that made it has been evaluated - e.g. a function a stylesheet function returns - when only the
+    // compiled body runs: not the one the debugger instruments when it steps through the expression. When it's called,
+    // the debugger steps through the body's text (see Debugger.enterInlineFunction), then the body itself runs quietly
+    private static void traceInlineFunction(net.sf.saxon.functions.hof.UserFunctionReference reference) {
+        net.sf.saxon.expr.instruct.UserFunction function = reference.getNominalTarget();
+        AttributeLocation attribute = xsltAttribute(reference.getLocation());
+        if (function == null || function.getBody() == null || function.getBody() instanceof TraceExpression || attribute == null) {
+            return;
+        }
+        String element = attribute.getElementName().getLocalPart();
+        String name = attribute.getAttributeName().getLocalPart();
+        if (!Debugger.isSteppable(attribute.getSystemId(), attribute.getLineNumber(), attribute.getColumnNumber(), element, name)) {
+            return;
+        }
+        // its parameters - those of an inline function, then any variables from outside it that it uses, which Saxon
+        // passes to it - identify it within the expression's text
+        java.util.List<String> parameters = new java.util.ArrayList<String>();
+        for (net.sf.saxon.expr.instruct.UserFunctionParameter parameter : function.getParameterDefinitions()) {
+            parameters.add(parameter.getVariableQName().getDisplayName());
+        }
+        SteppedResult.InlineFunction inline = new SteppedResult.InlineFunction(attribute.getSystemId(), attribute.getLineNumber(),
+                attribute.getColumnNumber(), element, name, parameters);
+        Expression body = function.getBody();
+        SteppedResult stepped = new SteppedResult(body, inline.key(), inline);
+        TraceExpression trace = new TraceExpression(stepped);
+        trace.setRetainedStaticContext(body.getRetainedStaticContext());
+        trace.setLocation(body.getLocation());
+        function.setBody(trace);
     }
 
     // An attribute's expression, as the instruction evaluates it (with any conversions Saxon adds): its topmost

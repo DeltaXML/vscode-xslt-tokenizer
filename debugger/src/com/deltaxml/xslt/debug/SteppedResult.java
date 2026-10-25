@@ -66,12 +66,43 @@ final class SteppedResult extends Expression {
     // the depth of quiet evaluations
     private static int quiet;
 
+    // an inline function's body, in the attribute whose multi-line expression it's in: identified by its parameters - its
+    // own, then those Saxon adds for the variables from outside it that it uses
+    static final class InlineFunction {
+        final String systemId;
+        final int tagEndLine;
+        final int tagEndColumn;
+        final String element;
+        final String attribute;
+        final java.util.List<String> parameters;
+
+        InlineFunction(String systemId, int tagEndLine, int tagEndColumn, String element, String attribute, java.util.List<String> parameters) {
+            this.systemId = systemId;
+            this.tagEndLine = tagEndLine;
+            this.tagEndColumn = tagEndColumn;
+            this.element = element;
+            this.attribute = attribute;
+            this.parameters = parameters;
+        }
+
+        String key() {
+            return SteppedResult.key(systemId, tagEndLine, tagEndColumn, element, attribute) + " function(" + String.join(", ", parameters) + ")";
+        }
+    }
+
     private final Operand operand;
     private final String key;
+    // for an inline function's body: which one
+    final InlineFunction inlineFunction;
 
     SteppedResult(Expression child, String key) {
+        this(child, key, null);
+    }
+
+    SteppedResult(Expression child, String key, InlineFunction inlineFunction) {
         this.operand = new Operand(this, child, OperandRole.SAME_FOCUS_ACTION);
         this.key = key;
+        this.inlineFunction = inlineFunction;
         ExpressionTool.copyLocationInfo(child, this);
     }
 
@@ -171,7 +202,7 @@ final class SteppedResult extends Expression {
 
     @Override
     public Expression copy(RebindingMap rebindings) {
-        SteppedResult copy = new SteppedResult(getChild().copy(rebindings), key);
+        SteppedResult copy = new SteppedResult(getChild().copy(rebindings), key, inlineFunction);
         ExpressionTool.copyLocationInfo(this, copy);
         return copy;
     }

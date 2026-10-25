@@ -89,6 +89,10 @@ final class Debugger {
     // --- transform-thread state
     private Thread transformThread;
     private boolean runningTask;
+    // the instruction (or part of an expression) just stopped at, while enter() for it runs - for stepThrough
+    private Traceable stoppedAt;
+    // for each traced inline function (see enterInlineFunction): its attribute, and where its body is in it
+    private final Map<SteppedResult.InlineFunction, Object[]> inlineFunctionTexts = new java.util.IdentityHashMap<SteppedResult.InlineFunction, Object[]>();
     private final Deque<Frame> frames = new ArrayDeque<Frame>();
     // the xsl:try instructions being evaluated, and the stack depth where each started
     private final Deque<Map.Entry<Traceable, Integer>> tryDepths = new ArrayDeque<Map.Entry<Traceable, Integer>>();
@@ -439,6 +443,10 @@ final class Debugger {
             // its own: stopping at it would stop twice where the first instruction is
             return;
         }
+        if (traceable instanceof SteppedResult && ((SteppedResult) traceable).inlineFunction != null) {
+            enterInlineFunction((SteppedResult) traceable, context);
+            return;
+        }
         if (traceable.getClass().getSimpleName().equals("TryCatch")) {
             tryDepths.push(new java.util.AbstractMap.SimpleImmutableEntry<Traceable, Integer>(traceable, frames.size()));
         }
@@ -519,7 +527,14 @@ final class Debugger {
             top.lineStart = traceable == top.owner ? null : traceable;
         }
         top.enteredReportedLine = reportedLine;
+        // an expression's first arrival, on the line of its instruction just stopped at: not stopped at again there
+        boolean justStoppedHere = false;
+        if (top == xpathFrame && xpathFrame != null && top.skipBreakpointLine >= 0) {
+            justStoppedHere = top.line == top.skipBreakpointLine;
+            top.skipBreakpointLine = -1;
+        }
 
+        stoppedAt = null;
         String reason = null;
         if (pauseRequested) {
             reason = "pause";
@@ -527,7 +542,7 @@ final class Debugger {
             reason = "entry";
         } else if (isCall && functionBreakpointHit(traceable, properties, top)) {
             reason = "function breakpoint";
-        } else if (onNewLine && !lazyArrival && breakpointHit(path, top.line, top)) {
+        } else if (onNewLine && !lazyArrival && !justStoppedHere && breakpointHit(path, top.line, top)) {
             // checked once each time execution arrives at the line - not for each instruction Saxon reports on it -
             // including again, e.g. for the next iteration of a loop on one line
             reason = "breakpoint";
@@ -540,6 +555,7 @@ final class Debugger {
             stoppedPath = path;
             stoppedLine = top.line;
             pause(reason, top, depth);
+            stoppedAt = traceable;
         }
         String branch = branchAttribute(location);
         if (branch != null && xpathDepth == 0) {
@@ -637,79 +653,149 @@ final class Debugger {
             // e.g. xsl:variable/@select, or for an expression in an element's content, xsl:select
             String name = attribute.name == null ? attribute.elementName : attribute.elementName + "/@" + attribute.name;
             String systemId = instruction.getLocation().getSystemId();
-            Frame frame = new Frame(null, name + " (XPath)", true);
-            frame.context = context;
-            frame.xsltContext = context;
-            frame.xsltCurrent = instruction;
-            frame.current = instruction;
-            frame.systemId = systemId;
-            frame.line = attribute.line;
-            frame.column = attribute.column;
-            int depthBefore = frames.size();
-            GroundedValue stepped = null;
-            frames.push(frame);
-            callDepth++;
-            xpathDepth++;
-            frame.callDepth = callDepth;
-            try {
-                XPathEngine.Compiled compiled = XPathEngine.compile(attribute.xpath, instruction, context, instruction, context,
-                        new XPathEngine.SourcePosition(systemId, attribute.line, attribute.column));
-                // an xsl:when's test is always stopped at: which tests are evaluated, until one is true, shows the
-                // branch taken
-                if (!breakpointWithin && !compiled.worthSteppingThrough && !"xsl:when".equals(attribute.elementName)) {
-                    // stepping into it is stepping over it: the instruction evaluates it as usual
-                    continue;
-                }
-                xpathFrame = frame;
-                frame.firstOnLine.clear();
-                xpathParts = compiled.instrumented;
-                frame.xpathExternals = compiled.externals;
-                frame.xpathSlots = compiled.slots;
-                net.sf.saxon.sxpath.XPathDynamicContext dynamicContext = compiled.prepare();
-                frame.xpathFocus = dynamicContext.getXPathContextObject().getCurrentIterator();
-                GroundedValue value = null;
-                XPathException raised = null;
-                try {
-                    // a test, as its instruction evaluates it: only as far as needed for true or false - not all of it,
-                    // which would call more functions (and write their messages) than the stylesheet does
-                    value = isTest(attribute) ? net.sf.saxon.value.BooleanValue.get(compiled.effectiveBooleanValue(dynamicContext)) :
-                            compiled.evaluate(dynamicContext);
-                } catch (XPathException e) {
-                    // a dynamic error is its result, as when the instruction evaluates it - e.g. one an xsl:try catches
-                    raised = e;
-                }
-                if (raised == null) {
-                    // the instruction's own evaluation of it is quiet - not after an error, which the instruction may
-                    // not raise, if it evaluates the expression lazily
-                    stepped = value;
-                }
-                dap.log(resultDescription(attribute, name) + (raised == null ? " returned " + Values.summary(XdmValue.wrap(value)) :
-                        " raised " + (raised.getErrorCodeQName() == null ? "an error" : raised.getErrorCodeQName().getLocalPart()) + ": " + message(raised)));
-            } catch (Exception | LinkageError e) {
-                // 'important': VS Code also shows it as a notification - it was stepped into, or has a breakpoint
-                dap.event("output", Json.obj().with("category", "important").with("output",
-                        name + " on line " + attribute.line + " couldn't be evaluated separately, to step through it: " + message(e) + "\n"));
-            } finally {
-                xpathFrame = null;
-                xpathParts = null;
-                // also the frames of any stylesheet function it was in, if it failed
-                unwindTo(depthBefore);
-                xpathDepth--;
-                // a step into or over that's still going: from the instruction's line, as if it had started there -
-                // so the instruction's own evaluation of the expression, just stepped through, isn't stopped at
-                synchronized (lock) {
-                    if (step == Step.INTO || step == Step.OVER) {
-                        stepCallDepth = callDepth;
-                        stepPath = path;
-                        stepLine = line;
-                    }
-                }
-            }
-            if (stepped != null) {
+            // an xsl:when's test is always stopped at: which tests are evaluated, until one is true, shows the branch taken
+            if (stepThrough(instruction, context, path, line, name, attribute.xpath, attribute.line, attribute.column, breakpointWithin,
+                    "xsl:when".equals(attribute.elementName), isTest(attribute), resultDescription(attribute, name))) {
                 String element = attribute.elementName.substring(attribute.elementName.indexOf(':') + 1);
                 SteppedResult.stepped(SteppedResult.key(systemId, attribute.tagEndLine, attribute.tagEndColumn, element, attribute.name), instruction, frames.peek(), context);
             }
         }
+    }
+
+    // Steps through an XPath expression - the text of an instruction's attribute, or an inline function's body - by
+    // evaluating it separately, instrumented, so each of its parts reports its own line: in a frame of its own, named
+    // e.g. 'xsl:variable/@select (XPath)', above that of the instruction (whose line is given, for a step that's still
+    // going afterwards). Unless a breakpoint is within it, or it's always stopped in, it's only stepped through if
+    // that shows more than its result (see XPathEngine.worthSteppingThrough). True if it was evaluated without an
+    // error: then the instruction's own evaluation of it is quiet (see SteppedResult) - not after an error, which the
+    // instruction may not raise, if it evaluates the expression lazily
+    private boolean stepThrough(Traceable instruction, XPathContext context, String path, int line, String name, String xpath,
+            int startLine, int startColumn, boolean breakpointWithin, boolean alwaysStopped, boolean isTest, String description) {
+        String systemId = instruction.getLocation().getSystemId();
+        Frame frame = new Frame(null, name + " (XPath)", true);
+        frame.context = context;
+        frame.xsltContext = context;
+        frame.xsltCurrent = instruction;
+        frame.current = instruction;
+        frame.systemId = systemId;
+        frame.line = startLine;
+        frame.column = startColumn;
+        // just stopped at the instruction, on its line: its expression's start, on the same line, isn't stopped at again
+        frame.skipBreakpointLine = stoppedAt == instruction ? line : -1;
+        int depthBefore = frames.size();
+        boolean stepped = false;
+        frames.push(frame);
+        callDepth++;
+        xpathDepth++;
+        frame.callDepth = callDepth;
+        try {
+            XPathEngine.Compiled compiled = XPathEngine.compile(xpath, instruction, context, instruction, context,
+                    new XPathEngine.SourcePosition(systemId, startLine, startColumn));
+            if (!breakpointWithin && !compiled.worthSteppingThrough && !alwaysStopped) {
+                // stepping into it is stepping over it: the instruction evaluates it as usual
+                return false;
+            }
+            xpathFrame = frame;
+            frame.firstOnLine.clear();
+            xpathParts = compiled.instrumented;
+            frame.xpathExternals = compiled.externals;
+            frame.xpathSlots = compiled.slots;
+            net.sf.saxon.sxpath.XPathDynamicContext dynamicContext = compiled.prepare();
+            frame.xpathFocus = dynamicContext.getXPathContextObject().getCurrentIterator();
+            GroundedValue value = null;
+            XPathException raised = null;
+            try {
+                // a test, as its instruction evaluates it: only as far as needed for true or false - not all of it,
+                // which would call more functions (and write their messages) than the stylesheet does
+                value = isTest ? net.sf.saxon.value.BooleanValue.get(compiled.effectiveBooleanValue(dynamicContext)) :
+                        compiled.evaluate(dynamicContext);
+            } catch (XPathException e) {
+                // a dynamic error is its result, as when the instruction evaluates it - e.g. one an xsl:try catches
+                raised = e;
+            }
+            stepped = raised == null;
+            dap.log(description + (raised == null ? " returned " + Values.summary(XdmValue.wrap(value)) :
+                    " raised " + (raised.getErrorCodeQName() == null ? "an error" : raised.getErrorCodeQName().getLocalPart()) + ": " + message(raised)));
+        } catch (Exception | LinkageError e) {
+            // 'important': VS Code also shows it as a notification - it was stepped into, or has a breakpoint
+            dap.event("output", Json.obj().with("category", "important").with("output",
+                    name + " on line " + startLine + " couldn't be evaluated separately, to step through it: " + message(e) + "\n"));
+        } finally {
+            xpathFrame = null;
+            xpathParts = null;
+            // also the frames of any stylesheet function it was in, if it failed
+            unwindTo(depthBefore);
+            xpathDepth--;
+            // a step into or over that's still going: from the instruction's line, as if it had started there -
+            // so the instruction's own evaluation of the expression, just stepped through, isn't stopped at
+            synchronized (lock) {
+                if (step == Step.INTO || step == Step.OVER) {
+                    stepCallDepth = callDepth;
+                    stepPath = path;
+                    stepLine = line;
+                }
+            }
+        }
+        return stepped;
+    }
+
+    // A call of an inline function in a multi-line XPath expression - its compiled body, traced (see
+    // DebugCodeInjector.traceInlineFunction): e.g. a function item a stylesheet function returned, called later
+    // elsewhere. (A call within an expression being stepped through is of the debugger's own, instrumented copy, see
+    // XPathEngine.instrument.) It's a frame of its own, e.g. 'function#0' - so the stylesheet functions it calls are
+    // shown as called from it - and, when stepped into or with a breakpoint in it, its body's text is stepped through,
+    // in the function's own context: its parameters, and the variables from outside it that it uses. Then the body
+    // itself runs, quietly
+    private void enterInlineFunction(SteppedResult body, XPathContext context) {
+        SteppedResult.InlineFunction inline = body.inlineFunction;
+        String path = pathOf(inline.systemId);
+        BreakableLines.XPathAttribute attribute;
+        InlineFunctionText text;
+        // found once for each inline function: it may be called many times, e.g. by fold-left()
+        Object[] found = inlineFunctionTexts.get(inline);
+        if (found == null) {
+            BreakableLines lines = path == null ? null : sourceLines(path);
+            attribute = lines == null ? null : lines.xpathAttribute(inline.tagEndLine, inline.tagEndColumn, inline.element, inline.attribute);
+            text = attribute == null ? null : InlineFunctionText.find(attribute.xpath, inline.parameters);
+            inlineFunctionTexts.put(inline, new Object[] { attribute, text });
+        } else {
+            attribute = (BreakableLines.XPathAttribute) found[0];
+            text = (InlineFunctionText) found[1];
+        }
+        Frame frame = new Frame(body, "function#" + (text == null ? inline.parameters.size() : text.declaredParameters), true);
+        frame.context = context;
+        frame.current = body;
+        frame.systemId = inline.systemId;
+        int[] start = text == null ? null : attribute.position(text.bodyStart);
+        frame.line = start != null ? start[0] : attribute != null ? attribute.line : inline.tagEndLine;
+        frame.column = start != null ? start[1] : 1;
+        frames.push(frame);
+        callDepth++;
+        if (start == null || Thread.currentThread() != transformThread || runningTask) {
+            return;
+        }
+        int lastLine = attribute.position(text.bodyEnd)[0];
+        boolean breakpointWithin = hasBreakpointBetween(path, start[0], lastLine);
+        if (step != Step.INTO && !breakpointWithin) {
+            return;
+        }
+        String description = "▸ function#" + text.declaredParameters + " (" + (lastLine > start[0] ? "lines " + start[0] + "-" + lastLine : "line " + start[0]) + ")";
+        if (stepThrough(body, context, path, start[0], "function#" + text.declaredParameters, attribute.xpath.substring(text.bodyStart, text.bodyEnd),
+                start[0], start[1], breakpointWithin, false, false, description)) {
+            SteppedResult.stepped(inline.key(), body, frames.peek(), context);
+        }
+    }
+
+    private boolean hasBreakpointBetween(String path, int firstLine, int lastLine) {
+        Map<Integer, Breakpoint> lines = breakpoints.get(path);
+        if (lines != null) {
+            for (Integer line : lines.keySet()) {
+                if (line >= firstLine && line <= lastLine) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // an attribute evaluated for its effective boolean value: an xsl:if's, xsl:when's or xsl:assert's test
@@ -1345,6 +1431,9 @@ final class Debugger {
         // for an XPath expression's frame: the part of the expression first entered on each line ('path:line') - a
         // line arrived at by another part is a part of it evaluated lazily
         final Map<String, Traceable> firstOnLine = new HashMap<String, Traceable>();
+        // for an XPath expression's frame: its instruction's line, if the instruction was just stopped at there - a
+        // breakpoint there isn't stopped at again when the expression first arrives at that line (-1: none)
+        int skipBreakpointLine = -1;
         Traceable current;
         XPathContext context;
         String systemId;
