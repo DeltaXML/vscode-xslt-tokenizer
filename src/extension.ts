@@ -42,6 +42,7 @@ import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
+import { EntityReferences } from './entityReferences';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 
 
@@ -383,6 +384,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
 	// XPath expressions, in a query file, evaluated on the XML context file - the nodes found are listed, to go to each
 	new XPathQuery(context);
+	// entity references, e.g. &company;: completion after '&', hover, and go to the DOCTYPE's declaration
+	EntityReferences.activate(context);
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xmlSelectionPick', () => showXMLSelectionPick()));
 	// when the index of the workspace's XSLT modules is first built, check the open modules again, for references to
 	// declarations in the stylesheets that import or include them
