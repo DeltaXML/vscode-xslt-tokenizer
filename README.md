@@ -207,11 +207,12 @@ Stylesheets can be debugged with SaxonJ (Saxon 12 or later, any edition, includi
 
 Where Saxon's standard tracing stops at XSLT instructions, this debugger uses Saxon's own APIs to inject extra trace points and re-parse XPath to locate sub-expressions, so it can stop deep inside multi-line expressions and inline functions.
 
+- Add debugger breakpoints or logpoints to almost any line of interest - from an XSLT instruction to deep within an XPath sub expression or inline function
 - Line breakpoints, with conditions, hit counts and logpoints (`{$*}` in a logpoint's message logs the local variables) - and function breakpoints, for stylesheet functions and named templates
 - Step Over, Step Into and Step Out - including line by line through multi-line XPath expressions, and into inline functions
 - Local and global variables, the context item, `current-group()` and `regex-group()` - and their values inline, while paused
 - XPath evaluation in the Watch view, the Debug Console and on hover, where execution is paused
-- Pausing on dynamic errors, and the output written so far
+- Pause execution on dynamic errors, and the output written so far
 
 See [XSLT Debugger](https://deltaxml.github.io/vscode-xslt-xpath/debugger.html) in the User Guide for the full description - including `launch.json` configurations, limitations and troubleshooting.
 
