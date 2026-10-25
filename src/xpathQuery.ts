@@ -88,6 +88,49 @@ export class XPathQuery {
 		return XPathQuery.expressionStarts(text).map((line) => ({ expressionLine: line, onBlankLine: line > 0 && lines[line - 1].trim() === '' }));
 	}
 
+	public static isQueryFile(document: vscode.TextDocument) {
+		return document.languageId === 'xpath' && path.basename(document.uri.fsPath) === XPathQuery.fileName;
+	}
+
+	// the query file's blocks of lines - expressions, or only comments - each checked, and completed, on its own:
+	// as the file's text with every other block blanked, keeping the positions
+	public static separateBlocks(text: string): string[] {
+		const lines = text.split('\n');
+		const blocks: [number, number][] = [];
+		lines.forEach((line, i) => {
+			if (line.trim() === '') {
+				return;
+			}
+			if (i > 0 && lines[i - 1].trim() !== '') {
+				blocks[blocks.length - 1][1] = i;
+			} else {
+				blocks.push([i, i]);
+			}
+		});
+		return blocks.map(([start, end]) => XPathQuery.keepLines(lines, start, end));
+	}
+
+	// the block at a line, for completion there - from a blank line, none: a new expression starts there
+	public static separateBlockAt(text: string, line: number): string {
+		const lines = text.split('\n');
+		if (line >= lines.length || lines[line].trim() === '') {
+			return XPathQuery.keepLines(lines, -1, -1);
+		}
+		let start = line;
+		while (start > 0 && lines[start - 1].trim() !== '') {
+			start--;
+		}
+		let end = line;
+		while (end < lines.length - 1 && lines[end + 1].trim() !== '') {
+			end++;
+		}
+		return XPathQuery.keepLines(lines, start, end);
+	}
+
+	private static keepLines(lines: string[], start: number, end: number) {
+		return lines.map((line, i) => i >= start && i <= end ? line : line.replace(/[^\r]/g, ' ')).join('\n');
+	}
+
 	// a 'declare namespace p = "uri";' prolog, as the query file's checks allow, isn't XPath: it's blanked - keeping
 	// the positions of the rest, for Saxon's errors - and its bindings given to Saxon separately
 	public static withoutProlog(expression: string): { xpath: string; namespaces: { [prefix: string]: string } } {
@@ -142,8 +185,36 @@ export class XPathQuery {
 		return element!.selectionRange;
 	}
 
+	// a query's result in brief, shown after its expression: the first node found, as a path - or the values, as
+	// XPath literals, cut short if they're long
+	public static resultSummary(result: XPathQueryResult, maxLength = 60): string {
+		const items = result.items ?? [];
+		const count = result.count ?? items.length;
+		if (count === 0) {
+			return '= ()  nothing found';
+		}
+		const ofCount = count > 1 ? `  (${count} items)` : '';
+		if (items[0].kind === 'node') {
+			return `→ ${XPathQuery.cutShort(items[0].path ?? '', maxLength)}${count > 1 ? `  (1 of ${count})` : ''}`;
+		}
+		const literals = items.map((item) => item.kind === 'node' ? item.path ?? '' : item.kind === 'other' ? item.value ?? '' :
+			/^(string|untypedAtomic|anyURI)$/.test(item.type ?? '') ? `'${(item.value ?? '').replace(/'/g, "''")}'` :
+				item.type === 'boolean' ? `${item.value}()` : item.value ?? '');
+		const values = count > 1 ? `(${literals.join(', ')}${count > items.length ? ', …' : ''})` : literals[0];
+		return `= ${XPathQuery.cutShort(values, maxLength)}${values.length > maxLength || count > items.length ? ofCount : ''}`;
+	}
+
+	private static cutShort(text: string, maxLength: number) {
+		const oneLine = text.replace(/\s*\n\s*/g, ' ');
+		return oneLine.length > maxLength ? oneLine.substring(0, maxLength - 1) + '…' : oneLine;
+	}
+
 	private diagnostics = vscode.languages.createDiagnosticCollection('xpath-query');
 	private output = vscode.window.createOutputChannel('XPath Query');
+	// each query file's latest results, by the expression's text - so they stay with it as lines are added before it -
+	// and the XML file it ran on
+	private results = new Map<string, { expression: string; target: string; summary: string }[]>();
+	private changed = new vscode.EventEmitter<void>();
 
 	constructor(private context: vscode.ExtensionContext) {
 		context.subscriptions.push(this.diagnostics, this.output);
@@ -156,7 +227,9 @@ export class XPathQuery {
 			const target = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 			return target ? `▶ Run on ${path.basename(target.fsPath)}` : '▶ Run - first open an XML file';
 		};
-		const changed = new vscode.EventEmitter<void>();
+		const changed = this.changed;
+		context.subscriptions.push(changed);
+		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showXPathQueryOutput', () => this.output.show(true)));
 		context.subscriptions.push(vscode.languages.registerCodeLensProvider(selector, {
 			onDidChangeCodeLenses: changed.event,
 			provideCodeLenses: (document) => XPathQuery.runPlaces(document.getText()).filter((place) => !place.onBlankLine).map((place) =>
@@ -165,13 +238,17 @@ export class XPathQuery {
 		}));
 		context.subscriptions.push(vscode.languages.registerInlayHintsProvider(selector, {
 			onDidChangeInlayHints: changed.event,
-			provideInlayHints: (document, range) => XPathQuery.runPlaces(document.getText()).filter((place) => place.onBlankLine &&
-				range.contains(new vscode.Position(place.expressionLine - 1, 0))).map((place) => {
-				const label = new vscode.InlayHintLabelPart(runTitle());
-				label.command = { title: runTitle(), command: 'xslt-xpath.runXPathQuery', arguments: [document.uri, place.expressionLine] };
-				label.tooltip = 'Run the expression below on the XML context file';
-				return new vscode.InlayHint(new vscode.Position(place.expressionLine - 1, 0), [label]);
-			})
+			provideInlayHints: (document, range) => {
+				const text = document.getText();
+				const runs = XPathQuery.runPlaces(text).filter((place) => place.onBlankLine &&
+					range.contains(new vscode.Position(place.expressionLine - 1, 0))).map((place) => {
+					const label = new vscode.InlayHintLabelPart(runTitle());
+					label.command = { title: runTitle(), command: 'xslt-xpath.runXPathQuery', arguments: [document.uri, place.expressionLine] };
+					label.tooltip = 'Run the expression below on the XML context file';
+					return new vscode.InlayHint(new vscode.Position(place.expressionLine - 1, 0), [label]);
+				});
+				return runs.concat(this.resultHints(document, text));
+			}
 		}));
 		// the file it runs on is shown with each expression
 		context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => changed.fire()));
@@ -180,6 +257,37 @@ export class XPathQuery {
 				this.diagnostics.delete(e.document.uri);
 			}
 		}));
+	}
+
+	// after each expression run on the XML context file, unchanged since, its result in brief
+	private resultHints(document: vscode.TextDocument, text: string): vscode.InlayHint[] {
+		const results = this.results.get(document.uri.toString()) ?? [];
+		const target = DocumentChangeHandler.lastActiveXMLNonXSLUri?.toString();
+		return XPathQuery.expressionStarts(text).flatMap((line) => {
+			const expression = XPathQuery.expressionAt(text, line)!;
+			const result = results.find((r) => r.expression === expression.text && r.target === target);
+			if (!result) {
+				return [];
+			}
+			const lastLine = line + expression.text.split('\n').length - 1;
+			const label = new vscode.InlayHintLabelPart(result.summary);
+			label.command = { title: 'Show All', command: 'xslt-xpath.showXPathQueryOutput' };
+			label.tooltip = 'The latest result - all of it in the XPath Query output';
+			const hint = new vscode.InlayHint(document.lineAt(lastLine).range.end, [label]);
+			hint.paddingLeft = true;
+			return [hint];
+		});
+	}
+
+	private setResult(queryDocument: vscode.TextDocument, expression: string, summary?: string) {
+		const key = queryDocument.uri.toString();
+		const target = DocumentChangeHandler.lastActiveXMLNonXSLUri?.toString() ?? '';
+		const results = (this.results.get(key) ?? []).filter((r) => r.expression !== expression);
+		if (summary !== undefined) {
+			results.push({ expression, target, summary });
+		}
+		this.results.set(key, results);
+		this.changed.fire();
 	}
 
 	private queryFileUri(): vscode.Uri {
@@ -220,6 +328,10 @@ export class XPathQuery {
 		if (!queryDocument) {
 			return;
 		}
+		if (!XPathQuery.isQueryFile(queryDocument)) {
+			vscode.window.showInformationMessage(`XPath query: runs an expression in the ${XPathQuery.fileName} editor - open it with 'Find Nodes with XPath...'.`);
+			return;
+		}
 		const at = line ?? (editor && editor.document === queryDocument ? editor.selection.active.line : 0);
 		const expression = XPathQuery.expressionAt(queryDocument.getText(), at);
 		if (!expression) {
@@ -248,9 +360,11 @@ export class XPathQuery {
 			return;
 		}
 		if (result.error) {
+			this.setResult(queryDocument, expression.text);
 			this.showError(queryDocument, expression, result.error);
 			return;
 		}
+		this.setResult(queryDocument, expression.text, XPathQuery.resultSummary(result));
 		await this.showResult(queryDocument, xmlDocument, expression.text, result);
 	}
 
@@ -294,7 +408,6 @@ export class XPathQuery {
 		const items = result.items ?? [];
 		const count = result.count ?? items.length;
 		const nodes = items.filter((item) => item.kind === 'node');
-		const values = items.filter((item) => item.kind !== 'node');
 		const summary = `${count} ${count === 1 ? 'item' : 'items'} for ${expression.replace(/\s+/g, ' ').trim()}` +
 			(count > items.length ? ` (the first ${items.length} shown)` : '');
 		this.output.appendLine(summary);
@@ -302,15 +415,7 @@ export class XPathQuery {
 			this.output.appendLine('  ' + (item.kind === 'node' ? `${item.path}${item.value !== undefined ? '  ' + JSON.stringify(item.value) : ''}` :
 				item.type ? `${item.value} (xs:${item.type})` : `${item.value}`));
 		}
-		if (values.length > 0 || count === 0) {
-			// a value - e.g. count(//item) - or nothing found: no locations to show
-			const shown = values.slice(0, 5).map((item) => item.value).join(', ') + (values.length > 5 ? ', ...' : '');
-			vscode.window.showInformationMessage(count === 0 ? `XPath query: nothing found for ${expression.trim()}` : `XPath query: ${shown}`, 'Show All').then((choice) => {
-				if (choice) {
-					this.output.show(true);
-				}
-			});
-		}
+		// a value - e.g. count(//item) - or nothing found: shown only after the expression, and in the output
 		if (nodes.length === 0) {
 			return;
 		}

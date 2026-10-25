@@ -16,6 +16,7 @@ import { ItemTypeSupport } from './itemTypeSupport';
 import * as url from 'url';
 import { XdocReferences, XdocTarget } from './xdocReferences';
 import { RecordTypes } from './recordTypes';
+import { XPathQuery } from './xpathQuery';
 
 interface ImportedGlobals {
 	href: string;
@@ -342,7 +343,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let localLanguageConfig = this.languageConfig;
 		const isCommaTrigger = DocumentChangeHandler.consumeCommaTrigger(document, position);
 		if (this.docType === DocumentTypes.XPath) {
-			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
+			// in the 'Find Nodes with XPath' query file, the expression at the cursor on its own
+			const text = XPathQuery.isQueryFile(document) ? XPathQuery.separateBlockAt(document.getText(), position.line) : document.getText();
+			allTokens = this.getXPLexer().analyse(text, ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
 			uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
 

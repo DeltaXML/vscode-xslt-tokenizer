@@ -412,6 +412,10 @@
 					"when": "false"
 				},
 				{
+					"command": "xslt-xpath.runXPathQuery",
+					"when": "editorLangId == xpath && resourceFilename == queries.xpath"
+				},
+				{
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
 					"when": "editorLangId == xslt"
 				},

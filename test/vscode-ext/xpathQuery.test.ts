@@ -40,6 +40,31 @@ suite('XPath queries on XML files', () => {
 		assert.deepEqual(XPathQuery.runPlaces('//a\n\n//b').map((p) => [p.expressionLine, p.onBlankLine]), [[0, false], [2, true]]);
 	});
 
+	test('each block checked on its own: the others blanked, keeping positions', () => {
+		const text = '//a\n\n(: c :)\n\n1 +\r\n 2\n';
+		const blank = (s: string) => s.replace(/[^\r\n]/g, ' ');
+		assert.deepEqual(XPathQuery.separateBlocks(text), [
+			'//a\n\n' + blank('(: c :)\n\n1 +\r\n 2\n'),
+			blank('//a\n\n') + '(: c :)\n\n' + blank('1 +\r\n 2\n'),
+			blank('//a\n\n(: c :)\n\n') + '1 +\r\n 2\n']);
+		assert.strictEqual(XPathQuery.separateBlockAt(text, 5), XPathQuery.separateBlocks(text)[2]);
+		// from a blank line: a new expression
+		assert.strictEqual(XPathQuery.separateBlockAt(text, 1), blank(text));
+	});
+
+	test("a result in brief: the first node's path, or the values as literals, cut short", () => {
+		const node = (path: string) => ({ kind: 'node' as const, nodeKind: 'attribute', path });
+		assert.strictEqual(XPathQuery.resultSummary({ count: 3, items: [node('/orders/order[1]/@id'), node('/orders/order[2]/@id'), node('/orders/order[3]/@id')] }),
+			'→ /orders/order[1]/@id  (1 of 3)');
+		assert.strictEqual(XPathQuery.resultSummary({ count: 1, items: [node('/orders')] }), '→ /orders');
+		assert.strictEqual(XPathQuery.resultSummary({ count: 0, items: [] }), '= ()  nothing found');
+		assert.strictEqual(XPathQuery.resultSummary({ count: 1, items: [{ kind: 'atomic', type: 'decimal', value: '3' }] }), '= 3');
+		assert.strictEqual(XPathQuery.resultSummary({ count: 3, items: [{ kind: 'atomic', type: 'string', value: "it's" },
+			{ kind: 'atomic', type: 'boolean', value: 'true' }, { kind: 'atomic', type: 'untypedAtomic', value: 'pen' }] }), "= ('it''s', true(), 'pen')");
+		const many = Array.from({ length: 20 }, (_, i) => ({ kind: 'atomic' as const, type: 'string', value: 'item' + i }));
+		assert.strictEqual(XPathQuery.resultSummary({ count: 20, items: many }, 30), "= ('item0', 'item1', 'item2', '…  (20 items)");
+	});
+
 	test('a namespace prolog: blanked, keeping the positions of the rest, and its bindings', () => {
 		const expression = 'declare namespace o = "urn:orders";\n(: note :) declare namespace x=\'urn:x\';\n//o:order/x:note';
 		const { xpath, namespaces } = XPathQuery.withoutProlog(expression);

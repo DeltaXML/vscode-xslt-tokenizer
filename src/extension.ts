@@ -1081,27 +1081,34 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 	};
 
 	public provideXPathProblems(document: vscode.TextDocument) {
-		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-		this.xpLexer.documentTokens = [];
-		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition);
-		return XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, [], [], []);
+		return this.expressionTokens(document).flatMap((tokens) =>
+			XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, tokens, [], [], []));
+	}
+
+	// the document's tokens - or, in the 'Find Nodes with XPath' query file, each expression's, lexed on its own
+	private expressionTokens(document: vscode.TextDocument): Token[][] {
+		const texts = XPathQuery.isQueryFile(document) ? XPathQuery.separateBlocks(document.getText()) : [document.getText()];
+		return texts.map((text) => {
+			const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+			this.xpLexer.documentTokens = [];
+			return this.xpLexer.analyse(text, ExitCondition.None, lexPosition);
+		});
 	}
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
-		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-		this.xpLexer.documentTokens = [];
-		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition);
-		setTimeout(() => this.reportProblems(allTokens, document), 0);
+		const expressionTokens = this.expressionTokens(document);
+		setTimeout(() => this.reportProblems(expressionTokens, document), 0);
 		const builder = new vscode.SemanticTokensBuilder();
-		allTokens.forEach((token) => {
+		expressionTokens.flat().forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
 		return builder.build();
 	}
 
-	private reportProblems(allTokens: Token[], document: vscode.TextDocument) {
+	private reportProblems(expressionTokens: Token[][], document: vscode.TextDocument) {
 		if (this.collection) {
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, XPathSemanticTokensProvider.globalInstructionData, []);
+			let diagnostics = expressionTokens.flatMap((allTokens) =>
+				XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, XPathSemanticTokensProvider.globalInstructionData, []));
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
 			} else {
