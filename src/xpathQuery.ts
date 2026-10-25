@@ -7,7 +7,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as cp from 'child_process';
-import { DocumentChangeHandler } from './documentChangeHandler';
 import { XMLConfiguration } from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
@@ -34,17 +33,23 @@ export interface XPathQueryResult {
 }
 
 // 'Find Nodes with XPath': XPath expressions are written in a query file - an .xpath file, so with the editor's
-// highlighting, checking and completion (of node names from the XML context file, too) - kept for the workspace, one
+// highlighting, checking and completion (of node names from the XML file, too) - kept for the workspace, one
 // expression after another, separated by blank lines. The expression at the cursor runs with Saxon (the
-// XSLT.tasks.saxonJar setting) on the XML context file; the nodes it finds are listed in VS Code's references peek,
+// XSLT.tasks.saxonJar setting) on the XML file last in an editor; the nodes it finds are listed in VS Code's references peek,
 // in the XML file, to go from one to the next, and atomic values are written to an output channel
 export class XPathQuery {
 	public static readonly fileName = 'queries.xpath';
 	public static readonly mainClass = 'com.deltaxml.xslt.debug.XPathQuery';
-	// a new query file's text: how it's used, and a first expression - the XML file's root element, quick to run
+	// a new query file's text: a first expression - the XML file's root element, quick to run - after a blank line, for
+	// its ▶ Run. How it's used is in the ▶ Run hover
 	public static seed(rootName?: string) {
-		return '(: Expressions to find nodes in the XML context file: Ctrl+Enter (Cmd+Enter on macOS), or ▶ above\n' +
-			`   an expression, runs the one at the cursor - separate expressions with a blank line :)\n\n/${rootName ?? '*'}\n`;
+		return `\n/${rootName ?? '*'}\n`;
+	}
+
+	// the ▶ Run hover: with the shortcut for this OS only
+	public static runTooltip(platform = process.platform) {
+		const shortcut = platform === 'darwin' ? 'Cmd+Enter' : 'Ctrl+Enter';
+		return `Run the expression below on the XML file last in an editor\n\n${shortcut} runs the expression at the cursor - separate expressions with a blank line`;
 	}
 
 
@@ -311,37 +316,78 @@ export class XPathQuery {
 	private results = new Map<string, { expression: string; target: string; summary: string }[]>();
 	private changed = new vscode.EventEmitter<void>();
 
+	// the XML file queries run on: the one last in an editor - as the editor's Find works on the editor it's in. Not
+	// the XSLT context file, chosen for a stylesheet, which stays as it is. Kept for the workspace
+	public static target: vscode.Uri | undefined;
+	private static targetChanged = new vscode.EventEmitter<void>();
+	public static readonly onDidChangeTarget = XPathQuery.targetChanged.event;
+	private static readonly targetKey = 'xpathQuery.target';
+
+	private static isXMLFile(document: vscode.TextDocument) {
+		return /^(xml|bpmn|dcp|sch)$/.test(document.languageId) && document.uri.scheme !== 'output';
+	}
+
+	private setTarget(uri: vscode.Uri) {
+		if (uri.toString() !== XPathQuery.target?.toString()) {
+			XPathQuery.target = uri;
+			this.context.workspaceState.update(XPathQuery.targetKey, uri.toString());
+			XPathQuery.targetChanged.fire();
+			this.changed.fire();
+		}
+	}
+
 	constructor(private context: vscode.ExtensionContext) {
 		context.subscriptions.push(this.diagnostics, this.output);
+		const saved = context.workspaceState.get<string>(XPathQuery.targetKey);
+		XPathQuery.target = saved ? vscode.Uri.parse(saved) : undefined;
+		const xmlEditor = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find((e) => e && XPathQuery.isXMLFile(e.document));
+		if (xmlEditor) {
+			this.setTarget(xmlEditor.document.uri);
+		}
+		context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => {
+			if (editor && XPathQuery.isXMLFile(editor.document)) {
+				this.setTarget(editor.document.uri);
+			}
+		}));
 		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.findNodesWithXPath', () => this.openQueryFile()));
 		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.runXPathQuery', (uri?: vscode.Uri, line?: number) => this.run(uri, line)));
 		// '▶ Run on orders.xml' for each expression: on the blank line before it, as an inlay hint, which takes no space
-		// of its own - or, with no blank line before it, e.g. on the first line, as a CodeLens above it
+		// of its own - or, with no blank line before it, e.g. on the first line, as a CodeLens above it, or with CodeLens
+		// turned off (editor.codeLens), as an inlay hint before it
 		const selector = { language: 'xpath', pattern: '**/' + XPathQuery.fileName };
 		const runTitle = () => {
-			const target = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+			const target = XPathQuery.target;
 			return target ? `▶ Run on ${path.basename(target.fsPath)}` : '▶ Run - first open an XML file';
 		};
 		const changed = this.changed;
 		context.subscriptions.push(changed);
 		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showXPathQueryOutput', () => this.output.show(true)));
+		const codeLensOn = (document: vscode.TextDocument) => vscode.workspace.getConfiguration('editor', document).get<boolean>('codeLens', true);
+		context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+			if (e.affectsConfiguration('editor.codeLens')) {
+				changed.fire();
+			}
+		}));
 		context.subscriptions.push(vscode.languages.registerCodeLensProvider(selector, {
 			onDidChangeCodeLenses: changed.event,
 			provideCodeLenses: (document) => XPathQuery.runPlaces(document.getText()).filter((place) => !place.onBlankLine).map((place) =>
 				new vscode.CodeLens(new vscode.Range(place.expressionLine, 0, place.expressionLine, 0),
-					{ title: runTitle(), command: 'xslt-xpath.runXPathQuery', arguments: [document.uri, place.expressionLine] }))
+					{ title: runTitle(), tooltip: XPathQuery.runTooltip(), command: 'xslt-xpath.runXPathQuery', arguments: [document.uri, place.expressionLine] }))
 		}));
 		context.subscriptions.push(vscode.languages.registerInlayHintsProvider(selector, {
 			onDidChangeInlayHints: changed.event,
 			provideInlayHints: (document, range) => {
 				const text = document.getText();
-				const runs = XPathQuery.runPlaces(text).filter((place) => place.onBlankLine &&
-					range.contains(new vscode.Position(place.expressionLine - 1, 0))).map((place) => {
+				const withCodeLens = codeLensOn(document);
+				const runs = XPathQuery.runPlaces(text).filter((place) => place.onBlankLine || !withCodeLens).map((place) => {
 					const label = new vscode.InlayHintLabelPart(runTitle());
 					label.command = { title: runTitle(), command: 'xslt-xpath.runXPathQuery', arguments: [document.uri, place.expressionLine] };
-					label.tooltip = 'Run the expression below on the XML context file';
-					return new vscode.InlayHint(new vscode.Position(place.expressionLine - 1, 0), [label]);
-				});
+					label.tooltip = XPathQuery.runTooltip();
+					const hint = new vscode.InlayHint(new vscode.Position(place.onBlankLine ? place.expressionLine - 1 : place.expressionLine, 0), [label]);
+					// before the expression, on its line
+					hint.paddingRight = !place.onBlankLine;
+					return hint;
+				}).filter((hint) => range.contains(hint.position));
 				return runs.concat(this.resultHints(document, text));
 			}
 		}));
@@ -351,7 +397,7 @@ export class XPathQuery {
 		context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, {
 			provideCompletionItems: async (document, position) => {
 				const start = XPathQuery.locationCompletionStart(document.getText(), position.line, position.character);
-				const xmlEditor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === DocumentChangeHandler.lastActiveXMLNonXSLUri?.toString());
+				const xmlEditor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === XPathQuery.target?.toString());
 				const location = start !== undefined && xmlEditor ? await XPathQuery.cursorLocation(xmlEditor) : undefined;
 				if (!location) {
 					return undefined;
@@ -402,7 +448,7 @@ export class XPathQuery {
 			return { text, line: existing };
 		}
 		const before = text.replace(/\s*$/, '');
-		const added = before === '' ? expression + '\n' : `${before}\n\n${expression}\n`;
+		const added = `${before}\n\n${expression}\n`.replace(/^\n\n/, '\n');
 		return { text: added, line: added.split('\n').length - 2 };
 	}
 
@@ -425,10 +471,10 @@ export class XPathQuery {
 		queryEditor.revealRange(new vscode.Range(end, end));
 	}
 
-	// after each expression run on the XML context file, unchanged since, its result in brief
+	// after each expression run on the XML file queried, unchanged since, its result in brief
 	private resultHints(document: vscode.TextDocument, text: string): vscode.InlayHint[] {
 		const results = this.results.get(document.uri.toString()) ?? [];
-		const target = DocumentChangeHandler.lastActiveXMLNonXSLUri?.toString();
+		const target = XPathQuery.target?.toString();
 		return XPathQuery.expressionStarts(text).flatMap((line) => {
 			const expression = XPathQuery.expressionAt(text, line)!;
 			const result = results.find((r) => r.expression === expression.text && r.target === target);
@@ -447,8 +493,9 @@ export class XPathQuery {
 
 	private setResult(queryDocument: vscode.TextDocument, expression: string, summary?: string) {
 		const key = queryDocument.uri.toString();
-		const target = DocumentChangeHandler.lastActiveXMLNonXSLUri?.toString() ?? '';
-		const results = (this.results.get(key) ?? []).filter((r) => r.expression !== expression);
+		const target = XPathQuery.target?.toString() ?? '';
+		// for each XML file: the same expression run on another keeps its result
+		const results = (this.results.get(key) ?? []).filter((r) => r.expression !== expression || r.target !== target);
 		if (summary !== undefined) {
 			results.push({ expression, target, summary });
 		}
@@ -461,12 +508,11 @@ export class XPathQuery {
 		return vscode.Uri.joinPath(storage, XPathQuery.fileName);
 	}
 
-	// the query file, in an editor group below the XML file - which becomes the XML context file
+	// the query file, in an editor group below the XML file - which it queries
 	private async openQueryFile() {
 		const active = vscode.window.activeTextEditor;
-		if (active && active.document.languageId !== 'xslt' && active.document.languageId !== 'xpath' && /^(xml|bpmn|dcp|sch)$/.test(active.document.languageId)) {
-			DocumentChangeHandler.setLastActiveXMLNonXSLUri(active.document.uri);
-			DocumentChangeHandler.refreshStatusBarItem();
+		if (active && XPathQuery.isXMLFile(active.document)) {
+			this.setTarget(active.document.uri);
 		}
 		const uri = this.queryFileUri();
 		try {
@@ -475,7 +521,7 @@ export class XPathQuery {
 			await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '..'));
 			// the root element: the XML file's outline has only it at the top - not comments, processing instructions or
 			// a DOCTYPE. Usually cached, as VS Code's outline and breadcrumbs ask for it, and needed for completion anyway
-			const target = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+			const target = XPathQuery.target;
 			const symbols = target ? await XsltDefinitionProvider.contextFileSymbols(target) : undefined;
 			await vscode.workspace.fs.writeFile(uri, Buffer.from(XPathQuery.seed(symbols?.[0]?.name), 'utf8'));
 		}
@@ -505,12 +551,12 @@ export class XPathQuery {
 		const at = line ?? (editor && editor.document === queryDocument ? editor.selection.active.line : 0);
 		const expression = XPathQuery.expressionAt(queryDocument.getText(), at);
 		if (!expression) {
-			vscode.window.showInformationMessage('XPath query: no expression at the cursor - write one, then press Ctrl+Enter.');
+			vscode.window.showInformationMessage(`XPath query: no expression at the cursor - write one, then press ${process.platform === 'darwin' ? 'Cmd' : 'Ctrl'}+Enter.`);
 			return;
 		}
-		const target = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+		const target = XPathQuery.target;
 		if (!target) {
-			vscode.window.showErrorMessage('XPath query: open the XML file to query first - or pick an XML context file from the status bar.');
+			vscode.window.showErrorMessage('XPath query: open the XML file to query first.');
 			return;
 		}
 		const saxonJar = unquotedPath(vscode.workspace.getConfiguration('XSLT.tasks').get<string>('saxonJar'));

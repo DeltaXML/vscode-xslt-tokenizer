@@ -970,7 +970,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'bpmn' }, new XsltSemanticTokensProvider(XMLConfiguration.configuration), legend));
 
 	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, new XPathSemanticTokensProvider(xpathDiagnosticsCollection), legend));
+	const xpathSemanticTokensProvider = new XPathSemanticTokensProvider(xpathDiagnosticsCollection);
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, xpathSemanticTokensProvider, legend));
+	// the 'Find Nodes with XPath' query file: checked again when it's to run on another XML file
+	context.subscriptions.push(XPathQuery.onDidChangeTarget(() => vscode.workspace.textDocuments.filter((doc) => XPathQuery.isQueryFile(doc))
+		.forEach((doc) => xpathSemanticTokensProvider.recheck(doc))));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
 	let xpathFormatter = new XMLDocumentFormattingProvider(XPathConfiguration.configuration);
@@ -1106,11 +1110,16 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 		return builder.build();
 	}
 
+	// checked again, e.g. for another XML file's namespace prefixes
+	public recheck(document: vscode.TextDocument) {
+		this.reportProblems(this.expressionTokens(document), document);
+	}
+
 	private reportProblems(expressionTokens: Token[][], document: vscode.TextDocument) {
 		if (this.collection) {
-			// the prefixes declared in the XML file: for the 'Find Nodes with XPath' query file, the XML context file it runs
-			// on - otherwise the last XML file (or stylesheet) edited
-			const contextFile = XPathQuery.isQueryFile(document) ? DocumentChangeHandler.lastActiveXMLNonXSLUri : undefined;
+			// the prefixes declared in the XML file: for the 'Find Nodes with XPath' query file, the XML file it runs on -
+			// otherwise the last XML file (or stylesheet) edited
+			const contextFile = XPathQuery.isQueryFile(document) ? XPathQuery.target : undefined;
 			const xmlData = (contextFile && DocumentChangeHandler.xmlnsPrefixesOf(contextFile)) || DocumentChangeHandler.lastXMLDocumentGlobalData;
 			let diagnostics = expressionTokens.flatMap((allTokens) =>
 				XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, xmlData, XPathSemanticTokensProvider.globalInstructionData, []));

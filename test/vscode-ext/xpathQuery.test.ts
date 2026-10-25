@@ -70,8 +70,17 @@ suite('XPath queries on XML files', () => {
 		const document = await vscode.workspace.openTextDocument({ content: xml, language: 'xml' });
 		const symbols = await new XsltSymbolProvider(XMLConfiguration.configuration, null).getDocumentSymbols(document, false) ?? [];
 		assert.deepEqual(symbols.map((symbol) => symbol.name), ['x:a']);
-		assert.isTrue(XPathQuery.seed('x:a').endsWith('\n\n/x:a\n'));
-		assert.isTrue(XPathQuery.seed().endsWith('\n\n/*\n'));
+		assert.strictEqual(XPathQuery.seed('x:a'), '\n/x:a\n');
+		assert.strictEqual(XPathQuery.seed(), '\n/*\n');
+		// its ▶ Run on the blank line
+		assert.deepEqual(XPathQuery.runPlaces(XPathQuery.seed('x:a')), [{ expressionLine: 1, onBlankLine: true }]);
+	});
+
+	test('the ▶ Run hover: the shortcut for this OS only', () => {
+		assert.include(XPathQuery.runTooltip('darwin'), 'Cmd+Enter runs');
+		assert.notInclude(XPathQuery.runTooltip('darwin'), 'Ctrl');
+		assert.include(XPathQuery.runTooltip('win32'), 'Ctrl+Enter runs');
+		assert.notInclude(XPathQuery.runTooltip('linux'), 'Cmd');
 	});
 
 	test("an XML file's cursor location: offered at the start of an expression, after comments only", () => {
@@ -86,7 +95,7 @@ suite('XPath queries on XML files', () => {
 	test('a location added to the query file: after a blank line - or, if already there, as it is', () => {
 		assert.deepEqual(XPathQuery.withExpression('(: c :)\n\n/a\n\n\n', '/a/b[2]'), { text: '(: c :)\n\n/a\n\n/a/b[2]\n', line: 4 });
 		assert.deepEqual(XPathQuery.withExpression('/a/b[2]\n\n//c', '/a/b[2]'), { text: '/a/b[2]\n\n//c', line: 0 });
-		assert.deepEqual(XPathQuery.withExpression('', '/a'), { text: '/a\n', line: 0 });
+		assert.deepEqual(XPathQuery.withExpression('', '/a'), { text: '\n/a\n', line: 1 });
 	});
 
 	test("a text node: the nth run of text between its element's children, comments and processing instructions", async () => {
