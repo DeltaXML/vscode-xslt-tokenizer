@@ -1542,6 +1542,16 @@
 				"description": "End of XML DTD Declaration"
 			},
 			{
+				"id": "dtdEntityName",
+				"superType": "function",
+				"description": "XML DTD: the name an <!ENTITY> declaration declares - colored as entity references are"
+			},
+			{
+				"id": "dtdLiteral",
+				"superType": "string",
+				"description": "XML DTD: a quoted literal - e.g. an entity's value, or a system or public identifier"
+			},
+			{
 				"id": "mapKey",
 				"superType": "keyword",
 				"description": "The key of a map-entry"
