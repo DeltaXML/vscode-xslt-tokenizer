@@ -81,6 +81,13 @@ export class XPathQuery {
 		return starts;
 	}
 
+	// where each expression's '▶ Run' goes: on the blank line before it, if there is one (a line with only
+	// whitespace on it), otherwise above its first line
+	public static runPlaces(text: string): { expressionLine: number; onBlankLine: boolean }[] {
+		const lines = text.split(/\r?\n/);
+		return XPathQuery.expressionStarts(text).map((line) => ({ expressionLine: line, onBlankLine: line > 0 && lines[line - 1].trim() === '' }));
+	}
+
 	// a 'declare namespace p = "uri";' prolog, as the query file's checks allow, isn't XPath: it's blanked - keeping
 	// the positions of the rest, for Saxon's errors - and its bindings given to Saxon separately
 	public static withoutProlog(expression: string): { xpath: string; namespaces: { [prefix: string]: string } } {
@@ -142,18 +149,32 @@ export class XPathQuery {
 		context.subscriptions.push(this.diagnostics, this.output);
 		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.findNodesWithXPath', () => this.openQueryFile()));
 		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.runXPathQuery', (uri?: vscode.Uri, line?: number) => this.run(uri, line)));
-		const codeLenses = new vscode.EventEmitter<void>();
-		context.subscriptions.push(vscode.languages.registerCodeLensProvider({ language: 'xpath', pattern: '**/' + XPathQuery.fileName }, {
-			onDidChangeCodeLenses: codeLenses.event,
-			provideCodeLenses: (document) => {
-				const target = DocumentChangeHandler.lastActiveXMLNonXSLUri;
-				const title = target ? `▶ Run on ${path.basename(target.fsPath)}` : '▶ Run - first open an XML file';
-				return XPathQuery.expressionStarts(document.getText()).map((line) =>
-					new vscode.CodeLens(new vscode.Range(line, 0, line, 0), { title, command: 'xslt-xpath.runXPathQuery', arguments: [document.uri, line] }));
-			}
+		// '▶ Run on orders.xml' for each expression: on the blank line before it, as an inlay hint, which takes no space
+		// of its own - or, with no blank line before it, e.g. on the first line, as a CodeLens above it
+		const selector = { language: 'xpath', pattern: '**/' + XPathQuery.fileName };
+		const runTitle = () => {
+			const target = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+			return target ? `▶ Run on ${path.basename(target.fsPath)}` : '▶ Run - first open an XML file';
+		};
+		const changed = new vscode.EventEmitter<void>();
+		context.subscriptions.push(vscode.languages.registerCodeLensProvider(selector, {
+			onDidChangeCodeLenses: changed.event,
+			provideCodeLenses: (document) => XPathQuery.runPlaces(document.getText()).filter((place) => !place.onBlankLine).map((place) =>
+				new vscode.CodeLens(new vscode.Range(place.expressionLine, 0, place.expressionLine, 0),
+					{ title: runTitle(), command: 'xslt-xpath.runXPathQuery', arguments: [document.uri, place.expressionLine] }))
 		}));
-		// the file it runs on is shown above each expression
-		context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => codeLenses.fire()));
+		context.subscriptions.push(vscode.languages.registerInlayHintsProvider(selector, {
+			onDidChangeInlayHints: changed.event,
+			provideInlayHints: (document, range) => XPathQuery.runPlaces(document.getText()).filter((place) => place.onBlankLine &&
+				range.contains(new vscode.Position(place.expressionLine - 1, 0))).map((place) => {
+				const label = new vscode.InlayHintLabelPart(runTitle());
+				label.command = { title: runTitle(), command: 'xslt-xpath.runXPathQuery', arguments: [document.uri, place.expressionLine] };
+				label.tooltip = 'Run the expression below on the XML context file';
+				return new vscode.InlayHint(new vscode.Position(place.expressionLine - 1, 0), [label]);
+			})
+		}));
+		// the file it runs on is shown with each expression
+		context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => changed.fire()));
 		context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
 			if (path.basename(e.document.uri.fsPath) === XPathQuery.fileName) {
 				this.diagnostics.delete(e.document.uri);

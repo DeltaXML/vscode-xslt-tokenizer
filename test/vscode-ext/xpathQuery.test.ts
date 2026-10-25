@@ -35,6 +35,11 @@ suite('XPath queries on XML files', () => {
 		assert.deepEqual(XPathQuery.expressionStarts(queries), [2, 4, 8]);
 	});
 
+	test("each expression's run: on the blank line before it, else above it", () => {
+		assert.deepEqual(XPathQuery.runPlaces(queries).map((p) => [p.expressionLine, p.onBlankLine]), [[2, true], [4, true], [8, true]]);
+		assert.deepEqual(XPathQuery.runPlaces('//a\n\n//b').map((p) => [p.expressionLine, p.onBlankLine]), [[0, false], [2, true]]);
+	});
+
 	test('a namespace prolog: blanked, keeping the positions of the rest, and its bindings', () => {
 		const expression = 'declare namespace o = "urn:orders";\n(: note :) declare namespace x=\'urn:x\';\n//o:order/x:note';
 		const { xpath, namespaces } = XPathQuery.withoutProlog(expression);
