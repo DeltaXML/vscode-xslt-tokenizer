@@ -193,7 +193,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 	// the symbols of the XML context file, for element and attribute name completions - computed here if they're not
 	// cached yet, e.g. when VS Code restores the context file's editor at startup without its symbols being requested
-	private static async contextFileSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[] | undefined> {
+	public static async contextFileSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[] | undefined> {
 		let symbols = XsltSymbolProvider.documentSymbols.get(uri);
 		if (!symbols) {
 			// the cache is keyed by Uri object: look for another Uri object for the same file

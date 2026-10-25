@@ -10,6 +10,7 @@ import * as cp from 'child_process';
 import { DocumentChangeHandler } from './documentChangeHandler';
 import { XMLConfiguration } from './languageConfigurations';
 import { XsltSymbolProvider } from './xsltSymbolProvider';
+import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { XsltDebug } from './xsltDebug';
 import { unquotedPath } from './settingPaths';
 
@@ -39,8 +40,12 @@ export interface XPathQueryResult {
 export class XPathQuery {
 	public static readonly fileName = 'queries.xpath';
 	public static readonly mainClass = 'com.deltaxml.xslt.debug.XPathQuery';
-	private static readonly seed = '(: Expressions to find nodes in the XML context file: Ctrl+Enter (Cmd+Enter on macOS), or ▶ above\n' +
-		'   an expression, runs the one at the cursor - separate expressions with a blank line :)\n\n//*\n';
+	// a new query file's text: how it's used, and a first expression - the XML file's root element, quick to run
+	public static seed(rootName?: string) {
+		return '(: Expressions to find nodes in the XML context file: Ctrl+Enter (Cmd+Enter on macOS), or ▶ above\n' +
+			`   an expression, runs the one at the cursor - separate expressions with a blank line :)\n\n/${rootName ?? '*'}\n`;
+	}
+
 
 	// the expression at a line: the lines around it up to blank ones - or, from a blank line, the nearest before it -
 	// unless it's only comments. Its first line, for where Saxon's errors are
@@ -307,7 +312,11 @@ export class XPathQuery {
 			await vscode.workspace.fs.stat(uri);
 		} catch {
 			await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '..'));
-			await vscode.workspace.fs.writeFile(uri, Buffer.from(XPathQuery.seed, 'utf8'));
+			// the root element: the XML file's outline has only it at the top - not comments, processing instructions or
+			// a DOCTYPE. Usually cached, as VS Code's outline and breadcrumbs ask for it, and needed for completion anyway
+			const target = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+			const symbols = target ? await XsltDefinitionProvider.contextFileSymbols(target) : undefined;
+			await vscode.workspace.fs.writeFile(uri, Buffer.from(XPathQuery.seed(symbols?.[0]?.name), 'utf8'));
 		}
 		const document = await vscode.workspace.openTextDocument(uri);
 		const open = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString());

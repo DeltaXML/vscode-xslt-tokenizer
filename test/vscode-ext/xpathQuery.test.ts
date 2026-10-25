@@ -65,6 +65,15 @@ suite('XPath queries on XML files', () => {
 		assert.strictEqual(XPathQuery.resultSummary({ count: 20, items: many }, 30), "= ('item0', 'item1', 'item2', '…  (20 items)");
 	});
 
+	test("a new query file's first expression: the root element - the only top-level symbol of the XML file's outline", async () => {
+		const xml = '<?xml version="1.0"?>\n<?pi <b?>\n<!-- c -->\n<!DOCTYPE x:a [\n<!ENTITY logo "<img/>">\n]>\n<x:a xmlns:x="urn:x"><b/></x:a>\n<!-- after -->';
+		const document = await vscode.workspace.openTextDocument({ content: xml, language: 'xml' });
+		const symbols = await new XsltSymbolProvider(XMLConfiguration.configuration, null).getDocumentSymbols(document, false) ?? [];
+		assert.deepEqual(symbols.map((symbol) => symbol.name), ['x:a']);
+		assert.isTrue(XPathQuery.seed('x:a').endsWith('\n\n/x:a\n'));
+		assert.isTrue(XPathQuery.seed().endsWith('\n\n/*\n'));
+	});
+
 	test('a namespace prolog: blanked, keeping the positions of the rest, and its bindings', () => {
 		const expression = 'declare namespace o = "urn:orders";\n(: note :) declare namespace x=\'urn:x\';\n//o:order/x:note';
 		const { xpath, namespaces } = XPathQuery.withoutProlog(expression);

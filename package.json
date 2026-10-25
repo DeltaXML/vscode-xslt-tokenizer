@@ -181,7 +181,8 @@
 			{
 				"command": "xslt-xpath.findNodesWithXPath",
 				"title": "Find Nodes with XPath...",
-				"category": "XML"
+				"category": "XML",
+				"icon": "$(search)"
 			},
 			{
 				"command": "xslt-xpath.runXPathQuery",
@@ -370,6 +371,11 @@
 				{
 					"command": "xslt-xpath.quickRunXml",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xml",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.findNodesWithXPath",
 					"when": "resourceLangId == xml",
 					"group": "navigation"
 				},
