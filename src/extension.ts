@@ -1108,8 +1108,12 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 
 	private reportProblems(expressionTokens: Token[][], document: vscode.TextDocument) {
 		if (this.collection) {
+			// the prefixes declared in the XML file: for the 'Find Nodes with XPath' query file, the XML context file it runs
+			// on - otherwise the last XML file (or stylesheet) edited
+			const contextFile = XPathQuery.isQueryFile(document) ? DocumentChangeHandler.lastActiveXMLNonXSLUri : undefined;
+			const xmlData = (contextFile && DocumentChangeHandler.xmlnsPrefixesOf(contextFile)) || DocumentChangeHandler.lastXMLDocumentGlobalData;
 			let diagnostics = expressionTokens.flatMap((allTokens) =>
-				XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, XPathSemanticTokensProvider.globalInstructionData, []));
+				XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, xmlData, XPathSemanticTokensProvider.globalInstructionData, []));
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
 			} else {

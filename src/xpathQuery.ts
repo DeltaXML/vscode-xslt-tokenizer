@@ -22,6 +22,7 @@ export interface XPathQueryItem {
 	path?: string;
 	positions?: number[];
 	name?: string;
+	textIndex?: number;
 	value?: string;
 	type?: string;
 }
@@ -165,8 +166,9 @@ export class XPathQuery {
 	}
 
 	// the range of a node in the XML document: in its outline, from the document element down, by the elements'
-	// positions - an element's name in its start tag, an attribute's, or for another node, its element's name
-	public static rangeOf(item: XPathQueryItem, symbols: vscode.DocumentSymbol[]): vscode.Range | undefined {
+	// positions - an element's name in its start tag, an attribute's, a text node's text (with the document), or for
+	// another node, its element's name
+	public static rangeOf(item: XPathQueryItem, symbols: vscode.DocumentSymbol[], document?: vscode.TextDocument): vscode.Range | undefined {
 		if (!item.positions || item.positions.length === 0) {
 			return undefined;
 		}
@@ -187,7 +189,95 @@ export class XPathQuery {
 				return attribute.selectionRange;
 			}
 		}
-		return element!.selectionRange;
+		if (item.nodeKind === 'text' && item.textIndex && document) {
+			const text = XPathQuery.textNodeSpan(document.getText(), document.offsetAt(XPathQuery.nameRange(element!).start) - 1, item.textIndex);
+			if (text) {
+				return new vscode.Range(document.positionAt(text[0]), document.positionAt(text[1]));
+			}
+		}
+		return XPathQuery.nameRange(element!);
+	}
+
+	// an element's name in its start tag - its symbol's selection range starts there, but for mixed content goes on
+	// to its last child
+	private static nameRange(element: vscode.DocumentSymbol) {
+		const start = element.selectionRange.start;
+		return new vscode.Range(start, start.translate(0, element.name.split(' ')[0].length));
+	}
+
+	// where an element's nth text node is, from its start tag's '<': text nodes are the runs of text in its content
+	// between child elements, comments and processing instructions - CDATA sections are part of them. Without the
+	// whitespace around it, unless it's only whitespace. Found by matching tags - not by the symbols' ranges, which
+	// may go on past an element's end tag
+	public static textNodeSpan(xml: string, elementStart: number, textIndex: number): [number, number] | undefined {
+		// after a tag's '>' - not one in an attribute value
+		const tagEnd = (from: number) => {
+			let quote = '';
+			for (let i = from; i < xml.length; i++) {
+				const c = xml[i];
+				if (quote) {
+					quote = c === quote ? '' : quote;
+				} else if (c === '"' || c === "'") {
+					quote = c;
+				} else if (c === '>') {
+					return i + 1;
+				}
+			}
+			return xml.length;
+		};
+		const after = (from: number, end: string) => {
+			const i = xml.indexOf(end, from);
+			return i < 0 ? xml.length : i + end.length;
+		};
+		let at = tagEnd(elementStart);
+		if (xml[at - 2] === '/') {
+			return undefined;
+		}
+		const runs: [number, number][] = [];
+		let runStart = at;
+		let depth = 0;
+		const endRun = (end: number) => {
+			if (depth === 0 && end > runStart) {
+				runs.push([runStart, end]);
+			}
+		};
+		while (at < xml.length) {
+			if (xml.startsWith('<![CDATA[', at)) {
+				at = after(at, ']]>');
+				continue;
+			}
+			if (xml.startsWith('</', at) && depth === 0) {
+				// its end tag
+				break;
+			}
+			if (xml[at] !== '<') {
+				at++;
+				continue;
+			}
+			endRun(at);
+			if (xml.startsWith('<!--', at)) {
+				at = after(at, '-->');
+			} else if (xml.startsWith('<?', at)) {
+				at = after(at, '?>');
+			} else if (xml.startsWith('</', at)) {
+				depth--;
+				at = tagEnd(at);
+			} else {
+				at = tagEnd(at);
+				depth += xml[at - 2] === '/' ? 0 : 1;
+			}
+			if (depth === 0) {
+				runStart = at;
+			}
+		}
+		endRun(at);
+		const run = runs[textIndex - 1];
+		if (!run) {
+			return undefined;
+		}
+		const text = xml.substring(run[0], run[1]);
+		const leading = text.length - text.trimStart().length;
+		return text.trim() === '' ? run : [run[0] + leading, run[0] + text.trimEnd().length];
 	}
 
 	// a query's result in brief, shown after its expression: the first node found, as a path - or the values, as
@@ -500,7 +590,7 @@ export class XPathQuery {
 			return;
 		}
 		const symbols = await new XsltSymbolProvider(XMLConfiguration.configuration, null).getDocumentSymbols(xmlDocument, false) ?? [];
-		const locations = nodes.map((item) => XPathQuery.rangeOf(item, symbols)).filter((range): range is vscode.Range => !!range)
+		const locations = nodes.map((item) => XPathQuery.rangeOf(item, symbols, xmlDocument)).filter((range): range is vscode.Range => !!range)
 			.map((range) => new vscode.Location(xmlDocument.uri, range));
 		if (locations.length === 0) {
 			vscode.window.showInformationMessage(`XPath query: ${nodes.length} nodes found, but not in the XML file's outline - e.g. if it isn't well-formed`);

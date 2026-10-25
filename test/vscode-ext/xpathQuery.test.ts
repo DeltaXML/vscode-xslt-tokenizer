@@ -89,6 +89,22 @@ suite('XPath queries on XML files', () => {
 		assert.deepEqual(XPathQuery.withExpression('', '/a'), { text: '/a\n', line: 0 });
 	});
 
+	test("a text node: the nth run of text between its element's children, comments and processing instructions", async () => {
+		const xml = '<p a=">">one <b>x</b> two<!-- c --> <![CDATA[<three>]]> <?pi?>\n  <i/>  four  </p>';
+		const document = await vscode.workspace.openTextDocument({ content: xml, language: 'xml' });
+		const symbols = await new XsltSymbolProvider(XMLConfiguration.configuration, null).getDocumentSymbols(document, false) ?? [];
+		const text = (textIndex: number, positions = [1]) => {
+			const range = XPathQuery.rangeOf({ kind: 'node', nodeKind: 'text', positions, textIndex }, symbols, document);
+			return range ? document.getText(range) : '(none)';
+		};
+		assert.deepEqual([1, 2, 3, 4, 5].map((i) => text(i)), ['one', 'two', '<![CDATA[<three>]]>', '\n  ', 'four']);
+		// in a child element
+		assert.strictEqual(text(1, [1, 1]), 'x');
+		// no such text node: the element's name - only, though its symbol's selection range goes on to its last child
+		assert.strictEqual(text(6), 'p');
+		assert.strictEqual(document.getText(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'element', positions: [1] }, symbols)), 'p');
+	});
+
 	test('a namespace prolog: blanked, keeping the positions of the rest, and its bindings', () => {
 		const expression = 'declare namespace o = "urn:orders";\n(: note :) declare namespace x=\'urn:x\';\n//o:order/x:note';
 		const { xpath, namespaces } = XPathQuery.withoutProlog(expression);
@@ -107,8 +123,9 @@ suite('XPath queries on XML files', () => {
 		assert.strictEqual(text(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'element', positions: [1, 2, 2] }, symbols)), 'note');
 		assert.strictEqual(at(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'element', positions: [1, 2, 1] }, symbols)), '2:18');
 		assert.strictEqual(text(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'attribute', name: 'id', positions: [1, 2] }, symbols)), 'id');
-		// a text node: its element
+		// a text node: its element - or, with the document, its text
 		assert.strictEqual(at(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'text', positions: [1, 1, 1] }, symbols)), '1:18');
+		assert.strictEqual(text(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'text', positions: [1, 1, 1], textIndex: 1 }, symbols, document)), 'pen');
 		assert.isUndefined(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'element', positions: [1, 3] }, symbols));
 	});
 });

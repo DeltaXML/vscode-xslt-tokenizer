@@ -382,6 +382,12 @@ export class DocumentChangeHandler {
 		}
 	}
 
+	// the xmlns prefixes of an open XML file - e.g. the XML context file, for the 'Find Nodes with XPath' query file
+	public static xmlnsPrefixesOf(uri: vscode.Uri): GlobalInstructionData[] | undefined {
+		const document = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+		return document ? this.lexer.analyseLight(document.getText(), true) : undefined;
+	}
+
 	private static getLastDocXmlnsPrefixes() {
 		if (DocumentChangeHandler.lastActiveXMLEditor) {
 			DocumentChangeHandler.lastXMLDocumentGlobalData = this.lexer.analyseLight(DocumentChangeHandler.lastActiveXMLEditor.document.getText(), true);

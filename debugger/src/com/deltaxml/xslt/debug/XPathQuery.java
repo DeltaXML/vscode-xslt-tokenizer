@@ -136,6 +136,16 @@ final class XPathQuery {
         }
         if (kind == XdmNodeKind.ATTRIBUTE) {
             result.with("name", node.getUnderlyingNode().getDisplayName());
+        } else if (kind == XdmNodeKind.TEXT) {
+            // which of its element's text nodes: in the XML file, the text between its child elements, comments and
+            // processing instructions
+            long textIndex = 1;
+            for (XdmSequenceIterator<XdmNode> it = node.axisIterator(Axis.PRECEDING_SIBLING); it.hasNext(); ) {
+                if (it.next().getNodeKind() == XdmNodeKind.TEXT) {
+                    textIndex++;
+                }
+            }
+            result.with("textIndex", textIndex);
         }
         if (kind != XdmNodeKind.ELEMENT && kind != XdmNodeKind.DOCUMENT) {
             String text = node.getStringValue();
