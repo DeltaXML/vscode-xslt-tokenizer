@@ -700,13 +700,20 @@ export function activate(context: vscode.ExtensionContext) {
 	};
 
 	// the XML context file to run the stylesheet with: { xmlSourceFsPath: undefined } for none, starting from
-	// xsl:initial-template - or undefined (having said why) if there's no context file and no initial template
-	const quickRunSource = async (xsltDocument: vscode.TextDocument, commandName: string): Promise<{ xmlSourceFsPath: string | undefined } | undefined> => {
+	// xsl:initial-template - or undefined (having said why) if there's no context file and no initial template. A
+	// stylesheet can be its own source document, e.g. a quick test with a match="/" template - only when chosen, as
+	// most such stylesheets are for another kind of document: with a task for that in tasks.json, or the error's
+	// 'Run on Itself' button, which calls runOnItself
+	const quickRunSource = async (xsltDocument: vscode.TextDocument, commandName: string, taskType: QuickRunTaskType, runOnItself: () => void): Promise<{ xmlSourceFsPath: string | undefined } | undefined> => {
 		const pickContextFileAction = 'Pick XML Context File';
-		const offerContextFilePick = (message: string) => {
-			vscode.window.showErrorMessage(message, pickContextFileAction).then((choice) => {
+		const runOnItselfAction = 'Run on Itself';
+		const offerContextFilePick = (message: string, canRunOnItself = false) => {
+			const actions = canRunOnItself ? [pickContextFileAction, runOnItselfAction] : [pickContextFileAction];
+			vscode.window.showErrorMessage(message, ...actions).then((choice) => {
 				if (choice === pickContextFileAction) {
 					vscode.commands.executeCommand('xslt-xpath.pickXsltContextFile');
+				} else if (choice === runOnItselfAction) {
+					runOnItself();
 				}
 			});
 		};
@@ -721,9 +728,13 @@ export function activate(context: vscode.ExtensionContext) {
 			return undefined;
 		}
 		if (!xmlSourceFsPath &&!await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
+			const xsltFsPath = xsltDocument.uri.fsPath;
+			if (await SaxonTaskProvider.hasQuickRunTask(taskType, xsltFsPath, xsltFsPath)) {
+				return { xmlSourceFsPath: xsltFsPath };
+			}
 			offerContextFilePick(DocumentChangeHandler.contextFileIsNone ?
-				`${commandName}: the XML context file is 'None', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.` :
-				`${commandName}: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar.`);
+				`${commandName}: the XML context file is 'None', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead, or run the stylesheet on itself.` :
+				`${commandName}: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar, or run the stylesheet on itself.`, true);
 			return undefined;
 		}
 		return { xmlSourceFsPath };
@@ -735,7 +746,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (!taskType) {
 			return;
 		}
-		const source = await quickRunSource(xsltDocument, 'Quick Run XSLT');
+		const source = await quickRunSource(xsltDocument, 'Quick Run XSLT', taskType, () => runQuickRunTask(taskType, xsltDocument, xsltDocument.uri.fsPath));
 		if (source) {
 			await runQuickRunTask(taskType, xsltDocument, source.xmlSourceFsPath);
 		}
@@ -755,12 +766,23 @@ export function activate(context: vscode.ExtensionContext) {
 			return undefined;
 		}
 		const xsltDocument = await stylesheetToRun(activeEditor.document);
-		const source = xsltDocument ? await quickRunSource(xsltDocument, 'Debug XSLT') : undefined;
+		const debugOnItself = async () => {
+			const configuration = xsltDocument ? await debugConfiguration(xsltDocument, xsltDocument.uri.fsPath) : undefined;
+			if (configuration) {
+				await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(xsltDocument!.uri) ?? vscode.workspace.workspaceFolders?.[0], configuration);
+			}
+		};
+		const source = xsltDocument ? await quickRunSource(xsltDocument, 'Debug XSLT', 'xslt', debugOnItself) : undefined;
 		if (!xsltDocument || !source) {
 			return undefined;
 		}
+		return debugConfiguration(xsltDocument, source.xmlSourceFsPath);
+	};
+
+	// the debug configuration for the stylesheet and source: its persisted quick-run 'xslt' task's
+	const debugConfiguration = async (xsltDocument: vscode.TextDocument, xmlSourceFsPath: string | undefined): Promise<vscode.DebugConfiguration | undefined> => {
 		try {
-			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask('xslt', xsltDocument, source.xmlSourceFsPath, xsltDefintiionProvider);
+			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask('xslt', xsltDocument, xmlSourceFsPath, xsltDefintiionProvider);
 			if (quickRunTask === 'cancelled') {
 				return undefined;
 			}
@@ -771,7 +793,7 @@ export function activate(context: vscode.ExtensionContext) {
 			console.warn('Debug XSLT: failed to find/create a persisted task, falling back to an ad hoc configuration.', e);
 		}
 		// no workspace folder to persist a task in - with no resultPath, the result is shown in the Debug Console
-		const { type, label, ...definition } = SaxonTaskProvider.createQuickRunTaskDefinition('xslt', 'Debug XSLT', xsltDocument.uri.fsPath, source.xmlSourceFsPath);
+		const { type, label, ...definition } = SaxonTaskProvider.createQuickRunTaskDefinition('xslt', 'Debug XSLT', xsltDocument.uri.fsPath, xmlSourceFsPath);
 		return { ...definition, type: XsltDebug.type, request: 'launch', name: 'Debug XSLT' };
 	};
 

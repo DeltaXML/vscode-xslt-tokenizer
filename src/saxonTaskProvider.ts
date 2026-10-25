@@ -115,6 +115,17 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return path.relative(docBaseURI, xdmView.fsPath);
     }
 
+    // whether the first workspace folder's tasks.json has a quick-run task of this type for the stylesheet and source -
+    // e.g. one that runs a stylesheet on itself, as its own source document
+    public static async hasQuickRunTask(taskType: QuickRunTaskType, xsltFsPath: string, xmlSourceFsPath: string | undefined): Promise<boolean> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return false;
+        }
+        const tasks: vscode.TaskDefinition[] = (await SaxonJsTaskProvider.getTasksObject())?.tasks || [];
+        return tasks.some((t) => SaxonTaskProvider.isQuickRunTaskFor(t, taskType, xsltFsPath, xmlSourceFsPath, workspaceFolder.uri.fsPath));
+    }
+
     // finds (or persists, on first use) a task of the given quick-run type ('xslt', 'xslt-js' or 'xslt-c') in
     // .vscode/tasks.json for this xsltFile/xmlSource pair, so the user can subsequently add xslt parameters etc. by
     // hand - an undefined xmlSourceFsPath means no source document, starting from xsl:initial-template instead.
