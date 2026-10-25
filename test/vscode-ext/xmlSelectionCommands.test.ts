@@ -36,6 +36,7 @@ suite('XML selection commands', () => {
 		assert.includeDeepMembers(contributes.menus['editor/context'].map((m: { submenu?: string }) => m.submenu), ['xslt-xpath.xmlSelection']);
 		const items = contributes.menus['xslt-xpath.xmlSelection'].map((m: { command: string }) => m.command);
 		assert.deepEqual(items, ['xslt-xpath.selectCurrentElement', 'xslt-xpath.selectParentElement', 'xslt-xpath.selectFirstChildElement',
-			'xslt-xpath.selectPrecedingElement', 'xslt-xpath.selectFollowingElement', 'xslt-xpath.gotoXPath']);
+			'xslt-xpath.selectPrecedingElement', 'xslt-xpath.selectFollowingElement', 'xslt-xpath.gotoXPath',
+			'xslt-xpath.findNodesWithXPath', 'xslt-xpath.addXPathLocationToQueries']);
 	});
 });

@@ -399,11 +399,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
-	public static getXPathFromSelection(expandText?: string[]) {
-		const editor = vscode.window.activeTextEditor;
+	// the location of the editor's cursor - by default, the active editor's - as a path, e.g. /orders/order[2]/@id
+	public static getXPathFromSelection(expandText?: string[], editor = vscode.window.activeTextEditor) {
 		if (editor) {
 			const selection = editor.selection;
-			const rootSymbol = XsltSymbolProvider.getSymbolsForActiveDocument()[0];
+			const rootSymbol = XsltSymbolProvider.getSymbolsForDocument(editor.document.uri)[0];
 			if (!rootSymbol) {
 				return undefined;
 			}

@@ -74,6 +74,21 @@ suite('XPath queries on XML files', () => {
 		assert.isTrue(XPathQuery.seed().endsWith('\n\n/*\n'));
 	});
 
+	test("an XML file's cursor location: offered at the start of an expression, after comments only", () => {
+		const text = '(: c :)\n/ord\n\n//a\n  /b\n\n  ';
+		assert.strictEqual(XPathQuery.locationCompletionStart(text, 1, 4), 0);
+		assert.strictEqual(XPathQuery.locationCompletionStart(text, 6, 2), 2);
+		assert.isUndefined(XPathQuery.locationCompletionStart(text, 4, 4));
+		assert.strictEqual(XPathQuery.locationCompletionStart(text, 3, 3), 0);
+		assert.isUndefined(XPathQuery.locationCompletionStart('count(/', 0, 7));
+	});
+
+	test('a location added to the query file: after a blank line - or, if already there, as it is', () => {
+		assert.deepEqual(XPathQuery.withExpression('(: c :)\n\n/a\n\n\n', '/a/b[2]'), { text: '(: c :)\n\n/a\n\n/a/b[2]\n', line: 4 });
+		assert.deepEqual(XPathQuery.withExpression('/a/b[2]\n\n//c', '/a/b[2]'), { text: '/a/b[2]\n\n//c', line: 0 });
+		assert.deepEqual(XPathQuery.withExpression('', '/a'), { text: '/a\n', line: 0 });
+	});
+
 	test('a namespace prolog: blanked, keeping the positions of the rest, and its bindings', () => {
 		const expression = 'declare namespace o = "urn:orders";\n(: note :) declare namespace x=\'urn:x\';\n//o:order/x:note';
 		const { xpath, namespaces } = XPathQuery.withoutProlog(expression);

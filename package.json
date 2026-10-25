@@ -185,6 +185,11 @@
 				"icon": "$(search)"
 			},
 			{
+				"command": "xslt-xpath.addXPathLocationToQueries",
+				"title": "Add XPath Location to Queries",
+				"category": "XML"
+			},
+			{
 				"command": "xslt-xpath.runXPathQuery",
 				"title": "Run XPath Query at Cursor",
 				"category": "XML"
@@ -365,6 +370,16 @@
 				{
 					"command": "xslt-xpath.gotoXPath",
 					"group": "2_goto@1"
+				},
+				{
+					"command": "xslt-xpath.findNodesWithXPath",
+					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/",
+					"group": "3_xpath@1"
+				},
+				{
+					"command": "xslt-xpath.addXPathLocationToQueries",
+					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/",
+					"group": "3_xpath@2"
 				}
 			],
 			"editor/title": [
@@ -420,6 +435,10 @@
 				{
 					"command": "xslt-xpath.runXPathQuery",
 					"when": "editorLangId == xpath && resourceFilename == queries.xpath"
+				},
+				{
+					"command": "xslt-xpath.addXPathLocationToQueries",
+					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/"
 				},
 				{
 					"command": "xslt-xpath.chooseTopLevelStylesheet",

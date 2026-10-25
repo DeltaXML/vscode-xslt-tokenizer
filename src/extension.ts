@@ -168,7 +168,8 @@ export function activate(context: vscode.ExtensionContext) {
 			{ label: 'Select preceding element', description: shortcut('6'), command: 'xslt-xpath.selectPrecedingElement' },
 			{ label: 'Select following element', description: shortcut('7'), command: 'xslt-xpath.selectFollowingElement' },
 			{ label: 'Goto XPath', description: '', command: 'xslt-xpath.gotoXPath' },
-			{ label: 'Find Nodes with XPath...', description: '', command: 'xslt-xpath.findNodesWithXPath' }
+			{ label: 'Find Nodes with XPath...', description: '', command: 'xslt-xpath.findNodesWithXPath' },
+			{ label: 'Add XPath Location to Queries', description: '', command: 'xslt-xpath.addXPathLocationToQueries' }
 		];
 		const picked = await vscode.window.showQuickPick(items, { placeHolder: 'XML selection' });
 		if (picked) {

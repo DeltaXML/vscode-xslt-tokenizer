@@ -255,6 +255,24 @@ export class XPathQuery {
 				return runs.concat(this.resultHints(document, text));
 			}
 		}));
+		// the location of the cursor in the XML file: added to the query file from the XML file's editor - or, from the
+		// query file, offered as a completion at the start of an expression
+		context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addXPathLocationToQueries', () => this.addLocation()));
+		context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, {
+			provideCompletionItems: async (document, position) => {
+				const start = XPathQuery.locationCompletionStart(document.getText(), position.line, position.character);
+				const xmlEditor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === DocumentChangeHandler.lastActiveXMLNonXSLUri?.toString());
+				const location = start !== undefined && xmlEditor ? await XPathQuery.cursorLocation(xmlEditor) : undefined;
+				if (!location) {
+					return undefined;
+				}
+				const item = new vscode.CompletionItem(location, vscode.CompletionItemKind.Reference);
+				item.detail = `cursor in ${path.basename(xmlEditor!.document.uri.fsPath)}`;
+				item.range = new vscode.Range(position.line, start!, position.line, position.character);
+				item.sortText = '!';
+				return [item];
+			}
+		}, '/'));
 		// the file it runs on is shown with each expression
 		context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => changed.fire()));
 		context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
@@ -262,6 +280,59 @@ export class XPathQuery {
 				this.diagnostics.delete(e.document.uri);
 			}
 		}));
+	}
+
+	// the location of an XML editor's cursor, e.g. /orders/order[2]/@id - from its outline, built first if VS Code
+	// hasn't asked for it yet
+	private static async cursorLocation(editor: vscode.TextEditor): Promise<string | undefined> {
+		await XsltDefinitionProvider.contextFileSymbols(editor.document.uri);
+		return XsltSymbolProvider.getXPathFromSelection(undefined, editor);
+	}
+
+	// where a location typed at a line's cursor would start: at the start of an expression - only comments before it -
+	// and replacing what's typed so far, e.g. '/ord'
+	public static locationCompletionStart(text: string, line: number, character: number): number | undefined {
+		const lines = text.split(/\r?\n/);
+		let start = line;
+		while (start > 0 && lines[start - 1].trim() !== '') {
+			start--;
+		}
+		if (XPathQuery.withoutComments(lines.slice(start, line).join('\n')).trim() !== '') {
+			return undefined;
+		}
+		const typed = /^(\s*)([/\w:.@[\]-]*)$/.exec(lines[line].substring(0, character));
+		return typed ? typed[1].length : undefined;
+	}
+
+	// the query file's text with an expression added at the end, after a blank line - or, if it's there already, as
+	// it is - and the expression's line
+	public static withExpression(text: string, expression: string): { text: string; line: number } {
+		const existing = XPathQuery.expressionStarts(text).find((line) => XPathQuery.expressionAt(text, line)!.text.trim() === expression);
+		if (existing !== undefined) {
+			return { text, line: existing };
+		}
+		const before = text.replace(/\s*$/, '');
+		const added = before === '' ? expression + '\n' : `${before}\n\n${expression}\n`;
+		return { text: added, line: added.split('\n').length - 2 };
+	}
+
+	// from the XML file's editor: its cursor's location, as an expression in the query file, ready to run or change
+	private async addLocation() {
+		const xmlEditor = vscode.window.activeTextEditor;
+		const location = xmlEditor ? await XPathQuery.cursorLocation(xmlEditor) : undefined;
+		if (!location) {
+			vscode.window.showInformationMessage('XPath query: put the cursor on an element or attribute in an XML file first.');
+			return;
+		}
+		const queryEditor = await this.openQueryFile();
+		const document = queryEditor.document;
+		const { text, line } = XPathQuery.withExpression(document.getText(), location);
+		if (text !== document.getText()) {
+			await queryEditor.edit((edit) => edit.replace(new vscode.Range(0, 0, document.lineCount, 0), text));
+		}
+		const end = document.lineAt(line).range.end;
+		queryEditor.selection = new vscode.Selection(end, end);
+		queryEditor.revealRange(new vscode.Range(end, end));
 	}
 
 	// after each expression run on the XML context file, unchanged since, its result in brief
@@ -321,13 +392,13 @@ export class XPathQuery {
 		const document = await vscode.workspace.openTextDocument(uri);
 		const open = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString());
 		if (open) {
-			await vscode.window.showTextDocument(document, { viewColumn: open.viewColumn });
-			return;
+			return vscode.window.showTextDocument(document, { viewColumn: open.viewColumn });
 		}
 		await vscode.commands.executeCommand('workbench.action.newGroupBelow');
 		const editor = await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Active, preview: false });
 		const last = document.lineCount - 1;
 		editor.selection = new vscode.Selection(last, document.lineAt(last).text.length, last, document.lineAt(last).text.length);
+		return editor;
 	}
 
 	// runs the expression at the line (or the cursor) of the query file
