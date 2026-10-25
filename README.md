@@ -36,7 +36,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
       <li><a href="https://qt4cg.org/2026-01-28/xslt-40/Overview.html">XSLT 4.0</a> and XPath 4.0, as in 
       <a href="https://www.saxonica.com/html/documentation13/changes/v13/xslt40.html">Saxon 13</a></li>
       <li>SaxonJS interactive extensions (IXSL)</li>
-      <li><code>.xpath</code> files, as XPath 4.0</li>
+      <li><code>.xpath</code> files, as XPath 3.0/4.0</li>
       <li>Fast semantic highlighting</li>
     </ul>
   </td>
@@ -45,6 +45,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
     <ul>
       <li>Record and enum types, with type-aware checks</li>
       <li>Named item types: <code>xsl:item-type</code></li>
+      <li>Full language features for JNodes (JSON)</li>
       <li><code>xsl:switch</code>, with missing-case quick fixes</li>
       <li>Keyword arguments and optional parameters</li>
       <li>Functions in no namespace</li>
@@ -95,6 +96,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
       <li>Go to (or peek) definition, and find references</li>
       <li>Go to the declarations of record fields</li>
       <li>Outline, breadcrumbs and Go to Symbol</li>
+      <li><i>Find nodes</i> using a fully featured XPath editor</li>
       <li>Links for <code>xsl:import</code> and <code>xsl:include</code></li>
       <li>XSLT Imports view, with inferred top-level stylesheets</li>
       <li>Filterable dropdown listing all symbols and modes</li>

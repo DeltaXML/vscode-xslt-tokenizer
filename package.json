@@ -17,6 +17,8 @@
 		"xslt",
 		"xsl",
 		"xpath",
+		"json",
+		"debugger",
 		"highlighter",
 		"formatter",
 		"saxon",
@@ -33,6 +35,7 @@
 	},
 	"categories": [
 		"Programming Languages",
+		"Debuggers",
 		"Linters",
 		"Formatters",
 		"Snippets"
@@ -42,7 +45,6 @@
 		"onLanguage:bpmn",
 		"onCommand:workbench.action.tasks.runTask",
 		"onDebugResolve:xslt-saxon",
-		"onCommand:xslt-xpath.debugXslt",
 		"onDebugDynamicConfigurations:xslt-saxon",
 		"onDebugInitialConfigurations"
 	],
