@@ -1817,6 +1817,9 @@ export enum ErrorType {
     // an entity reference to an entity that isn't declared: with no DOCTYPE, or not in its internal subset
     EntityNotDeclared,
     EntityNotDeclaredNoDoctype,
+    // a name in use-character-maps that no xsl:character-map declares, and an xsl:character-map name declared twice
+    CharacterMapNameUnresolved,
+    DuplicateCharacterMapName,
 }
 
 export interface BaseToken {

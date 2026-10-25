@@ -29,7 +29,8 @@ enum AttributeType {
 	InstructionMode,
 	UseAttributeSets,
 	UseAccumulators,
-	ExcludeResultPrefixes
+	ExcludeResultPrefixes,
+	UseCharacterMaps
 }
 
 interface XSLTToken extends BaseToken {
@@ -348,6 +349,8 @@ export class XsltTokenDefinitions {
 								attType = AttributeType.UseAttributeSets;
 							} else if (attNameText === 'use-accumulators') {
 								attType = AttributeType.UseAccumulators;
+							} else if (attNameText === 'use-character-maps') {
+								attType = AttributeType.UseCharacterMaps;
 							} else if (attNameText === XsltTokenDefinitions.excludePrefixes || attNameText === XsltTokenDefinitions.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -431,6 +434,17 @@ export class XsltTokenDefinitions {
 										const instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, nameToken.value, GlobalInstructionType.Accumulator);
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 										resultInputToken = { token: nameToken, type: GlobalInstructionType.Accumulator };
+									}
+								}
+								break;
+							case AttributeType.UseCharacterMaps:
+								if (isOnRequiredToken) {
+									const nameToken = XslLexer.tokensInsideToken(token, variableName).find((innerToken) =>
+										position.character >= innerToken.startCharacter && position.character <= (innerToken.startCharacter + innerToken.length));
+									if (nameToken) {
+										const instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, nameToken.value, GlobalInstructionType.CharacterMap);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
+										resultInputToken = { token: nameToken, type: GlobalInstructionType.CharacterMap };
 									}
 								}
 								break;

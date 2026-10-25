@@ -1694,6 +1694,9 @@ export class XslLexer {
                     case 'attribute-set':
                         instructionType = GlobalInstructionType.AttributeSet;
                         break;
+                    case 'character-map':
+                        instructionType = GlobalInstructionType.CharacterMap;
+                        break;
                     case 'use-package':
                         instructionType = GlobalInstructionType.UsePackage;
                         break;
@@ -1735,7 +1738,8 @@ export enum GlobalInstructionType {
     Unknown,
     ItemType,
     // not a declaration: an accumulator name listed in a use-accumulators attribute, e.g. on xsl:mode
-    AccumulatorUse
+    AccumulatorUse,
+    CharacterMap
 }
 
 

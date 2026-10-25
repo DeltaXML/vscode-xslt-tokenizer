@@ -40,7 +40,8 @@ enum AttributeType {
 	UseAttributeSets,
 	UseAccumulators,
 	ExcludeResultPrefixes,
-	Xmlns
+	Xmlns,
+	UseCharacterMaps
 }
 
 interface XSLTToken extends BaseToken {
@@ -553,6 +554,8 @@ export class XsltTokenCompletions {
 									attType = AttributeType.UseAttributeSets;
 								} else if (attNameText === XsltTokenCompletions.useAccumulators) {
 									attType = AttributeType.UseAccumulators;
+								} else if (attNameText === 'use-character-maps') {
+									attType = AttributeType.UseCharacterMaps;
 								} else if (attNameText === XsltTokenCompletions.excludePrefixes || attNameText === XsltTokenCompletions.xslExcludePrefixes) {
 									attType = AttributeType.ExcludeResultPrefixes;
 								} else {
@@ -660,6 +663,11 @@ export class XsltTokenCompletions {
 									let allCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Accumulator, globalInstructionData, importedInstructionData);
 									XsltTokenCompletions.createNonAlphanumericCompletions(document, position, ['all'], allCompletions);
 									resultCompletions = allCompletions;
+								}
+								break;
+							case AttributeType.UseCharacterMaps:
+								if (isOnRequiredToken) {
+									resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.CharacterMap, globalInstructionData, importedInstructionData);
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:

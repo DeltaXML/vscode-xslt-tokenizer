@@ -49,7 +49,9 @@ export enum AttributeType {
 	// [xsl:]default-mode: the mode for templates without a mode attribute
 	DefaultMode,
 	ExcludeResultPrefixes,
-	XPath
+	XPath,
+	// a list of character map names, on xsl:output, xsl:result-document or xsl:character-map
+	UseCharacterMaps
 }
 
 export enum CurlyBraceType {
@@ -509,6 +511,7 @@ export class XsltTokenDiagnostics {
 		// isJNode is true for a child step, e.g. jtree($a)/b, whose result can be used with '/' again
 		let lookupRecords = new Map<BaseToken, { record: RecordType, isJNode: boolean }>();
 		let globalAccumulatorNames: string[] = [];
+		const globalCharacterMapNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
 		// the prefixes, each with the token of the line it's on, for a value on more than one line
 		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[]; prefixTokens: BaseToken[] } | null = null;
@@ -629,6 +632,14 @@ export class XsltTokenDiagnostics {
 						problemTokens.push(instruction.token);
 					}
 					break;
+				case GlobalInstructionType.CharacterMap:
+					// in the same module, two with a name have the same import precedence (XTSE1580)
+					if (globalCharacterMapNames.indexOf(instruction.name) < 0) {
+						globalCharacterMapNames.push(instruction.name);
+					} else {
+						problemTokens.push({ ...instruction.token, error: ErrorType.DuplicateCharacterMapName, value: instruction.name });
+					}
+					break;
 				case GlobalInstructionType.AttributeSet:
 					globalAttributeSetNames.push(instruction.name);
 					break;
@@ -677,6 +688,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case GlobalInstructionType.Accumulator:
 					globalAccumulatorNames.push(instruction.name);
+					break;
+				case GlobalInstructionType.CharacterMap:
+					globalCharacterMapNames.push(instruction.name);
 					break;
 				case GlobalInstructionType.AttributeSet:
 					globalAttributeSetNames.push(instruction.name);
@@ -1262,6 +1276,8 @@ export class XsltTokenDiagnostics {
 								attType = AttributeType.UseAttributeSets;
 							} else if (attNameText === 'use-accumulators') {
 								attType = AttributeType.UseAccumulators;
+							} else if (attNameText === 'use-character-maps') {
+								attType = AttributeType.UseCharacterMaps;
 							} else if (attNameText === XsltTokenDiagnostics.excludePrefixes || attNameText === XsltTokenDiagnostics.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -1413,6 +1429,14 @@ export class XsltTokenDiagnostics {
 								}
 							});
 						}
+						if (!hasProblem && attType === AttributeType.UseCharacterMaps) {
+							// each name must be a declared character map (XTSE1590)
+							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
+								if (!globalCharacterMapNames.includes(nameToken.value)) {
+									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.CharacterMapNameUnresolved });
+								}
+							});
+						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
 							if (!namedTemplates.get(variableName)) {
 								valueToken['error'] = ErrorType.TemplateNameUnresolved;
@@ -1477,7 +1501,8 @@ export class XsltTokenDiagnostics {
 							}
 						}
 						// the list attributes stay so for the rest of a value on more than one line
-						if (isLastPart || !(attType === AttributeType.ExcludeResultPrefixes || attType === AttributeType.UseAccumulators || attType === AttributeType.UseAttributeSets)) {
+						if (isLastPart || !(attType === AttributeType.ExcludeResultPrefixes || attType === AttributeType.UseAccumulators || attType === AttributeType.UseAttributeSets ||
+							attType === AttributeType.UseCharacterMaps)) {
 							attType = AttributeType.None;
 						}
 						break;
@@ -4459,6 +4484,13 @@ export class XsltTokenDiagnostics {
 				case ErrorType.AccumulatorNameUnresolved:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:accumulator with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.CharacterMapNameUnresolved:
+					errCode = DiagnosticCode.unresolvedGenericRef;
+					msg = `XSLT: xsl:character-map with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.DuplicateCharacterMapName:
+					msg = `XSLT: Duplicate xsl:character-map name '${tokenValue}'`;
 					break;
 				case ErrorType.TemplateModeUnresolved:
 					msg = `XSLT: Template mode '${tokenValue}' not used`;
