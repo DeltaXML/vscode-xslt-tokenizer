@@ -478,6 +478,8 @@ export class XsltTokenDiagnostics {
 		let isXMLDeclaration = false;
 		let dtdStarted = false;
 		let dtdEnded = false;
+		// the entities the DOCTYPE declares - null if it has declarations that can't be seen
+		const doctypeEntities: { inSubset: boolean; declared: Set<string> | null } = { inSubset: false, declared: new Set() };
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default', '#unnamed'];
 		let globalKeys: string[] = [];
@@ -745,6 +747,12 @@ export class XsltTokenDiagnostics {
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
+				if (!dtdEnded && (xmlTokenType === XSLTokenLevelState.dtd || xmlTokenType === XSLTokenLevelState.dtdEnd ||
+					xmlTokenType === XSLTokenLevelState.dtdEntityName || xmlTokenType === XSLTokenLevelState.dtdLiteral)) {
+					const prevToken = allTokens[index - 1];
+					const prevText = prevToken && prevToken.line === token.line ? XsltTokenDiagnostics.getTextForToken(token.line, prevToken, document) : '';
+					XsltTokenDiagnostics.updateDeclaredEntities(xmlTokenType, XsltTokenDiagnostics.getTextForToken(token.line, token, document), prevText, doctypeEntities);
+				}
 
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xmlText:
@@ -1493,14 +1501,13 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.entityRef:
-						let entityName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						let validationResult;
 						if (token.error) {
 							problemTokens.push(token);
 						} else {
-							({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(entityName, dtdEnded, inheritedPrefixes));
-							if (validationResult !== NameValidationError.None) {
-								token['error'] = ErrorType.EntityName;
+							const { error, entityName } = XsltTokenDiagnostics.validateEntityRef(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document),
+								dtdEnded, inheritedPrefixes, doctypeEntities.declared);
+							if (error !== undefined) {
+								token['error'] = error;
 								token['value'] = entityName;
 								problemTokens.push(token);
 							}
@@ -2956,10 +2963,9 @@ export class XsltTokenDiagnostics {
 						if (token.error) {
 							problemTokens.push(token);
 						} else {
-							let validationResult, entityName;
-							({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes));
-							if (validationResult !== NameValidationError.None) {
-								token['error'] = ErrorType.EntityName;
+							const { error, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes, doctypeEntities.declared);
+							if (error !== undefined) {
+								token['error'] = error;
 								token['value'] = entityName;
 								problemTokens.push(token);
 							}
@@ -3609,8 +3615,12 @@ export class XsltTokenDiagnostics {
 		return [expectedElements, expectedAttributes] as [string[], string[] | undefined];
 	}
 
-	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[]) {
-		let validationResult = NameValidationError.None;
+	// an entity reference: a character reference, a predefined entity, or one declared in the DOCTYPE's internal subset
+	// - any well-formed name when the DOCTYPE has declarations that can't be seen (declaredEntities null): in an
+	// external DTD, or one a parameter entity reference brings in. The error, if any: an invalid name, or one that's
+	// not declared
+	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[], declaredEntities: Set<string> | null) {
+		let error: ErrorType | undefined;
 		if (entityName.length > 2 && entityName.endsWith(';')) {
 			entityName = entityName.substring(1, entityName.length - 1);
 			if (entityName.length > 1 && entityName.charAt(0) === '#') {
@@ -3620,17 +3630,56 @@ export class XsltTokenDiagnostics {
 				} else {
 					validNumber = /^#[0-9]+$/.test(entityName);
 				}
-				validationResult = validNumber ? NameValidationError.None : NameValidationError.NameError;
-			} else if (!dtdEnded) {
-				let isXmlChar = XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1;
-				validationResult = isXmlChar ? NameValidationError.None : NameValidationError.NameError;
+				error = validNumber ? undefined : ErrorType.EntityName;
+			} else if (XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, DocumentTypes.Other, inheritedPrefixes) !== NameValidationError.None) {
+				error = ErrorType.EntityName;
+			} else if (XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1 || (dtdEnded && (declaredEntities === null || declaredEntities.has(entityName)))) {
+				error = undefined;
 			} else {
-				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, DocumentTypes.Other, inheritedPrefixes);
+				error = dtdEnded ? ErrorType.EntityNotDeclared : ErrorType.EntityNotDeclaredNoDoctype;
 			}
 		} else {
-			validationResult = NameValidationError.NameError;
+			error = ErrorType.EntityName;
 		}
-		return { validationResult, entityName };
+		return { error, entityName };
+	}
+
+	// what a DOCTYPE's token tells of the entities it declares: the names <!ENTITY> declares, except parameter entities -
+	// or, null, that there are declarations that can't be seen: an external DTD, named before the internal subset's
+	// '[', or a parameter entity reference, e.g. %chars;, in the subset
+	private static updateDeclaredEntities(xmlTokenType: XSLTokenLevelState, text: string, prevText: string, doctype: { inSubset: boolean; declared: Set<string> | null }) {
+		if (doctype.declared === null) {
+			return;
+		}
+		switch (xmlTokenType) {
+			case XSLTokenLevelState.dtd:
+			case XSLTokenLevelState.dtdEnd: {
+				let subsetText = text;
+				if (!doctype.inSubset) {
+					const bracket = text.indexOf('[');
+					if (bracket < 0) {
+						return;
+					}
+					doctype.inSubset = true;
+					subsetText = text.substring(bracket + 1);
+				}
+				if (/%[^\s%;"']+;/.test(subsetText)) {
+					doctype.declared = null;
+				}
+				break;
+			}
+			case XSLTokenLevelState.dtdLiteral:
+				if (!doctype.inSubset) {
+					// a system or public identifier
+					doctype.declared = null;
+				}
+				break;
+			case XSLTokenLevelState.dtdEntityName:
+				if (!/%\s*$/.test(prevText)) {
+					doctype.declared.add(text);
+				}
+				break;
+		}
 	}
 
 	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], overridType?: TokenLevelState) {
@@ -4280,6 +4329,12 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.EntityName:
 					msg = `XML: Invalid entity name '${tokenValue}'`;
+					break;
+				case ErrorType.EntityNotDeclared:
+					msg = `XML: Entity '${tokenValue}' is not declared in the DOCTYPE`;
+					break;
+				case ErrorType.EntityNotDeclaredNoDoctype:
+					msg = `XML: Entity '${tokenValue}' is not declared - only lt, gt, amp, quot and apos are predefined: declare others in a DOCTYPE, or use a character reference, e.g. &#160;`;
 					break;
 				case ErrorType.MultiRoot:
 					msg = 'XML: More than one root element';

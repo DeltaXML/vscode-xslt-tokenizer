@@ -1814,6 +1814,9 @@ export enum ErrorType {
     MissingContextItemForRegex,
     // a duplicate xsl:map-entry key in an xsl:map with a duplicates attribute
     MapEntryKeyDuplicateHandled,
+    // an entity reference to an entity that isn't declared: with no DOCTYPE, or not in its internal subset
+    EntityNotDeclared,
+    EntityNotDeclaredNoDoctype,
 }
 
 export interface BaseToken {
