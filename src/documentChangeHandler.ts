@@ -316,16 +316,40 @@ export class DocumentChangeHandler {
 
 	};
 
+	// for a stylesheet that Quick Run runs on itself, as its own source document - with no XML context file, and no
+	// xsl:initial-template - the label of the task it uses (set by the extension, which knows the tasks)
+	public static selfSourceTask: ((document: vscode.TextDocument) => Promise<string | undefined>) | undefined;
+	// counts the updates, so that a slower, earlier lookup of a self-source task doesn't overwrite a later update
+	private static statusBarUpdates = 0;
+
 	public static updateStatusBarItem(isXSLTOrXPath: boolean): void {
+		const update = ++DocumentChangeHandler.statusBarUpdates;
 		if (isXSLTOrXPath) {
 			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 			const filename = docUri ? path.basename(docUri.path) : DocumentChangeHandler.contextFileIsNone ? '[no XML context]' : '[XML context file]';
 			DocumentChangeHandler.contextStatusBarItem.tooltip = 'XML context file - used for XPath auto-completion and as the source for Quick Run';
 			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
 			DocumentChangeHandler.contextStatusBarItem.show();
+			// the context file isn't shared by a stylesheet that runs on itself: shown for that stylesheet alone
+			const activeDocument = vscode.window.activeTextEditor?.document;
+			if (!docUri && activeDocument?.languageId === 'xslt' && DocumentChangeHandler.selfSourceTask) {
+				DocumentChangeHandler.selfSourceTask(activeDocument).then((taskLabel) => {
+					if (taskLabel !== undefined && update === DocumentChangeHandler.statusBarUpdates) {
+						const stylesheetName = path.basename(activeDocument.uri.path);
+						DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${stylesheetName} (itself)`;
+						DocumentChangeHandler.contextStatusBarItem.tooltip = `Quick Run runs ${stylesheetName} on itself, as its own source document, with the task '${taskLabel}' - pick an XML context file to run it on that file instead`;
+					}
+				}, () => undefined);
+			}
 		} else {
 			DocumentChangeHandler.contextStatusBarItem.hide();
 		}
+	}
+
+	// the status bar item again, for the active editor - e.g. after tasks.json changes
+	public static refreshStatusBarItem(): void {
+		const languageId = vscode.window.activeTextEditor?.document.languageId;
+		DocumentChangeHandler.updateStatusBarItem(languageId === 'xslt' || languageId === 'xpath' || languageId === 'dcp');
 	}
 
 	public async performRename(document: vscode.TextDocument, edit: TagRenameEdit) {
@@ -356,6 +380,12 @@ export class DocumentChangeHandler {
 		} else {
 			return false;
 		}
+	}
+
+	// the xmlns prefixes of an open XML file - e.g. the XML context file, for the 'Find Nodes with XPath' query file
+	public static xmlnsPrefixesOf(uri: vscode.Uri): GlobalInstructionData[] | undefined {
+		const document = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+		return document ? this.lexer.analyseLight(document.getText(), true) : undefined;
 	}
 
 	private static getLastDocXmlnsPrefixes() {

@@ -259,6 +259,14 @@ export class XPathLexer {
         return code === 34 ? '"' : code === 39 ? '\'' : undefined;
     }
 
+    // a character reference to whitespace - a space, tab, newline or carriage return, e.g. &#xA; or &#10; - which, as the
+    // XML parser replaces it, is whitespace in the XPath expression
+    public static isWhitespaceReference(reference: string): boolean {
+        const numeric = /^&#(?:x([0-9a-fA-F]+)|([0-9]+));$/.exec(reference);
+        const code = numeric ? (numeric[1] !== undefined ? parseInt(numeric[1], 16) : parseInt(numeric[2], 10)) : undefined;
+        return code === 9 || code === 10 || code === 13 || code === 32;
+    }
+
     // the text so far of a reference may be the start of one to the quote
     private static isQuoteReferencePrefix(text: string, quote: string): boolean {
         if ((quote === '"' ? '&quot;' : '&apos;').startsWith(text)) {
@@ -802,6 +810,9 @@ export class XPathLexer {
                                 nextState = [CharLevelState.lDqEnt, 0];
                             } else if (entQuote === '\'') {
                                 nextState = [CharLevelState.lSqEnt, 0];
+                            } else if (XPathLexer.isWhitespaceReference(ent)) {
+                                // e.g. 'a,&#xA;b' - whitespace, which isn't a token, but takes up its characters on the line
+                                this.update(poppedContext, result, tokenChars, CharLevelState.lWs, isTypeDeclaration);
                             } else {
                                 let entToken: Token = new BasicToken(ent, CharLevelState.lName);
                                 this.updateResult(poppedContext, result, entToken, isTypeDeclaration);
@@ -1028,7 +1039,7 @@ export class XPathLexer {
                 }
             }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
-            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration);
+            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration, result);
             if (prevToken && newToken.charType === CharLevelState.sep && newToken.value === '|' && XPathLexer.isChoiceSeparator(result, prevToken, poppedContext, isTypeDeclaration)) {
                 // XPath 4.0 choice item type, e.g. (xs:date | xs:time) - the item type before '|' may have been labelled as a name test
                 newToken.choiceSeparator = true;
@@ -1199,6 +1210,26 @@ export class XPathLexer {
         return !!ctx && ctx.tokenType === TokenLevelState.operator && (ctx.value === 'as' || ctx.value === 'of');
     }
 
+    private static isKindTestInType(result: Token[], isTypeDeclaration: boolean) {
+        // the kind test before the '*', '+' or '?' at the end of result, e.g. node() - in a sequence type: in an 'as'
+        // attribute, after 'as' or 'of' (e.g. instance of, or an inline function's parameter or return type), in a
+        // choice item type, or within the brackets of a map, array or function type
+        if (isTypeDeclaration) {
+            return true;
+        }
+        const beforeKindTest = result[result.length - 4];
+        if (beforeKindTest && ((beforeKindTest.tokenType === TokenLevelState.operator && (beforeKindTest.value === 'as' || beforeKindTest.value === 'of')) || beforeKindTest.choiceSeparator)) {
+            return true;
+        }
+        const index = XPathLexer.enclosingParenIndex(result);
+        if (index < 0) {
+            return false;
+        }
+        const typeToken = result[index].context;
+        return XPathLexer.isTypeParen(result[index]) || !!result[index - 1]?.choiceSeparator ||
+            (!!typeToken && (typeToken.tokenType === TokenLevelState.simpleType || typeToken.tokenType === TokenLevelState.nodeType));
+    }
+
     private static isInTypeParen(result: Token[]) {
         // the unclosed '(' before the '|' at the end of result
         const index = XPathLexer.enclosingParenIndex(result);
@@ -1346,7 +1377,7 @@ export class XPathLexer {
         }
     }
 
-    private setLabelsUsingCurrentToken(poppedContext: Token | null | undefined, prevToken: Token | null, currentToken: Token, isTypeDeclaration: boolean) {
+    private setLabelsUsingCurrentToken(poppedContext: Token | null | undefined, prevToken: Token | null, currentToken: Token, isTypeDeclaration: boolean, result: Token[]) {
         if (!(prevToken)) {
             prevToken = new BasicToken(',', CharLevelState.sep);
             prevToken.tokenType = TokenLevelState.operator;
@@ -1425,10 +1456,17 @@ export class XPathLexer {
             case CharLevelState.sep:
                 let prevTokenT = prevToken.tokenType;
                 let isStar = currentToken.value === '*';
-                if (isStar && (
+                // after a kind test, e.g. node(): an occurrence indicator in a type, e.g. instance of node()*, otherwise
+                // an operator, e.g. text() * 2
+                const afterKindTest = prevTokenT === TokenLevelState.nodeType && prevToken.value === '()';
+                if (afterKindTest && (isStar || currentToken.value === '?' || currentToken.value === '+')) {
+                    if (XPathLexer.isKindTestInType(result, isTypeDeclaration)) {
+                        currentToken.charType = CharLevelState.lName;
+                        currentToken.tokenType = TokenLevelState.nodeType;
+                    }
+                } else if (isStar && (
                     prevTokenT === TokenLevelState.attributeNameTest ||
-                    prevTokenT === TokenLevelState.uriLiteral ||
-                    prevTokenT === TokenLevelState.nodeType && prevToken.value === '()')
+                    prevTokenT === TokenLevelState.uriLiteral)
                 ) {
                     // @* or {example.com}*
                     currentToken.charType = CharLevelState.lName;
@@ -1749,6 +1787,8 @@ export enum ErrorType {
     FixedNamespacesToken,
     RecordFieldUnknown,
     RecordFieldValueType,
+    RecordInstructionFieldMissing,
+    RecordInstructionFieldUnknown,
     RecordLookupUnknown,
     AccumulatorNotApplicable,
     ItemTypeDuplicate,
@@ -1774,6 +1814,12 @@ export enum ErrorType {
     MissingContextItemForRegex,
     // a duplicate xsl:map-entry key in an xsl:map with a duplicates attribute
     MapEntryKeyDuplicateHandled,
+    // an entity reference to an entity that isn't declared: with no DOCTYPE, or not in its internal subset
+    EntityNotDeclared,
+    EntityNotDeclaredNoDoctype,
+    // a name in use-character-maps that no xsl:character-map declares, and an xsl:character-map name declared twice
+    CharacterMapNameUnresolved,
+    DuplicateCharacterMapName,
 }
 
 export interface BaseToken {
@@ -1791,7 +1837,21 @@ export interface BaseToken {
     // XPath 4.0: the '|' separating the item types of a choice item type, e.g. (xs:date | xs:time)
     choiceSeparator?: boolean;
     // XPath 4.0 record types: for a quick fix, the text that adds the missing fields to a map constructor
-    recordFix?: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } };
+    recordFix?: RecordFix;
+}
+
+// a quick fix's edit: inserting the text at the position, or replacing the text up to the end, or replaceLength characters
+// - altText is the text for an alternative fix, and alternatives the texts for a fix each, e.g. a field name for an unknown
+// one - isMarkup is true for XSLT markup, e.g. attributes, whose quotes are not adjusted for an enclosing attribute value
+export interface RecordFix {
+    line: number;
+    character: number;
+    text: string;
+    replaceLength?: number;
+    altText?: string;
+    end?: { line: number, character: number };
+    alternatives?: string[];
+    isMarkup?: boolean;
 }
 
 export interface Token extends BaseToken {

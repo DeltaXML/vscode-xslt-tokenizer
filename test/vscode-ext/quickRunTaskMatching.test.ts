@@ -46,6 +46,13 @@ suite('Quick Run - persisted task matching', () => {
 		assert.isTrue(SaxonTaskProvider.isQuickRunTaskFor(task, 'xslt', outside, fsPath('books.xml'), workspaceFolder));
 	});
 
+	test('matches paths relative to the workspace folder, as the task runs there', () => {
+		const task = definition('xsl/report.xsl', 'data/books.xml');
+		assert.isTrue(SaxonTaskProvider.isQuickRunTaskFor(task, 'xslt', fsPath('xsl', 'report.xsl'), fsPath('data', 'books.xml'), workspaceFolder));
+		assert.isTrue(SaxonTaskProvider.hasXmlSource(task, fsPath('data', 'books.xml'), workspaceFolder));
+		assert.isFalse(SaxonTaskProvider.isQuickRunTaskFor(task, 'xslt', fsPath('report.xsl'), fsPath('data', 'books.xml'), workspaceFolder));
+	});
+
 	test('with no XML source, matches tasks whose xmlSource is empty or absent', () => {
 		const xslt = fsPath('report.xsl');
 		const emptySource = definition('${workspaceFolder}/report.xsl', '');
@@ -65,6 +72,15 @@ suite('Quick Run - persisted task matching', () => {
 	test('ignores tasks whose paths are file-picker commands rather than files', () => {
 		const task = definition('${command:xslt-xpath.pickXsltFile}', '${command:xslt-xpath.pickXmlSourceFile}');
 		assert.isFalse(SaxonTaskProvider.isQuickRunTaskFor(task, 'xslt', fsPath('report.xsl'), fsPath('books.xml'), workspaceFolder));
+	});
+
+	test('several tasks for the pair are offered by label, the most recently picked first', () => {
+		const task = (label: string) => ({ ...definition('${workspaceFolder}/report.xsl', '${workspaceFolder}/books.xml'), label });
+		const tasks = [task('report with books.xml'), task('report (draft)'), task('report (fr)')];
+		assert.deepEqual(SaxonTaskProvider.quickRunTaskChoices(tasks, []), ['report with books.xml', 'report (draft)', 'report (fr)']);
+		assert.deepEqual(SaxonTaskProvider.quickRunTaskChoices(tasks, ['report (fr)', 'report (draft)']), ['report (fr)', 'report (draft)', 'report with books.xml']);
+		// a task picked before but since removed or renamed is ignored
+		assert.deepEqual(SaxonTaskProvider.quickRunTaskChoices(tasks, ['report (old)', 'report (draft)']), ['report (draft)', 'report with books.xml', 'report (fr)']);
 	});
 });
 
@@ -129,11 +145,33 @@ suite('Quick Run - tasks with no XML source', () => {
 		});
 	}
 
-	test('param defaults are copied to the task only when the command line gives them the same value', () => {
-		const copied = ["'order.schema.json'", '42', 'true()', '()', "'a $b' || \"c Q{d}\"", "fn:upper-case('x')", 'map:merge(())', "xs:date('2026-10-15')"];
-		const notCopied = ["replace($schema-uri, '\\.json$', '') || '-types.xsl'", 'my:default()', "Q{urn:x}f('a')", "resolve-uri('a.xsl', static-base-uri())"];
-		copied.forEach((select) => assert.isTrue(SaxonTaskProvider.isCommandLineDefault(select), select));
-		notCopied.forEach((select) => assert.isFalse(SaxonTaskProvider.isCommandLineDefault(select), select));
+	test('only required parameters are added: required="yes", or with no default and a type that excludes ()', () => {
+		const required = (startTag: string, content = '') => {
+			const text = `<xsl:stylesheet>\n  ${startTag}${startTag.endsWith('/>') ? '' : content + '</xsl:param>'}\n</xsl:stylesheet>`;
+			const declaration = SaxonTaskProvider.parameterDeclaration(text, 1, startTag.indexOf('name=') + 2);
+			assert.exists(declaration, startTag);
+			return SaxonTaskProvider.isRequiredParameter(declaration!.attributes, declaration!.hasContent);
+		};
+		assert.isTrue(required('<xsl:param name="a" as="xs:string"/>'));
+		assert.isTrue(required('<xsl:param name="a" as="element()+"/>'));
+		assert.isTrue(required('<xsl:param as="map(*)" name="a"></xsl:param>'));
+		assert.isTrue(required('<xsl:param name="a" required="yes"/>'));
+		assert.isTrue(required('<xsl:param name="a" as="xs:string">', '<!-- set by the caller -->'));
+		// the occurrence indicator of the whole type - not of a function type's return type
+		assert.isTrue(required('<xsl:param name="f" as="function(xs:string) as xs:integer?"/>'));
+		assert.isFalse(required('<xsl:param name="f" as="(function(xs:string) as xs:integer)?"/>'));
+		assert.isFalse(required('<xsl:param name="a" as="xs:string?"/>'));
+		assert.isFalse(required('<xsl:param name="a" as="item()*"/>'));
+		assert.isFalse(required('<xsl:param name="a" as="empty-sequence()"/>'));
+		assert.isFalse(required('<xsl:param name="a"/>'));
+		assert.isFalse(required('<xsl:param name="a" as="xs:string" select="\'x\'"/>'));
+		assert.isFalse(required('<xsl:param name="a" as="xs:string">', 'default'));
+		assert.isFalse(required('<xsl:param name="a" as="xs:string" required="no"/>'));
+	});
+
+	test('a required parameter\'s value is typed as is for atomic types, else as XPath', () => {
+		['xs:string', 'xs:integer+', 'xs:anyURI', "enum('a', 'b')", undefined].forEach((type) => assert.isTrue(SaxonTaskProvider.isPlainValueType(type), type));
+		['element()', 'map(*)', 'document-node()', 'xs:QName', 'record(a as xs:string)'].forEach((type) => assert.isFalse(SaxonTaskProvider.isPlainValueType(type), type));
 	});
 
 	test('tasks with an XML source have no initialTemplate', () => {

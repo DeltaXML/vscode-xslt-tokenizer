@@ -17,7 +17,7 @@ suite('XML selection commands', () => {
 		const extension = vscode.extensions.getExtension('deltaxml.xslt-xpath');
 		await extension?.activate();
 		const commands = await vscode.commands.getCommands(true);
-		assert.includeMembers(commands, selectionCommands.concat('xslt-xpath.xmlSelectionPick', 'xslt-xpath.gotoXPath'));
+		assert.includeMembers(commands, selectionCommands.concat('xslt-xpath.xmlSelectionPick', 'xslt-xpath.addXPathLocationToQueries'));
 	});
 
 	test('each keybinding has macOS and Windows/Linux keys, only in XML-based editors', () => {
@@ -31,11 +31,19 @@ suite('XML selection commands', () => {
 		});
 	});
 
+	test("the XPath location of the cursor: Alt+G (⌥G), in XML files - Goto XPath's former shortcut, not Cmd+G's Find Next", () => {
+		const keybinding = contributes.keybindings.find((k: { command: string }) => k.command === 'xslt-xpath.addXPathLocationToQueries');
+		assert.strictEqual(keybinding.key, 'alt+g');
+		assert.isUndefined(keybinding.mac);
+		assert.include(keybinding.when, 'editorLangId =~ /^(xml|dcp|sch|bpmn)$/');
+		assert.isUndefined(contributes.commands.find((c: { command: string }) => c.command === 'xslt-xpath.gotoXPath'));
+	});
+
 	test('the XML Selection submenu has each command', () => {
 		assert.deepEqual(contributes.submenus, [{ id: 'xslt-xpath.xmlSelection', label: 'XML Selection' }]);
 		assert.includeDeepMembers(contributes.menus['editor/context'].map((m: { submenu?: string }) => m.submenu), ['xslt-xpath.xmlSelection']);
 		const items = contributes.menus['xslt-xpath.xmlSelection'].map((m: { command: string }) => m.command);
 		assert.deepEqual(items, ['xslt-xpath.selectCurrentElement', 'xslt-xpath.selectParentElement', 'xslt-xpath.selectFirstChildElement',
-			'xslt-xpath.selectPrecedingElement', 'xslt-xpath.selectFollowingElement', 'xslt-xpath.gotoXPath']);
+			'xslt-xpath.selectPrecedingElement', 'xslt-xpath.selectFollowingElement', 'xslt-xpath.findNodesWithXPath', 'xslt-xpath.addXPathLocationToQueries']);
 	});
 });

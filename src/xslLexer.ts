@@ -102,7 +102,26 @@ export enum XSLTokenLevelState {
     xmlComment,
     xmlPunctuation,
     xslElementName,
-    xmlText
+    xmlText,
+    // within a DOCTYPE: the name an <!ENTITY> declares, and a quoted literal - e.g. an entity's value
+    dtdEntityName,
+    dtdLiteral
+}
+
+enum DtdDeclPhase {
+    None,
+    Keyword,
+    AwaitingEntityName,
+    EntityName
+}
+
+// at a character in a DOCTYPE: an entity name or a literal starts (before it) or ends (before it for a name, after
+// it - its closing quote - for a literal)
+enum DtdEvent {
+    NameStart,
+    NameEnd,
+    LiteralStart,
+    LiteralEnd
 }
 
 export interface XslToken extends BaseToken {
@@ -223,6 +242,18 @@ export class XslLexer {
     private genericTvtAttributes: string[] = [];
     private nativePrefixLength = 0;
     private dtdNesting = 0;
+    // within a <!...>: its last two characters, the quote of a literal it's in, whether it's in a processing
+    // instruction, and whether a comment in a DOCTYPE's internal subset is followed by more of the DOCTYPE
+    private exclamPrevChars = '';
+    private dtdQuote = '';
+    private dtdInPi = false;
+    private dtdResumeAfterComment = false;
+    // within a <!...> declaration: its keyword (e.g. ENTITY) as far as it's read, and whether it's being read, an
+    // ENTITY's name is awaited, or it's being read. And where the last character starts or ends a name or a literal,
+    // for its token
+    private dtdDeclPhase = DtdDeclPhase.None;
+    private dtdDeclKeyword = '';
+    private dtdEvents: DtdEvent[] = [];
     private nonNativeAvts = false;
     private docType: DocumentTypes;
     private static splitModesregexp = /([^\s]+)|(\s+)/g;
@@ -349,14 +380,39 @@ export class XslLexer {
                     this.commentCharCount = 4;
                 }
                 break;
-            case XMLCharState.lExclam:
-                // assume  <![CDATA[
-                if (char === '[' && nextChar === 'C') {
+            case XMLCharState.lExclam: {
+                // a <!DOCTYPE ...> - with its internal subset of declarations, each <!...> - a comment or a CDATA section
+                const afterLtExclam = this.exclamPrevChars === '<!';
+                this.exclamPrevChars = (this.exclamPrevChars + char).slice(-2);
+                this.dtdEvents = [];
+                if (!this.dtdQuote && !this.dtdInPi) {
+                    this.nextDtdDeclPhase(isCurrentCharNewLine, char);
+                }
+                if (this.dtdQuote) {
+                    // a literal, e.g. an entity's value: no markup within it
+                    if (char === this.dtdQuote) {
+                        this.dtdQuote = '';
+                        this.dtdEvents.push(DtdEvent.LiteralEnd);
+                    }
+                } else if (this.dtdInPi) {
+                    if (char === '>' && this.exclamPrevChars === '?>') {
+                        this.dtdInPi = false;
+                    }
+                } else if (char === '[' && nextChar === 'C' && afterLtExclam) {
+                    // assume  <![CDATA[
                     this.cdataCharCount = 0;
                     rc = XMLCharState.lCd;
-                } else if (char === '-' && nextChar === '-') {
+                } else if (char === '-' && nextChar === '-' && afterLtExclam) {
                     rc = XMLCharState.lComment;
                     this.commentCharCount = 0;
+                    if (this.dtdNesting > 0) {
+                        // a comment in the internal subset: the DTD goes on after it, and its '<' isn't closed by a '>' here
+                        this.dtdNesting--;
+                        this.dtdResumeAfterComment = true;
+                    }
+                } else if (char === '"' || char === "'") {
+                    this.dtdQuote = char;
+                    this.dtdEvents.push(DtdEvent.LiteralStart);
                 } else if (char === '>') {
                     this.dtdNesting--;
                     if (this.dtdNesting < 0) {
@@ -364,9 +420,26 @@ export class XslLexer {
                         rc = XMLCharState.rDtd;
                     }
                 } else if (char === '<') {
-                    this.dtdNesting++;
+                    if (nextChar === '?') {
+                        this.dtdInPi = true;
+                    } else {
+                        this.dtdNesting++;
+                        // a declaration, e.g. <!ENTITY - its keyword next
+                        this.dtdDeclPhase = DtdDeclPhase.Keyword;
+                        this.dtdDeclKeyword = '';
+                    }
                 }
-                // TODO: Handle internal DTD subset
+                break;
+            }
+            case XMLCharState.rComment:
+                if (this.dtdResumeAfterComment) {
+                    // the rest of the DOCTYPE, after a comment in its internal subset
+                    this.dtdResumeAfterComment = false;
+                    this.exclamPrevChars = '';
+                    rc = this.calcNewState(isCurrentCharNewLine, char, nextChar, XMLCharState.lExclam);
+                } else {
+                    rc = this.testChar(char, nextChar, false);
+                }
                 break;
             case XMLCharState.lCd:
                 switch (this.cdataCharCount) {
@@ -569,6 +642,52 @@ export class XslLexer {
         return rc;
     }
 
+    // a '<!' - not within a DOCTYPE
+    private startExclam(): XMLCharState {
+        this.exclamPrevChars = '<';
+        this.dtdQuote = '';
+        this.dtdInPi = false;
+        this.dtdNesting = 0;
+        this.dtdResumeAfterComment = false;
+        this.dtdDeclPhase = DtdDeclPhase.Keyword;
+        this.dtdDeclKeyword = '';
+        this.dtdEvents = [];
+        return XMLCharState.lExclam;
+    }
+
+    // in a declaration, outside a literal: its keyword, then for an ENTITY, the name it declares - after a '%' for a
+    // parameter entity - ending at whitespace, a quote or '>'
+    private nextDtdDeclPhase(isCurrentCharNewLine: boolean, char: string) {
+        const isWhitespace = this.isWhitespace(isCurrentCharNewLine, char);
+        switch (this.dtdDeclPhase) {
+            case DtdDeclPhase.Keyword:
+                if (char === '!' && this.dtdDeclKeyword === '') {
+                    // the '!' of '<!'
+                } else if (/[A-Za-z]/.test(char)) {
+                    this.dtdDeclKeyword += char;
+                } else {
+                    this.dtdDeclPhase = isWhitespace && this.dtdDeclKeyword === 'ENTITY' ? DtdDeclPhase.AwaitingEntityName : DtdDeclPhase.None;
+                }
+                break;
+            case DtdDeclPhase.AwaitingEntityName:
+                if (isWhitespace || char === '%') {
+                    // before the name
+                } else if (char === '"' || char === "'" || char === '>' || char === '<') {
+                    this.dtdDeclPhase = DtdDeclPhase.None;
+                } else {
+                    this.dtdDeclPhase = DtdDeclPhase.EntityName;
+                    this.dtdEvents.push(DtdEvent.NameStart);
+                }
+                break;
+            case DtdDeclPhase.EntityName:
+                if (isWhitespace || char === '"' || char === "'" || char === '>' || char === '<') {
+                    this.dtdDeclPhase = DtdDeclPhase.None;
+                    this.dtdEvents.push(DtdEvent.NameEnd);
+                }
+                break;
+        }
+    }
+
     private testAttNameChar (char: string, nextChar: string): XMLCharState {
         let rc: XMLCharState;
 
@@ -579,7 +698,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -621,7 +740,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -662,7 +781,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -787,6 +906,9 @@ export class XslLexer {
                     currentState,
                 );
 
+                if (currentState === XMLCharState.lExclam && nextState === XMLCharState.lExclam && this.dtdEvents.length > 0) {
+                    tokenStartChar = this.addDtdEventTokens(tokenStartChar, result);
+                }
                 if (nextState === currentState) {
                     if (isCurrentCharNewLIne || isLastChar) {
                         // we must split multi-line tokens:
@@ -804,7 +926,10 @@ export class XslLexer {
                                 addToken = XSLTokenLevelState.attributeValue;
                                 break;
                             case XMLCharState.lExclam:
-                                addToken = XSLTokenLevelState.dtd;
+                                // the rest of the line - nothing, after a name or literal that ends it
+                                if (tokenStartChar < this.lineCharCount - 1) {
+                                    addToken = this.dtdQuote ? XSLTokenLevelState.dtdLiteral : XSLTokenLevelState.dtd;
+                                }
                                 break;
                         }
                         if (addToken !== null) {
@@ -912,6 +1037,16 @@ export class XslLexer {
                             if (nextState === XMLCharState.rStNoAtt && this.isXPathTextElement(isNativeElement, tagElementName)) {
                                 xmlElementStack[xmlElementStack.length - 1].xpathText = true;
                                 nextChar = this.analyseXPathText(xpLexer, ExitCondition.LessThan, xsl, result);
+                            }
+                            break;
+                        case XMLCharState.lComment:
+                            if (currentState === XMLCharState.lExclam) {
+                                // the DOCTYPE before a comment in its internal subset, on the comment's line - at the
+                                // comment's first '-', its '<' is two characters back
+                                const commentStart = this.lineCharCount - 3;
+                                if (commentStart > tokenStartChar) {
+                                    this.addCharTokenToResult(tokenStartChar, commentStart - tokenStartChar, XSLTokenLevelState.dtd, result, currentState);
+                                }
                             }
                             break;
                         case XMLCharState.rDtd:
@@ -1413,7 +1548,8 @@ export class XslLexer {
     // xsl:include, or a package name, with its references decoded, e.g. a&amp;b.xsl is a&b.xsl
     public static globalName(type: GlobalInstructionType, attValue: string) {
         const isHref = type === GlobalInstructionType.Import || type === GlobalInstructionType.Include || type === GlobalInstructionType.UsePackage;
-        return isHref ? HrefPaths.fromAttribute(attValue) : attValue;
+        // a name may have whitespace around it, e.g. name=" t ", as Saxon allows
+        return isHref ? HrefPaths.fromAttribute(attValue) : attValue.trim();
     }
 
     public static tokensInsideToken(token: BaseToken, attValue: string) {
@@ -1464,6 +1600,23 @@ export class XslLexer {
         }
         result.push(tkn);
         return tkn;
+    }
+
+    // in a DOCTYPE, at the current character: the tokens up to where an entity name or a literal starts or ends - and
+    // where the next token starts
+    private addDtdEventTokens(tokenStartChar: number, result: BaseToken[]): number {
+        const at = this.lineCharCount - 1;
+        for (const event of this.dtdEvents) {
+            const end = event === DtdEvent.LiteralEnd ? at + 1 : at;
+            const tokenType = event === DtdEvent.NameEnd ? XSLTokenLevelState.dtdEntityName :
+                event === DtdEvent.LiteralEnd ? XSLTokenLevelState.dtdLiteral : XSLTokenLevelState.dtd;
+            if (end > tokenStartChar) {
+                this.addCharTokenToResult(tokenStartChar, end - tokenStartChar, tokenType, result, XMLCharState.lExclam);
+            }
+            tokenStartChar = end;
+        }
+        this.dtdEvents = [];
+        return tokenStartChar;
     }
 
     private addCharTokenToResult(tokenStartChar: number, tokenLength: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState) {
@@ -1541,6 +1694,9 @@ export class XslLexer {
                     case 'attribute-set':
                         instructionType = GlobalInstructionType.AttributeSet;
                         break;
+                    case 'character-map':
+                        instructionType = GlobalInstructionType.CharacterMap;
+                        break;
                     case 'use-package':
                         instructionType = GlobalInstructionType.UsePackage;
                         break;
@@ -1582,7 +1738,8 @@ export enum GlobalInstructionType {
     Unknown,
     ItemType,
     // not a declaration: an accumulator name listed in a use-accumulators attribute, e.g. on xsl:mode
-    AccumulatorUse
+    AccumulatorUse,
+    CharacterMap
 }
 
 

@@ -64,9 +64,9 @@ const completionCases: [string, string, vscode.CompletionItemKind, string[]][] =
 	['a built-in function argument', sequence(`concat(¦)`), vscode.CompletionItemKind.EnumMember, []],
 	['an xsl:next-iteration xsl:with-param select', iterate(`<xsl:with-param name="acc" select="{¦}"/>`), Field, ['\'r\'', '\'i\'']],
 	['an xsl:next-iteration xsl:with-param enumeration value', iterate(`<xsl:with-param name="c" select="¦"/>`), vscode.CompletionItemKind.EnumMember, ['\'red\'', '\'green\'']],
-	['an xsl:map in an xsl:next-iteration xsl:with-param', iterate(`<xsl:with-param name="acc"><¦</xsl:with-param>`), vscode.CompletionItemKind.Snippet, ['xsl:map cx:complex: required fields']],
+	['an xsl:map in an xsl:next-iteration xsl:with-param', iterate(`<xsl:with-param name="acc"><¦</xsl:with-param>`), vscode.CompletionItemKind.Snippet, ['xsl:map cx:complex: required fields', 'xsl:record cx:complex: required fields']],
 	['an xsl:apply-templates xsl:with-param', `<xsl:apply-templates select="."><xsl:with-param name="shape" select="{¦}"/></xsl:apply-templates>`, Field, []],
-	['an xsl:map in an xsl:with-param', callDraw(`<xsl:with-param name="shape"><¦</xsl:with-param>`), vscode.CompletionItemKind.Snippet, ['xsl:map cx:complex: required fields']],
+	['an xsl:map in an xsl:with-param', callDraw(`<xsl:with-param name="shape"><¦</xsl:with-param>`), vscode.CompletionItemKind.Snippet, ['xsl:map cx:complex: required fields', 'xsl:record cx:complex: required fields']],
 ];
 
 async function lint(body: string) {

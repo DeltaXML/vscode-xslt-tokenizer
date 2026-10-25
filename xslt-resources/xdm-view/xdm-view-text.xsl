@@ -238,6 +238,67 @@
     <xsl:sequence select="zxd:debug-core($title, $labels, true(), $level)"/>
   </xsl:function>
 
+  <!-- A drop-in for fn:trace($value, $label): returns $value unchanged and
+       writes it with xsl:message - as '$label: ' then the value rendered
+       the same way as a value in xdm:debug (a node shows its xdm:path()
+       location above a pruned copy), pretty-printed over several lines
+       where it has structure. fn:trace's own format is
+       implementation-defined: Saxon writes one line per item, with a map
+       or array all on one line.
+
+       Color is on by default - the opposite of xdm:view-text - since a
+       trace is read in a terminal or console that shows it. The NO_COLOR
+       environment variable (https://no-color.org) turns it off for every
+       call, e.g. where messages go to a log file; the 3-argument form
+       sets it for one call. Through Saxon's default message handling, the
+       color codes are written XML-escaped (see the README's "Color
+       output"), so NO_COLOR or false() is needed there too.
+
+       $label may be the empty sequence (or omitted), when only the value
+       is written.
+
+       Unlike fn:trace, which may report the items of a lazily evaluated
+       value one at a time as they're used, xdm:trace reads all of
+       $value to render it before returning it. -->
+  <xsl:function name="xdm:trace" as="item()*">
+    <xsl:param name="value" as="item()*"/>
+    <xsl:sequence select="xdm:trace($value, (), zxd:trace-color-default())"/>
+  </xsl:function>
+
+  <xsl:function name="xdm:trace" as="item()*">
+    <xsl:param name="value" as="item()*"/>
+    <xsl:param name="label" as="xs:string?"/>
+    <xsl:sequence select="xdm:trace($value, $label, zxd:trace-color-default())"/>
+  </xsl:function>
+
+  <xsl:function name="xdm:trace" as="item()*">
+    <xsl:param name="value" as="item()*"/>
+    <xsl:param name="label" as="xs:string?"/>
+    <xsl:param name="useColor" as="xs:boolean"/>
+    <xsl:message select="zxd:trace-text($value, $label, $useColor)"/>
+    <xsl:sequence select="$value"/>
+  </xsl:function>
+
+  <!-- color unless the NO_COLOR environment variable is set, to any value -->
+  <xsl:function name="zxd:trace-color-default" as="xs:boolean">
+    <xsl:sequence select="empty(environment-variable('NO_COLOR'))"/>
+  </xsl:function>
+
+  <!-- what xdm:trace writes: the label (colored as an xdm:debug label is)
+       and the value, whose lines after the first are indented to start
+       under its first -->
+  <xsl:function name="zxd:trace-text" as="xs:string">
+    <xsl:param name="value" as="item()*"/>
+    <xsl:param name="label" as="xs:string?"/>
+    <xsl:param name="useColor" as="xs:boolean"/>
+    <xsl:variable name="items" as="element(xdm:item)*" select="xdm:to-document(zxd:husk-value($value))/xdm:sequence/xdm:item"/>
+    <xsl:variable name="rendered" as="xs:string" select="zxd:render-item-seq-text($items, $useColor, 0)"/>
+    <xsl:sequence select="
+      if (empty($label)) then $rendered
+      else zxd:debug-label-prefix($label, string-length($label), $useColor) ||
+        zxd:indent-continuation-lines($rendered, zxd:pad-right('', string-length($label) + 2))"/>
+  </xsl:function>
+
   <xsl:function name="zxd:debug-core" as="xs:string">
     <xsl:param name="title" as="xs:string"/>
     <xsl:param name="labels" as="map(xs:string, item()*)"/>
@@ -273,7 +334,7 @@
        have nowhere on themselves to hang a location marker the way an
        element can carry an extra attribute, hence the wrapper. Likewise
        every XPath 4.0 JNode: its husked value, wrapped with its path
-       within its tree (LOCAL INTERIM CHANGE - see VENDORED.md). Used by
+       within its tree (see xdm-persistence's zxd:is-jnode). Used by
        zxd:debug-core before handing $labels to plain xdm:to-document(),
        so the tree serialize/render ever see is already bounded in size
        - no limit needs threading through the renderer itself. -->
@@ -292,7 +353,7 @@
           map:merge(for $k in map:keys($item) return map:entry($k, zxd:husk-value($item($k))))
         else if ($item instance of array(*)) then
           (: members by position, not with array:for-each: in this XSLT 3.0 module, Saxon 13 passes a JNode
-             member to array:for-each's function as its value (LOCAL INTERIM CHANGE - see VENDORED.md) :)
+             member to array:for-each's function as its value :)
           array:join(for $i in 1 to array:size($item) return [zxd:husk-value($item($i))])
         else $item"/>
   </xsl:function>
@@ -407,31 +468,26 @@
        truncated via zxd:truncate-text), and its direct child elements
        with their own attributes and *their* first immediate text-node
        child (normalized and truncated the same way) - nothing past
-       that; a document node
-       recurses into its child element the same way. Location is
-       computed via xdm:path() on the *original* node, before the
-       shallow copy loses its ancestor context, and travels along as a
-       zxd:path attribute on the husked element - zxd:render-node-text
-       knows to pull it back out as a location line and strip it so it
-       never displays as a fake extra attribute of the real content.
-       Only ever called (via zxd:husk-value) on element()/
-       document-node() items - the "otherwise" branch's own $node is
-       therefore always an element(). -->
-  <xsl:function name="zxd:husk-node" as="node()">
+       that; a document node recurses into its child element the same
+       way. Carries no location of its own - that's zxd:husk-node's job,
+       layered on top - so this is the piece xdm-view-tokens.xsl's own
+       $minimize option can reuse directly, without also taking on
+       zxd:husk-node's path-attribute wiring, which it doesn't need (it
+       has its own, separate path-token mechanism - see its
+       zxd:with-node-paths). -->
+  <xsl:function name="zxd:prune-node" as="node()">
     <xsl:param name="node" as="node()"/>
     <xsl:choose>
       <xsl:when test="$node instance of document-node()">
         <xsl:document>
           <xsl:for-each select="$node/node()">
-            <xsl:sequence select="if (. instance of element()) then zxd:husk-node(.) else ."/>
+            <xsl:sequence select="if (. instance of element()) then zxd:prune-node(.) else ."/>
           </xsl:for-each>
         </xsl:document>
       </xsl:when>
       <xsl:otherwise>
-        <xsl:variable name="path" as="xs:string" select="xdm:path($node)"/>
         <xsl:for-each select="$node">
           <xsl:copy copy-namespaces="no">
-            <xsl:attribute name="zxd:path" select="$path"/>
             <xsl:sequence select="@*"/>
             <xsl:for-each select="node()">
               <xsl:choose>
@@ -464,6 +520,38 @@
                 </xsl:when>
               </xsl:choose>
             </xsl:for-each>
+          </xsl:copy>
+        </xsl:for-each>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:function>
+
+  <!-- Layers a zxd:path attribute (location computed via xdm:path() on
+       the *original* node, before zxd:prune-node's shallow copy loses
+       its ancestor context) on top of zxd:prune-node's own shrinking -
+       zxd:render-node-text knows to pull the attribute back out as a
+       location line and strip it so it never displays as a fake extra
+       attribute of the real content. Only ever called (via
+       zxd:husk-value) on element()/document-node() items - the
+       "otherwise" branch's own $node is therefore always an
+       element(). -->
+  <xsl:function name="zxd:husk-node" as="node()">
+    <xsl:param name="node" as="node()"/>
+    <xsl:choose>
+      <xsl:when test="$node instance of document-node()">
+        <xsl:document>
+          <xsl:for-each select="$node/node()">
+            <xsl:sequence select="if (. instance of element()) then zxd:husk-node(.) else ."/>
+          </xsl:for-each>
+        </xsl:document>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:variable name="path" as="xs:string" select="xdm:path($node)"/>
+        <xsl:for-each select="zxd:prune-node($node)">
+          <xsl:copy copy-namespaces="no">
+            <xsl:attribute name="zxd:path" select="$path"/>
+            <xsl:sequence select="@*"/>
+            <xsl:sequence select="node()"/>
           </xsl:copy>
         </xsl:for-each>
       </xsl:otherwise>
@@ -823,11 +911,12 @@
   </xsl:function>
 
   <!-- A real (element/document) node has no compact XPath-literal form. A
-       leaf-like node (no descendant elements) is shown as truncated,
-       single-line markup; one with descendant elements is pretty-printed
-       with conventional XML indentation instead, aligned to the current
-       nesting level - truncating nested markup to a fixed length would
-       just cut it apart awkwardly.
+       leaf-like node (no descendant elements) is shown as single-line
+       markup; one with descendant elements is pretty-printed with
+       conventional XML indentation instead, aligned to the current
+       nesting level. Neither branch truncates - a long single line is
+       left for the terminal/consumer to wrap, same as any other long
+       line this project produces.
 
        A zxd:path attribute on $node means it was husked for xdm:debug
        (zxd:husk-node) - shown as an uncolored location line above the
@@ -877,11 +966,8 @@
           <xsl:sequence select="'&#10;' || $indent || zxd:colorize($body, $zxd:BLUE, $useColor)"/>
         </xsl:when>
         <xsl:otherwise>
-          <xsl:variable name="maxLength" as="xs:integer" select="80"/>
-          <xsl:variable name="raw" as="xs:string" select="
-            string-join(for $n in $clean return serialize($n, map{'method':'xml', 'indent': false()}), '')"/>
           <xsl:variable name="text" as="xs:string" select="
-            if (string-length($raw) gt $maxLength) then substring($raw, 1, $maxLength - 3) || '...' else $raw"/>
+            string-join(for $n in $clean return serialize($n, map{'method':'xml', 'indent': false()}), '')"/>
           <xsl:sequence select="zxd:colorize($text, $zxd:BLUE, $useColor)"/>
         </xsl:otherwise>
       </xsl:choose>

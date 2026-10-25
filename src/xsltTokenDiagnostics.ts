@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
-import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer, ExitCondition } from './xpLexer';
+import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer, ExitCondition, RecordFix } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
@@ -49,7 +49,9 @@ export enum AttributeType {
 	// [xsl:]default-mode: the mode for templates without a mode attribute
 	DefaultMode,
 	ExcludeResultPrefixes,
-	XPath
+	XPath,
+	// a list of character map names, on xsl:output, xsl:result-document or xsl:character-map
+	UseCharacterMaps
 }
 
 export enum CurlyBraceType {
@@ -147,7 +149,10 @@ export enum DiagnosticCode {
 	noteVariablesMissing,
 	noteRequiresXSLT40,
 	saxonTypeAlias,
-	enumValueDuplicate
+	enumValueDuplicate,
+	recordFieldUnknown,
+	// a function in a namespace with a prefix, e.g. ext:lookup(), not found - see XSLT.validation.externalFunctionPrefixes
+	prefixedFunctionNotFound
 }
 
 export class XsltTokenDiagnostics {
@@ -231,6 +236,17 @@ export class XsltTokenDiagnostics {
 	public static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 	public static readonly brackets = [CharLevelState.lB, CharLevelState.lBr, CharLevelState.lPr, CharLevelState.rB, CharLevelState.rBr, CharLevelState.rPr];
 	private static isHtmlParserJarSet = false;
+	// the prefixes of functions that the stylesheet's processing system provides, e.g. Java extension functions: calls
+	// of functions with these prefixes aren't checked (the XSLT.validation.externalFunctionPrefixes setting)
+	private static externalFunctionPrefixes: string[] = [];
+	public static readonly externalFunctionPrefixesSection = 'XSLT.validation';
+	public static readonly externalFunctionPrefixesSetting = 'externalFunctionPrefixes';
+
+	// the setting's prefixes for a document, without any ':' after them, e.g. 'ext' for 'ext:'
+	public static externalFunctionPrefixesFor(uri?: vscode.Uri): string[] {
+		const prefixes = vscode.workspace.getConfiguration(XsltTokenDiagnostics.externalFunctionPrefixesSection, uri).get<string[]>(XsltTokenDiagnostics.externalFunctionPrefixesSetting, []);
+		return Array.isArray(prefixes) ? prefixes.filter((p) => typeof p === 'string').map((p) => p.trim().replace(/:$/, '')).filter((p) => p.length > 0) : [];
+	}
 
 	public static isBracket(charState: CharLevelState) {
 		return XsltTokenDiagnostics.brackets.indexOf(charState) !== -1;
@@ -416,6 +432,15 @@ export class XsltTokenDiagnostics {
 		let prologUriToken: BaseToken | null = null;
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
+		// an attribute value on more than one line has a token for each line, after the first starting at the line's
+		// start: only the first starts with the value's quote, and only the last ends with it - the quote, while the
+		// value continues on the next line, and the line of its last part
+		let openAttributeQuote: string | undefined;
+		let openAttributeLine = -1;
+		// a single name within a value on more than one line, e.g. mode="&#10;  m&#10;": its text so far, and the token of
+		// the line with the name
+		let pendingNameText = '';
+		let pendingNameToken: BaseToken | undefined;
 		let tagElementName = '';
 		let tagElementId: number = -1;
 		let tagElementAttributes: string[] | undefined = [];
@@ -455,6 +480,8 @@ export class XsltTokenDiagnostics {
 		let isXMLDeclaration = false;
 		let dtdStarted = false;
 		let dtdEnded = false;
+		// the entities the DOCTYPE declares - null if it has declarations that can't be seen
+		const doctypeEntities: { inSubset: boolean; declared: Set<string> | null } = { inSubset: false, declared: new Set() };
 		let namedTemplates: Map<string, string[]> = new Map();
 		let globalModes: string[] = ['#current', '#default', '#unnamed'];
 		let globalKeys: string[] = [];
@@ -484,8 +511,10 @@ export class XsltTokenDiagnostics {
 		// isJNode is true for a child step, e.g. jtree($a)/b, whose result can be used with '/' again
 		let lookupRecords = new Map<BaseToken, { record: RecordType, isJNode: boolean }>();
 		let globalAccumulatorNames: string[] = [];
+		const globalCharacterMapNames: string[] = [];
 		let globalAttributeSetNames: string[] = [];
-		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[] } | null = null;
+		// the prefixes, each with the token of the line it's on, for a value on more than one line
+		let tagExcludeResultPrefixes: { token: BaseToken; prefixes: string[]; prefixTokens: BaseToken[] } | null = null;
 		let ifThenStack: BaseToken[] = [];
 		let currentXSLTIterateParams: string[][] = [];
 		let schemaQuery: SchemaQuery | undefined;
@@ -495,6 +524,7 @@ export class XsltTokenDiagnostics {
 		let pendingTemplateParamErrors: BaseToken[] = [];
 		const htmlParserString = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
 		XsltTokenDiagnostics.isHtmlParserJarSet = !!htmlParserString && htmlParserString.trim().length > 0;
+		XsltTokenDiagnostics.externalFunctionPrefixes = XsltTokenDiagnostics.externalFunctionPrefixesFor(document.uri);
 
 		if (languageConfig.isVersion4) {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
@@ -602,6 +632,14 @@ export class XsltTokenDiagnostics {
 						problemTokens.push(instruction.token);
 					}
 					break;
+				case GlobalInstructionType.CharacterMap:
+					// in the same module, two with a name have the same import precedence (XTSE1580)
+					if (globalCharacterMapNames.indexOf(instruction.name) < 0) {
+						globalCharacterMapNames.push(instruction.name);
+					} else {
+						problemTokens.push({ ...instruction.token, error: ErrorType.DuplicateCharacterMapName, value: instruction.name });
+					}
+					break;
 				case GlobalInstructionType.AttributeSet:
 					globalAttributeSetNames.push(instruction.name);
 					break;
@@ -650,6 +688,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case GlobalInstructionType.Accumulator:
 					globalAccumulatorNames.push(instruction.name);
+					break;
+				case GlobalInstructionType.CharacterMap:
+					globalCharacterMapNames.push(instruction.name);
 					break;
 				case GlobalInstructionType.AttributeSet:
 					globalAttributeSetNames.push(instruction.name);
@@ -720,6 +761,12 @@ export class XsltTokenDiagnostics {
 				preXPathVariable = false;
 				let xmlCharType = <XMLCharState>token.charType;
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDiagnostics.xsltStartTokenNumber);
+				if (!dtdEnded && (xmlTokenType === XSLTokenLevelState.dtd || xmlTokenType === XSLTokenLevelState.dtdEnd ||
+					xmlTokenType === XSLTokenLevelState.dtdEntityName || xmlTokenType === XSLTokenLevelState.dtdLiteral)) {
+					const prevToken = allTokens[index - 1];
+					const prevText = prevToken && prevToken.line === token.line ? XsltTokenDiagnostics.getTextForToken(token.line, prevToken, document) : '';
+					XsltTokenDiagnostics.updateDeclaredEntities(xmlTokenType, XsltTokenDiagnostics.getTextForToken(token.line, token, document), prevText, doctypeEntities);
+				}
 
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xmlText:
@@ -818,7 +865,7 @@ export class XsltTokenDiagnostics {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
 										let pfx = prefixNsPair[0];
 										let namespaceURI = prefixNsPair[1];
-										let xsltType = FunctionData.namespaces.get(namespaceURI);
+										let xsltType = FunctionData.namespaceType(namespaceURI);
 										if (xsltType !== undefined) {
 											xsltPrefixesToURIs.set(pfx, xsltType);
 										}
@@ -833,7 +880,7 @@ export class XsltTokenDiagnostics {
 										// the prefixes for the known namespaces, e.g. fn and xs, are those of the fixed bindings
 										xsltPrefixesToURIs = new Map();
 										fixedNamespaces.bindings.forEach((uri, pfx) => {
-											const xsltType = FunctionData.namespaces.get(uri);
+											const xsltType = FunctionData.namespaceType(uri);
 											if (xsltType !== undefined) {
 												xsltPrefixesToURIs.set(pfx, xsltType);
 											}
@@ -850,10 +897,10 @@ export class XsltTokenDiagnostics {
 										});
 									}
 									if (missingPrefix) {
-										let xToken = tagExcludeResultPrefixes.token;
+										let xToken = tagExcludeResultPrefixes.prefixTokens[tagExcludeResultPrefixes.prefixes.indexOf(missingPrefix)] ?? tagExcludeResultPrefixes.token;
 										xToken['error'] = ErrorType.MissingPrefixInList;
 										xToken.value = missingPrefix;
-										problemTokens.push(tagExcludeResultPrefixes.token);
+										problemTokens.push(xToken);
 										problem = true;
 									}
 								}
@@ -1214,6 +1261,10 @@ export class XsltTokenDiagnostics {
 						}
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDiagnostics.xslNameAtt ? AttributeType.Variable : AttributeType.None;
+						} else if (tagType === TagType.XSLTstart && tagElementName === 'xsl:record') {
+							// XSLT 4.0: an attribute in no namespace is a record field, e.g. name="'Ann'" - the standard attributes
+							// are in the XSLT namespace
+							attType = attNameText === XsltTokenDiagnostics.xslExcludePrefixes ? AttributeType.ExcludeResultPrefixes : AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
 							if (docType === DocumentTypes.DCP && (attNameText === 'parameterRef' || attNameText === 'if' || attNameText === 'unless')) {
 								attType = AttributeType.VariableRef;
@@ -1225,6 +1276,8 @@ export class XsltTokenDiagnostics {
 								attType = AttributeType.UseAttributeSets;
 							} else if (attNameText === 'use-accumulators') {
 								attType = AttributeType.UseAccumulators;
+							} else if (attNameText === 'use-character-maps') {
+								attType = AttributeType.UseCharacterMaps;
 							} else if (attNameText === XsltTokenDiagnostics.excludePrefixes || attNameText === XsltTokenDiagnostics.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -1247,7 +1300,36 @@ export class XsltTokenDiagnostics {
 								tagAttributeSymbols[tagAttributeSymbols.length - 1].kind = vscode.SymbolKind.Event;
 							}
 						}
-						let variableName = fullVariableName.substring(1, fullVariableName.length - 1);
+						const isContinuation = openAttributeQuote !== undefined && token.line > openAttributeLine && token.startCharacter === 0;
+						const valueQuote = isContinuation ? openAttributeQuote! : fullVariableName.charAt(0);
+						const valueStart = isContinuation ? 0 : 1;
+						const isLastPart = fullVariableName.length > valueStart && fullVariableName.endsWith(valueQuote);
+						let variableName = fullVariableName.substring(valueStart, isLastPart ? fullVariableName.length - 1 : fullVariableName.length);
+						openAttributeQuote = isLastPart ? undefined : valueQuote;
+						openAttributeLine = token.line;
+						// a single name, e.g. a mode or template name, may have whitespace around it, or be on a line of its
+						// own within the value: it's checked at the value's last part, as the value's text trimmed - with a
+						// problem reported on the line with the name
+						const isSingleName = attType === AttributeType.Variable || attType === AttributeType.VariableRef ||
+							attType === AttributeType.InstructionName || attType === AttributeType.InstructionMode;
+						if (isSingleName && !isLastPart) {
+							pendingNameText = (isContinuation ? pendingNameText : '') + variableName;
+							if (!isContinuation || variableName.trim() !== '') {
+								pendingNameToken = token;
+							}
+							break;
+						}
+						let valueToken = token;
+						if (isSingleName && isContinuation) {
+							valueToken = variableName.trim() === '' && pendingNameToken ? pendingNameToken : token;
+							variableName = pendingNameText + variableName;
+						}
+						if (isSingleName) {
+							variableName = variableName.trim();
+						}
+						// a list's names, e.g. of use-accumulators, are found within the token, which starts with the value's
+						// quote except on a later line
+						const namesToken = isContinuation ? { ...valueToken, startCharacter: valueToken.startCharacter - 1 } : valueToken;
 						let hasProblem = false;
 						if (rootXmlnsName !== null) {
 							let prefix = rootXmlnsName.length === 5 ? '' : rootXmlnsName.substr(6);
@@ -1262,10 +1344,10 @@ export class XsltTokenDiagnostics {
 										currentXSLTIterateParams[currentXSLTIterateParams.length - 1].push(variableName);
 									}
 								}
-								variableData = { token: token, name: variableName };
+								variableData = { token: valueToken, name: variableName };
 								break;
 							case AttributeType.VariableRef:
-								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference('', document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
+								let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference('', document, importedGlobalVarNames, valueToken, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 									xpathStack, inScopeVariablesList, elementStack);
 								if (unResolvedToken !== null) {
 									unresolvedXsltVariableReferences.push(unResolvedToken);
@@ -1285,12 +1367,15 @@ export class XsltTokenDiagnostics {
 								}
 								break;
 							case AttributeType.ExcludeResultPrefixes:
-								let excludePrefixes = variableName.split(/\s+/);
-								tagExcludeResultPrefixes = { token: token, prefixes: excludePrefixes };
+								let excludePrefixes = variableName.split(/\s+/).filter((prefix) => prefix.length > 0);
+								// on more than one line: the prefixes on each line, with that line's token
+								const earlierPrefixes = isContinuation && tagExcludeResultPrefixes ? tagExcludeResultPrefixes : { token: valueToken, prefixes: [] as string[], prefixTokens: [] as BaseToken[] };
+								tagExcludeResultPrefixes = { token: earlierPrefixes.token, prefixes: earlierPrefixes.prefixes.concat(excludePrefixes),
+									prefixTokens: earlierPrefixes.prefixTokens.concat(excludePrefixes.map(() => valueToken)) };
 								break;
 							case AttributeType.None:
 								const tagAttributeName = tagAttributeNames.length > 0 ? tagAttributeNames[tagAttributeNames.length - 1] : undefined;
-								let isAVTbracket = token.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
+								let isAVTbracket = valueToken.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
 								if (!isAVTbracket && schemaQuery && tagAttributeName && variableName.indexOf('{') === -1) {
 									const expectedValues = schemaQuery.getExpected(tagElementName, tagAttributeName);
 									const expectedSimpleType = schemaQuery.lastEnumSimpleType;
@@ -1302,53 +1387,61 @@ export class XsltTokenDiagnostics {
 												const invalidNames = XsltTokenDiagnostics.findInvalidNames(variableName, docType, xpathPrefixes());
 												if (invalidNames.length > 0) {
 													const quotedNames = invalidNames.map((uName) => '\'' + uName + '\'');
-													token['error'] = ErrorType.XMLNameList;
-													token.value = tagAttributeName + ' ' + quotedNames.join(',');
+													valueToken['error'] = ErrorType.XMLNameList;
+													valueToken.value = tagAttributeName + ' ' + quotedNames.join(',');
 												}
 											} else {
 												const isHashedExpected = expectedValues.attributeValues[0][0].charAt(0) === '#';
 												const isHashedValue = (variableName.charAt(0) === '#');
 												const ignoreHashNoMatch = isHashedExpected && !isHashedValue;
 												if (!ignoreHashNoMatch) {
-													token['error'] = ErrorType.XMLAttributeValueUnexpected;
+													valueToken['error'] = ErrorType.XMLAttributeValueUnexpected;
 													const expectedNames = expectedValues.attributeValues.map(arr => arr[0]);
-													token.value = variableName + '!' + tagAttributeName + '!' + expectedNames.join(', ');
+													valueToken.value = variableName + '!' + tagAttributeName + '!' + expectedNames.join(', ');
 												}
 											}
 										}
 									}
 								}
-								if (prevToken && prevToken.length === 1 && prevToken.tokenType === XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.attributeValue) {
-									token['error'] = ErrorType.XPathEmpty;
+								if (!isContinuation && prevToken && prevToken.length === 1 && prevToken.tokenType === XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.attributeValue) {
+									valueToken['error'] = ErrorType.XPathEmpty;
 								}
 								break;
 						}
 
-						if (token.error) {
-							problemTokens.push(token);
+						if (valueToken.error) {
+							problemTokens.push(valueToken);
 							hasProblem = true;
 						}
 						if (!hasProblem && attType === AttributeType.UseAttributeSets) {
-							if (globalAttributeSetNames.indexOf(variableName) < 0 && variableName !== 'xsl:original') {
-								token['error'] = ErrorType.AttributeSetUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
-								hasProblem = true;
-							}
+							// each name must be a declared attribute set
+							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
+								if (!globalAttributeSetNames.includes(nameToken.value) && nameToken.value !== 'xsl:original') {
+									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.AttributeSetUnresolved });
+								}
+							});
 						}
 						if (!hasProblem && attType === AttributeType.UseAccumulators) {
 							// each name must be a declared accumulator (XTSE3300)
-							XslLexer.tokensInsideToken(token, variableName).forEach((nameToken) => {
+							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
 								if (nameToken.value !== '#all' && !globalAccumulatorNames.includes(nameToken.value)) {
-									problemTokens.push({ ...nameToken, tokenType: token.tokenType, error: ErrorType.AccumulatorNameUnresolved });
+									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.AccumulatorNameUnresolved });
+								}
+							});
+						}
+						if (!hasProblem && attType === AttributeType.UseCharacterMaps) {
+							// each name must be a declared character map (XTSE1590)
+							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
+								if (!globalCharacterMapNames.includes(nameToken.value)) {
+									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.CharacterMapNameUnresolved });
 								}
 							});
 						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
 							if (!namedTemplates.get(variableName)) {
-								token['error'] = ErrorType.TemplateNameUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
+								valueToken['error'] = ErrorType.TemplateNameUnresolved;
+								valueToken.value = variableName;
+								problemTokens.push(valueToken);
 								hasProblem = true;
 							}
 						}
@@ -1359,18 +1452,18 @@ export class XsltTokenDiagnostics {
 							if (!localName.includes(':') && !localName.startsWith('Q{')) {
 								const reason = !XsltTokenDiagnostics.isXPath40(docType) ? 'XSLT 4.0' : XsltTokenDiagnostics.isSaxonHEConfigured() ? 'Saxon-HE' : undefined;
 								if (reason) {
-									token['error'] = ErrorType.XSLTFunctionNamePrefix;
-									token.value = variableName + RecordTypes.valueSeparator + reason;
-									problemTokens.push(token);
+									valueToken['error'] = ErrorType.XSLTFunctionNamePrefix;
+									valueToken.value = variableName + RecordTypes.valueSeparator + reason;
+									problemTokens.push(valueToken);
 									hasProblem = true;
 								}
 							}
 						}
 						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
 							if (globalModes.indexOf(variableName) < 0) {
-								token['error'] = ErrorType.TemplateModeUnresolved;
-								token.value = variableName;
-								problemTokens.push(token);
+								valueToken['error'] = ErrorType.TemplateModeUnresolved;
+								valueToken.value = variableName;
+								problemTokens.push(valueToken);
 								hasProblem = true;
 							}
 						}
@@ -1379,16 +1472,16 @@ export class XsltTokenDiagnostics {
 							let templateParams = namedTemplates.get(callTemplateName);
 							if (templateParams) {
 								if (templateParams?.indexOf(variableName) < 0) {
-									token['error'] = ErrorType.MissingTemplateParam;
-									token.value = `${callTemplateName}#${variableName}`;
-									pendingTemplateParamErrors.push(token);
+									valueToken['error'] = ErrorType.MissingTemplateParam;
+									valueToken.value = `${callTemplateName}#${variableName}`;
+									pendingTemplateParamErrors.push(valueToken);
 								}
 							} else if (currentXSLTIterateParams.length > 0 && elementStack.length > 2 && elementStack[elementStack.length - 1].symbolName === 'xsl:next-iteration') {
 								const params = currentXSLTIterateParams[currentXSLTIterateParams.length - 1];
 								if (params.indexOf(variableName) < 0) {
-									token['error'] = ErrorType.IterateParamInvalid;
-									token.value = variableName;
-									problemTokens.push(token);
+									valueToken['error'] = ErrorType.IterateParamInvalid;
+									valueToken.value = variableName;
+									problemTokens.push(valueToken);
 									hasProblem = true;
 								}
 							}
@@ -1400,14 +1493,18 @@ export class XsltTokenDiagnostics {
 								const nameToTest = tagElementName === "xsl:namespace" && variableName === '' ? 'empty' : variableName;
 								let validateResult = XsltTokenDiagnostics.validateName(nameToTest, vType, docType, xpathPrefixes());
 								if (validateResult !== NameValidationError.None) {
-									token['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
-									token['value'] = variableName;
-									token.tagElementId = tagElementId;
-									problemTokens.push(token);
+									valueToken['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
+									valueToken['value'] = variableName;
+									valueToken.tagElementId = tagElementId;
+									problemTokens.push(valueToken);
 								}
 							}
 						}
-						attType = AttributeType.None;
+						// the list attributes stay so for the rest of a value on more than one line
+						if (isLastPart || !(attType === AttributeType.ExcludeResultPrefixes || attType === AttributeType.UseAccumulators || attType === AttributeType.UseAttributeSets ||
+							attType === AttributeType.UseCharacterMaps)) {
+							attType = AttributeType.None;
+						}
 						break;
 					case XSLTokenLevelState.processingInstrName:
 						let piName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
@@ -1429,14 +1526,13 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.entityRef:
-						let entityName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
-						let validationResult;
 						if (token.error) {
 							problemTokens.push(token);
 						} else {
-							({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(entityName, dtdEnded, inheritedPrefixes));
-							if (validationResult !== NameValidationError.None) {
-								token['error'] = ErrorType.EntityName;
+							const { error, entityName } = XsltTokenDiagnostics.validateEntityRef(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document),
+								dtdEnded, inheritedPrefixes, doctypeEntities.declared);
+							if (error !== undefined) {
+								token['error'] = error;
 								token['value'] = entityName;
 								problemTokens.push(token);
 							}
@@ -1670,8 +1766,10 @@ export class XsltTokenDiagnostics {
 					}
 				} else if (XsltTokenDiagnostics.isAnonymousFunctionParams(stackItem)) {
 					let invalidTokenForAnonFunction = !XsltTokenDiagnostics.anonFunctionTokenTypes.has(token.tokenType);
-					// nodeType is also permitted except when value is '*'
-					if (invalidTokenForAnonFunction && token.tokenType === TokenLevelState.nodeType && token.value !== '*') {
+					// nodeType is also permitted except when value is '*' - other than as an occurrence indicator, after
+					// a type's brackets, e.g. function($m as map(*)*, $n as node()*)
+					const isOccurrenceIndicator = token.value === '*' && (prevToken?.value === ')' || prevToken?.value === '()');
+					if (invalidTokenForAnonFunction && token.tokenType === TokenLevelState.nodeType && (token.value !== '*' || isOccurrenceIndicator)) {
 						invalidTokenForAnonFunction = false;
 					}
 					if (invalidTokenForAnonFunction && !stackItem.anonFnSyntaxErrorReported) {
@@ -1752,7 +1850,7 @@ export class XsltTokenDiagnostics {
 								xsltPrefixesToURIs = new Map(xsltPrefixesToURIs);
 							}
 							inheritedPrefixes = inheritedPrefixes.includes(prefix) ? inheritedPrefixes : inheritedPrefixes.concat([prefix]);
-							const nsType = FunctionData.namespaces.get(token.value.substring(1, token.value.length - 1));
+							const nsType = FunctionData.namespaceType(token.value.substring(1, token.value.length - 1));
 							if (nsType === undefined) {
 								xsltPrefixesToURIs.delete(prefix);
 							} else {
@@ -2890,10 +2988,9 @@ export class XsltTokenDiagnostics {
 						if (token.error) {
 							problemTokens.push(token);
 						} else {
-							let validationResult, entityName;
-							({ validationResult, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes));
-							if (validationResult !== NameValidationError.None) {
-								token['error'] = ErrorType.EntityName;
+							const { error, entityName } = XsltTokenDiagnostics.validateEntityRef(token.value, dtdEnded, inheritedPrefixes, doctypeEntities.declared);
+							if (error !== undefined) {
+								token['error'] = error;
 								token['value'] = entityName;
 								problemTokens.push(token);
 							}
@@ -3043,6 +3140,10 @@ export class XsltTokenDiagnostics {
 				// the values of XSLT instructions - an XPath document has none
 				XsltTokenDiagnostics.checkInstructionValues(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
 			}
+			if (docType === DocumentTypes.XSLT40 && documentText.includes('<xsl:record')) {
+				// xsl:record is XSLT 4.0
+				XsltTokenDiagnostics.checkRecordInstructions(document, allTokens, allGlobals, itemTypeDeclarations, problemTokens);
+			}
 			if (XsltTokenDiagnostics.isXPath40(docType)) {
 				// xsl:switch is XSLT 4.0
 				XsltTokenDiagnostics.checkSwitches(document, allTokens, argumentVariableTypes, allGlobals, itemTypeDeclarations, problemTokens);
@@ -3067,10 +3168,10 @@ export class XsltTokenDiagnostics {
 		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		// the quick fixes for missing record fields
-		const recordFixes = new Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>();
+		const recordFixes = new Map<string, RecordFix>();
 		problemTokens.forEach((token) => {
 			if (token.recordFix) {
-				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.noteVariablesMissing || d.code === DiagnosticCode.noteRequiresXSLT40 || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
+				allDiagnostics.filter((d) => (d.code === DiagnosticCode.recordFieldMissing || d.code === DiagnosticCode.recordFieldUnknown || d.code === DiagnosticCode.switchCasesMissing || d.code === DiagnosticCode.noteParamsMissing || d.code === DiagnosticCode.noteFieldsMissing || d.code === DiagnosticCode.noteVariablesMissing || d.code === DiagnosticCode.noteRequiresXSLT40 || d.code === DiagnosticCode.enumValueDuplicate) && d.range.start.line === token.line && d.range.start.character === token.startCharacter)
 					.forEach((d) => recordFixes.set(XsltTokenDiagnostics.recordFixKey(d.range, d.message), token.recordFix!));
 			}
 		});
@@ -3539,8 +3640,12 @@ export class XsltTokenDiagnostics {
 		return [expectedElements, expectedAttributes] as [string[], string[] | undefined];
 	}
 
-	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[]) {
-		let validationResult = NameValidationError.None;
+	// an entity reference: a character reference, a predefined entity, or one declared in the DOCTYPE's internal subset
+	// - any well-formed name when the DOCTYPE has declarations that can't be seen (declaredEntities null): in an
+	// external DTD, or one a parameter entity reference brings in. The error, if any: an invalid name, or one that's
+	// not declared
+	private static validateEntityRef(entityName: string, dtdEnded: boolean, inheritedPrefixes: string[], declaredEntities: Set<string> | null) {
+		let error: ErrorType | undefined;
 		if (entityName.length > 2 && entityName.endsWith(';')) {
 			entityName = entityName.substring(1, entityName.length - 1);
 			if (entityName.length > 1 && entityName.charAt(0) === '#') {
@@ -3550,17 +3655,56 @@ export class XsltTokenDiagnostics {
 				} else {
 					validNumber = /^#[0-9]+$/.test(entityName);
 				}
-				validationResult = validNumber ? NameValidationError.None : NameValidationError.NameError;
-			} else if (!dtdEnded) {
-				let isXmlChar = XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1;
-				validationResult = isXmlChar ? NameValidationError.None : NameValidationError.NameError;
+				error = validNumber ? undefined : ErrorType.EntityName;
+			} else if (XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, DocumentTypes.Other, inheritedPrefixes) !== NameValidationError.None) {
+				error = ErrorType.EntityName;
+			} else if (XsltTokenDiagnostics.xmlChars.indexOf(entityName) > -1 || (dtdEnded && (declaredEntities === null || declaredEntities.has(entityName)))) {
+				error = undefined;
 			} else {
-				validationResult = XsltTokenDiagnostics.validateName(entityName, ValidationType.Name, DocumentTypes.Other, inheritedPrefixes);
+				error = dtdEnded ? ErrorType.EntityNotDeclared : ErrorType.EntityNotDeclaredNoDoctype;
 			}
 		} else {
-			validationResult = NameValidationError.NameError;
+			error = ErrorType.EntityName;
 		}
-		return { validationResult, entityName };
+		return { error, entityName };
+	}
+
+	// what a DOCTYPE's token tells of the entities it declares: the names <!ENTITY> declares, except parameter entities -
+	// or, null, that there are declarations that can't be seen: an external DTD, named before the internal subset's
+	// '[', or a parameter entity reference, e.g. %chars;, in the subset
+	private static updateDeclaredEntities(xmlTokenType: XSLTokenLevelState, text: string, prevText: string, doctype: { inSubset: boolean; declared: Set<string> | null }) {
+		if (doctype.declared === null) {
+			return;
+		}
+		switch (xmlTokenType) {
+			case XSLTokenLevelState.dtd:
+			case XSLTokenLevelState.dtdEnd: {
+				let subsetText = text;
+				if (!doctype.inSubset) {
+					const bracket = text.indexOf('[');
+					if (bracket < 0) {
+						return;
+					}
+					doctype.inSubset = true;
+					subsetText = text.substring(bracket + 1);
+				}
+				if (/%[^\s%;"']+;/.test(subsetText)) {
+					doctype.declared = null;
+				}
+				break;
+			}
+			case XSLTokenLevelState.dtdLiteral:
+				if (!doctype.inSubset) {
+					// a system or public identifier
+					doctype.declared = null;
+				}
+				break;
+			case XSLTokenLevelState.dtdEntityName:
+				if (!/%\s*$/.test(prevText)) {
+					doctype.declared.add(text);
+				}
+				break;
+		}
 	}
 
 	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], overridType?: TokenLevelState) {
@@ -3599,6 +3743,9 @@ export class XsltTokenDiagnostics {
 				} else if (prevToken.tokenType === TokenLevelState.nodeType) {
 					if (token.value === '()') {
 						isXPathError = prevToken.value.charAt(0) === '.';
+					} else if (prevToken.value === '()' && tokenType === TokenLevelState.nodeType && (token.value === '*' || token.value === '+' || token.value === '?')) {
+						// an occurrence indicator on a kind test in a type, e.g. instance of node()* - the lexer labels
+						// '*' as an operator elsewhere, e.g. text() * 2
 					} else {
 						isXPathError = true;
 					}
@@ -3785,6 +3932,9 @@ export class XsltTokenDiagnostics {
 				// prefix is not declared
 				fErrorType = ErrorType.XPathFunctionNamespace;
 				isValid = false;
+			} else if (XsltTokenDiagnostics.externalFunctionPrefixes.includes(fNameParts[0]) || xsltType === XSLTnamespaces.Java) {
+				// provided by the processing system, e.g. a Java extension function - a 'java:' namespace's always are
+				isValid = true;
 			} else if (xsltType === XSLTnamespaces.NotDefined || xsltType === undefined) {
 				isValid = checkedGlobalFnNames.indexOf(qFunctionName) > -1;
 			} else if (useXPath40) {
@@ -3875,7 +4025,8 @@ export class XsltTokenDiagnostics {
 			isValid = !isParseHTMLFnWarning;
 		}
 		fErrorType = isParseHTMLFnWarning ? ErrorType.XPathFunctionParseHtml : isValid ? ErrorType.None : fErrorType;
-		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && tokenValue.startsWith('xdm:debug')) {
+		// a function of the xdm-view library (bundled with the extension) whose module isn't included - the quick fix includes it
+		if (!isValid && (fErrorType === ErrorType.XPathFunction || fErrorType === ErrorType.XPathFunctionNamespace) && (tokenValue.startsWith('xdm:debug') || tokenValue === 'xdm:trace')) {
 			fErrorType = ErrorType.XPathFunctionXdmDebug;
 		}
 		return { isValid, qFunctionName, fErrorType };
@@ -4204,6 +4355,12 @@ export class XsltTokenDiagnostics {
 				case ErrorType.EntityName:
 					msg = `XML: Invalid entity name '${tokenValue}'`;
 					break;
+				case ErrorType.EntityNotDeclared:
+					msg = `XML: Entity '${tokenValue}' is not declared in the DOCTYPE`;
+					break;
+				case ErrorType.EntityNotDeclaredNoDoctype:
+					msg = `XML: Entity '${tokenValue}' is not declared - only lt, gt, amp, quot and apos are predefined: declare others in a DOCTYPE, or use a character reference, e.g. &#160;`;
+					break;
 				case ErrorType.MultiRoot:
 					msg = 'XML: More than one root element';
 					break;
@@ -4328,6 +4485,13 @@ export class XsltTokenDiagnostics {
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					msg = `XSLT: xsl:accumulator with name '${tokenValue}' not found`;
 					break;
+				case ErrorType.CharacterMapNameUnresolved:
+					errCode = DiagnosticCode.unresolvedGenericRef;
+					msg = `XSLT: xsl:character-map with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.DuplicateCharacterMapName:
+					msg = `XSLT: Duplicate xsl:character-map name '${tokenValue}'`;
+					break;
 				case ErrorType.TemplateModeUnresolved:
 					msg = `XSLT: Template mode '${tokenValue}' not used`;
 					severity = vscode.DiagnosticSeverity.Warning;
@@ -4409,6 +4573,20 @@ export class XsltTokenDiagnostics {
 					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
 					msg = `XPath: '${field}' is not a field of the record type: ${recordName}`;
 					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.recordFieldUnknown;
+					break;
+				}
+				case ErrorType.RecordInstructionFieldMissing: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: Record field '${field}' is missing from the xsl:record - it's required by the record type: ${recordName}`;
+					errCode = DiagnosticCode.recordFieldMissing;
+					break;
+				}
+				case ErrorType.RecordInstructionFieldUnknown: {
+					const [field, recordName] = tokenValue.split(RecordTypes.valueSeparator);
+					msg = `XSLT: The xsl:record attribute '${field}' is not a field of the record type: ${recordName}`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.recordFieldUnknown;
 					break;
 				}
 				case ErrorType.SwitchCaseNotEnumValue: {
@@ -4689,6 +4867,10 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunction:
 					errCode = DiagnosticCode.unresolvedGenericRef;
 					let parts = tokenValue.split('#');
+					if (parts[0].includes(':') && !parts[0].startsWith('Q{')) {
+						// a prefixed function, e.g. ext:lookup - the quick fix adds the prefix to the setting
+						errCode = DiagnosticCode.prefixedFunctionNotFound;
+					}
 					msg = `XPath: Function: '${parts[0]}' with ${parts[1]} arguments not found`;
 					break;
 				case ErrorType.XPathTypeFullArity:
@@ -4706,7 +4888,7 @@ export class XsltTokenDiagnostics {
 				case ErrorType.XPathFunctionXdmDebug:
 					errCode = DiagnosticCode.xdmDebugRef;
 					severity = vscode.DiagnosticSeverity.Warning;
-					msg = `XPath: 'xdm:debug/debug-color' function not defined - use QuickFix`;
+					msg = `XPath: '${tokenValue.split('#')[0]}' function not defined - use QuickFix to include the xdm-view module`;
 					break;
 				case ErrorType.XPathTypeName:
 					msg = `XPath: Invalid type: '${tokenValue}'`;
@@ -5400,7 +5582,7 @@ export class XsltTokenDiagnostics {
 				const namePosition = document.positionAt(switchStart + 1);
 				const token: BaseToken = { line: namePosition.line, startCharacter: namePosition.character, length: 'xsl:switch'.length, value: '', tokenType: 0 };
 				// two forms of fix, with the same edit position: xsl:when elements with a select attribute, or with content
-				let recordFix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } } | undefined;
+				let recordFix: RecordFix | undefined;
 				const lineIndent = (offset: number) => {
 					const lineStart = text.lastIndexOf('\n', offset) + 1;
 					return /^[ \t]*$/.test(text.substring(lineStart, offset)) ? text.substring(lineStart, offset) : undefined;
@@ -5495,10 +5677,10 @@ export class XsltTokenDiagnostics {
 		const openElements = RecordTypes.openElementsAt(RecordTypes.blankMarkup(text), candidates.map((c) => c.tagStart));
 		candidates.forEach((candidate, index) => {
 			if (candidate.name === 'key') {
-				// the record field for an xsl:map-entry key in an xsl:map with a record type
+				// the record field for an xsl:map-entry key in an xsl:map or xsl:record with a record type
 				const mapAncestors = openElements[index];
 				const mapIndex = mapAncestors.length - 1;
-				const record = mapIndex > -1 && mapAncestors[mapIndex].name === 'xsl:map' ? RecordTypes.xslMapRecord(text, mapAncestors, mapIndex, itemTypes, templateParamType) : undefined;
+				const record = mapIndex > -1 && RecordTypes.isMapInstruction(mapAncestors[mapIndex].name) ? RecordTypes.xslMapRecord(text, mapAncestors, mapIndex, itemTypes, templateParamType) : undefined;
 				const keyToken = candidate.tokens[0];
 				const field = record?.fields.find((f) => f.name === keyToken.value.substring(1, keyToken.value.length - 1));
 				if (record && field) {
@@ -5522,6 +5704,87 @@ export class XsltTokenDiagnostics {
 		});
 	}
 
+	// XSLT 4.0: checks each xsl:record against its record type - its xsl:as, or the declared type of its value from the
+	// containing instruction, e.g. an xsl:variable with an 'as'. Each attribute in no namespace is a field: it must be a
+	// field of the record type, and a literal value must suit the field's type. Each required field must be an attribute
+	// or the literal key of an xsl:map-entry child - unless other content may add entries
+	private static checkRecordInstructions(document: vscode.TextDocument, allTokens: BaseToken[], globals: GlobalInstructionData[], itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const markup = RecordTypes.blankMarkup(text);
+		const instructions = RecordTypes.recordInstructions(text, markup);
+		if (instructions.length === 0) {
+			return;
+		}
+		const templateParamType = (template: string, param: string) => XsltTokenDiagnostics.parameterType(globals, GlobalInstructionType.Template, template, undefined, -1, param);
+		const openElements = RecordTypes.openElementsAt(markup, instructions.map((instruction) => instruction.offset));
+		// the XPath tokens, for the values of the attributes - by their offsets, in ascending order
+		const xpathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && t.tokenType !== TokenLevelState.comment);
+		const tokenOffsets = xpathTokens.map((t) => document.offsetAt(new vscode.Position(t.line, t.startCharacter)));
+		const firstTokenFrom = (offset: number) => {
+			let low = 0;
+			let high = tokenOffsets.length;
+			while (low < high) {
+				const mid = (low + high) >> 1;
+				if (tokenOffsets[mid] < offset) {
+					low = mid + 1;
+				} else {
+					high = mid;
+				}
+			}
+			return low;
+		};
+		const nameToken = (offset: number, name: string): BaseToken => {
+			const position = document.positionAt(offset);
+			return { line: position.line, startCharacter: position.character, length: name.length, value: name, tokenType: 0 };
+		};
+		instructions.forEach((instruction, index) => {
+			const ancestors = openElements[index].concat([{ name: 'xsl:record', offset: instruction.offset }]);
+			const record = RecordTypes.xslMapRecord(text, ancestors, ancestors.length - 1, itemTypes, templateParamType);
+			if (!record) {
+				return;
+			}
+			const fieldAttributes = instruction.attributes.filter((attribute) => RecordTypes.isFieldAttribute(attribute.name));
+			const entryKeys = instruction.isEmpty ? [] : RecordTypes.mapEntryKeys(text, markup, instruction.offset).map((k) => k.key);
+			const usedNames = fieldAttributes.map((attribute) => attribute.name).concat(entryKeys);
+			fieldAttributes.forEach((attribute) => {
+				const token = nameToken(attribute.nameOffset, attribute.name);
+				const field = record.fields.find((f) => f.name === attribute.name);
+				if (!field) {
+					// the fix replaces the attribute's name with the name of a field not yet used
+					const alternatives = RecordTypes.closestNames(attribute.name, record.fields.map((f) => f.name).filter((name) => RecordTypes.isNCName(name) && !usedNames.includes(name)));
+					const recordFix = alternatives.length > 0 ? { line: token.line, character: token.startCharacter, text: '', end: { line: token.line, character: token.startCharacter + token.length }, alternatives, isMarkup: true } : undefined;
+					problemTokens.push({ ...RecordTypes.problemToken(token, ErrorType.RecordInstructionFieldUnknown, attribute.name, record.name), recordFix });
+					return;
+				}
+				RecordTypes.fieldReferences.push({ token, field, record });
+				const valueStart = firstTokenFrom(attribute.valueOffset);
+				const valueEnd = firstTokenFrom(attribute.valueOffset + attribute.value.length) - 1;
+				if (valueStart <= valueEnd) {
+					RecordTypes.checkFieldValue(xpathTokens, valueStart, valueEnd, field, itemTypes, problemTokens);
+				}
+			});
+			// content other than xsl:map-entry elements with literal keys may add any entries
+			const childNames = instruction.isEmpty ? [] : RecordTypes.childElementNames(markup, instruction.offset);
+			if (childNames.some((name) => name !== 'xsl:map-entry') || childNames.length > entryKeys.length) {
+				return;
+			}
+			const missingFields = record.fields.filter((field) => !field.optional && !usedNames.includes(field.name));
+			if (missingFields.length === 0) {
+				return;
+			}
+			// the fix adds the fields whose names are NCNames as attributes, after the last attribute
+			const lastAttribute = instruction.attributes[instruction.attributes.length - 1];
+			const insertOffset = lastAttribute ? lastAttribute.valueOffset + lastAttribute.value.length + 1 : instruction.offset + '<xsl:record'.length;
+			const insertPosition = document.positionAt(insertOffset);
+			const attributeFields = missingFields.filter((field) => RecordTypes.isNCName(field.name));
+			const recordFix = attributeFields.length > 0 ? { line: insertPosition.line, character: insertPosition.character, text: RecordTypes.fieldAttributesText(attributeFields, itemTypes), isMarkup: true } : undefined;
+			const token = nameToken(instruction.offset + 1, 'xsl:record');
+			missingFields.forEach((field) => {
+				problemTokens.push({ ...RecordTypes.problemToken(token, ErrorType.RecordInstructionFieldMissing, field.name, record.name), recordFix });
+			});
+		});
+	}
+
 	// the declared type of a parameter of a user-defined function (with the arity) or a named template, by keyword or position
 	public static parameterType(globals: GlobalInstructionData[], type: GlobalInstructionType, name: string, arity: number | undefined, position: number, keyword?: string) {
 		const declaration = globals.find((g) => g.type === type && g.name === name && (arity === undefined || type !== GlobalInstructionType.Function || XslLexer.functionArityMatches(g, arity)));
@@ -5532,7 +5795,7 @@ export class XsltTokenDiagnostics {
 	// a placeholder for a value, e.g. __TODO.city - inserted by the completion for a map constructor with a record type
 	public static readonly placeholderPrefix = RecordTypes.placeholderPrefix;
 	// XPath 4.0 record types: the quick fixes for missing fields, for each document - by the diagnostic's position and message
-	public static readonly recordFixes = new Map<string, Map<string, { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }>>();
+	public static readonly recordFixes = new Map<string, Map<string, RecordFix>>();
 
 	// XPath 4.0 record types: the tokens that refer to record fields, for each document
 	public static readonly recordFieldReferences = new Map<string, FieldReference[]>();

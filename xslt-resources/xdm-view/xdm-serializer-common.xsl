@@ -17,9 +17,7 @@
        imported alongside it, same as xdm-serializer.xsl/xdm-parser.xsl.
   -->
 
-  <!-- LOCAL INTERIM CHANGE (vscode-xslt-tokenizer, 2026-10-16) - not
-       in upstream xdm-persistence yet; see VENDORED.md.
-       XPath 4.0 JNodes (e.g. from jtree(), or a path step over a map):
+  <!-- XPath 4.0 JNodes (e.g. from jtree(), or a path step over a map):
        a JNode isn't a node(), function (maps and arrays are functions)
        or atomic value, so without this it would reach zxd:build-atomic
        and fail with FOTY0013 when atomized. The 4.0 functions are
@@ -53,7 +51,8 @@
 
   <!-- $items with each JNode replaced by its value, so a JNode
        serializes as the map, array or atomic value it wraps - its
-       location is shown by xdm:debug only (see zxd:husk-value). -->
+       location is shown by xdm-viewer's xdm:debug only (see its
+       zxd:husk-value). -->
   <xsl:function name="zxd:jnode-values" as="item()*">
     <xsl:param name="items" as="item()*"/>
     <xsl:sequence select="for $item in $items return if (zxd:is-jnode($item)) then zxd:jnode-value($item) else $item"/>

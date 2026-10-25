@@ -16,6 +16,7 @@ import { ItemTypeSupport } from './itemTypeSupport';
 import * as url from 'url';
 import { XdocReferences, XdocTarget } from './xdocReferences';
 import { RecordTypes } from './recordTypes';
+import { XPathQuery } from './xpathQuery';
 
 interface ImportedGlobals {
 	href: string;
@@ -192,7 +193,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 	// the symbols of the XML context file, for element and attribute name completions - computed here if they're not
 	// cached yet, e.g. when VS Code restores the context file's editor at startup without its symbols being requested
-	private static async contextFileSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[] | undefined> {
+	public static async contextFileSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[] | undefined> {
 		let symbols = XsltSymbolProvider.documentSymbols.get(uri);
 		if (!symbols) {
 			// the cache is keyed by Uri object: look for another Uri object for the same file
@@ -294,6 +295,37 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
+		const result = await this.completionItems(document, position, token, context);
+		if (result) {
+			XsltDefinitionProvider.fitToPrefixedWord(Array.isArray(result) ? result : result.items, document, position);
+		}
+		return result;
+	}
+
+	// The language's word pattern takes a QName as one word, prefix and all (e.g. 'fn:co'), and an item without a
+	// range of its own is filtered by - and replaces - the word. An item whose label has no prefix (e.g. the
+	// built-in function 'count') is given a range of the word's local part, after its ':', instead
+	public static fitToPrefixedWord(items: vscode.CompletionItem[], document: vscode.TextDocument, position: vscode.Position) {
+		const wordRange = document.getWordRangeAtPosition(position);
+		if (!wordRange) {
+			return;
+		}
+		const typed = document.getText(new vscode.Range(wordRange.start, position));
+		const colon = typed.lastIndexOf(':');
+		if (colon < 1) {
+			return;
+		}
+		const localStart = wordRange.start.translate(0, colon + 1);
+		const range = { inserting: new vscode.Range(localStart, position), replacing: new vscode.Range(localStart, wordRange.end) };
+		for (const item of items) {
+			const label = typeof item.label === 'string' ? item.label : item.label.label;
+			if (!item.range && !label.includes(':')) {
+				item.range = range;
+			}
+		}
+	}
+
+	private async completionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
 		const keepNameTests = true;
 		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
 		let symbolsForXPath: vscode.DocumentSymbol[] = [];
@@ -311,9 +343,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		let localLanguageConfig = this.languageConfig;
 		const isCommaTrigger = DocumentChangeHandler.consumeCommaTrigger(document, position);
 		if (this.docType === DocumentTypes.XPath) {
-			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
+			// in the 'Find Nodes with XPath' query file, the expression at the cursor on its own
+			const text = XPathQuery.isQueryFile(document) ? XPathQuery.separateBlockAt(document.getText(), position.line) : document.getText();
+			allTokens = this.getXPLexer().analyse(text, ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
-			uri = DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
+			// names from the XML file: for the query file, the one it runs on
+			uri = XPathQuery.isQueryFile(document) ? XPathQuery.target : DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
 
 		} else {
 			if (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.DCP) {
@@ -414,12 +449,19 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			// XPath 4.0 keyword arguments, e.g. ex:area(2, scale := 2) - the names of the called function's parameters
 			const keywordArguments = (isXSLT40 || this.docType === DocumentTypes.XPath) && !recordEntries && !argumentValues?.inString ?
 				XsltTokenCompletions.getKeywordArgumentCompletions(document, allTokens, position, this.docType === DocumentTypes.XPath, globalInstructionData, allImportedGlobals) : undefined;
-			if (recordEntries || selectValues || isCommaTrigger || argumentValues?.inString) {
+			// a '{' that starts an attribute or text value template - not an XPath token, as one in an expression is,
+			// e.g. of a map constructor - is followed by any XPath expression, so it has all the completions
+			const braceStart = position.character > 0 ? position.translate(0, -1) : undefined;
+			const isValueTemplateStart = !!braceStart && document.getText(new vscode.Range(braceStart, position)) === '{' &&
+				!allTokens.some((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber && t.line === braceStart.line && t.startCharacter === braceStart.character);
+			if (recordEntries || selectValues || (isCommaTrigger && !isValueTemplateStart) || argumentValues?.inString) {
 				// triggered by a ',', '{', ':' or quote, or within a string literal: only these completions
 				const items = recordEntries ?? selectValues ?? (argumentValues?.items ?? []).concat(keywordArguments?.items ?? []);
 				resolve(items && items.length > 0 ? new vscode.CompletionList(items, true) : undefined);
 				return;
 			}
+			// XSLT 4.0: an attribute of an xsl:record for a field of its record type, before the other completions
+			const recordAttributes = isXSLT40 ? XsltTokenCompletions.getRecordAttributeCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			// the key attribute of an xsl:map-entry for a record type
 			const mapEntryKeys = hasItemTypes ? XsltTokenCompletions.getMapEntryKeyCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (mapEntryKeys) {
@@ -448,7 +490,10 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				// after a keyword argument, only keyword arguments can follow
 				completions = keywordArguments.keywordsOnly ? keywordArguments.items : keywordArguments.items.concat(completions ?? []);
 			}
-			// an xsl:map for a record type, before the other element completions
+			if (recordAttributes && recordAttributes.length > 0) {
+				completions = recordAttributes.concat(completions ?? []);
+			}
+			// an xsl:map or xsl:record for a record type, before the other element completions
 			const recordMaps = isXSLT40 ? XsltTokenCompletions.getRecordMapElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (recordMaps) {
 				completions = recordMaps.concat(completions ?? []);

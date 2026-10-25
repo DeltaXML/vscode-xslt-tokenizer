@@ -4,7 +4,7 @@ import { XPathSemanticTokensProvider } from './extension';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SchemaQuery } from './schemaQuery';
-import { Data, XPathLexer } from './xpLexer';
+import { Data, RecordFix, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
@@ -15,6 +15,7 @@ import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
 import * as path from 'path';
 import { wrapTarget, wrappersFor } from './xsltWrap';
+import { TraceActions } from './traceActions';
 
 
 enum ElementSelectionType {
@@ -62,7 +63,7 @@ enum XsltCodeActionKind {
 	extractXsltFunctionPartial = 'xsl:function - partial refactor',
 	extractXsltTemplate = 'xsl:template',
 	extractXsltVariable = 'xsl:variable',
-	fixXdmDebugRef = 'include XSLT module for xdm:debug',
+	fixXdmDebugRef = 'include XSLT module for xdm:debug and xdm:trace',
 	copyXdmViewToWorkspace = 'copy xdm-view library into workspace',
 	extractXsltFunctionFmXPath = 'xsl:function (XPath) - full refactor',
 	extractXsltFunctionFmXPathPartial = 'xsl:function (XPath) - partial refactor',
@@ -116,8 +117,20 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private inlineRecordExtraction: { document: vscode.TextDocument, plan: InlineRecordExtractionPlan } | null = null;
 	private xpathTokenProvider = new XPathSemanticTokensProvider();
 
+	private static changeFieldNameTitle(name: string) {
+		return `Change to '${name}'`;
+	}
+
 	private static useRecordTypeTitle(name: string) {
 		return `Use record type '${name}'`;
+	}
+
+	public static wrapWithTraceTitle(functionName: string) {
+		return `Wrap with ${functionName}()`;
+	}
+
+	public static removeTraceTitle(functionName: string) {
+		return `Remove ${functionName}() - keep the expression`;
 	}
 
 	// the edits for 'Extract record type', adding an xsl:item-type for the record type and setting the declaration's 'as',
@@ -175,7 +188,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	}
 
 	// XSLT 4.0: adds an xsl:when for each enumeration value that an xsl:switch doesn't test
-	private static createSwitchCasesAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }, title: string, text: string) {
+	private static createSwitchCasesAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: RecordFix, title: string, text: string) {
 		const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
 		action.diagnostics = [diagnostic];
 		action.edit = new vscode.WorkspaceEdit();
@@ -192,11 +205,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return action;
 	}
 
-	private static createRecordFieldsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } }) {
+	private static createRecordFieldsAction(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, fix: RecordFix) {
 		const position = new vscode.Position(fix.line, fix.character);
 		// the string literal keys use the quote character that isn't the attribute value's delimiter
+		// - unless the text is markup, e.g. the attributes of an xsl:record
 		const textBefore = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
-		const isApostropheAttribute = textBefore.lastIndexOf('=\'') > textBefore.lastIndexOf('="');
+		const isApostropheAttribute = !fix.isMarkup && textBefore.lastIndexOf('=\'') > textBefore.lastIndexOf('="');
 		const text = isApostropheAttribute ? fix.text.replace(/'/g, '"') : fix.text;
 		const action = new vscode.CodeAction(XsltCodeActionKind.addMissingRecordFields, vscode.CodeActionKind.QuickFix);
 		action.diagnostics = [diagnostic];
@@ -225,6 +239,21 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					codeActions.push(new vscode.CodeAction(XsltCodeActionKind.copyXdmViewToWorkspace, vscode.CodeActionKind.QuickFix));
 				}
 			});
+		// a function with a prefix that isn't found, e.g. ext:lookup(): a fix that adds the prefix to the functions the
+		// processing system provides, which aren't checked
+		const prefixes = new Set<string>();
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.prefixedFunctionNotFound).forEach((diagnostic) => {
+			const prefix = /Function: '([^':{}]+):/.exec(diagnostic.message)?.[1];
+			if (!prefix || prefixes.has(prefix)) {
+				return;
+			}
+			prefixes.add(prefix);
+			const where = vscode.workspace.workspaceFolders ? 'this workspace' : 'user settings';
+			const action = new vscode.CodeAction(`Don't report unknown '${prefix}:' functions in ${where}`, vscode.CodeActionKind.QuickFix);
+			action.diagnostics = [diagnostic];
+			action.command = { command: 'xslt-xpath.addExternalFunctionPrefix', title: action.title, arguments: [prefix, document.uri] };
+			codeActions.push(action);
+		});
 		// Saxon type aliases: a fix that runs the command to convert them in the workspace
 		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.saxonTypeAlias).slice(0, 1).forEach((diagnostic) => {
 			const action = new vscode.CodeAction(XsltCodeActionKind.convertSaxonTypeAliases, vscode.CodeActionKind.QuickFix);
@@ -232,11 +261,12 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			action.command = { command: 'xslt-xpath.convertSaxonTypeAliases', title: XsltCodeActionKind.convertSaxonTypeAliases };
 			codeActions.push(action);
 		});
-		// XPath 4.0 record types: one fix adds all the missing fields of a map constructor
+		// XPath 4.0 record types: one fix adds all the missing fields of a map constructor or xsl:record - and for an unknown
+		// field, a fix for each field name that could replace it
 		const recordFixes = XsltTokenDiagnostics.recordFixes.get(document.uri.toString());
 		const addedFixes = new Set<object>();
 		context.diagnostics
-			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing || diagnostic.code === DiagnosticCode.noteRequiresXSLT40 || diagnostic.code === DiagnosticCode.enumValueDuplicate)
+			.filter(diagnostic => diagnostic.code === DiagnosticCode.recordFieldMissing || diagnostic.code === DiagnosticCode.recordFieldUnknown || diagnostic.code === DiagnosticCode.switchCasesMissing || diagnostic.code === DiagnosticCode.noteParamsMissing || diagnostic.code === DiagnosticCode.noteFieldsMissing || diagnostic.code === DiagnosticCode.noteVariablesMissing || diagnostic.code === DiagnosticCode.noteRequiresXSLT40 || diagnostic.code === DiagnosticCode.enumValueDuplicate)
 			.forEach(diagnostic => {
 				const fix = recordFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message));
 				if (fix && !addedFixes.has(fix)) {
@@ -248,6 +278,15 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						action.edit = new vscode.WorkspaceEdit();
 						action.edit.insert(document.uri, new vscode.Position(fix.line, fix.character), fix.text);
 						codeActions.push(action);
+					} else if (diagnostic.code === DiagnosticCode.recordFieldUnknown) {
+						// a fix for each field name that could replace the unknown one, closest first
+						(fix.alternatives ?? []).forEach((name) => {
+							const action = new vscode.CodeAction(XSLTCodeActions.changeFieldNameTitle(name), vscode.CodeActionKind.QuickFix);
+							action.diagnostics = [diagnostic];
+							action.edit = new vscode.WorkspaceEdit();
+							action.edit.replace(document.uri, new vscode.Range(fix.line, fix.character, fix.end!.line, fix.end!.character), name);
+							codeActions.push(action);
+						});
 					} else if (diagnostic.code === DiagnosticCode.enumValueDuplicate) {
 						const action = new vscode.CodeAction(XsltCodeActionKind.removeDuplicateEnumValue, vscode.CodeActionKind.QuickFix);
 						action.diagnostics = [diagnostic];
@@ -323,6 +362,19 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			}
 		}
 
+		// 'Remove trace()': the expression traced by the trace(), fn:trace() or xdm:trace() call whose name is at the cursor -
+		// in an XPath attribute or attribute value template
+		const traceCall = TraceActions.traceCallAt(document.getText(), document.offsetAt(range.start));
+		if (traceCall && range.end.isBeforeOrEqual(document.positionAt(traceCall.end))) {
+			const attribute = XsltSymbolProvider.symbolForXMLElement(SelectionType.Current, range.start, undefined, document.uri);
+			if (attribute && (attribute.kind === vscode.SymbolKind.Event || attribute.kind === vscode.SymbolKind.Field)) {
+				const action = new vscode.CodeAction(XSLTCodeActions.removeTraceTitle(traceCall.name), vscode.CodeActionKind.RefactorInline);
+				action.edit = new vscode.WorkspaceEdit();
+				action.edit.replace(document.uri, new vscode.Range(document.positionAt(traceCall.start), document.positionAt(traceCall.end)), TraceActions.unwrapped(document.getText(), traceCall));
+				codeActions.push(action);
+			}
+		}
+
 		let roughSelectionType : RangeTagType = RangeTagType.unknown;
 		let firstTagName: string = '';
 		let lastTagName: string = '';
@@ -332,6 +384,24 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				roughSelectionType = result.rangeTagType;
 				firstTagName = result.firstTagName;
 				lastTagName = result.lastTagName;
+				// 'Wrap with xdm:trace()' and 'Wrap with trace()': for a whole XPath expression - not part of a name, which
+				// may be one on its own, e.g. 'tot' of '$total'
+				const fullText = document.getText();
+				const startOffset = document.offsetAt(range.start);
+				const endOffset = document.offsetAt(range.end);
+				const nameChar = /[\w.:-]/;
+				const splitsName = (nameChar.test(fullText.charAt(startOffset)) && /[\w.:$-]/.test(fullText.charAt(startOffset - 1))) ||
+					(nameChar.test(fullText.charAt(endOffset - 1)) && nameChar.test(fullText.charAt(endOffset)));
+				if (result.isXPathExpression && !splitsName) {
+					for (const functionName of ['xdm:trace', 'trace']) {
+						const action = new vscode.CodeAction(XSLTCodeActions.wrapWithTraceTitle(functionName), vscode.CodeActionKind.RefactorRewrite);
+						const { prefix, label, suffix } = TraceActions.wrapSnippet(document.getText(range), functionName, result.attributeQuote);
+						const snippet = new vscode.SnippetString().appendText(prefix).appendPlaceholder(label).appendText(suffix);
+						action.edit = new vscode.WorkspaceEdit();
+						action.edit.set(document.uri, [new vscode.SnippetTextEdit(range, snippet)]);
+						codeActions.push(action);
+					}
+				}
 			} catch (e: any) {
 				console.error("Error on estimateSelectionType: " + e);
 				return codeActions;
@@ -461,12 +531,16 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		return ancestorOrSelfSymbol;
 	}
 
-	private estimateSelectionType(document: vscode.TextDocument, initRange: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string } {
+	// isXPathExpression: the selection is a whole XPath expression, within an attribute (or value template) whose value
+	// is delimited by attributeQuote - though rangeTagType is only xpathAttribute for one that isn't just a name
+	private estimateSelectionType(document: vscode.TextDocument, initRange: vscode.Range): { rangeTagType: RangeTagType; firstTagName: string; lastTagName: string; isXPathExpression: boolean; attributeQuote: string } {
 		let rangeTagType = RangeTagType.unknown,
 			firstTagName = '',
 			lastTagName = '',
 			firstSymbol: possDocumentSymbol | undefined,
-			lastSymbol: possDocumentSymbol | undefined;
+			lastSymbol: possDocumentSymbol | undefined,
+			isXPathExpression = false,
+			attributeQuote = '"';
 		let range = initRange;
 
 		const startPosition = range.start;
@@ -503,10 +577,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 							const diagnostics = this.xpathTokenProvider.provideXPathProblems(new CodeActionDocument(document.uri, xpathText));
 							const blockingIssue = diagnostics.find((item) => item.severity !== vscode.DiagnosticSeverity.Hint &&
 								item.code !== DiagnosticCode.unresolvedGenericRef &&
+								item.code !== DiagnosticCode.prefixedFunctionNotFound &&
 								item.code !== DiagnosticCode.unresolvedVariableRef &&
 								item.code !== DiagnosticCode.xdmDebugRef &&
 								item.code !== DiagnosticCode.parseHtmlRef);
 							if (!blockingIssue) {
+								// a whole expression, if only a name - it can be wrapped in a trace() call
+								isXPathExpression = true;
+								attributeQuote = document.getText(new vscode.Range(document.positionAt(startCharOfAttrValue - 1), document.positionAt(startCharOfAttrValue)));
 								let pass = xpathText.length > 30;
 								if (!pass) {
 									// we need an expression other than just a name or whitespace
@@ -600,7 +678,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		this.actionProps = { document, range, firstSymbol, lastSymbol, expandTextVal };
 
-		return { rangeTagType, firstTagName, lastTagName };
+		return { rangeTagType, firstTagName, lastTagName, isXPathExpression, attributeQuote };
 	}
 
 	public static getAttrStartFromSymbol(document: vscode.TextDocument, docSymbol: vscode.DocumentSymbol) {

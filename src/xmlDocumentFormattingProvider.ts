@@ -77,6 +77,46 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		}
 	};
 
+	// whether the text before a position ends within a CDATA section or a comment
+	private static isInCDataOrComment(textBefore: string) {
+		return textBefore.lastIndexOf('<![CDATA[') > textBefore.lastIndexOf(']]>') || textBefore.lastIndexOf('<!--') > textBefore.lastIndexOf('-->');
+	}
+
+	// the indentation for an empty or whitespace-only line, as after Enter - undefined if it has that already, or where
+	// whitespace is kept as it is: within xsl:text, a CDATA section or a comment
+	public emptyLineIndentation(document: vscode.TextDocument, line: number, options: vscode.FormattingOptions): string | undefined {
+		const lineStart = new vscode.Position(line, 0);
+		if (XMLDocumentFormattingProvider.isInCDataOrComment(document.getText(new vscode.Range(new vscode.Position(0, 0), lineStart)))) {
+			return undefined;
+		}
+		const edit = this.provideOnTypeFormattingEdits(document, lineStart, '\n', options, new vscode.CancellationTokenSource().token)
+			.find((e) => e.range.start.line === line && e.range.start.character === 0);
+		return edit && edit.newText.trim() === '' ? edit.newText : undefined;
+	}
+
+	// Tab, in an XSLT or XML editor: on an empty or whitespace-only line - e.g. one clicked on, with the cursor at its
+	// start - the line is indented for its context, as after Enter, with the cursor at its end; otherwise, or where the
+	// line is indented that far already, it's VS Code's Tab
+	public static async tabToIndentation(editor: vscode.TextEditor | undefined, formatter: XMLDocumentFormattingProvider) {
+		const tab = () => vscode.commands.executeCommand('tab');
+		if (!editor || editor.selections.length !== 1 || !editor.selection.isEmpty) {
+			return tab();
+		}
+		const cursor = editor.selection.active;
+		const line = editor.document.lineAt(cursor.line);
+		if (!line.isEmptyOrWhitespace) {
+			return tab();
+		}
+		const options = { tabSize: Number(editor.options.tabSize) || 4, insertSpaces: editor.options.insertSpaces !== false };
+		const indentation = formatter.emptyLineIndentation(editor.document, cursor.line, options);
+		if (indentation === undefined || indentation.length <= line.text.length) {
+			return tab();
+		}
+		await editor.edit((builder) => builder.replace(line.range, indentation));
+		const end = new vscode.Position(cursor.line, indentation.length);
+		editor.selection = new vscode.Selection(end, end);
+	}
+
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		const lastLine = document.lineAt(document.lineCount - 1);
 		const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);

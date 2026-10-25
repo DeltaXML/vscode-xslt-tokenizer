@@ -2,7 +2,7 @@
 	"name": "xslt-xpath",
 	"displayName": "XSLT/XPath for Visual Studio Code",
 	"description": "XSLT 3.0/4.0 and XPath 3.1/4.0 language support - linting, auto-completion, code documentation and Quick Run with Saxon",
-	"version": "2.0.1",
+	"version": "2.1.0",
 	"publisher": "deltaxml",
 	"icon": "xslt-xpath.png",
 	"bugs": {
@@ -40,7 +40,11 @@
 	"activationEvents": [
 		"onLanguage:xml",
 		"onLanguage:bpmn",
-		"onCommand:workbench.action.tasks.runTask"
+		"onCommand:workbench.action.tasks.runTask",
+		"onDebugResolve:xslt-saxon",
+		"onCommand:xslt-xpath.debugXslt",
+		"onDebugDynamicConfigurations:xslt-saxon",
+		"onDebugInitialConfigurations"
 	],
 	"license": "MIT",
 	"main": "./out/src/extension.js",
@@ -92,6 +96,22 @@
 			}
 		},
 		"keybindings": [
+			{
+				"command": "xslt-xpath.runXPathQuery",
+				"key": "ctrl+enter",
+				"mac": "cmd+enter",
+				"when": "editorTextFocus && editorLangId == xpath && resourceFilename == queries.xpath"
+			},
+			{
+				"command": "xslt-xpath.addXPathLocationToQueries",
+				"key": "alt+g",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|dcp|sch|bpmn)$/"
+			},
+			{
+				"command": "xslt-xpath.tabToIndentation",
+				"key": "tab",
+				"when": "editorTextFocus && !editorReadonly && !editorHasSelection && !editorHasMultipleSelections && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible && !inlineEditIsVisible && !hasOtherSuggestions && !editorTabMovesFocus && editorLangId =~ /^(xslt|xml|bpmn)$/"
+			},
 			{
 				"command": "xslt-xpath.selectCurrentElement",
 				"key": "ctrl+shift+0",
@@ -159,8 +179,19 @@
 				"category": "XML"
 			},
 			{
-				"command": "xslt-xpath.gotoXPath",
-				"title": "Goto XPath",
+				"command": "xslt-xpath.findNodesWithXPath",
+				"title": "Find Nodes with XPath...",
+				"category": "XML",
+				"icon": "$(search)"
+			},
+			{
+				"command": "xslt-xpath.addXPathLocationToQueries",
+				"title": "Add XPath Location to Queries",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.runXPathQuery",
+				"title": "Run XPath Query at Cursor",
 				"category": "XML"
 			},
 			{
@@ -255,6 +286,33 @@
 				"title": "Quick Run: Switch Processor",
 				"category": "XSLT",
 				"icon": "$(arrow-swap)"
+			},
+			{
+				"command": "xslt-xpath.debugXslt",
+				"title": "Debug Stylesheet with SaxonJ",
+				"category": "XSLT",
+				"icon": "$(debug-alt)"
+			},
+			{
+				"command": "xslt-xpath.showDebugOutput",
+				"title": "Show Debug Output",
+				"category": "XSLT",
+				"icon": "$(output)"
+			},
+			{
+				"command": "xslt-xpath.goToDebugOutputSource",
+				"title": "Go to XSLT Source",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.tabToIndentation",
+				"title": "Tab: Indent an Empty Line for Its Context",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.showDebugOutputFromVariable",
+				"title": "Show Output",
+				"category": "XSLT"
 			}
 		],
 		"views": {
@@ -277,6 +335,11 @@
 		],
 		"menus": {
 			"editor/context": [
+				{
+					"command": "xslt-xpath.goToDebugOutputSource",
+					"when": "resourceScheme == xslt-debug-output",
+					"group": "navigation@1"
+				},
 				{
 					"submenu": "xslt-xpath.xmlSelection",
 					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/",
@@ -305,14 +368,25 @@
 					"group": "1_select@5"
 				},
 				{
-					"command": "xslt-xpath.gotoXPath",
-					"group": "2_goto@1"
+					"command": "xslt-xpath.findNodesWithXPath",
+					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/",
+					"group": "3_xpath@1"
+				},
+				{
+					"command": "xslt-xpath.addXPathLocationToQueries",
+					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/",
+					"group": "3_xpath@2"
 				}
 			],
 			"editor/title": [
 				{
 					"command": "xslt-xpath.quickRunXml",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
+					"when": "resourceLangId == xml",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.findNodesWithXPath",
 					"when": "resourceLangId == xml",
 					"group": "navigation"
 				},
@@ -355,12 +429,32 @@
 					"when": "false"
 				},
 				{
+					"command": "xslt-xpath.runXPathQuery",
+					"when": "editorLangId == xpath && resourceFilename == queries.xpath"
+				},
+				{
+					"command": "xslt-xpath.addXPathLocationToQueries",
+					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/"
+				},
+				{
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
 					"when": "editorLangId == xslt"
 				},
 				{
 					"command": "xslt-xpath.wrapWith",
 					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.goToDebugOutputSource",
+					"when": "resourceScheme == xslt-debug-output"
+				},
+				{
+					"command": "xslt-xpath.showDebugOutputFromVariable",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.tabToIndentation",
+					"when": "false"
 				},
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonJ",
@@ -373,6 +467,30 @@
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonC",
 					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.debugXslt",
+					"when": "editorLangId == xslt"
+				}
+			],
+			"editor/title/run": [
+				{
+					"command": "xslt-xpath.debugXslt",
+					"when": "resourceLangId == xslt",
+					"group": "navigation@1"
+				}
+			],
+			"debug/toolBar": [
+				{
+					"command": "xslt-xpath.showDebugOutput",
+					"when": "debugType == 'xslt-saxon'"
+				}
+			],
+			"debug/variables/context": [
+				{
+					"command": "xslt-xpath.showDebugOutputFromVariable",
+					"when": "debugType == 'xslt-saxon' && debugProtocolVariableMenuContext == 'xsltOutput'",
+					"group": "navigation"
 				}
 			]
 		},
@@ -558,6 +676,21 @@
 							"path"
 						]
 					}
+				},
+				"XSLT.validation.externalFunctionPrefixes": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"scope": "resource",
+					"markdownDescription": "Prefixes of functions that the stylesheet's processing system provides, e.g. Java extension functions, such as `ext` for `ext:lookup()`. Calls of functions with these prefixes aren't checked. The quick fix for a function that isn't found adds its prefix here, in the workspace's settings."
+				},
+				"XSLT.debug.openOutput": {
+					"type": "boolean",
+					"default": false,
+					"scope": "window",
+					"description": "When debugging with SaxonJ, open the output written so far - beside the stylesheet - at the first pause where there is some. Otherwise, it's opened with the 'Show Debug Output' button on the debug toolbar, 'Show Output' on an output in the Variables view's Output section, or 'XSLT: Show Debug Output'."
 				}
 			}
 		},
@@ -1409,6 +1542,16 @@
 				"description": "End of XML DTD Declaration"
 			},
 			{
+				"id": "dtdEntityName",
+				"superType": "function",
+				"description": "XML DTD: the name an <!ENTITY> declaration declares - colored as entity references are"
+			},
+			{
+				"id": "dtdLiteral",
+				"superType": "string",
+				"description": "XML DTD: a quoted literal - e.g. an entity's value, or a system or public identifier"
+			},
+			{
 				"id": "mapKey",
 				"superType": "keyword",
 				"description": "The key of a map-entry"
@@ -1560,6 +1703,236 @@
 			{
 				"scopeName": "source.xpath-type",
 				"path": "./syntaxes/xpath-type.tmLanguage.json"
+			}
+		],
+		"debuggers": [
+			{
+				"type": "xslt-saxon",
+				"label": "XSLT (Saxon)",
+				"languages": [
+					"xslt"
+				],
+				"configurationAttributes": {
+					"launch": {
+						"properties": {
+							"quickRun": {
+								"type": "boolean",
+								"default": true,
+								"description": "Debug the stylesheet in the active editor as Quick Run runs it - with the XML context file (or from xsl:initial-template) and the Quick Run task's settings"
+							},
+							"task": {
+								"type": "string",
+								"description": "The label of an 'xslt' task in tasks.json whose settings (xsltFile, xmlSource, parameters etc.) are used - properties set here override them"
+							},
+							"stopOnEntry": {
+								"type": "boolean",
+								"default": false,
+								"description": "Pause at the first instruction executed"
+							},
+							"saxonJar": {
+								"type": "string",
+								"description": "Path of the installed Saxon jar file (Saxon 12 or later) - default: the XSLT.tasks.saxonJar setting",
+								"default": "${config:XSLT.tasks.saxonJar}"
+							},
+							"xsltFile": {
+								"type": "string",
+								"description": "The path to the XSLT stylesheet"
+							},
+							"xmlSource": {
+								"type": "string",
+								"description": "The path to the XML/JSON source file (a '.json' file is passed as JSON - otherwise set 'useJsonSource')"
+							},
+							"useJsonSource": {
+								"type": "boolean",
+								"default": true,
+								"description": "Pass the 'xmlSource' file as JSON (-json:) rather than XML (-s:). When not set, files with a '.json' extension are passed as JSON"
+							},
+							"initialTemplate": {
+								"type": "string",
+								"description": "The named template to be executed. Namespaced templates can be written as {uri}localname. Default is xsl:initial-template"
+							},
+							"initialMode": {
+								"type": "string",
+								"description": "The initial mode for the transformation. Namespaced modes can be written as {uri}localname"
+							},
+							"resultPath": {
+								"type": "string",
+								"description": "The destination path for the XSLT result"
+							},
+							"catalogFilenames": {
+								"type": "string",
+								"description": "Either a file name or a list of file names separated by semicolons; the files are OASIS XML catalogs defining how public identifiers and system identifiers (URIs) are to be redirected"
+							},
+							"configFilename": {
+								"type": "string",
+								"description": "If set, configuration properties (unless overridden by other properties here) are taken from the supplied configuration file."
+							},
+							"dtd": {
+								"type": "string",
+								"enum": [
+									"on",
+									"off"
+								],
+								"description": "Requests DTD-based validation of the source file and of any files read using the document() function"
+							},
+							"enableAssertions": {
+								"type": [
+									"string"
+								],
+								"enum": [
+									"on",
+									"off",
+									"recover"
+								],
+								"description": "Enables assertions both at compile time and at run time"
+							},
+							"allowSyntaxExtensions40": {
+								"type": [
+									"string"
+								],
+								"enum": [
+									"auto",
+									"on",
+									"off"
+								],
+								"enumDescriptions": [
+									"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+									"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
+									"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
+								],
+								"default": "auto",
+								"description": "Enables XPath 4.0 syntax (the Saxon '--allowSyntaxExtensions' option). See: https://www.saxonica.com/html/documentation13/expressions/xpath40new.html"
+							},
+							"expandValues": {
+								"type": "string",
+								"enum": [
+									"on",
+									"off"
+								],
+								"description": "Specifying 'off' suppresses expansion of DTD/Schema fixed or default values"
+							},
+							"explainFilename": {
+								"type": [
+									"string"
+								],
+								"description": "Writes an execution plan and other diagnostic information for the stylesheet to the specified filename"
+							},
+							"exportFilename": {
+								"type": "string",
+								"description": "Export filename: If set, exports the compiled stylesheet, in a form suitable for subsequent execution"
+							},
+							"parameters": {
+								"description": "The xsl:param values for the XSLT",
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"name": {
+											"type": "string",
+											"description": "The xsl:param name.\nNamespaced params are written as {uri}localname.\nSpecial prefix characters are:\n'?' (XPath)\n'!' (xsl:output)\n'+' (filename):\nSee: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+										},
+										"value": {
+											"type": "string",
+											"description": "The xsl:param value. "
+										}
+									},
+									"required": [
+										"name",
+										"value"
+									]
+								},
+								"minItems": 1
+							},
+							"features": {
+								"description": "Set a feature defined in the Saxon Configuration interface. See https://www.saxonica.com/documentation11/index.html#!configuration/config-features",
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"name": {
+											"type": "string",
+											"description": "The feature name - the last part of the Configuration name after the '/' char (name may have a uri suffix). E.g. for 'http://saxon.sf.net/feature/parserFeature?uri=' enter  'parserFeature?uri='"
+										},
+										"value": {
+											"type": "string",
+											"description": "The value for the given feature"
+										}
+									},
+									"required": [
+										"name",
+										"value"
+									]
+								},
+								"minItems": 1
+							},
+							"classPathEntries": {
+								"description": "Add Java extension libraries to the classpath",
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"minItems": 1
+							}
+						}
+					}
+				},
+				"configurationSnippets": [
+					{
+						"label": "XSLT (Saxon): Debug Active Stylesheet",
+						"description": "Debug the stylesheet in the active editor, as Quick Run runs it",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug Active Stylesheet",
+							"quickRun": true
+						}
+					},
+					{
+						"label": "XSLT (Saxon): Debug a Task",
+						"description": "Debug an 'xslt' task from tasks.json",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug ${1:task label}",
+							"task": "${1:task label}"
+						}
+					},
+					{
+						"label": "XSLT (Saxon): Debug Stylesheet",
+						"description": "Debug a stylesheet with a source file",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug XSLT",
+							"xsltFile": "^\"\\${file}\"",
+							"xmlSource": "^\"\\${command:xslt-xpath.pickXmlSourceFile}\"",
+							"resultPath": "^\"\\${workspaceFolder}/xsl-out/result1.xml\""
+						}
+					},
+					{
+						"label": "XSLT (Saxon): Debug from Initial Template",
+						"description": "Debug a stylesheet starting from xsl:initial-template",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug XSLT (initial template)",
+							"xsltFile": "^\"\\${file}\"",
+							"initialTemplate": ""
+						}
+					}
+				]
+			}
+		],
+		"breakpoints": [
+			{
+				"language": "xslt"
+			}
+		],
+		"viewsWelcome": [
+			{
+				"view": "debug",
+				"contents": "Debug the XSLT stylesheet in the active editor with SaxonJ, as Quick Run runs it.\n[Debug Stylesheet](command:xslt-xpath.debugXslt)",
+				"when": "debugStartLanguage == xslt"
 			}
 		]
 	},

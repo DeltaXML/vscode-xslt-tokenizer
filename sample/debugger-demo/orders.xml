@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<orders>
+  <order id="A-100" customer="Ada">
+    <line product="widget" category="hardware" qty="3" price="2.50"/>
+    <line product="gadget" category="hardware" qty="1" price="12.00"/>
+    <line product="manual" category="books" qty="2" price="8.75"/>
+  </order>
+  <order id="B-200" customer="Grace">
+    <line product="sprocket" category="hardware" qty="10" price="0.40"/>
+    <line product="primer" category="books" qty="1" price="15.00"/>
+  </order>
+  <order id="C-300" customer="Linus">
+    <line product="cable" category="hardware" qty="4" price="3.25"/>
+  </order>
+</orders>

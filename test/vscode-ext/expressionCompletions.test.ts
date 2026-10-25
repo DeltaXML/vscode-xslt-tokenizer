@@ -61,6 +61,14 @@ suite('XPath keyword completions', () => {
 		assert.equal(item!.filterText, 'let');
 	});
 
+	test('xdm:trace, from the bundled xdm-view library, where it is not included', async () => {
+		const items = await completions(select('xdm:tr¦'));
+		const item = items.find((i) => i.label === 'xdm:trace(…, label) - pretty-printed trace');
+		assert.isDefined(item);
+		assert.equal((item!.insertText as vscode.SnippetString).value, "xdm:trace(${1:value}, '${2:label}')$0");
+		assert.equal(item!.filterText, 'xdm:trace');
+	});
+
 	test("in XPath 4.0, the braced 'if' too", async () => {
 		assert.include(await labels(select('(1, ¦'), '4.0'), 'if (…) { … }');
 	});

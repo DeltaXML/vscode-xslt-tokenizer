@@ -41,6 +41,9 @@ import { CatalogDocumentProvider } from './catalogDocumentProvider';
 import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
+import { XPathQuery } from './xpathQuery';
+import { EntityReferences } from './entityReferences';
+import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 
 
 
@@ -165,37 +168,12 @@ export function activate(context: vscode.ExtensionContext) {
 			{ label: 'Select first child element', description: shortcut('8'), command: 'xslt-xpath.selectFirstChildElement' },
 			{ label: 'Select preceding element', description: shortcut('6'), command: 'xslt-xpath.selectPrecedingElement' },
 			{ label: 'Select following element', description: shortcut('7'), command: 'xslt-xpath.selectFollowingElement' },
-			{ label: 'Goto XPath', description: '', command: 'xslt-xpath.gotoXPath' }
+			{ label: 'Find Nodes with XPath...', description: '', command: 'xslt-xpath.findNodesWithXPath' },
+			{ label: 'Add XPath Location to Queries', description: process.platform === 'darwin' ? '⌥G' : 'Alt+G', command: 'xslt-xpath.addXPathLocationToQueries' }
 		];
 		const picked = await vscode.window.showQuickPick(items, { placeHolder: 'XML selection' });
 		if (picked) {
 			await vscode.commands.executeCommand(picked.command);
-		}
-	}
-
-	async function showGotoXPathInputBox() {
-		let symbol: vscode.DocumentSymbol|undefined;
-		const xpath = XsltSymbolProvider.getXPathFromSelection();
-		const inboxValue = xpath? xpath : '';
-		const result = await window.showInputBox({
-			value: inboxValue,
-			valueSelection: [0, inboxValue.length],
-			placeHolder: '/element/element[2]/element[3]',
-			validateInput: text => {
-				if (!text.startsWith('/')) {
-					return 'XPath should start with "/"';
-				} else {
-					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text, XsltSymbolProvider.getSymbolsForActiveDocument());
-					return symbol? null : 'No matching elements';
-				}
-				
-			}
-		});
-		if (result) {
-			XsltSymbolProvider.selectTextWithSymbol(symbol);
-			const foundSymbol = symbol !== undefined;
-			const msg = foundSymbol? `Matching element found: ${symbol?.name}` : 'No matching elements';
-			window.showInformationMessage(msg);
 		}
 	}
 
@@ -327,6 +305,34 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	}));
 
+	// reports a completed transform (a task or debug session), offering to 'Open' the result file if it exists
+	const showTransformResult = async (message: string, failed: boolean, resultFsPath: string | undefined) => {
+		let resultUri: vscode.Uri | undefined;
+		if (!failed && resultFsPath) {
+			try {
+				resultUri = vscode.Uri.file(resultFsPath);
+				await vscode.workspace.fs.stat(resultUri);
+			} catch {
+				resultUri = undefined;
+			}
+		}
+		if (resultUri) {
+			// for an HTML result, also 'Open in Browser' - VS Code's integrated browser
+			const actions = SaxonTaskProvider.resultActions(resultUri.fsPath, await vscode.commands.getCommands(true));
+			vscode.window.showInformationMessage(message, ...actions).then((choice) => {
+				if (choice === SaxonTaskProvider.openResultAction) {
+					vscode.commands.executeCommand('vscode.open', resultUri);
+				} else if (choice === SaxonTaskProvider.openResultInBrowserAction) {
+					vscode.commands.executeCommand(SaxonTaskProvider.integratedBrowserOpenFile, resultUri);
+				}
+			});
+		} else if (failed) {
+			vscode.window.showErrorMessage(message);
+		} else {
+			vscode.window.showInformationMessage(message);
+		}
+	};
+
 	// onDidEndTaskProcess (rather than onDidEndTask) provides the exit code, so 'Open' is only offered for a result
 	// written by this run - a failed run can leave an earlier run's result file in place
 	context.subscriptions.push(vscode.tasks.onDidEndTaskProcess(async (event) => {
@@ -335,34 +341,9 @@ export function activate(context: vscode.ExtensionContext) {
 			// exitCode is undefined when VS Code can't determine it (e.g. the task was terminated) - not treated as a failure
 			const failed = event.exitCode !== undefined && event.exitCode !== 0;
 			const message = failed ? `Task '${t.definition.label}' failed (exit code ${event.exitCode})` : `Completed task: '${t.definition.label}'`;
-			let resultUri: vscode.Uri | undefined;
-			if (!failed) {
-				const resultFsPath = await resolveTaskPath(t, 'resultPath');
-				if (resultFsPath) {
-					try {
-						resultUri = vscode.Uri.file(resultFsPath);
-						await vscode.workspace.fs.stat(resultUri);
-					} catch {
-						resultUri = undefined;
-					}
-				}
-			}
+			const resultFsPath = failed ? undefined : await resolveTaskPath(t, 'resultPath');
 			fileSelector.pickedValues.clear();
-			if (resultUri) {
-				// for an HTML result, also 'Open in Browser' - VS Code's integrated browser
-				const actions = SaxonTaskProvider.resultActions(resultUri.fsPath, await vscode.commands.getCommands(true));
-				vscode.window.showInformationMessage(message, ...actions).then((choice) => {
-					if (choice === SaxonTaskProvider.openResultAction) {
-						vscode.commands.executeCommand('vscode.open', resultUri);
-					} else if (choice === SaxonTaskProvider.openResultInBrowserAction) {
-						vscode.commands.executeCommand(SaxonTaskProvider.integratedBrowserOpenFile, resultUri);
-					}
-				});
-			} else if (failed) {
-				vscode.window.showErrorMessage(message);
-			} else {
-				vscode.window.showInformationMessage(message);
-			}
+			await showTransformResult(message, failed, resultFsPath);
 		}
 		fileSelector.completedPick = true; // as fileselector may not be used for next task
 	}));
@@ -391,6 +372,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickFile', async (...args) => await fileSelector.pickFile(args[0])));
+	context.subscriptions.push(vscode.commands.registerCommand(SaxonTaskProvider.parameterValueCommand, async (...args) => await fileSelector.enterParameterValue(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXsltFile', async () => await fileSelector.pickXsltFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXsltContextFile', async () => await fileSelector.pickXsltContextFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickXmlSourceFile', async () => await fileSelector.pickXmlSourceFile()));
@@ -400,7 +382,10 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickStage2ResultFile', async () => await fileSelector.pickStage2ResultFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setVariableNames', (...args) => XPathSemanticTokensProvider.setVariableNames(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
-	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
+	// XPath expressions, in a query file, evaluated on the XML context file - the nodes found are listed, to go to each
+	new XPathQuery(context);
+	// entity references, e.g. &company;: completion after '&', hover, and go to the DOCTYPE's declaration
+	EntityReferences.activate(context);
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xmlSelectionPick', () => showXMLSelectionPick()));
 	// when the index of the workspace's XSLT modules is first built, check the open modules again, for references to
 	// declarations in the stylesheets that import or include them
@@ -523,13 +508,44 @@ export function activate(context: vscode.ExtensionContext) {
 	};
 	updateQuickRunProcessorIndicators();
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => updateQuickRunProcessorIndicators()));
+
+	// the XML context file's status bar item, for a stylesheet Quick Run runs on itself (see quickRunSource): the label
+	// of its task for the selected processor - when it has no xsl:initial-template, which is used instead
+	DocumentChangeHandler.selfSourceTask = async (document) => {
+		const taskLabel = await SaxonTaskProvider.quickRunTaskLabel(getQuickRunTaskType(document.uri), document.uri.fsPath, document.uri.fsPath);
+		return taskLabel !== undefined && !await SaxonTaskProvider.declaresInitialTemplate(document, xsltDefintiionProvider) ? taskLabel : undefined;
+	};
+	// the item is first shown earlier in activation - e.g. for the stylesheet whose opening activated the extension
+	DocumentChangeHandler.refreshStatusBarItem();
+	const tasksFileWatcher = vscode.workspace.createFileSystemWatcher('**/.vscode/tasks.json');
+	context.subscriptions.push(tasksFileWatcher);
+	for (const onTasksFileEvent of [tasksFileWatcher.onDidChange, tasksFileWatcher.onDidCreate, tasksFileWatcher.onDidDelete]) {
+		context.subscriptions.push(onTasksFileEvent(() => DocumentChangeHandler.refreshStatusBarItem()));
+	}
+
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
 		if (e.affectsConfiguration('XSLT.tasks.quickRunProcessor')) {
 			updateQuickRunProcessorIndicators();
+			DocumentChangeHandler.refreshStatusBarItem();
 		}
-		// item types and notes before XSLT 4.0: check the open modules again
-		if (e.affectsConfiguration(`${ItemTypeSupport.section}.${ItemTypeSupport.setting}`)) {
+		// item types and notes before XSLT 4.0, or functions provided by the processing system: check the open modules again
+		if (e.affectsConfiguration(`${ItemTypeSupport.section}.${ItemTypeSupport.setting}`) ||
+			e.affectsConfiguration(`${XsltTokenDiagnostics.externalFunctionPrefixesSection}.${XsltTokenDiagnostics.externalFunctionPrefixesSetting}`)) {
 			relintXsltModules();
+		}
+	}));
+
+	// the quick fix for a function with a prefix that isn't found: the prefix is added to those of functions the processing
+	// system provides - in the workspace folder's settings, the workspace's, or with no workspace, the user's
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addExternalFunctionPrefix', async (prefix: string, uri?: vscode.Uri) => {
+		const config = vscode.workspace.getConfiguration(XsltTokenDiagnostics.externalFunctionPrefixesSection, uri);
+		const target = uri && vscode.workspace.getWorkspaceFolder(uri) ? vscode.ConfigurationTarget.WorkspaceFolder
+			: vscode.workspace.workspaceFolders ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+		const inspected = config.inspect<string[]>(XsltTokenDiagnostics.externalFunctionPrefixesSetting);
+		const current = (target === vscode.ConfigurationTarget.WorkspaceFolder ? inspected?.workspaceFolderValue :
+			target === vscode.ConfigurationTarget.Workspace ? inspected?.workspaceValue : inspected?.globalValue) ?? [];
+		if (!current.includes(prefix)) {
+			await config.update(XsltTokenDiagnostics.externalFunctionPrefixesSetting, current.concat([prefix]), target);
 		}
 	}));
 
@@ -598,6 +614,9 @@ export function activate(context: vscode.ExtensionContext) {
 		const xsltFsPath = xsltDocument.uri.fsPath;
 		try {
 			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask(taskType, xsltDocument, xmlSourceFsPath, xsltDefintiionProvider);
+			if (quickRunTask === 'cancelled') {
+				return;
+			}
 			if (quickRunTask) {
 				const { label, created } = quickRunTask;
 				if (created && xmlSourceFsPath && await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
@@ -613,7 +632,8 @@ export function activate(context: vscode.ExtensionContext) {
 					persistedTasks = await vscode.tasks.fetchTasks({ type: taskType });
 					const persistedTask = persistedTasks.find((t) => {
 						const folder = typeof t.scope === 'object' ? t.scope : vscode.workspace.workspaceFolders?.[0];
-						return !!folder && SaxonTaskProvider.isQuickRunTaskFor(t.definition, taskType, xsltFsPath, xmlSourceFsPath, folder.uri.fsPath);
+						// by label too: the one picked, if several tasks are for the pair
+						return !!folder && t.name === label && SaxonTaskProvider.isQuickRunTaskFor(t.definition, taskType, xsltFsPath, xmlSourceFsPath, folder.uri.fsPath);
 					});
 					if (persistedTask) {
 						await vscode.tasks.executeTask(persistedTask);
@@ -675,32 +695,163 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	};
 
-	// runs the stylesheet with the XML context file, with the selected Quick Run processor
-	const quickRunDocument = async (xsltDocument: vscode.TextDocument) => {
-		const taskType = getRunnableQuickRunTaskType(xsltDocument.uri);
-		if (!taskType) {
-			return;
-		}
+	// the XML context file to run the stylesheet with: { xmlSourceFsPath: undefined } for none, starting from
+	// xsl:initial-template - or undefined (having said why) if there's no context file and no initial template. A
+	// stylesheet can be its own source document, e.g. a quick test with a match="/" template - only when chosen, as
+	// most such stylesheets are for another kind of document: with a task for that in tasks.json, or the error's
+	// 'Run on Itself' button, which calls runOnItself
+	const quickRunSource = async (xsltDocument: vscode.TextDocument, commandName: string, taskType: QuickRunTaskType, runOnItself: () => void): Promise<{ xmlSourceFsPath: string | undefined } | undefined> => {
 		const pickContextFileAction = 'Pick XML Context File';
-		const offerContextFilePick = (message: string) => {
-			vscode.window.showErrorMessage(message, pickContextFileAction).then((choice) => {
+		const runOnItselfAction = 'Run on Itself';
+		const offerContextFilePick = (message: string, canRunOnItself = false) => {
+			const actions = canRunOnItself ? [pickContextFileAction, runOnItselfAction] : [pickContextFileAction];
+			vscode.window.showErrorMessage(message, ...actions).then((choice) => {
 				if (choice === pickContextFileAction) {
 					vscode.commands.executeCommand('xslt-xpath.pickXsltContextFile');
+				} else if (choice === runOnItselfAction) {
+					runOnItself();
 				}
 			});
 		};
 		// without an XML context file - 'None' deliberately chosen, or none chosen yet - the stylesheet runs with no
 		// source document, starting from xsl:initial-template ('-it') - an undefined xmlSourceFsPath selects this
 		// throughout - so it must declare one
-		const xmlSourceFsPath = DocumentChangeHandler.lastActiveXMLNonXSLUri?.fsPath;
-		if (!xmlSourceFsPath && !await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
+		const xmlSourceUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+		const xmlSourceFsPath = xmlSourceUri?.fsPath;
+		// a context file remembered from earlier may since have been deleted or moved
+		if (xmlSourceUri?.scheme === 'file' && !await vscode.workspace.fs.stat(xmlSourceUri).then(() => true, () => false)) {
+			offerContextFilePick(`${commandName}: the XML context file '${path.basename(xmlSourceUri.fsPath)}' no longer exists - pick another XML context file.`);
+			return undefined;
+		}
+		if (!xmlSourceFsPath &&!await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
+			const xsltFsPath = xsltDocument.uri.fsPath;
+			if (await SaxonTaskProvider.quickRunTaskLabel(taskType, xsltFsPath, xsltFsPath) !== undefined) {
+				return { xmlSourceFsPath: xsltFsPath };
+			}
 			offerContextFilePick(DocumentChangeHandler.contextFileIsNone ?
-				'Quick Run XSLT: the XML context file is \'None\', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead.' :
-				'Quick Run XSLT: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar.');
+				`${commandName}: the XML context file is 'None', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead, or run the stylesheet on itself.` :
+				`${commandName}: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar, or run the stylesheet on itself.`, true);
+			return undefined;
+		}
+		return { xmlSourceFsPath };
+	};
+
+	// runs the stylesheet with the XML context file, with the selected Quick Run processor
+	const quickRunDocument = async (xsltDocument: vscode.TextDocument) => {
+		const taskType = getRunnableQuickRunTaskType(xsltDocument.uri);
+		if (!taskType) {
 			return;
 		}
-		await runQuickRunTask(taskType, xsltDocument, xmlSourceFsPath);
+		const source = await quickRunSource(xsltDocument, 'Quick Run XSLT', taskType, () => runQuickRunTask(taskType, xsltDocument, xsltDocument.uri.fsPath));
+		if (source) {
+			await runQuickRunTask(taskType, xsltDocument, source.xmlSourceFsPath);
+		}
 	};
+
+	// the debug configuration for the active stylesheet (or the top-level stylesheet importing it), run as Quick Run
+	// runs it with SaxonJ: with the XML context file, using the persisted quick-run 'xslt' task for the pair - created
+	// on first use - so parameters etc. added to the task also apply when debugging
+	const debugConfigurationForActiveEditor = async (): Promise<vscode.DebugConfiguration | undefined> => {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
+			vscode.window.showErrorMessage('Debug XSLT: open an XSLT stylesheet in the active editor first.');
+			return undefined;
+		}
+		if (!vscode.workspace.getConfiguration('XSLT.tasks').get('saxonJar')) {
+			vscode.window.showErrorMessage('Debug XSLT: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
+			return undefined;
+		}
+		const xsltDocument = await stylesheetToRun(activeEditor.document);
+		const debugOnItself = async () => {
+			const configuration = xsltDocument ? await debugConfiguration(xsltDocument, xsltDocument.uri.fsPath) : undefined;
+			if (configuration) {
+				await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(xsltDocument!.uri) ?? vscode.workspace.workspaceFolders?.[0], configuration);
+			}
+		};
+		const source = xsltDocument ? await quickRunSource(xsltDocument, 'Debug XSLT', 'xslt', debugOnItself) : undefined;
+		if (!xsltDocument || !source) {
+			return undefined;
+		}
+		return debugConfiguration(xsltDocument, source.xmlSourceFsPath);
+	};
+
+	// the debug configuration for the stylesheet and source: its persisted quick-run 'xslt' task's
+	const debugConfiguration = async (xsltDocument: vscode.TextDocument, xmlSourceFsPath: string | undefined): Promise<vscode.DebugConfiguration | undefined> => {
+		try {
+			const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask('xslt', xsltDocument, xmlSourceFsPath, xsltDefintiionProvider);
+			if (quickRunTask === 'cancelled') {
+				return undefined;
+			}
+			if (quickRunTask) {
+				return { type: XsltDebug.type, request: 'launch', name: `Debug ${quickRunTask.label}`, task: quickRunTask.label };
+			}
+		} catch (e) {
+			console.warn('Debug XSLT: failed to find/create a persisted task, falling back to an ad hoc configuration.', e);
+		}
+		// no workspace folder to persist a task in - with no resultPath, the result is shown in the Debug Console
+		const { type, label, ...definition } = SaxonTaskProvider.createQuickRunTaskDefinition('xslt', 'Debug XSLT', xsltDocument.uri.fsPath, xmlSourceFsPath);
+		return { ...definition, type: XsltDebug.type, request: 'launch', name: 'Debug XSLT' };
+	};
+
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.debugXslt', async () => {
+		const configuration = await debugConfigurationForActiveEditor();
+		if (configuration) {
+			const folder = vscode.window.activeTextEditor ? vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri) : undefined;
+			await vscode.debug.startDebugging(folder ?? vscode.workspace.workspaceFolders?.[0], configuration);
+		}
+	}));
+	const debugConfigurationProvider = new XsltDebugConfigurationProvider(debugConfigurationForActiveEditor);
+	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider(XsltDebug.type, debugConfigurationProvider));
+	// the configurations offered in the Run and Debug view with no launch.json - only provideDebugConfigurations is
+	// used for these, so a separate provider (resolveDebugConfiguration is called for each registered provider)
+	context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider(XsltDebug.type, {
+		provideDebugConfigurations: (folder) => debugConfigurationProvider.provideDebugConfigurations(folder)
+	}, vscode.DebugConfigurationProviderTriggerKind.Dynamic));
+	context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(XsltDebug.type, new XsltDebugAdapterFactory(context.extensionUri)));
+	context.subscriptions.push(vscode.languages.registerEvaluatableExpressionProvider({ language: 'xslt' }, new XsltEvaluatableExpressionProvider()));
+	// while paused, variable values at their declarations
+	context.subscriptions.push(vscode.languages.registerInlineValuesProvider({ language: 'xslt' }, new XsltInlineValuesProvider()));
+	// the output written so far, while debugging
+	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(XsltDebugOutputs.scheme, XsltDebugOutputs.get()));
+	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
+		XsltDebugOutputs.revealEnd(e.document);
+		if (e.contentChanges.length > 0) {
+			// Saxon's errors from the last debug session, for a file that's now been edited
+			XsltDebugProblems.clearDocument(e.document.uri);
+		}
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showDebugOutput', () => XsltDebugOutputs.get().show()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.showDebugOutputFromVariable', (variableContext) => XsltDebugOutputs.get().showFromVariable(variableContext)));
+	// from a part of an XML output to the stylesheet instruction that wrote it: go to definition, and a command that keeps
+	// the output in view
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ scheme: XsltDebugOutputs.scheme }, XsltDebugOutputs.get()));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.goToDebugOutputSource', () => XsltDebugOutputs.get().goToSource()));
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => XsltDebugOutputs.get().revealInOtherGroup(editor)));
+	// a hint at the cursor's line, of the keys for that
+	context.subscriptions.push(vscode.languages.registerInlayHintsProvider({ scheme: XsltDebugOutputs.scheme }, XsltDebugOutputs.get()));
+	context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection((e) => XsltDebugOutputs.get().selectionChanged(e)));
+	// output views restored from the last window, which would be empty
+	XsltDebugOutputs.get().closeRestoredTabs(vscode.window.tabGroups.all.flatMap((group) => group.tabs));
+	context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs((e) => XsltDebugOutputs.get().closeRestoredTabs(e.opened)));
+	const debugExitCodes = new XsltDebugExitCodes();
+	context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(XsltDebug.type, debugExitCodes));
+	// as for tasks: when the transform completes, 'Open' the result
+	context.subscriptions.push(vscode.debug.onDidTerminateDebugSession(async (session) => {
+		if (session.type === XsltDebug.type) {
+			fileSelector.pickedValues.clear();
+			// undefined if the session was stopped before the transform completed
+			const exitCode = debugExitCodes.take(session);
+			const staticErrors = debugExitCodes.takeStaticErrors(session);
+			const failure = debugExitCodes.takeFailure(session);
+			if (exitCode !== undefined) {
+				const failed = exitCode !== 0;
+				const message = XsltDebug.sessionEndMessage(session.name, exitCode, staticErrors, failure);
+				const resultPath: string | undefined = session.configuration.resultPath;
+				const resultFsPath = resultPath && !path.isAbsolute(resultPath) && session.workspaceFolder ? path.join(session.workspaceFolder.uri.fsPath, resultPath) : resultPath;
+				await showTransformResult(message, failed, resultFsPath);
+			}
+		}
+	}));
 	// the processor-specific variants exist only so the editor title play button's tooltip names the processor
 	for (const command of ['xslt-xpath.quickRunXslt', 'xslt-xpath.quickRunXsltSaxonJ', 'xslt-xpath.quickRunXsltSaxonJS', 'xslt-xpath.quickRunXsltSaxonC']) {
 		context.subscriptions.push(vscode.commands.registerCommand(command, quickRunXslt));
@@ -794,7 +945,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'bpmn' }, new XsltSemanticTokensProvider(XMLConfiguration.configuration), legend));
 
 	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
-	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, new XPathSemanticTokensProvider(xpathDiagnosticsCollection), legend));
+	const xpathSemanticTokensProvider = new XPathSemanticTokensProvider(xpathDiagnosticsCollection);
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xpath' }, xpathSemanticTokensProvider, legend));
+	// the 'Find Nodes with XPath' query file: checked again when it's to run on another XML file
+	context.subscriptions.push(XPathQuery.onDidChangeTarget(() => vscode.workspace.textDocuments.filter((doc) => XPathQuery.isQueryFile(doc))
+		.forEach((doc) => xpathSemanticTokensProvider.recheck(doc))));
 	// formatter
 	let xsltFormatter = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
 	let xpathFormatter = new XMLDocumentFormattingProvider(XPathConfiguration.configuration);
@@ -808,6 +963,10 @@ export function activate(context: vscode.ExtensionContext) {
 		xsltFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xslt',
 		xsltFormatter, '\n', '/'));
+
+	// Tab on an empty line, in XSLT and XML: to the indentation for its context (see the keybinding's 'when')
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.tabToIndentation', () =>
+		XMLDocumentFormattingProvider.tabToIndentation(vscode.window.activeTextEditor, vscode.window.activeTextEditor?.document.languageId === 'xslt' ? xsltFormatter : xmlFormatter)));
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xpath',
 		xpathFormatter));
@@ -902,27 +1061,43 @@ export class XPathSemanticTokensProvider implements vscode.DocumentSemanticToken
 	};
 
 	public provideXPathProblems(document: vscode.TextDocument) {
-		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-		this.xpLexer.documentTokens = [];
-		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition);
-		return XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, [], [], []);
+		return this.expressionTokens(document).flatMap((tokens) =>
+			XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, tokens, [], [], []));
+	}
+
+	// the document's tokens - or, in the 'Find Nodes with XPath' query file, each expression's, lexed on its own
+	private expressionTokens(document: vscode.TextDocument): Token[][] {
+		const texts = XPathQuery.isQueryFile(document) ? XPathQuery.separateBlocks(document.getText()) : [document.getText()];
+		return texts.map((text) => {
+			const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+			this.xpLexer.documentTokens = [];
+			return this.xpLexer.analyse(text, ExitCondition.None, lexPosition);
+		});
 	}
 
 	async provideDocumentSemanticTokens(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.SemanticTokens> {
-		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
-		this.xpLexer.documentTokens = [];
-		const allTokens = this.xpLexer.analyse(document.getText(), ExitCondition.None, lexPosition);
-		setTimeout(() => this.reportProblems(allTokens, document), 0);
+		const expressionTokens = this.expressionTokens(document);
+		setTimeout(() => this.reportProblems(expressionTokens, document), 0);
 		const builder = new vscode.SemanticTokensBuilder();
-		allTokens.forEach((token) => {
+		expressionTokens.flat().forEach((token) => {
 			builder.push(token.line, token.startCharacter, token.length, token.tokenType, 0);
 		});
 		return builder.build();
 	}
 
-	private reportProblems(allTokens: Token[], document: vscode.TextDocument) {
+	// checked again, e.g. for another XML file's namespace prefixes
+	public recheck(document: vscode.TextDocument) {
+		this.reportProblems(this.expressionTokens(document), document);
+	}
+
+	private reportProblems(expressionTokens: Token[][], document: vscode.TextDocument) {
 		if (this.collection) {
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, DocumentChangeHandler.lastXMLDocumentGlobalData, XPathSemanticTokensProvider.globalInstructionData, []);
+			// the prefixes declared in the XML file: for the 'Find Nodes with XPath' query file, the XML file it runs on -
+			// otherwise the last XML file (or stylesheet) edited
+			const contextFile = XPathQuery.isQueryFile(document) ? XPathQuery.target : undefined;
+			const xmlData = (contextFile && DocumentChangeHandler.xmlnsPrefixesOf(contextFile)) || DocumentChangeHandler.lastXMLDocumentGlobalData;
+			let diagnostics = expressionTokens.flatMap((allTokens) =>
+				XsltTokenDiagnostics.calculateDiagnostics(XPathConfiguration.configuration, DocumentTypes.XPath, document, allTokens, xmlData, XPathSemanticTokensProvider.globalInstructionData, []));
 			if (diagnostics.length > 0) {
 				this.collection.set(document.uri, diagnostics);
 			} else {
