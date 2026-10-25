@@ -46,7 +46,10 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(awk '/public static textNodeSpan/{f=1} f&&/^\t}$/{print NR; exit}' src/xpathQuery.ts)",
-      "Bash(node scripts/test-debugger.js debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)"
+      "Bash(node scripts/test-debugger.js debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)",
+      "Read(//Users/phil.fearon/Documents/github/deltaxml.github.io/vscode-xslt-xpath/authoring/**)",
+      "Bash(grep -n -i -B3 -A12 \"goto xpath\\\\|XML Selection\\\\|Select Element\" navigation.xml editing.xml)",
+      "Bash(cat layout.xml)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"
