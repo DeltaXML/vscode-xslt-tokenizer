@@ -96,7 +96,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
       <li>Go to (or peek) definition, and find references</li>
       <li>Go to the declarations of record fields</li>
       <li>Outline, breadcrumbs and Go to Symbol</li>
-      <li><i>Find nodes</i> using a fully featured XPath editor</li>
+      <li><i>Find nodes</i> in XML with a fully featured XPath editor</li>
       <li>Links for <code>xsl:import</code> and <code>xsl:include</code></li>
       <li>XSLT Imports view, with inferred top-level stylesheets</li>
       <li>Filterable dropdown listing all symbols and modes</li>
