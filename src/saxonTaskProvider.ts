@@ -247,10 +247,13 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return folder ?? vscode.TaskScope.Workspace;
     }
 
+    // a relative path, e.g. 'xsl/main.xsl', is relative to the workspace folder - the task runs there; another
+    // variable, e.g. ${file} or ${command:...}, is left as it is, so it matches no file
     private static resolveStoredPath(value: string, workspaceFolderFsPath: string) {
-        return path.normalize(value.startsWith('${workspaceFolder}')
-            ? path.join(workspaceFolderFsPath, value.substring('${workspaceFolder}'.length))
-            : value);
+        if (value.startsWith('${workspaceFolder}')) {
+            return path.normalize(path.join(workspaceFolderFsPath, value.substring('${workspaceFolder}'.length)));
+        }
+        return path.normalize(path.isAbsolute(value) || value.includes('${') ? value : path.join(workspaceFolderFsPath, value));
     }
 
     // true if this stylesheet, or any module it imports/includes, declares a template named xsl:initial-template -

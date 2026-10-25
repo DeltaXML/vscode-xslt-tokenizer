@@ -46,6 +46,13 @@ suite('Quick Run - persisted task matching', () => {
 		assert.isTrue(SaxonTaskProvider.isQuickRunTaskFor(task, 'xslt', outside, fsPath('books.xml'), workspaceFolder));
 	});
 
+	test('matches paths relative to the workspace folder, as the task runs there', () => {
+		const task = definition('xsl/report.xsl', 'data/books.xml');
+		assert.isTrue(SaxonTaskProvider.isQuickRunTaskFor(task, 'xslt', fsPath('xsl', 'report.xsl'), fsPath('data', 'books.xml'), workspaceFolder));
+		assert.isTrue(SaxonTaskProvider.hasXmlSource(task, fsPath('data', 'books.xml'), workspaceFolder));
+		assert.isFalse(SaxonTaskProvider.isQuickRunTaskFor(task, 'xslt', fsPath('report.xsl'), fsPath('data', 'books.xml'), workspaceFolder));
+	});
+
 	test('with no XML source, matches tasks whose xmlSource is empty or absent', () => {
 		const xslt = fsPath('report.xsl');
 		const emptySource = definition('${workspaceFolder}/report.xsl', '');

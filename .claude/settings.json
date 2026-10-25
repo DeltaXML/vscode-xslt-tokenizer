@@ -23,7 +23,14 @@
       "Bash(sed -i '' 's#http://github.com/pgfearo/xdm-viewer#http://deltaxignia.com/ns/xdm-persistence#' /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/trace/trace-proto.xsl)",
       "Bash(java -cp ~/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform -xsl:/private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/trace/trace-proto.xsl -s:debugger/test/basic.xml)",
       "Read(//Users/phil.fearon/Documents/github/xdm-viewer/**)",
-      "Bash(sed -n 90,150p tests/test-debug.xsl)"
+      "Bash(sed -n 90,150p tests/test-debug.xsl)",
+      "Read(//Users/phil.fearon/dev-research/linear-recursive-sequence-gen/**)",
+      "Bash(ls -la)",
+      "Bash(ls .vscode)",
+      "Bash(cat .vscode/tasks.json)",
+      "Bash(find . -name \"*.xsl*\" -not -path \"*/node_modules/*\")",
+      "Bash(grep -n \"private static resolveStoredPath\" -A6 src/saxonTaskProvider.ts; grep -n \"initial-template\\\\|match=\\\\\"/\\\\\"\\\\|xsl:template\" /Users/phil.fearon/dev-research/linear-recursive-sequence-gen/xsl/sequence-gen.xsl | head; grep -n \"case 'xsltFile'\\\\|case 'xmlSource'\" -A3 src/saxonTaskProvider.ts | head -12)",
+      "Read(//Users/phil.fearon/dev-research/linear-recursive-sequence-gen/xsl/**)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"
