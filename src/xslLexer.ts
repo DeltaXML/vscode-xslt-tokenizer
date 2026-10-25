@@ -223,6 +223,12 @@ export class XslLexer {
     private genericTvtAttributes: string[] = [];
     private nativePrefixLength = 0;
     private dtdNesting = 0;
+    // within a <!...>: its last two characters, the quote of a literal it's in, whether it's in a processing
+    // instruction, and whether a comment in a DOCTYPE's internal subset is followed by more of the DOCTYPE
+    private exclamPrevChars = '';
+    private dtdQuote = '';
+    private dtdInPi = false;
+    private dtdResumeAfterComment = false;
     private nonNativeAvts = false;
     private docType: DocumentTypes;
     private static splitModesregexp = /([^\s]+)|(\s+)/g;
@@ -349,14 +355,33 @@ export class XslLexer {
                     this.commentCharCount = 4;
                 }
                 break;
-            case XMLCharState.lExclam:
-                // assume  <![CDATA[
-                if (char === '[' && nextChar === 'C') {
+            case XMLCharState.lExclam: {
+                // a <!DOCTYPE ...> - with its internal subset of declarations, each <!...> - a comment or a CDATA section
+                const afterLtExclam = this.exclamPrevChars === '<!';
+                this.exclamPrevChars = (this.exclamPrevChars + char).slice(-2);
+                if (this.dtdQuote) {
+                    // a literal, e.g. an entity's value: no markup within it
+                    if (char === this.dtdQuote) {
+                        this.dtdQuote = '';
+                    }
+                } else if (this.dtdInPi) {
+                    if (char === '>' && this.exclamPrevChars === '?>') {
+                        this.dtdInPi = false;
+                    }
+                } else if (char === '[' && nextChar === 'C' && afterLtExclam) {
+                    // assume  <![CDATA[
                     this.cdataCharCount = 0;
                     rc = XMLCharState.lCd;
-                } else if (char === '-' && nextChar === '-') {
+                } else if (char === '-' && nextChar === '-' && afterLtExclam) {
                     rc = XMLCharState.lComment;
                     this.commentCharCount = 0;
+                    if (this.dtdNesting > 0) {
+                        // a comment in the internal subset: the DTD goes on after it, and its '<' isn't closed by a '>' here
+                        this.dtdNesting--;
+                        this.dtdResumeAfterComment = true;
+                    }
+                } else if (char === '"' || char === "'") {
+                    this.dtdQuote = char;
                 } else if (char === '>') {
                     this.dtdNesting--;
                     if (this.dtdNesting < 0) {
@@ -364,9 +389,23 @@ export class XslLexer {
                         rc = XMLCharState.rDtd;
                     }
                 } else if (char === '<') {
-                    this.dtdNesting++;
+                    if (nextChar === '?') {
+                        this.dtdInPi = true;
+                    } else {
+                        this.dtdNesting++;
+                    }
                 }
-                // TODO: Handle internal DTD subset
+                break;
+            }
+            case XMLCharState.rComment:
+                if (this.dtdResumeAfterComment) {
+                    // the rest of the DOCTYPE, after a comment in its internal subset
+                    this.dtdResumeAfterComment = false;
+                    this.exclamPrevChars = '';
+                    rc = this.calcNewState(isCurrentCharNewLine, char, nextChar, XMLCharState.lExclam);
+                } else {
+                    rc = this.testChar(char, nextChar, false);
+                }
                 break;
             case XMLCharState.lCd:
                 switch (this.cdataCharCount) {
@@ -569,6 +608,16 @@ export class XslLexer {
         return rc;
     }
 
+    // a '<!' - not within a DOCTYPE
+    private startExclam(): XMLCharState {
+        this.exclamPrevChars = '<';
+        this.dtdQuote = '';
+        this.dtdInPi = false;
+        this.dtdNesting = 0;
+        this.dtdResumeAfterComment = false;
+        return XMLCharState.lExclam;
+    }
+
     private testAttNameChar (char: string, nextChar: string): XMLCharState {
         let rc: XMLCharState;
 
@@ -579,7 +628,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -621,7 +670,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -662,7 +711,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -912,6 +961,16 @@ export class XslLexer {
                             if (nextState === XMLCharState.rStNoAtt && this.isXPathTextElement(isNativeElement, tagElementName)) {
                                 xmlElementStack[xmlElementStack.length - 1].xpathText = true;
                                 nextChar = this.analyseXPathText(xpLexer, ExitCondition.LessThan, xsl, result);
+                            }
+                            break;
+                        case XMLCharState.lComment:
+                            if (currentState === XMLCharState.lExclam) {
+                                // the DOCTYPE before a comment in its internal subset, on the comment's line - at the
+                                // comment's first '-', its '<' is two characters back
+                                const commentStart = this.lineCharCount - 3;
+                                if (commentStart > tokenStartChar) {
+                                    this.addCharTokenToResult(tokenStartChar, commentStart - tokenStartChar, XSLTokenLevelState.dtd, result, currentState);
+                                }
                             }
                             break;
                         case XMLCharState.rDtd:
