@@ -507,6 +507,27 @@ async function testLazyLet(saxonJar) {
     assert.ok(steppedInto.some((line, i) => line === '7' && ['9', '7'].includes(steppedInto[i - 1])), steppedInto.join(' '));
 }
 
+// 'Find Nodes with XPath' (XPathQuery, a main class of the adapter's jar): the nodes an expression finds, by where they
+// are among the document's elements - unprefixed names in the document's default namespace, the document element's
+// prefixes and any given - atomic values as they are, and Saxon's error, with where it is in the expression
+function testXPathQuery(saxonJar) {
+    const xml = '<orders xmlns="urn:orders" xmlns:x="urn:extra">\n  <order id="A1" status="late"><item>pen</item><x:note>urgent</x:note></order>\n' +
+        '  <order id="B2" status="ok"><item>ink</item></order>\n</orders>';
+    const query = (xpath, namespaces) => {
+        const result = require('child_process').spawnSync('java', ['-cp', [adapterJar, saxonJar].join(path.delimiter), 'com.deltaxml.xslt.debug.XPathQuery'],
+            { input: JSON.stringify({ xpath, xml, systemId: 'file:///tmp/orders.xml', namespaces }), encoding: 'utf8' });
+        return JSON.parse(result.stdout);
+    };
+    assert.deepStrictEqual(query("//order[@status = 'late']/item").items, [{ kind: 'node', nodeKind: 'element', path: '/orders/order[1]/item', positions: [1, 1, 1] }]);
+    assert.deepStrictEqual(query('//order[2]/@id | //x:note/text()').items.map((item) => [item.nodeKind, item.positions, item.name, item.value]),
+        [['text', [1, 1, 2], undefined, 'urgent'], ['attribute', [1, 2], 'id', 'B2']]);
+    assert.deepStrictEqual(query('//p:note', { p: 'urn:extra' }).items.map((item) => item.path), ['/orders/order[1]/x:note']);
+    assert.deepStrictEqual(query('count(//order), (1 to 2) ! (. * 2)').items.map((item) => item.value), ['2', '2', '4']);
+    const error = query('//order[').error;
+    assert.strictEqual(error.code, 'XPST0003');
+    assert.deepStrictEqual([error.line, error.column], [1, 8]);
+}
+
 // an inline function that a stylesheet function returns, called later elsewhere - its compiled body, traced (not
 // the debugger's instrumented copy, used while stepping through the expression that makes it): a breakpoint in its
 // body stops for each call, in a frame of its own, with its captured variables as locals; Step Into from where it's
@@ -2269,7 +2290,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

@@ -97,6 +97,12 @@
 		},
 		"keybindings": [
 			{
+				"command": "xslt-xpath.runXPathQuery",
+				"key": "ctrl+enter",
+				"mac": "cmd+enter",
+				"when": "editorTextFocus && editorLangId == xpath && resourceFilename == queries.xpath"
+			},
+			{
 				"command": "xslt-xpath.tabToIndentation",
 				"key": "tab",
 				"when": "editorTextFocus && !editorReadonly && !editorHasSelection && !editorHasMultipleSelections && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible && !inlineEditIsVisible && !hasOtherSuggestions && !editorTabMovesFocus && editorLangId =~ /^(xslt|xml|bpmn)$/"
@@ -170,6 +176,16 @@
 			{
 				"command": "xslt-xpath.gotoXPath",
 				"title": "Goto XPath",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.findNodesWithXPath",
+				"title": "Find Nodes with XPath...",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.runXPathQuery",
+				"title": "Run XPath Query at Cursor",
 				"category": "XML"
 			},
 			{

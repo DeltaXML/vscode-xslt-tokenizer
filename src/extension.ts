@@ -41,6 +41,7 @@ import { CatalogDocumentProvider } from './catalogDocumentProvider';
 import { ImportIndex } from './importIndex';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
+import { XPathQuery } from './xpathQuery';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 
 
@@ -166,7 +167,8 @@ export function activate(context: vscode.ExtensionContext) {
 			{ label: 'Select first child element', description: shortcut('8'), command: 'xslt-xpath.selectFirstChildElement' },
 			{ label: 'Select preceding element', description: shortcut('6'), command: 'xslt-xpath.selectPrecedingElement' },
 			{ label: 'Select following element', description: shortcut('7'), command: 'xslt-xpath.selectFollowingElement' },
-			{ label: 'Goto XPath', description: '', command: 'xslt-xpath.gotoXPath' }
+			{ label: 'Goto XPath', description: '', command: 'xslt-xpath.gotoXPath' },
+			{ label: 'Find Nodes with XPath...', description: '', command: 'xslt-xpath.findNodesWithXPath' }
 		];
 		const picked = await vscode.window.showQuickPick(items, { placeHolder: 'XML selection' });
 		if (picked) {
@@ -406,6 +408,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setVariableNames', (...args) => XPathSemanticTokensProvider.setVariableNames(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
+	// XPath expressions, in a query file, evaluated on the XML context file - the nodes found are listed, to go to each
+	new XPathQuery(context);
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xmlSelectionPick', () => showXMLSelectionPick()));
 	// when the index of the workspace's XSLT modules is first built, check the open modules again, for references to
 	// declarations in the stylesheets that import or include them

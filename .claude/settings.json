@@ -38,7 +38,9 @@
       "Bash(wc -l *.java)",
       "Bash(grep -n \"static.*instrument\\\\|UserFunctionReference\\\\|getNominalTarget\\\\|class LocatingParser\\\\|starts\\\\b\" XPathEngine.java)",
       "Bash(java -cp ~/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform -xsl:debugger/test/returned-function.xsl -s:debugger/test/basic.xml)",
-      "Bash(node /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/one-test.js ~/opt/SaxonPE13-1J/saxon-pe-13.1.jar)"
+      "Bash(node /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/one-test.js ~/opt/SaxonPE13-1J/saxon-pe-13.1.jar)",
+      "Bash(node -e 'const p=require\\(\"./package.json\"\\);console.log\\(JSON.stringify\\(p.dependencies\\), JSON.stringify\\(p.devDependencies\\)\\)')",
+      "Bash(node -e 'const p=require\\(\"./package.json\"\\); const m=p.contributes.menus.commandPalette||[]; console.log\\(m.filter\\(x=>/gotoXPath|runXPath/.test\\(x.command\\)\\)\\)')"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"
