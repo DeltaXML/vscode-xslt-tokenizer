@@ -30,7 +30,8 @@
       "Bash(cat .vscode/tasks.json)",
       "Bash(find . -name \"*.xsl*\" -not -path \"*/node_modules/*\")",
       "Bash(grep -n \"private static resolveStoredPath\" -A6 src/saxonTaskProvider.ts; grep -n \"initial-template\\\\|match=\\\\\"/\\\\\"\\\\|xsl:template\" /Users/phil.fearon/dev-research/linear-recursive-sequence-gen/xsl/sequence-gen.xsl | head; grep -n \"case 'xsltFile'\\\\|case 'xmlSource'\" -A3 src/saxonTaskProvider.ts | head -12)",
-      "Read(//Users/phil.fearon/dev-research/linear-recursive-sequence-gen/xsl/**)"
+      "Read(//Users/phil.fearon/dev-research/linear-recursive-sequence-gen/xsl/**)",
+      "Bash(env -u ELECTRON_RUN_AS_NODE node /private/tmp/claude-502/-Users-phil-fearon-dev-vscode-xslt-tokenizer/40170564-63b4-46b0-81d6-c042726494b7/scratchpad/selfprobe/run-selfA.js)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

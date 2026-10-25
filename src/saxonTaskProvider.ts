@@ -115,15 +115,22 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return path.relative(docBaseURI, xdmView.fsPath);
     }
 
-    // whether the first workspace folder's tasks.json has a quick-run task of this type for the stylesheet and source -
-    // e.g. one that runs a stylesheet on itself, as its own source document
-    public static async hasQuickRunTask(taskType: QuickRunTaskType, xsltFsPath: string, xmlSourceFsPath: string | undefined): Promise<boolean> {
+    // the label of the first workspace folder's quick-run task of this type for the stylesheet and source, if there is
+    // one - e.g. a task that runs a stylesheet on itself, as its own source document
+    public static async quickRunTaskLabel(taskType: QuickRunTaskType, xsltFsPath: string, xmlSourceFsPath: string | undefined): Promise<string | undefined> {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
-            return false;
+            return undefined;
         }
-        const tasks: vscode.TaskDefinition[] = (await SaxonJsTaskProvider.getTasksObject())?.tasks || [];
-        return tasks.some((t) => SaxonTaskProvider.isQuickRunTaskFor(t, taskType, xsltFsPath, xmlSourceFsPath, workspaceFolder.uri.fsPath));
+        // as saved, as the task runs - not an open document's text, which VS Code keeps after the file's deleted
+        let text: string;
+        try {
+            text = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'))).toString('utf8');
+        } catch {
+            return undefined;
+        }
+        const tasks: vscode.TaskDefinition[] = jsc.parse(text)?.tasks || [];
+        return tasks.find((t) => SaxonTaskProvider.isQuickRunTaskFor(t, taskType, xsltFsPath, xmlSourceFsPath, workspaceFolder.uri.fsPath))?.label;
     }
 
     // finds (or persists, on first use) a task of the given quick-run type ('xslt', 'xslt-js' or 'xslt-c') in

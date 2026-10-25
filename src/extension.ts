@@ -528,9 +528,25 @@ export function activate(context: vscode.ExtensionContext) {
 	};
 	updateQuickRunProcessorIndicators();
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => updateQuickRunProcessorIndicators()));
+
+	// the XML context file's status bar item, for a stylesheet Quick Run runs on itself (see quickRunSource): the label
+	// of its task for the selected processor - when it has no xsl:initial-template, which is used instead
+	DocumentChangeHandler.selfSourceTask = async (document) => {
+		const taskLabel = await SaxonTaskProvider.quickRunTaskLabel(getQuickRunTaskType(document.uri), document.uri.fsPath, document.uri.fsPath);
+		return taskLabel !== undefined && !await SaxonTaskProvider.declaresInitialTemplate(document, xsltDefintiionProvider) ? taskLabel : undefined;
+	};
+	// the item is first shown earlier in activation - e.g. for the stylesheet whose opening activated the extension
+	DocumentChangeHandler.refreshStatusBarItem();
+	const tasksFileWatcher = vscode.workspace.createFileSystemWatcher('**/.vscode/tasks.json');
+	context.subscriptions.push(tasksFileWatcher);
+	for (const onTasksFileEvent of [tasksFileWatcher.onDidChange, tasksFileWatcher.onDidCreate, tasksFileWatcher.onDidDelete]) {
+		context.subscriptions.push(onTasksFileEvent(() => DocumentChangeHandler.refreshStatusBarItem()));
+	}
+
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
 		if (e.affectsConfiguration('XSLT.tasks.quickRunProcessor')) {
 			updateQuickRunProcessorIndicators();
+			DocumentChangeHandler.refreshStatusBarItem();
 		}
 		// item types and notes before XSLT 4.0, or functions provided by the processing system: check the open modules again
 		if (e.affectsConfiguration(`${ItemTypeSupport.section}.${ItemTypeSupport.setting}`) ||
@@ -729,7 +745,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		if (!xmlSourceFsPath &&!await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
 			const xsltFsPath = xsltDocument.uri.fsPath;
-			if (await SaxonTaskProvider.hasQuickRunTask(taskType, xsltFsPath, xsltFsPath)) {
+			if (await SaxonTaskProvider.quickRunTaskLabel(taskType, xsltFsPath, xsltFsPath) !== undefined) {
 				return { xmlSourceFsPath: xsltFsPath };
 			}
 			offerContextFilePick(DocumentChangeHandler.contextFileIsNone ?
