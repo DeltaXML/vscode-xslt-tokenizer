@@ -103,6 +103,11 @@
 				"when": "editorTextFocus && editorLangId == xpath && resourceFilename == queries.xpath"
 			},
 			{
+				"command": "xslt-xpath.addXPathLocationToQueries",
+				"key": "alt+g",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|dcp|sch|bpmn)$/"
+			},
+			{
 				"command": "xslt-xpath.tabToIndentation",
 				"key": "tab",
 				"when": "editorTextFocus && !editorReadonly && !editorHasSelection && !editorHasMultipleSelections && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible && !inlineEditIsVisible && !hasOtherSuggestions && !editorTabMovesFocus && editorLangId =~ /^(xslt|xml|bpmn)$/"
@@ -171,11 +176,6 @@
 			{
 				"command": "xslt-xpath.formatUnchecked",
 				"title": "Format XML with newlines inside mixed-content",
-				"category": "XML"
-			},
-			{
-				"command": "xslt-xpath.gotoXPath",
-				"title": "Goto XPath",
 				"category": "XML"
 			},
 			{
@@ -366,10 +366,6 @@
 				{
 					"command": "xslt-xpath.selectFollowingElement",
 					"group": "1_select@5"
-				},
-				{
-					"command": "xslt-xpath.gotoXPath",
-					"group": "2_goto@1"
 				},
 				{
 					"command": "xslt-xpath.findNodesWithXPath",

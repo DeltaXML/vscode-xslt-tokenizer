@@ -45,7 +45,8 @@
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('package.json','utf8'\\)\\)\")",
       "Bash(npx tsc *)",
       "Bash(npm run *)",
-      "Bash(awk '/public static textNodeSpan/{f=1} f&&/^\t}$/{print NR; exit}' src/xpathQuery.ts)"
+      "Bash(awk '/public static textNodeSpan/{f=1} f&&/^\t}$/{print NR; exit}' src/xpathQuery.ts)",
+      "Bash(node scripts/test-debugger.js debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

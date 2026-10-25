@@ -165,8 +165,9 @@ The XML selection commands are also in the **XML Selection** submenu of the edit
 
 | Command  | Key-Binding (macOS / Windows, Linux) | Details |
 | ------- | ------- | --------- |
-| XML: Goto XPath |  | Initially shows current XPath at the text prompt  |
-| XML: Select Element... | ⇧⌘2 / Ctrl+Shift+2 | Quick pick of the XML selection commands, and Goto XPath |
+| XML: Find Nodes with XPath... |  | Opens the XPath query file below the XML file |
+| XML: Add XPath Location to Queries | ⌥G / Alt+G | Adds the location of the node at the cursor to the XPath query file |
+| XML: Select Element... | ⇧⌘2 / Ctrl+Shift+2 | Quick pick of the XML selection commands, and the XPath query commands |
 | XML: Select current element | ⇧⌘0 / Ctrl+Shift+0 | Includes start/end tags |
 | XML: Select parent element | ⇧⌘9 / Ctrl+Shift+9 | Includes start/end tags |
 | XML: Select first child element | ⇧⌘8 / Ctrl+Shift+8 | Includes start/end tags |

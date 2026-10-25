@@ -167,39 +167,12 @@ export function activate(context: vscode.ExtensionContext) {
 			{ label: 'Select first child element', description: shortcut('8'), command: 'xslt-xpath.selectFirstChildElement' },
 			{ label: 'Select preceding element', description: shortcut('6'), command: 'xslt-xpath.selectPrecedingElement' },
 			{ label: 'Select following element', description: shortcut('7'), command: 'xslt-xpath.selectFollowingElement' },
-			{ label: 'Goto XPath', description: '', command: 'xslt-xpath.gotoXPath' },
 			{ label: 'Find Nodes with XPath...', description: '', command: 'xslt-xpath.findNodesWithXPath' },
-			{ label: 'Add XPath Location to Queries', description: '', command: 'xslt-xpath.addXPathLocationToQueries' }
+			{ label: 'Add XPath Location to Queries', description: process.platform === 'darwin' ? '⌥G' : 'Alt+G', command: 'xslt-xpath.addXPathLocationToQueries' }
 		];
 		const picked = await vscode.window.showQuickPick(items, { placeHolder: 'XML selection' });
 		if (picked) {
 			await vscode.commands.executeCommand(picked.command);
-		}
-	}
-
-	async function showGotoXPathInputBox() {
-		let symbol: vscode.DocumentSymbol|undefined;
-		const xpath = XsltSymbolProvider.getXPathFromSelection();
-		const inboxValue = xpath? xpath : '';
-		const result = await window.showInputBox({
-			value: inboxValue,
-			valueSelection: [0, inboxValue.length],
-			placeHolder: '/element/element[2]/element[3]',
-			validateInput: text => {
-				if (!text.startsWith('/')) {
-					return 'XPath should start with "/"';
-				} else {
-					symbol = XsltSymbolProvider.getSymbolFromXPathLocator(text, XsltSymbolProvider.getSymbolsForActiveDocument());
-					return symbol? null : 'No matching elements';
-				}
-				
-			}
-		});
-		if (result) {
-			XsltSymbolProvider.selectTextWithSymbol(symbol);
-			const foundSymbol = symbol !== undefined;
-			const msg = foundSymbol? `Matching element found: ${symbol?.name}` : 'No matching elements';
-			window.showInformationMessage(msg);
 		}
 	}
 
@@ -408,7 +381,6 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickStage2ResultFile', async () => await fileSelector.pickStage2ResultFile()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setVariableNames', (...args) => XPathSemanticTokensProvider.setVariableNames(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.formatUnchecked', () => formatUnchecked()));
-	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.gotoXPath', () => showGotoXPathInputBox()));
 	// XPath expressions, in a query file, evaluated on the XML context file - the nodes found are listed, to go to each
 	new XPathQuery(context);
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xmlSelectionPick', () => showXMLSelectionPick()));

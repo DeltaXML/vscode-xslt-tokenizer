@@ -26,6 +26,17 @@ export interface XPathQueryItem {
 	type?: string;
 }
 
+// as VS Code's vscode.getEditorLayout gives it: groups in rows or columns, nested, each with its size
+export interface EditorLayoutGroup {
+	size?: number;
+	groups?: EditorLayoutGroup[];
+}
+
+export interface EditorLayout {
+	orientation: number;
+	groups: EditorLayoutGroup[];
+}
+
 export interface XPathQueryResult {
 	count?: number;
 	items?: XPathQueryItem[];
@@ -452,15 +463,19 @@ export class XPathQuery {
 		return { text: added, line: added.split('\n').length - 2 };
 	}
 
-	// from the XML file's editor: its cursor's location, as an expression in the query file, ready to run or change
+	// from the XML file's editor: its cursor's location, as an expression in the query file, ready to run or change -
+	// with the cursor not on a node, e.g. before the root element, just the query file
 	private async addLocation() {
 		const xmlEditor = vscode.window.activeTextEditor;
-		const location = xmlEditor ? await XPathQuery.cursorLocation(xmlEditor) : undefined;
-		if (!location) {
+		if (!xmlEditor || !XPathQuery.isXMLFile(xmlEditor.document)) {
 			vscode.window.showInformationMessage('XPath query: put the cursor on an element or attribute in an XML file first.');
 			return;
 		}
+		const location = await XPathQuery.cursorLocation(xmlEditor);
 		const queryEditor = await this.openQueryFile();
+		if (!location) {
+			return;
+		}
 		const document = queryEditor.document;
 		const { text, line } = XPathQuery.withExpression(document.getText(), location);
 		if (text !== document.getText()) {
@@ -530,11 +545,50 @@ export class XPathQuery {
 		if (open) {
 			return vscode.window.showTextDocument(document, { viewColumn: open.viewColumn });
 		}
+		const column = vscode.window.activeTextEditor?.viewColumn;
 		await vscode.commands.executeCommand('workbench.action.newGroupBelow');
 		const editor = await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Active, preview: false });
 		const last = document.lineCount - 1;
 		editor.selection = new vscode.Selection(last, document.lineAt(last).text.length, last, document.lineAt(last).text.length);
+		// a quarter of the height the XML file's group had
+		if (column) {
+			const layout = XPathQuery.withQuarterBelow(await vscode.commands.executeCommand<EditorLayout>('vscode.getEditorLayout'), column);
+			if (layout) {
+				await vscode.commands.executeCommand('vscode.setEditorLayout', layout);
+			}
+		}
 		return editor;
+	}
+
+	// an editor layout with the group below the one in a view column - the one just made below it - a quarter of their
+	// height: the groups are numbered as they're laid out, so it's the next one, and they're in the same list
+	public static withQuarterBelow(layout: EditorLayout | undefined, column: number): EditorLayout | undefined {
+		if (!layout) {
+			return undefined;
+		}
+		const copy: EditorLayout = JSON.parse(JSON.stringify(layout));
+		let leaf = 0;
+		const visit = (groups: EditorLayoutGroup[]): boolean => {
+			for (let i = 0; i < groups.length; i++) {
+				const group = groups[i];
+				if (group.groups && group.groups.length > 0) {
+					if (visit(group.groups)) {
+						return true;
+					}
+				} else if (++leaf === column) {
+					const below = groups[i + 1];
+					if (!below || (below.groups && below.groups.length > 0)) {
+						return false;
+					}
+					const total = (group.size ?? 1) + (below.size ?? 1);
+					group.size = total * 0.75;
+					below.size = total * 0.25;
+					return true;
+				}
+			}
+			return false;
+		};
+		return visit(copy.groups) ? copy : undefined;
 	}
 
 	// runs the expression at the line (or the cursor) of the query file

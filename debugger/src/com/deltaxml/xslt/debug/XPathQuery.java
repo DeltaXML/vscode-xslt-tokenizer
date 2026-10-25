@@ -22,6 +22,7 @@ import net.sf.saxon.s9api.Axis;
 import net.sf.saxon.s9api.DocumentBuilder;
 import net.sf.saxon.s9api.Processor;
 import net.sf.saxon.s9api.SaxonApiException;
+import net.sf.saxon.s9api.Serializer;
 import net.sf.saxon.s9api.XPathCompiler;
 import net.sf.saxon.s9api.XPathSelector;
 import net.sf.saxon.s9api.XdmAtomicValue;
@@ -48,6 +49,8 @@ final class XPathQuery {
 
     // the most items returned: a result can be large, e.g. //node()
     private static final int MAX_ITEMS = 5000;
+    // of a map, array or function's text
+    private static final int MAX_VALUE_LENGTH = 10000;
 
     private XPathQuery() { }
 
@@ -120,9 +123,25 @@ final class XPathQuery {
             items.add(item.isNode() ? node((XdmNode) item) : item instanceof XdmAtomicValue ?
                     Json.obj().with("kind", "atomic").with("type", ((XdmAtomicValue) item).getPrimitiveTypeName().getLocalName())
                             .with("value", item.getStringValue()) :
-                    Json.obj().with("kind", "other").with("value", Values.summary(item)));
+                    Json.obj().with("kind", "other").with("value", adaptive(processor, item)));
         }
         return Json.obj().with("count", value.size()).with("items", items);
+    }
+
+    // a map, array or function, as the adaptive output method writes it - e.g. [89], map{"a":1}, fn:count#1 - on
+    // one line, and cut short if it's long
+    private static String adaptive(Processor processor, XdmItem item) {
+        java.io.StringWriter writer = new java.io.StringWriter();
+        Serializer serializer = processor.newSerializer(writer);
+        serializer.setOutputProperty(Serializer.Property.METHOD, "adaptive");
+        serializer.setOutputProperty(Serializer.Property.OMIT_XML_DECLARATION, "yes");
+        try {
+            serializer.serializeXdmValue(item);
+        } catch (SaxonApiException e) {
+            return Values.summary(item);
+        }
+        String text = writer.toString();
+        return text.length() > MAX_VALUE_LENGTH ? text.substring(0, MAX_VALUE_LENGTH - 1) + "…" : text;
     }
 
     private static Json.Obj node(XdmNode node) {

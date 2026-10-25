@@ -114,6 +114,17 @@ suite('XPath queries on XML files', () => {
 		assert.strictEqual(document.getText(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'element', positions: [1] }, symbols)), 'p');
 	});
 
+	test("the query file's group: a quarter of the height the XML file's group had", () => {
+		// one group, split
+		assert.deepEqual(XPathQuery.withQuarterBelow({ orientation: 1, groups: [{ size: 400 }, { size: 400 }] }, 1),
+			{ orientation: 1, groups: [{ size: 600 }, { size: 200 }] });
+		// the XML file in the second of two side by side: its column now two rows
+		assert.deepEqual(XPathQuery.withQuarterBelow({ orientation: 0, groups: [{ size: 500 }, { size: 500, groups: [{ size: 400 }, { size: 400 }] }] }, 2),
+			{ orientation: 0, groups: [{ size: 500 }, { size: 500, groups: [{ size: 600 }, { size: 200 }] }] });
+		// not where it's expected: unchanged
+		assert.isUndefined(XPathQuery.withQuarterBelow({ orientation: 1, groups: [{ size: 800 }] }, 1));
+	});
+
 	test('a namespace prolog: blanked, keeping the positions of the rest, and its bindings', () => {
 		const expression = 'declare namespace o = "urn:orders";\n(: note :) declare namespace x=\'urn:x\';\n//o:order/x:note';
 		const { xpath, namespaces } = XPathQuery.withoutProlog(expression);

@@ -523,6 +523,9 @@ function testXPathQuery(saxonJar) {
         [['text', [1, 1, 2], undefined, 'urgent'], ['attribute', [1, 2], 'id', 'B2']]);
     assert.deepStrictEqual(query('//p:note', { p: 'urn:extra' }).items.map((item) => item.path), ['/orders/order[1]/x:note']);
     assert.deepStrictEqual(query('count(//order), (1 to 2) ! (. * 2)').items.map((item) => item.value), ['2', '2', '4']);
+    // a map, array or function: as the adaptive output method writes it
+    assert.deepStrictEqual(query("[89], map{'a':[1,'two',true()]}, count#1, [(//item)[1]]").items.map((item) => item.value),
+        ['[89]', 'map{"a":[1,"two",true()]}', 'fn:count#1', '[<item xmlns="urn:orders" xmlns:x="urn:extra">pen</item>]']);
     const error = query('//order[').error;
     assert.strictEqual(error.code, 'XPST0003');
     assert.deepStrictEqual([error.line, error.column], [1, 8]);
