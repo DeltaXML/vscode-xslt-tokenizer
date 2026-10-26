@@ -22,8 +22,8 @@
     <xsl:variable name="cNew2" as="item()*" select="
       'test', $c1/element2[exists(@id)]
       /element3"/>
-    <xsl:variable name="c2" as="element()?" select="element1/element2"/>
-    <xsl:variable name="c3" as="element()?" select="element1/element2/element3"/>
+    <xsl:variable name="c2" as="element()?" select="element1/child::element2"/>
+    <xsl:variable name="c3" as="element()?" select="element1/parent::order/element1/element2/element3"/>
 
     <xsl:variable name="c4" as="attribute()?" select="element1/element2/element3/@attribute1"/>
     <wrapper>

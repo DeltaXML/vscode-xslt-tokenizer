@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<totals currency="GBP">
+   <wrapper/>
+   <element1>
+      <element2>
+         <element3>
+        </element3>
+      </element2>
+   </element1>
+   <element2>
+      <element3>
+        </element3>
+   </element2>
+   <element3>
+        </element3>test<order id="A-100" customer="Ada" total="842.925"/>
+   <wrapper/>
+   <element1>
+      <element2>
+      </element2>
+   </element1>
+   <element2>
+      </element2>test<order id="B-200" customer="Grace" total="1520.86"/>
+   <wrapper attribute1="test"/>
+   <element1>
+      <element2>
+         <element3 attribute1="test">
+        </element3>
+      </element2>
+   </element1>
+   <element2>
+      <element3 attribute1="test">
+        </element3>
+   </element2>
+   <element3 attribute1="test">
+        </element3>test<order id="C-300" customer="Linus" total="550.925"/>
+</totals>
