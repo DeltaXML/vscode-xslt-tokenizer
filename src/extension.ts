@@ -72,6 +72,35 @@ async function syntaxExtensionsReason(fsPath: string) {
 	}
 }
 
+// The symbol providers also report problems, but VS Code only asks them for symbols for its breadcrumbs, sticky scroll
+// or Outline view - with all of those off, no problems would be reported. So the symbols of each visible document in
+// these languages are asked for when it's shown or edited (after a pause in typing). VS Code caches them per document
+// version, so this costs nothing when one of those features has already asked
+function requestSymbolsForProblems(context: vscode.ExtensionContext, languages: string[]) {
+	const timers = new Map<string, NodeJS.Timeout>();
+	const request = (document: vscode.TextDocument, delay: number) => {
+		if (!languages.includes(document.languageId) || !vscode.window.visibleTextEditors.some((e) => e.document === document)) {
+			return;
+		}
+		const key = document.uri.toString();
+		clearTimeout(timers.get(key));
+		timers.set(key, setTimeout(() => {
+			timers.delete(key);
+			vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', document.uri).then(undefined, () => undefined);
+		}, delay));
+	};
+	const requestVisible = () => vscode.window.visibleTextEditors.forEach((e) => request(e.document, 100));
+	context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(requestVisible));
+	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
+		if (e.contentChanges.length > 0) {
+			request(e.document, 500);
+		}
+	}));
+	context.subscriptions.push(vscode.workspace.onDidOpenTextDocument((document) => request(document, 100)));
+	context.subscriptions.push({ dispose: () => timers.forEach((timer) => clearTimeout(timer)) });
+	requestVisible();
+}
+
 export function activate(context: vscode.ExtensionContext) {
 	const fileSelector = new FileSelection(context);
 	DocumentChangeHandler.isWindowsOS = os.platform() === 'win32';
@@ -354,6 +383,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'sch' }, schSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml' }, xmlSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'bpmn' }, bpmnSymbolProvider));
+	requestSymbolsForProblems(context, ['xslt', 'dcp', 'sch', 'xml', 'bpmn']);
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));

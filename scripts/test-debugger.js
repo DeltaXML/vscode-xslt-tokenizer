@@ -2285,6 +2285,122 @@ async function testOutputMapWithoutXslOutput(saxonJar) {
     await dap.exited;
 }
 
+// going back: the transform is run again, quietly, to an earlier point - the output shown already isn't shown again
+async function testStepBack(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'basic.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`], stopOnEntry: true },
+        { 'basic.xsl': [{ line: 12 }] });
+    let stop = await stopped;
+    assert.strictEqual(stop.reason, 'entry');
+    await assert.rejects(dap.request('stepBack', { threadId: 1 }), /start of the transform/);
+    const doubled = async () => byName(await dap.variables(0, 'Locals')).$doubled.value;
+    const resume = async (command) => {
+        stopped = dap.stopped();
+        await dap.request(command, { threadId: 1 });
+        return stopped;
+    };
+    stop = await resume('continue');
+    assert.strictEqual(stop.frames[0].line, 12);
+    assert.strictEqual(await doubled(), '2');
+    stop = await resume('continue');
+    assert.strictEqual(await doubled(), '4');
+
+    // back one line, in the same template call
+    stop = await resume('stepBack');
+    assert.strictEqual(stop.reason, 'step');
+    assert.strictEqual(stop.frames[0].line, 11);
+    assert.strictEqual(await doubled(), '4');
+    assert.match(stop.frames[1].name, /xsl:template match="\/"/);
+    // back to the breakpoint before
+    stop = await resume('reverseContinue');
+    assert.strictEqual(stop.reason, 'breakpoint');
+    assert.strictEqual(stop.frames[0].line, 12);
+    assert.strictEqual(await doubled(), '2');
+    // and on again: a step, then the breakpoints after
+    stop = await resume('next');
+    stop = await resume('continue');
+    assert.strictEqual(await doubled(), '4');
+    stop = await resume('continue');
+    assert.strictEqual(await doubled(), '6');
+    // back to the start, with no breakpoint before
+    await dap.request('setBreakpoints', { source: { path: path.join(fixtures, 'basic.xsl') }, breakpoints: [] });
+    stop = await resume('reverseContinue');
+    assert.strictEqual(stop.reason, 'entry');
+    const terminated = dap.event('terminated');
+    await dap.request('continue', { threadId: 1 });
+    await terminated;
+    for (const n of [1, 2, 3]) {
+        assert.strictEqual(dap.output.split(`item ${n}\n`).length - 1, 1, `'item ${n}' shown once:\n${dap.output}`);
+    }
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
+// going back where Step Into has stepped through XPath expressions and inline functions: the run again goes the
+// same way - each step back is to a stop made before, and stepping into from there makes the same stops as before
+async function testStepBackReplaysSteps(saxonJar) {
+    const fs = require('fs');
+    const os = require('os');
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-debug-'));
+    const runs = [
+        [`-xsl:${path.join(fixtures, 'multiline.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`],
+        [`-xsl:${path.join(fixtures, 'inline-functions.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'a.xml')}`],
+        [`-xsl:${path.join(fixtures, 'returned-function.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'b.xml')}`],
+        [`-xsl:${path.join(fixtures, 'lazy-let.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`, `-o:${path.join(outDir, 'c.xml')}`],
+        [`-xsl:${path.join(fixtures, 'xpath-loops.xsl')}`, '-it'],
+    ];
+    for (const saxonArgs of runs) {
+        const name = path.basename(saxonArgs[0]);
+        // where it's stopped: the stack, and the values of the locals
+        const position = async (dap, stop) => {
+            const locals = stop.frames.length ? (await dap.variables(0, 'Locals')).map((v) => `${v.name}=${v.value}`).join(' ') : '';
+            return stop.frames.map((f) => `${f.name}:${f.line}`).join(' < ') + ' | ' + locals;
+        };
+        const stepInAll = async (dap, stop, max) => {
+            const positions = [];
+            while (stop && positions.length < max) {
+                positions.push(await position(dap, stop));
+                const next = dap.stopped();
+                await dap.request('stepIn', { threadId: 1 });
+                stop = await Promise.race([next, dap.event('terminated').then(() => undefined)]);
+            }
+            return positions;
+        };
+        let dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.start({ saxonArgs, stopOnEntry: true }, {});
+        const all = await stepInAll(dap, await stopped, 80);
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+
+        dap = new DapClient(saxonJar);
+        stopped = dap.stopped();
+        await dap.start({ saxonArgs, stopOnEntry: true }, {});
+        let stop = await stopped;
+        let index = Math.floor(all.length * 2 / 3);
+        for (let i = 0; i < index; i++) {
+            stopped = dap.stopped();
+            await dap.request('stepIn', { threadId: 1 });
+            stop = await stopped;
+        }
+        for (let back = 0; back < 3 && index > 0; back++) {
+            stopped = dap.stopped();
+            await dap.request('stepBack', { threadId: 1 });
+            stop = await stopped;
+            const at = await position(dap, stop);
+            const earlier = all.lastIndexOf(at, index - 1);
+            assert.ok(earlier >= 0, `${name}: stepped back from ${index} (${all[index]}) to a stop made before: ${at}`);
+            index = earlier;
+        }
+        const again = await stepInAll(dap, stop, 80);
+        assert.deepStrictEqual(again, all.slice(index, index + again.length), `${name}: the same stops, from ${index}`);
+        assert.strictEqual(index + again.length, all.length, `${name}: to the end`);
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+    }
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -2293,7 +2409,11 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+            // e.g. DEBUGGER_TEST=testStepBack, to run only that test
+            if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
+                continue;
+            }
             try {
                 const outcome = await test(jar);
                 console.log(`${outcome === 'skipped' ? 'skip' : 'ok  '} ${test.name} - ${path.basename(jar.split(path.delimiter)[0])}`);

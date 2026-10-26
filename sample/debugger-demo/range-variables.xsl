@@ -20,7 +20,14 @@
     <xsl:variable name="line-totals" as="xs:decimal*" select="
       for $line in line
       return
-        xs:integer($line/@qty) * xs:decimal($line/@price) * (1 - $discount)"/>
+      let $x := count($line) + 2, 
+          $y := count($line) + 31,
+          $a := count($line) + 32,
+          $b := count($line) + 33,
+          $c := count($line) + 34,
+          $sum := $x + $y + $a + $c + $b
+        return 
+          xs:integer($line/@qty) * $sum + xs:decimal($line/@price) * (1 - $discount)"/>
     <order id="{@id}" customer="{$customer}" total="{sum($line-totals)}"/>
   </xsl:template>
 
