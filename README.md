@@ -154,8 +154,6 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
 </tr>
 </table>
 
-\* *Problem-reporting currently depends on the VSCode symbol-provider. To ensure problems are always reported in VSCode, use the following VSCode setting: `"breadcrumbs.enabled": true`*
-
 <p align="center">
   <em>XSLT 4.0 with a documentation note, its hover help where the function is called, and the XSLT Imports view:</em>
   <img alt="XSLT Editor" src="vscode-xslt-notes.png">
