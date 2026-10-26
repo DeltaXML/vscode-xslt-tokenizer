@@ -234,6 +234,7 @@ suite('XSLT debugger - configurations', () => {
 			'  <xsl:for-each select="item"><xsl:value-of select="name"/></xsl:for-each>',
 			'  <xsl:sequence select="child::a/text(), $m?name?(1)?*, ../b[1]!c, f:x()/y, $doc/f:y($z)/w, $a[1]/x, /root/r, $f(1)/z, ($a, $b)/p, (a | b)/q, key(\'k\', @r)/s, (f:x())/t"/>',
 			'</xsl:template>',
+			'<xsl:variable name="h" select="$doc/h, k"/>',
 			'</xsl:stylesheet>'].join('\n');
 		const chains = (line: number, column: number, inXPathFrame = false) => XsltEmptySteps.chains(text, line, column, inXPathFrame)
 			.map((c) => c.points.map((p) => text.substring(p.markStart, p.markEnd)).join(' '));
@@ -245,6 +246,9 @@ suite('XSLT debugger - configurations', () => {
 		assert.deepStrictEqual(chains(4, 3), ['$doc order item [@n &lt; 2] @id', 'item']);
 		assert.deepStrictEqual(chains(4, 31), ['$doc order item [@n &lt; 2] @id', 'name']);
 		assert.deepStrictEqual(chains(5, 3, true), ['$doc order item [@n &lt; 2] @id', '$m ?name ?(1) ?*', '$a [1] x', 'root r', '($a, $b) p']);
+		// paused in a global variable: only its own paths - as it's evaluated, in the global focus
+		assert.deepStrictEqual(chains(7, 1), ['$doc h', 'k']);
+		assert.deepStrictEqual(chains(1, 1), ['a b']);
 		assert.strictEqual(XsltEmptySteps.unescape('@n &lt; 2 &amp;&#x41;&#66;'), '@n < 2 &AB');
 
 		// each point's value from the one before - a step's predicates stay with the step (per item it's from)

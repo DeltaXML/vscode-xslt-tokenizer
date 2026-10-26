@@ -58,6 +58,7 @@ export class XsltEmptySteps {
 	private static decoration: vscode.TextEditorDecorationType | undefined;
 	private static decorated: vscode.TextEditor[] = [];
 	private static generation = 0;
+	private static readonly timeBudget = 300;
 	// for tests: what was faded at the last pause, and the hovers' text
 	public static lastFaded: { line: number; text: string; hover: string }[] = [];
 
@@ -127,13 +128,20 @@ export class XsltEmptySteps {
 			}
 		};
 		const decorations: vscode.DecorationOptions[] = [];
+		// the paths are checked for up to this long at each pause - after that, the rest aren't, so a slow one (e.g. a
+		// stylesheet function it starts with) doesn't slow down stepping
+		const deadline = Date.now() + XsltEmptySteps.timeBudget;
 		for (const chain of chains.slice(0, 100)) {
+			if (Date.now() > deadline) {
+				break;
+			}
 			if (chain.variable && notEvaluated.has(chain.variable)) {
 				continue;
 			}
-			// all its points' counts at once, each step evaluated once
+			// whether each of its points has a value (1 or 0), all at once, each step evaluated once - exists() only
+			// needs a step's first item, as the stylesheet may, where count() would need them all
 			const bindings = XsltEmptySteps.bindings(text, chain);
-			const counts = await strings(`let ${bindings.join(', ')} return (${bindings.map((_, k) => `count($_step${k})`).join(', ')})`);
+			const counts = await strings(`let ${bindings.join(', ')} return (${bindings.map((_, k) => `(if (exists($_step${k})) then 1 else 0)`).join(', ')})`);
 			if (generation !== XsltEmptySteps.generation) {
 				return;
 			}
@@ -336,16 +344,13 @@ export class XsltEmptySteps {
 				}
 			}
 		}
-		// from the template or function paused in
-		let scopeStart = 0;
-		stack.forEach((element) => {
-			if (element.name === 'xsl:template' || element.name === 'xsl:function') {
-				scopeStart = element.line;
-			}
-		});
 		// the instruction paused at: at the column given, else the first starting on the line
 		const onLine = startTags.filter((s) => s.line === stopLine);
 		const stopped = onLine.find((s) => stopColumn !== undefined && s.character === stopColumn - 1) ?? onLine[0];
+		// from the template or function paused in - else the top-level declaration, e.g. a global variable being
+		// evaluated (stack[0] is the xsl:stylesheet element), or the instruction paused at, if it's one
+		const declaration = [...stack].reverse().find((element) => element.name === 'xsl:template' || element.name === 'xsl:function');
+		const scopeStart = declaration ? declaration.line : stack.length > 1 ? stack[1].line : stopped ? stopped.line : stopLine;
 
 		const chains: PathChain[] = [];
 		for (const group of groups) {

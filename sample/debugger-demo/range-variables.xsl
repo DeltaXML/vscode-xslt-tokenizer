@@ -8,6 +8,7 @@
 
   <xsl:param name="discount" as="xs:decimal" select="0.1"/>
   <xsl:variable name="currency" as="xs:string" select="'GBP'"/>
+  <xsl:variable name="myOrder" as="element()?" select="/orders/order[2]/nothing"/>
 
   <xsl:template match="/orders">
     <totals currency="{$currency}">
@@ -29,7 +30,7 @@
     <wrapper>
       <xsl:sequence select="$c4"/>
     </wrapper>
-    <xsl:sequence select="$c1,$c2,$c3, $cNew, $cNew2"/>
+    <xsl:sequence select="$c1,$c2,$c3, $cNew, $cNew2, $myOrder"/>
     <xsl:variable name="line-totals" as="xs:decimal*" select="
       for $line in line
       return
