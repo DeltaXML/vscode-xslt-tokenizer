@@ -17,6 +17,17 @@
 
   <xsl:template match="order">
     <xsl:variable name="customer" as="xs:string" select="@customer"/>
+    <xsl:variable name="c1" as="element()?" select="element1"/>
+    <xsl:variable name="cNew" as="element()?" select="$c1/element2[empty(@id)]/element3"/>
+    <xsl:variable name="cNew2" as="element()?" select="$c1/element2[exists(@id)]/element3"/>
+    <xsl:variable name="c2" as="element()?" select="element1/element2"/>
+    <xsl:variable name="c3" as="element()?" select="element1/element2/element3"/>
+
+    <xsl:variable name="c4" as="attribute()?" select="element1/element2/element3/@attribute1"/>
+    <wrapper>
+      <xsl:sequence select="$c4"/>
+    </wrapper>
+    <xsl:sequence select="$c1,$c2,$c3, $cNew"/>
     <xsl:variable name="line-totals" as="xs:decimal*" select="
       for $line in line
       return

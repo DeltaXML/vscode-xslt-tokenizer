@@ -4,12 +4,28 @@
     <line product="widget" category="hardware" qty="3" price="2.50"/>
     <line product="gadget" category="hardware" qty="1" price="12.00"/>
     <line product="manual" category="books" qty="2" price="8.75"/>
+    <element1>
+      <element2>
+        <element3>
+        </element3>
+      </element2>
+    </element1>
   </order>
   <order id="B-200" customer="Grace">
     <line product="sprocket" category="hardware" qty="10" price="0.40"/>
     <line product="primer" category="books" qty="1" price="15.00"/>
+    <element1>
+      <element2>
+      </element2>
+    </element1>
   </order>
   <order id="C-300" customer="Linus">
     <line product="cable" category="hardware" qty="4" price="3.25"/>
+    <element1>
+      <element2>
+        <element3 attribute1="test">
+        </element3>
+      </element2>
+    </element1>
   </order>
 </orders>

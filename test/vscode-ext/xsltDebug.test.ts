@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as cp from 'child_process';
 import { XsltDebug, XsltDebugAdapterProcess, XsltDebugConfigurationProvider, XsltDebugLog, XsltDebugOutputs, XsltDebugProblems } from '../../src/xsltDebug';
 import { unquotedPath, unquotedPaths } from '../../src/settingPaths';
+import { XsltEmptySteps } from '../../src/xsltEmptySteps';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
 
@@ -221,6 +222,40 @@ suite('XSLT debugger - configurations', () => {
 		const task = <XSLTTask><unknown>{ type: 'xslt', label: 'quoted', saxonJar: '"C:\\saxon jar\\saxon-pe-13.1.jar"', xsltFile: 'a.xsl' };
 		assert.deepStrictEqual(SaxonTaskProvider.commandLine(task, true).classPath, ['C:\\saxon jar\\saxon-pe-13.1.jar']);
 	});
+
+	// paths and lookups checked for an empty step while paused - relative ones only in instructions with the same focus
+	// as the one paused at
+	test('the path and lookup chains checked for empty steps', () => {
+		const text = [
+			'<xsl:stylesheet version="4.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f">',
+			'<xsl:variable name="g" select="/a/b"/>',
+			'<xsl:template match="order">',
+			'  <xsl:variable name="x" as="attribute()*" select="$doc/order//item[@n &lt; 2]/@id"/>',
+			'  <xsl:for-each select="item"><xsl:value-of select="name"/></xsl:for-each>',
+			'  <xsl:sequence select="child::a/text(), $m?name?(1)?*, ../b[1]!c, f:x()/y, $doc/f:y($z)/w, $a[1]/x, /root/r, $f(1)/z, ($a, $b)/p, (a | b)/q, key(\'k\', @r)/s, (f:x())/t"/>',
+			'</xsl:template>',
+			'</xsl:stylesheet>'].join('\n');
+		const chains = (line: number, column: number, inXPathFrame = false) => XsltEmptySteps.chains(text, line, column, inXPathFrame)
+			.map((c) => c.points.map((p) => text.substring(p.markStart, p.markEnd)).join(' '));
+		// the for-each's select is in the template's focus, as the sequence is; its value-of's isn't
+		// from a stylesheet function's result too - it's evaluated once - but not beyond a stylesheet function's call
+		assert.deepStrictEqual(chains(5, 3), ['$doc order item [@n &lt; 2] @id', 'item', 'child::a text()', '$m ?name ?(1) ?*', '.. b [1]', 'f:x() y', '$a [1] x', 'root r',
+			'($a, $b) p', '(a | b) q', 'a', 'b', 'key(\'k\', @r) s', '@r', '(f:x()) t']);
+		// the for-each, or the value-of in it
+		assert.deepStrictEqual(chains(4, 3), ['$doc order item [@n &lt; 2] @id', 'item']);
+		assert.deepStrictEqual(chains(4, 31), ['$doc order item [@n &lt; 2] @id', 'name']);
+		assert.deepStrictEqual(chains(5, 3, true), ['$doc order item [@n &lt; 2] @id', '$m ?name ?(1) ?*', '$a [1] x', 'root r', '($a, $b) p']);
+		assert.strictEqual(XsltEmptySteps.unescape('@n &lt; 2 &amp;&#x41;&#66;'), '@n < 2 &AB');
+
+		// each point's value from the one before - a step's predicates stay with the step (per item it's from)
+		const bindings = (line: number, column: number) => XsltEmptySteps.chains(text, line, column, false).map((c) => XsltEmptySteps.bindings(text, c).join(', '));
+		assert.deepStrictEqual(bindings(5, 3).filter((b) => /^\$_step0 := (\$doc|\.\.|\$a|\$m|\/?root)/.test(b)), [
+			'$_step0 := $doc, $_step1 := $_step0/order, $_step2 := $_step1//item, $_step3 := $_step1//item[@n < 2], $_step4 := $_step3/@id',
+			'$_step0 := $m, $_step1 := $_step0?name, $_step2 := $_step1?(1), $_step3 := $_step2?*',
+			'$_step0 := .., $_step1 := $_step0/b, $_step2 := $_step0/b[1]',
+			'$_step0 := $a, $_step1 := $_step0[1], $_step2 := $_step1/x',
+			'$_step0 := /root, $_step1 := $_step0/r']);
+	});
 });
 
 suite('XSLT debugger - Saxon\'s problems', () => {
@@ -389,6 +424,28 @@ suite('XSLT debugger - debug sessions', function () {
 		// the launch, in the 'XSLT Debugger' log
 		assert.isTrue(XsltDebugLog.messages.some((m) => /'debug basic.xsl': java -cp .*xslt-debugger.jar/.test(m)));
 		assert.isTrue(XsltDebugLog.messages.some((m) => /'debug basic.xsl': Saxon.*, on Java [\d.]+.*\n    Saxon options: .*-xsl:.*-T:com.deltaxml.xslt.debug.DebugTraceListener -opt:0/.test(m)));
+	});
+
+	test('fades the step, predicate or lookup after which a path is empty, with why in its hover', async () => {
+		stops = [];
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		const xsltUri = vscode.Uri.file(path.join(fixtures, 'empty-steps.xsl'));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(xsltUri, new vscode.Position(11, 0)))]);
+		const name = 'empty steps';
+		const ended = terminated(name);
+		assert.isTrue(await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name, saxonJar, xsltFile: xsltUri.fsPath, initialTemplate: '' }));
+		const stop = await nextStop();
+		for (let i = 0; i < 100 && XsltEmptySteps.lastFaded.length === 0; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		const faded = XsltEmptySteps.lastFaded;
+		assert.deepStrictEqual(faded.map((f) => `${f.line + 1} ${f.text}`), ['7 orders', '8 ?name', '9 [@n = 5]', '11 o:none']);
+		assert.match(faded[0].hover, /There's `orders` in namespace `urn:orders`/);
+		assert.match(faded[1].hover, /no key `name`[\s\S]*Keys: `id`, `title`|no key `name`[\s\S]*Keys: `title`, `id`/);
+		assert.match(faded[2].hover, /the predicate kept none of the 1 items/);
+		await stop.session.customRequest('continue', { threadId: 1 });
+		await ended;
+		assert.deepStrictEqual(XsltEmptySteps.lastFaded, []);
 	});
 
 	// VS Code waits for a response to each request before it ends a session - up to 500ms

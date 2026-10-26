@@ -44,6 +44,7 @@ import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
+import { XsltEmptySteps } from './xsltEmptySteps';
 
 
 
@@ -841,6 +842,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerEvaluatableExpressionProvider({ language: 'xslt' }, new XsltEvaluatableExpressionProvider()));
 	// while paused, variable values at their declarations
 	context.subscriptions.push(vscode.languages.registerInlineValuesProvider({ language: 'xslt' }, new XsltInlineValuesProvider()));
+	// while paused, the step in a path (or lookup) after which its value is empty, faded
+	XsltEmptySteps.register(context, XsltDebug.type);
 	// the output written so far, while debugging
 	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(XsltDebugOutputs.scheme, XsltDebugOutputs.get()));
 	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
