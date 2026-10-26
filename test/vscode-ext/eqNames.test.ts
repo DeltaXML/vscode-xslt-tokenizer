@@ -7,16 +7,22 @@ import { assert } from 'chai';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
+import { XslLexerLight } from '../../src/xslLexerLight';
 
-async function problems(body: string) {
-	const xslt = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+const stylesheet = (body: string) => `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
 ${body}
 </xsl:stylesheet>`;
+
+// the problems in a stylesheet with the body - and the globals of an imported module with the body, as XslLexerLight
+// reads them for globalsProvider
+async function problems(body: string, importedBody?: string) {
+	const xslt = stylesheet(body);
 	const xslLexer = new XslLexer(XSLTConfiguration.configuration);
 	xslLexer.provideCharLevelState = true;
 	const allTokens = xslLexer.analyse(xslt);
+	const imported = importedBody ? new XslLexerLight(XSLTConfiguration.configuration).analyseLight(stylesheet(importedBody)) : [];
 	const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'xslt' });
-	const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XSLTConfiguration.configuration, DocumentTypes.XSLT, document, allTokens, xslLexer.globalInstructionData, [], []);
+	const diagnostics = XsltTokenDiagnostics.calculateDiagnostics(XSLTConfiguration.configuration, DocumentTypes.XSLT, document, allTokens, xslLexer.globalInstructionData, imported, []);
 	return diagnostics.map((d) => [d.message, document.getText(d.range)]);
 }
 
@@ -62,5 +68,13 @@ suite('EQNames', () => {
 		test(label, async () => {
 			assert.deepEqual(await problems(body), expected);
 		});
+	});
+
+	test('globals of an imported module', async () => {
+		const imported = `<xsl:param name="Q{}x" select="1"/>
+<xsl:variable name="Q{urn:v}y" select="2"/>
+<xsl:function name="Q{urn:f}double"><xsl:param name="n"/><xsl:sequence select="$n * 2"/></xsl:function>`;
+		const result = await problems(`<xsl:template match="/"><xsl:sequence select="$Q{}x, $Q{urn:v}y, Q{urn:f}double(1)"/></xsl:template>`, imported);
+		assert.deepEqual(result, []);
 	});
 });

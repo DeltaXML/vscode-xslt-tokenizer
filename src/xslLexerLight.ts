@@ -365,6 +365,10 @@ export class XslLexerLight extends XslLexer {
                            break;
                         case XMLCharState.sqAvt:
                         case XMLCharState.dqAvt:
+                            // not an AVT here: the '{' is part of the value, e.g. the EQName in name="Q{}x"
+                            if (storeToken) {
+                                tokenChars.push(currentChar);
+                            }
                             nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             break;
                         case XMLCharState.tvt:
