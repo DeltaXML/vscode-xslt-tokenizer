@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
+import { ImportPrecedence } from './importPrecedence';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { GlobalsProvider } from './globalsProvider';
 import * as path from 'path';
@@ -220,6 +221,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					});
 				}
 			});
+			// highest import precedence first: the first declaration with a name is the one used
+			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 			this.internalImportedGlobals = allImportedGlobals;
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			if (vscode.window.activeTextEditor && document.fileName !== vscode.window.activeTextEditor.document.fileName) {

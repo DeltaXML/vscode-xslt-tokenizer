@@ -45,6 +45,7 @@ import { XPathQuery } from './xpathQuery';
 import { EntityReferences } from './entityReferences';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 import { XsltEmptySteps } from './xsltEmptySteps';
+import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
 
 
 
@@ -401,6 +402,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xpath' }, new XSLTSignatureHelpProvider(XPathConfiguration.configuration), '(', ','));
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
+	context.subscriptions.push(vscode.languages.registerCallHierarchyProvider({ language: 'xslt' }, new XsltCallHierarchyProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.pickFile', async (...args) => await fileSelector.pickFile(args[0])));
 	context.subscriptions.push(vscode.commands.registerCommand(SaxonTaskProvider.parameterValueCommand, async (...args) => await fileSelector.enterParameterValue(args[0])));

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
+import { ImportPrecedence } from './importPrecedence';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
@@ -291,6 +292,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				});
 			}
 		});
+		// highest import precedence first: the first declaration with a name is the one used
+		allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 		return { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs };
 	}
 
@@ -413,6 +416,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
+			// highest import precedence first: the first declaration with a name is the one used
+			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 			let xslVariable = ['xsl:variable', 'xsl:param'];
 
 			let completions: vscode.CompletionItem[]|undefined;
