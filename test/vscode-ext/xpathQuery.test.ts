@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { assert } from 'chai';
 import { XPathQuery } from '../../src/xpathQuery';
+import { XPathQueryResults } from '../../src/xpathQueryResults';
 import { XMLConfiguration } from '../../src/languageConfigurations';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 
@@ -112,6 +113,17 @@ suite('XPath queries on XML files', () => {
 		// no such text node: the element's name - only, though its symbol's selection range goes on to its last child
 		assert.strictEqual(text(6), 'p');
 		assert.strictEqual(document.getText(XPathQuery.rangeOf({ kind: 'node', nodeKind: 'element', positions: [1] }, symbols)), 'p');
+	});
+
+	test("a node's line in the References view: from a word's start before it, not the indentation, with the node highlighted", () => {
+		const preview = (line: string, start: number, end: number, endLine = 0) => {
+			const { label, highlight } = XPathQueryResults.preview(line, new vscode.Range(0, start, endLine, end));
+			return label.substring(0, highlight[0]) + '[' + label.substring(highlight[0], highlight[1]) + ']' + label.substring(highlight[1]);
+		};
+		assert.strictEqual(preview('    <order id="A1">', 5, 10), '<[order] id="A1">');
+		assert.strictEqual(preview('<orders><order id="A1" status="late">', 23, 29), 'id="A1" [status]="late">');
+		// a text node going on to another line: highlighted to the end of its first
+		assert.strictEqual(preview('  <p>one two', 5, 3, 1), '<p>[one two]');
 	});
 
 	test("the query file's group: a quarter of the height the XML file's group had", () => {

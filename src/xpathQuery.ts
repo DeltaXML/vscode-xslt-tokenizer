@@ -12,6 +12,7 @@ import { XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { XsltDebug } from './xsltDebug';
 import { unquotedPath } from './settingPaths';
+import { XPathQueryResults, XPathQueryFound } from './xpathQueryResults';
 
 // an item of a query's result, from XPathQuery (in the debug adapter's jar): a node - where it is among the document's
 // elements, and for an attribute its name - or an atomic value, or another item (a map, array or function)
@@ -46,8 +47,9 @@ export interface XPathQueryResult {
 // 'Find Nodes with XPath': XPath expressions are written in a query file - an .xpath file, so with the editor's
 // highlighting, checking and completion (of node names from the XML file, too) - kept for the workspace, one
 // expression after another, separated by blank lines. The expression at the cursor runs with Saxon (the
-// XSLT.tasks.saxonJar setting) on the XML file last in an editor; the nodes it finds are listed in VS Code's references peek,
-// in the XML file, to go from one to the next, and atomic values are written to an output channel
+// XSLT.tasks.saxonJar setting) on the XML file last in an editor; the editor goes to the first node it finds, and all
+// of them are listed in VS Code's References view, to go from one to the next, and atomic values are written to an
+// output channel
 export class XPathQuery {
 	public static readonly fileName = 'queries.xpath';
 	public static readonly mainClass = 'com.deltaxml.xslt.debug.XPathQuery';
@@ -635,7 +637,35 @@ export class XPathQuery {
 			return;
 		}
 		this.setResult(queryDocument, expression.text, XPathQuery.resultSummary(result));
-		await this.showResult(queryDocument, xmlDocument, expression.text, result);
+		// from the References view's history or its Refresh: run again, on the XML file as it is then
+		const find = async (): Promise<XPathQueryFound | undefined> => {
+			const xml = await vscode.workspace.openTextDocument(target);
+			const again = await this.evaluate(saxonJar, { xpath, xml: xml.getText(), systemId: target.toString(), namespaces });
+			if (again.error) {
+				vscode.window.showErrorMessage(`XPath query: ${again.error.code ?? 'error'} - ${again.error.message}`);
+				return undefined;
+			}
+			return { locations: await XPathQuery.locate(xml, again), message: XPathQuery.countText(again) };
+		};
+		await this.showResult(queryDocument, xmlDocument, expression.text, result, find);
+	}
+
+	// e.g. '12 items', or '1200 items (the first 1000 shown)'
+	private static countText(result: XPathQueryResult) {
+		const count = result.count ?? result.items?.length ?? 0;
+		const shown = result.items?.length ?? 0;
+		return `${count} ${count === 1 ? 'item' : 'items'}` + (count > shown ? ` (the first ${shown} shown)` : '');
+	}
+
+	// the nodes found, in the XML file - by its outline
+	private static async locate(xmlDocument: vscode.TextDocument, result: XPathQueryResult): Promise<vscode.Location[]> {
+		const nodes = (result.items ?? []).filter((item) => item.kind === 'node');
+		if (nodes.length === 0) {
+			return [];
+		}
+		const symbols = await new XsltSymbolProvider(XMLConfiguration.configuration, null).getDocumentSymbols(xmlDocument, false) ?? [];
+		return nodes.map((item) => XPathQuery.rangeOf(item, symbols, xmlDocument)).filter((range): range is vscode.Range => !!range)
+			.map((range) => new vscode.Location(xmlDocument.uri, range));
 	}
 
 	private evaluate(saxonJar: string, request: object): Promise<XPathQueryResult> {
@@ -674,12 +704,13 @@ export class XPathQuery {
 		vscode.window.setStatusBarMessage(`XPath query: ${error.code ?? 'error'} - see the Problems view`, 5000);
 	}
 
-	private async showResult(queryDocument: vscode.TextDocument, xmlDocument: vscode.TextDocument, expression: string, result: XPathQueryResult) {
+	private async showResult(queryDocument: vscode.TextDocument, xmlDocument: vscode.TextDocument, expression: string, result: XPathQueryResult,
+		find: () => Promise<XPathQueryFound | undefined>) {
 		const items = result.items ?? [];
-		const count = result.count ?? items.length;
 		const nodes = items.filter((item) => item.kind === 'node');
-		const summary = `${count} ${count === 1 ? 'item' : 'items'} for ${expression.replace(/\s+/g, ' ').trim()}` +
-			(count > items.length ? ` (the first ${items.length} shown)` : '');
+		const oneLine = expression.replace(/\s+/g, ' ').trim();
+		const count = XPathQuery.countText(result);
+		const summary = count.replace(/^(\d+ items?)/, `$1 for ${oneLine}`);
 		this.output.appendLine(summary);
 		for (const item of items) {
 			this.output.appendLine('  ' + (item.kind === 'node' ? `${item.path}${item.value !== undefined ? '  ' + JSON.stringify(item.value) : ''}` :
@@ -689,18 +720,19 @@ export class XPathQuery {
 		if (nodes.length === 0) {
 			return;
 		}
-		const symbols = await new XsltSymbolProvider(XMLConfiguration.configuration, null).getDocumentSymbols(xmlDocument, false) ?? [];
-		const locations = nodes.map((item) => XPathQuery.rangeOf(item, symbols, xmlDocument)).filter((range): range is vscode.Range => !!range)
-			.map((range) => new vscode.Location(xmlDocument.uri, range));
+		const locations = await XPathQuery.locate(xmlDocument, result);
 		if (locations.length === 0) {
 			vscode.window.showInformationMessage(`XPath query: ${nodes.length} nodes found, but not in the XML file's outline - e.g. if it isn't well-formed`);
 			return;
 		}
-		// in the XML file's editor - the one it was opened from, not the query file's group
+		// the first node, in the XML file's editor - the one it was opened from, not the query file's group - and all of
+		// them in the References view, to go from one to the next
 		const queryColumn = vscode.window.visibleTextEditors.find((e) => e.document === queryDocument)?.viewColumn;
 		const xmlEditor = vscode.window.visibleTextEditors.find((e) => e.document === xmlDocument && e.viewColumn !== queryColumn);
-		await vscode.window.showTextDocument(xmlDocument, { viewColumn: xmlEditor?.viewColumn ?? vscode.ViewColumn.One, preserveFocus: false });
+		const first = locations[0].range.start;
+		await vscode.window.showTextDocument(xmlDocument, { viewColumn: xmlEditor?.viewColumn ?? vscode.ViewColumn.One, preserveFocus: false,
+			selection: new vscode.Range(first, first) });
 		vscode.window.setStatusBarMessage(`XPath query: ${summary}`, 10000);
-		await vscode.commands.executeCommand('editor.action.showReferences', xmlDocument.uri, locations[0].range.start, locations);
+		await XPathQueryResults.show(`XPath: ${oneLine}`, { locations, message: count }, find);
 	}
 }
