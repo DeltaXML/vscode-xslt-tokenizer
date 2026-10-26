@@ -8,11 +8,14 @@ package com.deltaxml.xslt.debug;
 
 import java.util.Map;
 
+import net.sf.saxon.Controller;
 import net.sf.saxon.expr.XPathContext;
 import net.sf.saxon.lib.TraceListener;
 import net.sf.saxon.om.Item;
 import net.sf.saxon.trace.Traceable;
+import net.sf.saxon.trans.Mode;
 import net.sf.saxon.trans.XPathException;
+import net.sf.saxon.trans.rules.BuiltInRuleSet;
 
 /**
  * The TraceListener Saxon creates for the '-T:' command-line option - Saxon instantiates it by class name, so it
@@ -55,6 +58,22 @@ public class DebugTraceListener implements TraceListener {
     public void startCurrentItem(Item item) {
         if (debugger != null && !SteppedResult.isQuiet()) {
             debugger.startCurrentItem(item);
+        }
+    }
+
+    // the transform's controller - for a pause where no stylesheet instruction has run yet
+    @Override
+    public void open(Controller controller) {
+        if (debugger != null) {
+            debugger.transformOpened(controller);
+        }
+    }
+
+    // the template rule for an item, found by xsl:apply-templates - Saxon gives its mode's built-in rules if none matched
+    @Override
+    public void endRuleSearch(Object rule, Mode mode, Item item) {
+        if (debugger != null && !SteppedResult.isQuiet() && rule instanceof BuiltInRuleSet) {
+            debugger.noTemplateMatched((BuiltInRuleSet) rule, mode, item);
         }
     }
 }

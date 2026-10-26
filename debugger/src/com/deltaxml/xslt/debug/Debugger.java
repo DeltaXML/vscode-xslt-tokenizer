@@ -83,6 +83,8 @@ final class Debugger {
     // the exception breakpoint filters: dynamic errors, and errors caught by xsl:try
     private volatile boolean breakOnErrors = true;
     private volatile boolean breakOnCaughtErrors;
+    // the 'No Template Matched' filter: pause at the first element of each name, in each mode, no template matched
+    private volatile boolean breakOnNoMatch;
     // the error paused at, if any
     private volatile Map<String, Object> pausedError;
 
@@ -116,6 +118,12 @@ final class Debugger {
     private final Set<String> modulePaths = java.util.concurrent.ConcurrentHashMap.newKeySet();
     // the instruction entered last - for output written by it, e.g. nodes it copies (only used on the transform thread)
     private Traceable lastEntered;
+    // the transform's controller, and for each element name and mode ('name (mode m)'), how many elements no
+    // template rule matched (only used on the transform thread)
+    private net.sf.saxon.Controller controller;
+    private final Map<String, Integer> unmatched = new java.util.LinkedHashMap<String, Integer>();
+    // likewise, for modes with on-no-match="deep-skip", where they're dropped
+    private final Map<String, Integer> droppedUnmatched = new java.util.LinkedHashMap<String, Integer>();
 
     // --- going back (stepBack, reverseContinue). A transform runs the same way each time, so going back is running
     // it again, from the start, in a new Debugger, to an earlier point - quietly, resumed at each pause as it was
@@ -187,6 +195,7 @@ final class Debugger {
         nextFunctionBreakpointId = before.nextFunctionBreakpointId;
         breakOnErrors = before.breakOnErrors;
         breakOnCaughtErrors = before.breakOnCaughtErrors;
+        breakOnNoMatch = before.breakOnNoMatch;
         currentDateTime = before.currentDateTime;
         // the Debug Console has shown the output up to where the run being gone back from is paused - at an error,
         // including that event's
@@ -429,6 +438,7 @@ final class Debugger {
                             "The transform didn't run the same way again, so it couldn't go back: it has run to the end\n"));
                 }
                 dap.muted = false;
+                reportUnmatched();
                 System.out.flush();
                 System.err.flush();
                 sendOutputs(null, false);
@@ -1296,7 +1306,8 @@ final class Debugger {
     private void pause(String reason, Frame frame, int frameCallDepth, Map<String, Object> error) {
         pausedError = error;
         pausedEvent = events;
-        pausedAtError = error != null;
+        // an error, or no template matched: after the event it happened in (for going back)
+        pausedAtError = error != null || NO_MATCH_REASON.equals(reason);
         pausedFrames = new ArrayList<Frame>();
         for (Frame f : frames) {
             if (!pausedFrames.isEmpty() || f == frame) {
@@ -1383,6 +1394,98 @@ final class Debugger {
         List<Object> filters = Json.array(args, "filters");
         breakOnErrors = filters.contains("errors");
         breakOnCaughtErrors = filters.contains("caught");
+        breakOnNoMatch = filters.contains("noMatch");
+    }
+
+    // ---------------------------------------------------------------- no template matched
+
+    void transformOpened(net.sf.saxon.Controller controller) {
+        if (Thread.currentThread() == transformThread) {
+            this.controller = controller;
+        }
+    }
+
+    /**
+     * No template rule matched an item, for xsl:apply-templates (from the TraceListener): its mode's built-in rules
+     * apply. Only an element, where they're the usual fallback (text-only-copy, which Saxon names 'text-only') - not a mode whose on-no-match is e.g.
+     * shallow-copy, or one with no template rules, where that's the intent. Each element name, in each mode, is
+     * counted, for the summary at the end; with the 'No Template Matched' filter, the first of each is paused at -
+     * at the xsl:apply-templates (or in a frame of its own, if no instruction has run yet, as for the initial mode),
+     * in a frame for the element, which is its context item
+     */
+    void noTemplateMatched(net.sf.saxon.trans.rules.BuiltInRuleSet rules, net.sf.saxon.trans.Mode mode, Item item) {
+        if (abandoned) {
+            throw new Abandoned();
+        }
+        boolean dropping = rules.getName().equals("deep-skip");
+        if (Thread.currentThread() != transformThread || runningTask || !(rules.getName().startsWith("text-only") || dropping) || mode.isEmpty() ||
+                !(item instanceof net.sf.saxon.om.NodeInfo) || ((net.sf.saxon.om.NodeInfo) item).getNodeKind() != net.sf.saxon.type.Type.ELEMENT) {
+            return;
+        }
+        String name = ((net.sf.saxon.om.NodeInfo) item).getDisplayName();
+        String modeName = mode.isUnnamedMode() ? "#default" : mode.getModeName().getDisplayName();
+        String key = name + " (mode " + modeName + ")";
+        if (dropping) {
+            // with on-no-match="deep-skip": the element and its content aren't processed - only in the summary
+            Integer dropped = droppedUnmatched.get(key);
+            droppedUnmatched.put(key, dropped == null ? 1 : dropped + 1);
+            return;
+        }
+        Integer count = unmatched.get(key);
+        unmatched.put(key, count == null ? 1 : count + 1);
+        if (replayTo >= 0) {
+            resumeAsBefore(events, true);
+            return;
+        }
+        Frame top = frames.peek();
+        net.sf.saxon.Controller c = top != null && top.context != null ? top.context.getController() : controller;
+        if (!breakOnNoMatch || count != null || c == null) {
+            return;
+        }
+        Frame frame = newFrame(null, "no template matched: " + key, false);
+        net.sf.saxon.expr.XPathContextMajor context = c.newXPathContext();
+        context.setCurrentIterator(new net.sf.saxon.tree.iter.ManualIterator(item));
+        frame.context = context;
+        if (top != null) {
+            frame.current = top.current;
+            frame.systemId = top.systemId;
+            frame.line = top.line;
+            frame.column = top.column;
+        }
+        frames.push(frame);
+        try {
+            // not an exception (VS Code shows those as errors): a pause, with why in the Debug Console
+            dap.log("\u25b8 No template rule matched " + name + " (mode " + modeName + "): the built-in template rules apply - its text is written, and its children are processed");
+            pause(NO_MATCH_REASON, frame, callDepth);
+        } finally {
+            frames.remove(frame);
+        }
+    }
+
+    // the elements no template rule matched: e.g. 'Built-in template rules applied to 37 elements no template matched:
+    // item ×30 (mode #default), o:note ×7 (mode summary)' - and on a line of its own, those dropped by deep-skip
+    private void reportUnmatched() {
+        if (!unmatched.isEmpty()) {
+            int total = 0;
+            for (int n : unmatched.values()) {
+                total += n;
+            }
+            dap.log("▸ Built-in template rules applied to " + total + (total == 1 ? " element" : " elements") + " no template matched: " + unmatchedList(unmatched));
+        }
+        if (!droppedUnmatched.isEmpty()) {
+            dap.log("▸ Dropped by on-no-match=\"deep-skip\": " + unmatchedList(droppedUnmatched));
+        }
+    }
+
+    // e.g. 'item ×30 (mode #default), o:note ×7 (mode summary)'
+    private static String unmatchedList(Map<String, Integer> counts) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            String key = entry.getKey();
+            int mode = key.indexOf(" (mode ");
+            sb.append(sb.length() > 0 ? ", " : "").append(key, 0, mode).append(" ×").append(entry.getValue()).append(key.substring(mode));
+        }
+        return sb.toString();
     }
 
     Map<String, Object> exceptionInfo() {
@@ -1494,6 +1597,8 @@ final class Debugger {
 
     private static final String DYNAMIC_ERROR = "Dynamic error";
     private static final String CAUGHT_ERROR = "Error caught by xsl:try";
+    // the stopped event's reason: VS Code shows 'Paused on no template matched'
+    private static final String NO_MATCH_REASON = "no template matched";
 
     // for the exceptionInfo request: VS Code's exception widget shows the code as its title, and the description below
     // it - Saxon's message, for an error caught by xsl:try after saying so (else, with no message, the category)

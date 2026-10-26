@@ -2401,6 +2401,71 @@ async function testStepBackReplaysSteps(saxonJar) {
     }
 }
 
+// with the 'No Template Matched' filter: a pause at the first element of each name (in each mode) that no template
+// rule matched, in a frame of its own with the element as the context item - at the xsl:apply-templates, if any - and
+// a summary at the end. Not for modes whose on-no-match is e.g. shallow-copy - and for deep-skip, only in the summary
+async function testNoTemplateMatched(saxonJar) {
+    let dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${path.join(fixtures, 'no-match.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] });
+    await dap.request('setExceptionBreakpoints', { filters: ['errors', 'noMatch'] });
+    await dap.request('configurationDone', {});
+    let stop = await stopped;
+    // a pause, not an exception (shown as an error)
+    assert.strictEqual(stop.reason, 'no template matched');
+    assert.strictEqual(stop.frames[0].name, 'no template matched: item (mode #default)');
+    assert.strictEqual(stop.frames[0].line, 5);
+    assert.match(stop.frames[1].name, /xsl:template match="\/"/);
+    const context = byName(await dap.variables(0, 'Context'));
+    assert.match(context['.'].value, /^<item n="2">/);
+    assert.match(dap.output, /\u25b8 No template rule matched item \(mode #default\): the built-in template rules apply/);
+    // going back from it, then on to it again
+    stopped = dap.stopped();
+    await dap.request('stepBack', { threadId: 1 });
+    stop = await stopped;
+    assert.strictEqual(stop.reason, 'step');
+    assert.deepStrictEqual(stop.frames.map((f) => f.line), [5]);
+    stopped = dap.stopped();
+    await dap.request('continue', { threadId: 1 });
+    stop = await stopped;
+    assert.strictEqual(stop.frames[0].name, 'no template matched: item (mode #default)');
+    // item 3 isn't paused at: an element of the same name
+    let terminated = dap.event('terminated');
+    await dap.request('continue', { threadId: 1 });
+    await terminated;
+    assert.match(dap.output, /Built-in template rules applied to 2 elements no template matched: item \u00d72 \(mode #default\)\n/);
+    // a mode with on-no-match="deep-skip": only in the summary, on a line of its own
+    assert.match(dap.output, /Dropped by on-no-match="deep-skip": item \u00d72 \(mode drop\)\n/);
+    // the pause, the step back, and the pause again - not for item 3
+    assert.strictEqual(dap.events.filter((e) => e.event === 'stopped').length, 3);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+
+    // nothing matched from the start (the templates are for another namespace): a frame with no source line
+    dap = new DapClient(saxonJar);
+    stopped = dap.stopped();
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${path.join(fixtures, 'no-match-initial.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] });
+    await dap.request('setExceptionBreakpoints', { filters: ['noMatch'] });
+    await dap.request('configurationDone', {});
+    stop = await stopped;
+    assert.deepStrictEqual(stop.frames.map((f) => f.name), ['no template matched: items (mode #default)']);
+    assert.match(byName(await dap.variables(0, 'Context'))['.'].value, /^<items>/);
+    const evaluated = await dap.request('evaluate', { expression: 'count(item)', frameId: 0, context: 'watch' });
+    assert.strictEqual(evaluated.result, '3');
+    stopped = dap.stopped();
+    await dap.request('continue', { threadId: 1 });
+    stop = await stopped;
+    assert.deepStrictEqual(stop.frames.map((f) => f.name), ['no template matched: item (mode #default)']);
+    terminated = dap.event('terminated');
+    await dap.request('continue', { threadId: 1 });
+    await terminated;
+    assert.match(dap.output, /applied to 4 elements no template matched: items \u00d71 \(mode #default\), item \u00d73 \(mode #default\)/);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function main() {
     const jars = process.argv.slice(2);
     if (jars.length === 0) {
@@ -2409,7 +2474,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;

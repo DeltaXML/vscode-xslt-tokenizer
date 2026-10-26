@@ -166,7 +166,9 @@ public final class XsltDebugAdapter {
                                     Json.obj().with("filter", "errors").with("label", "Dynamic Errors").with("default", true)
                                             .with("description", "Pause at a dynamic error that ends the transform - including xsl:message with terminate=\"yes\""),
                                     Json.obj().with("filter", "caught").with("label", "Errors Caught by xsl:try").with("default", false)
-                                            .with("description", "Pause at a dynamic error that an xsl:try catches"))));
+                                            .with("description", "Pause at a dynamic error that an xsl:try catches"),
+                                    Json.obj().with("filter", "noMatch").with("label", "No Template Matched").with("default", false)
+                                            .with("description", "Pause at the first element of each name, in each mode, that no template rule matched - so the built-in rules apply"))));
                     event("initialized", null);
                     break;
                 case "launch":
