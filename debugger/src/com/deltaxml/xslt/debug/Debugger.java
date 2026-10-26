@@ -571,6 +571,26 @@ final class Debugger {
 
     // the frames from startFrame, at most levels of them (0: all) - VS Code asks for a deep stack, e.g. in recursion, a
     // part at a time
+    // for each paused frame, in recursion - a frame whose name others on the stack have too, e.g. 'f:sum#2' - how deep
+    // in it it is: 1 for the outermost of them; 0 for a frame whose name is the only one
+    private int[] recursionDepths() {
+        Map<String, Integer> totals = new HashMap<String, Integer>();
+        for (Frame frame : pausedFrames) {
+            Integer n = totals.get(frame.name);
+            totals.put(frame.name, n == null ? 1 : n + 1);
+        }
+        int[] depths = new int[pausedFrames.size()];
+        Map<String, Integer> seen = new HashMap<String, Integer>();
+        for (int i = pausedFrames.size() - 1; i >= 0; i--) {
+            String name = pausedFrames.get(i).name;
+            if (totals.get(name) > 1) {
+                Integer n = seen.get(name);
+                seen.put(name, depths[i] = n == null ? 1 : n + 1);
+            }
+        }
+        return depths;
+    }
+
     int frameCount() throws Exception {
         return onTransformThread(new Callable<Integer>() {
             public Integer call() {
@@ -584,9 +604,11 @@ final class Debugger {
             public List<Map<String, Object>> call() {
                 List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
                 int end = levels > 0 ? Math.min(pausedFrames.size(), startFrame + levels) : pausedFrames.size();
+                int[] depths = recursionDepths();
                 for (int i = Math.max(startFrame, 0); i < end; i++) {
                     Frame frame = pausedFrames.get(i);
-                    Json.Obj dapFrame = Json.obj().with("id", i).with("name", frame.name)
+                    String name = depths[i] > 0 ? frame.name + " [depth " + String.format(Locale.ROOT, "%,d", depths[i]) + "]" : frame.name;
+                    Json.Obj dapFrame = Json.obj().with("id", i).with("name", name)
                             .with("line", Math.max(frame.line, 0)).with("column", Math.max(frame.column, 1));
                     String path = frame.systemId == null ? null : pathOf(frame.systemId);
                     if (path != null) {

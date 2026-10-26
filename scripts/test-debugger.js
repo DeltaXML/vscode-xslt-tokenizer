@@ -2479,7 +2479,8 @@ async function testDeepRecursion(saxonJar) {
     const page = await dap.request('stackTrace', { threadId: 1, startFrame: 0, levels: 20 });
     assert.strictEqual(page.stackFrames.length, 20);
     assert.ok(page.totalFrames > 49990, `totalFrames ${page.totalFrames}`);
-    assert.ok(page.stackFrames.every((f) => f.name.startsWith('f:sum')));
+    // each with how deep in the recursion it is - from 50000 down to 10
+    assert.deepStrictEqual(page.stackFrames.slice(0, 2).map((f) => f.name), ['f:sum#2 [depth 49,991]', 'f:sum#2 [depth 49,990]']);
     const last = await dap.request('stackTrace', { threadId: 1, startFrame: page.totalFrames - 1, levels: 20 });
     assert.deepStrictEqual(last.stackFrames.map((f) => f.id), [page.totalFrames - 1]);
     assert.match(last.stackFrames[0].name, /initial-template|transform/);
