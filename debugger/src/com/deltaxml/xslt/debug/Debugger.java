@@ -50,6 +50,9 @@ final class Debugger {
 
     enum Step { NONE, OVER, INTO, OUT }
 
+    // the transform thread's stack size (see start)
+    private static final long TRANSFORM_STACK_SIZE = 2048L * 1024 * 1024;
+
     // the debugger instance that DebugTraceListener instances (created by Saxon from the -T option) report to
     static volatile Debugger current;
 
@@ -410,7 +413,10 @@ final class Debugger {
                 nextResumption++;
             }
         }
-        transformThread = new Thread(new Runnable() {
+        // a large stack: without optimisation (-opt:0), and traced, recursive calls aren't tail calls - each uses the
+        // stack - so a deeply recursive stylesheet, which a normal run handles, would otherwise overflow it. The stack
+        // is only reserved, not used, until needed
+        transformThread = new Thread(null, new Runnable() {
             public void run() {
                 int exitCode = 0;
                 try {
@@ -445,7 +451,7 @@ final class Debugger {
                 dap.event("exited", Json.obj().with("exitCode", exitCode));
                 dap.event("terminated", Json.obj());
             }
-        }, "xslt-transform");
+        }, "xslt-transform", TRANSFORM_STACK_SIZE);
         transformThread.start();
     }
 
@@ -563,11 +569,22 @@ final class Debugger {
         pauseRequested = true;
     }
 
-    List<Map<String, Object>> stackTrace() throws Exception {
+    // the frames from startFrame, at most levels of them (0: all) - VS Code asks for a deep stack, e.g. in recursion, a
+    // part at a time
+    int frameCount() throws Exception {
+        return onTransformThread(new Callable<Integer>() {
+            public Integer call() {
+                return pausedFrames.size();
+            }
+        });
+    }
+
+    List<Map<String, Object>> stackTrace(final int startFrame, final int levels) throws Exception {
         return onTransformThread(new Callable<List<Map<String, Object>>>() {
             public List<Map<String, Object>> call() {
                 List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
-                for (int i = 0; i < pausedFrames.size(); i++) {
+                int end = levels > 0 ? Math.min(pausedFrames.size(), startFrame + levels) : pausedFrames.size();
+                for (int i = Math.max(startFrame, 0); i < end; i++) {
                     Frame frame = pausedFrames.get(i);
                     Json.Obj dapFrame = Json.obj().with("id", i).with("name", frame.name)
                             .with("line", Math.max(frame.line, 0)).with("column", Math.max(frame.column, 1));

@@ -90,7 +90,8 @@ export class XsltEmptySteps {
 			return;
 		}
 		const session = item.session;
-		const { stackFrames } = await session.customRequest('stackTrace', { threadId: item.threadId });
+		// only the frame selected (the adapter's frame ids are their positions) - the stack may be deep, e.g. in recursion
+		const { stackFrames } = await session.customRequest('stackTrace', { threadId: item.threadId, startFrame: item.frameId, levels: 1 });
 		const frame = (stackFrames ?? []).find((f: { id: number }) => f.id === item.frameId);
 		const framePath: string | undefined = frame?.source?.path;
 		const editor = framePath ? vscode.window.visibleTextEditors.find((e) => path.normalize(e.document.uri.fsPath) === path.normalize(framePath)) : undefined;

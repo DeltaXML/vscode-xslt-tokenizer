@@ -198,8 +198,8 @@ public final class XsltDebugAdapter {
                     respond(request, Json.obj().with("threads", threads));
                     break;
                 case "stackTrace":
-                    List<Map<String, Object>> frames = debugger.stackTrace();
-                    respond(request, Json.obj().with("stackFrames", frames).with("totalFrames", frames.size()));
+                    List<Map<String, Object>> frames = debugger.stackTrace((int) Json.number(args, "startFrame", 0), (int) Json.number(args, "levels", 0));
+                    respond(request, Json.obj().with("stackFrames", frames).with("totalFrames", debugger.frameCount()));
                     break;
                 case "scopes":
                     respond(request, Json.obj().with("scopes", debugger.scopes((int) Json.number(args, "frameId", 0))));
