@@ -37,8 +37,11 @@ public final class XsltDebugAdapter {
 
     private final OutputStream protocolOut;
     private int seq = 1;
-    private final Debugger debugger = new Debugger(this);
+    // replaced by a new one on going back (stepBack, reverseContinue), which runs the transform again
+    private volatile Debugger debugger = new Debugger(this);
     private OutputEventStream stderr;
+    // while the transform is run again, to go back: the output already shown in the Debug Console isn't shown again
+    volatile boolean muted;
 
     private XsltDebugAdapter(OutputStream protocolOut) {
         this.protocolOut = protocolOut;
@@ -126,6 +129,9 @@ public final class XsltDebugAdapter {
 
     // a message for the Debug Console from the adapter itself (rather than the transform)
     void log(String text) {
+        if (muted) {
+            return;
+        }
         event("output", Json.obj().with("category", "console").with("output", text + "\n"));
     }
 
@@ -155,6 +161,7 @@ public final class XsltDebugAdapter {
                             .with("supportsFunctionBreakpoints", true)
                             .with("supportsTerminateRequest", true)
                             .with("supportsExceptionInfoRequest", true)
+                            .with("supportsStepBack", true)
                             .with("exceptionBreakpointFilters", Arrays.asList(
                                     Json.obj().with("filter", "errors").with("label", "Dynamic Errors").with("default", true)
                                             .with("description", "Pause at a dynamic error that ends the transform - including xsl:message with terminate=\"yes\""),
@@ -216,6 +223,11 @@ public final class XsltDebugAdapter {
                     break;
                 case "stepOut":
                     debugger.resume(Debugger.Step.OUT);
+                    respond(request, null);
+                    break;
+                case "stepBack":
+                case "reverseContinue":
+                    debugger = debugger.goBack(command.equals("reverseContinue"));
                     respond(request, null);
                     break;
                 case "pause":
@@ -309,7 +321,9 @@ public final class XsltDebugAdapter {
         }
 
         private void emit() {
-            if (buffer.size() > 0) {
+            if (buffer.size() > 0 && adapter.muted) {
+                buffer.reset();
+            } else if (buffer.size() > 0) {
                 String text = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
                 buffer.reset();
                 Json.Obj event = Json.obj().with("category", category).with("output", text);

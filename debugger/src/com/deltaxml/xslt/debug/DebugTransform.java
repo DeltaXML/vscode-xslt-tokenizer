@@ -88,6 +88,7 @@ class DebugTransform extends Transform {
         debugger.stylesheetCompiled(executable.getUnderlyingCompiledStylesheet().getTopLevelPackage());
         DebugCodeInjector.traceKeys(executable.getUnderlyingCompiledStylesheet().getTopLevelPackage());
         Xslt30Transformer transformer = super.newTransformer(executable, options);
+        debugger.fixCurrentDateTime(transformer.getUnderlyingController());
         final ErrorReporter saxonReporter = transformer.getErrorReporter();
         transformer.setErrorReporter(error -> debugger.reportError(error, saxonReporter, false));
         if (!debugger.isMessageEscaping()) {

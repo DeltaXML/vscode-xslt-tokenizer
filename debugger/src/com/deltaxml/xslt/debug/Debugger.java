@@ -63,7 +63,7 @@ final class Debugger {
     private boolean messageEscaping;
 
     // --- breakpoints: normalised file path -> line -> breakpoint (written by the DAP thread at any time)
-    private final Map<String, Map<Integer, Breakpoint>> breakpoints = new ConcurrentHashMap<String, Map<Integer, Breakpoint>>();
+    private final Map<String, Map<Integer, Breakpoint>> breakpoints;
 
     // --- function breakpoints: functions and named templates, by name (replaced by the DAP thread at any time); the
     // compiled stylesheet, which their names are checked against, once it's compiled
@@ -117,8 +117,93 @@ final class Debugger {
     // the instruction entered last - for output written by it, e.g. nodes it copies (only used on the transform thread)
     private Traceable lastEntered;
 
+    // --- going back (stepBack, reverseContinue). A transform runs the same way each time, so going back is running
+    // it again, from the start, in a new Debugger, to an earlier point - quietly, resumed at each pause as it was
+    // before (a step into, e.g., steps through XPath expressions, which reports more of them). The points are counted:
+    // each instruction or expression part entered with a location (an event); the ones arriving at a line, where a
+    // step back can go, are recorded, with their frame
+    private int events;
+    // for each arrival at a line: its event, its frame's serial number, its line, and its path (in arrivalPaths)
+    private int[] arrivals = new int[4096];
+    private int arrivalCount;
+    private final List<String> arrivalPaths = new ArrayList<String>();
+    private final Map<String, Integer> arrivalPathIds = new HashMap<String, Integer>();
+    private int frameSerials;
+    // how the run went on from each pause (guarded by lock), and where it's paused now
+    private final List<Resumption> resumptions = new ArrayList<Resumption>();
+    private int pausedEvent;
+    private boolean pausedAtError;
+    // when running again, to go back: the event to pause at, why, and how far the run went on from the pause
+    // being resumed as before (-1 once it's paused there); the breakpoints' lines then
+    private int replayTo = -1;
+    private String replayReason;
+    private int nextResumption;
+    private Map<String, Set<Integer>> replayBreakpointLines;
+    // the furthest event any run has written output after: the Debug Console has shown output up to there already
+    private int shownTo;
+    // current-dateTime(), the same for each run
+    private net.sf.saxon.value.DateTimeValue currentDateTime;
+    // a run that was gone back from: its thread stops at its next callback
+    private volatile boolean abandoned;
+
+    /** thrown on an abandoned run's thread, to end its transform (an Error: Saxon doesn't catch it) */
+    static final class Abandoned extends Error {
+        private static final long serialVersionUID = 1L;
+
+        Abandoned() {
+            super("the transform was run again, to go back", null, false, false);
+        }
+    }
+
+    /** a pause - at an event, or an error after it - and the step it was resumed with */
+    private static final class Resumption {
+        final int event;
+        final boolean atError;
+        final Step step;
+        final Map<String, Set<Integer>> breakpointLines;
+
+        Resumption(int event, boolean atError, Step step, Map<String, Set<Integer>> breakpointLines) {
+            this.event = event;
+            this.atError = atError;
+            this.step = step;
+            this.breakpointLines = breakpointLines;
+        }
+    }
+
     Debugger(XsltDebugAdapter dap) {
         this.dap = dap;
+        this.breakpoints = new ConcurrentHashMap<String, Map<Integer, Breakpoint>>();
+        init();
+    }
+
+    // a run again, to go back to an event: with the same settings and breakpoints, resumed at each pause before it
+    // as it was before
+    private Debugger(Debugger before, int replayTo, String replayReason) {
+        this.dap = before.dap;
+        this.breakpoints = before.breakpoints;
+        saxonArgs.addAll(before.saxonArgs);
+        messageEscaping = before.messageEscaping;
+        functionBreakpoints = before.functionBreakpoints;
+        nextFunctionBreakpointId = before.nextFunctionBreakpointId;
+        breakOnErrors = before.breakOnErrors;
+        breakOnCaughtErrors = before.breakOnCaughtErrors;
+        currentDateTime = before.currentDateTime;
+        // the Debug Console has shown the output up to where the run being gone back from is paused - at an error,
+        // including that event's
+        shownTo = Math.max(before.shownTo, before.pausedAtError ? before.pausedEvent : before.pausedEvent - 1);
+        synchronized (before.lock) {
+            for (Resumption r : before.resumptions) {
+                if (r.event < replayTo || (r.event == 0 && !r.atError)) {
+                    resumptions.add(r);
+                }
+            }
+        }
+        this.replayTo = replayTo;
+        this.replayReason = replayReason;
+        init();
+    }
+
+    private void init() {
         current = this;
         SteppedResult.discardAll();
         // where the parts of an XML output came from, for going from the output to the stylesheet
@@ -299,16 +384,32 @@ final class Debugger {
         args.add("-opt:0");
         args.add("-l:on");
         args.add("-quit:off");
-        // for the extension's log (VS Code ignores events it doesn't know)
-        dap.event("xsltDebugLaunch", Json.obj().with("saxon", net.sf.saxon.Version.getProductTitle())
-                .with("java", System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")")
-                .with("javaHome", System.getProperty("java.home")).with("saxonArgs", args));
+        if (replayTo < 0) {
+            // for the extension's log (VS Code ignores events it doesn't know)
+            dap.event("xsltDebugLaunch", Json.obj().with("saxon", net.sf.saxon.Version.getProductTitle())
+                    .with("java", System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")")
+                    .with("javaHome", System.getProperty("java.home")).with("saxonArgs", args));
+            // the breakpoints the run starts with (a run again, to go back, has those of the first)
+            resumptions.add(new Resumption(0, false, Step.NONE, breakpointLines()));
+        } else {
+            // the output shown already, compiling the stylesheet again included
+            dap.muted = true;
+        }
+        for (Resumption r : resumptions) {
+            if (r.event == 0) {
+                replayBreakpointLines = r.breakpointLines;
+                nextResumption++;
+            }
+        }
         transformThread = new Thread(new Runnable() {
             public void run() {
                 int exitCode = 0;
                 try {
                     new DebugTransform(Debugger.this).doTransform(args.toArray(new String[0]), "java net.sf.saxon.Transform");
                 } catch (Throwable e) {
+                    if (abandoned) {
+                        return;
+                    }
                     exitCode = 2;
                     // Saxon has already reported a failure it throws as a plain RuntimeException
                     if (e.getClass() != RuntimeException.class) {
@@ -317,6 +418,17 @@ final class Debugger {
                     // why, for the extension's notification: e.g. 'Source file ... does not exist'
                     dap.event("xsltDebugFailure", Json.obj().with("message", message(e)));
                 }
+                if (abandoned) {
+                    return;
+                }
+                if (replayTo >= 0) {
+                    // the event to go back to wasn't reached: the run didn't go the same way
+                    replayTo = -1;
+                    dap.muted = false;
+                    dap.event("output", Json.obj().with("category", "important").with("output",
+                            "The transform didn't run the same way again, so it couldn't go back: it has run to the end\n"));
+                }
+                dap.muted = false;
                 System.out.flush();
                 System.err.flush();
                 sendOutputs(null, false);
@@ -337,7 +449,103 @@ final class Debugger {
             stepPath = stoppedPath;
             stepLine = stoppedLine;
             paused = false;
+            // how it went on from here: for running it again the same way, to go back
+            resumptions.add(new Resumption(pausedEvent, pausedAtError, nextStep, breakpointLines()));
             lock.notifyAll();
+        }
+    }
+
+    // the lines with breakpoints, by path: they decide which XPath expressions are stepped through
+    private Map<String, Set<Integer>> breakpointLines() {
+        Map<String, Set<Integer>> result = new HashMap<String, Set<Integer>>();
+        for (Map.Entry<String, Map<Integer, Breakpoint>> entry : breakpoints.entrySet()) {
+            result.put(entry.getKey(), new HashSet<Integer>(entry.getValue().keySet()));
+        }
+        return result;
+    }
+
+    // the lines with breakpoints in a file - when running again to go back, those of the run being repeated
+    private Set<Integer> breakpointLines(String path) {
+        if (replayTo >= 0 && replayBreakpointLines != null) {
+            Set<Integer> lines = replayBreakpointLines.get(path);
+            return lines == null ? java.util.Collections.<Integer>emptySet() : lines;
+        }
+        Map<Integer, Breakpoint> lines = breakpoints.get(path);
+        return lines == null ? java.util.Collections.<Integer>emptySet() : lines.keySet();
+    }
+
+    /**
+     * Goes back (on the DAP thread, while paused): a step back is to the line arrived at last in the frame paused in, or
+     * one it was called from (e.g. the previous line, or the line making the call); a reverse continue is to the last
+     * arrival at a line with a breakpoint (its condition isn't checked), else to the start. The transform is run
+     * again, in the Debugger returned, to that point, then paused there; this one's run is abandoned
+     */
+    Debugger goBack(boolean toBreakpoint) {
+        synchronized (lock) {
+            if (!paused || replayTo >= 0) {
+                throw new IllegalStateException("the transform is running");
+            }
+        }
+        Set<Integer> stack = new HashSet<Integer>();
+        for (Frame frame : pausedFrames) {
+            stack.add(frame.serial);
+        }
+        int target = -1;
+        String reason = "step";
+        for (int i = arrivalCount - 1; i >= 0 && target < 0; i--) {
+            int event = arrivals[i * 4];
+            if (event > pausedEvent || (event == pausedEvent && !pausedAtError)) {
+                continue;
+            }
+            if (toBreakpoint) {
+                Map<Integer, Breakpoint> lines = breakpoints.get(arrivalPaths.get(arrivals[i * 4 + 3]));
+                if (lines != null && lines.containsKey(arrivals[i * 4 + 2])) {
+                    target = event;
+                    reason = "breakpoint";
+                }
+            } else if (stack.contains(arrivals[i * 4 + 1])) {
+                target = event;
+            }
+        }
+        if (target < 0 && toBreakpoint && arrivalCount > 0 && arrivals[0] < pausedEvent) {
+            target = arrivals[0];
+            reason = "entry";
+        }
+        if (target < 0) {
+            throw new IllegalStateException("this is the start of the transform: there's nothing to go back to");
+        }
+        Debugger next = new Debugger(this, target, reason);
+        abandon();
+        next.start();
+        return next;
+    }
+
+    // this run is ended: its thread, paused, goes on and throws Abandoned at once
+    private void abandon() {
+        dap.muted = true;
+        synchronized (lock) {
+            abandoned = true;
+            paused = false;
+            tasks.clear();
+            lock.notifyAll();
+        }
+        try {
+            transformThread.join(10000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    // the current date and time, the same for each run, so it's run again the same way
+    void fixCurrentDateTime(net.sf.saxon.Controller controller) {
+        try {
+            if (currentDateTime == null) {
+                currentDateTime = controller.getCurrentDateTime();
+            } else {
+                controller.setCurrentDateTime(currentDateTime);
+            }
+        } catch (XPathException | RuntimeException e) {
+            // each run has its own
         }
     }
 
@@ -432,6 +640,9 @@ final class Debugger {
     // ---------------------------------------------------------------- transform thread
 
     void enter(Traceable traceable, Map<String, Object> properties, XPathContext context) {
+        if (abandoned) {
+            throw new Abandoned();
+        }
         if (Thread.currentThread() != transformThread || runningTask) {
             // e.g. a lazily evaluated variable being evaluated for the Variables view
             return;
@@ -452,12 +663,12 @@ final class Debugger {
         }
         boolean isCall = traceable instanceof TraceableComponent;
         if (isCall || isFocusInstruction(traceable)) {
-            frames.push(new Frame(traceable, frameName(traceable, properties), isCall));
+            frames.push(newFrame(traceable, frameName(traceable, properties), isCall));
             if (isCall) {
                 callDepth++;
             }
         } else if (frames.isEmpty()) {
-            frames.push(new Frame(null, "transform", false));
+            frames.push(newFrame(null, "transform", false));
         }
         // a part of the XPath expression being stepped through belongs to its frame - even when, evaluated lazily
         // (e.g. a function argument), it's evaluated within a function it calls
@@ -535,8 +746,23 @@ final class Debugger {
         }
 
         stoppedAt = null;
+        int event = ++events;
+        if (onNewLine && !lazyArrival) {
+            recordArrival(event, top.serial, top.line, path);
+        }
         String reason = null;
-        if (pauseRequested) {
+        if (replayTo >= 0) {
+            // running again, to go back: quietly to the event gone back to, resumed at each pause as before
+            dap.muted = true;
+            if (event == replayTo) {
+                replayTo = -1;
+                replayBreakpointLines = null;
+                pauseRequested = false;
+                reason = replayReason;
+            } else {
+                resumeAsBefore(event, false);
+            }
+        } else if (pauseRequested) {
             reason = "pause";
         } else if (stopOnEntry) {
             reason = "entry";
@@ -548,6 +774,10 @@ final class Debugger {
             reason = "breakpoint";
         } else if ((!lazyArrival || step == Step.INTO) && isStepComplete(path, top.line, depth, arrivingAgain)) {
             reason = "step";
+        }
+        if (replayTo < 0) {
+            // output after this event that the Debug Console has shown already isn't shown again
+            dap.muted = event <= shownTo;
         }
         if (reason != null) {
             pauseRequested = false;
@@ -672,7 +902,7 @@ final class Debugger {
     private boolean stepThrough(Traceable instruction, XPathContext context, String path, int line, String name, String xpath,
             int startLine, int startColumn, boolean breakpointWithin, boolean alwaysStopped, boolean isTest, String description) {
         String systemId = instruction.getLocation().getSystemId();
-        Frame frame = new Frame(null, name + " (XPath)", true);
+        Frame frame = newFrame(null, name + " (XPath)", true);
         frame.context = context;
         frame.xsltContext = context;
         frame.xsltCurrent = instruction;
@@ -762,7 +992,7 @@ final class Debugger {
             attribute = (BreakableLines.XPathAttribute) found[0];
             text = (InlineFunctionText) found[1];
         }
-        Frame frame = new Frame(body, "function#" + (text == null ? inline.parameters.size() : text.declaredParameters), true);
+        Frame frame = newFrame(body, "function#" + (text == null ? inline.parameters.size() : text.declaredParameters), true);
         frame.context = context;
         frame.current = body;
         frame.systemId = inline.systemId;
@@ -787,12 +1017,9 @@ final class Debugger {
     }
 
     private boolean hasBreakpointBetween(String path, int firstLine, int lastLine) {
-        Map<Integer, Breakpoint> lines = breakpoints.get(path);
-        if (lines != null) {
-            for (Integer line : lines.keySet()) {
-                if (line >= firstLine && line <= lastLine) {
-                    return true;
-                }
+        for (Integer line : breakpointLines(path)) {
+            if (line >= firstLine && line <= lastLine) {
+                return true;
             }
         }
         return false;
@@ -884,18 +1111,18 @@ final class Debugger {
     }
 
     private boolean hasBreakpointWithin(String path, BreakableLines.XPathAttribute attribute, int instructionLine) {
-        Map<Integer, Breakpoint> lines = breakpoints.get(path);
-        if (lines != null) {
-            for (Integer line : lines.keySet()) {
-                if (line >= attribute.line && line <= attribute.lastLine && line != instructionLine) {
-                    return true;
-                }
+        for (Integer line : breakpointLines(path)) {
+            if (line >= attribute.line && line <= attribute.lastLine && line != instructionLine) {
+                return true;
             }
         }
         return false;
     }
 
     void leave(Traceable traceable) {
+        if (abandoned) {
+            throw new Abandoned();
+        }
         if (Thread.currentThread() != transformThread || runningTask) {
             return;
         }
@@ -950,6 +1177,10 @@ final class Debugger {
                 return false;
             }
             if (bp.logMessage != null) {
+                if (dap.muted) {
+                    // shown already, before going back
+                    return false;
+                }
                 dap.event("output", Json.obj().with("category", "console").with("output", interpolate(bp.logMessage, frame) + "\n")
                         .with("source", Json.obj().with("path", path)).with("line", line));
                 return false;
@@ -1064,6 +1295,8 @@ final class Debugger {
     // with an error: its code and message, for the stopped event and the exceptionInfo request
     private void pause(String reason, Frame frame, int frameCallDepth, Map<String, Object> error) {
         pausedError = error;
+        pausedEvent = events;
+        pausedAtError = error != null;
         pausedFrames = new ArrayList<Frame>();
         for (Frame f : frames) {
             if (!pausedFrames.isEmpty() || f == frame) {
@@ -1110,6 +1343,9 @@ final class Debugger {
             }
         }
         values.clear();
+        if (abandoned) {
+            throw new Abandoned();
+        }
     }
 
     // the XSLT context of a frame's XPath: within an XPath expression being stepped through, its instruction's
@@ -1161,6 +1397,9 @@ final class Debugger {
     // the Debug Console, and the location for the Problems view - and with a dynamic error, a pause where it happened
     // (Saxon reports it at the top level, but the debugger's stack frames still show where it was raised)
     void reportError(XmlProcessingError error, ErrorReporter saxonReporter, boolean compiling) {
+        if (abandoned) {
+            return;
+        }
         Location location = error.getLocation();
         String path = location == null || location.getSystemId() == null ? null : pathOf(location.getSystemId());
         int line = location == null ? -1 : location.getLineNumber();
@@ -1171,12 +1410,14 @@ final class Debugger {
             }
         });
         String code = error.getErrorCode() == null ? "" : error.getErrorCode().getLocalName();
-        if (path != null && line > 0) {
+        if (path != null && line > 0 && !dap.muted) {
             dap.event("xsltDebugError", Json.obj().with("path", path).with("line", line).with("column", column)
                     .with("code", code).with("message", error.getMessage()).with("severity", error.isWarning() ? "warning" : "error")
                     .with("compiling", compiling));
         }
-        if (!error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
+        if (replayTo >= 0) {
+            resumeAsBefore(events, true);
+        } else if (!error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
             pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "unhandled", DYNAMIC_ERROR));
         }
     }
@@ -1192,13 +1433,52 @@ final class Debugger {
         if (Thread.currentThread() != transformThread || runningTask) {
             return;
         }
-        if (breakOnCaughtErrors && !frames.isEmpty()) {
+        if (replayTo >= 0) {
+            resumeAsBefore(events, true);
+        } else if (breakOnCaughtErrors && !frames.isEmpty()) {
             String code = error.getErrorCodeQName() == null ? "" : error.getErrorCodeQName().getLocalPart();
             pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "always", CAUGHT_ERROR));
         }
         if (checkpoint instanceof Integer) {
             unwindTo((Integer) checkpoint);
         }
+    }
+
+    // running again, to go back: at an event (or an error after it) where the run before paused, it goes on as it did
+    // then - with the step it was resumed with, and the breakpoints it had then
+    private void resumeAsBefore(int event, boolean atError) {
+        while (nextResumption < resumptions.size()) {
+            Resumption r = resumptions.get(nextResumption);
+            if (r.event > event || (r.event == event && r.atError != atError)) {
+                return;
+            }
+            nextResumption++;
+            step = r.step;
+            replayBreakpointLines = r.breakpointLines;
+        }
+    }
+
+    private Frame newFrame(Traceable owner, String name, boolean isCall) {
+        Frame frame = new Frame(owner, name, isCall);
+        frame.serial = ++frameSerials;
+        return frame;
+    }
+
+    private void recordArrival(int event, int frameSerial, int line, String path) {
+        Integer pathId = arrivalPathIds.get(path);
+        if (pathId == null) {
+            pathId = arrivalPaths.size();
+            arrivalPaths.add(path);
+            arrivalPathIds.put(path, pathId);
+        }
+        if (arrivalCount * 4 == arrivals.length) {
+            arrivals = java.util.Arrays.copyOf(arrivals, arrivals.length * 2);
+        }
+        int i = arrivalCount++ * 4;
+        arrivals[i] = event;
+        arrivals[i + 1] = frameSerial;
+        arrivals[i + 2] = line;
+        arrivals[i + 3] = pathId;
     }
 
     // removes the frames above this depth, as their leave() calls would
@@ -1406,6 +1686,8 @@ final class Debugger {
         final Traceable owner;
         final String name;
         final boolean isCall;
+        // in the order frames are made: the same in each run, so arrivals at lines are matched to frames on going back
+        int serial;
         // for an XPath expression's frame: the call depth within it, and its instruction's context - for the
         // stylesheet's functions and global variables, and current(), current-group() etc.
         int callDepth;
