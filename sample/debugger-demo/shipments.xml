@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shipments xmlns="urn:example:shipping" date="2026-10-26">
+  <shipment id="S-100" status="shipped" service="express">
+    <customer>Ada</customer>
+    <item sku="W-1" qty="3"/>
+    <item sku="G-2" qty="1"/>
+  </shipment>
+  <shipment id="S-200" status="pending" service="standard">
+    <customer>Grace</customer>
+    <item sku="W-1" qty="10"/>
+  </shipment>
+</shipments>

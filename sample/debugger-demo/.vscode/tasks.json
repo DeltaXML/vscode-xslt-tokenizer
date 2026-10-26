@@ -42,6 +42,32 @@
 					"value": "0.1"
 				}
 			]
+		},
+		{
+			"type": "xslt",
+			"label": "empty-steps with shipments.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/empty-steps.xsl",
+			"xmlSource": "${workspaceFolder}/shipments.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			}
+		},
+		{
+			"type": "xslt",
+			"label": "empty-steps with orders.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/empty-steps.xsl",
+			"xmlSource": "${workspaceFolder}/orders.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			}
 		}
 	]
 }

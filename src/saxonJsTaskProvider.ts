@@ -122,8 +122,11 @@ export class SaxonJsTaskProvider implements vscode.TaskProvider {
         let tasksObject = undefined;
 
         try {
-            const doc = await vscode.workspace.openTextDocument(workspaceTaskUri);
-            tasksObject = jsc.parse(doc.getText());
+            // from the file - VS Code's copy of an open tasks.json may not have caught up yet with a task just added to
+            // the file (e.g. by the Debug button), so the task wouldn't be found - unless it has unsaved changes
+            const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === workspaceTaskUri.toString());
+            const text = open?.isDirty ? open.getText() : Buffer.from(await vscode.workspace.fs.readFile(workspaceTaskUri)).toString('utf8');
+            tasksObject = jsc.parse(text);
         } catch (e) {
             tasksObject = { tasks: [] };
         }

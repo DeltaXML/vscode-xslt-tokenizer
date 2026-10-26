@@ -211,7 +211,8 @@ export class XsltEmptySteps {
 				break;
 			case 'predicate': {
 				const counted = (await strings(`${lets}string(count(${before}))`))?.[0];
-				markdown.appendMarkdown(`Empty here: the predicate kept none of the ${counted ? counted + ' ' : ''}items`);
+				markdown.appendMarkdown(counted === '1' ? 'Empty here: the predicate didn\'t keep the one item' :
+					`Empty here: the predicate kept none of the ${counted ? counted + ' ' : ''}items`);
 				break;
 			}
 			case 'lookup': {
@@ -246,7 +247,7 @@ export class XsltEmptySteps {
 				}
 				const found = names.slice(1).map((n) => { const [name, local, uri] = n.split(' '); return { name, local, uri: uri ?? '' }; });
 				const local = test.replace(/^.*:/, '');
-				markdown.appendMarkdown(`Empty here: no ${code(test)} - ${names[0]} ${what} in all`);
+				markdown.appendMarkdown(`Empty here: no ${code(test)} - ${names[0]} ${names[0] === '1' ? what.replace(/(attribute|element)s/, '$1') : what} in all`);
 				if (/[()]/.test(test) || local === '*') {
 					break;
 				}

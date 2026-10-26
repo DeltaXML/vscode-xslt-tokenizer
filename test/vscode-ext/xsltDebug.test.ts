@@ -446,7 +446,7 @@ suite('XSLT debugger - debug sessions', function () {
 		assert.deepStrictEqual(faded.map((f) => `${f.line + 1} ${f.text}`), ['7 orders', '8 ?name', '9 [@n = 5]', '11 o:none']);
 		assert.match(faded[0].hover, /There's `orders` in namespace `urn:orders`/);
 		assert.match(faded[1].hover, /no key `name`[\s\S]*Keys: `id`, `title`|no key `name`[\s\S]*Keys: `title`, `id`/);
-		assert.match(faded[2].hover, /the predicate kept none of the 1 items/);
+		assert.match(faded[2].hover, /the predicate didn't keep the one item/);
 		await stop.session.customRequest('continue', { threadId: 1 });
 		await ended;
 		assert.deepStrictEqual(XsltEmptySteps.lastFaded, []);
