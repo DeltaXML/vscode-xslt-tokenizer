@@ -184,7 +184,10 @@
 				"command": "xslt-xpath.findNodesWithXPath",
 				"title": "Find Nodes with XPath...",
 				"category": "XML",
-				"icon": "$(search)"
+				"icon": {
+					"light": "xslt-resources/icons/xpath-find-light.svg",
+					"dark": "xslt-resources/icons/xpath-find-dark.svg"
+				}
 			},
 			{
 				"command": "xslt-xpath.addXPathLocationToQueries",
