@@ -1590,6 +1590,10 @@ export class XsltTokenDiagnostics {
 				let xpathCharType = <CharLevelState>token.charType;
 				let xpathTokenType = <TokenLevelState>token.tokenType;
 				const stackItem: XPathData | undefined = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1] : undefined;
+				if (prevToken?.tokenType === TokenLevelState.uriLiteral) {
+					// the local name of an EQName, e.g. double in Q{urn:f}double(1)
+					token.eqNameUri = prevToken.value;
+				}
 
 				if (currentAttName === 'as') {
 					tagAsRange = tagAsRange ? [tagAsRange[0], index] : [index, index];
@@ -1899,7 +1903,8 @@ export class XsltTokenDiagnostics {
 								xsltVariableDeclarations.push(token);
 							}
 						} else {
-							let prefixEnd = token.value.indexOf(':');
+							// an EQName, e.g. $Q{urn:a}name, has a URI, not a prefix
+							let prefixEnd = token.value.startsWith('$Q{') ? -1 : token.value.indexOf(':');
 							if (prefixEnd !== -1) {
 								let prefix = token.value.substring(1, prefixEnd);
 								if (xpathPrefixes().indexOf(prefix) === -1) {
@@ -3104,6 +3109,7 @@ export class XsltTokenDiagnostics {
 		}
 		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
 			XsltTokenDiagnostics.checkIterateOrder(document, problemTokens);
+			XsltTokenDiagnostics.checkInstructionStructure(document, problemTokens);
 			XsltTokenDiagnostics.checkPatternOperators(document, allTokens, problemTokens);
 			XsltTokenDiagnostics.checkDocumentationNotes(document, itemTypeDeclarations, problemTokens);
 			XsltTokenDiagnostics.checkNoteReferences(document, globalInstructionData.concat(importedInstructionData), problemTokens);
@@ -3111,7 +3117,7 @@ export class XsltTokenDiagnostics {
 		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
 		const allXPathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
 		RecordTypes.checkMapConstructorKeys(allXPathTokens, problemTokens);
-		XsltTokenDiagnostics.checkBracedURILiterals(allXPathTokens, problemTokens);
+		XsltTokenDiagnostics.checkBracedURILiterals(document, allXPathTokens, problemTokens);
 		if (!XsltTokenDiagnostics.isXPath40(docType)) {
 			XsltTokenDiagnostics.checkKindTestNames(allXPathTokens, problemTokens);
 		}
@@ -3738,8 +3744,10 @@ export class XsltTokenDiagnostics {
 				if (prevToken.tokenType === TokenLevelState.complexExpression || prevToken.tokenType === TokenLevelState.entityRef) {
 					// no error
 				} else if (prevToken.tokenType === TokenLevelState.uriLiteral) {
-					// a name test after a braced URI literal - a local name, or '*' for a wildcard, e.g. Q{urn:x}*
-					isXPathError = tokenType !== TokenLevelState.nodeNameTest && !(token.value === '*' && tokenType === TokenLevelState.nodeType);
+					// a name test after a braced URI literal - a local name, or '*' for a wildcard, e.g. Q{urn:x}* - or a
+					// function name, e.g. Q{urn:f}double(1)
+					isXPathError = tokenType !== TokenLevelState.nodeNameTest && tokenType !== TokenLevelState.function &&
+						!(token.value === '*' && tokenType === TokenLevelState.nodeType);
 				} else if (prevToken.tokenType === TokenLevelState.nodeType) {
 					if (token.value === '()') {
 						isXPathError = prevToken.value.charAt(0) === '.';
@@ -3909,6 +3917,14 @@ export class XsltTokenDiagnostics {
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
+		if (token.eqNameUri !== undefined) {
+			// e.g. Q{urn:f}double(1): only checked against the stylesheet functions declared with EQNames in its namespace -
+			// a function in another namespace, e.g. fn or an extension function's, isn't checked
+			const eqName = token.eqNameUri + qFunctionName;
+			const uri = token.eqNameUri;
+			const isStylesheetNamespace = checkedGlobalFnNames.some((name) => name.startsWith(uri));
+			return { isValid: !isStylesheetNamespace || checkedGlobalFnNames.includes(eqName), qFunctionName: eqName, fErrorType };
+		}
 		// a user-defined function in no namespace, e.g. area(2) for name="area" or name="Q{}area" - an XSLT 4.0 extension
 		if (fNameParts.length === 1 && (checkedGlobalFnNames.includes(qFunctionName) || checkedGlobalFnNames.includes('Q{}' + qFunctionName))) {
 			isValid = true;
@@ -4674,6 +4690,27 @@ export class XsltTokenDiagnostics {
 				case ErrorType.SwitchWithoutWhen:
 					msg = `XSLT: xsl:switch must contain at least one xsl:when`;
 					break;
+				case ErrorType.ChooseWithoutWhen:
+					msg = `XSLT: xsl:choose must contain at least one xsl:when (XTSE0010)`;
+					break;
+				case ErrorType.OtherwiseNotLast:
+					msg = `XSLT: xsl:otherwise must come after every xsl:when of xsl:choose (XTSE0010)`;
+					break;
+				case ErrorType.SortNotFirst:
+					msg = `XSLT: xsl:sort must come before any other content of ${tokenValue} (XTSE0010)`;
+					break;
+				case ErrorType.WithParamDuplicate:
+					msg = `XSLT: Duplicate xsl:with-param name: '${tokenValue}' (XTSE0670)`;
+					break;
+				case ErrorType.SelectAndContent:
+					msg = `XSLT: ${tokenValue} has a select attribute, so it must be empty (XTSE0620)`;
+					break;
+				case ErrorType.TemplateWithoutNameOrMatch:
+					msg = `XSLT: xsl:template must have a match or a name attribute (XTSE0500)`;
+					break;
+				case ErrorType.TemplateAttributeWithoutMatch:
+					msg = `XSLT: xsl:template has a ${tokenValue} attribute, so it must have a match attribute (XTSE0500)`;
+					break;
 				case ErrorType.SwitchCasesMissing:
 					msg = `XSLT: xsl:switch has no xsl:when or xsl:otherwise for the enumeration values: ${tokenValue}`;
 					severity = vscode.DiagnosticSeverity.Information;
@@ -5284,7 +5321,11 @@ export class XsltTokenDiagnostics {
 
 	// the braced URI literal of an EQName, e.g. Q{http://example.com}name: as in Saxon 13, XPST0003 if it's not closed, if
 	// a local name without a prefix doesn't follow it immediately, or if it follows an operand, e.g. 'book Q{urn:x}name'
-	private static checkBracedURILiterals(xpathTokens: BaseToken[], problemTokens: BaseToken[]) {
+	private static checkBracedURILiterals(document: vscode.TextDocument, xpathTokens: BaseToken[], problemTokens: BaseToken[]) {
+		// the tokens are those of all the document's XPath expressions: a token in another attribute value, or in element
+		// content, is separated by markup, e.g. '" as="'
+		const isInSameExpression = (previous: BaseToken, token: BaseToken) => !/["'<>]/.test(document.getText(new vscode.Range(
+			previous.line, previous.startCharacter + previous.length, token.line, token.startCharacter)));
 		xpathTokens.forEach((token, index) => {
 			if (token.tokenType !== TokenLevelState.uriLiteral || token.error) {
 				return;
@@ -5303,7 +5344,7 @@ export class XsltTokenDiagnostics {
 				problemTokens.push({ ...token, error: ErrorType.UriLiteralLocalName });
 			} else if (/^[^:(]*:/.test(next.value) && !next.error) {
 				problemTokens.push({ ...next, error: ErrorType.UriLiteralPrefix });
-			} else if (previousIsOperand) {
+			} else if (previousIsOperand && isInSameExpression(previous, token)) {
 				problemTokens.push({ ...token, error: ErrorType.XPathUnexpected });
 			}
 		});
@@ -5431,6 +5472,112 @@ export class XsltTokenDiagnostics {
 				previousEnd = tagRgx.lastIndex;
 			}
 		});
+	}
+
+	// static errors in the structure of XSLT instructions, which Saxon reports when it compiles: xsl:choose without
+	// xsl:when, or with xsl:otherwise before an xsl:when; xsl:sort after other content of xsl:for-each, xsl:for-each-group
+	// or xsl:perform-sort; sibling xsl:with-param elements with the same name; xsl:variable, xsl:param or xsl:with-param
+	// with both select and content; and xsl:template without match, but with mode or priority, or without name too - an
+	// element with use-when may be excluded at compile time, so it isn't counted where order or duplicates matter
+	private static checkInstructionStructure(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		const markup = RecordTypes.blankMarkup(text);
+		type Element = { name: string, offset: number, tag: string, children: Element[], hasText: boolean, textBefore: boolean, parent?: Element };
+		const problem = (offset: number, length: number, value: string, error: ErrorType) => {
+			const position = document.positionAt(offset);
+			problemTokens.push({ line: position.line, startCharacter: position.character, length, value, tokenType: 0, error });
+		};
+		const elementProblem = (element: Element, error: ErrorType, value = element.name) => problem(element.offset + 1, element.name.length, value, error);
+		const hasAttribute = (element: Element, name: string) => new RegExp(`\\s_?${name}\\s*=`).test(element.tag);
+		const isConditional = (element: Element) => hasAttribute(element, 'use-when');
+		const isChild = (element: Element, name: string) => element.name === name && !isConditional(element);
+
+		const check = (element: Element) => {
+			switch (element.name) {
+				case 'xsl:choose': {
+					const whens = element.children.filter((c) => c.name === 'xsl:when');
+					if (whens.length === 0) {
+						elementProblem(element, ErrorType.ChooseWithoutWhen);
+					}
+					const otherwise = element.children.find((c) => c.name === 'xsl:otherwise');
+					if (otherwise && whens.some((w) => w.offset > otherwise.offset)) {
+						elementProblem(otherwise, ErrorType.OtherwiseNotLast);
+					}
+					break;
+				}
+				case 'xsl:for-each':
+				case 'xsl:for-each-group':
+				case 'xsl:perform-sort': {
+					let otherContent = false;
+					element.children.forEach((child) => {
+						if (child.name === 'xsl:sort') {
+							if (otherContent || child.textBefore) {
+								elementProblem(child, ErrorType.SortNotFirst, element.name);
+							}
+						} else if (!isConditional(child)) {
+							otherContent = true;
+						}
+					});
+					break;
+				}
+				case 'xsl:template':
+					// a template rule of an XSLT 4.0 enclosed mode has its own error: EnclosedTemplateMatch
+					if (!hasAttribute(element, 'match') && element.parent?.name !== 'xsl:mode') {
+						const attribute = ['mode', 'priority'].find((name) => hasAttribute(element, name));
+						if (!hasAttribute(element, 'name')) {
+							elementProblem(element, ErrorType.TemplateWithoutNameOrMatch);
+						} else if (attribute) {
+							elementProblem(element, ErrorType.TemplateAttributeWithoutMatch, attribute);
+						}
+					}
+					break;
+			}
+			if ((element.name === 'xsl:variable' || element.name === 'xsl:param' || element.name === 'xsl:with-param') &&
+				hasAttribute(element, 'select') && (element.children.length > 0 || element.hasText)) {
+				elementProblem(element, ErrorType.SelectAndContent);
+			}
+			const withParamNames: string[] = [];
+			element.children.filter((c) => isChild(c, 'xsl:with-param')).forEach((withParam) => {
+				const name = /\sname\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(withParam.tag);
+				if (name) {
+					const value = name[1] ?? name[2];
+					if (withParamNames.includes(value)) {
+						problem(withParam.offset + name.index + name[0].length - value.length - 1, value.length, value, ErrorType.WithParamDuplicate);
+					}
+					withParamNames.push(value);
+				}
+			});
+		};
+
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		const stack: Element[] = [];
+		let previousEnd = 0;
+		let match: RegExpExecArray | null;
+		while ((match = tagRgx.exec(markup)) !== null) {
+			const parent = stack.length > 0 ? stack[stack.length - 1] : undefined;
+			if (parent && markup.substring(previousEnd, match.index).trim() !== '') {
+				parent.hasText = true;
+			}
+			previousEnd = tagRgx.lastIndex;
+			if (match[1]) {
+				// an end tag: the elements not closed before it, if any, are checked too
+				const index = stack.map((e) => e.name).lastIndexOf(match[2]);
+				while (index > -1 && stack.length > index) {
+					check(stack.pop()!);
+				}
+			} else {
+				const element: Element = { name: match[2], offset: match.index, tag: match[0], children: [], hasText: false, textBefore: !!parent?.hasText, parent };
+				if (element.name !== 'xsl:note') {
+					// an XSLT 4.0 documentation note isn't content, e.g. of an xsl:param with a select attribute
+					parent?.children.push(element);
+				}
+				if (match[3]) {
+					check(element);
+				} else {
+					stack.push(element);
+				}
+			}
+		}
 	}
 
 	// xsl:next-iteration and xsl:break must be in a tail position of the xsl:iterate: its last instruction, or the last in an

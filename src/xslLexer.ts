@@ -257,6 +257,8 @@ export class XslLexer {
     private nonNativeAvts = false;
     private docType: DocumentTypes;
     private static splitModesregexp = /([^\s]+)|(\s+)/g;
+    // the XSLT instructions whose name attribute is an attribute value template
+    private static avtNameElements = ['element', 'attribute', 'processing-instruction', 'namespace'];
 
 
     constructor(languageConfiguration: LanguageConfiguration) {
@@ -834,6 +836,7 @@ export class XslLexer {
         let result: BaseToken[] = [];
         let attName: string = '';
         let avtExit = false;
+        let keepTokenStart = false;
 
         let xpLexer: XPathLexer = new XPathLexer();
         xpLexer.elementNameTests = this.elementNameTests;
@@ -1368,7 +1371,8 @@ export class XslLexer {
                                 } else if (exit = attName.startsWith('_')) {
                                     exit = ExitCondition.CurlyBrace;
                                 } else {
-                                    if (tagElementName === 'merge-source') {
+                                    if (tagElementName === 'merge-source' || (attName === 'name' && !XslLexer.avtNameElements.includes(tagElementName))) {
+                                        // e.g. xsl:variable's name isn't an AVT, so '{' is part of a name, e.g. the EQName Q{}x
                                         exit = ExitCondition.None;
                                     } else {
                                         exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
@@ -1400,6 +1404,11 @@ export class XslLexer {
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
                                 avtExit = true;
+                            } else {
+                                keepTokenStart = true;
+                                if (storeToken) {
+                                    tokenChars.push(currentChar);
+                                }
                             }
                             nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             break;
@@ -1480,7 +1489,12 @@ export class XslLexer {
                             break;
 
                     }
-                    tokenStartChar = this.lineCharCount > 0? this.lineCharCount - 1: 0;
+                    if (keepTokenStart) {
+                        // a '{' in an attribute value that isn't an AVT, e.g. the EQName in name="Q{}x", is part of the value
+                        keepTokenStart = false;
+                    } else {
+                        tokenStartChar = this.lineCharCount > 0? this.lineCharCount - 1: 0;
+                    }
                     if (avtExit) {
                         avtExit = false;
                         tokenStartChar++;

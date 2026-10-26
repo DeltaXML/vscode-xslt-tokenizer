@@ -342,8 +342,10 @@ export class XPathLexer {
         return result;
     }
 
-    // the characters of the current token, for XPath 4.0 numeric literals
+    // the characters of the current token, for XPath 4.0 numeric literals and EQName variables
     private numberChars: string[] = [];
+    // within the Q{...} of a variable's EQName
+    private inVarUri = false;
 
     private calcNewState(isFirstChar: boolean, nesting: number, char: string, nextChar: string, existing: CharLevelState): [CharLevelState, number] {
         let rv: CharLevelState;
@@ -430,7 +432,14 @@ export class XPathLexer {
                 }
             // no-break intentional
             case CharLevelState.lVar:
-                if (resolvedEarly) {
+                if (this.inVarUri) {
+                    // the URI of an EQName variable, e.g. $Q{urn:a}name
+                    rv = existing;
+                    this.inVarUri = char !== '}';
+                } else if (existing === CharLevelState.lVar && char === 'Q' && nextChar === '{' && this.numberChars.length === 1) {
+                    rv = existing;
+                    this.inVarUri = true;
+                } else if (resolvedEarly) {
                     rv = existing;
                 } else if (char === '-' || char === '.' ||
                     (char === ':' && !(nextChar === ':' || nextChar === '=' || nextChar === '*' || nextChar === ' ' || nextChar === '\n' || nextChar === '\r' || nextChar === '\t'))) {
@@ -571,6 +580,7 @@ export class XPathLexer {
             console.time('xplexer.analyse');
         }
         this.latestRealToken = null;
+        this.inVarUri = false;
         this.prologState = PrologState.Start;
         this.lineNumber = position.line;
         this.wsCharNumber = 0;
@@ -1767,6 +1777,13 @@ export enum ErrorType {
     IterateParamOrder,
     IterateOnCompletionOrder,
     IterateTailPosition,
+    ChooseWithoutWhen,
+    OtherwiseNotLast,
+    SortNotFirst,
+    WithParamDuplicate,
+    SelectAndContent,
+    TemplateWithoutNameOrMatch,
+    TemplateAttributeWithoutMatch,
     NoteParamUnknown,
     NoteParamsMissing,
     NoteParamDuplicate,
@@ -1838,6 +1855,8 @@ export interface BaseToken {
     choiceSeparator?: boolean;
     // XPath 4.0 record types: for a quick fix, the text that adds the missing fields to a map constructor
     recordFix?: RecordFix;
+    // the local name of an EQName: the Q{...} part before it, e.g. Q{urn:f} for Q{urn:f}double
+    eqNameUri?: string;
 }
 
 // a quick fix's edit: inserting the text at the position, or replacing the text up to the end, or replaceLength characters
