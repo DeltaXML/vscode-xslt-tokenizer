@@ -33,6 +33,12 @@
 
   <xsl:template match="/">
     <report>
+      <xsl:for-each select="1 to 4">
+        <xsl:variable name="pos" select="position() + 2"/>
+        <pos>
+          <xsl:sequence select="position()"/>
+        </pos>
+      </xsl:for-each>
       <xsl:apply-templates select="orders/order"/>
       <xsl:call-template name="by-category"/>
     </report>

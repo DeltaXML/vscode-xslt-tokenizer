@@ -712,10 +712,8 @@ final class Debugger {
         }
         boolean isCall = traceable instanceof TraceableComponent;
         if (isCall || isFocusInstruction(traceable)) {
-            frames.push(newFrame(traceable, frameName(traceable, properties), isCall));
-            if (isCall) {
-                callDepth++;
-            }
+            frames.push(newFrame(traceable, frameName(traceable, properties), true));
+            callDepth++;
         } else if (frames.isEmpty()) {
             frames.push(newFrame(null, "transform", false));
         }
@@ -725,7 +723,7 @@ final class Debugger {
         if (top == xpathFrame && xpathFrame != null) {
             xpathFrame.lazyPart = frames.peek() != xpathFrame;
         }
-        int depth = top == xpathFrame && xpathFrame != null ? xpathFrame.callDepth : callDepth;
+        int depth = top == xpathFrame && xpathFrame != null ? xpathFrame.callDepth : instructionDepth(traceable);
         top.context = context;
         top.current = traceable;
         lastEntered = traceable;
@@ -797,7 +795,7 @@ final class Debugger {
         stoppedAt = null;
         int event = ++events;
         if (onNewLine && !lazyArrival) {
-            recordArrival(event, top.serial, top.line, path);
+            recordArrival(event, arrivalFrame(top, traceable).serial, top.line, path);
         }
         String reason = null;
         if (replayTo >= 0) {
@@ -1009,7 +1007,7 @@ final class Debugger {
             // so the instruction's own evaluation of the expression, just stepped through, isn't stopped at
             synchronized (lock) {
                 if (step == Step.INTO || step == Step.OVER) {
-                    stepCallDepth = callDepth;
+                    stepCallDepth = instructionDepth(instruction);
                     stepPath = path;
                     stepLine = line;
                 }
@@ -1185,7 +1183,7 @@ final class Debugger {
         if (top != null && top.owner == traceable) {
             frames.pop();
             SteppedResult.discardFrame(top);
-            if (top.isCall) {
+            if (top.countsDepth) {
                 callDepth--;
             }
         }
@@ -1600,8 +1598,8 @@ final class Debugger {
         }
     }
 
-    private Frame newFrame(Traceable owner, String name, boolean isCall) {
-        Frame frame = new Frame(owner, name, isCall);
+    private Frame newFrame(Traceable owner, String name, boolean countsDepth) {
+        Frame frame = new Frame(owner, name, countsDepth);
         frame.serial = ++frameSerials;
         return frame;
     }
@@ -1628,7 +1626,7 @@ final class Debugger {
         while (frames.size() > depth) {
             Frame frame = frames.pop();
             SteppedResult.discardFrame(frame);
-            if (frame.isCall) {
+            if (frame.countsDepth) {
                 callDepth--;
             }
         }
@@ -1653,8 +1651,26 @@ final class Debugger {
         return "always".equals(error.get("breakMode")) ? CAUGHT_ERROR : DYNAMIC_ERROR;
     }
 
-    // instructions that change the focus get their own stack frame, showing the context item - unlike calls, they
-    // aren't stepped over
+    // the call depth of an instruction where it's entered: a focus instruction is at the depth of the frame it's in,
+    // not its own, entered for it - so Step Over steps over all its iterations, and Step Into into them, as for a call
+    private int instructionDepth(Traceable traceable) {
+        Frame top = frames.peek();
+        return top != null && top.owner == traceable && isFocusInstruction(traceable) ? callDepth - 1 : callDepth;
+    }
+
+    // the frame an arrival at a line belongs to, for going back: a focus instruction's own is in the frame it's in - so a
+    // step back from after it goes back to it, not to the line before it, once its frame has gone
+    private Frame arrivalFrame(Frame top, Traceable traceable) {
+        if (top.owner == traceable && isFocusInstruction(traceable) && frames.size() > 1) {
+            java.util.Iterator<Frame> it = frames.iterator();
+            it.next();
+            return it.next();
+        }
+        return top;
+    }
+
+    // instructions that change the focus get their own stack frame, showing the context item - and, like calls, are
+    // stepped over (all their iterations) with Step Over, and out of with Step Out
     private static boolean isFocusInstruction(Traceable traceable) {
         String className = traceable.getClass().getSimpleName();
         return className.equals("ForEach") || className.equals("ForEachGroup") || className.equals("IterateInstr") || className.equals("AnalyzeString");
@@ -1829,7 +1845,9 @@ final class Debugger {
     static final class Frame {
         final Traceable owner;
         final String name;
-        final boolean isCall;
+        // a call, a focus instruction or an XPath expression stepped through: a level of the call depth, which Step
+        // Over steps over and Step Out steps out of
+        final boolean countsDepth;
         // in the order frames are made: the same in each run, so arrivals at lines are matched to frames on going back
         int serial;
         // for an XPath expression's frame: the call depth within it, and its instruction's context - for the
@@ -1866,10 +1884,10 @@ final class Debugger {
         int line;
         int column;
 
-        Frame(Traceable owner, String name, boolean isCall) {
+        Frame(Traceable owner, String name, boolean countsDepth) {
             this.owner = owner;
             this.name = name;
-            this.isCall = isCall;
+            this.countsDepth = countsDepth;
         }
     }
 }

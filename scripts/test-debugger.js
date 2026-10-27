@@ -1006,6 +1006,40 @@ async function runStops(saxonJar, file, breakpoints, command, extraArgs, context
     return { stops, output: dap.output, messages: dap.output.split('\n').filter((line) => /^[a-z]+ -?\d+$/.test(line)) };
 }
 
+// xsl:for-each, xsl:iterate, xsl:for-each-group and xsl:analyze-string, like calls: Step Over steps over all their
+// iterations (stopping at a breakpoint in them), Step Into into them, Step Out out of them, to the line after them -
+// and a step back from that line goes back to the instruction, not the line before it
+async function testStepOverLoops(saxonJar) {
+    const steps = async (breakpoints, commands) => {
+        const file = 'step-over-loops.xsl';
+        const dap = new DapClient(saxonJar);
+        let stopped = dap.stopped();
+        await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, file)}`, '-it'] }, { [file]: breakpoints.map((line) => ({ line })) });
+        const terminated = dap.event('terminated');
+        const stops = [];
+        for (let i = 0; ; i++) {
+            const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+            if (!stop) {
+                break;
+            }
+            stops.push(stop.frames[0].line);
+            stopped = dap.stopped();
+            stopped.catch(() => undefined);
+            await dap.request(commands[i] || 'continue', { threadId: 1 });
+        }
+        await dap.request('disconnect', {}).catch(() => undefined);
+        await dap.exited;
+        return stops;
+    };
+    assert.deepStrictEqual(await steps([4], ['next', 'next', 'next', 'next', 'next', 'next']), [4, 5, 9, 15, 18, 23]);
+    assert.deepStrictEqual(await steps([4], ['next', 'stepIn', 'next', 'next', 'next', 'stepOut', 'next']), [4, 5, 6, 7, 6, 7, 9, 15]);
+    // xsl:iterate's body: xsl:next-iteration, for each item
+    assert.deepStrictEqual(await steps([4], ['next', 'next', 'stepIn', 'next', 'next', 'stepOut', 'stepIn', 'stepOut', 'next']),
+        [4, 5, 9, 11, 11, 11, 15, 16, 18, 23]);
+    assert.deepStrictEqual(await steps([5, 7], ['next', 'next', 'next', 'next']), [5, 7, 6, 7, 6, 7]);
+    assert.deepStrictEqual(await steps([4], ['next', 'next', 'stepBack', 'stepIn', 'stepBack', 'stepBack', 'next']), [4, 5, 9, 5, 6, 5, 4, 5]);
+}
+
 // a test stepped through is evaluated as its instruction evaluates it: only as far as needed for true or false - so
 // only the functions a normal run calls are called, and their messages written (xsl:if stops at the first node that
 // matches; xsl:when too); its result is shown as true or false
@@ -2532,7 +2566,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;
