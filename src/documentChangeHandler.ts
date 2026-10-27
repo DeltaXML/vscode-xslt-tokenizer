@@ -296,9 +296,14 @@ export class DocumentChangeHandler {
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLEditor = editor;
 			if (document.languageId !== 'xslt' && document.languageId !== 'dcp') {
-				FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
+				// only a file can be the XML context file - not, e.g., the debugger's view of the output so far
+				// ('[XSLT output] ...'), an untitled document, or another extension's virtual document
+				const isFile = document.uri.scheme === 'file';
+				if (isFile) {
+					FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
+				}
 				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
-				if (!DocumentChangeHandler.lastActiveXMLNonXSLUri && !DocumentChangeHandler.contextFileIsNone) {
+				if (isFile && !DocumentChangeHandler.lastActiveXMLNonXSLUri && !DocumentChangeHandler.contextFileIsNone) {
 					DocumentChangeHandler.setLastActiveXMLNonXSLUri(editor.document.uri);
 				}
 			}
