@@ -62,6 +62,8 @@
         function($largest, $line) {
           if (f:line-total($line) gt f:line-total($largest))
           then $line
+            else if ('test') 
+                    then 'new'
           else $largest
         })"/>
     <order id="{@id}" customer="{@customer}" total="{$total - $discount}" largest="{$largest/@product}">

@@ -59,10 +59,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			return [];
 		}
 		if (ch.indexOf('\n') > -1 || this.isCloseTag) {
-			//const prevLine = document.lineAt(pos.line - 1);
 			const newLine = document.lineAt(pos.line);
 			this.onTypeLineEmpty = newLine.text.trim().length === 0;
-			const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
+			// after Enter, the line just finished is indented again too: its indentation was set before its text was
+			// typed, e.g. for an 'else' typed on the line after a 'then' clause
+			const firstLine = !this.isCloseTag && pos.line > 0 ? document.lineAt(pos.line - 1) : newLine;
+			const documentRange = new vscode.Range(firstLine.range.start, newLine.range.end);
 			this.onType = true;
 			this.onTypeLine = pos.line;
 			try {
@@ -144,6 +146,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 	private formatRange(document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions): vscode.TextEdit[] {
 		let result: vscode.TextEdit[] = [];
+		// on-type formatting stops once the new line is formatted - the line before it may be formatted first. After Enter,
+		// that's after the new line's first token, even when its indentation is right already, e.g. from VS Code's own
+		// indentation of the new line: the tokens after it may be out of line order, e.g. those of an attribute's lines
+		let isOnTypeLineReached = false;
+		const isOnTypeLineDone = () => this.onType && (isOnTypeLineReached || result.some((edit) => edit.range.start.line >= this.onTypeLine));
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
 		let newLineString = (document.eol === vscode.EndOfLine.CRLF) ? "\r\n" : "\n";
@@ -270,7 +277,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			let isXMLToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
 
-			if (this.onType && result.length > 0) {
+			if (isOnTypeLineDone()) {
 				// do nothing
 			} else if (isXMLToken) {
 				xpathNestingLevel = 0;
@@ -564,7 +571,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			if (addNewLine && lineNumberDiff === 0) {
 				lineNumberDiff = 1;
 			}
-			if (this.onType && result.length > 0) {
+			if (isOnTypeLineDone()) {
 			} else if (this.isCloseTag) {
 				if (nestingLevel > 0 && closeTagName !== null && this.closeTagPos !== null) {
 					let nonWsStart = this.closeTagLine ? this.closeTagLine.firstNonWhitespaceCharacterIndex : 0;
@@ -667,6 +674,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			nestingLevel = newNestingLevel;
 			multiLineState = newMultiLineState;
 			prevToken = token;
+			if (this.onType && !this.isCloseTag && token.line >= this.onTypeLine) {
+				isOnTypeLineReached = true;
+			}
 		});
 		return result;
 	}

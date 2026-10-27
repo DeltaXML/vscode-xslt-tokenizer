@@ -99,6 +99,59 @@ suite('Formatting', () => {
 		assert.equal(await applied(provider.provideDocumentRangeFormattingEdits(document, document.lineAt(1).range, spaces, token())), expected);
 	});
 
+	test('typing line by line: Enter indents the new line, and the line just typed again, e.g. for then and else', async () => {
+		const start = ['<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="f" version="3.0">',
+			'  <xsl:template match="/">', '    <xsl:variable name="largest" as="element(line)" select="'];
+		const typed = ['fold-left(tail(line), head(line),', 'function($largest, $line) {', 'if (f:line-total($line) gt f:line-total($largest))',
+			'then $line', `else if ('test') then 'new'`, 'else $largest', '})"/>', '</xsl:template>', '</xsl:stylesheet>'];
+		const document = await vscode.workspace.openTextDocument({ content: start.join('\n'), language: 'xslt' });
+		const provider = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration);
+		const apply = async (edits: vscode.TextEdit[]) => {
+			const edit = new vscode.WorkspaceEdit();
+			edit.set(document.uri, edits);
+			await vscode.workspace.applyEdit(edit);
+		};
+		for (const text of typed) {
+			// Enter at the end of the document, with on-type formatting, then the line's text
+			await apply([vscode.TextEdit.insert(document.lineAt(document.lineCount - 1).range.end, '\n')]);
+			const line = document.lineCount - 1;
+			await apply(provider.provideOnTypeFormattingEdits(document, new vscode.Position(line, 0), '\n', spaces, token()));
+			await apply([vscode.TextEdit.insert(document.lineAt(line).range.end, text)]);
+		}
+		// as formatted - except the last line, as Enter hasn't been pressed after it
+		assert.deepEqual(document.getText().split('\n'), [...start,
+			'      fold-left(tail(line), head(line),',
+			'        function($largest, $line) {',
+			'          if (f:line-total($line) gt f:line-total($largest))',
+			'            then $line',
+			`          else if ('test') then 'new'`,
+			'          else $largest',
+			'        })"/>',
+			'  </xsl:template>',
+			'  </xsl:stylesheet>']);
+	});
+
+	test('Enter, with the new line already indented by VS Code: the lines are indented as when the new line is empty', async () => {
+		const lines = ['<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="f" version="3.0">',
+			'  <xsl:template match="/">',
+			'    <xsl:variable name="v" select="',
+			`      if ('test')`,
+			`        then 'new'`,
+			`      else 'old'"/>`,
+			'  </xsl:template>',
+			'</xsl:stylesheet>'];
+		for (const autoIndent of ['', '      ', '        ']) {
+			// Enter after then 'new'
+			const content = [...lines.slice(0, 5), autoIndent, ...lines.slice(5)].join('\n');
+			const document = await vscode.workspace.openTextDocument({ content, language: 'xslt' });
+			const edits = new XMLDocumentFormattingProvider(XSLTConfiguration.configuration).provideOnTypeFormattingEdits(document, new vscode.Position(5, autoIndent.length), '\n', spaces, token());
+			const edit = new vscode.WorkspaceEdit();
+			edit.set(document.uri, edits);
+			await vscode.workspace.applyEdit(edit);
+			assert.deepEqual(document.getText().split('\n').slice(4, 6), [`        then 'new'`, '        '], JSON.stringify(autoIndent));
+		}
+	});
+
 	test('xsl:text content is kept as it is', async () => {
 		const { lines } = await format(stylesheet(['  <xsl:template match="/">', '<xsl:text>', '   a', ' b</xsl:text>', '  </xsl:template>']));
 		assert.deepEqual(lines.slice(3, 5), ['   a', ' b</xsl:text>']);
