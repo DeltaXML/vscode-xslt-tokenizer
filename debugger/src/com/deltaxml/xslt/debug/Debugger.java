@@ -1289,14 +1289,21 @@ final class Debugger {
         while (m.find()) {
             String text;
             if (m.group(1).replaceAll("\\s+", "").equals("$*")) {
-                // after other text, on the lines below it
-                text = m.start() > 0 ? "\n" + localsText(frame).replaceAll("(?m)^", "  ") : localsText(frame);
+                // as xdm:debug-color writes them, which starts on a new line (not at the message's start); else after
+                // other text, on the lines below it
+                List<Map.Entry<String, net.sf.saxon.om.Sequence>> locals = localValues(frame);
+                text = locals.isEmpty() ? null : withLogView(frame, view -> view.render(frame.name, locals));
+                if (text != null) {
+                    text = m.start() > 0 ? text : text.replaceFirst("^\n", "");
+                } else {
+                    text = m.start() > 0 ? "\n" + localsText(frame).replaceAll("(?m)^", "  ") : localsText(frame);
+                }
                 m.appendReplacement(sb, Matcher.quoteReplacement(text));
                 continue;
             }
             try {
                 XdmValue value = Evaluator.evaluate(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), m.group(1));
-                text = Values.isLogLeaves(value) ? null : renderedForLog(value, frame);
+                text = withLogView(frame, view -> view.render(value));
                 if (text == null) {
                     text = Values.logText(value);
                 }
@@ -1310,13 +1317,14 @@ final class Debugger {
         return sb.toString().replaceAll("[ \t]+\n", "\n");
     }
 
-    // a value that isn't all leaves (see Values.isLogLeaves) as xdm:trace writes it - null if xdm-view can't be used:
-    // said once, when the summary is written instead
-    private String renderedForLog(XdmValue value, Frame frame) {
+    // a logpoint's value, as xdm:trace writes it - showing where it's from (a node's or JNode's path) and its type where
+    // that isn't obvious - or its local variables, as xdm:debug-color writes them: null if xdm-view can't be used,
+    // said once, when they're written as text instead (see Values.logText and localsText)
+    private String withLogView(Frame frame, java.util.function.Function<XdmView, String> render) {
         if (xdmView == null) {
             xdmView = new XdmView(frame.context.getConfiguration());
         }
-        String text = xdmView.render(value);
+        String text = render.apply(xdmView);
         if (text == null && xdmView.problem() != null && !xdmViewProblemShown) {
             xdmViewProblemShown = true;
             dap.log("Logpoint values are summarised: " + xdmView.problem());
@@ -1324,8 +1332,14 @@ final class Debugger {
         return text;
     }
 
+    // the local variables in scope, with their values - as the Locals scope shows them
+    private static List<Map.Entry<String, net.sf.saxon.om.Sequence>> localValues(Frame frame) {
+        return frame.xsltContext == null ? Values.localValues(frame.context, frame.current) :
+                Values.xpathLocalValues(frame.context, frame.current, frame.xpathExternals, frame.xpathSlots, frame.xsltContext, frame.xsltCurrent);
+    }
+
     // the local variables in scope - as the Locals scope shows them - one per line, with their names aligned, e.g.
-    // '$customer = "Ada"', for a logpoint's {$*}
+    // '$customer = "Ada"', for a logpoint's {$*} where xdm-view can't be used
     private String localsText(Frame frame) {
         List<Map<String, Object>> locals;
         try {

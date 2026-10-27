@@ -99,45 +99,64 @@ final class Values {
     // uses, which Saxon passes to it - then its range variables; the instruction's other variables aren't shown
     Supplier<List<Map<String, Object>>> xpathLocals(final XPathContext context, final Traceable current, final int externals,
             final SlotManager slots, final XPathContext xsltContext, final Traceable xsltCurrent) {
-        return () -> {
-            StackFrame stackFrame = context.getStackFrame();
-            boolean expressionFrame = stackFrame != null && stackFrame.getStackFrameMap() == slots;
-            List<Map.Entry<StructuredQName, Sequence>> own = localVariables(context, current, expressionFrame ? externals : 0);
-            Set<String> ownNames = new HashSet<String>();
-            for (Map.Entry<StructuredQName, Sequence> local : own) {
-                ownNames.add(local.getKey().getDisplayName());
-            }
-            List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
-            if (expressionFrame) {
-                for (Map.Entry<StructuredQName, Sequence> local : localVariables(xsltContext, xsltCurrent, 0)) {
-                    if (!ownNames.contains(local.getKey().getDisplayName())) {
-                        result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
-                    }
-                }
-            }
-            for (Map.Entry<StructuredQName, Sequence> local : own) {
-                result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
-            }
-            if (expressionFrame) {
-                for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(xsltContext)) {
-                    result.add(variable("$" + tunnel.getKey().getDisplayName() + " (tunnel)", tunnel.getValue()));
-                }
-            }
-            return result;
-        };
+        return () -> asVariables(xpathLocalValues(context, current, externals, slots, xsltContext, xsltCurrent));
     }
 
     Supplier<List<Map<String, Object>>> locals(final XPathContext context, final Traceable current) {
-        return () -> {
-            List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
-            for (Map.Entry<StructuredQName, Sequence> local : localVariables(context, current)) {
-                result.add(variable("$" + local.getKey().getDisplayName(), local.getValue()));
+        return () -> asVariables(localValues(context, current));
+    }
+
+    private List<Map<String, Object>> asVariables(List<Map.Entry<String, Sequence>> values) {
+        List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+        for (Map.Entry<String, Sequence> value : values) {
+            result.add(variable("$" + value.getKey(), value.getValue()));
+        }
+        return result;
+    }
+
+    // the variables xpathLocals() and locals() show, by name (without '$'; a tunnel parameter's with ' (tunnel)' after
+    // it), with their values
+    static List<Map.Entry<String, Sequence>> xpathLocalValues(XPathContext context, Traceable current, int externals,
+            SlotManager slots, XPathContext xsltContext, Traceable xsltCurrent) {
+        StackFrame stackFrame = context.getStackFrame();
+        boolean expressionFrame = stackFrame != null && stackFrame.getStackFrameMap() == slots;
+        List<Map.Entry<StructuredQName, Sequence>> own = localVariables(context, current, expressionFrame ? externals : 0);
+        Set<String> ownNames = new HashSet<String>();
+        for (Map.Entry<StructuredQName, Sequence> local : own) {
+            ownNames.add(local.getKey().getDisplayName());
+        }
+        List<Map.Entry<String, Sequence>> result = new ArrayList<Map.Entry<String, Sequence>>();
+        if (expressionFrame) {
+            for (Map.Entry<StructuredQName, Sequence> local : localVariables(xsltContext, xsltCurrent, 0)) {
+                if (!ownNames.contains(local.getKey().getDisplayName())) {
+                    result.add(named(local.getKey().getDisplayName(), local.getValue()));
+                }
             }
-            for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(context)) {
-                result.add(variable("$" + tunnel.getKey().getDisplayName() + " (tunnel)", tunnel.getValue()));
+        }
+        for (Map.Entry<StructuredQName, Sequence> local : own) {
+            result.add(named(local.getKey().getDisplayName(), local.getValue()));
+        }
+        if (expressionFrame) {
+            for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(xsltContext)) {
+                result.add(named(tunnel.getKey().getDisplayName() + " (tunnel)", tunnel.getValue()));
             }
-            return result;
-        };
+        }
+        return result;
+    }
+
+    static List<Map.Entry<String, Sequence>> localValues(XPathContext context, Traceable current) {
+        List<Map.Entry<String, Sequence>> result = new ArrayList<Map.Entry<String, Sequence>>();
+        for (Map.Entry<StructuredQName, Sequence> local : localVariables(context, current)) {
+            result.add(named(local.getKey().getDisplayName(), local.getValue()));
+        }
+        for (Map.Entry<StructuredQName, Sequence> tunnel : tunnelParameters(context)) {
+            result.add(named(tunnel.getKey().getDisplayName() + " (tunnel)", tunnel.getValue()));
+        }
+        return result;
+    }
+
+    private static Map.Entry<String, Sequence> named(String name, Sequence value) {
+        return new java.util.AbstractMap.SimpleImmutableEntry<String, Sequence>(name, value);
     }
 
     // the focus; and from the XSLT instruction's context (which, within an XPath expression being stepped through, is
@@ -804,39 +823,17 @@ final class Values {
 
     // ---------------------------------------------------------------- one-line summaries
 
-    // the value as text for logpoints - like xsl:value-of, atomic values and nodes as their string values, a JNode of
-    // an atomic value as that value
+    // the value as text for logpoints, where xdm-view can't be used - like xsl:value-of, atomic values and nodes as
+    // their string values
     static String logText(XdmValue value) {
         StringBuilder sb = new StringBuilder();
         for (XdmItem item : value) {
             if (sb.length() > 0) {
                 sb.append(' ');
             }
-            Object content = isJNode(item) ? jnodeCall(item.getUnderlyingValue(), "getContent") : null;
-            sb.append(item instanceof XdmAtomicValue || item instanceof XdmNode ? item.getStringValue() :
-                    content instanceof net.sf.saxon.value.AtomicValue ? ((net.sf.saxon.value.AtomicValue) content).getStringValue() : summary(item));
+            sb.append(item instanceof XdmAtomicValue || item instanceof XdmNode ? item.getStringValue() : summary(item));
         }
         return sb.toString();
-    }
-
-    // whether a logpoint writes the value as text (logText) - it's all leaves: atomic values, attributes, text nodes
-    // (and comments, processing instructions and namespaces), and JNodes of atomic values - not as xdm:trace does
-    static boolean isLogLeaves(XdmValue value) {
-        for (XdmItem item : value) {
-            if (item instanceof XdmNode) {
-                XdmNodeKind kind = ((XdmNode) item).getNodeKind();
-                if (kind == XdmNodeKind.ELEMENT || kind == XdmNodeKind.DOCUMENT) {
-                    return false;
-                }
-            } else if (isJNode(item)) {
-                if (!(jnodeCall(item.getUnderlyingValue(), "getContent") instanceof net.sf.saxon.value.AtomicValue)) {
-                    return false;
-                }
-            } else if (!(item instanceof XdmAtomicValue)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     static String summary(XdmValue value) {

@@ -21,7 +21,9 @@ class DapClient {
         this.pending = new Map();
         this.waiters = [];
         this.events = [];
+        // the Debug Console's output: without color (e.g. a logpoint's values), and as it is
         this.output = '';
+        this.rawOutput = '';
         this.buffer = Buffer.alloc(0);
         this.process = spawn('java', ['-cp', [adapterJar, saxonJar].join(path.delimiter), 'com.deltaxml.xslt.debug.XsltDebugAdapter']);
         this.process.stdout.on('data', (data) => this.receive(data));
@@ -48,7 +50,8 @@ class DapClient {
                 message.success ? resolve(message.body) : reject(new Error(`${message.command}: ${message.message}`));
             } else if (message.type === 'event') {
                 if (message.event === 'output') {
-                    this.output += message.body.output;
+                    this.rawOutput += message.body.output;
+                    this.output += message.body.output.replace(/\x1b\[[0-9;]*m/g, '');
                 }
                 this.events.push(message);
                 this.waiters = this.waiters.filter((w) => !w(message));
@@ -204,8 +207,9 @@ async function testStepOverAndLogpoint(saxonJar) {
         lines.push(stop.frames[0].line);
     }
     assert.ok(lines.includes(6), `stepped over line 6: ${lines}`);
-    assert.match(dap.output, /n is 1, doubled 2/);
-    assert.match(dap.output, /n is 3, doubled 6/);
+    // an attribute with its path, as xdm:trace writes it
+    assert.match(dap.output, /n is \/items\/item\[1\]\/@n\n@n="1", doubled 2/);
+    assert.match(dap.output, /@n="3", doubled 6/);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
 }
@@ -1137,7 +1141,7 @@ async function testFixedNamespaces(saxonJar) {
     await terminated;
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
-    assert.match(dap.output, /^v=10 twice=8 three=3 d=d$/m);
+    assert.match(dap.output, /^v=10 twice=8 three=3 d='d'$/m);
     assert.match(dap.output, /<out v="10" d="d"\/>/);
 }
 
@@ -1740,23 +1744,34 @@ async function testLogpointLocals(saxonJar) {
         await terminated;
         await dap.request('disconnect', {}).catch(() => undefined);
         await dap.exited;
-        return dap.events.filter((e) => e.event === 'output' && e.body.category === 'console' && e.body.line === line).map((e) => e.body.output);
+        return dap.events.filter((e) => e.event === 'output' && e.body.category === 'console' && e.body.line === line)
+            .map((e) => e.body.output.replace(/\x1b\[[0-9;]*m/g, ''));
     };
     // the nearer $x hides the outer one
-    let logged = await log('scopes.xsl', 13, 'item {@n}: {$*}');
-    assert.deepStrictEqual(logged, ['1', '2', '3'].map((n) => `item ${n}:\n  $p     = "param"\n  $later = "later-${n}"\n  $x     = "inner-${n}"\n`));
+    // as xdm:debug-color writes them, with the frame's name as the title: in order where maps keep it (Saxon 13) - in
+    // Saxon 12, in the map's order, as for a call of xdm:debug-color
+    const unordered = /12\.\d+\.jar/.test(saxonJar);
+    const lines = (texts) => texts.map((text) => unordered ? text.split('\n').sort().join('\n') : text);
+    const banner = (title) => {
+        const fill = 70 - title.length - 2;
+        return '\u2500'.repeat(Math.floor(fill / 2)) + ` ${title} ` + '\u2500'.repeat(fill - Math.floor(fill / 2));
+    };
+    let logged = await log('scopes.xsl', 13, 'item {number(@n)}: {$*}');
+    assert.deepStrictEqual(lines(logged), lines(['1', '2', '3'].map((n) =>
+        `item ${n}:\n${banner('xsl:for-each select="items/item"')}\np:     'param'\nlater: 'later-${n}'\nx:     'inner-${n}'\n`)));
     // within a multi-line XPath expression being stepped through
     logged = await log('xpath-frame.xsl', 12, '{$*}');
-    assert.deepStrictEqual(logged.slice(0, 3), ['$n = 1\n$i = 1\n', '$n = 2\n$i = 1\n', '$n = 2\n$i = 2\n']);
-    // none in scope
+    const xpath = banner('xsl:variable/@select (XPath)');
+    assert.deepStrictEqual(lines(logged.slice(0, 3)), lines([`${xpath}\nn: 1\ni: 1\n`, `${xpath}\nn: 2\ni: 1\n`, `${xpath}\nn: 2\ni: 2\n`]));
     logged = await log('scopes.xsl', 4, '{$*}');
-    assert.deepStrictEqual(logged, ['$p = "param"\n']);
+    assert.deepStrictEqual(logged, [`${banner('xsl:template match="/"')}\np: 'param'\n`]);
+    // none in scope
     logged = await log('basic.xsl', 5, 'start {$*}');
     assert.strictEqual(logged[0], 'start\n  (no local variables)\n');
     // {*} is XPath, as any other {xpath}: the context item's child elements - here, the document's, <items>, written
     // as xdm:trace writes it (see testLogpointValues)
     logged = await log('basic.xsl', 5, 'children: {*}');
-    assert.match(logged[0].replace(/\x1b\[[0-9;]*m/g, ''), /^children: \/items\n<items>\n {3}<item n="1"\/>/);
+    assert.match(logged[0], /^children: \/items\n<items>\n {3}<item n="1"\/>/);
 }
 
 async function testXPathForms(saxonJar) {
@@ -1901,8 +1916,8 @@ async function testMultiLineTextValueTemplate(saxonJar) {
     await dap.exited;
 }
 
-// a logpoint's {expression}: atomic values as they are; nodes, maps and arrays as xdm:trace writes them (rendered by
-// the bundled xdm-view, which the stylesheet doesn't include), in color - a node with its path above it
+// a logpoint's {expression}: as xdm:trace writes it (rendered by the bundled xdm-view, which the stylesheet doesn't
+// include), in color - a string quoted, a sequence in parentheses, a node with its path above it
 async function testLogpointValues(saxonJar) {
     const xsl = path.join(fixtures, 'log-values.xsl');
     const dap = new DapClient(saxonJar);
@@ -1914,9 +1929,9 @@ async function testLogpointValues(saxonJar) {
     await terminated;
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
-    assert.match(dap.output, /\x1b\[/);
-    const text = dap.output.replace(/\x1b\[[0-9;]*m/g, '');
-    assert.ok(text.includes("name=Ada n=1 2 3 id=1 m={\n  'langs': [\n    'xslt',\n    {'name': 'Ada'}\n  ]\n} order=/orders/order\n<order id=\"1\">\n   <item>a</item>\n</order>"), text);
+    assert.match(dap.rawOutput, /\x1b\[/);
+    const text = dap.output;
+    assert.ok(text.includes("name='Ada' n=(1, 2, 3) id=/orders/order/@id\n@id=\"1\" m={\n  'langs': [\n    'xslt',\n    {'name': 'Ada'}\n  ]\n} order=/orders/order\n<order id=\"1\">\n   <item>a</item>\n</order>"), text);
 }
 
 // hit counts (n, ==n, >n, >=n, <n, <=n, %n) - counted when the condition, if any, is true - with conditions and
@@ -1930,7 +1945,7 @@ async function testHitCounts(saxonJar) {
         source: { path: path.join(fixtures, 'basic.xsl') }, breakpoints: [
             { line: 10, hitCondition: '2' },
             { line: 11, condition: '@n != 2', hitCondition: '>=2' },
-            { line: 12, logMessage: 'hit at {@n}', hitCondition: '%2' },
+            { line: 12, logMessage: 'hit at {number(@n)}', hitCondition: '%2' },
             { line: 16, hitCondition: 'often' },
         ]
     });
@@ -2003,7 +2018,7 @@ async function testConditionErrorsAndXPathConditions(saxonJar) {
 // within an XPath loop, a line is arrived at once each iteration - not again for a function argument evaluated
 // lazily, within the function - so a logpoint logs, and a breakpoint stops, once each iteration
 async function testXPathLoopArrivals(saxonJar) {
-    for (const breakpoint of [{ line: 7, logMessage: 'item {$item/@n}' }, { line: 7 }]) {
+    for (const breakpoint of [{ line: 7, logMessage: 'item {number($item/@n)}' }, { line: 7 }]) {
         const dap = new DapClient(saxonJar);
         let stopped = dap.stopped();
         await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'loop-call.xsl')}`, `-s:${path.join(fixtures, 'basic.xml')}`] },
