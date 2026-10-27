@@ -88,7 +88,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private importHrefs: Map<string, string[]> = new Map();
 	public static importSymbolHrefs: Map<string, string[]> = new Map();
 	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
-	private internalImportedGlobals: GlobalInstructionData[] = [];
+	// the declarations imported by each document, by its URI, when it was last checked
+	private importedGlobalsByDocument = new Map<string, GlobalInstructionData[]>();
 	// false when another extension already reports the same problems, e.g. Red Hat's XML extension for XML files
 	private readonly showDiagnostics: () => boolean;
 
@@ -158,8 +159,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		// the problems found are only reported if the document hasn't changed since: a run for a later version reports them
 		const version = document.version;
 		const allTokens = this.xslLexer.analyse(document.getText());
-		this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
-		const globalInstructionData = this.xslLexer.globalInstructionData;
+		// this check's own copies of the lexer's results: another document may be analysed by the same lexer while this
+		// check waits for its imports to be processed, e.g. two stylesheets changed by an AI agent
+		const isVersion4 = this.xslLexer.isXSLT40;
+		this.languageConfig['isVersion4'] = isVersion4;
+		const languageConfig = { ...this.languageConfig, isVersion4 };
+		const globalInstructionData = this.xslLexer.globalInstructionData.slice();
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
@@ -236,8 +241,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			});
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
-			this.internalImportedGlobals = allImportedGlobals;
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
+			this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
 			if (!XsltSymbolProvider.isOpenInEditor(document) || document.version !== version) {
 
 			} else {
@@ -263,12 +268,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	}
 
+	// the problems of the document with a change, e.g. a function extracted - with the declarations imported when it was
+	// last checked, not those of another document checked since
 	public calculateVirtualDiagnostics(document: vscode.TextDocument) {
 		const allTokens = this.xslLexer.analyse(document.getText());
-		const symbols = XsltSymbolProvider.documentSymbols.get(document.uri)!;
-		const globalInstructionData = this.xslLexer.globalInstructionData;
+		const globalInstructionData = this.xslLexer.globalInstructionData.slice();
+		const languageConfig = { ...this.languageConfig, isVersion4: this.xslLexer.isXSLT40 };
+		const importedGlobals = this.importedGlobalsByDocument.get(document.uri.toString()) ?? [];
 
-		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, this.internalImportedGlobals, symbols);
+		// the symbols found aren't needed - not the document's cached symbols, which they would be added to
+		let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, importedGlobals, []);
 		return diagnostics;
 	}
 	
