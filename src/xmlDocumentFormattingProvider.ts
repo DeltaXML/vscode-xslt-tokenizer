@@ -182,6 +182,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 		let xmlSpacePreserveStack: boolean[] = [];
 		let xmlelementStack: string[] = [];
+		// the names of the open elements, and the number of them closed by the current close tag: as in the linter, a
+		// close tag closes the nearest open element with its name, and any elements still open within it - and none
+		// when no element with its name is open, so a missing or stray close tag doesn't shift the indentation after it
+		let openElementNames: string[] = [];
+		let closedElementCount = 1;
 		let xmlSpaceAttributeValue: boolean | null = null;
 		let awaitingXmlSpaceAttributeValue = false;
 		let attributeNameOffset = 0;
@@ -307,6 +312,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case XMLCharState.rStNoAtt:
 								let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 								xmlSpacePreserveStack.push(preserveSpace);
+								openElementNames.push(elementName);
 								if (!withinNote && isXSLTStartTag && elementName === 'xsl:note') {
 									startNote(lineNumber);
 								}
@@ -327,15 +333,23 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 									xmlSpacePreserveStack.push(xmlSpaceAttributeValue);
 									xmlSpaceAttributeValue = null;
 								}
+								openElementNames.push(elementName);
 								if (this.isCloseTag) {
 									xmlelementStack.push(elementName);
 								}
 								break;
 							case XMLCharState.lCt:
 								isNoteEndTag = withinNote && document.lineAt(lineNumber).text.startsWith('</xsl:note', token.startCharacter);
-								// outdent:
-								indent = -1;
-								newNestingLevel--;
+								// outdent, by the number of elements the close tag closes - one, unless its name is still
+								// being typed:
+								closedElementCount = 1;
+								const endTagName = /^[^\s/>]+/.exec(document.lineAt(lineNumber).text.substring(token.startCharacter + 2))?.[0];
+								if (endTagName && openElementNames.length > 0) {
+									const matchIndex = openElementNames.lastIndexOf(endTagName);
+									closedElementCount = matchIndex > -1 ? openElementNames.length - matchIndex : 0;
+								}
+								indent = -closedElementCount;
+								newNestingLevel -= closedElementCount;
 								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken, token);
 								if (this.isCloseTag) {
 									closeTagWithinText = this.closeTagPos?.line === token.line &&
@@ -357,9 +371,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								attributeNameOffset = 0;
 								attributeValueOffset = 0;
 								isPreserveSpaceElement = false;
-								if (stackLength > 0) {
-									xmlSpacePreserveStack.pop();
-								}
+								xmlSpacePreserveStack.splice(Math.max(0, stackLength - closedElementCount));
+								openElementNames.splice(Math.max(0, openElementNames.length - closedElementCount));
 								if (this.isCloseTag && xmlelementStack.length > 0) {
 									xmlelementStack.pop();
 								}

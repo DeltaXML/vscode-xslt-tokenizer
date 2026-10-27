@@ -10,7 +10,7 @@
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
-import { XSLTConfiguration } from '../../src/languageConfigurations';
+import { XMLConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
 import { XMLDocumentFormattingProvider } from '../../src/xmlDocumentFormattingProvider';
 
 const spaces: vscode.FormattingOptions = { tabSize: 2, insertSpaces: true };
@@ -37,6 +37,26 @@ suite('Formatting', () => {
 	test('blank lines are left empty, and whitespace-only lines are emptied', async () => {
 		const { lines } = await format(stylesheet(['', '  <xsl:template match="/">', '      ', '    <a/>', '  </xsl:template>']));
 		assert.deepEqual(lines, stylesheet(['', '  <xsl:template match="/">', '', '    <a/>', '  </xsl:template>']));
+	});
+
+	test('XML on one line is split into a line per tag, also when it is not well nested, so its problems can be seen', async () => {
+		// with indentMixedContent, as for the 'Format Unchecked' command - as in the linter, a close tag closes the nearest
+		// open element with its name, and any elements still open within it, and none when no element with its name is open
+		const cases: [string, string[]][] = [
+			['<a><b><c></b></a>', ['<a>', '  <b>', '    <c>', '  </b>', '</a>']],
+			['<a><b></x></b></a>', ['<a>', '  <b>', '    </x>', '  </b>', '</a>']],
+			['<a><b></bb></a>', ['<a>', '  <b>', '    </bb>', '</a>']],
+			['<a><b><c>', ['<a>', '  <b>', '    <c>']],
+		];
+		for (const [xml, expected] of cases) {
+			const document = await vscode.workspace.openTextDocument({ content: xml, language: 'xml' });
+			const formatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
+			formatter.indentMixedContent = true;
+			const edit = new vscode.WorkspaceEdit();
+			edit.set(document.uri, formatter.provideDocumentFormattingEdits(document, spaces, token()));
+			await vscode.workspace.applyEdit(edit);
+			assert.deepEqual(document.getText().split('\n'), expected, xml);
+		}
 	});
 
 	test('no edits for a document that is already formatted', async () => {
