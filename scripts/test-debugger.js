@@ -1753,9 +1753,10 @@ async function testLogpointLocals(saxonJar) {
     assert.deepStrictEqual(logged, ['$p = "param"\n']);
     logged = await log('basic.xsl', 5, 'start {$*}');
     assert.strictEqual(logged[0], 'start\n  (no local variables)\n');
-    // {*} is XPath, as any other {xpath}: the context item's child elements - here, the document's, <items>
+    // {*} is XPath, as any other {xpath}: the context item's child elements - here, the document's, <items>, written
+    // as xdm:trace writes it (see testLogpointValues)
     logged = await log('basic.xsl', 5, 'children: {*}');
-    assert.match(logged[0], /^children:\s*two\s*$/);
+    assert.match(logged[0].replace(/\x1b\[[0-9;]*m/g, ''), /^children: \/items\n<items>\n {3}<item n="1"\/>/);
 }
 
 async function testXPathForms(saxonJar) {
@@ -1898,6 +1899,24 @@ async function testMultiLineTextValueTemplate(saxonJar) {
     assert.deepStrictEqual(stops, [5, 9, 13, 14, 15, 16]);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
+}
+
+// a logpoint's {expression}: atomic values as they are; nodes, maps and arrays as xdm:trace writes them (rendered by
+// the bundled xdm-view, which the stylesheet doesn't include), in color - a node with its path above it
+async function testLogpointValues(saxonJar) {
+    const xsl = path.join(fixtures, 'log-values.xsl');
+    const dap = new DapClient(saxonJar);
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${xsl}`, '-it'] });
+    await dap.request('setBreakpoints', { source: { path: xsl }, breakpoints: [{ line: 6, logMessage: 'name={$m?langs?2?name} n={1 to 3} id={$doc//order/@id} m={$m} order={$doc//order}' }] });
+    const terminated = dap.event('terminated');
+    await dap.request('configurationDone', {});
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    assert.match(dap.output, /\x1b\[/);
+    const text = dap.output.replace(/\x1b\[[0-9;]*m/g, '');
+    assert.ok(text.includes("name=Ada n=1 2 3 id=1 m={\n  'langs': [\n    'xslt',\n    {'name': 'Ada'}\n  ]\n} order=/orders/order\n<order id=\"1\">\n   <item>a</item>\n</order>"), text);
 }
 
 // hit counts (n, ==n, >n, >=n, <n, <=n, %n) - counted when the condition, if any, is true - with conditions and
@@ -2566,7 +2585,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;

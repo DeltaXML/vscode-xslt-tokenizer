@@ -116,6 +116,9 @@ final class Debugger {
     private Map<Location, Boolean> xpathParts;
     // the call depth when last paused: that of the frame paused in
     private int pausedCallDepth;
+    // renders logpoint values, as xdm:trace does: made when first needed, with the transform's configuration
+    private XdmView xdmView;
+    private boolean xdmViewProblemShown;
     private final Map<String, BreakableLines> sourceLines = new HashMap<String, BreakableLines>();
     // the paths of the stylesheet modules with instructions executed so far
     private final Set<String> modulePaths = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -1292,7 +1295,11 @@ final class Debugger {
                 continue;
             }
             try {
-                text = Values.logText(Evaluator.evaluate(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), m.group(1)));
+                XdmValue value = Evaluator.evaluate(frame.current, frame.context, xsltCurrent(frame), xsltContext(frame), m.group(1));
+                text = Values.isLogLeaves(value) ? null : renderedForLog(value, frame);
+                if (text == null) {
+                    text = Values.logText(value);
+                }
             } catch (Exception e) {
                 text = "<" + message(e) + ">";
             }
@@ -1301,6 +1308,20 @@ final class Debugger {
         m.appendTail(sb);
         // e.g. 'item 1: {$*}' - not a space at the end of the first line
         return sb.toString().replaceAll("[ \t]+\n", "\n");
+    }
+
+    // a value that isn't all leaves (see Values.isLogLeaves) as xdm:trace writes it - null if xdm-view can't be used:
+    // said once, when the summary is written instead
+    private String renderedForLog(XdmValue value, Frame frame) {
+        if (xdmView == null) {
+            xdmView = new XdmView(frame.context.getConfiguration());
+        }
+        String text = xdmView.render(value);
+        if (text == null && xdmView.problem() != null && !xdmViewProblemShown) {
+            xdmViewProblemShown = true;
+            dap.log("Logpoint values are summarised: " + xdmView.problem());
+        }
+        return text;
     }
 
     // the local variables in scope - as the Locals scope shows them - one per line, with their names aligned, e.g.

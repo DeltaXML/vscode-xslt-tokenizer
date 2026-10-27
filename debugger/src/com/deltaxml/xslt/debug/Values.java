@@ -804,16 +804,39 @@ final class Values {
 
     // ---------------------------------------------------------------- one-line summaries
 
-    // the value as text for logpoints - like xsl:value-of, atomic values and nodes as their string values
+    // the value as text for logpoints - like xsl:value-of, atomic values and nodes as their string values, a JNode of
+    // an atomic value as that value
     static String logText(XdmValue value) {
         StringBuilder sb = new StringBuilder();
         for (XdmItem item : value) {
             if (sb.length() > 0) {
                 sb.append(' ');
             }
-            sb.append(item instanceof XdmAtomicValue || item instanceof XdmNode ? item.getStringValue() : summary(item));
+            Object content = isJNode(item) ? jnodeCall(item.getUnderlyingValue(), "getContent") : null;
+            sb.append(item instanceof XdmAtomicValue || item instanceof XdmNode ? item.getStringValue() :
+                    content instanceof net.sf.saxon.value.AtomicValue ? ((net.sf.saxon.value.AtomicValue) content).getStringValue() : summary(item));
         }
         return sb.toString();
+    }
+
+    // whether a logpoint writes the value as text (logText) - it's all leaves: atomic values, attributes, text nodes
+    // (and comments, processing instructions and namespaces), and JNodes of atomic values - not as xdm:trace does
+    static boolean isLogLeaves(XdmValue value) {
+        for (XdmItem item : value) {
+            if (item instanceof XdmNode) {
+                XdmNodeKind kind = ((XdmNode) item).getNodeKind();
+                if (kind == XdmNodeKind.ELEMENT || kind == XdmNodeKind.DOCUMENT) {
+                    return false;
+                }
+            } else if (isJNode(item)) {
+                if (!(jnodeCall(item.getUnderlyingValue(), "getContent") instanceof net.sf.saxon.value.AtomicValue)) {
+                    return false;
+                }
+            } else if (!(item instanceof XdmAtomicValue)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     static String summary(XdmValue value) {
