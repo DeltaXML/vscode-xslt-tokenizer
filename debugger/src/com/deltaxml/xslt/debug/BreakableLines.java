@@ -175,9 +175,14 @@ final class BreakableLines {
 
     private final List<Tag> tags = new ArrayList<Tag>();
     private final java.util.Map<Integer, List<Tag>> tagsEndingOn = new java.util.HashMap<Integer, List<Tag>>();
-    // the xsl:text whose content ends at a line and column ("line:column"): Saxon reports the parts of a text value
-    // template there, at the content's end, so a multi-line one would seem to leave its line and arrive at it again
-    private final java.util.Map<String, Tag> textEndingAt = new java.util.HashMap<String, Tag>();
+    // where the text node ending at a line and column ("line:column") is shown: Saxon 13 reports a text value template
+    // there, at the text's end (Saxon 12 at its parent's start tag) - often the line of the end tag or the next element
+    private final java.util.Map<String, int[]> textEndingAt = new java.util.HashMap<String, int[]>();
+
+    // XSLT instructions whose content Saxon evaluates as part of their own value: a text value template in it is
+    // shown at the instruction - not, multi-line, as leaving its line and arriving at it again
+    private static final Set<String> TEXT_VALUE_INSTRUCTIONS = new HashSet<String>(Arrays.asList("xsl:text", "xsl:value-of",
+            "xsl:attribute", "xsl:comment", "xsl:message", "xsl:processing-instruction", "xsl:namespace"));
 
     private BreakableLines() { }
 
@@ -239,6 +244,10 @@ final class BreakableLines {
             // for each open element: its tag, and whether its descendants are executed
             private final Deque<Tag> open = new ArrayDeque<Tag>();
             private final Deque<Boolean> executed = new ArrayDeque<Boolean>();
+            // where the last tag ended, and where the text node after it is shown (null until its first characters;
+            // empty if as any other location on its line)
+            private int textStartOffset = 0;
+            private int[] textShownAt;
 
             @Override
             public void setDocumentLocator(Locator locator) {
@@ -307,15 +316,29 @@ final class BreakableLines {
                 }
                 result.tags.add(tag);
                 open.push(tag);
+                textStartOffset = endOffset;
+                textShownAt = null;
                 executed.push(parentExecuted && !(isXslt && UNEXECUTED_CONTENT.contains(localName)) &&
                         !(reason != null && reason.startsWith("is a top-level")));
             }
 
             @Override
             public void characters(char[] ch, int start, int length) {
-                Tag parent = open.peek();
-                if (parent != null && parent.name.equals("xsl:text")) {
-                    result.textEndingAt.put(locator.getLineNumber() + ":" + locator.getColumnNumber(), parent);
+                // reported in chunks: Saxon's location is the last one's end
+                if (textShownAt == null) {
+                    Tag parent = open.peek();
+                    if (parent != null && TEXT_VALUE_INSTRUCTIONS.contains(parent.name)) {
+                        textShownAt = new int[] { parent.startLine, parent.startColumn };
+                    } else {
+                        // starting on the line where the tag before it ends: shown at that tag, as any location on
+                        // the line is - e.g. not on the last line of an xsl:if's multi-line test, but at the xsl:if
+                        int offset = firstTextOffset(text, textStartOffset);
+                        int line = lineOf(lineStarts, offset);
+                        textShownAt = line == lineOf(lineStarts, textStartOffset) ? new int[0] : new int[] { line, offset - lineStarts[line - 1] + 1 };
+                    }
+                }
+                if (textShownAt.length > 0) {
+                    result.textEndingAt.put(locator.getLineNumber() + ":" + locator.getColumnNumber(), textShownAt);
                 }
             }
 
@@ -323,6 +346,9 @@ final class BreakableLines {
             public void endElement(String uri, String localName, String qName) {
                 Tag tag = open.pop();
                 executed.pop();
+                int tagEndLine = locator.getLineNumber();
+                textStartOffset = Math.min(text.length(), lineStarts[Math.min(tagEndLine, lineStarts.length) - 1] + Math.max(locator.getColumnNumber() - 1, 0));
+                textShownAt = null;
                 if (XSLT_NS.equals(uri) && localName.equals("select") && tag.untracedReason == null && tag.contentOffset >= 0) {
                     // XSLT 4.0 xsl:select: its content is an XPath expression - stepped through as an attribute's is
                     int endLine = locator.getLineNumber();
@@ -412,6 +438,10 @@ final class BreakableLines {
     // element: a pattern for the element the instruction is - e.g. a local variable is an xsl:variable, which Saxon 13
     // may report at the location of an instruction in its content (the first one's select)
     int displayLine(int line, int column, String element) {
+        int[] text = textEndingAt(line, column);
+        if (text != null) {
+            return text[0];
+        }
         Tag tag = reportedTag(line, column, element);
         return tag != null ? tag.startLine : line;
     }
@@ -423,8 +453,29 @@ final class BreakableLines {
     }
 
     int displayColumn(int line, int column, String element) {
+        int[] text = textEndingAt(line, column);
+        if (text != null) {
+            return text[1];
+        }
         Tag tag = reportedTag(line, column, element);
         return tag != null ? tag.startColumn : column;
+    }
+
+    // where a text node ending at this location is shown - not where a start tag ends there, e.g. an element's after
+    // whitespace-only text, which Saxon doesn't trace
+    private int[] textEndingAt(int line, int column) {
+        if (column <= 0) {
+            return null;
+        }
+        List<Tag> ending = tagsEndingOn.get(line);
+        if (ending != null) {
+            for (Tag tag : ending) {
+                if (tag.endColumn == column) {
+                    return null;
+                }
+            }
+        }
+        return textEndingAt.get(line + ":" + column);
     }
 
     // the start tag ending at this line and column (just after its '>'): [its start line, its start column, 1 if it's an
@@ -454,10 +505,6 @@ final class BreakableLines {
     }
 
     private Tag reportedTag(int line, int column) {
-        Tag text = column > 0 ? textEndingAt.get(line + ":" + column) : null;
-        if (text != null) {
-            return text;
-        }
         List<Tag> ending = tagsEndingOn.get(line);
         if (ending == null) {
             return null;
@@ -668,5 +715,23 @@ final class BreakableLines {
     private static int lineOf(int[] lineStarts, int offset) {
         int index = Arrays.binarySearch(lineStarts, offset);
         return (index >= 0 ? index : -index - 2) + 1;
+    }
+
+    // the offset of the first character of a text node's content that isn't whitespace, a comment or a processing
+    // instruction - from where the tag before it ends (its first character if it's all whitespace)
+    private static int firstTextOffset(String text, int offset) {
+        int i = offset;
+        while (i < text.length()) {
+            if (Character.isWhitespace(text.charAt(i))) {
+                i++;
+            } else if (text.startsWith("<!--", i) && text.indexOf("-->", i + 4) >= 0) {
+                i = text.indexOf("-->", i + 4) + 3;
+            } else if (text.startsWith("<?", i) && text.indexOf("?>", i + 2) >= 0) {
+                i = text.indexOf("?>", i + 2) + 2;
+            } else {
+                return text.charAt(i) == '<' && !text.startsWith("<![CDATA[", i) ? offset : i;
+            }
+        }
+        return offset;
     }
 }

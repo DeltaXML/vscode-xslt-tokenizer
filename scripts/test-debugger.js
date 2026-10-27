@@ -1835,10 +1835,9 @@ async function testStepThroughXPathWithExtensions(saxonJar) {
     await dap.exited;
 }
 
-// hit counts (n, ==n, >n, >=n, <n, <=n, %n) - counted when the condition, if any, is true - with conditions and
-// logpoints; an invalid hit count is rejected
-// a multi-line text value template is one arrival at its xsl:text: Saxon 13, with syntax extensions on, reports some
-// of its parts at the end of its content - not a line of their own
+// a multi-line text value template: Saxon 13, with syntax extensions on, reports it at the end of its text - in an
+// instruction whose value it is, e.g. xsl:text, it's one arrival at the instruction, not leaving its line and arriving
+// again; in a literal result element, it's shown where its text starts, not at the end tag or the next element
 async function testMultiLineTextValueTemplate(saxonJar) {
     if (!/saxon-[pe]e-1[3-9]/i.test(saxonJar)) {
         return 'skipped';
@@ -1848,7 +1847,7 @@ async function testMultiLineTextValueTemplate(saxonJar) {
     let stopped = dap.stopped();
     await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
     await dap.request('launch', { saxonArgs: [`-xsl:${xsl}`, '-it', '--allowSyntaxExtensions:on'] });
-    await dap.request('setBreakpoints', { source: { path: xsl }, breakpoints: [{ line: 5 }] });
+    await dap.request('setBreakpoints', { source: { path: xsl }, breakpoints: [{ line: 5 }, { line: 9 }, { line: 13 }] });
     const terminated = dap.event('terminated');
     await dap.request('configurationDone', {});
     const stops = [];
@@ -1859,13 +1858,16 @@ async function testMultiLineTextValueTemplate(saxonJar) {
         }
         stops.push(stop.frames[0].line);
         stopped = dap.stopped();
-        await dap.request('continue', { threadId: 1 });
+        // through the literal result element's content
+        await dap.request(stop.frames[0].line >= 13 ? 'stepIn' : 'continue', { threadId: 1 });
     }
-    assert.deepStrictEqual(stops, [5]);
+    assert.deepStrictEqual(stops, [5, 9, 13, 14, 15, 16]);
     await dap.request('disconnect', {}).catch(() => undefined);
     await dap.exited;
 }
 
+// hit counts (n, ==n, >n, >=n, <n, <=n, %n) - counted when the condition, if any, is true - with conditions and
+// logpoints; an invalid hit count is rejected
 async function testHitCounts(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
