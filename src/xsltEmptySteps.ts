@@ -61,6 +61,9 @@ export class XsltEmptySteps {
 	private static readonly timeBudget = 300;
 	// for tests: what was faded at the last pause, and the hovers' text
 	public static lastFaded: { line: number; text: string; hover: string }[] = [];
+	// the decorations at the pause, and the document they're for: shown again when it's shown again in an editor - VS
+	// Code makes a new editor for it, e.g. after switching to another file's editor and back
+	private static shown: { uri: string; decorations: vscode.DecorationOptions[] } | undefined;
 
 	public static register(context: vscode.ExtensionContext, debugType: string) {
 		XsltEmptySteps.decoration = vscode.window.createTextEditorDecorationType({ opacity: '0.5' });
@@ -69,6 +72,7 @@ export class XsltEmptySteps {
 			XsltEmptySteps.update(item, debugType).catch(() => undefined);
 		}));
 		context.subscriptions.push(vscode.debug.onDidTerminateDebugSession(() => XsltEmptySteps.clear()));
+		context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors((editors) => XsltEmptySteps.showAgain(editors)));
 		context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
 			if (e.contentChanges.length > 0 && XsltEmptySteps.decorated.some((editor) => editor.document === e.document)) {
 				XsltEmptySteps.clear();
@@ -78,9 +82,29 @@ export class XsltEmptySteps {
 
 	private static clear() {
 		XsltEmptySteps.generation++;
-		XsltEmptySteps.decorated.forEach((editor) => editor.setDecorations(XsltEmptySteps.decoration!, []));
+		XsltEmptySteps.decorated.forEach((editor) => {
+			try {
+				editor.setDecorations(XsltEmptySteps.decoration!, []);
+			} catch {
+				// an editor VS Code has closed since
+			}
+		});
 		XsltEmptySteps.decorated = [];
 		XsltEmptySteps.lastFaded = [];
+		XsltEmptySteps.shown = undefined;
+	}
+
+	private static showAgain(editors: readonly vscode.TextEditor[]) {
+		const shown = XsltEmptySteps.shown;
+		if (!shown) {
+			return;
+		}
+		// not those closed since
+		XsltEmptySteps.decorated = XsltEmptySteps.decorated.filter((editor) => editors.includes(editor));
+		editors.filter((editor) => editor.document.uri.toString() === shown.uri && !XsltEmptySteps.decorated.includes(editor)).forEach((editor) => {
+			editor.setDecorations(XsltEmptySteps.decoration!, shown.decorations);
+			XsltEmptySteps.decorated.push(editor);
+		});
 	}
 
 	private static async update(item: vscode.DebugThread | vscode.DebugStackFrame | undefined, debugType: string) {
@@ -156,6 +180,7 @@ export class XsltEmptySteps {
 		if (generation === XsltEmptySteps.generation && decorations.length > 0) {
 			editor.setDecorations(XsltEmptySteps.decoration!, decorations);
 			XsltEmptySteps.decorated.push(editor);
+			XsltEmptySteps.shown = { uri: document.uri.toString(), decorations };
 			XsltEmptySteps.lastFaded = decorations.map((d) => ({ line: d.range.start.line, text: document.getText(d.range), hover: (d.hoverMessage as vscode.MarkdownString).value }));
 		}
 	}

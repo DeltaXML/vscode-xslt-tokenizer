@@ -4,8 +4,6 @@
                 exclude-result-prefixes="#all"
                 version="3.0">
 
-  <!-- Debug this with shipments.xml, with a breakpoint on the <report> line: while paused there, the step where
-       each path stops matching is faded - hover over it to see why -->
   <xsl:output method="xml" indent="yes"/>
 
   <xsl:variable name="carriers" select="map { 'standard': 'Royal Mail', 'express': 'DHL' }"/>
