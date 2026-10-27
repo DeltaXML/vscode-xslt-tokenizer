@@ -125,6 +125,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return result ?? [];
 	}
 
+	// whether the document is open in an editor tab, shown or not - not one only loaded, e.g. an XML context file read
+	// for completions - so its problems are reported, also after it's changed by an AI agent while another file is active
+	public static isOpenInEditor(document: vscode.TextDocument) {
+		const uri = document.uri.toString();
+		return vscode.window.visibleTextEditors.some((editor) => editor.document === document) ||
+			vscode.window.tabGroups.all.some((group) => group.tabs.some((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === uri));
+	}
+
 	public async provideDocumentSymbols(document: vscode.TextDocument, token: vscode.CancellationToken): Promise<vscode.DocumentSymbol[] | undefined> {
 		const result = this.getDocumentSymbols(document, false);
 		return result;
@@ -147,6 +155,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				return [];
 			}
 		}
+		// the problems found are only reported if the document hasn't changed since: a run for a later version reports them
+		const version = document.version;
 		const allTokens = this.xslLexer.analyse(document.getText());
 		this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
 		const globalInstructionData = this.xslLexer.globalInstructionData;
@@ -228,7 +238,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 			this.internalImportedGlobals = allImportedGlobals;
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(this.languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
-			if (vscode.window.activeTextEditor && document.fileName !== vscode.window.activeTextEditor.document.fileName) {
+			if (!XsltSymbolProvider.isOpenInEditor(document) || document.version !== version) {
 
 			} else {
 				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully

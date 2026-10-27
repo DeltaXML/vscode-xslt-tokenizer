@@ -75,13 +75,14 @@ async function syntaxExtensionsReason(fsPath: string) {
 }
 
 // The symbol providers also report problems, but VS Code only asks them for symbols for its breadcrumbs, sticky scroll
-// or Outline view - with all of those off, no problems would be reported. So the symbols of each visible document in
-// these languages are asked for when it's shown or edited (after a pause in typing). VS Code caches them per document
-// version, so this costs nothing when one of those features has already asked
+// or Outline view - with all of those off, no problems would be reported. So the symbols of each document in these
+// languages that's open in an editor are asked for when it's shown or edited (after a pause in typing) - also when it
+// isn't shown, e.g. edited by an AI agent. VS Code caches them per document version, so this costs nothing when one
+// of those features has already asked
 function requestSymbolsForProblems(context: vscode.ExtensionContext, languages: string[]) {
 	const timers = new Map<string, NodeJS.Timeout>();
 	const request = (document: vscode.TextDocument, delay: number) => {
-		if (!languages.includes(document.languageId) || !vscode.window.visibleTextEditors.some((e) => e.document === document)) {
+		if (!languages.includes(document.languageId) || !XsltSymbolProvider.isOpenInEditor(document)) {
 			return;
 		}
 		const key = document.uri.toString();
