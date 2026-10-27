@@ -2,8 +2,7 @@
 
 These files are copied, not submoduled, from:
 
-- https://github.com/pgfearo/xdm-viewer @ 6424e8ad9a8b1f4df750b9d6adf331eab3fb8407 (`src/*.xsl`),
-  plus `xdm:trace` (uncommitted there when copied, 2026-10-24 - update this hash once it's committed)
+- https://github.com/pgfearo/xdm-viewer @ 782e50551f1104f5ec682eb1ab2a31d983acabb5 (`src/*.xsl`)
 - https://github.com/pgfearo/xdm-persistence @ 093d5a93e63476335107bc70875d7dcfa6350230 (`src/*.xsl`)
 
 Flattened into one directory. One change from upstream:

@@ -89,11 +89,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	public static importSymbolHrefs: Map<string, string[]> = new Map();
 	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
 	private internalImportedGlobals: GlobalInstructionData[] = [];
+	// false when another extension already reports the same problems, e.g. Red Hat's XML extension for XML files
+	private readonly showDiagnostics: () => boolean;
 
-	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null) {
+	public constructor(xsltConfiguration: LanguageConfiguration, collection: vscode.DiagnosticCollection | null, showDiagnostics: () => boolean = () => true) {
 		this.xslLexer = new XslLexer(xsltConfiguration);
 		this.xslLexer.provideCharLevelState = true;
 		this.collection = collection;
+		this.showDiagnostics = showDiagnostics;
 		this.languageConfig = xsltConfiguration;
 		this.docType = xsltConfiguration.docType;
 		this.internalDiagnostics = [];
@@ -235,7 +238,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem));
 					});
 					let allDiagnostics = importDiagnostics.concat(diagnostics);
-					if (allDiagnostics.length > 0) {
+					if (allDiagnostics.length > 0 && this.showDiagnostics()) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
 						// only this document's problems - not those of other documents

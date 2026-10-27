@@ -154,7 +154,24 @@ export function activate(context: vscode.ExtensionContext) {
 	const xmlDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xml');
 	const bpmnDiagnosticsCollection = vscode.languages.createDiagnosticCollection('bpmn');
 
-	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection);
+	// Red Hat's XML extension reports the same well-formedness problems for XML files, so ours aren't shown as well
+	const redHatXmlValidates = () => !!vscode.extensions.getExtension('redhat.vscode-xml') && vscode.workspace.getConfiguration('xml.validation').get<boolean>('enabled', true);
+	const xmlSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, xmlDiagnosticsCollection, () => !redHatXmlValidates());
+	const updateXmlDiagnostics = () => {
+		if (redHatXmlValidates()) {
+			xmlDiagnosticsCollection.clear();
+		} else {
+			vscode.window.visibleTextEditors.filter((editor) => editor.document.languageId === 'xml').forEach((editor) => {
+				vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', editor.document.uri).then(undefined, () => undefined);
+			});
+		}
+	};
+	context.subscriptions.push(vscode.extensions.onDidChange(updateXmlDiagnostics));
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+		if (e.affectsConfiguration('xml.validation.enabled')) {
+			updateXmlDiagnostics();
+		}
+	}));
 	const bpmnSymbolProvider = new XsltSymbolProvider(XMLConfiguration.configuration, bpmnDiagnosticsCollection);
 
 	const docChangeHandler = new DocumentChangeHandler();
