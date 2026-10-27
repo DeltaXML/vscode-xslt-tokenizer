@@ -175,6 +175,9 @@ final class BreakableLines {
 
     private final List<Tag> tags = new ArrayList<Tag>();
     private final java.util.Map<Integer, List<Tag>> tagsEndingOn = new java.util.HashMap<Integer, List<Tag>>();
+    // the xsl:text whose content ends at a line and column ("line:column"): Saxon reports the parts of a text value
+    // template there, at the content's end, so a multi-line one would seem to leave its line and arrive at it again
+    private final java.util.Map<String, Tag> textEndingAt = new java.util.HashMap<String, Tag>();
 
     private BreakableLines() { }
 
@@ -306,6 +309,14 @@ final class BreakableLines {
                 open.push(tag);
                 executed.push(parentExecuted && !(isXslt && UNEXECUTED_CONTENT.contains(localName)) &&
                         !(reason != null && reason.startsWith("is a top-level")));
+            }
+
+            @Override
+            public void characters(char[] ch, int start, int length) {
+                Tag parent = open.peek();
+                if (parent != null && parent.name.equals("xsl:text")) {
+                    result.textEndingAt.put(locator.getLineNumber() + ":" + locator.getColumnNumber(), parent);
+                }
             }
 
             @Override
@@ -443,6 +454,10 @@ final class BreakableLines {
     }
 
     private Tag reportedTag(int line, int column) {
+        Tag text = column > 0 ? textEndingAt.get(line + ":" + column) : null;
+        if (text != null) {
+            return text;
+        }
         List<Tag> ending = tagsEndingOn.get(line);
         if (ending == null) {
             return null;

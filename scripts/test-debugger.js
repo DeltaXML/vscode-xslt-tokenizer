@@ -1837,6 +1837,35 @@ async function testStepThroughXPathWithExtensions(saxonJar) {
 
 // hit counts (n, ==n, >n, >=n, <n, <=n, %n) - counted when the condition, if any, is true - with conditions and
 // logpoints; an invalid hit count is rejected
+// a multi-line text value template is one arrival at its xsl:text: Saxon 13, with syntax extensions on, reports some
+// of its parts at the end of its content - not a line of their own
+async function testMultiLineTextValueTemplate(saxonJar) {
+    if (!/saxon-[pe]e-1[3-9]/i.test(saxonJar)) {
+        return 'skipped';
+    }
+    const xsl = path.join(fixtures, 'text-value-template.xsl');
+    const dap = new DapClient(saxonJar);
+    let stopped = dap.stopped();
+    await dap.request('initialize', { adapterID: 'xslt-saxon', linesStartAt1: true, columnsStartAt1: true });
+    await dap.request('launch', { saxonArgs: [`-xsl:${xsl}`, '-it', '--allowSyntaxExtensions:on'] });
+    await dap.request('setBreakpoints', { source: { path: xsl }, breakpoints: [{ line: 5 }] });
+    const terminated = dap.event('terminated');
+    await dap.request('configurationDone', {});
+    const stops = [];
+    while (true) {
+        const stop = await Promise.race([stopped, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        stops.push(stop.frames[0].line);
+        stopped = dap.stopped();
+        await dap.request('continue', { threadId: 1 });
+    }
+    assert.deepStrictEqual(stops, [5]);
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+}
+
 async function testHitCounts(saxonJar) {
     const dap = new DapClient(saxonJar);
     let stopped = dap.stopped();
@@ -2501,7 +2530,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;
