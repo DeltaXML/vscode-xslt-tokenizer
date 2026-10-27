@@ -709,6 +709,58 @@ export class XsltTokenDiagnostics {
 			inheritedPrefixes = inheritedPrefixes.concat(['array', 'map', 'math', 'xs', 'fn', 'xsl', 'ixsl']);
 		}
 
+		// an element popped from elementStack, by its close tag - or by the close tag of an ancestor when it isn't
+		// closed itself: the checks of its content, its outline symbol and the variables in scope after it
+		const closeElement = (poppedData: ElementData, endToken: BaseToken) => {
+			const elementName = poppedData.symbolName;
+			if (elementName === 'xsl:function') {
+				insideGlobalFunction = false;
+				if (functionContent) {
+					XsltTokenDiagnostics.checkFunctionContent(functionContent, problemTokens);
+					functionContent = null;
+				}
+				if (functionResult) {
+					if (functionResult.record && functionResult.select) {
+						RecordTypes.checkMapConstructor(allTokens.slice(functionResult.select[0], functionResult.select[1] + 1), functionResult.record, itemTypeDeclarations, problemTokens);
+					}
+					functionResult = null;
+				}
+			} else if (elementName === 'xsl:iterate') {
+				currentXSLTIterateParams.pop();
+			} else if (insideGlobalFunction) {
+				XsltTokenDiagnostics.addProblemIfMissingContext(true, elementName, poppedData, elementStack, xpathStack, problemTokens);
+				XsltTokenDiagnostics.addCallTemplateProbIfMissingContext(true, poppedData.identifierToken, elementName, elementStack, xpathStack, problemTokens);
+			}
+			inheritedPrefixes = poppedData.namespacePrefixes.slice();
+			let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
+			if (symbol !== null) {
+				symbol.children = poppedData.childSymbols;
+				// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
+				if (elementStack.length > 0) {
+					elementStack[elementStack.length - 1].childSymbols.push(symbol);
+				} else {
+					topLevelSymbols.push(symbol);
+				}
+			}
+			inScopeVariablesList = poppedData.variables;
+			if (poppedData.currentVariable) {
+				if (docType === DocumentTypes.DCP) {
+					importedGlobalVarNames.push(poppedData.currentVariable.name);
+					globalVariableData.push(poppedData.currentVariable);
+				} else if (elementStack.length > 1) {
+					// reset inscope variables - unless at global-variable stack-level
+					inScopeVariablesList.push(poppedData.currentVariable);
+				}
+			}
+		};
+
+		const addUnclosedElementProblem = (elementData: ElementData) => {
+			let errorToken = Object.assign({}, elementData.identifierToken);
+			errorToken['error'] = ErrorType.ElementNesting;
+			errorToken['value'] = elementData.symbolName;
+			problemTokens.push(errorToken);
+		};
+
 		allTokens.forEach((token, index) => {
 			lineNumber = token.line;
 			let isXMLToken = token.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
@@ -1107,72 +1159,21 @@ export class XsltTokenDiagnostics {
 
 								break;
 							case XMLCharState.rCt:
-								// end of an element close-tag:
-								if (elementStack.length > 0) {
-									let poppedData = elementStack.pop()!;
-									inheritedPrefixes = poppedData.namespacePrefixes;
-									if (tagElementName === 'xsl:function') insideGlobalFunction = false;
-									if (tagElementName === 'xsl:function' && functionContent) {
-										XsltTokenDiagnostics.checkFunctionContent(functionContent, problemTokens);
-										functionContent = null;
+								// end of an element close-tag: it closes the nearest open element with its name - the elements
+								// still open within that element aren't closed, so they're reported, then closed here too.
+								// Without an open element of that name, only the close tag is reported: no open element is
+								// closed, so the errors don't cascade to its ancestors
+								let matchIndex = elementStack.length - 1;
+								while (matchIndex > -1 && elementStack[matchIndex].symbolName !== tagElementName) {
+									matchIndex--;
+								}
+								if (matchIndex > -1) {
+									while (elementStack.length > matchIndex + 1) {
+										const unclosedData = elementStack.pop()!;
+										addUnclosedElementProblem(unclosedData);
+										closeElement(unclosedData, token);
 									}
-									if (tagElementName === 'xsl:function' && functionResult) {
-										if (functionResult.record && functionResult.select) {
-											RecordTypes.checkMapConstructor(allTokens.slice(functionResult.select[0], functionResult.select[1] + 1), functionResult.record, itemTypeDeclarations, problemTokens);
-										}
-										functionResult = null;
-									}
-									if (tagElementName === 'xsl:iterate') {
-										currentXSLTIterateParams.pop();
-									} else if (tagElementName === 'xsl:function') {
-										insideGlobalFunction = false;
-									} else if (insideGlobalFunction) {
-										XsltTokenDiagnostics.addProblemIfMissingContext(true, tagElementName, poppedData, elementStack, xpathStack, problemTokens);
-										XsltTokenDiagnostics.addCallTemplateProbIfMissingContext(true, poppedData.identifierToken, tagElementName, elementStack, xpathStack, problemTokens);
-
-									}
-									if (poppedData) {
-										if (poppedData.symbolName !== tagElementName) {
-											let errorToken = Object.assign({}, poppedData.identifierToken);
-											errorToken['error'] = ErrorType.ElementNesting;
-											errorToken['value'] = poppedData.symbolName;
-											problemTokens.push(errorToken);
-											if (prevToken) {
-												prevToken['error'] = ErrorType.ElementNestingX;
-												prevToken['value'] = tagElementName;
-												problemTokens.push(prevToken);
-											}
-											// not well-nested
-											if (elementStack.length > 0 && elementStack[elementStack.length - 1].symbolName === tagElementName) {
-												// recover for benefit of outline view
-												poppedData = elementStack.pop()!;
-												inheritedPrefixes = poppedData.namespacePrefixes;
-											}
-										}
-									}
-									if (poppedData) {
-										inheritedPrefixes = poppedData.namespacePrefixes.slice();
-										let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, token);
-										if (symbol !== null) {
-											symbol.children = poppedData.childSymbols;
-											// the parent symbol hasn't yet been created, but the elementStack parent is now the top item
-											if (elementStack.length > 0) {
-												elementStack[elementStack.length - 1].childSymbols.push(symbol);
-											} else {
-												topLevelSymbols.push(symbol);
-											}
-										}
-										inScopeVariablesList = (poppedData) ? poppedData.variables : [];
-										if (poppedData.currentVariable) {
-											if (docType === DocumentTypes.DCP) {
-												importedGlobalVarNames.push(poppedData.currentVariable.name);
-												globalVariableData.push(poppedData.currentVariable);
-											} else if (elementStack.length > 1) {
-												// reset inscope variables - unless at global-variable stack-level
-												inScopeVariablesList.push(poppedData.currentVariable);
-											}
-										}
-									}
+									closeElement(elementStack.pop()!, token);
 								} else {
 									let errToken = (prevToken) ? prevToken : token;
 									errToken['error'] = ErrorType.ElementNestingX;
@@ -3080,9 +3081,7 @@ export class XsltTokenDiagnostics {
 								endToken = token;
 								usedtoken = true;
 							}
-							let errorToken = Object.assign({}, poppedData.identifierToken);
-							errorToken['error'] = ErrorType.ElementNesting;
-							problemTokens.push(errorToken);
+							addUnclosedElementProblem(poppedData);
 							let symbol = XsltTokenDiagnostics.createSymbolFromElementTokens(poppedData.symbolName, poppedData.symbolID, poppedData.identifierToken, endToken);
 							if (symbol !== null) {
 								if (elementStack.length > 0) {
