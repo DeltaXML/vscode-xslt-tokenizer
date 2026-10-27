@@ -27,6 +27,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	private onTypeLineEmpty = false;
 	// for on-type formatting, the line to indent - the new line after Enter, which may be empty
 	private onTypeLine = -1;
+	private isWholeDocument = false;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	// the parts of a string template, or of a string delimited by entities, that can't start a string
 	private static readonly stringContinuationCharTypes = [CharLevelState.mBt, CharLevelState.rBt, CharLevelState.rDqEnt, CharLevelState.rSqEnt,
@@ -120,7 +121,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		const lastLine = document.lineAt(document.lineCount - 1);
 		const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
-		return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+		this.isWholeDocument = true;
+		try {
+			return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+		} finally {
+			this.isWholeDocument = false;
+		}
 	};
 
 	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
@@ -199,8 +205,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
 		let preThen = false;
-		let documenthasNewLines: HasCharacteristic = HasCharacteristic.unknown;
-		let awaitingSecondTag: HasCharacteristic = HasCharacteristic.unknown;
+		// a document with its first tags on one line, e.g. generated XML, is split into lines - only when the whole
+		// document is formatted: not for on-type or range formatting, e.g. after Enter in a line split from it
+		let documenthasNewLines: HasCharacteristic = this.isWholeDocument ? HasCharacteristic.unknown : HasCharacteristic.yes;
+		let awaitingSecondTag: HasCharacteristic = this.isWholeDocument ? HasCharacteristic.unknown : HasCharacteristic.no;
 		let firstStartTagLineNumber = -1;
 		let prevToken: BaseToken | null = null;
 		let elementName = '';

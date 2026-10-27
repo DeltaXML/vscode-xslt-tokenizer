@@ -82,6 +82,23 @@ suite('Formatting', () => {
 		assert.deepEqual(edits.map((e) => [e.range.start.line, e.newText]), [[2, '    ']]);
 	});
 
+	test('on-type and range formatting of XML split from one line: only the line is indented, no new lines are added', async () => {
+		// Enter before </file> - the first tags are still on one line, but only a whole document is split into lines
+		const content = '<this><new><file><formatter>is</formatter>\n</file></new></this>';
+		const expected = '<this><new><file><formatter>is</formatter>\n    </file></new></this>';
+		const applied = async (edits: vscode.TextEdit[]) => {
+			const document = await vscode.workspace.openTextDocument({ content, language: 'xml' });
+			const edit = new vscode.WorkspaceEdit();
+			edit.set(document.uri, edits);
+			await vscode.workspace.applyEdit(edit);
+			return document.getText();
+		};
+		const document = await vscode.workspace.openTextDocument({ content, language: 'xml' });
+		const provider = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
+		assert.equal(await applied(provider.provideOnTypeFormattingEdits(document, new vscode.Position(1, 0), '\n', spaces, token())), expected);
+		assert.equal(await applied(provider.provideDocumentRangeFormattingEdits(document, document.lineAt(1).range, spaces, token())), expected);
+	});
+
 	test('xsl:text content is kept as it is', async () => {
 		const { lines } = await format(stylesheet(['  <xsl:template match="/">', '<xsl:text>', '   a', ' b</xsl:text>', '  </xsl:template>']));
 		assert.deepEqual(lines.slice(3, 5), ['   a', ' b</xsl:text>']);
