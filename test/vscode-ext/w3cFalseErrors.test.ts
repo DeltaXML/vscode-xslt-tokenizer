@@ -42,6 +42,31 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.include(reported[0], "'xmlx'");
 	});
 
+	test('multiplying an attribute, e.g. @price * @qty - not @ followed by a wildcard (expression-0601, sort)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="order"><r v="{@price * @qty}" w="{sum(for $i in item return $i/@price * $i/@qty)}"><xsl:value-of select="@height*@width"/><xsl:copy-of select="@*"/></r></xsl:template>')), []);
+	});
+
+	test('a string literal operand of an arithmetic operator: allowed in XSLT 1.0 backwards compatible mode (select-3401)', async () => {
+		const body = '<xsl:template match="doc"><xsl:value-of select="\' 6 \'*div"/><xsl:value-of select="\'2\' div 1"/></xsl:template>';
+		assert.deepEqual(await problems(stylesheet(body).replace('version="3.0"', 'version="1.0"')), []);
+		// a type error otherwise
+		assert.lengthOf(await problems(stylesheet(body)), 2);
+	});
+
+	test('a name or wildcard within a kind test doesn\'t need a context item, e.g. in a function (higher-order-functions-075)', async () => {
+		const fn = (select: string) => stylesheet(`<xsl:function name="f:f" xmlns:f="urn:f" xmlns:io="urn:io"><xsl:param name="node"/><xsl:sequence select="${select}"/></xsl:function>`, 'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"');
+		for (const select of ['$node instance of element(*)', '$node instance of element(io:x)', '$node instance of attribute(*, xs:string)', '$node instance of document-node(element(a))',
+			'function($r as element(io:realworld)) as item()+ { 1 }']) {
+			assert.deepEqual(await problems(fn(select)), [], select);
+		}
+		// a step still needs one
+		assert.deepEqual(await problems(fn('count(*)')), ['XPath: Context-item is missing for: \'*\'']);
+	});
+
+	test('an occurrence indicator after whitespace, e.g. as="xs:integer *" (sequence types)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:variable name="q" as="xs:integer *" select="1, 2"/><xsl:variable name="r" as="xs:string ?" select="()"/><xsl:template name="t"><xsl:sequence select="$q, $r"/></xsl:template>', 'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"')), []);
+	});
+
 	test('the name of a package is a URI, e.g. urn:simple (package-version-001)', async () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:template name="main"/>', 'xsl:package', ' name="urn:simple" package-version="1.0"')), []);
 		assert.deepEqual(await problems(stylesheet('<xsl:use-package name="http://example.com/pkg/a" package-version="*"/>\n<xsl:template name="main"/>', 'xsl:package', ' name="urn:b"')), []);

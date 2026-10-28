@@ -849,7 +849,10 @@ export class XPathLexer {
                         case CharLevelState.lWs:
                         case CharLevelState.lUri:
                             if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq && currentLabelState !== CharLevelState.escBt) {
-                                this.update(poppedContext, result, tokenChars, currentLabelState);
+                                // in a type declaration, a name ended by whitespace and then an occurrence indicator is a type, e.g.
+                                // xs:integer in 'xs:integer *'
+                                const isTypeWithIndicator = isTypeDeclaration && nextLabelState === CharLevelState.lWs && XPathLexer.isOccurrenceIndicatorAfter(xpath, i - 1);
+                                this.update(poppedContext, result, tokenChars, currentLabelState, isTypeWithIndicator);
                             }
                             tokenChars.push(currentChar);
                             break;
@@ -958,6 +961,13 @@ export class XPathLexer {
                 result = open === CharLevelState.lPr;
         }
         return result;
+    }
+
+    // whether the first character from the offset that isn't whitespace is an occurrence indicator: '*', '+' or '?'
+    private static isOccurrenceIndicatorAfter(xpath: string, offset: number) {
+        const following = /\s*([*+?])/y;
+        following.lastIndex = offset;
+        return following.test(xpath);
     }
 
     private update(poppedContext: Token | null | undefined, result: Token[], tokenChars: string[], charState: CharLevelState, isTypeDeclaration = false) {
@@ -1475,10 +1485,10 @@ export class XPathLexer {
                         currentToken.tokenType = TokenLevelState.nodeType;
                     }
                 } else if (isStar && (
-                    prevTokenT === TokenLevelState.attributeNameTest ||
+                    (prevTokenT === TokenLevelState.attributeNameTest && (prevToken.value === '@' || prevToken.value.endsWith('*'))) ||
                     prevTokenT === TokenLevelState.uriLiteral)
                 ) {
-                    // @* or {example.com}*
+                    // @* (or @ *) or {example.com}* - not after an attribute's name, e.g. @price * @qty, a multiplication
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
                 } else if (isStar && prevTokenT === TokenLevelState.operator && prevToken.value === '?') {

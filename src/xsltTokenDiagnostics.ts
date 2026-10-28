@@ -481,6 +481,9 @@ export class XsltTokenDiagnostics {
 		let onRootStartTag = true;
 		// the prefix of the outermost element, e.g. xsl:stylesheet, which must be bound to the XSLT namespace
 		let rootXsltPrefix = 'xsl';
+		// XSLT 1.0 backwards compatible mode, for the version attribute of the outermost element, e.g. version="1.0": XPath
+		// 1.0 compatibility mode, in which a string operand is converted to a number, e.g. '6' * 2
+		let isBackwardsCompatible = false;
 		let rootXmlnsName: string | null = null;
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 		let isXMLDeclaration = false;
@@ -1339,6 +1342,9 @@ export class XsltTokenDiagnostics {
 							}
 							break;
 						}
+						if (onRootStartTag && currentAttName === 'version' && isLastPart) {
+							isBackwardsCompatible = Number(variableName.trim()) < 2;
+						}
 						let valueToken = token;
 						if (isSingleName && isContinuation) {
 							valueToken = variableName.trim() === '' && pendingNameToken ? pendingNameToken : token;
@@ -1854,7 +1860,7 @@ export class XsltTokenDiagnostics {
 								if (!hasContext && xpathTokenType !== TokenLevelState.axisName) {
 									hasContext = (prevToken.charType === CharLevelState.dSep && prevToken.value === '::');
 								}
-								if (!hasContext) {
+								if (!hasContext && !XsltTokenDiagnostics.isWithinKindTest(xpathStack, allTokens, index)) {
 									token.error = ErrorType.MissingContextItemGeneral;
 								}
 							}
@@ -2366,7 +2372,8 @@ export class XsltTokenDiagnostics {
 								// permitted, as for any primary expression, e.g. 'a'[$show]
 								switch (tv.length) {
 									case 1:
-										isXPathError = (tv === '(' || tv === '{' || tv === '-' || tv === '+' || tv === '|' || tv === '?' || tv === '*' || tv === '.');
+										isXPathError = (tv === '(' || tv === '{' || tv === '|' || tv === '?' || tv === '.') ||
+											(!isBackwardsCompatible && (tv === '-' || tv === '+' || tv === '*'));
 										break;
 									case 2:
 										isXPathError = (tv === 'as' || tv === 'of' || tv === '//' || tv === '{}' || tv === '[]' || tv === '()' || tv === '*:' || tv === '::' || tv === '<<' || tv === '>>');
@@ -2376,7 +2383,7 @@ export class XsltTokenDiagnostics {
 										}
 										break;
 									case 3:
-										isXPathError = (tv === 'div' || tv === 'mod');
+										isXPathError = !isBackwardsCompatible && (tv === 'div' || tv === 'mod');
 										break;
 									default:
 										isXPathError = (tv === 'idiv' || tv === 'union' || tv === 'except' || tv === 'intersect' || tv === '&lt;&lt;' || tv === '&gt;&gt;');
@@ -2861,7 +2868,8 @@ export class XsltTokenDiagnostics {
 						if (prevToken && insideGlobalFunction && !isGroupingAttribute) {
 							const prevToken2 = allTokens[index - 2];
 							if (!withinTypeDeclarationAttr && !isGroupingAttribute && !XsltTokenDiagnostics.isRequiredNodeTypeContext(prevToken, prevToken2) && !XsltTokenDiagnostics.contextItemExists(elementStack, xpathStack, insideGlobalFunction, false, rootOperandContext)) {
-								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()' || prevToken.value === 'as'))) {
+								if (!(token.value === '?' || token.value === '+' || (token.value === '*' && prevToken.value === ')' || prevToken.value === '()' || prevToken.value === 'as')) &&
+									!XsltTokenDiagnostics.isWithinKindTest(xpathStack, allTokens, index)) {
 									token.error = ErrorType.MissingContextItemGeneral;
 									problemTokens.push(token);
 								}
@@ -3739,6 +3747,20 @@ export class XsltTokenDiagnostics {
 				break;
 		}
 	}
+
+	// within the parentheses of a kind test, e.g. the name or '*' in element(*), element(io:x) or attribute(*, xs:string) -
+	// a name or wildcard there isn't a step of a path, so it doesn't need a context item
+	private static isWithinKindTest(xpathStack: XPathData[], allTokens: BaseToken[], index: number) {
+		const bracket = xpathStack.length > 0 ? xpathStack[xpathStack.length - 1].token : undefined;
+		if (!bracket || bracket.value !== '(') {
+			return false;
+		}
+		const bracketIndex = allTokens.lastIndexOf(bracket, index);
+		const before = bracketIndex > 0 ? allTokens[bracketIndex - 1] : undefined;
+		return !!before && before.tokenType === TokenLevelState.nodeType && XsltTokenDiagnostics.namedKindTests.has(before.value);
+	}
+
+	private static readonly namedKindTests = new Set(['element', 'attribute', 'schema-element', 'schema-attribute', 'document-node']);
 
 	private static checkTokenIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[], overridType?: TokenLevelState) {
 		if (token.error || token.charType === CharLevelState.mBt || token.charType === CharLevelState.rBt) {
