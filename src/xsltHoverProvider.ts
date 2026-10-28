@@ -12,6 +12,7 @@ import { declarationParamLabels } from "./declarationParams";
 import { XsltTokenDefinitions } from "./xsltTokenDefintions";
 import { HrefPaths } from './hrefPaths';
 import { XdocReferences } from './xdocReferences';
+import { ModeHover } from './xsltModeHover';
 
 enum CharType {
 	none,
@@ -69,7 +70,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			}
 			return this.findModuleNoteHover(document, position) ?? await this.findVariableHover(document, position, token) ?? await this.findModuleHover(document, position) ??
 				await this.findDeclarationHover(document, position, token) ?? await this.findTemplateHover(document, position, token) ??
-				await this.findItemTypeHover(document, position, token);
+				await ModeHover.hover(document, position, token) ?? await this.findItemTypeHover(document, position, token);
 		}
 
 		const trimmedFnName = rawFnName.trimRight();
