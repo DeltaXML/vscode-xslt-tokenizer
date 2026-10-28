@@ -505,6 +505,8 @@ export class XsltTokenDiagnostics {
 		const argumentVariableTypes = new Map<BaseToken, string>();
 		// the 'as' and 'select' attributes of the current start tag, as allTokens index ranges
 		let currentAttName = '';
+		// as it's written, e.g. xslt:expand-text, for xsl:expand-text in currentAttName
+		let currentWrittenAttName = '';
 		let tagAsRange: [number, number] | null = null;
 		let tagSelectRange: [number, number] | null = null;
 		// the record type of the current xsl:function, and the 'select' of its last xsl:sequence (a direct child)
@@ -1222,6 +1224,7 @@ export class XsltTokenDiagnostics {
 						// on a literal result element, e.g. <axsl:item-type as="{$type}"/> with xsl:namespace-alias, 'as' is an AVT
 						withinTypeDeclarationAttr = attNameText === 'as' && (tagType !== TagType.XMLstart || isSchematron);
 						currentAttName = attNameText;
+						currentWrittenAttName = writtenAttName;
 						let problemReported = false;
 						if (prevToken) {
 							if (token.line === prevToken.line && token.startCharacter - (prevToken.startCharacter + prevToken.length) === 0) {
@@ -1391,31 +1394,35 @@ export class XsltTokenDiagnostics {
 									prefixTokens: earlierPrefixes.prefixTokens.concat(excludePrefixes.map(() => valueToken)) };
 								break;
 							case AttributeType.None:
-								const tagAttributeName = tagAttributeNames.length > 0 ? tagAttributeNames[tagAttributeNames.length - 1] : undefined;
+								// the attribute this value is for - not the last in tagAttributeNames, which has no namespace declarations
+								const tagAttributeName = currentAttName !== '' ? currentAttName : undefined;
 								let isAVTbracket = valueToken.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
 								if (!isAVTbracket && schemaQuery && tagAttributeName && variableName.indexOf('{') === -1) {
 									const expectedValues = schemaQuery.getExpected(tagElementName, tagAttributeName);
 									const expectedSimpleType = schemaQuery.lastEnumSimpleType;
 									if (expectedValues.attributeValues && expectedValues.attributeValues.length > 0) {
-										const matchingNameAndDesc = expectedValues.attributeValues.find(arr => arr[0] === variableName);
-										if (!matchingNameAndDesc) {
-											const isNameTest = SimpleTypeNames.nametests === expectedSimpleType;
-											if (isNameTest) {
-												const invalidNames = XsltTokenDiagnostics.findInvalidNames(variableName, docType, xpathPrefixes());
-												if (invalidNames.length > 0) {
-													const quotedNames = invalidNames.map((uName) => '\'' + uName + '\'');
-													valueToken['error'] = ErrorType.XMLNameList;
-													valueToken.value = tagAttributeName + ' ' + quotedNames.join(',');
-												}
-											} else {
-												const isHashedExpected = expectedValues.attributeValues[0][0].charAt(0) === '#';
-												const isHashedValue = (variableName.charAt(0) === '#');
-												const ignoreHashNoMatch = isHashedExpected && !isHashedValue;
-												if (!ignoreHashNoMatch) {
-													valueToken['error'] = ErrorType.XMLAttributeValueUnexpected;
-													const expectedNames = expectedValues.attributeValues.map(arr => arr[0]);
-													valueToken.value = variableName + '!' + tagAttributeName + '!' + expectedNames.join(', ');
-												}
+										if (SimpleTypeNames.nametests === expectedSimpleType) {
+											// a list of names: each part of the value, so that a problem is reported on its line
+											const invalidNames = expectedValues.attributeValues.some(arr => arr[0] === variableName) ? [] : XsltTokenDiagnostics.findInvalidNames(variableName, docType, xpathPrefixes());
+											if (invalidNames.length > 0) {
+												const quotedNames = invalidNames.map((uName) => '\'' + uName + '\'');
+												valueToken['error'] = ErrorType.XMLNameList;
+												valueToken.value = tagAttributeName + ' ' + quotedNames.join(',');
+											}
+										} else if (isLastPart) {
+											// one of the values: a value on more than one line, or with character references, is in parts - it's
+											// checked once, at its last part, as the whole value's text, e.g. ' xml ' for "&#x20;xml&#x20;" - and
+											// leading and trailing whitespace is allowed, e.g. disable-output-escaping=" no ", as Saxon allows it
+											const wholeValue = RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(valueToken.line, valueToken.startCharacter)), currentWrittenAttName);
+											const trimmedValue = wholeValue?.trim();
+											const isExpected = trimmedValue === undefined || trimmedValue.includes('{') || expectedValues.attributeValues.some(arr => arr[0] === trimmedValue);
+											const isHashedExpected = expectedValues.attributeValues[0][0].charAt(0) === '#';
+											// e.g. a mode name, where #default etc. are also allowed
+											const ignoreHashNoMatch = isHashedExpected && trimmedValue?.charAt(0) !== '#';
+											if (!isExpected && !ignoreHashNoMatch) {
+												valueToken['error'] = ErrorType.XMLAttributeValueUnexpected;
+												const expectedNames = expectedValues.attributeValues.map(arr => arr[0]);
+												valueToken.value = trimmedValue + '!' + tagAttributeName + '!' + expectedNames.join(', ');
 											}
 										}
 									}
@@ -1504,7 +1511,9 @@ export class XsltTokenDiagnostics {
 							}
 						}
 
-						if (!hasProblem && (attType === AttributeType.Variable || attType === AttributeType.InstructionName)) {
+						// the name of a package is a URI, e.g. urn:simple or http://example.com/pkg, not a QName
+						const isPackageName = attType === AttributeType.InstructionName && (tagElementName === 'xsl:package' || tagElementName === 'xsl:use-package');
+						if (!hasProblem && !isPackageName && (attType === AttributeType.Variable || attType === AttributeType.InstructionName)) {
 							if (!fullVariableName.includes('{')) {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;
 								const nameToTest = tagElementName === "xsl:namespace" && variableName === '' ? 'empty' : variableName;
