@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { HrefPaths } from './hrefPaths';
+import { RecordTypes } from './recordTypes';
 
 // an xsl:import or xsl:include of a module: its resolved path
 export interface ModuleReference {
@@ -53,7 +54,7 @@ export class ImportIndex {
 	public static moduleReferences(text: string, modulePath: string): ModuleReference[] {
 		const references: ModuleReference[] = [];
 		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
-		for (const match of withoutComments.matchAll(/<xsl:(import|include)\s[^>]*?(?<![\w.:-])href\s*=\s*(["'])([^"'{}]+)\2/g)) {
+		for (const match of withoutComments.matchAll(RecordTypes.xsltPattern(/<xsl:(import|include)\s[^>]*?(?<![\w.:-])href\s*=\s*(["'])([^"'{}]+)\2/g, withoutComments))) {
 			const referencePath = HrefPaths.toPath(HrefPaths.fromAttribute(match[3]), modulePath);
 			if (referencePath === undefined) {
 				// not a file, e.g. an http: URI

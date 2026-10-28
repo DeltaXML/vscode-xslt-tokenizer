@@ -141,7 +141,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const { document, plan } = this.recordExtraction!;
 		const isExtract = codeAction.title === XsltCodeActionKind.extractRecordType;
 		const text = document.getText();
-		const existingNames = [...text.matchAll(/<xsl:item-type\s[^>]*name\s*=\s*["']([^"']*)["']/g)].map((match) => match[1]);
+		const existingNames = [...text.matchAll(RecordTypes.xsltPattern(/<xsl:item-type\s[^>]*name\s*=\s*["']([^"']*)["']/g, text))].map((match) => match[1]);
 		const typeName = isExtract ? RecordExtraction.newTypeName(existingNames) : this.recordExtraction!.existingTypes.find((name) => codeAction.title === XSLTCodeActions.useRecordTypeTitle(name))!;
 		codeAction.edit = new vscode.WorkspaceEdit();
 		const { asEdit, itemTypeInsert } = plan;
@@ -167,7 +167,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private addItemTypeEdit(edit: vscode.WorkspaceEdit, document: vscode.TextDocument, typeName: string, recordType: string, itemTypeInsert: { offset: number, indent: string, isAfter: boolean }) {
 		const declaration = `<xsl:item-type name="${typeName}" as="${recordType}"/>`;
 		const insertPosition = document.positionAt(itemTypeInsert.offset);
-		edit.insert(document.uri, insertPosition, itemTypeInsert.isAfter ? `\n${itemTypeInsert.indent}${declaration}` : `${itemTypeInsert.indent}${declaration}\n`);
+		edit.insert(document.uri, insertPosition, XSLTCodeActions.inModule(document, itemTypeInsert.isAfter ? `\n${itemTypeInsert.indent}${declaration}` : `${itemTypeInsert.indent}${declaration}\n`));
 		// the new type's name, after the edit - the xsl:item-type is before the type's use
 		const nameLine = insertPosition.line + (itemTypeInsert.isAfter ? 1 : 0);
 		this.executeRenameCommand(nameLine, itemTypeInsert.indent.length + '<xsl:item-type name="'.length, document.uri);
@@ -182,7 +182,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let tabStop = 1;
 		const snippet = fix.text.replace(/[$}\\]/g, '\\$&').replace(/ description(?=\n|$)/g, () => ` \${${tabStop++}:description}`);
 		const position = new vscode.Position(fix.line, fix.character);
-		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, position), new vscode.SnippetString(snippet));
+		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, position), new vscode.SnippetString(XSLTCodeActions.inModule(document, snippet)));
 		// the lines have the indentation
 		snippetEdit.keepWhitespace = true;
 		action.edit.set(document.uri, [snippetEdit]);
@@ -200,7 +200,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const snippetText = text.replace(/[$}\\]/g, '\\$&');
 		const withCursor = snippetText.replace(/select=""/, 'select="$0"') !== snippetText ? snippetText.replace(/select=""/, 'select="$0"') :
 			snippetText.replace(/(<xsl:when test="[^"]*">(?:\n[ \t]*)?)/, '$1$$0');
-		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, end), new vscode.SnippetString(withCursor));
+		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, end), new vscode.SnippetString(XSLTCodeActions.inModule(document, withCursor)));
 		// the text already has the indentation
 		snippetEdit.keepWhitespace = true;
 		action.edit.set(document.uri, [snippetEdit]);
@@ -217,8 +217,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const action = new vscode.CodeAction(XsltCodeActionKind.addMissingRecordFields, vscode.CodeActionKind.QuickFix);
 		action.diagnostics = [diagnostic];
 		action.edit = new vscode.WorkspaceEdit();
-		action.edit.insert(document.uri, position, text);
+		action.edit.insert(document.uri, position, XSLTCodeActions.inModule(document, text));
 		return action;
+	}
+
+	// text to insert in the document, with its prefix for XSLT, e.g. xslt:when for xsl:when (see RecordTypes.withXsltPrefix)
+	private static inModule(document: vscode.TextDocument, text: string) {
+		return RecordTypes.withXsltPrefix(text, XsltTokenDiagnostics.xsltPrefixOf(document));
 	}
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
@@ -278,7 +283,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						const action = new vscode.CodeAction(XsltCodeActionKind.excludeNote, vscode.CodeActionKind.QuickFix);
 						action.diagnostics = [diagnostic];
 						action.edit = new vscode.WorkspaceEdit();
-						action.edit.insert(document.uri, new vscode.Position(fix.line, fix.character), fix.text);
+						action.edit.insert(document.uri, new vscode.Position(fix.line, fix.character), XSLTCodeActions.inModule(document, fix.text));
 						codeActions.push(action);
 					} else if (diagnostic.code === DiagnosticCode.recordFieldUnknown) {
 						// a fix for each field name that could replace the unknown one, closest first
@@ -368,7 +373,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				const action = new vscode.CodeAction(XsltCodeActionKind.addDocumentationNote, vscode.CodeActionKind.RefactorRewrite);
 				action.edit = new vscode.WorkspaceEdit();
 				const noteRange = new vscode.Range(document.positionAt(note.insertOffset), document.positionAt(note.insertOffset + note.replaceLength));
-				const snippetEdit = new vscode.SnippetTextEdit(noteRange, new vscode.SnippetString(note.snippet));
+				const snippetEdit = new vscode.SnippetTextEdit(noteRange, new vscode.SnippetString(XSLTCodeActions.inModule(document, note.snippet)));
 				// the snippet has the indentation
 				snippetEdit.keepWhitespace = true;
 				action.edit.set(document.uri, [snippetEdit]);
@@ -526,7 +531,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				codeAction.edit = new vscode.WorkspaceEdit();
 				const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
 				codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:xdm="${'http://deltaxignia.com/ns/xdm-persistence'}"` + '\n' + prefixWS);
-				codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${xdmViewIncludePath}"/>` + '\n\t');
+				codeAction.edit.insert(document.uri, firstChildElement.range.start, XSLTCodeActions.inModule(document, `<xsl:include href="${xdmViewIncludePath}"/>`) + '\n\t');
 			}
 		}
 	}
@@ -735,7 +740,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const fullRange = this.extendRangeToFullLines(range);
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
-		codeAction.edit.replace(document.uri, fullRange, text);
+		codeAction.edit.replace(document.uri, fullRange, XSLTCodeActions.inModule(document, text));
 		return codeAction;
 	}
 
@@ -937,11 +942,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					const wsBeforeFirstChar = parentStartLine.text.substring(0, firstCharOnFirstLine);
 					instrText += wsBeforeFirstChar;
 				}
-				codeAction.edit.insert(document.uri, attrParentRange.start, instrText);
+				codeAction.edit.insert(document.uri, attrParentRange.start, XSLTCodeActions.inModule(document, instrText));
 			}
 
 		}
-		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
+		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, XSLTCodeActions.inModule(document, replacementAll));
 
 		const functionParamLines = requiredParamNames.map((argName) => {
 			let argType = (argName === ExtractFunctionParams.position || argName === ExtractFunctionParams.last) ?
@@ -960,7 +965,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const allFunctionText = functionHeadText + functionParamLines.join('') + finalCorrectText + functionFootText;
 		if (!forXSLTVariable) {
-			codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
+			codeAction.edit.insert(document.uri, targetRange.end, XSLTCodeActions.inModule(document, allFunctionText));
 		}
 		let fnStartLineIncrement = (replacementIsVariable && forXSLTemplate) || addRegexMapInstruction ? 1 : 0;
 		if (addMergeGroupMapInstruction) {

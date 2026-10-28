@@ -225,7 +225,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const text = declarationDocument.getText();
 		const nameOffset = declarationDocument.offsetAt(location.range.start);
 		const tagStart = text.lastIndexOf('<', nameOffset);
-		const element = /^<(xsl:param|xsl:variable)\s/.exec(text.substring(tagStart, tagStart + 14))?.[1];
+		const element = RecordTypes.xsltNameIn(text, RecordTypes.xsltPattern(/^<(xsl:param|xsl:variable)\s/, text).exec(text.substring(tagStart, tagStart + 40))?.[1]);
 		const nameStart = element ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'name') : undefined;
 		// the declaration's name attribute, not e.g. a variable declared in an XPath expression within it
 		if (!element || nameStart === undefined || nameOffset < nameStart || nameOffset > nameStart + (RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name')?.length ?? 0)) {
@@ -261,7 +261,7 @@ export class XSLTHoverProvider implements HoverProvider {
 	// a global xsl:param or xsl:variable: its declared type, its documentation - its own note, or its @param or @variable
 	// in the module note - and for an enumeration type, its values - with the module declaring it (href), if it's another
 	private globalVariableHover(text: string, tagStart: number, href: string | undefined, itemTypes: GlobalInstructionData[]) {
-		const isParam = text.startsWith('<xsl:param', tagStart);
+		const isParam = text.startsWith(RecordTypes.xsltTag(text, 'param'), tagStart);
 		const name = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') ?? '';
 		const asText = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as');
 		const documentation = XdocNotes.globalDocumentation(text, tagStart);
@@ -277,7 +277,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset);
-		if (tagStart < 0 || !/^<xsl:(import|include)\s/.test(text.substring(tagStart, tagStart + 13))) {
+		if (tagStart < 0 || !RecordTypes.xsltPattern(/^<xsl:(import|include)\s/, text).test(text.substring(tagStart, tagStart + 40))) {
 			return undefined;
 		}
 		const hrefStart = RecordTypes.attributeValueOffset(text, tagStart + 1, 'href');
@@ -323,7 +323,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset);
-		if (tagStart < 0 || !/^<xsl:note[\s>]/.test(text.substring(tagStart, tagStart + 10))) {
+		if (tagStart < 0 || !RecordTypes.xsltPattern(/^<xsl:note[\s>]/, text).test(text.substring(tagStart, tagStart + 40))) {
 			return undefined;
 		}
 		const markup = RecordTypes.blankMarkup(text);
@@ -395,7 +395,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			return nameStart !== undefined && name ? { nameStart, name } : undefined;
 		};
 		const tagStart = text.lastIndexOf('<', offset);
-		const element = /^<(xsl:function|xsl:template|xsl:item-type|xsl:param|xsl:variable)\s/.exec(text.substring(tagStart, tagStart + 16))?.[1];
+		const element = RecordTypes.xsltNameIn(text, RecordTypes.xsltPattern(/^<(xsl:function|xsl:template|xsl:item-type|xsl:param|xsl:variable)\s/, text).exec(text.substring(tagStart, tagStart + 40))?.[1]);
 		const own = element ? nameAt(tagStart) : undefined;
 		if (!own || offset < own.nameStart || offset > own.nameStart + own.name.length) {
 			return undefined;
@@ -448,7 +448,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset);
-		const element = /^<(xsl:call-template|xsl:with-param)\s/.exec(text.substring(tagStart, tagStart + 20))?.[1];
+		const element = RecordTypes.xsltNameIn(text, RecordTypes.xsltPattern(/^<(xsl:call-template|xsl:with-param)\s/, text).exec(text.substring(tagStart, tagStart + 40))?.[1]);
 		const nameStart = element ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'name') : undefined;
 		const name = element ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') : undefined;
 		if (nameStart === undefined || !name || offset < nameStart || offset > nameStart + name.length) {

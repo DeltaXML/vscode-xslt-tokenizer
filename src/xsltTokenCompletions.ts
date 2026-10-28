@@ -518,7 +518,7 @@ export class XsltTokenCompletions {
 					case XSLTokenLevelState.attributeName:
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
-						attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						attNameText = XsltTokenDiagnostics.xsltAttributeName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						// track the select attribute of an xsl:variable/xsl:param so its bound
 						// expression's start token can be captured precisely (see VariableData.selectExprStartIndex)
 						awaitingSelectExprStart = tagType === TagType.XSLTvar && xmlTokenType === XSLTokenLevelState.attributeName && attNameText === 'select';
@@ -1255,7 +1255,7 @@ export class XsltTokenCompletions {
 		const offset = document.offsetAt(position);
 		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, offset)), offset);
 		for (let i = ancestors.length - 1; i > -1; i--) {
-			const value = RecordTypes.attributeOfElementAt(text, ancestors[i].offset + 1, ancestors[i].name.startsWith('xsl:') ? 'expand-text' : 'xsl:expand-text');
+			const value = RecordTypes.attributeOfElementAt(text, ancestors[i].offset + 1, ancestors[i].name.startsWith('xsl:') ? 'expand-text' : RecordTypes.xsltPrefix(text) + ':expand-text');
 			if (value !== undefined) {
 				return ['yes', 'true', '1'].includes(value.trim());
 			}
@@ -1432,7 +1432,7 @@ export class XsltTokenCompletions {
 		// the XPath is a select attribute, or the content of an XSLT 4.0 xsl:select element
 		const firstOffset = document.offsetAt(new vscode.Position(allTokens[first].line, allTokens[first].startCharacter));
 		const selectElementStart = document.getText().lastIndexOf('<', firstOffset);
-		const isSelectElement = /^<xsl:select(?:\s[^<>]*)?>\s*$/.test(document.getText().substring(selectElementStart, firstOffset));
+		const isSelectElement = XsltTokenDiagnostics.xsltPatternOf(/^<xsl:select(?:\s[^<>]*)?>\s*$/, document).test(document.getText().substring(selectElementStart, firstOffset));
 		if (attributeName !== 'select' && !isSelectElement) {
 			return undefined;
 		}
@@ -1771,7 +1771,7 @@ export class XsltTokenCompletions {
 	public static getNoteCompletions(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[] = []): vscode.CompletionItem[] | undefined {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
-		const noteStart = offset > 0 ? text.lastIndexOf('<xsl:note', offset - 1) : -1;
+		const noteStart = offset > 0 ? text.lastIndexOf(RecordTypes.xsltTag(text, 'note'), offset - 1) : -1;
 		const startTagEnd = noteStart > -1 ? text.indexOf('>', noteStart) : -1;
 		// the cursor is after the note's start tag, with no other markup since, except CDATA sections - and it may be in one
 		const contentBefore = startTagEnd > -1 && startTagEnd < offset ? text.substring(startTagEnd + 1, offset).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '') : '<';
@@ -1946,7 +1946,7 @@ export class XsltTokenCompletions {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset - 1);
-		const test = /^<xsl:when\s(?:[^<>]*\s)?test\s*=\s*(["'])((?:(?!\1)[^<>])*)$/.exec(text.substring(tagStart, offset));
+		const test = RecordTypes.xsltPattern(/^<xsl:when\s(?:[^<>]*\s)?test\s*=\s*(["'])((?:(?!\1)[^<>])*)$/, text).exec(text.substring(tagStart, offset));
 		if (tagStart < 0 || !test) {
 			return undefined;
 		}
@@ -1996,7 +1996,7 @@ export class XsltTokenCompletions {
 		// an empty select, or one with a string literal being typed, e.g. select="'|'" - [3] is the string literal's quote -
 		// or the content of an XSLT 4.0 xsl:select element, e.g. <xsl:select>|
 		const emptySelect = /^<([\w.:-]+)\s(?:[^<>]*\s)?select\s*=\s*(["'])\s*(?:(?!\2)(['"])[^'"<>]*)?$/.exec(text.substring(tagStart, offset)) ??
-			/^<(xsl:select)(?:\s[^<>]*)?>()\s*(?:(['"])[^'"<>]*)?$/.exec(text.substring(tagStart, offset));
+			RecordTypes.xsltPattern(/^<(xsl:select)(?:\s[^<>]*)?>()\s*(?:(['"])[^'"<>]*)?$/, text).exec(text.substring(tagStart, offset));
 		if (tagStart < 0 || !emptySelect) {
 			return undefined;
 		}
@@ -2047,7 +2047,7 @@ export class XsltTokenCompletions {
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset - 1);
 		// [1] is the attribute name typed so far
-		const namePosition = tagStart > -1 ? /^<xsl:record(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s+([\w.-]*)$/.exec(text.substring(tagStart, offset)) : null;
+		const namePosition = tagStart > -1 ? RecordTypes.xsltPattern(/^<xsl:record(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s+([\w.-]*)$/, text).exec(text.substring(tagStart, offset)) : null;
 		if (!namePosition) {
 			return undefined;
 		}
@@ -2493,7 +2493,7 @@ export class XsltTokenCompletions {
 		const tagStart = text.lastIndexOf('<', offset - 1);
 		const tagText = text.substring(tagStart, offset);
 		// the attribute value typed so far may be the start of a string literal, e.g. key="'na
-		const keyValue = /^<xsl:map-entry\s(?:[^<>]*\s)?key\s*=\s*(["'])((?:(?!\1)[^<>])*)$/.exec(tagText);
+		const keyValue = RecordTypes.xsltPattern(/^<xsl:map-entry\s(?:[^<>]*\s)?key\s*=\s*(["'])((?:(?!\1)[^<>])*)$/, text).exec(tagText);
 		if (tagStart < 0 || !keyValue) {
 			return undefined;
 		}

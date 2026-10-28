@@ -14,6 +14,7 @@ import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { LexPosition } from './xpLexer';
 import { CatalogSetting } from './catalogSetting';
 import { unquotedPath } from './settingPaths';
+import { RecordTypes } from './recordTypes';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -384,7 +385,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         offset += character;
         // attribute values can't contain '<', so the last one before the name starts the tag
         const tagStart = text.lastIndexOf('<', offset);
-        if (tagStart < 0 || !text.startsWith('<xsl:param', tagStart)) {
+        if (tagStart < 0 || !text.startsWith(RecordTypes.xsltTag(text, 'param'), tagStart)) {
             return undefined;
         }
         let tagEnd = -1;

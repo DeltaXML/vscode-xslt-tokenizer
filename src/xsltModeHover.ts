@@ -23,7 +23,8 @@ export class ModeHover {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset);
-		const element = /^<(xsl:template|xsl:apply-templates|xsl:mode)[\s>/]/.exec(text.substring(tagStart, tagStart + 22))?.[1];
+		const writtenElement = RecordTypes.xsltPattern(/^<(xsl:template|xsl:apply-templates|xsl:mode)[\s>/]/, text).exec(text.substring(tagStart, tagStart + 40))?.[1];
+		const element = writtenElement ? RecordTypes.xsltName(writtenElement, RecordTypes.xsltPrefix(text)) : undefined;
 		const attributeName = element === 'xsl:mode' ? 'name' : 'mode';
 		const valueStart = element ? RecordTypes.attributeValueOffset(text, tagStart + 1, attributeName) : undefined;
 		const value = element ? RecordTypes.attributeOfElementAt(text, tagStart + 1, attributeName, true) : undefined;
@@ -83,7 +84,7 @@ export class ModeHover {
 			const tagStarts = new Set<number>();
 			for (const reference of references.filter((r) => r.uri.toString() === uri.toString())) {
 				const tagStart = markup.lastIndexOf('<', document.offsetAt(reference.range.start));
-				if (markup.startsWith('<xsl:apply-templates', tagStart)) {
+				if (markup.startsWith(RecordTypes.xsltTag(markup, 'apply-templates'), tagStart)) {
 					tagStarts.add(tagStart);
 				}
 			}

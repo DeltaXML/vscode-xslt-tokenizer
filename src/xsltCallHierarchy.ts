@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { TokenLevelState } from './xpLexer';
 import { XslLexer } from './xslLexer';
 import { XSLTConfiguration } from './languageConfigurations';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 const builtInPrefixes = new Set(['fn', 'map', 'array', 'math', 'xs']);
 
@@ -136,7 +137,7 @@ export class XsltCallHierarchyProvider implements vscode.CallHierarchyProvider {
 			}
 		}
 		const text = document.getText(within);
-		const callTemplate = /<xsl:call-template\s[^>]*?\bname\s*=\s*(["'])([^"']+)\1/g;
+		const callTemplate = XsltTokenDiagnostics.xsltPatternOf(/<xsl:call-template\s[^>]*?\bname\s*=\s*(["'])([^"']+)\1/g, document);
 		for (let m = callTemplate.exec(text); m; m = callTemplate.exec(text)) {
 			const start = document.offsetAt(within.start) + m.index + m[0].length - 1 - m[2].length;
 			ranges.push(new vscode.Range(document.positionAt(start), document.positionAt(start + m[2].length)));

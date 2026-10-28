@@ -10,6 +10,7 @@
 import * as vscode from 'vscode';
 import { SchemaData, XSLTSchema } from './xsltSchema';
 import { XSLTSchema4 } from './xsltSchema4';
+import { RecordTypes } from './recordTypes';
 
 // XSLT 4.0 named item types - xsl:item-type, with record and enumeration types, also in 'as' attributes - and
 // xsl:note are available in an XSLT 4.0 stylesheet, and in one for an earlier version when the setting
@@ -53,7 +54,7 @@ export class ItemTypeSupport {
 		if (rootTag && /\sversion\s*=\s*["']4\.0["']/.test(rootTag[0])) {
 			return 'xslt40';
 		}
-		const usesItemTypes = /<xsl:(item-type|note)[\s/>]/.test(withoutComments) || /\sas\s*=\s*(["'])[^"']*(?<![\w.:-])(record|enum)\s*\(/.test(withoutComments);
+		const usesItemTypes = RecordTypes.xsltPattern(/<xsl:(item-type|note)[\s/>]/, withoutComments).test(withoutComments) || /\sas\s*=\s*(["'])[^"']*(?<![\w.:-])(record|enum)\s*\(/.test(withoutComments);
 		return usesItemTypes && ItemTypeSupport.isEnabledBefore40() ? 'itemTypes' : undefined;
 	}
 

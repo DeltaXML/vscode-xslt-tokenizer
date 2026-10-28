@@ -302,11 +302,39 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
-		const result = await this.completionItems(document, position, token, context);
+		let result = await this.completionItems(document, position, token, context);
+		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix
+		const prefix = this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
+		if (result && prefix !== 'xsl') {
+			result = Array.isArray(result) ? XsltDefinitionProvider.withXsltPrefix(result, prefix) : new vscode.CompletionList(XsltDefinitionProvider.withXsltPrefix(result.items, prefix), result.isIncomplete);
+		}
 		if (result) {
 			XsltDefinitionProvider.fitToPrefixedWord(Array.isArray(result) ? result : result.items, document, position);
 		}
 		return result;
+	}
+
+	// copies of the items - which may be shared - with each name with the prefix xsl, in the label and the text inserted,
+	// with the prefix (see RecordTypes.withXsltPrefix)
+	private static withXsltPrefix(items: vscode.CompletionItem[], prefix: string): vscode.CompletionItem[] {
+		const text = (value: string) => RecordTypes.withXsltPrefix(value, prefix);
+		return items.map((item) => {
+			const copy: vscode.CompletionItem = Object.assign(new vscode.CompletionItem(''), item);
+			copy.label = typeof item.label === 'string' ? text(item.label) : { ...item.label, label: text(item.label.label) };
+			if (typeof item.insertText === 'string') {
+				copy.insertText = text(item.insertText);
+			} else if (item.insertText) {
+				copy.insertText = new vscode.SnippetString(text(item.insertText.value));
+			}
+			if (item.filterText) {
+				copy.filterText = text(item.filterText);
+			}
+			if (item.textEdit) {
+				copy.textEdit = new vscode.TextEdit(item.textEdit.range, text(item.textEdit.newText));
+			}
+			copy.additionalTextEdits = item.additionalTextEdits?.map((edit) => new vscode.TextEdit(edit.range, text(edit.newText)));
+			return copy;
+		});
 	}
 
 	// The language's word pattern takes a QName as one word, prefix and all (e.g. 'fn:co'), and an item without a

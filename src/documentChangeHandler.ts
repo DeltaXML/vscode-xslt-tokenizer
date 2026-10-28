@@ -8,6 +8,7 @@ import { XslLexerLight } from './xslLexerLight';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { FileSelection } from './fileSelection';
+import { RecordTypes } from './recordTypes';
 
 export interface TagRenameEdit {
 	range: vscode.Range;
@@ -122,7 +123,7 @@ export class DocumentChangeHandler {
 		// a quote, or an auto-closed pair, starting a string literal key or value, e.g. { 'a': ' or select="'
 		const isStringStart = ['\'', '"', '\'\'', '""'].includes(activeChange.text) && /(?:[:,{(]|:=|=\s*["'])\s*$/.test(lineBefore);
 		// the name of an xsl:with-param or xsl:call-template: the parameter or template names, as the value's quote is typed
-		const isNameStart = ['"', '\'', '""', '\'\''].includes(activeChange.text) && /<xsl:(?:with-param|call-template)\s(?:[^<>]*\s)?name\s*=\s*$/.test(lineBefore);
+		const isNameStart = ['"', '\'', '""', '\'\''].includes(activeChange.text) && XsltTokenDiagnostics.xsltPatternOf(/<xsl:(?:with-param|call-template)\s(?:[^<>]*\s)?name\s*=\s*$/, e.document).test(lineBefore);
 		if (!triggerSuggest && !skipTrigger && isNameStart) {
 			triggerSuggest = true;
 		}
@@ -140,8 +141,8 @@ export class DocumentChangeHandler {
 		if (!triggerSuggest && !skipTrigger && activeChange.text === '@' && e.document.languageId === 'xslt') {
 			// a tag within a documentation note, an xsl:note with format="xdoc-md"
 			const textBefore = e.document.getText(new vscode.Range(new vscode.Position(0, 0), activeChange.range.start));
-			const noteStart = textBefore.lastIndexOf('<xsl:note');
-			const noteTag = noteStart > -1 ? /^<xsl:note\s[^>]*format\s*=\s*["']xdoc-md["'][^>]*>/.exec(textBefore.substring(noteStart)) : null;
+			const noteStart = textBefore.lastIndexOf(RecordTypes.xsltTag(textBefore, 'note'));
+			const noteTag = noteStart > -1 ? RecordTypes.xsltPattern(/^<xsl:note\s[^>]*format\s*=\s*["']xdoc-md["'][^>]*>/, textBefore).exec(textBefore.substring(noteStart)) : null;
 			// no other markup after the note's start tag, except CDATA sections
 			triggerSuggest = !!noteTag && !textBefore.substring(noteStart + noteTag[0].length).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '').includes('<');
 		}

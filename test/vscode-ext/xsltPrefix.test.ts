@@ -11,6 +11,8 @@ import { assert } from 'chai';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { DocumentTypes, XslLexer } from '../../src/xslLexer';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
+import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
+import { ImportIndex } from '../../src/importIndex';
 
 const toXslt = (text: string) => text.replace(/\bxmlns:xsl=/g, 'xmlns:xslt=').replace(/(?<![\w.:-])xsl:/g, 'xslt:');
 
@@ -36,20 +38,9 @@ suite('An XSLT prefix other than xsl', function () {
 		assert.isAbove(samples.length, 50);
 	});
 
-	// Phase 2: checks that find XSLT instructions in the text with the xsl prefix, e.g. xsl:iterate's order and
-	// xsl:choose's xsl:when, aren't made with another prefix yet - in these samples, problems are only missing
-	const textChecked = ['explore-validation-enhancements.xsl', 'fnCompletionTest.xsl', 'gotoTests.xsl', 'import-key.xsl', 'min-iterate.xsl', 'sat-context.xsl', 'sat-latest.xsl'];
-
 	samples.forEach((sample) => {
 		test(`the same problems: ${sample.name}`, async () => {
-			const reported = await problems(toXslt(sample.text));
-			const expected = await problems(sample.text);
-			if (textChecked.includes(sample.name)) {
-				assert.isEmpty(reported.filter((p) => !expected.includes(p)), 'no other problems');
-				assert.isBelow(reported.length, expected.length);
-			} else {
-				assert.deepEqual(reported, expected);
-			}
+			assert.deepEqual(await problems(toXslt(sample.text)), await problems(sample.text));
 		});
 	});
 
@@ -80,6 +71,35 @@ suite('An XSLT prefix other than xsl', function () {
 		}
 		assert.lengthOf(problems(), 1, problems().join('\n'));
 		assert.include(problems()[0], 'f:missing');
+	});
+
+	test('instruction completions: with the module\'s prefix, in the label and the text inserted', async () => {
+		const marked = '<xslt:stylesheet xmlns:xslt="http://www.w3.org/1999/XSL/Transform" version="4.0">\n<xslt:template name="t"><|</xslt:template>\n</xslt:stylesheet>';
+		const offset = marked.indexOf('|');
+		const document = await vscode.workspace.openTextDocument({ content: marked.replace('|', ''), language: 'xslt' });
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token,
+			{ triggerKind: vscode.CompletionTriggerKind.TriggerCharacter, triggerCharacter: '<' });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		const inserted = new Map(items.map((item) => [typeof item.label === 'string' ? item.label : item.label.label,
+			item.insertText instanceof vscode.SnippetString ? item.insertText.value : item.insertText ?? '']));
+		assert.equal(inserted.get('xslt:switch'), 'xslt:switch select="${1:$expr}">\n\t<xslt:when test="\'$2\'">\n\t\t$3\n\t</xslt:when>\n</xslt:switch>');
+		assert.isFalse([...inserted.keys()].some((label) => label.startsWith('xsl:')), 'no labels with the prefix xsl');
+	});
+
+	test('formatting: the content of xslt:text is kept as it is', async () => {
+		const content = '<xslt:stylesheet xmlns:xslt="http://www.w3.org/1999/XSL/Transform" version="3.0">\n<xslt:template match="/">\n<xslt:text>  a\n   b  </xslt:text>\n</xslt:template>\n</xslt:stylesheet>';
+		const document = await vscode.workspace.openTextDocument({ content, language: 'xslt' });
+		const edits = await vscode.commands.executeCommand<vscode.TextEdit[]>('vscode.executeFormatDocumentProvider', document.uri, { tabSize: 2, insertSpaces: true });
+		const edit = new vscode.WorkspaceEdit();
+		edit.set(document.uri, edits ?? []);
+		await vscode.workspace.applyEdit(edit);
+		assert.include(document.getText(), '<xslt:text>  a\n   b  </xslt:text>');
+		assert.include(document.getText(), '\n  <xslt:template match="/">');
+	});
+
+	test('the import index: xslt:import and xslt:include', () => {
+		const references = ImportIndex.moduleReferences('<xslt:stylesheet xmlns:xslt="http://www.w3.org/1999/XSL/Transform" version="3.0">\n<xslt:import href="a.xsl"/>\n<xslt:include href="b.xsl"/>\n</xslt:stylesheet>', path.join(os.tmpdir(), 'main.xsl'));
+		assert.deepEqual(references.map((r) => path.basename(r.path)), ['a.xsl', 'b.xsl']);
 	});
 
 	test('the XSLT instructions are lexed as XSLT, with XPath in their attributes', () => {

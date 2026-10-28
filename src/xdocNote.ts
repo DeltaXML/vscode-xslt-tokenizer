@@ -214,7 +214,7 @@ export class XdocNotes {
 
 	// the xsl:note elements with format="xdoc-md" in the markup, by the offset of their start tags
 	public static noteOffsets(text: string): number[] {
-		return [...text.matchAll(/<xsl:note\s[^<>]*format\s*=\s*["']xdoc-md["']/g)].map((match) => match.index!);
+		return [...text.matchAll(RecordTypes.xsltPattern(/<xsl:note\s[^<>]*format\s*=\s*["']xdoc-md["']/g, text))].map((match) => match.index!);
 	}
 
 	// the documentation note of a function, template or item type declaration, from its global instruction data: in the document's
@@ -410,7 +410,7 @@ export class XdocNotes {
 	// the named item types declared in the text, with their 'as' values
 	public static itemTypes(text: string): Map<string, string> {
 		const itemTypes = new Map<string, string>();
-		for (const match of RecordTypes.blankMarkup(text).matchAll(/<xsl:item-type\s/g)) {
+		for (const match of RecordTypes.blankMarkup(text).matchAll(RecordTypes.xsltPattern(/<xsl:item-type\s/g, text))) {
 			const name = RecordTypes.attributeOfElementAt(text, match.index! + 1, 'name');
 			const asText = RecordTypes.attributeOfElementAt(text, match.index! + 1, 'as');
 			if (name && asText) {
@@ -428,7 +428,7 @@ export class XdocNotes {
 
 	// the offset of the start tag of the module's root element
 	public static rootOffset(markup: string): number | undefined {
-		return /<(xsl:stylesheet|xsl:transform|xsl:package)[\s>]/.exec(markup)?.index;
+		return RecordTypes.xsltPattern(/<(xsl:stylesheet|xsl:transform|xsl:package)[\s>]/, markup).exec(markup)?.index;
 	}
 
 	// the element at the offset is a global declaration: a child of the root element
@@ -444,7 +444,7 @@ export class XdocNotes {
 		if (own) {
 			return XdocNotes.toMarkdown(own);
 		}
-		const isParam = text.startsWith('<xsl:param', declarationOffset);
+		const isParam = text.startsWith(RecordTypes.xsltTag(text, 'param'), declarationOffset);
 		const name = RecordTypes.attributeOfElementAt(text, declarationOffset + 1, 'name');
 		const tag = name ? XdocNotes.moduleNote(text, markup)?.tags.find((t) => t.name === (isParam ? 'param' : 'variable') && t.paramName === name) : undefined;
 		return tag ? XdocNotes.markdownText(tag.text) : undefined;
@@ -492,7 +492,8 @@ export class XdocNotes {
 	// xsl:note is an unknown XSLT element for the processor
 	public static noteSnippetAt(text: string, offset: number, isExcluded = false): { insertOffset: number, replaceLength: number, snippet: string } | undefined {
 		const tagStart = offset > 0 ? text.lastIndexOf('<', offset - 1) : -1;
-		const elementName = tagStart > -1 ? /^<(xsl:function|xsl:template|xsl:item-type|xsl:stylesheet|xsl:transform|xsl:package|xsl:param|xsl:variable)[\s/>]/.exec(text.substring(tagStart, tagStart + 16))?.[1] : undefined;
+		const writtenName = tagStart > -1 ? RecordTypes.xsltPattern(/^<(xsl:function|xsl:template|xsl:item-type|xsl:stylesheet|xsl:transform|xsl:package|xsl:param|xsl:variable)[\s/>]/, text).exec(text.substring(tagStart, tagStart + 40))?.[1] : undefined;
+		const elementName = writtenName ? RecordTypes.xsltName(writtenName, RecordTypes.xsltPrefix(text)) : undefined;
 		if (!elementName) {
 			return undefined;
 		}
