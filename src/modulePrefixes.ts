@@ -65,6 +65,15 @@ export class ModulePrefixes {
 		});
 	}
 
+	// a name as written in a module with the bindings, as an EQName - e.g. Q{urn:fns}double for f:double - to compare it
+	// with a name in another module: a name in no namespace, e.g. double or Q{}double, is its local name, and one whose
+	// prefix isn't bound is as written
+	public static expandedName(name: string, bindings: Map<string, string> | undefined): string {
+		const qname = /^([^:{}]+):(.+)$/.exec(name);
+		const uri = qname ? bindings?.get(qname[1]) : undefined;
+		return uri !== undefined ? `Q{${uri}}${qname![2]}` : name.startsWith('Q{}') ? name.substring(3) : name;
+	}
+
 	// names the imported declarations with the prefixes of the module with the bindings, which they're imported into
 	public static toModule(globals: GlobalInstructionData[], bindings: Map<string, string> | undefined) {
 		globals.filter((global) => bindings && global.prefixBindings).forEach((global) => {

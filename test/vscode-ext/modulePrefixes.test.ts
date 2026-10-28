@@ -9,6 +9,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { assert } from 'chai';
 import { ImportIndex } from '../../src/importIndex';
+import { XSLTReferenceProvider } from '../../src/xsltReferenceProvider';
 
 suite('Module prefixes: names matched by namespace, not prefix', function () {
 	this.timeout(30000);
@@ -103,5 +104,51 @@ suite('Module prefixes: names matched by namespace, not prefix', function () {
 		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', uri('main.xsl'), mainCall, 'my:triple');
 		const replaced = edit.entries().flatMap(([u, edits]) => edits.map((e) => `${path.basename(u.fsPath)}:${e.newText}`)).sort();
 		assert.deepEqual(replaced, ['lib.xsl:f:triple', 'main.xsl:my:triple']);
+	});
+});
+
+suite('Module prefixes: renaming a function that another module may override', function () {
+	this.timeout(30000);
+	let dir: string;
+	const lib = [
+		'<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:fns">',
+		'  <xsl:function name="f:area"><xsl:param name="w"/><xsl:sequence select="$w"/></xsl:function>',
+		'  <xsl:function name="f:len"><xsl:param name="s"/><xsl:sequence select="$s"/></xsl:function>',
+		'</xsl:stylesheet>'].join('\n');
+	// my:area overrides lib.xsl's f:area, with another prefix for urn:fns - and f:len is another function, in urn:other
+	const top = [
+		'<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:my="urn:fns" xmlns:f="urn:other">',
+		'  <xsl:import href="lib.xsl"/>',
+		'  <xsl:function name="my:area"><xsl:param name="w"/><xsl:sequence select="$w * 2"/></xsl:function>',
+		'  <xsl:function name="f:len"><xsl:param name="s"/><xsl:sequence select="0"/></xsl:function>',
+		'  <xsl:template match="/"><r a="{my:area(1)}" l="{f:len(\'x\')}"/></xsl:template>',
+		'</xsl:stylesheet>'].join('\n');
+
+	suiteSetup(async () => {
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-prefix-overrides-'));
+		fs.writeFileSync(path.join(dir, 'lib.xsl'), lib);
+		fs.writeFileSync(path.join(dir, 'top.xsl'), top);
+		await ImportIndex.instance.buildFrom([path.join(dir, 'top.xsl'), path.join(dir, 'lib.xsl')]);
+	});
+
+	// the reason the rename at the function's name in lib.xsl is refused - undefined if it isn't
+	const refusal = async (name: string) => {
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'lib.xsl')));
+		await vscode.window.showTextDocument(document);
+		const position = document.positionAt(document.getText().indexOf(`"${name}"`) + 3);
+		try {
+			await new XSLTReferenceProvider().prepareRename(document, position, new vscode.CancellationTokenSource().token);
+		} catch (reason) {
+			return String(reason);
+		}
+		return undefined;
+	};
+
+	test('refused: an override in another module, with another prefix for the namespace', async () => {
+		assert.match(await refusal('f:area') ?? '', /^XSLT: f:area is also declared in top\.xsl, where it may override this function/);
+	});
+
+	test('not refused: a function with the same prefix and local name, in another namespace', async () => {
+		assert.isUndefined(await refusal('f:len'));
 	});
 });

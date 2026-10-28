@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { XSLTnamespaces, FunctionData } from './functionData';
-import { XSLTConfiguration } from './languageConfigurations';
+import { XSLTConfiguration, XSLTLightConfiguration } from './languageConfigurations';
+import { XslLexerLight } from './xslLexerLight';
 import { SchemaQuery } from './schemaQuery';
 import { LexPosition, BaseToken, CharLevelState, Data, ErrorType, TokenLevelState, XPathLexer } from './xpLexer';
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XMLCharState, XslLexer, XSLTokenLevelState } from './xslLexer';
@@ -23,6 +24,8 @@ import { XdocReferences } from './xdocReferences';
 interface OverridableDeclaration {
 	elementName: string;
 	name: string;
+	// the name with its namespace, to compare with names in other modules, which may use other prefixes for it
+	expandedName: string;
 	file: string;
 	isParam: boolean;
 	arity?: [number, number];
@@ -297,6 +300,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		XdocReferences.find(text, markup).filter((reference) => reference.kind === 'variable' && reference.declarationOffset === parent.offset && XdocReferences.resolve(reference, [], text, markup)[0]?.paramOffset === tagStart)
 			.forEach((reference) => locations.push(nameLocation(declarationDocument, reference.offset)));
 		const declarationName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name');
+		const declarationBindings = XSLTReferenceProvider.prefixBindings(text);
 		const otherModules = declarationName && declaration ? (await XSLTReferenceProvider.usingModules(declarationDocument, declaration)).filter((file) => !hrefs.includes(file)) : [];
 		const openModule = async (href: string) => {
 			try {
@@ -314,8 +318,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					continue;
 				}
 				const docMarkup = RecordTypes.blankMarkup(docText);
+				const docBindings = XSLTReferenceProvider.prefixBindings(docText);
 				for (const call of docMarkup.matchAll(/<xsl:call-template\s/g)) {
-					if (RecordTypes.attributeOfElementAt(docText, call.index! + 1, 'name') !== declarationName) {
+					const calledName = RecordTypes.attributeOfElementAt(docText, call.index! + 1, 'name')?.trim();
+					if (calledName === undefined || ModulePrefixes.expandedName(calledName, docBindings) !== ModulePrefixes.expandedName(declarationName!.trim(), declarationBindings)) {
 						continue;
 					}
 					RecordTypes.childElements(docText, docMarkup, call.index!, 'xsl:with-param').forEach((withParam) => {
@@ -330,7 +336,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		}
 		// the calls of the function that its arity allows - the parameters with required="no" are optional, and the
 		// arity of a call with an arrow operator doesn't include the implicit first argument
-		const functionName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name');
+		const functionName = ModulePrefixes.expandedName((RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'name') ?? '').trim(), declarationBindings);
 		const params = RecordTypes.childElements(text, markup, parent.offset, 'xsl:param');
 		const requiredCount = params.filter((offset) => !['no', 'false', '0'].includes((RecordTypes.attributeOfElementAt(text, offset + 1, 'required') ?? '').trim())).length;
 		for (const href of hrefs.concat(otherModules)) {
@@ -342,12 +348,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				continue;
 			}
 			const tokens = (doc === document ? documentTokens : this.xslLexer.analyse(doc.getText())).filter((t) => t.tokenType < XsltTokenDefinitions.xsltStartTokenNumber);
+			const docBindings = doc === document ? XSLTReferenceProvider.prefixBindings(doc.getText()) : this.xslLexer.prefixBindings;
 			tokens.forEach((t, index) => {
 				if (t.tokenType !== TokenLevelState.mapKey || t.value !== paramName || tokens[index + 1]?.value !== ':=') {
 					return;
 				}
 				const call = RecordTypes.callArgument(tokens, index + 2);
-				if (call && call.name === functionName && (call.arity === undefined || (call.arity <= params.length && call.arity + 1 >= requiredCount))) {
+				if (call && ModulePrefixes.expandedName(call.name, docBindings) === functionName && (call.arity === undefined || (call.arity <= params.length && call.arity + 1 >= requiredCount))) {
 					locations.push(XsltTokenDefinitions.createLocationFromToken(t, doc));
 				}
 			});
@@ -409,9 +416,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			element = parent && (parent.name === 'xsl:function' || parent.name === 'xsl:template') ? parent.name : undefined;
 			elementStart = parent?.offset ?? -1;
 		}
-		const name = element ? RecordTypes.attributeOfElementAt(text, elementStart + 1, 'name') : undefined;
+		const name = element ? RecordTypes.attributeOfElementAt(text, elementStart + 1, 'name')?.trim() : undefined;
 		return element && name ? {
-			elementName: element, name, file: declarationDocument.fileName, isParam,
+			elementName: element, name, expandedName: ModulePrefixes.expandedName(name, XSLTReferenceProvider.prefixBindings(text)), file: declarationDocument.fileName, isParam,
 			arity: element === 'xsl:function' ? XSLTReferenceProvider.functionArity(text, markup, elementStart) : undefined
 		} : undefined;
 	}
@@ -427,12 +434,16 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 	// arity in common
 	private static declares(file: string, declaration: OverridableDeclaration) {
 		const text = XSLTReferenceProvider.moduleText(file);
-		if (!text.includes(declaration.name)) {
+		// the module may use another prefix for the name's namespace: its local name, before the module's bindings are found
+		const unqualified = declaration.name.replace(/^Q\{[^}]*\}/, '');
+		if (!text.includes(unqualified.substring(unqualified.indexOf(':') + 1))) {
 			return false;
 		}
 		const markup = RecordTypes.blankMarkup(text);
+		const bindings = XSLTReferenceProvider.prefixBindings(text);
 		for (const match of markup.matchAll(new RegExp(`<${declaration.elementName}\\s`, 'g'))) {
-			if (RecordTypes.attributeOfElementAt(text, match.index! + 1, 'name')?.trim() !== declaration.name) {
+			const name = RecordTypes.attributeOfElementAt(text, match.index! + 1, 'name')?.trim();
+			if (name === undefined || ModulePrefixes.expandedName(name, bindings) !== declaration.expandedName) {
 				continue;
 			}
 			if (!declaration.arity) {
@@ -444,6 +455,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			}
 		}
 		return false;
+	}
+
+	// the namespace bindings for the names of the declarations of a module's text (see ModulePrefixes)
+	private static prefixBindings(text: string) {
+		const lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
+		lexer.analyseLight(text);
+		return lexer.prefixBindings;
 	}
 
 	// the text of a module: from its editor, if it's open, as it may not be saved
