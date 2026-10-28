@@ -477,6 +477,8 @@ export class XsltTokenDiagnostics {
 		let importedGlobalFnNames: string[] = [];
 		let incrementFunctionArity = false;
 		let onRootStartTag = true;
+		// the prefix of the outermost element, e.g. xsl:stylesheet, which must be bound to the XSLT namespace
+		let rootXsltPrefix = 'xsl';
 		let rootXmlnsName: string | null = null;
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 		let isXMLDeclaration = false;
@@ -841,7 +843,11 @@ export class XsltTokenDiagnostics {
 						// this is xslt or schematron element
 						incrementFunctionArity = false;
 						pendingTemplateParamErrors = [];
-						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						const writtenElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						tagElementName = XsltTokenDiagnostics.xsltElementName(writtenElementName, document);
+						if (onRootStartTag && elementStack.length === 0 && writtenElementName.includes(':')) {
+							rootXsltPrefix = writtenElementName.substring(0, writtenElementName.indexOf(':'));
+						}
 						tagElementId++;
 						inheritedPrefixesCopy = inheritedPrefixes.slice();
 						const isXsltElementName = tagElementName.startsWith('xsl:');
@@ -924,9 +930,10 @@ export class XsltTokenDiagnostics {
 											xsltPrefixesToURIs.set(pfx, xsltType);
 										}
 									});
-									if (xsltPrefixesToURIs.get('xsl') !== XSLTnamespaces.XSLT) {
+									if (xsltPrefixesToURIs.get(rootXsltPrefix) !== XSLTnamespaces.XSLT) {
 										if (startTagToken !== null) {
 											startTagToken['error'] = ErrorType.XSLTNamesapce;
+											startTagToken['value'] = rootXsltPrefix;
 											problemTokens.push(startTagToken);
 										}
 									}
@@ -4052,6 +4059,14 @@ export class XsltTokenDiagnostics {
 		return { isValid, qFunctionName, fErrorType };
 	}
 
+	// the name of an XSLT element - an xslElementName token - as it's compared, e.g. with the schema's names: with the
+	// prefix xsl, in an XSLT module that uses another prefix for the XSLT namespace, e.g. xslt:template in some W3C tests
+	// (see XslLexer.useRootPrefix) - in Schematron, as it's written
+	public static xsltElementName(name: string, document: vscode.TextDocument) {
+		const colon = name.indexOf(':');
+		return colon > 0 && document.languageId === 'xslt' && !name.startsWith('xsl:') ? 'xsl' + name.substring(colon) : name;
+	}
+
 	public static getTextForToken(lineNumber: number, token: BaseToken, document: vscode.TextDocument) {
 		let start = token.startCharacter;
 		if (start < 0) {
@@ -4520,7 +4535,7 @@ export class XsltTokenDiagnostics {
 					msg = `XML: Text found outside root element: '${tokenValue}`;
 					break;
 				case ErrorType.XSLTNamesapce:
-					msg = `Expected on the root element: xmlns:xsl='http://www.w3.org/1999/XSL/Transform' prefix/namespace-uri binding`;
+					msg = `Expected on the root element: xmlns:${tokenValue}='http://www.w3.org/1999/XSL/Transform' prefix/namespace-uri binding`;
 					break;
 				case ErrorType.XSLTPrefix:
 					msg = `XSLT: Undeclared prefix in name: '${tokenValue}'`;

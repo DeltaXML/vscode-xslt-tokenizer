@@ -241,10 +241,13 @@ export class XslLexer {
     private commentCharCount = 0;
     private cdataCharCount = 0;
     protected entityContext = EntityPosition.text;
-    private languageConfiguration: LanguageConfiguration;
+    protected languageConfiguration: LanguageConfiguration;
     private skipTokenChar = false;
     private nativeTvtAttributes: string[] = [];
     private genericTvtAttributes: string[] = [];
+    // the prefix of the XSLT instructions: the configuration's, e.g. xsl - unless the module's outermost element is a
+    // stylesheet, transform or package with another, e.g. xslt:stylesheet in some W3C tests (see useRootPrefix)
+    public nativePrefix = '';
     private nativePrefixLength = 0;
     private dtdNesting = 0;
     // within a <!...>: its last two characters, the quote of a literal it's in, whether it's in a processing
@@ -268,13 +271,25 @@ export class XslLexer {
 
     constructor(languageConfiguration: LanguageConfiguration) {
         this.nonNativeAvts = languageConfiguration.nonNativeAvts;
-        this.nativePrefixLength = languageConfiguration.nativePrefix.length === 0? 0: languageConfiguration.nativePrefix.length + 1;
         this.languageConfiguration = languageConfiguration;
-        this.languageConfiguration.tvtAttributes.forEach(tvtAttribute => {
-            this.nativeTvtAttributes.push(this.languageConfiguration.nativePrefix + ':' + tvtAttribute);
-        });
+        this.setNativePrefix(languageConfiguration.nativePrefix);
         this.genericTvtAttributes = this.languageConfiguration.tvtAttributes;
         this.docType = languageConfiguration.docType;
+    }
+
+    protected setNativePrefix(prefix: string) {
+        this.nativePrefix = prefix;
+        this.nativePrefixLength = prefix.length === 0 ? 0 : prefix.length + 1;
+        this.nativeTvtAttributes = this.languageConfiguration.tvtAttributes.map((tvtAttribute) => prefix + ':' + tvtAttribute);
+    }
+
+    // for XSLT, whose instructions have the prefix xsl: the prefix of the module's outermost element, when it's a
+    // stylesheet, transform or package - as the linter checks, the prefix must be bound to the XSLT namespace
+    protected useRootPrefix(rootName: string) {
+        if (this.languageConfiguration.nativePrefix === 'xsl') {
+            const root = /^([^:]+):(stylesheet|transform|package)$/.exec(rootName);
+            this.setNativePrefix(root ? root[1] : 'xsl');
+        }
     }
 
     public static getTextmateTypeLegend(): string[] {
@@ -304,7 +319,7 @@ export class XslLexer {
             return false;
         } else if (parentElement === 'record') {
             // xsl:record: each no-namespace attribute is a map entry expression
-            return name === 'xsl:duplicates' || name.indexOf(':') === -1;
+            return name === this.nativePrefix + ':duplicates' || name.indexOf(':') === -1;
         } else {
             return this.languageConfiguration.expressionAtts ? this.languageConfiguration.expressionAtts.indexOf(name) > -1 : false;
         }
@@ -823,6 +838,8 @@ export class XslLexer {
         this.globalInstructionData.length = 0;
         this.globalModeData.length = 0;
         this.isXSLT40 = false;
+        this.setNativePrefix(this.languageConfiguration.nativePrefix);
+        let rootNamed = false;
         const rootAttributes = new Map<string, string>();
         this.lineNumber = 0;
         this.lineCharCount = -1;
@@ -1000,6 +1017,10 @@ export class XslLexer {
                         case XMLCharState.rCt:
                             let isCloseTag = nextState === XMLCharState.rCt;
                             let isRootChildStartTag = !isCloseTag && xmlElementStack.length === 1;
+                            if (!rootNamed && !isCloseTag) {
+                                rootNamed = true;
+                                this.useRootPrefix(tokenChars.join(''));
+                            }
                             let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;
@@ -1100,7 +1121,7 @@ export class XslLexer {
                             isGlobalUsePackageVersion = false;
                             isGlobalVersion = false;
                             attName = tokenChars.join('');
-                            isDefaultModeAttribute = isNativeElement ? attName === 'default-mode' : attName === 'xsl:default-mode';
+                            isDefaultModeAttribute = isNativeElement ? attName === 'default-mode' : attName === this.nativePrefix + ':default-mode';
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
                                 if (attName === 'as') {
@@ -1674,7 +1695,7 @@ export class XslLexer {
 
     protected getElementProperties(tokenChars: string[], isRootChild: boolean): ElementProperties {
         let elementName= tokenChars.join('');
-        let isNative = (this.nativePrefixLength === 0 && elementName.indexOf(':') === -1) || (tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.languageConfiguration.nativePrefix + ':'));
+        let isNative = (this.nativePrefixLength === 0 && elementName.indexOf(':') === -1) || (tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.nativePrefix + ':'));
         let instructionType = GlobalInstructionType.Unknown;
         let nativeName = '';
 

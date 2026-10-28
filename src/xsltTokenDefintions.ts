@@ -178,7 +178,7 @@ export class XsltTokenDefinitions {
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDefinitions.xsltStartTokenNumber);
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
-						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						tagElementName = XsltTokenDiagnostics.xsltElementName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						if (tagType === TagType.Start) {
 							if (tagElementName === 'xsl:iterate') {
 								currentXSLTIterateParams.push([]);

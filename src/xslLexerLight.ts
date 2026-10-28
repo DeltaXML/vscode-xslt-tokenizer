@@ -29,6 +29,8 @@ export class XslLexerLight extends XslLexer {
 
         this.globalInstructionData = [];
         this.globalModeData = [];
+        this.setNativePrefix(this.languageConfiguration.nativePrefix);
+        let rootNamed = false;
         const rootAttributes = new Map<string, string>();
 
         let currentState: XMLCharState = XMLCharState.init;
@@ -106,7 +108,8 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lCtName:
                             break;
                         case XMLCharState.lEn:
-                            if (xmlElementStack === 1 || xmlElementStack === 2 && tokenChars.length < 5) {
+                            // the outermost element's name too, for its prefix (see useRootPrefix)
+                            if (xmlElementStack <= 1 || xmlElementStack === 2 && tokenChars.length < 5) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             } else {
@@ -120,6 +123,10 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.rCt:
                             let isCloseTag = nextState === XMLCharState.rCt;
                             let isRootChildStartTag = !isCloseTag && xmlElementStack === 1;
+                            if (!rootNamed && !isCloseTag) {
+                                rootNamed = true;
+                                this.useRootPrefix(tokenChars.join(''));
+                            }
                             let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;

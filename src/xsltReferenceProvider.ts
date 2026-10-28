@@ -652,7 +652,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					case XSLTokenLevelState.xslElementName:
 						// this is xslt or schematron element
 						pendingTemplateParamErrors = [];
-						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						tagElementName = XsltTokenDiagnostics.xsltElementName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 
 						if (tagType === TagType.Start) {
 							if (tagElementName === 'xsl:iterate') {
