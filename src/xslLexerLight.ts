@@ -11,6 +11,7 @@
 import { XslLexer, XMLCharState, GlobalInstructionType, XSLTokenLevelState, EntityPosition, GlobalInstructionData} from "./xslLexer";
 import { BaseToken, XPathLexer } from "./xpLexer";
 import { RecordTypes } from "./recordTypes";
+import { ModulePrefixes } from "./modulePrefixes";
 import * as vscode from 'vscode';
 
 
@@ -20,6 +21,7 @@ export class XslLexerLight extends XslLexer {
 
         this.globalInstructionData = [];
         this.globalModeData = [];
+        const rootAttributes = new Map<string, string>();
 
         let currentState: XMLCharState = XMLCharState.init;
         let currentChar: string = '';
@@ -221,6 +223,9 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.rDq:
                         case XMLCharState.escDqAvt:
                         case XMLCharState.escSqAvt:
+                            if (xmlElementStack === 0 && ModulePrefixes.isBindingAttribute(attName)) {
+                                rootAttributes.set(attName, tokenChars.join(''));
+                            }
                             if (isDefaultModeAttribute) {
                                 const defaultMode = tokenChars.join('').trim();
                                 if (defaultMode !== '' && defaultMode !== '#unnamed') {
@@ -359,7 +364,8 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage
-                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute || isUseAccumulatorsAttribute || isDefaultModeAttribute) {
+                                 || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute || isUseAccumulatorsAttribute || isDefaultModeAttribute
+                                 || (xmlElementStack === 0 && ModulePrefixes.isBindingAttribute(attName))) {
                                 storeToken = true;
                             }
                            break;
@@ -407,7 +413,10 @@ export class XslLexerLight extends XslLexer {
             } 
             currentChar = nextChar;
         } 
-        return this.globalInstructionData.concat(this.globalModeData);
+        const globals = this.globalInstructionData.concat(this.globalModeData);
+        this.prefixBindings = ModulePrefixes.fromRootAttributes(rootAttributes);
+        ModulePrefixes.resolve(globals, this.prefixBindings);
+        return globals;
     }
 
 }

@@ -652,7 +652,7 @@ export class XsltTokenDefinitions {
 											if (poppedData.awaitingArity && prevToken) {
 												keepProcessing = false;
 												const fnArity = poppedData.functionArity;
-												const fnName = poppedData.function.value;
+												const fnName = (poppedData.function.eqNameUri ?? '') + poppedData.function.value;
 												let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 												resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 												resultInputToken = { token: poppedData.function, type: GlobalInstructionType.Function };
@@ -683,7 +683,7 @@ export class XsltTokenDefinitions {
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
 									if (awaitingRequiredArity) {
 										const fnArity = incrementFunctionArity ? 1 : 0;
-										const fnName = prevToken.value;
+										const fnName = (prevToken.eqNameUri ?? '') + prevToken.value;
 										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 										resultInputToken = { token: prevToken, type: GlobalInstructionType.Function };
@@ -716,6 +716,10 @@ export class XsltTokenDefinitions {
 						}
 						break;
 				}
+			}
+			if (token.tokenType === TokenLevelState.function && prevToken?.tokenType === TokenLevelState.uriLiteral) {
+				// the local name of an EQName, e.g. double in Q{urn:f}double(1)
+				token.eqNameUri = prevToken.value;
 			}
 			if (incrementFunctionArity && prevToken?.charType === CharLevelState.dSep && (prevToken.value === '=>' || prevToken.value === '=!>') && token.tokenType !== TokenLevelState.function) {
 				// the implicit first argument only applies to a static function call, not to a dynamic call

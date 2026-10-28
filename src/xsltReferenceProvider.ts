@@ -6,6 +6,7 @@ import { LexPosition, BaseToken, CharLevelState, Data, ErrorType, TokenLevelStat
 import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XMLCharState, XslLexer, XSLTokenLevelState } from './xslLexer';
 import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
+import { ModulePrefixes } from './modulePrefixes';
 import { AttributeType, TagType, XSLTToken, XsltTokenDiagnostics, ElementData, XPathData, VariableData, ValidationType, CurlyBraceType } from './xsltTokenDiagnostics';
 import * as url from 'url';
 import * as fs from 'fs';
@@ -125,12 +126,20 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		if (!newNameIsValid || !this.definition) {
 			return new Promise((resolve, reject) => reject('new name is invalid: \'' + newName + '\''));
 		}
-		let newNameInUse = false;
-
+		// a module may use another prefix for the name's namespace: unless the rename changes the prefix, the name there
+		// keeps its prefix, e.g. my:double, when f:double is renamed f:triple
+		const prefixOf = (name: string) => /^([^:]+):/.exec(name)?.[1];
+		const renamed = this.refLocations.find((location) => location.uri.toString() === document.uri.toString() && location.range.contains(position));
+		const keepPrefixes = renamed !== undefined && prefixOf(newName) !== undefined && prefixOf(newName) === prefixOf(document.getText(renamed.range));
 		const wse = new vscode.WorkspaceEdit();
-		this.refLocations.forEach(location => {
-			wse.replace(location.uri, location.range, newName);
-		});
+		for (const location of this.refLocations) {
+			let locationName = newName;
+			if (keepPrefixes && location.uri.toString() !== document.uri.toString()) {
+				const prefix = prefixOf((await vscode.workspace.openTextDocument(location.uri)).getText(location.range));
+				locationName = prefix ? prefix + newName.substring(newName.indexOf(':')) : newName;
+			}
+			wse.replace(location.uri, location.range, locationName);
+		}
 		return wse;
 	}
 
@@ -214,7 +223,11 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						const docUri = vscode.Uri.parse(pathForUri);
 						let hrefDoc = await vscode.workspace.openTextDocument(docUri);
 						const hrefAllTokens = this.xslLexer.analyse(hrefDoc.getText());
-						let refDocTokens = XSLTReferenceProvider.calculateReferences(instruction, langConfig, langConfig.docType, hrefDoc, hrefAllTokens, eid.globalInstructionData, eid.allImportedGlobals);
+						// the names as they're written in the module, which may use other prefixes for their namespaces
+						const hrefBindings = this.xslLexer.prefixBindings;
+						const [hrefInstruction] = ModulePrefixes.inModule([instruction], hrefBindings);
+						let refDocTokens = XSLTReferenceProvider.calculateReferences(hrefInstruction, langConfig, langConfig.docType, hrefDoc, hrefAllTokens,
+							ModulePrefixes.inModule(eid.globalInstructionData, hrefBindings), ModulePrefixes.inModule(eid.allImportedGlobals, hrefBindings));
 						const refLocations = refDocTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, hrefDoc));
 						locations = locations.concat(refLocations, XSLTReferenceProvider.noteReferences(hrefDoc, document, definition, globals));
 					} catch (error) {

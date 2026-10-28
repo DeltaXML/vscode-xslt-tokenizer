@@ -13,6 +13,7 @@ import { SchemaData } from "./xsltSchema";
 import { Snippet} from './xsltSnippets';
 import { HrefPaths } from './hrefPaths';
 import { RecordTypes } from './recordTypes';
+import { ModulePrefixes } from './modulePrefixes';
 
 export enum DocumentTypes {
     XSLT,
@@ -177,6 +178,8 @@ export interface GlobalInstructionData {
     // the 'as' attribute of an xsl:item-type, or of a global xsl:variable or xsl:param
     declaredType?: string;
     defaultSelect?: string;
+    // for a name that's a QName: the namespace bindings of the module that declares it (see ModulePrefixes)
+    prefixBindings?: Map<string, string>;
 }
 
 export class XslLexer {
@@ -227,6 +230,8 @@ export class XslLexer {
     public attributeNameTests: string[]|undefined;
     public elementNameTests: string[]|undefined;
     public isXSLT40 = false;
+    // the namespace bindings for the names of the module's declarations (see ModulePrefixes)
+    public prefixBindings: Map<string, string> | undefined;
     protected globalModeData: GlobalInstructionData[] = [];
     private lineNumber: number = 0;
     private charCount = 0;
@@ -818,6 +823,7 @@ export class XslLexer {
         this.globalInstructionData.length = 0;
         this.globalModeData.length = 0;
         this.isXSLT40 = false;
+        const rootAttributes = new Map<string, string>();
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.charCount = -1;
@@ -1198,6 +1204,9 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
                             }
+                            if (xmlElementStack.length === 0 && ModulePrefixes.isBindingAttribute(attName)) {
+                                rootAttributes.set(attName, tokenChars.join(''));
+                            }
                             if (xpathEnded) {
                                 tokenStartChar++;
                                 xpathEnded = false;
@@ -1522,6 +1531,8 @@ export class XslLexer {
             console.timeEnd('xslLexer.analyse');
         }
         this.globalInstructionData = this.globalInstructionData.concat(this.globalModeData);
+        this.prefixBindings = ModulePrefixes.fromRootAttributes(rootAttributes);
+        ModulePrefixes.resolve(this.globalInstructionData, this.prefixBindings);
         return result;
     }
 

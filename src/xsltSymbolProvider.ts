@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
+import { ModulePrefixes } from './modulePrefixes';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { GlobalsProvider } from './globalsProvider';
 import * as path from 'path';
@@ -165,6 +166,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		this.languageConfig['isVersion4'] = isVersion4;
 		const languageConfig = { ...this.languageConfig, isVersion4 };
 		const globalInstructionData = this.xslLexer.globalInstructionData.slice();
+		const prefixBindings = this.xslLexer.prefixBindings;
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
 
 		// Import/include XSLT - ensuring no duplicates
@@ -239,6 +241,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					});
 				}
 			});
+			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 			this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
@@ -390,6 +393,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			global['href'] = globals.href;
 			importedGlobals.push(global);
 		}));
+		ModulePrefixes.toModule(importedGlobals, xslLexer.prefixBindings);
 		return XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, importedGlobals, []);
 	}
 

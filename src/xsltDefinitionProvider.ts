@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
+import { ModulePrefixes } from './modulePrefixes';
 import {GlobalsProvider} from './globalsProvider';
 import * as path from 'path';
 import { DefinitionData, DefinitionLocation, XsltTokenDefinitions } from './xsltTokenDefintions';
@@ -253,12 +254,14 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	public async getImportedGlobals(document: vscode.TextDocument, lexPosition: LexPosition) {
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];
+		let prefixBindings: Map<string, string> | undefined;
 		if (this.docType === DocumentTypes.XPath) {
 			allTokens = this.getXPLexer().analyse(document.getText(), ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
 		} else {
 			allTokens = this.xslLexer.analyse(document.getText());
 			globalInstructionData = this.xslLexer.globalInstructionData;
+			prefixBindings = this.xslLexer.prefixBindings;
 		}
 
 		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
@@ -292,6 +295,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				});
 			}
 		});
+		ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 		// highest import precedence first: the first declaration with a name is the one used
 		allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 		return { allTokens, globalInstructionData, allImportedGlobals, accumulatedHrefs };
@@ -335,6 +339,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 		let allTokens: BaseToken[] = [];
 		let globalInstructionData: GlobalInstructionData[] = [];
+		let prefixBindings: Map<string, string> | undefined;
 		let uri: vscode.Uri|undefined;
 		// this.xslLexer is a single instance shared by every completion request for this language,
 		// so any value read off it (or off this.languageConfig) must be captured into a local
@@ -363,6 +368,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 			allTokens = this.xslLexer.analyse(document.getText(), keepNameTests);
 			globalInstructionData = this.xslLexer.globalInstructionData;
+			prefixBindings = this.xslLexer.prefixBindings;
 			attNames = this.xslLexer.attributeNameTests ? this.xslLexer.attributeNameTests : [];
 			nodeNames = this.xslLexer.elementNameTests ? this.xslLexer.elementNameTests : [];
 			this.languageConfig['isVersion4'] = this.xslLexer.isXSLT40;
@@ -416,6 +422,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
+			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 			let xslVariable = ['xsl:variable', 'xsl:param'];
