@@ -7,6 +7,7 @@
  * - a map may have entries that are not fields of the record
  */
 import { BaseToken, CharLevelState, ErrorType, TokenLevelState } from './xpLexer';
+import { XslLexer } from './xslLexer';
 
 export interface RecordField {
 	name: string;
@@ -855,13 +856,12 @@ export class RecordTypes {
 	private static lastPrefix = 'xsl';
 
 	// the prefix of the XSLT instructions of a stylesheet module's text, or its markup: that of its outermost element,
-	// when it's a stylesheet, transform or package - usually xsl, but e.g. xslt in some W3C tests (as the lexer finds it,
-	// see XslLexer.useRootPrefix)
+	// when it's a stylesheet, transform or package - usually xsl, but e.g. xslt in some W3C tests - as the lexer finds it
+	// (see XslLexer.rootPrefix)
 	public static xsltPrefix(text: string): string {
 		if (text !== RecordTypes.lastPrefixText) {
-			const root = /(?:\s+|\uFEFF|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE(?:[^[>]|\[[\s\S]*?\])*>)*<([^\s/>:]+):(?:stylesheet|transform|package)[\s/>]/y.exec(text);
 			RecordTypes.lastPrefixText = text;
-			RecordTypes.lastPrefix = root ? root[1] : 'xsl';
+			RecordTypes.lastPrefix = XslLexer.rootPrefix(text);
 		}
 		return RecordTypes.lastPrefix;
 	}

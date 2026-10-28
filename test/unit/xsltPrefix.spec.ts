@@ -15,6 +15,14 @@ describe('RecordTypes: a module\'s prefix for XSLT', () => {
         expect(RecordTypes.xsltPrefix('<html xsl:version="3.0"/>')).to.equal('xsl');
     });
 
+    it('should be quick for an outermost element without a prefix, after a run of whitespace', () => {
+        // e.g. markup, with the XML declaration blanked: before the fix, it took exponential time not to match
+        const text = ' '.repeat(5000) + '\n<transform xmlns="http://www.w3.org/1999/XSL/Transform" version="3.0"/>';
+        const start = Date.now();
+        expect(RecordTypes.xsltPrefix(text)).to.equal('xsl');
+        expect(Date.now() - start).to.be.below(100);
+    });
+
     it('should give XSLT names with the prefix xsl', () => {
         expect(RecordTypes.xsltName('xslt:template', 'xslt')).to.equal('xsl:template');
         expect(RecordTypes.xsltName('xslt:use-attribute-sets', 'xslt')).to.equal('xsl:use-attribute-sets');

@@ -831,7 +831,15 @@ export class XslLexer {
         return rc;
     }
 
-    public analyse(xsl: string, keepNameTests?: boolean): BaseToken[] {
+    // the prefix of the XSLT instructions of a stylesheet module's text (see useRootPrefix): lexed only as far as the name
+    // of its outermost element
+    public static rootPrefix(xsl: string): string {
+        const lexer = new XslLexer({ expressionAtts: [], variableElementNames: [], nativePrefix: 'xsl', tvtAttributes: [], nonNativeAvts: false, docType: DocumentTypes.XSLT });
+        lexer.analyse(xsl, false, true);
+        return lexer.nativePrefix;
+    }
+
+    public analyse(xsl: string, keepNameTests?: boolean, rootOnly = false): BaseToken[] {
         if (this.timerOn) {
             console.time('xslLexer.analyse');
         }
@@ -914,7 +922,7 @@ export class XslLexer {
             return [];
         }
 
-        while (this.charCount < xslLength) {
+        while (this.charCount < xslLength && !(rootOnly && rootNamed)) {
             this.charCount++;
             this.lineCharCount++;
             let nextState: XMLCharState = XMLCharState.init;
