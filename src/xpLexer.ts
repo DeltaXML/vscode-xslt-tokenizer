@@ -1837,6 +1837,8 @@ export enum ErrorType {
     // a name in use-character-maps that no xsl:character-map declares, and an xsl:character-map name declared twice
     CharacterMapNameUnresolved,
     DuplicateCharacterMapName,
+    // an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
+    ApplyTemplatesDefaultMode,
 }
 
 export interface BaseToken {

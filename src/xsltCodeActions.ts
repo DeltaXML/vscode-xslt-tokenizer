@@ -78,6 +78,8 @@ enum XsltCodeActionKind {
 	excludeNote = 'Exclude with use-when="false()"',
 	convertSaxonTypeAliases = 'Convert all Saxon type aliases in the workspace to xsl:item-type...',
 	removeDuplicateEnumValue = 'Remove duplicate enum value',
+	addModeCurrent = 'Add mode="#current"',
+	addModeDefault = 'Add mode="#default"',
 	wrapWith = 'Wrap with...',
 }
 
@@ -310,6 +312,18 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (codeActions.length > 0) {
 			codeActions[0].isPreferred = true;
 		}
+		// an xsl:apply-templates without a mode, in a template rule with a mode: a mode attribute after the element name -
+		// #current, the preferred fix, or #default where the default mode is meant
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.applyTemplatesDefaultMode).forEach((diagnostic) => {
+			[XsltCodeActionKind.addModeCurrent, XsltCodeActionKind.addModeDefault].forEach((kind, i) => {
+				const action = new vscode.CodeAction(kind, vscode.CodeActionKind.QuickFix);
+				action.diagnostics = [diagnostic];
+				action.edit = new vscode.WorkspaceEdit();
+				action.edit.insert(document.uri, diagnostic.range.end, i === 0 ? ' mode="#current"' : ' mode="#default"');
+				action.isPreferred = i === 0;
+				codeActions.push(action);
+			});
+		});
 
 		// XPath 4.0: 'Extract record type'
 		this.recordExtraction = null;

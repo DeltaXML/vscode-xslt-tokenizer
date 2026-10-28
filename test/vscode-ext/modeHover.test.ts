@@ -1,7 +1,7 @@
 /**
- * Test suite for the hover of a mode's name: where the mode is applied from - the modes of the template rules, the
- * named templates and the functions with an xsl:apply-templates for it, across the stylesheet's modules, with the
- * number of each - also the mode's own template rules, for mode="#current"
+ * Test suite for the hover of a mode's name: where the mode is applied from - the other modes of the template rules,
+ * the named templates and the functions with an xsl:apply-templates for it, across the stylesheet's modules, with the
+ * number of each - not the mode itself, which its own template rules commonly apply
  */
 import * as vscode from 'vscode';
 import { assert } from 'chai';
@@ -26,6 +26,9 @@ const main = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" v
     <xsl:apply-templates mode="summary"/>
   </xsl:template>
   <xsl:template match="z" mode="unused"/>
+  <xsl:template match="z" mode="recursive">
+    <xsl:apply-templates select="*" mode="recursive"/>
+  </xsl:template>
 </xsl:stylesheet>`;
 
 const lib = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="f" version="3.0">
@@ -61,9 +64,14 @@ suite('Mode hover', () => {
 			'- function `f:g`',
 			'- mode `#default` (2)',
 			'- mode `detail`, mode `other`',
-			'- mode `summary`',
 			'- named template `t`',
 		]);
+	});
+
+	test('a mode only applied by its own template rules: maybe the initial mode', async () => {
+		const hover = await hoverAt('recursive">');
+		assert.include(hover, 'Only applied by its own template rules - it may be the initial mode');
+		assert.notInclude(hover, 'Applied from');
 	});
 
 	test('the same, from the xsl:mode declaration or an xsl:apply-templates', async function () {

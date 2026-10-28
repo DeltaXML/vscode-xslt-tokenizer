@@ -8,9 +8,9 @@ import * as vscode from 'vscode';
 import { RecordTypes } from './recordTypes';
 
 /**
- * The hover of a mode's name: where the mode is applied from - the modes of the template rules, and the named
+ * The hover of a mode's name: where the mode is applied from - the other modes of the template rules, and the named
  * templates or functions, with an xsl:apply-templates for it, across the stylesheet's modules, as 'Find All
- * References' finds them. With the mode's own template rules for an xsl:apply-templates with mode="#current" in them.
+ * References' finds them. Not the mode itself, which its own template rules commonly apply, e.g. with mode="#current".
  * An xsl:apply-templates without a mode, for a default-mode that names the mode, isn't included.
  */
 export class ModeHover {
@@ -49,10 +49,11 @@ export class ModeHover {
 		if (token.isCancellationRequested) {
 			return undefined;
 		}
-		const invokers = await ModeHover.invokers(mode.name, references);
+		const { invokers, appliedByItself } = await ModeHover.invokers(mode.name, references);
 		const markdown = new vscode.MarkdownString(`**mode** \`${mode.name}\`\n\n`);
 		if (invokers.size === 0) {
-			markdown.appendMarkdown('Not applied by an `xsl:apply-templates` in the stylesheet\'s modules - it may be the initial mode, set when the transform is run');
+			markdown.appendMarkdown(appliedByItself ? 'Only applied by its own template rules' : 'Not applied by an `xsl:apply-templates` in the stylesheet\'s modules');
+			markdown.appendMarkdown(' - it may be the initial mode, set when the transform is run');
 		} else {
 			markdown.appendMarkdown('Applied from:\n');
 			for (const [invoker, count] of invokers) {
@@ -63,16 +64,17 @@ export class ModeHover {
 	}
 
 	// where the mode is applied from, with the number of xsl:apply-templates for each: e.g. 'mode `summary`', for the
-	// template rules in that mode, or 'named template `t`' - from the modules with references to the mode
-	private static async invokers(modeName: string, references: vscode.Location[]): Promise<Map<string, number>> {
+	// template rules in that mode, or 'named template `t`' - from the modules with references to the mode. Not the mode
+	// itself: a template rule in it and another mode is listed for the other mode
+	private static async invokers(modeName: string, references: vscode.Location[]): Promise<{ invokers: Map<string, number>, appliedByItself: boolean }> {
 		const invokers = new Map<string, number>();
-		const add = (invoker: string) => invokers.set(invoker, (invokers.get(invoker) ?? 0) + 1);
+		let appliedByItself = false;
 		const uris = new Map<string, vscode.Uri>(references.map((r) => [r.uri.toString(), r.uri]));
 		for (const uri of uris.values()) {
 			const document = await vscode.workspace.openTextDocument(uri);
 			const text = document.getText();
 			const markup = RecordTypes.blankMarkup(text);
-			// the xsl:apply-templates referencing the mode, and those with mode="#current"
+			// the xsl:apply-templates referencing the mode
 			const tagStarts = new Set<number>();
 			for (const reference of references.filter((r) => r.uri.toString() === uri.toString())) {
 				const tagStart = markup.lastIndexOf('<', document.offsetAt(reference.range.start));
@@ -80,29 +82,23 @@ export class ModeHover {
 					tagStarts.add(tagStart);
 				}
 			}
-			const currentRgx = /<xsl:apply-templates\s[^>]*?\bmode\s*=\s*(["'])\s*#current\s*\1/g;
-			const currentStarts = new Set<number>();
-			for (let m = currentRgx.exec(markup); m; m = currentRgx.exec(markup)) {
-				currentStarts.add(m.index);
-			}
-			const offsets = [...tagStarts, ...currentStarts].sort((a, b) => a - b);
+			const offsets = [...tagStarts].sort((a, b) => a - b);
 			const ancestorsAt = RecordTypes.openElementsAt(markup, offsets);
 			offsets.forEach((offset, i) => {
-				const context = ModeHover.context(text, ancestorsAt[i]);
-				if (!currentStarts.has(offset)) {
-					add(context.label);
-				} else if (context.modes.includes(modeName)) {
-					// within a template rule in this mode, so the mode applies itself
-					add(`mode \`${modeName}\``);
+				const invoker = ModeHover.invoker(text, ancestorsAt[i], modeName);
+				if (invoker) {
+					invokers.set(invoker, (invokers.get(invoker) ?? 0) + 1);
+				} else {
+					appliedByItself = true;
 				}
 			});
 		}
-		return invokers;
+		return { invokers, appliedByItself };
 	}
 
-	// what an xsl:apply-templates is within: the template rule, with its modes, the named template, or the function
-	// or other declaration
-	private static context(text: string, ancestors: { name: string, offset: number }[]): { label: string, modes: string[] } {
+	// what an xsl:apply-templates is within: the template rule, with its modes other than the mode applied, the named
+	// template, or the function or other declaration - undefined for a template rule only in the mode applied
+	private static invoker(text: string, ancestors: { name: string, offset: number }[], modeName: string): string | undefined {
 		const attribute = (element: { offset: number }, name: string) => RecordTypes.attributeOfElementAt(text, element.offset + 1, name);
 		const template = ancestors.find((a) => a.name === 'xsl:template');
 		if (template) {
@@ -112,18 +108,18 @@ export class ModeHover {
 			const enclosingMode = ancestors.find((a) => a.name === 'xsl:mode');
 			const modes = (enclosingMode ? attribute(enclosingMode, 'name') : attribute(template, 'mode'))?.trim().split(/\s+/) ?? [];
 			if (match !== undefined) {
-				const ruleModes = modes.length > 0 ? modes : ['#default'];
-				return { label: ruleModes.map((m) => `mode \`${m}\``).join(', '), modes: ruleModes };
+				const otherModes = (modes.length > 0 ? modes : ['#default']).filter((m) => m !== modeName);
+				return otherModes.length > 0 ? otherModes.map((m) => `mode \`${m}\``).join(', ') : undefined;
 			}
-			return { label: `named template \`${name}\``, modes: [] };
+			return `named template \`${name}\``;
 		}
 		const fn = ancestors.find((a) => a.name === 'xsl:function');
 		if (fn) {
-			return { label: `function \`${attribute(fn, 'name')}\``, modes: [] };
+			return `function \`${attribute(fn, 'name')}\``;
 		}
 		// e.g. a global variable - the child of the xsl:stylesheet
 		const declaration = ancestors[1];
 		const declarationName = declaration ? attribute(declaration, 'name') : undefined;
-		return { label: declaration ? `\`${declaration.name}\`${declarationName ? ` \`${declarationName}\`` : ''}` : 'the stylesheet', modes: [] };
+		return declaration ? `\`${declaration.name}\`${declarationName ? ` \`${declarationName}\`` : ''}` : 'the stylesheet';
 	}
 }

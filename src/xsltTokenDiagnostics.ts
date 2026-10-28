@@ -152,7 +152,9 @@ export enum DiagnosticCode {
 	enumValueDuplicate,
 	recordFieldUnknown,
 	// a function in a namespace with a prefix, e.g. ext:lookup(), not found - see XSLT.validation.externalFunctionPrefixes
-	prefixedFunctionNotFound
+	prefixedFunctionNotFound,
+	// an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
+	applyTemplatesDefaultMode
 }
 
 export class XsltTokenDiagnostics {
@@ -3113,6 +3115,9 @@ export class XsltTokenDiagnostics {
 			XsltTokenDiagnostics.checkDocumentationNotes(document, itemTypeDeclarations, problemTokens);
 			XsltTokenDiagnostics.checkNoteReferences(document, globalInstructionData.concat(importedInstructionData), problemTokens);
 		}
+		if (docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) {
+			XsltTokenDiagnostics.checkApplyTemplatesModes(document, problemTokens);
+		}
 		// duplicate literal keys in map constructors, and in the xsl:map-entry children of an xsl:map
 		const allXPathTokens = allTokens.filter((t) => t.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber);
 		RecordTypes.checkMapConstructorKeys(allXPathTokens, problemTokens);
@@ -4710,6 +4715,14 @@ export class XsltTokenDiagnostics {
 				case ErrorType.TemplateAttributeWithoutMatch:
 					msg = `XSLT: xsl:template has a ${tokenValue} attribute, so it must have a match attribute (XTSE0500)`;
 					break;
+				case ErrorType.ApplyTemplatesDefaultMode: {
+					const modes = tokenValue.split(' ');
+					msg = `XSLT: xsl:apply-templates without a mode applies the default mode, not the template rule's mode${modes.length > 1 ? 's' : ''} ` +
+						`${modes.map((mode: string) => `'${mode}'`).join(', ')} - add mode="#current", or mode="#default" if that's intended`;
+					severity = vscode.DiagnosticSeverity.Warning;
+					errCode = DiagnosticCode.applyTemplatesDefaultMode;
+					break;
+				}
 				case ErrorType.SwitchCasesMissing:
 					msg = `XSLT: xsl:switch has no xsl:when or xsl:otherwise for the enumeration values: ${tokenValue}`;
 					severity = vscode.DiagnosticSeverity.Information;
@@ -5639,6 +5652,52 @@ export class XsltTokenDiagnostics {
 				const position = document.positionAt(candidate.offset + 1);
 				problemTokens.push({ line: position.line, startCharacter: position.character, length: candidate.name.length, value: candidate.name, tokenType: 0, error: ErrorType.IterateTailPosition });
 			}
+		});
+	}
+
+	// an xsl:apply-templates without a mode, in a template rule with a mode, applies the default mode - rarely what's
+	// meant, e.g. when mode="#current" is forgotten in a template rule for a new mode. Not when the template rule's modes
+	// include the default mode, or #all - nor in a template rule within an XSLT 4.0 xsl:mode, where the default is the
+	// enclosing mode (as in Saxon 13). The default mode is that of the innermost [xsl:]default-mode, else the unnamed mode
+	private static checkApplyTemplatesModes(document: vscode.TextDocument, problemTokens: BaseToken[]) {
+		const text = document.getText();
+		if (!text.includes('<xsl:apply-templates')) {
+			return;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const elementName = 'xsl:apply-templates';
+		const starts: number[] = [];
+		const startRgx = /<xsl:apply-templates(?=[\s/>])/g;
+		for (let m = startRgx.exec(markup); m; m = startRgx.exec(markup)) {
+			starts.push(m.index);
+		}
+		const attribute = (offset: number, name: string) => RecordTypes.attributeOfElementAt(text, offset + 1, name);
+		const ancestorsAt = RecordTypes.openElementsAt(markup, starts);
+		starts.forEach((start, i) => {
+			const ancestors = ancestorsAt[i];
+			const template = ancestors.find((a) => a.name === 'xsl:template');
+			if (attribute(start, 'mode') !== undefined || !template || ancestors.some((a) => a.name === 'xsl:mode')) {
+				return;
+			}
+			const modeValue = attribute(template.offset, 'mode');
+			if (modeValue === undefined || attribute(template.offset, 'match') === undefined) {
+				return;
+			}
+			let defaultMode = '#unnamed';
+			for (const element of [{ name: elementName, offset: start }, ...ancestors.slice().reverse()]) {
+				const value = attribute(element.offset, element.name.startsWith('xsl:') ? 'default-mode' : 'xsl:default-mode');
+				if (value !== undefined) {
+					defaultMode = value.trim();
+					break;
+				}
+			}
+			const modes = modeValue.trim().split(/\s+/);
+			if (modes.some((mode) => mode === '#all' || mode === '#default' || mode === defaultMode)) {
+				return;
+			}
+			const position = document.positionAt(start + 1);
+			const token: BaseToken = { line: position.line, startCharacter: position.character, length: elementName.length, value: elementName, tokenType: XsltTokenDiagnostics.xsltStartTokenNumber + XSLTokenLevelState.xslElementName };
+			problemTokens.push(RecordTypes.problemToken(token, ErrorType.ApplyTemplatesDefaultMode, modes.join(' ')));
 		});
 	}
 
