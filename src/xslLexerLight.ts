@@ -12,11 +12,19 @@ import { XslLexer, XMLCharState, GlobalInstructionType, XSLTokenLevelState, Enti
 import { BaseToken, XPathLexer } from "./xpLexer";
 import { RecordTypes } from "./recordTypes";
 import { ModulePrefixes } from "./modulePrefixes";
+import { XSLTLightConfiguration } from "./languageConfigurations";
 import * as vscode from 'vscode';
 
 
 
 export class XslLexerLight extends XslLexer {
+    // the namespace bindings for the names of the declarations of a module's text (see ModulePrefixes)
+    public static prefixBindingsOf(text: string) {
+        const lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
+        lexer.analyseLight(text);
+        return lexer.prefixBindings;
+    }
+
     public analyseLight(xsl: string, xmlnsPrefixesOnly?: boolean): GlobalInstructionData[] {
 
         this.globalInstructionData = [];

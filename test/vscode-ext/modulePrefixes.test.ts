@@ -214,3 +214,76 @@ suite('Module prefixes: variables and parameters with prefixes', function () {
 		assert.deepEqual(replaced, ['lib.xsl:f:breadth', 'lib.xsl:f:breadth', 'main.xsl:my:breadth', 'second.xsl:s:breadth']);
 	});
 });
+
+suite('Module prefixes: named templates and modes', function () {
+	this.timeout(30000);
+	let dir: string;
+	const lib = [
+		'<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:fns">',
+		'  <xsl:mode name="f:m" on-no-match="shallow-copy"/>',
+		'  <xsl:template match="a" mode="f:m f:other"><xsl:apply-templates mode="f:m"/></xsl:template>',
+		'  <xsl:template name="f:t"><xsl:apply-templates mode="f:m"/></xsl:template>',
+		'</xsl:stylesheet>'].join('\n');
+	// f:m here is another mode, in urn:different
+	const main = [
+		'<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:my="urn:fns" xmlns:f="urn:different">',
+		'  <xsl:import href="lib.xsl"/>',
+		'  <xsl:template match="/"><xsl:apply-templates mode="my:m"/><xsl:call-template name="my:t"/><xsl:apply-templates mode="f:m"/></xsl:template>',
+		'  <xsl:template match="b" mode="my:m"><b/></xsl:template>',
+		'  <xsl:template match="d" mode="f:m"><d/></xsl:template>',
+		'</xsl:stylesheet>'].join('\n');
+	const uri = (file: string) => vscode.Uri.file(path.join(dir, file));
+	const at = (text: string, line: number, name: string, nth = 0) => {
+		const lineText = text.split('\n')[line];
+		let index = -1;
+		for (let i = 0; i <= nth; i++) {
+			index = lineText.indexOf(name, index + 1);
+		}
+		return new vscode.Position(line, index + 2);
+	};
+	const edits = (edit: vscode.WorkspaceEdit) => edit.entries().flatMap(([u, e]) => e.map((x) => `${path.basename(u.fsPath)}:${x.range.start.line}:${x.newText}`)).sort();
+
+	suiteSetup(async () => {
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-prefix-modes-'));
+		fs.writeFileSync(path.join(dir, 'lib.xsl'), lib);
+		fs.writeFileSync(path.join(dir, 'main.xsl'), main);
+		await ImportIndex.instance.buildFrom([path.join(dir, 'main.xsl'), path.join(dir, 'lib.xsl')]);
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri('main.xsl')));
+		// once lib.xsl has been read: my:t has a definition
+		for (let i = 0; i < 50 && !(await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeDefinitionProvider', uri('main.xsl'), at(main, 2, 'my:t')))?.length; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+	});
+
+	test('problems: none for the template and mode with another prefix', () => {
+		const problems = vscode.languages.getDiagnostics(uri('main.xsl')).filter((d) => d.severity !== vscode.DiagnosticSeverity.Hint).map((d) => d.message);
+		assert.deepEqual(problems, []);
+	});
+
+	test('Rename a named template from its call: the declaration keeps its prefix', async () => {
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', uri('main.xsl'), at(main, 2, 'my:t'), 'my:tt');
+		assert.deepEqual(edits(edit), ['lib.xsl:3:f:tt', 'main.xsl:2:my:tt']);
+	});
+
+	test('References of a mode: with another prefix, and not the mode in another namespace', async () => {
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri('lib.xsl')));
+		const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', uri('lib.xsl'), at(lib, 1, 'f:m'));
+		assert.deepEqual(references.map((r) => `${path.basename(r.uri.fsPath)}:${r.range.start.line}`).sort(),
+			['lib.xsl:1', 'lib.xsl:2', 'lib.xsl:2', 'lib.xsl:3', 'main.xsl:2', 'main.xsl:3']);
+	});
+
+	test('Rename a mode: each module keeps its prefix', async () => {
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri('lib.xsl')));
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', uri('lib.xsl'), at(lib, 1, 'f:m'), 'f:mm');
+		assert.deepEqual(edits(edit), ['lib.xsl:1:f:mm', 'lib.xsl:2:f:mm', 'lib.xsl:2:f:mm', 'lib.xsl:3:f:mm', 'main.xsl:2:my:mm', 'main.xsl:3:my:mm']);
+	});
+
+	test('the mode\'s hover: applied from another mode and a named template, not from the mode itself', async () => {
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri('main.xsl')));
+		const hovers = await vscode.commands.executeCommand<vscode.Hover[]>('vscode.executeHoverProvider', uri('main.xsl'), at(main, 3, 'my:m'));
+		const text = hovers.flatMap((h) => h.contents.map((c) => typeof c === 'string' ? c : c.value)).join('\n');
+		assert.include(text, 'mode `f:other`');
+		assert.include(text, 'named template `f:t`');
+		assert.notInclude(text, 'mode `f:m`');
+	});
+});

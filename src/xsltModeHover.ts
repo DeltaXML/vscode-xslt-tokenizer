@@ -6,6 +6,8 @@
  */
 import * as vscode from 'vscode';
 import { RecordTypes } from './recordTypes';
+import { ModulePrefixes } from './modulePrefixes';
+import { XslLexerLight } from './xslLexerLight';
 
 /**
  * The hover of a mode's name: where the mode is applied from - the other modes of the template rules, and the named
@@ -49,7 +51,9 @@ export class ModeHover {
 		if (token.isCancellationRequested) {
 			return undefined;
 		}
-		const { invokers, appliedByItself } = await ModeHover.invokers(mode.name, references);
+		// the mode's name with its namespace: another module may use another prefix for it
+		const expandedName = ModulePrefixes.expandedName(mode.name, XslLexerLight.prefixBindingsOf(document.getText()));
+		const { invokers, appliedByItself } = await ModeHover.invokers(expandedName, references);
 		const markdown = new vscode.MarkdownString(`**mode** \`${mode.name}\`\n\n`);
 		if (invokers.size === 0) {
 			markdown.appendMarkdown(appliedByItself ? 'Only applied by its own template rules' : 'Not applied by an `xsl:apply-templates` in the stylesheet\'s modules');
@@ -65,7 +69,7 @@ export class ModeHover {
 
 	// where the mode is applied from, with the number of xsl:apply-templates for each: e.g. 'mode `summary`', for the
 	// template rules in that mode, or 'named template `t`' - from the modules with references to the mode. Not the mode
-	// itself: a template rule in it and another mode is listed for the other mode
+	// itself, by its expanded name (see ModulePrefixes): a template rule in it and another mode is listed for the other mode
 	private static async invokers(modeName: string, references: vscode.Location[]): Promise<{ invokers: Map<string, number>, appliedByItself: boolean }> {
 		const invokers = new Map<string, number>();
 		let appliedByItself = false;
@@ -74,6 +78,7 @@ export class ModeHover {
 			const document = await vscode.workspace.openTextDocument(uri);
 			const text = document.getText();
 			const markup = RecordTypes.blankMarkup(text);
+			const bindings = XslLexerLight.prefixBindingsOf(text);
 			// the xsl:apply-templates referencing the mode
 			const tagStarts = new Set<number>();
 			for (const reference of references.filter((r) => r.uri.toString() === uri.toString())) {
@@ -85,7 +90,7 @@ export class ModeHover {
 			const offsets = [...tagStarts].sort((a, b) => a - b);
 			const ancestorsAt = RecordTypes.openElementsAt(markup, offsets);
 			offsets.forEach((offset, i) => {
-				const invoker = ModeHover.invoker(text, ancestorsAt[i], modeName);
+				const invoker = ModeHover.invoker(text, ancestorsAt[i], modeName, bindings);
 				if (invoker) {
 					invokers.set(invoker, (invokers.get(invoker) ?? 0) + 1);
 				} else {
@@ -98,7 +103,7 @@ export class ModeHover {
 
 	// what an xsl:apply-templates is within: the template rule, with its modes other than the mode applied, the named
 	// template, or the function or other declaration - undefined for a template rule only in the mode applied
-	private static invoker(text: string, ancestors: { name: string, offset: number }[], modeName: string): string | undefined {
+	private static invoker(text: string, ancestors: { name: string, offset: number }[], modeName: string, bindings: Map<string, string> | undefined): string | undefined {
 		const attribute = (element: { offset: number }, name: string) => RecordTypes.attributeOfElementAt(text, element.offset + 1, name);
 		const template = ancestors.find((a) => a.name === 'xsl:template');
 		if (template) {
@@ -108,7 +113,7 @@ export class ModeHover {
 			const enclosingMode = ancestors.find((a) => a.name === 'xsl:mode');
 			const modes = (enclosingMode ? attribute(enclosingMode, 'name') : attribute(template, 'mode'))?.trim().split(/\s+/) ?? [];
 			if (match !== undefined) {
-				const otherModes = (modes.length > 0 ? modes : ['#default']).filter((m) => m !== modeName);
+				const otherModes = (modes.length > 0 ? modes : ['#default']).filter((m) => ModulePrefixes.expandedName(m, bindings) !== modeName);
 				return otherModes.length > 0 ? otherModes.map((m) => `mode \`${m}\``).join(', ') : undefined;
 			}
 			return `named template \`${name}\``;
