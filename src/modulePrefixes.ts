@@ -51,11 +51,20 @@ export class ModulePrefixes {
 	// one bound to its namespace in the module - its own, if that is - or, when none is, the name is an EQName, e.g.
 	// Q{urn:fns}double. A mode's name may be a list of names
 	public static nameIn(global: GlobalInstructionData, bindings: Map<string, string> | undefined): string {
-		const declared = global.prefixBindings;
-		if (!declared || !bindings || !global.name.includes(':') || declared === bindings) {
-			return global.name;
+		return ModulePrefixes.translate(global.name, global.prefixBindings, bindings);
+	}
+
+	// the names of the parameters of a template or function, as they're written in a module with the bindings - e.g. of
+	// xsl:with-param in a call of the template
+	private static memberNamesIn(global: GlobalInstructionData, bindings: Map<string, string> | undefined) {
+		return global.memberNames?.map((name) => ModulePrefixes.translate(name, global.prefixBindings, bindings));
+	}
+
+	private static translate(name: string, declared: Map<string, string> | undefined, bindings: Map<string, string> | undefined): string {
+		if (!declared || !bindings || !name.includes(':') || declared === bindings) {
+			return name;
 		}
-		return global.name.replace(/(^|\s)([^\s:{}]+):([^\s:]+)/g, (qname: string, space: string, prefix: string, local: string) => {
+		return name.replace(/(^|\s)([^\s:{}]+):([^\s:]+)/g, (qname: string, space: string, prefix: string, local: string) => {
 			const uri = declared.get(prefix);
 			if (uri === undefined || bindings.get(prefix) === uri) {
 				return qname;
@@ -78,6 +87,7 @@ export class ModulePrefixes {
 	public static toModule(globals: GlobalInstructionData[], bindings: Map<string, string> | undefined) {
 		globals.filter((global) => bindings && global.prefixBindings).forEach((global) => {
 			global.name = ModulePrefixes.nameIn(global, bindings);
+			global.memberNames = ModulePrefixes.memberNamesIn(global, bindings);
 			// its prefixes are now the module's
 			global.prefixBindings = bindings;
 		});
@@ -87,7 +97,9 @@ export class ModulePrefixes {
 	public static inModule(globals: GlobalInstructionData[], bindings: Map<string, string> | undefined): GlobalInstructionData[] {
 		return globals.map((global) => {
 			const name = ModulePrefixes.nameIn(global, bindings);
-			return name === global.name ? global : { ...global, name, prefixBindings: bindings };
+			const memberNames = ModulePrefixes.memberNamesIn(global, bindings);
+			const changed = name !== global.name || memberNames?.some((member, index) => member !== global.memberNames![index]);
+			return changed ? { ...global, name, memberNames, prefixBindings: bindings } : global;
 		});
 	}
 

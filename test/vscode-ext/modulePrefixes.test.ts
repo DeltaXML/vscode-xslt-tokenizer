@@ -152,3 +152,65 @@ suite('Module prefixes: renaming a function that another module may override', f
 		assert.isUndefined(await refusal('f:len'));
 	});
 });
+
+suite('Module prefixes: variables and parameters with prefixes', function () {
+	this.timeout(30000);
+	let dir: string;
+	const lib = [
+		'<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:fns">',
+		'  <xsl:param name="f:size" select="1"/>',
+		'  <xsl:template name="f:box">',
+		'    <xsl:param name="f:width" required="yes"/>',
+		'    <box w="{$f:width}"/>',
+		'  </xsl:template>',
+		'</xsl:stylesheet>'].join('\n');
+	const main = [
+		'<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:my="urn:fns">',
+		'  <xsl:import href="lib.xsl"/>',
+		'  <xsl:template match="/">',
+		'    <r s="{$my:size}" n="{$my:nosuch}"/>',
+		'    <xsl:call-template name="my:box">',
+		'      <xsl:with-param name="my:width" select="2"/>',
+		'    </xsl:call-template>',
+		'  </xsl:template>',
+		'</xsl:stylesheet>'].join('\n');
+	// another stylesheet using lib.xsl, with another prefix again
+	const second = [
+		'<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:s="urn:fns">',
+		'  <xsl:import href="lib.xsl"/>',
+		'  <xsl:template match="/"><xsl:call-template name="s:box"><xsl:with-param name="s:width" select="3"/></xsl:call-template></xsl:template>',
+		'</xsl:stylesheet>'].join('\n');
+	const uri = (file: string) => vscode.Uri.file(path.join(dir, file));
+
+	suiteSetup(async () => {
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-prefix-params-'));
+		fs.writeFileSync(path.join(dir, 'lib.xsl'), lib);
+		fs.writeFileSync(path.join(dir, 'main.xsl'), main);
+		fs.writeFileSync(path.join(dir, 'second.xsl'), second);
+		await ImportIndex.instance.buildFrom([path.join(dir, 'main.xsl'), path.join(dir, 'lib.xsl'), path.join(dir, 'second.xsl')]);
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri('main.xsl')));
+		for (let i = 0; i < 50 && !vscode.languages.getDiagnostics(uri('main.xsl')).some((d) => d.message.includes('nosuch')); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+	});
+
+	test('problems: a global parameter, and a template parameter, with another prefix', () => {
+		const problems = vscode.languages.getDiagnostics(uri('main.xsl')).filter((d) => d.severity !== vscode.DiagnosticSeverity.Hint).map((d) => d.message);
+		assert.lengthOf(problems, 1, problems.join('\n'));
+		assert.include(problems[0], 'my:nosuch');
+	});
+
+	test('Rename a global parameter: its references with another prefix keep it', async () => {
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri('lib.xsl')));
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', uri('lib.xsl'), new vscode.Position(1, 18), 'f:length');
+		const replaced = edit.entries().flatMap(([u, edits]) => edits.map((e) => `${path.basename(u.fsPath)}:${e.newText}`)).sort();
+		assert.deepEqual(replaced, ['lib.xsl:f:length', 'main.xsl:my:length']);
+	});
+
+	test('Rename a template parameter: each xsl:with-param with another prefix keeps it - in another stylesheet too', async () => {
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri('lib.xsl')));
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', uri('lib.xsl'), new vscode.Position(3, 22), 'f:breadth');
+		const replaced = edit.entries().flatMap(([u, edits]) => edits.map((e) => `${path.basename(u.fsPath)}:${e.newText}`)).sort();
+		assert.deepEqual(replaced, ['lib.xsl:f:breadth', 'lib.xsl:f:breadth', 'main.xsl:my:breadth', 'second.xsl:s:breadth']);
+	});
+});

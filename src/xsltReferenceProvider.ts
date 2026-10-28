@@ -132,7 +132,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 		// a module may use another prefix for the name's namespace: unless the rename changes the prefix, the name there
 		// keeps its prefix, e.g. my:double, when f:double is renamed f:triple
 		const prefixOf = (name: string) => /^([^:]+):/.exec(name)?.[1];
-		const renamed = this.refLocations.find((location) => location.uri.toString() === document.uri.toString() && location.range.contains(position));
+		// the name as it's written in this document - at the position, or elsewhere in the document, with the same prefix
+		const inDocument = this.refLocations.filter((location) => location.uri.toString() === document.uri.toString());
+		const renamed = inDocument.find((location) => location.range.contains(position)) ?? inDocument[0];
 		const keepPrefixes = renamed !== undefined && prefixOf(newName) !== undefined && prefixOf(newName) === prefixOf(document.getText(renamed.range));
 		const wse = new vscode.WorkspaceEdit();
 		for (const location of this.refLocations) {
@@ -215,6 +217,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 				const otherModules = declaration && declarationDocument && !declaration.isParam ?
 					(await XSLTReferenceProvider.usingModules(declarationDocument, declaration)).filter((file) => !eid.accumulatedHrefs.includes(file)) : [];
 				const searchedModules = eid.accumulatedHrefs.concat(otherModules);
+				// a parameter of a template, e.g. f:width, isn't a global with the bindings of its module: they're found for
+				// it, as for a global, so that a prefixed name is found with another prefix, e.g. in an xsl:with-param
+				const seekInstruction = instruction.prefixBindings || !instruction.name.includes(':') ? instruction :
+					{ ...instruction, prefixBindings: XSLTReferenceProvider.prefixBindings(XSLTReferenceProvider.moduleText(this.definition.uri.fsPath)) };
 				for (let index = 0; index < searchedModules.length; index++) {
 					const currentHref = searchedModules[index];
 					// not a missing module, e.g. an import that isn't found - VS Code logs an error for it
@@ -228,7 +234,7 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 						const hrefAllTokens = this.xslLexer.analyse(hrefDoc.getText());
 						// the names as they're written in the module, which may use other prefixes for their namespaces
 						const hrefBindings = this.xslLexer.prefixBindings;
-						const [hrefInstruction] = ModulePrefixes.inModule([instruction], hrefBindings);
+						const [hrefInstruction] = ModulePrefixes.inModule([seekInstruction], hrefBindings);
 						let refDocTokens = XSLTReferenceProvider.calculateReferences(hrefInstruction, langConfig, langConfig.docType, hrefDoc, hrefAllTokens,
 							ModulePrefixes.inModule(eid.globalInstructionData, hrefBindings), ModulePrefixes.inModule(eid.allImportedGlobals, hrefBindings));
 						const refLocations = refDocTokens.map(token => XsltTokenDefinitions.createLocationFromToken(token, hrefDoc));
@@ -289,9 +295,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			return [];
 		}
 		const locations: vscode.Location[] = [];
-		const nameLocation = (doc: vscode.TextDocument, offset: number) => {
+		const nameLocation = (doc: vscode.TextDocument, offset: number, length = paramName.length) => {
 			const start = doc.positionAt(offset);
-			return new vscode.Location(doc.uri, new vscode.Range(start, start.translate(0, paramName.length)));
+			return new vscode.Location(doc.uri, new vscode.Range(start, start.translate(0, length)));
 		};
 		XdocNotes.forDeclaration(text, parent.offset, markup)?.tags
 			.filter((tag) => tag.name === 'param' && tag.paramName === paramName && tag.paramOffset !== undefined)
@@ -314,11 +320,13 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 			for (const href of otherModules) {
 				const doc = await openModule(href);
 				const docText = doc?.getText() ?? '';
-				if (!doc || !docText.includes(paramName)) {
+				// the stylesheet may use another prefix for the parameter's namespace: its local name
+				if (!doc || !docText.includes(paramName.substring(paramName.indexOf(':') + 1))) {
 					continue;
 				}
 				const docMarkup = RecordTypes.blankMarkup(docText);
 				const docBindings = XSLTReferenceProvider.prefixBindings(docText);
+				const expandedParamName = ModulePrefixes.expandedName(paramName, declarationBindings);
 				for (const call of docMarkup.matchAll(/<xsl:call-template\s/g)) {
 					const calledName = RecordTypes.attributeOfElementAt(docText, call.index! + 1, 'name')?.trim();
 					if (calledName === undefined || ModulePrefixes.expandedName(calledName, docBindings) !== ModulePrefixes.expandedName(declarationName!.trim(), declarationBindings)) {
@@ -326,8 +334,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					}
 					RecordTypes.childElements(docText, docMarkup, call.index!, 'xsl:with-param').forEach((withParam) => {
 						const nameOffset = RecordTypes.attributeValueOffset(docText, withParam + 1, 'name');
-						if (nameOffset !== undefined && RecordTypes.attributeOfElementAt(docText, withParam + 1, 'name') === paramName) {
-							locations.push(nameLocation(doc, nameOffset));
+						const withParamName = RecordTypes.attributeOfElementAt(docText, withParam + 1, 'name');
+						if (nameOffset !== undefined && withParamName !== undefined && ModulePrefixes.expandedName(withParamName, docBindings) === expandedParamName) {
+							locations.push(nameLocation(doc, nameOffset, withParamName.length));
 						}
 					});
 				}
