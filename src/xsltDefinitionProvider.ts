@@ -383,8 +383,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			const text = XPathQuery.isQueryFile(document) ? XPathQuery.separateBlockAt(document.getText(), position.line) : document.getText();
 			allTokens = this.getXPLexer().analyse(text, ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
-			// names from the XML file: for the query file, the one it runs on
-			uri = XPathQuery.isQueryFile(document) ? XPathQuery.target : DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
+			// names from the XML file: for the query file, the one it runs on - otherwise the XML context file, as shown
+			// in the status bar
+			uri = XPathQuery.isQueryFile(document) ? XPathQuery.target : DocumentChangeHandler.lastActiveXMLNonXSLUri ?? undefined;
 
 		} else {
 			if (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.DCP) {

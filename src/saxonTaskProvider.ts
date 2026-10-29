@@ -134,6 +134,38 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return tasks.find((t) => SaxonTaskProvider.isQuickRunTaskFor(t, taskType, xsltFsPath, xmlSourceFsPath, workspaceFolder.uri.fsPath))?.label;
     }
 
+    // the source of the first workspace folder's quick-run task for the stylesheet: its fsPath, null for a task with no
+    // source, or undefined with no task - see quickRunTaskSourceIn
+    public static async quickRunTaskSource(taskType: QuickRunTaskType, xsltFsPath: string): Promise<string | null | undefined> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return undefined;
+        }
+        let text: string;
+        try {
+            text = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'))).toString('utf8');
+        } catch {
+            return undefined;
+        }
+        return SaxonTaskProvider.quickRunTaskSourceIn(jsc.parse(text)?.tasks || [], taskType, xsltFsPath, workspaceFolder.uri.fsPath);
+    }
+
+    // of the quick-run tasks for the stylesheet - of the selected type if there are any, else of any type - the last
+    // one's source (the most recently added, unless edited since): its fsPath, or null for a task with no source,
+    // starting from xsl:initial-template. Tasks whose source is a variable, e.g. '${file}', are left out
+    public static quickRunTaskSourceIn(tasks: vscode.TaskDefinition[], taskType: QuickRunTaskType, xsltFsPath: string, workspaceFolderFsPath: string): string | null | undefined {
+        const quickRunTypes = Object.keys(SaxonTaskProvider.quickRunProcessorNames);
+        const forStylesheet = tasks.filter((t) => quickRunTypes.includes(t.type) && typeof t.xsltFile === 'string' &&
+            SaxonTaskProvider.resolveStoredPath(t.xsltFile, workspaceFolderFsPath) === path.normalize(xsltFsPath) &&
+            !(typeof t.xmlSource === 'string' && t.xmlSource.includes('${') && !t.xmlSource.startsWith('${workspaceFolder}')));
+        const ofType = forStylesheet.filter((t) => t.type === taskType);
+        const task = (ofType.length > 0 ? ofType : forStylesheet).pop();
+        if (!task) {
+            return undefined;
+        }
+        return typeof task.xmlSource === 'string' && task.xmlSource !== '' ? SaxonTaskProvider.resolveStoredPath(task.xmlSource, workspaceFolderFsPath) : null;
+    }
+
     // finds (or persists, on first use) a task of the given quick-run type ('xslt', 'xslt-js' or 'xslt-c') in
     // .vscode/tasks.json for this xsltFile/xmlSource pair, so the user can subsequently add xslt parameters etc. by
     // hand - an undefined xmlSourceFsPath means no source document, starting from xsl:initial-template instead.

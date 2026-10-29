@@ -8,6 +8,7 @@ import { XslLexerLight } from './xslLexerLight';
 import { XslLexerRenameTag, TagRenamePosition } from './xslLexerRenameTag';
 import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { FileSelection } from './fileSelection';
+import { ImportIndex } from './importIndex';
 import { RecordTypes } from './recordTypes';
 
 export interface TagRenameEdit {
@@ -18,10 +19,22 @@ export interface TagRenameEdit {
 export class DocumentChangeHandler {
 	public static lastActiveXMLEditor: vscode.TextEditor | null = null;
 	public static lastActiveXMLNonXSLEditor: vscode.TextEditor | null = null;
+	// the XML context file in use: for the active stylesheet (see useContextFor), or else the last one picked
 	public static lastActiveXMLNonXSLUri: vscode.Uri | null = null;
 	// true when the user deliberately chose 'None' as the XML context file - unlike the initial unset state,
 	// this is not replaced by the next XML file viewed
 	public static contextFileIsNone = false;
+	// the XML context file last picked (or 'None') - or the first XML file viewed, when none has been picked yet. It's
+	// used for a stylesheet with no context file of its own, and for XPath and DCP files
+	private static lastPickedUri: vscode.Uri | null = null;
+	private static lastPickedIsNone = false;
+	// the (top-level) stylesheet whose own context file is in use - undefined when it's the last one picked
+	private static contextStylesheet: string | undefined;
+	// for a stylesheet with no context file picked for it, the source of its Quick Run task: its fsPath, null for a
+	// task with no source, or undefined with no task (set by the extension, which knows the tasks)
+	public static taskContextFile: ((stylesheetFsPath: string) => Promise<string | null | undefined>) | undefined;
+	// counts the lookups, so that a slower, earlier one doesn't overwrite the context file a later one found
+	private static contextLookups = 0;
 
 	public static lastXMLDocumentGlobalData: GlobalInstructionData[] = [];
 	// set when completions are triggered by typing ',' in an XSLT 4.0 stylesheet: the completion provider then only
@@ -41,16 +54,78 @@ export class DocumentChangeHandler {
 	}
 	public static isWindowsOS: boolean | undefined;
 
+	// the context file picked, for the active stylesheet - and as the last one picked, for the others
 	public static setLastActiveXMLNonXSLUri(uri: vscode.Uri): void {
-		DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
-		DocumentChangeHandler.contextFileIsNone = false;
-		FileSelection.instance?.setContextFileUri(uri.fsPath);
+		DocumentChangeHandler.setPickedContextFile(uri);
 	}
 
 	public static setNoContextFile(): void {
-		DocumentChangeHandler.lastActiveXMLNonXSLUri = null;
-		DocumentChangeHandler.contextFileIsNone = true;
-		FileSelection.instance?.setContextFileUri(FileSelection.NO_FILE_PICKED);
+		DocumentChangeHandler.setPickedContextFile(null);
+	}
+
+	private static setPickedContextFile(uri: vscode.Uri | null) {
+		DocumentChangeHandler.contextLookups++;
+		DocumentChangeHandler.setLastPicked(uri, uri === null);
+		const pickedFsPath = uri ? uri.fsPath : FileSelection.NO_FILE_PICKED;
+		FileSelection.instance?.setContextFileUri(pickedFsPath);
+		const activeDocument = vscode.window.activeTextEditor?.document;
+		const stylesheet = activeDocument && DocumentChangeHandler.isStylesheetFile(activeDocument) ? DocumentChangeHandler.stylesheetKey(activeDocument) : undefined;
+		if (stylesheet) {
+			FileSelection.instance?.setStylesheetContextFile(stylesheet, pickedFsPath);
+		}
+		DocumentChangeHandler.useContext(uri, uri === null, stylesheet);
+	}
+
+	// the last context file picked, e.g. as restored at startup - also in use, unless a stylesheet's own one is
+	public static setLastPicked(uri: vscode.Uri | null, isNone: boolean) {
+		DocumentChangeHandler.lastPickedUri = uri;
+		DocumentChangeHandler.lastPickedIsNone = isNone;
+		if (!DocumentChangeHandler.contextStylesheet) {
+			DocumentChangeHandler.useContext(uri, isNone, undefined);
+		}
+	}
+
+	private static useContext(uri: vscode.Uri | null, isNone: boolean, stylesheet: string | undefined) {
+		DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
+		DocumentChangeHandler.contextFileIsNone = isNone;
+		DocumentChangeHandler.contextStylesheet = stylesheet;
+	}
+
+	// only a stylesheet saved as a file has a context file of its own, kept by its fsPath
+	private static isStylesheetFile(document: vscode.TextDocument) {
+		return document.languageId === 'xslt' && document.uri.scheme === 'file';
+	}
+
+	// modules share the context file of the top-level stylesheet that imports or includes them
+	public static stylesheetKey(document: vscode.TextDocument): string {
+		return (ImportIndex.isEnabled() ? ImportIndex.instance.masterFor(document.fileName) : undefined) ?? document.fileName;
+	}
+
+	// the XML context file for the stylesheet: the one picked for it (or its top-level stylesheet), else the source
+	// of its Quick Run task, else the last one picked. A null uri with isNone for 'None' - starting from
+	// xsl:initial-template - or with !isNone, when there's no context file yet
+	public static async contextFor(document: vscode.TextDocument | undefined): Promise<{ uri: vscode.Uri | null; isNone: boolean; stylesheet?: string }> {
+		if (document && DocumentChangeHandler.isStylesheetFile(document)) {
+			const stylesheet = DocumentChangeHandler.stylesheetKey(document);
+			const picked = FileSelection.instance?.getStylesheetContextFile(stylesheet);
+			const fsPath = picked !== undefined ? picked : await DocumentChangeHandler.taskContextFile?.(stylesheet);
+			if (fsPath === FileSelection.NO_FILE_PICKED || fsPath === null) {
+				return { uri: null, isNone: true, stylesheet };
+			}
+			if (fsPath !== undefined) {
+				return { uri: vscode.Uri.file(fsPath), isNone: false, stylesheet };
+			}
+		}
+		return { uri: DocumentChangeHandler.lastPickedUri, isNone: DocumentChangeHandler.lastPickedIsNone };
+	}
+
+	// makes the stylesheet's context file the one in use - e.g. when its editor becomes active
+	public static async useContextFor(document: vscode.TextDocument | undefined): Promise<void> {
+		const lookup = ++DocumentChangeHandler.contextLookups;
+		const { uri, isNone, stylesheet } = await DocumentChangeHandler.contextFor(document);
+		if (lookup === DocumentChangeHandler.contextLookups) {
+			DocumentChangeHandler.useContext(uri, isNone, stylesheet);
+		}
 	}
 
 	private onDidChangeRegistration: vscode.Disposable | null = null;
@@ -304,8 +379,10 @@ export class DocumentChangeHandler {
 					FileSelection.instance.addToRecentlyUsedPickFile(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_PREVIOIUS_LABEL, editor.document.uri.fsPath);
 				}
 				DocumentChangeHandler.lastActiveXMLNonXSLEditor = editor;
-				if (isFile && !DocumentChangeHandler.lastActiveXMLNonXSLUri && !DocumentChangeHandler.contextFileIsNone) {
-					DocumentChangeHandler.setLastActiveXMLNonXSLUri(editor.document.uri);
+				// with none picked yet, the first XML file viewed - for stylesheets with no context file of their own
+				if (isFile && !DocumentChangeHandler.lastPickedUri && !DocumentChangeHandler.lastPickedIsNone) {
+					DocumentChangeHandler.setLastPicked(editor.document.uri, false);
+					FileSelection.instance?.setContextFileUri(editor.document.uri.fsPath);
 				}
 			}
 			DocumentChangeHandler.getLastDocXmlnsPrefixes();
@@ -318,8 +395,11 @@ export class DocumentChangeHandler {
 			this.onDidChangeRegistration = vscode.workspace.onDidChangeTextDocument(e => this.getXPathDocumentChangeHandler().onDocumentChange(e));
 		}
 		let isDCPDocument = document.languageId === 'dcp';
-		DocumentChangeHandler.updateStatusBarItem(isXPathDocument || isXSLTDocument || isDCPDocument);
-
+		if (isXPathDocument || isXSLTDocument || isDCPDocument) {
+			DocumentChangeHandler.refreshStatusBarItem();
+		} else {
+			DocumentChangeHandler.updateStatusBarItem(false);
+		}
 	};
 
 	// for a stylesheet that Quick Run runs on itself, as its own source document - with no XML context file, and no
@@ -332,10 +412,15 @@ export class DocumentChangeHandler {
 		const update = ++DocumentChangeHandler.statusBarUpdates;
 		if (isXSLTOrXPath) {
 			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
-			const filename = docUri ? path.basename(docUri.path) : DocumentChangeHandler.contextFileIsNone ? '[no XML context]' : '[XML context file]';
 			const activeDocument = vscode.window.activeTextEditor?.document;
 			const isXslt = activeDocument?.languageId === 'xslt';
-			DocumentChangeHandler.contextStatusBarItem.tooltip = DocumentChangeHandler.statusBarTooltip('XML context file - used for XPath auto-completion and as the source for Quick Run', isXslt);
+			const isItself = !!docUri && docUri.toString() === activeDocument?.uri.toString();
+			const filename = docUri ? path.basename(docUri.path) + (isItself ? ' (itself)' : '') : DocumentChangeHandler.contextFileIsNone ? '[no XML context]' : '[XML context file]';
+			const stylesheet = DocumentChangeHandler.contextStylesheet;
+			const tooltip = stylesheet ? `XML context file for ${path.basename(stylesheet)}${stylesheet !== activeDocument?.fileName ? ' and the modules it imports or includes' : ''} - used for XPath auto-completion and as the source for Quick Run` :
+				isXslt ? 'XML context file - the last one picked, as none has been picked for this stylesheet - used for XPath auto-completion and as the source for Quick Run' :
+					'XML context file - used for XPath auto-completion and as the source for Quick Run';
+			DocumentChangeHandler.contextStatusBarItem.tooltip = DocumentChangeHandler.statusBarTooltip(tooltip, isXslt);
 			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
 			DocumentChangeHandler.contextStatusBarItem.show();
 			// the context file isn't shared by a stylesheet that runs on itself: shown for that stylesheet alone
@@ -365,10 +450,15 @@ export class DocumentChangeHandler {
 		return tooltip;
 	}
 
-	// the status bar item again, for the active editor - e.g. after tasks.json changes
+	// the context file in use and the status bar item again, for the active editor - e.g. when it changes, or after
+	// tasks.json changes
 	public static refreshStatusBarItem(): void {
-		const languageId = vscode.window.activeTextEditor?.document.languageId;
-		DocumentChangeHandler.updateStatusBarItem(languageId === 'xslt' || languageId === 'xpath' || languageId === 'dcp');
+		const document = vscode.window.activeTextEditor?.document;
+		const languageId = document?.languageId;
+		const show = languageId === 'xslt' || languageId === 'xpath' || languageId === 'dcp';
+		// an XPath or DCP file uses the last one picked
+		const lookup = show ? DocumentChangeHandler.useContextFor(languageId === 'xslt' ? document : undefined) : Promise.resolve();
+		lookup.then(() => DocumentChangeHandler.updateStatusBarItem(show), () => DocumentChangeHandler.updateStatusBarItem(show));
 	}
 
 	public async performRename(document: vscode.TextDocument, edit: TagRenameEdit) {

@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { assert } from 'chai';
-import { XSLTConfiguration } from '../../src/languageConfigurations';
+import { XPathConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
 import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { DocumentChangeHandler } from '../../src/documentChangeHandler';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
@@ -32,6 +32,18 @@ suite('Context file: completions without cached symbols', () => {
 		const document = await vscode.workspace.openTextDocument({ content: text, language: 'xslt' });
 		const provider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
 		const result = await provider.provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.TriggerCharacter, triggerCharacter: '/' });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		const labels = items.map((item) => typeof item.label === 'string' ? item.label : item.label.label);
+		assert.include(labels, 'books');
+	});
+
+	test('an XPath file uses the context file shown in the status bar too', async () => {
+		const contextUri = vscode.Uri.file(xmlPath);
+		XsltSymbolProvider.documentSymbols.delete(contextUri);
+		DocumentChangeHandler.lastActiveXMLNonXSLUri = contextUri;
+		const document = await vscode.workspace.openTextDocument({ content: '/', language: 'xpath' });
+		const provider = new XsltDefinitionProvider(XPathConfiguration.configuration);
+		const result = await provider.provideCompletionItems(document, document.positionAt(1), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.TriggerCharacter, triggerCharacter: '/' });
 		const items = Array.isArray(result) ? result : result?.items ?? [];
 		const labels = items.map((item) => typeof item.label === 'string' ? item.label : item.label.label);
 		assert.include(labels, 'books');

@@ -100,6 +100,21 @@ export class FileSelection {
     return this.context.workspaceState.get(FileSelection.MMO_PREFIX + FileSelection.XSLT_CONTEXT_URI_LABEL) === FileSelection.NO_FILE_PICKED;
   }
 
+  // the context file picked for each (top-level) stylesheet, by its fsPath - NO_FILE_PICKED for 'None'
+  private static readonly STYLESHEET_CONTEXT_URIS_LABEL = "xslt context uris by stylesheet";
+
+  public setStylesheetContextFile(stylesheetFsPath: string, fsPath: string) {
+    const key = FileSelection.MMO_PREFIX + FileSelection.STYLESHEET_CONTEXT_URIS_LABEL;
+    const contextFiles: { [stylesheet: string]: string } = this.context.workspaceState.get(key) ?? {};
+    this.context.workspaceState.update(key, { ...contextFiles, [stylesheetFsPath]: fsPath });
+  }
+
+  // undefined if none has been picked for the stylesheet
+  public getStylesheetContextFile(stylesheetFsPath: string): string | undefined {
+    const contextFiles: { [stylesheet: string]: string } | undefined = this.context.workspaceState.get(FileSelection.MMO_PREFIX + FileSelection.STYLESHEET_CONTEXT_URIS_LABEL);
+    return contextFiles?.[stylesheetFsPath];
+  }
+
   public addToRecentlyUsedPickFile(workspaceLabel: string, pickedFsPath: string) {
     let fileListForLabel: string[] | undefined = this.context.workspaceState.get(workspaceLabel);
     if (!fileListForLabel) { fileListForLabel = []; }

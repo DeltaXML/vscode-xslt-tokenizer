@@ -153,7 +153,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// a deliberate 'None' XML context file is restored synchronously, before registerXMLEditor() below can adopt
 	// the active XML file as the context file
-	DocumentChangeHandler.contextFileIsNone = fileSelector.isNoContextFile();
+	DocumentChangeHandler.setLastPicked(null, fileSelector.isNoContextFile());
 
 	// restore the deliberately-chosen XML context file on startup, rather than waiting for the user to open/pick
 	// one again - only if it still exists. Deliberately not derived from the recently-used file list, since that
@@ -164,12 +164,10 @@ export function activate(context: vscode.ExtensionContext) {
 			try {
 				const uri = vscode.Uri.file(persistedContextFsPath);
 				await vscode.workspace.fs.stat(uri);
-				DocumentChangeHandler.lastActiveXMLNonXSLUri = uri;
+				DocumentChangeHandler.setLastPicked(uri, false);
 				// registerXMLEditor() below already ran by the time this resolves and may have rendered the
-				// status bar with the placeholder text (lastActiveXMLNonXSLUri was still unset then) - refresh
-				// it now, using the same visibility rule registerXMLDocument uses for the current active editor
-				const activeLangId = vscode.window.activeTextEditor?.document.languageId;
-				DocumentChangeHandler.updateStatusBarItem(activeLangId === 'xslt' || activeLangId === 'xpath' || activeLangId === 'dcp');
+				// status bar with the placeholder text (the last context file picked was still unset then) - refresh it
+				DocumentChangeHandler.refreshStatusBarItem();
 			} catch {
 				// file no longer exists - leave this to be set the usual way, by opening/picking an XML file
 			}
@@ -564,6 +562,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => importTreeProvider.refresh()));
 	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => doc.languageId === 'xslt' && importTreeProvider.refresh()));
 	context.subscriptions.push(ImportIndex.instance.onDidChange(() => importTreeProvider.refresh()));
+	// a module's context file is its top-level stylesheet's, which the index may only now know
+	context.subscriptions.push(ImportIndex.instance.onDidChange(() => DocumentChangeHandler.refreshStatusBarItem()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.wrapWith', (uri?: vscode.Uri, start?: number, end?: number) => wrapWith(uri, start, end)));
 	// Saxon's earlier syntax for named types, which Saxon 12.8 and later ignore, as XSLT 4.0 xsl:item-type declarations
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.convertSaxonTypeAliases', () => SaxonTypeAliases.convertWorkspace()));
@@ -610,6 +610,8 @@ export function activate(context: vscode.ExtensionContext) {
 		const taskLabel = await SaxonTaskProvider.quickRunTaskLabel(getQuickRunTaskType(document.uri), document.uri.fsPath, document.uri.fsPath);
 		return taskLabel !== undefined && !await SaxonTaskProvider.declaresInitialTemplate(document, xsltDefintiionProvider) ? taskLabel : undefined;
 	};
+	// for a stylesheet with no XML context file picked for it, its Quick Run task's source - for the selected processor
+	DocumentChangeHandler.taskContextFile = (stylesheetFsPath) => SaxonTaskProvider.quickRunTaskSource(getQuickRunTaskType(vscode.Uri.file(stylesheetFsPath)), stylesheetFsPath);
 	// the item is first shown earlier in activation - e.g. for the stylesheet whose opening activated the extension
 	DocumentChangeHandler.refreshStatusBarItem();
 	const tasksFileWatcher = vscode.workspace.createFileSystemWatcher('**/.vscode/tasks.json');
@@ -843,7 +845,8 @@ export function activate(context: vscode.ExtensionContext) {
 		// without an XML context file - 'None' deliberately chosen, or none chosen yet - the stylesheet runs with no
 		// source document, starting from xsl:initial-template ('-it') - an undefined xmlSourceFsPath selects this
 		// throughout - so it must declare one
-		const xmlSourceUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
+		// the stylesheet's own context file - the stylesheet run may not be the active one, e.g. the top-level stylesheet
+		const { uri: xmlSourceUri, isNone } = await DocumentChangeHandler.contextFor(xsltDocument);
 		const xmlSourceFsPath = xmlSourceUri?.fsPath;
 		// a context file remembered from earlier may since have been deleted or moved
 		if (xmlSourceUri?.scheme === 'file' && !await vscode.workspace.fs.stat(xmlSourceUri).then(() => true, () => false)) {
@@ -855,7 +858,7 @@ export function activate(context: vscode.ExtensionContext) {
 			if (await SaxonTaskProvider.quickRunTaskLabel(taskType, xsltFsPath, xsltFsPath) !== undefined) {
 				return { xmlSourceFsPath: xsltFsPath };
 			}
-			offerContextFilePick(DocumentChangeHandler.contextFileIsNone ?
+			offerContextFilePick(isNone ?
 				`${commandName}: the XML context file is 'None', but this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - pick an XML context file instead, or run the stylesheet on itself.` :
 				`${commandName}: no XML context file is set, and this stylesheet (and its imported/included modules) does not declare an xsl:initial-template to start from - open an XML source file, or pick one from the status bar, or run the stylesheet on itself.`, true);
 			return undefined;
