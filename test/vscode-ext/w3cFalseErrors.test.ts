@@ -148,6 +148,14 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.deepEqual(await problems(stylesheet(fn + '<xsl:template match="/"><xsl:value-of select="Q{f}attribute(\'x\', string(.))"/></xsl:template>')), []);
 	});
 
+	test('a context item in a function: in xsl:merge-action, and for a pattern, e.g. xsl:number count="*" (merge-020, number-0202)', async () => {
+		const fn = (body: string) => stylesheet(`<xsl:function name="f:f" xmlns:f="urn:f"><xsl:param name="e"/>${body}</xsl:function>`);
+		assert.deepEqual(await problems(fn('<xsl:merge><xsl:merge-source select="$e"><xsl:merge-key select="."/></xsl:merge-source><xsl:merge-action><xsl:value-of select="."/></xsl:merge-action></xsl:merge>')), []);
+		assert.deepEqual(await problems(fn('<xsl:number select="$e" count="*[@a]" from="b"/>')), []);
+		// still reported: a step without one
+		assert.deepEqual(await problems(fn('<xsl:value-of select="."/>')), ['XPath: Context-item is missing for: \'.\'']);
+	});
+
 	test('the name of a package is a URI, e.g. urn:simple (package-version-001)', async () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:template name="main"/>', 'xsl:package', ' name="urn:simple" package-version="1.0"')), []);
 		assert.deepEqual(await problems(stylesheet('<xsl:use-package name="http://example.com/pkg/a" package-version="*"/>\n<xsl:template name="main"/>', 'xsl:package', ' name="urn:b"')), []);

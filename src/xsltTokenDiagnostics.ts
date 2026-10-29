@@ -1327,7 +1327,9 @@ export class XsltTokenDiagnostics {
 									problemTokens.push(token);
 								}
 								tagAttributeSymbols.push(XsltTokenDiagnostics.createSymbolForAttribute(token, attNameText));
-								isGroupingAttribute = attNameText === 'group-by' || attNameText === 'group-adjacent' || attNameText === 'group-starting-with' || attNameText === 'group-ending-with';
+								// evaluated with a focus of its own: a grouping attribute, or a pattern, e.g. xsl:number's count="*"
+								isGroupingAttribute = attNameText === 'group-by' || attNameText === 'group-adjacent' || attNameText === 'group-starting-with' || attNameText === 'group-ending-with' ||
+									!!XsltTokenDiagnostics.patternAttributes.get(tagElementName)?.includes(attNameText);
 								tagAttributeNames.push(attNameText);
 								tagWrittenAttributeNames.push(writtenAttName);
 							}
@@ -3354,7 +3356,7 @@ export class XsltTokenDiagnostics {
 		if (!insideGlobalFunction) return true;
 
 		const foundForEach = elementStack.find((item) => item.symbolName === 'xsl:for-each' || item.symbolName === 'xsl:for-each-group' ||
-			item.symbolName === 'xsl:source-document' || item.symbolName === 'xsl:merge-source' ||
+			item.symbolName === 'xsl:source-document' || item.symbolName === 'xsl:merge-source' || item.symbolName === 'xsl:merge-action' ||
 			item.symbolName === 'xsl:iterate' || item.symbolName === 'xsl:copy' || item.symbolName === 'xsl:analyze-string' || item.symbolName === 'xsl:perform-sort');
 		if (foundForEach) return true;
 		let foundContextBracketsOrPredicate: boolean;
