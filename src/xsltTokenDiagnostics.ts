@@ -489,6 +489,8 @@ export class XsltTokenDiagnostics {
 		// 1.0 compatibility mode, in which a string operand is converted to a number, e.g. '6' * 2
 		let isBackwardsCompatible = false;
 		let rootXmlnsName: string | null = null;
+		// a namespace declaration on an element other than the root, e.g. xmlns:xs on xsl:template
+		let innerXmlnsName: string | null = null;
 		let xsltPrefixesToURIs = new Map<string, XSLTnamespaces>();
 		let isXMLDeclaration = false;
 		let dtdStarted = false;
@@ -1226,6 +1228,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.attributeName:
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
+						innerXmlnsName = null;
 						const writtenAttName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
 						let attNameText = XsltTokenDiagnostics.xsltAttributeName(writtenAttName, document);
 						// on a literal result element, e.g. <axsl:item-type as="{$type}"/> with xsl:namespace-alias, 'as' is an AVT
@@ -1279,6 +1282,8 @@ export class XsltTokenDiagnostics {
 								}
 								if (onRootStartTag) {
 									rootXmlnsName = attNameText;
+								} else {
+									innerXmlnsName = attNameText;
 								}
 							} else {
 								if (tagAttributeNames.indexOf(attNameText) > -1) {
@@ -1370,6 +1375,13 @@ export class XsltTokenDiagnostics {
 						if (rootXmlnsName !== null) {
 							let prefix = rootXmlnsName.length === 5 ? '' : rootXmlnsName.substr(6);
 							rootXmlnsBindings.push([prefix, variableName]);
+						} else if (innerXmlnsName !== null && innerXmlnsName.length > 6 && !fixedNamespaces) {
+							// a known namespace, e.g. for xs:float('INF') - not scoped to the element: whether the prefix is declared
+							// where it's used is checked separately
+							const xsltType = FunctionData.namespaceType(variableName);
+							if (xsltType !== undefined) {
+								xsltPrefixesToURIs.set(innerXmlnsName.substring(6), xsltType);
+							}
 						}
 						switch (attType) {
 							case AttributeType.Variable:
@@ -3147,6 +3159,7 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		XsltTokenDiagnostics.checkAccumulatorsApplicable(globalInstructionData, importedInstructionData, problemTokens);
+		problemTokens = XsltTokenDiagnostics.withoutGuardedFunctions(problemTokens, document, documentText);
 		if (hasItemTypes) {
 			XsltTokenDiagnostics.checkItemTypeDeclarations(globalInstructionData, importedInstructionData, itemTypeDeclarations, xsltPrefixesToURIs, document.uri.fsPath, problemTokens);
 		}
@@ -3764,6 +3777,33 @@ export class XsltTokenDiagnostics {
 				}
 				break;
 		}
+	}
+
+	// the problems without those for a function that isn't found, in an element - or within one - whose use-when tests that
+	// it's available, e.g. use-when="function-available('saxon:line-number')": use-when is evaluated when the stylesheet is
+	// compiled, so the call is either removed, or of a function that's available - whatever the processor
+	private static withoutGuardedFunctions(problemTokens: BaseToken[], document: vscode.TextDocument, text: string): BaseToken[] {
+		const unknownFunctions = problemTokens.filter((p) => p.error === ErrorType.XPathFunction || p.error === ErrorType.XPathFunctionNamespace);
+		if (unknownFunctions.length === 0 || !/use-when/.test(text)) {
+			return problemTokens;
+		}
+		const markup = RecordTypes.blankMarkup(text);
+		const offsets = unknownFunctions.map((p) => document.offsetAt(new vscode.Position(p.line, p.startCharacter)));
+		const sorted = [...offsets].sort((a, b) => a - b);
+		const openElements = RecordTypes.openElementsAt(markup, sorted);
+		const openAt = new Map(sorted.map((offset, i) => [offset, openElements[i]]));
+		const guarded = new Set(unknownFunctions.filter((p, i) => {
+			const name = p.value.split('#')[0];
+			const guard = new RegExp(`function-available\\(\\s*(["'])${name.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')}\\1`);
+			// the element whose attribute or text has the call - a tag starting after its ancestors - and its ancestors
+			const tagStart = markup.lastIndexOf('<', offsets[i]);
+			const elements = (openAt.get(offsets[i]) ?? []).map((e) => e.offset).concat(tagStart > -1 ? [tagStart] : []);
+			return elements.some((offset) => {
+				const useWhen = RecordTypes.attributeOfElementAt(text, offset + 1, 'use-when') ?? RecordTypes.attributeOfElementAt(text, offset + 1, RecordTypes.xsltPrefix(text) + ':use-when');
+				return useWhen !== undefined && guard.test(useWhen);
+			});
+		}));
+		return problemTokens.filter((p) => !guarded.has(p));
 	}
 
 	// within the parentheses of a kind test, e.g. the name or '*' in element(*), element(io:x) or attribute(*, xs:string) -

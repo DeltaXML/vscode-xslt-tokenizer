@@ -140,6 +140,8 @@ export enum ModifierState {
 }
 
 export class Data {
+    // the operators < and > written as numeric character references, e.g. 1&#60;2
+    public static numericLtGt = ['&#60;', '&#x3C;', '&#x3c;', '&#62;', '&#x3E;', '&#x3e;'];
     // ';' ends an XPath 4.0 namespace declaration, e.g. declare namespace p = 'uri'; - '×' and '÷' are XPath 4.0's
     // multiplication and division operators
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%', ';', '×', '÷'];
@@ -158,7 +160,7 @@ export class Data {
         "else", "eq", "except",
         "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "union", "&lt;", "&gt;"].concat(Data.nodeComparisons40);
+        "then", "to", "union", "&lt;", "&gt;", ...Data.numericLtGt].concat(Data.nodeComparisons40);
 
 
     // axes added in XPath 4.0:
@@ -188,7 +190,7 @@ export class Data {
         "else", "eq", "except",
         "function", "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "map", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "treat", "union", "&lt;", "&gt;"].concat(Data.nodeComparisons40);
+        "then", "to", "treat", "union", "&lt;", "&gt;", ...Data.numericLtGt].concat(Data.nodeComparisons40);
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
     // 'key' and 'value' are for XPath 4.0 map bindings: for key $k value $v in map-expression

@@ -96,6 +96,21 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.deepEqual(await problems(stylesheet(body).replace('version="3.0"', 'version="4.0"')), []);
 	});
 
+	test('< and > written as numeric character references, e.g. 1&#60;2 (boolean-051, math-2509)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:value-of select="1&#60;2, 1 &#x3C; 2, 2&#62;1"/></xsl:template>')), []);
+	});
+
+	test('a known namespace declared on an inner element, e.g. xs:float (math-0105)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/" xmlns:xs="http://www.w3.org/2001/XMLSchema"><xsl:value-of select="xs:float(\'INF\') + 3"/></xsl:template>')), []);
+	});
+
+	test('a function guarded by use-when="function-available(...)" on the element or an ancestor (use-when-0112, version-026)', async () => {
+		const body = '<xsl:template match="p" xmlns:saxon="http://saxon.sf.net/"><a><xsl:value-of select="saxon:line-number()" use-when="function-available(\'saxon:line-number\')"/></a>' +
+			'<b use-when="function-available(\'burnish\', 2)"><xsl:value-of select="burnish(1, 2)"/></b><c><xsl:value-of select="nosuch(1)"/></c></xsl:template>';
+		// still reported: a function that isn't guarded
+		assert.deepEqual(await problems(stylesheet(body)), ['XPath: Function: \'nosuch\' with 1 arguments not found']);
+	});
+
 	test('the name of a package is a URI, e.g. urn:simple (package-version-001)', async () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:template name="main"/>', 'xsl:package', ' name="urn:simple" package-version="1.0"')), []);
 		assert.deepEqual(await problems(stylesheet('<xsl:use-package name="http://example.com/pkg/a" package-version="*"/>\n<xsl:template name="main"/>', 'xsl:package', ' name="urn:b"')), []);
