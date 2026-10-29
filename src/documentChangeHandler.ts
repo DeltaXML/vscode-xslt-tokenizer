@@ -333,23 +333,36 @@ export class DocumentChangeHandler {
 		if (isXSLTOrXPath) {
 			const docUri = DocumentChangeHandler.lastActiveXMLNonXSLUri;
 			const filename = docUri ? path.basename(docUri.path) : DocumentChangeHandler.contextFileIsNone ? '[no XML context]' : '[XML context file]';
-			DocumentChangeHandler.contextStatusBarItem.tooltip = 'XML context file - used for XPath auto-completion and as the source for Quick Run';
+			const activeDocument = vscode.window.activeTextEditor?.document;
+			const isXslt = activeDocument?.languageId === 'xslt';
+			DocumentChangeHandler.contextStatusBarItem.tooltip = DocumentChangeHandler.statusBarTooltip('XML context file - used for XPath auto-completion and as the source for Quick Run', isXslt);
 			DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${filename}`;
 			DocumentChangeHandler.contextStatusBarItem.show();
 			// the context file isn't shared by a stylesheet that runs on itself: shown for that stylesheet alone
-			const activeDocument = vscode.window.activeTextEditor?.document;
-			if (!docUri && activeDocument?.languageId === 'xslt' && DocumentChangeHandler.selfSourceTask) {
+			if (!docUri && isXslt && DocumentChangeHandler.selfSourceTask) {
 				DocumentChangeHandler.selfSourceTask(activeDocument).then((taskLabel) => {
 					if (taskLabel !== undefined && update === DocumentChangeHandler.statusBarUpdates) {
 						const stylesheetName = path.basename(activeDocument.uri.path);
 						DocumentChangeHandler.contextStatusBarItem.text = `$(file-code) ${stylesheetName} (itself)`;
-						DocumentChangeHandler.contextStatusBarItem.tooltip = `Quick Run runs ${stylesheetName} on itself, as its own source document, with the task '${taskLabel}' - pick an XML context file to run it on that file instead`;
+						DocumentChangeHandler.contextStatusBarItem.tooltip = DocumentChangeHandler.statusBarTooltip(`Quick Run runs ${stylesheetName} on itself, as its own source document, with the task '${taskLabel}' - pick an XML context file to run it on that file instead`, true);
 					}
 				}, () => undefined);
 			}
 		} else {
 			DocumentChangeHandler.contextStatusBarItem.hide();
 		}
+	}
+
+	// for a stylesheet, with a link to its Quick Run task in tasks.json - the text is escaped, e.g. a file name's '_'
+	private static statusBarTooltip(text: string, isXslt: boolean): string | vscode.MarkdownString {
+		if (!isXslt) {
+			return text;
+		}
+		const tooltip = new vscode.MarkdownString(undefined, true);
+		tooltip.isTrusted = { enabledCommands: ['xslt-xpath.editQuickRunTask'] };
+		tooltip.appendText(text);
+		tooltip.appendMarkdown('\n\n[$(edit) Edit Quick Run Task](command:xslt-xpath.editQuickRunTask)');
+		return tooltip;
 	}
 
 	// the status bar item again, for the active editor - e.g. after tasks.json changes

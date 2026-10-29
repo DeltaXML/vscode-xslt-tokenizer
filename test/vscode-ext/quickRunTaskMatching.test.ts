@@ -84,6 +84,44 @@ suite('Quick Run - persisted task matching', () => {
 	});
 });
 
+suite('Quick Run - showing a task in tasks.json', () => {
+	const tasksJson = `{
+	// comments are allowed in tasks.json
+	"version": "2.0.0",
+	"tasks": [
+		{ "type": "shell", "label": "build", "command": "make" },
+		{
+			"type": "xslt",
+			"label": "report with books.xml",
+			"xsltFile": "\${workspaceFolder}/report.xsl",
+			"xmlSource": "\${workspaceFolder}/books.xml",
+		},
+		{ "type": "xslt-js", "label": "report with books.xml", "xsltFile": "\${workspaceFolder}/report.xsl", "xmlSource": "\${workspaceFolder}/books.xml" }
+	]
+}`;
+
+	test('finds the range of the first matching task object', () => {
+		const range = SaxonTaskProvider.taskRange(tasksJson, (definition) => definition.type === 'xslt-js' && definition.label === 'report with books.xml');
+		assert.exists(range);
+		const taskText = tasksJson.substring(range!.offset, range!.offset + range!.length);
+		assert.isTrue(taskText.startsWith('{ "type": "xslt-js"') && taskText.endsWith('}'), taskText);
+	});
+
+	test('matches on the task definition, e.g. by stylesheet and source, with comments and trailing commas', () => {
+		const workspaceFolder = path.resolve('/work/project');
+		const range = SaxonTaskProvider.taskRange(tasksJson, (definition) =>
+			SaxonTaskProvider.isQuickRunTaskFor(definition, 'xslt', path.join(workspaceFolder, 'report.xsl'), path.join(workspaceFolder, 'books.xml'), workspaceFolder));
+		assert.exists(range);
+		assert.include(tasksJson.substring(range!.offset, range!.offset + range!.length), '"type": "xslt",');
+	});
+
+	test('no range without a match, or a tasks array', () => {
+		assert.isUndefined(SaxonTaskProvider.taskRange(tasksJson, (definition) => definition.label === 'missing'));
+		assert.isUndefined(SaxonTaskProvider.taskRange('{ "version": "2.0.0" }', () => true));
+		assert.isUndefined(SaxonTaskProvider.taskRange('', () => true));
+	});
+});
+
 suite('Quick Run - tasks listed for the active XML file', () => {
 	const workspaceFolder = path.resolve('/work/project');
 	const fsPath = (...segments: string[]) => path.join(workspaceFolder, ...segments);

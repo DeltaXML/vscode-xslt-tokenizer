@@ -68,6 +68,19 @@
 			"group": {
 				"kind": "build"
 			}
+		},
+		{
+			"type": "xslt",
+			"label": "range-variables with wf.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/range-variables.xsl",
+			"xmlSource": "${workspaceFolder}/wf.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			}
 		}
 	]
 }

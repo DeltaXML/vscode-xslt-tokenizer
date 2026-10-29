@@ -224,6 +224,15 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return { label, created: true };
     }
 
+    // the offset and length in tasks.json's text of the first task (by its definition) that matches - e.g. to show a
+    // Quick Run task for editing
+    public static taskRange(text: string, matches: (definition: vscode.TaskDefinition) => boolean): { offset: number; length: number } | undefined {
+        const root = jsc.parseTree(text);
+        const tasksNode = root ? jsc.findNodeAtLocation(root, ['tasks']) : undefined;
+        const taskNode = tasksNode?.type === 'array' ? tasksNode.children?.find((node) => node.type === 'object' && matches(jsc.getNodeValue(node))) : undefined;
+        return taskNode ? { offset: taskNode.offset, length: taskNode.length } : undefined;
+    }
+
     // the labels of the tasks picked for each quick-run type, stylesheet and source, when several tasks are for them -
     // most recently picked first
     private static pickedTasks = new Map<string, string[]>();

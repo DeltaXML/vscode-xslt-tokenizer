@@ -74,6 +74,49 @@ async function syntaxExtensionsReason(fsPath: string) {
 	}
 }
 
+// the highlight of a task shown in tasks.json - as for a symbol picked with 'Go to Symbol'
+const taskHighlight = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: new vscode.ThemeColor('editor.rangeHighlightBackground') });
+
+// opens the workspace folder's tasks.json with the first task that matches highlighted, and the cursor at its start -
+// highlighted until the cursor's moved or the file's edited. A task just written to the file may not be in an open
+// tasks.json document until VS Code has reloaded it, so that's retried briefly; with no matching task, the file's opened
+async function showTaskInTasksJson(workspaceFolder: vscode.WorkspaceFolder, matches: (definition: vscode.TaskDefinition) => boolean) {
+	const document = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'));
+	let taskRange = SaxonTaskProvider.taskRange(document.getText(), matches);
+	for (let attempt = 0; !taskRange && attempt < 10; attempt++) {
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		taskRange = SaxonTaskProvider.taskRange(document.getText(), matches);
+	}
+	const editor = await vscode.window.showTextDocument(document);
+	if (!taskRange) {
+		return;
+	}
+	const range = new vscode.Range(document.positionAt(taskRange.offset), document.positionAt(taskRange.offset + taskRange.length));
+	editor.selection = new vscode.Selection(range.start, range.start);
+	editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+	editor.setDecorations(taskHighlight, [range]);
+	const listeners: vscode.Disposable[] = [];
+	const clear = () => {
+		editor.setDecorations(taskHighlight, []);
+		listeners.forEach((listener) => listener.dispose());
+	};
+	listeners.push(vscode.window.onDidChangeTextEditorSelection((e) => {
+		if (e.textEditor === editor && (e.kind === vscode.TextEditorSelectionChangeKind.Keyboard || e.kind === vscode.TextEditorSelectionChangeKind.Mouse)) {
+			clear();
+		}
+	}));
+	listeners.push(vscode.workspace.onDidChangeTextDocument((e) => {
+		if (e.document === document && e.contentChanges.length > 0) {
+			clear();
+		}
+	}));
+	listeners.push(vscode.workspace.onDidCloseTextDocument((closed) => {
+		if (closed === document) {
+			clear();
+		}
+	}));
+}
+
 // The symbol providers also report problems, but VS Code only asks them for symbols for its breadcrumbs, sticky scroll
 // or Outline view - with all of those off, no problems would be reported. So the symbols of each document in these
 // languages that's open in an editor are asked for when it's shown or edited (after a pause in typing) - also when it
@@ -347,9 +390,9 @@ export function activate(context: vscode.ExtensionContext) {
 			`Task '${t.name}': the XSLT 4.0 stylesheet '${path.basename(xsltFsPath)}' is run with "allowSyntaxExtensions40": "off", so Saxon will report any XPath 4.0 syntax as an error. Set it to "auto" or "on" in tasks.json.` :
 			`Task '${t.name}': the stylesheet '${path.basename(xsltFsPath)}' uses XSLT 4.0 item types or notes, and is run with "allowSyntaxExtensions40": "off", so Saxon will report them as errors. Set it to "auto" or "on" in tasks.json.`;
 		vscode.window.showWarningMessage(message, openAction).then(async (choice) => {
-			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+			const workspaceFolder = typeof t.scope === 'object' ? t.scope : vscode.workspace.workspaceFolders?.[0];
 			if (choice === openAction && workspaceFolder) {
-				vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'));
+				showTaskInTasksJson(workspaceFolder, (definition) => definition.type === t.definition.type && definition.label === t.name);
 			}
 		});
 	}));
@@ -624,14 +667,41 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// a stylesheet with both match templates and xsl:initial-template can be run either way - Quick Run can't tell
 	// which is intended, so it keeps to the XML context file, and points out the alternative once, when the task is created
-	const showInitialTemplateTip = (label: string, sourceName: string) => {
-		const openTasksAction = 'Open tasks.json';
-		vscode.window.showInformationMessage(`Quick Run: task '${label}' applies templates to ${sourceName}. This stylesheet also declares xsl:initial-template - to start from it instead, add "initialTemplate": "" to the task (${sourceName} then becomes the global context item), or pick 'None' as the XML context file.`, openTasksAction).then((choice) => {
-			const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-			if (choice === openTasksAction && workspaceFolder) {
-				vscode.window.showTextDocument(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'));
+	const showInitialTemplateTip = (label: string, sourceName: string, showTask: () => void) => {
+		const editTaskAction = 'Edit Task';
+		vscode.window.showInformationMessage(`Quick Run: task '${label}' applies templates to ${sourceName}. This stylesheet also declares xsl:initial-template - to start from it instead, add "initialTemplate": "" to the task (${sourceName} then becomes the global context item), or pick 'None' as the XML context file.`, editTaskAction).then((choice) => {
+			if (choice === editTaskAction) {
+				showTask();
 			}
 		});
+	};
+
+	// the first run of a stylesheet with a source saves a task for them in tasks.json - which isn't obvious, so this says
+	// so, until the user asks not to
+	const hideTaskSavedTipKey = 'xslt-xpath.hideTaskSavedTip';
+	const showTaskSavedTip = (taskType: QuickRunTaskType, label: string, showTask: () => void) => {
+		if (context.globalState.get(hideTaskSavedTipKey)) {
+			return;
+		}
+		const editTaskAction = 'Edit Task';
+		const hideAction = "Don't Show Again";
+		const usedBy = taskType === 'xslt' ? 'Quick Run and Debug use' : 'Quick Run uses';
+		vscode.window.showInformationMessage(`${usedBy} the task '${label}', saved in tasks.json - edit it to set stylesheet parameters, the result file and other options.`, editTaskAction, hideAction).then((choice) => {
+			if (choice === editTaskAction) {
+				showTask();
+			} else if (choice === hideAction) {
+				context.globalState.update(hideTaskSavedTipKey, true);
+			}
+		});
+	};
+
+	// shows the quick-run task for the stylesheet and source in tasks.json - by label too, as several may be for the pair
+	const showQuickRunTask = (taskType: QuickRunTaskType, label: string, xsltFsPath: string, xmlSourceFsPath: string | undefined) => {
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		if (workspaceFolder) {
+			showTaskInTasksJson(workspaceFolder, (definition) => definition.label === label &&
+				SaxonTaskProvider.isQuickRunTaskFor(definition, taskType, xsltFsPath, xmlSourceFsPath, workspaceFolder.uri.fsPath));
+		}
 	};
 
 	// the selected Quick Run processor's task type, or undefined (having reported why) if it isn't set up to run
@@ -671,8 +741,13 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 			if (quickRunTask) {
 				const { label, created } = quickRunTask;
-				if (created && xmlSourceFsPath && await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
-					showInitialTemplateTip(label, path.basename(xmlSourceFsPath));
+				if (created) {
+					const showTask = () => showQuickRunTask(taskType, label, xsltFsPath, xmlSourceFsPath);
+					if (xmlSourceFsPath && await SaxonTaskProvider.declaresInitialTemplate(xsltDocument, xsltDefintiionProvider)) {
+						showInitialTemplateTip(label, path.basename(xmlSourceFsPath), showTask);
+					} else {
+						showTaskSavedTip(taskType, label, showTask);
+					}
 				}
 				// a task just written to tasks.json isn't returned by fetchTasks until VS Code has asynchronously
 				// reloaded the file - on a first run the initial fetch nearly always misses it, so retry briefly
@@ -835,6 +910,9 @@ export function activate(context: vscode.ExtensionContext) {
 				return undefined;
 			}
 			if (quickRunTask) {
+				if (quickRunTask.created) {
+					showTaskSavedTip('xslt', quickRunTask.label, () => showQuickRunTask('xslt', quickRunTask.label, xsltDocument.uri.fsPath, xmlSourceFsPath));
+				}
 				return { type: XsltDebug.type, request: 'launch', name: `Debug ${quickRunTask.label}`, task: quickRunTask.label };
 			}
 		} catch (e) {
@@ -909,6 +987,47 @@ export function activate(context: vscode.ExtensionContext) {
 	// the processor-specific variants exist only so the editor title play button's tooltip names the processor
 	for (const command of ['xslt-xpath.quickRunXslt', 'xslt-xpath.quickRunXsltSaxonJ', 'xslt-xpath.quickRunXsltSaxonJS', 'xslt-xpath.quickRunXsltSaxonC']) {
 		context.subscriptions.push(vscode.commands.registerCommand(command, quickRunXslt));
+	}
+
+	// shows, in tasks.json, the task of this type that Quick Run (or for 'xslt', Debug too) uses for the active stylesheet
+	// (or the top-level stylesheet importing it) and the XML context file - first saving it, as a run would, if there
+	// isn't one yet
+	const editQuickRunTask = async (taskType: QuickRunTaskType) => {
+		const commandName = 'Edit Quick Run Task';
+		const activeEditor = vscode.window.activeTextEditor;
+		if (!activeEditor || activeEditor.document.languageId !== 'xslt') {
+			vscode.window.showErrorMessage(`${commandName}: open an XSLT stylesheet in the active editor first.`);
+			return;
+		}
+		if (!vscode.workspace.workspaceFolders?.[0]) {
+			vscode.window.showErrorMessage(`${commandName}: Quick Run tasks are saved in the workspace folder's .vscode/tasks.json - open a folder first.`);
+			return;
+		}
+		const xsltDocument = await stylesheetToRun(activeEditor.document);
+		if (!xsltDocument) {
+			return;
+		}
+		const showTask = async (xmlSourceFsPath: string | undefined) => {
+			try {
+				const quickRunTask = await SaxonTaskProvider.findOrCreateQuickRunTask(taskType, xsltDocument, xmlSourceFsPath, xsltDefintiionProvider);
+				if (quickRunTask && quickRunTask !== 'cancelled') {
+					showQuickRunTask(taskType, quickRunTask.label, xsltDocument.uri.fsPath, xmlSourceFsPath);
+				}
+			} catch (e) {
+				vscode.window.showErrorMessage(`${commandName}: couldn't read or update tasks.json - ${e instanceof Error ? e.message : e}`);
+			}
+		};
+		const source = await quickRunSource(xsltDocument, commandName, taskType, () => showTask(xsltDocument.uri.fsPath));
+		if (source) {
+			await showTask(source.xmlSourceFsPath);
+		}
+	};
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.editQuickRunTask', () => editQuickRunTask(getQuickRunTaskType(vscode.window.activeTextEditor?.document.uri))));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.editDebugTask', () => editQuickRunTask('xslt')));
+	// the processor-specific variants exist only so their titles in the editor title run menu name the task
+	const editTaskVariants: [string, QuickRunTaskType][] = [['xslt-xpath.editQuickRunTaskSaxonJ', 'xslt'], ['xslt-xpath.editQuickRunTaskSaxonJS', 'xslt-js'], ['xslt-xpath.editQuickRunTaskSaxonC', 'xslt-c']];
+	for (const [command, taskType] of editTaskVariants) {
+		context.subscriptions.push(vscode.commands.registerCommand(command, () => editQuickRunTask(taskType)));
 	}
 
 	// with an XML file active, offers the XSLT tasks that can run on it: tasks whose xmlSource is this file (e.g. those
