@@ -848,6 +848,7 @@ export class XslLexer {
         this.isXSLT40 = false;
         this.setNativePrefix(this.languageConfiguration.nativePrefix);
         let rootNamed = false;
+        let contextGlobalStart = 0;
         const rootAttributes = new Map<string, string>();
         this.lineNumber = 0;
         this.lineCharCount = -1;
@@ -1051,6 +1052,8 @@ export class XslLexer {
                                 tagGlobalInstructionType = GlobalInstructionType.RootXSLT;
                             } if (xmlElementStack.length === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
+                                // the declarations recorded for this top-level element come after this
+                                contextGlobalStart = this.globalInstructionData.length;
                             } else if (xmlElementStack.length === 2 
                                 && (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template)
                                 && isNativeElement && elementProperties.nativeName === 'param') {
@@ -1285,7 +1288,9 @@ export class XslLexer {
                                 }
                             } else if (isGlobalParameterName) {
                                 let attValue = tokenChars.join('');
-                                if (this.globalInstructionData.length > 0) {
+                                // a parameter of the enclosing function or template, if it's recorded - not one with a shadow
+                                // attribute for its name, e.g. _name="{$n}", whose parameters aren't the previous one's
+                                if (this.globalInstructionData.length > contextGlobalStart) {
                                     let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
                                     if (gd.memberNames) {
                                         if (gd.memberNames.indexOf(attValue) > -1) {

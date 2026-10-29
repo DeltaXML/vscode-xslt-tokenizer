@@ -31,6 +31,7 @@ export class XslLexerLight extends XslLexer {
         this.globalModeData = [];
         this.setNativePrefix(this.languageConfiguration.nativePrefix);
         let rootNamed = false;
+        let contextGlobalStart = 0;
         const rootAttributes = new Map<string, string>();
 
         let currentState: XMLCharState = XMLCharState.init;
@@ -141,6 +142,8 @@ export class XslLexerLight extends XslLexer {
                             topLevelParamNamePushed = false;
                             if (xmlElementStack === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
+                                // the declarations recorded for this top-level element come after this
+                                contextGlobalStart = this.globalInstructionData.length;
                             } else if (xmlElementStack === 2 
                                 && (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template)
                                 && isNativeElement && elementProperties.nativeName === 'param') {
@@ -295,7 +298,8 @@ export class XslLexerLight extends XslLexer {
                                 //tagGlobalInstructionType = GlobalInstructionType.Unknown;
                             } else if (isGlobalParameterName || isGlobalUsePackageVersion) {
                                 let attValue = tokenChars.join('');
-                                if (this.globalInstructionData.length > 0) {
+                                // of the enclosing declaration, if it's recorded - not one with a shadow attribute for its name
+                                if (this.globalInstructionData.length > contextGlobalStart) {
                                     let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
                                     if (isGlobalUsePackageVersion) {
                                         gd['version'] = attValue;

@@ -132,6 +132,13 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.isAbove((await problems(simplified.replace(' xsl:version="3.0"', ''))).length, 0);
 	});
 
+	test('a function with a shadow attribute for its name: its parameters aren\'t the previous function\'s (initial-function-101)', async () => {
+		const fn = (name: string) => `<xsl:function ${name} xmlns:f="urn:f"><xsl:param name="p"/><xsl:sequence select="$p"/></xsl:function>`;
+		assert.deepEqual(await problems(stylesheet(fn('name="f:a"') + fn('_name="f:b"') + fn('_name="{\'f:c\'}"'))), []);
+		// still reported: a duplicate in one function
+		assert.deepEqual(await problems(stylesheet('<xsl:function name="f:a" xmlns:f="urn:f"><xsl:param name="p"/><xsl:param name="p"/><xsl:sequence select="$p"/></xsl:function>')), ['XSLT: Duplicate parameter name: \'p\'']);
+	});
+
 	test('the name of a package is a URI, e.g. urn:simple (package-version-001)', async () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:template name="main"/>', 'xsl:package', ' name="urn:simple" package-version="1.0"')), []);
 		assert.deepEqual(await problems(stylesheet('<xsl:use-package name="http://example.com/pkg/a" package-version="*"/>\n<xsl:template name="main"/>', 'xsl:package', ' name="urn:b"')), []);
