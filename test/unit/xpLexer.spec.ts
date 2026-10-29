@@ -48,6 +48,13 @@ describe('XPathLexer', () => {
             expect(labels('@*')).to.deep.equal(['@*:attributeNameTest']);
         });
 
+        it('should take an EQName after @ or # as one token, with a wildcard', () => {
+            expect(labels('@Q{urn:a}b')).to.deep.equal(['@Q{urn:a}b:attributeNameTest']);
+            expect(labels('@Q{}*')).to.deep.equal(['@Q{}*:attributeNameTest']);
+            expect(labels('#Q{urn:a}b')).to.deep.equal(['#Q{urn:a}b:functionNameTest']);
+            expect(labels('@Q{urn:a}b * 2')).to.deep.equal(['@Q{urn:a}b:attributeNameTest', '*:operator', '2:number']);
+        });
+
         it('should take an occurrence indicator after whitespace in a type declaration as part of the type', () => {
             expect(labels('xs:integer *', true)).to.deep.equal(['xs:integer:simpleType', '*:simpleType']);
             expect(labels('xs:string ?', true)).to.deep.equal(['xs:string:simpleType', '?:simpleType']);

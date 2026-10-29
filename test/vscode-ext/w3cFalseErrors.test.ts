@@ -67,6 +67,35 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:variable name="q" as="xs:integer *" select="1, 2"/><xsl:variable name="r" as="xs:string ?" select="()"/><xsl:template name="t"><xsl:sequence select="$q, $r"/></xsl:template>', 'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"')), []);
 	});
 
+	test('xsl:element and xsl:attribute with a namespace attribute: the name\'s prefix needn\'t be declared (namespace-3118, attribute-0601)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:element name="q:foo" namespace="http://a.com/"/><xsl:element namespace="http://b.com/" name="baz:foo"/><out><xsl:attribute name="c:x" namespace="http://c.com/">1</xsl:attribute></out></xsl:template>')), []);
+		// still reported: without the namespace attribute
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:element name="q:foo"/></xsl:template>')), ['XSLT: Undeclared prefix in name: \'q:foo\'']);
+	});
+
+	test('a prefix declared on the same element, after the attribute using it (call-template-0703, backwards-014, boolean-024)', async () => {
+		const body = '<xsl:variable name="S:v" select="1" xmlns:S="urn:s"/><xsl:template name="t"><xsl:param name="S:p" xmlns:S="urn:s"/></xsl:template>' +
+			'<xsl:template match="/"><xsl:call-template name="t"><xsl:with-param name="S:p" select="$S:v" xmlns:S="urn:s"/></xsl:call-template>' +
+			'<xsl:value-of select="xs:boolean(\'0\')" xmlns:xs="http://www.w3.org/2001/XMLSchema"/><b c="{f:g()}" xmlns:f="http://f.com/"/></xsl:template>';
+		assert.deepEqual((await problems(stylesheet(body))).filter((p) => /prefix/.test(p)), []);
+	});
+
+	test('the xml prefix is always declared (attribute-0901, wildcard-type-003)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:value-of select="@xml:att1"/></xsl:template>')), []);
+		// XPath 4.0: a wildcard in attribute()
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="attribute(xml:*)"/>').replace('version="3.0"', 'version="4.0"')), []);
+	});
+
+	test('XSLT 4.0 type patterns, e.g. ~xs:integer (match-410, next-match-405)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="~xs:integer"/><xsl:template match="~xs:short[. lt 20]"/>', 'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"').replace('version="3.0"', 'version="4.0"')), []);
+	});
+
+	test('EQNames: after @ or # and in xsl:use-attribute-sets on a literal result element (attribute-set-0102, catalog-010, expression-4302)', async () => {
+		const body = '<xsl:attribute-set name="Q{http://example.com/ns}set1"/><xsl:template match="/"><out xsl:use-attribute-sets="Q{http://example.com/ns}set1">' +
+			'<xsl:sequence select="//@Q{http://www.w3.org/2001/XMLSchema-instance}type, @Q{}*, @Q{urn:a}*, #Q{http://example.ns}blah"/></out></xsl:template>';
+		assert.deepEqual(await problems(stylesheet(body).replace('version="3.0"', 'version="4.0"')), []);
+	});
+
 	test('the name of a package is a URI, e.g. urn:simple (package-version-001)', async () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:template name="main"/>', 'xsl:package', ' name="urn:simple" package-version="1.0"')), []);
 		assert.deepEqual(await problems(stylesheet('<xsl:use-package name="http://example.com/pkg/a" package-version="*"/>\n<xsl:template name="main"/>', 'xsl:package', ' name="urn:b"')), []);

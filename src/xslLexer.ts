@@ -1416,7 +1416,9 @@ export class XslLexer {
                                         exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
                                     }
                                 }
-                            } else if (this.nonNativeAvts) {
+                            } else if (this.nonNativeAvts && !attName.startsWith(this.nativePrefix + ':')) {
+                                // not an XSLT attribute of a literal result element, e.g. xsl:use-attribute-sets, whose value may
+                                // have an EQName, e.g. Q{http://example.com/}set1 - an AVT
                                 exit = ExitCondition.CurlyBrace;
                             } else {
                                 exit =ExitCondition.None;

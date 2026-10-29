@@ -420,6 +420,9 @@ export class XPathLexer {
                 } else if (nesting < 0 && char === '*') {
                     nesting = 0;
                     resolvedEarly = true;
+                } else if (char === '*' && this.numberChars[this.numberChars.length - 1] === '}') {
+                    // the wildcard of an EQName, e.g. @Q{urn:a}*
+                    resolvedEarly = true;
                 }
             // no-break intentional
             case CharLevelState.lName:
@@ -436,7 +439,9 @@ export class XPathLexer {
                     // the URI of an EQName variable, e.g. $Q{urn:a}name
                     rv = existing;
                     this.inVarUri = char !== '}';
-                } else if (existing === CharLevelState.lVar && char === 'Q' && nextChar === '{' && this.numberChars.length === 1) {
+                } else if (char === 'Q' && nextChar === '{' && this.numberChars.length === 1 &&
+                    (existing === CharLevelState.lVar || existing === CharLevelState.lAttr || (existing === CharLevelState.lName && this.numberChars[0] === '#'))) {
+                    // an EQName after $, @ or # (an XPath 4.0 QName literal), e.g. $Q{urn:a}name, @Q{urn:a}name or #Q{urn:a}name
                     rv = existing;
                     this.inVarUri = true;
                 } else if (resolvedEarly) {

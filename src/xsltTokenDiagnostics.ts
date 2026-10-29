@@ -283,6 +283,10 @@ export class XsltTokenDiagnostics {
 				return NameValidationError.None;
 			}
 		}
+		if (/^Q\{[^{}]*\}/.test(name)) {
+			// an EQName, e.g. Q{http://example.com/}name - with a URI, not a prefix
+			return /^Q\{[^{}]*\}([\p{L}_][\p{L}\p{N}_.-]*|\*)?$/u.test(name) ? NameValidationError.None : NameValidationError.NameError;
+		}
 		let nameParts = name.split(':');
 		if (nameParts.length > 2) {
 			return NameValidationError.NameError;
@@ -322,13 +326,13 @@ export class XsltTokenDiagnostics {
 							}
 						}
 					} else {
-						valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
+						valid = (prefix === 'xml' || xmlnsPrefixes.indexOf(prefix) > -1) ? NameValidationError.None : NameValidationError.NamespaceError;
 					}
 				} else if (type === ValidationType.PrefixedName) {
 					if (prefix === '*') {
 						nameParts = [suffix];
 					} else {
-						valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
+						valid = (prefix === 'xml' || xmlnsPrefixes.indexOf(prefix) > -1) ? NameValidationError.None : NameValidationError.NamespaceError;
 						if (suffix === '*') {
 							nameParts = [prefix];
 						};
@@ -338,7 +342,7 @@ export class XsltTokenDiagnostics {
 					// TODO: for attributes on non-xsl instructions, check that name is in the attributeGroup: xsl:literal-result-element-attributes (e.g. xsl:expand-text)
 					//valid = xmlnsPrefixes.indexOf(prefix) > -1? NameValidationError.None: NameValidationError.NamespaceError;
 				} else {
-					valid = xmlnsPrefixes.indexOf(prefix) > -1 ? NameValidationError.None : NameValidationError.NamespaceError;
+					valid = (prefix === 'xml' || xmlnsPrefixes.indexOf(prefix) > -1) ? NameValidationError.None : NameValidationError.NamespaceError;
 				}
 			} else if (isSchematron && type === ValidationType.XMLElement) {
 				if (elementStack?.length === 0) {
@@ -1254,8 +1258,14 @@ export class XsltTokenDiagnostics {
 								if (attNameText.length > 6) {
 									let prefix = attNameText.substring(6);
 									if (inheritedPrefixes.indexOf(prefix) < 0) {
-										// in case xmlns comes after xpath expression in same element - remove problem tokens caused by this
-										problemTokens = problemTokens.filter(p => !((p.error === ErrorType.XPathPrefix || p.error === ErrorType.XSLTPrefix) && (p.value.startsWith(prefix + ':') || p.value.startsWith('@' + prefix + ':')) && p.tagElementId === tagElementId));
+										// in case xmlns comes after an attribute using the prefix in the same element, e.g. select="$S:v"
+										// xmlns:S="…" - remove the problems for it: in the start tag, for a name with the prefix, e.g. S:v,
+										// @S:v, $S:v or the function S:f#1
+										const usesPrefix = (p: BaseToken) => (p.error === ErrorType.XPathPrefix || p.error === ErrorType.XSLTPrefix || p.error === ErrorType.XPathFunctionNamespace) &&
+											new RegExp(`^[@$#~]?${prefix.replace(/[.-]/g, '\\$&')}:`).test(p.value);
+										const inStartTag = (p: BaseToken) => p.tagElementId === tagElementId || (!!startTagToken &&
+											(p.line > startTagToken.line || (p.line === startTagToken.line && p.startCharacter >= startTagToken.startCharacter)));
+										problemTokens = problemTokens.filter(p => !(usesPrefix(p) && inStartTag(p)));
 										inheritedPrefixes.push(prefix);
 									}
 									if (prefix === 'ixsl') {
@@ -1524,6 +1534,12 @@ export class XsltTokenDiagnostics {
 								let vType = tagElementName.endsWith(':attribute') ? ValidationType.XMLAttribute : ValidationType.PrefixedName;
 								const nameToTest = tagElementName === "xsl:namespace" && variableName === '' ? 'empty' : variableName;
 								let validateResult = XsltTokenDiagnostics.validateName(nameToTest, vType, docType, xpathPrefixes());
+								// xsl:element or xsl:attribute with a namespace attribute: the name's prefix needn't be declared, e.g.
+								// name="q:foo" namespace="http://example.com/" - the namespace attribute may come after the name
+								if (validateResult === NameValidationError.NamespaceError && (tagElementName === 'xsl:element' || tagElementName === 'xsl:attribute') &&
+									RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(valueToken.line, valueToken.startCharacter)), 'namespace') !== undefined) {
+									validateResult = NameValidationError.None;
+								}
 								if (validateResult !== NameValidationError.None) {
 									valueToken['error'] = validateResult === NameValidationError.NameError ? ErrorType.XSLTName : ErrorType.XSLTPrefix;
 									valueToken['value'] = variableName;
@@ -2889,7 +2905,8 @@ export class XsltTokenDiagnostics {
 							let validationType;
 							let skipValidation = false;
 							if (xpathTokenType !== TokenLevelState.attributeNameTest) {
-								tokenValue = token.value;
+								// XSLT 4.0: a type pattern's type, e.g. xs:integer in match="~xs:integer"
+								tokenValue = token.value.startsWith('~') ? token.value.substring(1) : token.value;
 								validationType = ValidationType.PrefixedName;
 							} else {
 								tokenValue = token.value;
@@ -2912,7 +2929,8 @@ export class XsltTokenDiagnostics {
 					case TokenLevelState.functionNameTest:
 						if (token.value.startsWith('#')) {
 							// XPath 4.0 QName literal, e.g. #xml:lang
-							const qNamePrefixEnd = token.value.indexOf(':');
+							// with a prefix - not an EQName, e.g. #Q{http://example.com/}name
+							const qNamePrefixEnd = token.value.startsWith('#Q{') ? -1 : token.value.indexOf(':');
 							const qNamePrefix = qNamePrefixEnd === -1 ? '' : token.value.substring(1, qNamePrefixEnd);
 							if (!XsltTokenDiagnostics.isXPath40(docType)) {
 								token.error = ErrorType.QNameLiteralRequiresXPath40;
