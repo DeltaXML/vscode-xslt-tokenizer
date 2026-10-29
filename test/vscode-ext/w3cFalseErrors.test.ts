@@ -111,6 +111,27 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.deepEqual(await problems(stylesheet(body)), ['XPath: Function: \'nosuch\' with 1 arguments not found']);
 	});
 
+	test('forwards compatible mode, for a higher version: an unknown top-level element, an unknown instruction with xsl:fallback, an unknown attribute (version-004, forwards-201)', async () => {
+		const body = '<xsl:new-declaration/><xsl:template match="/"><xsl:non-existent-element processing="magic"><xsl:fallback>F</xsl:fallback><xsl:ignored/></xsl:non-existent-element>' +
+			'<xsl:value-of select="1" new-attribute="x"/></xsl:template>';
+		assert.deepEqual(await problems(stylesheet(body).replace('version="3.0"', 'version="8.5"')), []);
+		// an element with a higher version, within a 3.0 stylesheet
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><xsl:future version="9.0"><xsl:fallback/></xsl:future></xsl:template>')), []);
+		// without xsl:fallback, an unknown instruction is still an error (XTSE0010, error-0010bb)
+		assert.lengthOf(await problems(stylesheet('<xsl:template match="/"><xsl:banana/></xsl:template>').replace('version="3.0"', 'version="22.0"')), 1);
+		// and in XSLT 3.0, all are reported
+		assert.isAbove((await problems(stylesheet(body))).length, 0);
+	});
+
+	test('a simplified stylesheet: a literal result element with a sequence constructor (for-each-group-001, math-3318)', async () => {
+		const simplified = '<table xsl:version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"><tr/><xsl:for-each-group select="*" group-by="@c"><xsl:value-of select="1"/></xsl:for-each-group></table>';
+		assert.deepEqual(await problems(simplified), []);
+		// a declaration isn't allowed there
+		assert.deepEqual(await problems(simplified.replace('<tr/>', '<xsl:template match="/"/>')), ['XSLT: instruction: xsl:template not valid in this context']);
+		// without xsl:version, it isn't a simplified stylesheet (XTSE0150, error-0150d)
+		assert.isAbove((await problems(simplified.replace(' xsl:version="3.0"', ''))).length, 0);
+	});
+
 	test('the name of a package is a URI, e.g. urn:simple (package-version-001)', async () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:template name="main"/>', 'xsl:package', ' name="urn:simple" package-version="1.0"')), []);
 		assert.deepEqual(await problems(stylesheet('<xsl:use-package name="http://example.com/pkg/a" package-version="*"/>\n<xsl:template name="main"/>', 'xsl:package', ' name="urn:b"')), []);

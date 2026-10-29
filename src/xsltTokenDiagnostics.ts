@@ -74,6 +74,11 @@ export interface ElementData {
 	childSymbols: vscode.DocumentSymbol[];
 	namespacePrefixes: string[];
 	expectedChildElements: string[];
+	// the element's effective version: its version attribute (xsl:version for a literal result element), or its parent's
+	version?: number;
+	// forwards compatible mode: an XSLT element that isn't known, or not allowed where it is, and which is accepted - at the
+	// top level, or with an xsl:fallback child - whose content isn't checked, as it's ignored
+	isIgnored?: boolean;
 }
 // context value set by the pipeline operator '->' or the simple map operator '!' for their right-hand operand
 export interface OperandContext {
@@ -488,6 +493,14 @@ export class XsltTokenDiagnostics {
 		// XSLT 1.0 backwards compatible mode, for the version attribute of the outermost element, e.g. version="1.0": XPath
 		// 1.0 compatibility mode, in which a string operand is converted to a number, e.g. '6' * 2
 		let isBackwardsCompatible = false;
+		// the version attribute of the start tag being read - xsl:version for a literal result element
+		let tagVersion: number | undefined;
+		// the markup of the text, for an xsl:fallback child in forwards compatible mode - found when it's needed
+		let fallbackMarkup: string | undefined;
+		// forwards compatible mode, for an element whose effective version is higher than XSLT 3.0's, or 4.0's in an XSLT 4.0
+		// module: an XSLT element that isn't known, or not allowed where it is, and an unknown attribute of an XSLT element,
+		// aren't static errors
+		const isForwardsCompatible = (version: number | undefined) => version !== undefined && version > (languageConfig.isVersion4 ? 4 : 3);
 		let rootXmlnsName: string | null = null;
 		// a namespace declaration on an element other than the root, e.g. xmlns:xs on xsl:template
 		let innerXmlnsName: string | null = null;
@@ -910,6 +923,7 @@ export class XsltTokenDiagnostics {
 					case XSLTokenLevelState.xmlPunctuation:
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
+								tagVersion = undefined;
 								tagAttributeNames = [];
 								tagWrittenAttributeNames = [];
 								withinTypeDeclarationAttr = false;
@@ -1007,8 +1021,23 @@ export class XsltTokenDiagnostics {
 								pendingTemplateParamErrors = [];
 
 
+								const effectiveVersion = tagVersion ?? (elementStack.length > 0 ? elementStack[elementStack.length - 1].version : undefined);
+								const forwardsCompatible = isForwardsCompatible(effectiveVersion);
+								// within an element that forwards compatible mode accepts and ignores, nothing is checked
+								let isIgnored = elementStack.length > 0 && !!elementStack[elementStack.length - 1].isIgnored;
 								if (startTagToken && !problem && !startTagToken.error) {
-									let validationError = XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, docType, inheritedPrefixes, elementStack);
+									let validationError = isIgnored ? NameValidationError.None : XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, docType, inheritedPrefixes, elementStack);
+									if (forwardsCompatible && validationError === NameValidationError.XSLTElementNameError) {
+										// an XSLT element that isn't known, or not allowed where it is: ignored at the top level, or else
+										// replaced by its xsl:fallback children - without them, it's still an error (XTSE0010)
+										const isTopLevel = elementStack.length === 1;
+										const tagStart = documentText.lastIndexOf('<', document.offsetAt(new vscode.Position(startTagToken.line, startTagToken.startCharacter)) + 1);
+										fallbackMarkup = fallbackMarkup ?? RecordTypes.blankMarkup(documentText);
+										if (isTopLevel || RecordTypes.childElements(documentText, fallbackMarkup, tagStart, 'xsl:fallback').length > 0) {
+											validationError = NameValidationError.None;
+											isIgnored = true;
+										}
+									}
 									if (validationError !== NameValidationError.None) {
 										startTagToken['error'] = validationError === NameValidationError.NameError ? ErrorType.XMLName : validationError === NameValidationError.NamespaceError ? ErrorType.XMLXMLNS : ErrorType.XSLTInstrUnexpected;
 										startTagToken['value'] = tagElementName;
@@ -1026,7 +1055,7 @@ export class XsltTokenDiagnostics {
 									}
 									// an xsl:note may have any attributes, and its content isn't checked - also before XSLT 4.0,
 									// as a note is excluded with use-when, or else reported itself
-									else if (xsltAttsWithNameErrors.length > 0 && tagElementName !== 'xsl:note' && !elementStack.some((element) => element.symbolName === 'xsl:note')) {
+									else if (xsltAttsWithNameErrors.length > 0 && !forwardsCompatible && !isIgnored && tagElementName !== 'xsl:note' && !elementStack.some((element) => element.symbolName === 'xsl:note')) {
 										startTagToken['error'] = ErrorType.XSLTAttrUnexpected;
 										startTagToken['value'] = tagElementName + '\': \'' + xsltAttsWithNameErrors.join('\', ');
 										problemTokens.push(startTagToken);
@@ -1119,8 +1148,13 @@ export class XsltTokenDiagnostics {
 									}
 									// if top-level element add global variables - these include following variables also:
 									let newVariablesList = elementStack.length === 0 ? globalVariableData : inScopeVariablesList;
+									// a simplified stylesheet, a literal result element with xsl:version, e.g. <html xsl:version="3.0">:
+									// its content is a sequence constructor, as for xsl:if
+									const isSimplifiedStylesheet = attrValType === ValidationType.XMLAttribute && elementStack.length === 0 && tagVersion !== undefined &&
+										(docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40);
 									const stackElementChildren = isSchematron || docType === DocumentTypes.DCP ?
 										tagElementChildren :
+										isSimplifiedStylesheet ? XsltTokenDiagnostics.getExpectedElementNames('xsl:if', schemaQuery, elementStack)[0] :
 										attrValType === ValidationType.XMLAttribute && elementStack.length > 0 ?
 											elementStack[elementStack.length - 1].expectedChildElements :
 											tagElementChildren;
@@ -1137,12 +1171,13 @@ export class XsltTokenDiagnostics {
 											if (tagElementName === 'xsl:function') insideGlobalFunction = true;
 											elementStack.push({
 												namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList,
-												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren
+												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren,
+												version: effectiveVersion, isIgnored
 											});
 										}
 									} else if (startTagToken) {
 										if (tagElementName === 'xsl:function') insideGlobalFunction = true;
-										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren });
+										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren, version: effectiveVersion, isIgnored });
 									}
 									inScopeVariablesList = [];
 									newVariablesList = [];
@@ -1359,6 +1394,9 @@ export class XsltTokenDiagnostics {
 						}
 						if (onRootStartTag && currentAttName === 'version' && isLastPart) {
 							isBackwardsCompatible = Number(variableName.trim()) < 2;
+						}
+						if (isLastPart && ((currentAttName === 'version' && tagElementName.startsWith('xsl:')) || currentAttName === 'xsl:version') && !isNaN(Number(variableName.trim()))) {
+							tagVersion = Number(variableName.trim());
 						}
 						let valueToken = token;
 						if (isSingleName && isContinuation) {
