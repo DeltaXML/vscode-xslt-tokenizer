@@ -139,6 +139,15 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:function name="f:a" xmlns:f="urn:f"><xsl:param name="p"/><xsl:param name="p"/><xsl:sequence select="$p"/></xsl:function>')), ['XSLT: Duplicate parameter name: \'p\'']);
 	});
 
+	test('an EQName in a text or attribute value template: its } doesn\'t end the expression (snapshot-0101)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="/"><c>{exists(parent::Q{http://www.opengis.net/gml/3.2}Envelope)}</c><d a="{Q{urn:x}b}"/></xsl:template>', 'xsl:stylesheet', ' expand-text="yes"')), []);
+	});
+
+	test('a function whose EQName has the local name of a kind test, e.g. Q{f}attribute(...) (sf-boolean-001)', async () => {
+		const fn = '<xsl:function name="Q{f}attribute"><xsl:param name="a"/><xsl:param name="b"/><xsl:sequence select="$a"/></xsl:function>';
+		assert.deepEqual(await problems(stylesheet(fn + '<xsl:template match="/"><xsl:value-of select="Q{f}attribute(\'x\', string(.))"/></xsl:template>')), []);
+	});
+
 	test('the name of a package is a URI, e.g. urn:simple (package-version-001)', async () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:template name="main"/>', 'xsl:package', ' name="urn:simple" package-version="1.0"')), []);
 		assert.deepEqual(await problems(stylesheet('<xsl:use-package name="http://example.com/pkg/a" package-version="*"/>\n<xsl:template name="main"/>', 'xsl:package', ' name="urn:b"')), []);

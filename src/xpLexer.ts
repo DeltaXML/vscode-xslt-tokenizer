@@ -639,6 +639,8 @@ export class XPathLexer {
                             currentLabelState !== CharLevelState.lBt &&
                             currentLabelState !== CharLevelState.mBt &&
                             currentLabelState !== CharLevelState.escBt &&
+                            // the end of a braced URI literal, e.g. Q{urn:a}b, $Q{urn:a}v or @Q{urn:a}b
+                            currentLabelState !== CharLevelState.lUri && !this.inVarUri &&
                             currentChar === "}") {
                             let isNestedOk = false;
                             for (var x = 0; x < nestedTokenStack.length; x++) {
@@ -1065,6 +1067,10 @@ export class XPathLexer {
                     isTypeDeclaration = lastToken2.tokenType === TokenLevelState.simpleType || lastToken2.tokenType === TokenLevelState.nodeType;
                 }
             }
+            if (prevToken?.tokenType === TokenLevelState.uriLiteral && newToken.charType === CharLevelState.lName) {
+                // the local name of an EQName, e.g. attribute in Q{f}attribute('x')
+                newToken.eqNameUri = prevToken.value;
+            }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
             this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration, result);
             if (prevToken && newToken.charType === CharLevelState.sep && newToken.value === '|' && XPathLexer.isChoiceSeparator(result, prevToken, poppedContext, isTypeDeclaration)) {
@@ -1332,7 +1338,10 @@ export class XPathLexer {
     }
 
     private updateTokenBeforeBrackets(prevToken: Token, isTypeDeclaration = false) {
-        if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
+        if (prevToken.eqNameUri !== undefined && (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.nodeType)) {
+            // a function whose name is an EQName, even with the local name of a kind test, e.g. Q{f}attribute('x')
+            prevToken.tokenType = TokenLevelState.function;
+        } else if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
             if (Data.nodeTypes.indexOf(prevToken.value) > -1) {
                 prevToken.tokenType = TokenLevelState.nodeType;
             } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {

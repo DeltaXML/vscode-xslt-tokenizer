@@ -55,6 +55,11 @@ describe('XPathLexer', () => {
             expect(labels('@Q{urn:a}b * 2')).to.deep.equal(['@Q{urn:a}b:attributeNameTest', '*:operator', '2:number']);
         });
 
+        it('should take an EQName with the local name of a kind test, before brackets, as a function', () => {
+            expect(labels("Q{f}attribute('x')")).to.deep.equal(['Q{f}:uriLiteral', 'attribute:function', '(:operator', "'x':string", '):operator']);
+            expect(labels('attribute(a)')).to.deep.equal(['attribute:nodeType', '(:operator', 'a:nodeNameTest', '):operator']);
+        });
+
         it('should take an occurrence indicator after whitespace in a type declaration as part of the type', () => {
             expect(labels('xs:integer *', true)).to.deep.equal(['xs:integer:simpleType', '*:simpleType']);
             expect(labels('xs:string ?', true)).to.deep.equal(['xs:string:simpleType', '?:simpleType']);
