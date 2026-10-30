@@ -3184,6 +3184,11 @@ export class XsltTokenCompletions {
 					newItem3.documentation = "start and close tags";
 					newItem3.insertText = new vscode.SnippetString('${1:element}>\n\t${0}\n</element>');
 					completionItems.push(newItem3);
+				} else if (tagName === 'xsl:expose') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:expose component="${1:function}" names="${2:f:*}" visibility="${3:public}"/>$0');
+					completionItems.push(newItem);
 				} else if (tagName === 'xsl:message') {
 					useCurrent = false;
 					if (inScopeVariablesList.length > 0) {
