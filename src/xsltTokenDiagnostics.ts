@@ -5693,7 +5693,8 @@ export class XsltTokenDiagnostics {
 			problemTokens.push({ line: position.line, startCharacter: position.character, length, value, tokenType: 0, error });
 		};
 		const elementProblem = (element: Element, error: ErrorType, value = element.name) => problem(element.offset + 1, element.nameLength, value, error);
-		const hasAttribute = (element: Element, name: string) => new RegExp(`\\s_?${name}\\s*=`).test(element.tag);
+		const hasAttribute = (element: Element, name: string) => hasAttribute1(element, name) || hasAttribute1(element, '_' + name);
+		const hasAttribute1 = (element: Element, name: string) => new RegExp(`\\s_?${name}\\s*=`).test(element.tag);
 		const getFirstMissingName = (element: Element, names: string[]) => names.find((name) => !hasAttribute(element, name)) ?? null;
 		const isConditional = (element: Element) => hasAttribute(element, 'use-when');
 		const isChild = (element: Element, name: string) => element.name === name && !isConditional(element);
@@ -5750,6 +5751,12 @@ export class XsltTokenDiagnostics {
 						if (missingName) {
 							missingAttributeProblem(element, missingName);
 						}
+					}
+					break;
+				case 'xsl:include':
+				case 'xsl:import':
+					if (!hasAttribute(element, 'href')) {
+						missingAttributeProblem(element, 'href');
 					}
 					break;
 				case 'xsl:attribute':
