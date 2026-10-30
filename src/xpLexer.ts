@@ -1865,6 +1865,7 @@ export enum ErrorType {
     DuplicateCharacterMapName,
     // an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
     ApplyTemplatesDefaultMode,
+	MissingXsltAttribute,
 }
 
 export interface BaseToken {

@@ -4887,6 +4887,9 @@ export class XsltTokenDiagnostics {
 				case ErrorType.TemplateWithoutNameOrMatch:
 					msg = `XSLT: xsl:template must have a match or a name attribute (XTSE0500)`;
 					break;
+				case ErrorType.MissingXsltAttribute:
+					msg = `XSLT: missing attribute: '${tokenValue}'`;
+					break;
 				case ErrorType.TemplateAttributeWithoutMatch:
 					msg = `XSLT: xsl:template has a ${tokenValue} attribute, so it must have a match attribute (XTSE0500)`;
 					break;
@@ -5693,6 +5696,13 @@ export class XsltTokenDiagnostics {
 		const hasAttribute = (element: Element, name: string) => new RegExp(`\\s_?${name}\\s*=`).test(element.tag);
 		const isConditional = (element: Element) => hasAttribute(element, 'use-when');
 		const isChild = (element: Element, name: string) => element.name === name && !isConditional(element);
+		const missingAttributeProblem = (element: Element, attributeName: string) =>
+			problem(
+				element.offset + 1,
+				element.nameLength,
+				attributeName,
+				ErrorType.MissingXsltAttribute
+    );
 
 		const check = (element: Element) => {
 			switch (element.name) {
@@ -5731,6 +5741,16 @@ export class XsltTokenDiagnostics {
 						} else if (attribute) {
 							elementProblem(element, ErrorType.TemplateAttributeWithoutMatch, attribute);
 						}
+					}
+					break;
+				case 'xsl:expose':
+					if (!hasAttribute(element, 'visibility')) {
+						missingAttributeProblem(element, 'visibility');
+					}
+					break;
+				case 'xsl:function':
+					if (!hasAttribute(element, 'name')) {
+						missingAttributeProblem(element, 'name');
 					}
 					break;
 			}
