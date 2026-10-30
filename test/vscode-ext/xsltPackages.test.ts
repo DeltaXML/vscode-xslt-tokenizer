@@ -23,9 +23,57 @@ suite('XSLT packages: declarations and uses', () => {
 		assert.isUndefined(ImportIndex.packageDeclaration(`<xsl:stylesheet name="x" version="3.0"><xsl:package name="y"/></xsl:stylesheet>`));
 	});
 
-	test('the packages used, not in comments', () => {
-		const text = `<xsl:stylesheet version="3.0">\n  <xsl:use-package name="urn:a" package-version="1.0"/>\n  <!-- <xsl:use-package name="urn:old"/> -->\n  <xsl:use-package\n    package-version="*" name="urn:b">\n  </xsl:use-package>\n</xsl:stylesheet>`;
-		assert.deepEqual(ImportIndex.usedPackageNames(text), ['urn:a', 'urn:b']);
+	test('the packages used, with their versions, not in comments', () => {
+		const text = `<xsl:stylesheet version="3.0">\n  <xsl:use-package name="urn:a" package-version="1.0"/>\n  <!-- <xsl:use-package name="urn:old"/> -->\n  <xsl:use-package\n    package-version="2+" name="urn:b">\n  </xsl:use-package>\n  <xsl:use-package name="urn:c"/>\n</xsl:stylesheet>`;
+		assert.deepEqual(ImportIndex.usedPackages(text), [{ name: 'urn:a', versionRange: '1.0' }, { name: 'urn:b', versionRange: '2+' }, { name: 'urn:c', versionRange: undefined }]);
+	});
+});
+
+suite('XSLT packages: versions', () => {
+	test('versions compare their numeric parts as integers, missing parts as 0, then a name part is lower', () => {
+		const sign = (a: string, b: string) => Math.sign(XsltPackages.compareVersions(a, b));
+		assert.strictEqual(sign('1.10', '1.9'), 1);
+		assert.strictEqual(sign('1', '1.0.0'), 0);
+		assert.strictEqual(sign('2.0-beta', '2.0'), -1);
+		assert.strictEqual(sign('2.0-beta', '2.0-alpha'), 1);
+		assert.strictEqual(sign('1.2', '1.2.1'), -1);
+	});
+
+	test('package-version ranges', () => {
+		const matches = (version: string, range: string | undefined) => XsltPackages.versionMatches(version, range);
+		assert.isTrue(matches('3.1', undefined));
+		assert.isTrue(matches('3.1', '*'));
+		assert.isTrue(matches('1.0.0', '1'));
+		assert.isFalse(matches('1.1', '1'));
+		assert.isTrue(matches('1.2.5', '1.2.*'));
+		assert.isTrue(matches('1.2', '1.2.*'));
+		assert.isFalse(matches('1.3', '1.2.*'));
+		assert.isTrue(matches('2.5', '2+'));
+		assert.isFalse(matches('1.9', '2+'));
+		assert.isTrue(matches('1.5', '1 to 2'));
+		assert.isTrue(matches('2.0', '1 to 2'));
+		assert.isFalse(matches('2.1', '1 to 2'));
+		assert.isTrue(matches('0.5', 'to 1'));
+		assert.isTrue(matches('3.0', '1.0, 3.0'));
+		assert.isFalse(matches('2.0', '1.0, 3.0'));
+	});
+
+	test('the highest version in the range, the setting\'s first for the same version', () => {
+		const packages = [
+			{ name: 'urn:a', path: 'setting/a.xsl', version: '1.0' },
+			{ name: 'urn:a', path: '/ws/a1.xsl', version: '1.0.0' },
+			{ name: 'urn:a', path: '/ws/a2.xsl', version: '2.1' },
+			{ name: 'urn:a', path: '/ws/a3.xsl', version: '3.0-beta' },
+			{ name: 'urn:b', path: '/ws/b.xsl' },
+		];
+		assert.strictEqual(XsltPackages.find(packages, 'urn:a')?.path, '/ws/a3.xsl');
+		assert.strictEqual(XsltPackages.find(packages, 'urn:a', '1 to 2.9')?.path, '/ws/a2.xsl');
+		assert.strictEqual(XsltPackages.find(packages, 'urn:a', '1.0')?.path, 'setting/a.xsl');
+		// as the lexer gives an attribute's value, with its quotes
+		assert.strictEqual(XsltPackages.find(packages, 'urn:a', '"1.*"')?.path, 'setting/a.xsl');
+		assert.isUndefined(XsltPackages.find(packages, 'urn:a', '4+'));
+		// a package with no version is version 1
+		assert.strictEqual(XsltPackages.find(packages, 'urn:b', '1.0')?.path, '/ws/b.xsl');
 	});
 });
 
@@ -38,9 +86,11 @@ suite('XSLT packages: -lib for a stylesheet', () => {
 	};
 	const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"';
 	const main = file('main.xsl', `<xsl:stylesheet ${ns}><xsl:import href="module.xsl"/><xsl:use-package name="urn:a"/></xsl:stylesheet>`);
-	file('module.xsl', `<xsl:stylesheet ${ns}><xsl:use-package name="urn:b"/></xsl:stylesheet>`);
+	file('module.xsl', `<xsl:stylesheet ${ns}><xsl:use-package name="urn:b" package-version="1 to 2"/></xsl:stylesheet>`);
 	const a = file('a.xsl', `<xsl:package name="urn:a" ${ns}><xsl:use-package name="urn:c"/></xsl:package>`);
 	const b = file('b.xsl', `<xsl:package name="urn:b" package-version="2" ${ns}/>`);
+	// an older version of urn:b, which the module's package-version leaves out
+	file('b1.xsl', `<xsl:package name="urn:b" package-version="1.5" ${ns}/>`);
 	const c = file('c.xsl', `<xsl:package name="urn:c" ${ns}/>`);
 	file('unused.xsl', `<xsl:package name="urn:unused" ${ns}/>`);
 
@@ -51,7 +101,7 @@ suite('XSLT packages: -lib for a stylesheet', () => {
 
 	test('packages in the workspace are found without the setting', () => {
 		const found = XsltPackages.all().filter((p) => p.path.startsWith(dir));
-		assert.sameDeepMembers(found.map((p) => [p.name, p.version]), [['urn:a', '1'], ['urn:b', '2'], ['urn:c', '1'], ['urn:unused', '1']]);
+		assert.sameDeepMembers(found.map((p) => [p.name, p.version]), [['urn:a', '1'], ['urn:b', '2'], ['urn:b', '1.5'], ['urn:c', '1'], ['urn:unused', '1']]);
 	});
 
 	test('the packages used by the stylesheet, its modules and the packages they use - not others', () => {

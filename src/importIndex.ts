@@ -14,6 +14,12 @@ import { HrefPaths } from './hrefPaths';
 import { RecordTypes } from './recordTypes';
 
 // an xsl:import or xsl:include of a module: its resolved path
+// an xsl:use-package: the name of the package it uses, and its package-version, if any
+export interface UsedPackage {
+	name: string;
+	versionRange?: string;
+}
+
 export interface ModuleReference {
 	path: string;
 	isInclude: boolean;
@@ -36,7 +42,7 @@ export class ImportIndex {
 	private importers = new Map<string, Set<string>>();
 	// the modules that are packages, and the packages each module uses
 	private packageDeclarations = new Map<string, { name: string; version: string }>();
-	private usedPackages = new Map<string, string[]>();
+	private usedPackages = new Map<string, UsedPackage[]>();
 	private building: Promise<void> | undefined;
 	private isBuilt = false;
 	private watcher: vscode.FileSystemWatcher | undefined;
@@ -78,10 +84,18 @@ export class ImportIndex {
 		return name ? { name, version: attribute('package-version') || '1' } : undefined;
 	}
 
-	// the names of the packages an xsl:use-package uses in the text
-	public static usedPackageNames(text: string): string[] {
+	// the packages the xsl:use-package elements in the text use: their names and package-version ranges
+	public static usedPackages(text: string): UsedPackage[] {
 		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
-		return [...withoutComments.matchAll(RecordTypes.xsltPattern(/<xsl:use-package\s[^>]*?(?<![\w.:-])name\s*=\s*(["'])([^"']+)\1/g, withoutComments))].map((match) => match[2].trim());
+		const attribute = (tag: string, name: string) => tag.match(new RegExp(`(?<![\\w.:-])${name}\\s*=\\s*(["'])([^"']*)\\1`))?.[2].trim();
+		const used: UsedPackage[] = [];
+		for (const match of withoutComments.matchAll(RecordTypes.xsltPattern(/<xsl:use-package\s[^>]*>/g, withoutComments))) {
+			const name = attribute(match[0], 'name');
+			if (name) {
+				used.push({ name, versionRange: attribute(match[0], 'package-version') });
+			}
+		}
+		return used;
 	}
 
 	// a module's references, and what it declares or uses of packages
@@ -93,7 +107,7 @@ export class ImportIndex {
 		} else {
 			this.packageDeclarations.delete(file);
 		}
-		const used = ImportIndex.usedPackageNames(text);
+		const used = ImportIndex.usedPackages(text);
 		if (used.length > 0) {
 			this.usedPackages.set(file, used);
 		} else {
@@ -113,8 +127,8 @@ export class ImportIndex {
 		return [...this.packageDeclarations].map(([path, declaration]) => ({ path, ...declaration }));
 	}
 
-	// the names of the packages the module uses - with xsl:use-package
-	public usedPackagesOf(file: string): string[] {
+	// the packages the module uses - with xsl:use-package
+	public usedPackagesOf(file: string): UsedPackage[] {
 		return this.usedPackages.get(file) ?? [];
 	}
 

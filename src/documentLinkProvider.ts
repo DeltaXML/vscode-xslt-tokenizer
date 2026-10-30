@@ -36,9 +36,7 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 				link.tooltip = HrefPaths.linkTooltip(instruction.name, document.fileName);
 				result.push(link);
 			} else if (instruction.type === GlobalInstructionType.UsePackage) {
-				let packageLookup = xsltPackages.find((pkg) => {
-					return pkg.name === instruction.name;
-				});
+				let packageLookup = XsltPackages.find(xsltPackages, instruction.name, instruction.version);
 				if (packageLookup && rootPath) {
 					const packagePath = HrefPaths.settingsPath(packageLookup.path, rootPath);
 					if (packagePath === undefined) {

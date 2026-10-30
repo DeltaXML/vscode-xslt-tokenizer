@@ -35,6 +35,65 @@ export class XsltPackages {
 		return fromSetting.concat(found);
 	}
 
+	// the package an xsl:use-package uses: of those with the name, the highest version that its package-version (default
+	// '*') matches - the first, the setting's before those found in the workspace, for the same version
+	public static find(packages: XsltPackage[], name: string, versionRange?: string): XsltPackage | undefined {
+		const range = versionRange?.replace(/^\s*["']|["']\s*$/g, '');
+		let found: XsltPackage | undefined;
+		for (const pkg of packages) {
+			if (pkg.name === name && XsltPackages.versionMatches(pkg.version ?? '1', range)
+				&& (!found || XsltPackages.compareVersions(pkg.version ?? '1', found.version ?? '1') > 0)) {
+				found = pkg;
+			}
+		}
+		return found;
+	}
+
+	// XSLT 3.0 section 3.5.1: a version is a numeric part, e.g. 1.2.0, with an optional '-' and name part - numeric parts
+	// are compared as integers, a missing one counting as 0, and with equal numeric parts, a version with no name part
+	// is the higher, else the name parts are compared as strings
+	public static compareVersions(a: string, b: string): number {
+		const parse = (version: string) => {
+			const match = version.trim().match(/^([\d.]*)(?:-(.*))?$/);
+			return { numbers: (match?.[1] ?? '').split('.').filter((n) => n !== '').map((n) => parseInt(n, 10)), name: match?.[2] };
+		};
+		const va = parse(a);
+		const vb = parse(b);
+		for (let i = 0; i < Math.max(va.numbers.length, vb.numbers.length); i++) {
+			const difference = (va.numbers[i] ?? 0) - (vb.numbers[i] ?? 0);
+			if (difference !== 0) {
+				return difference;
+			}
+		}
+		if (va.name === vb.name) {
+			return 0;
+		}
+		return va.name === undefined ? 1 : vb.name === undefined ? -1 : va.name < vb.name ? -1 : 1;
+	}
+
+	// whether the version is in an xsl:use-package package-version range: '*', or ranges separated by commas, each a
+	// version (equal to it), 'V.*' (with V's numeric parts as a prefix), 'V+' (V or higher), 'V to W', or 'to W'
+	public static versionMatches(version: string, range: string | undefined): boolean {
+		if (range === undefined || range.trim() === '' || range.trim() === '*') {
+			return true;
+		}
+		return range.split(',').map((r) => r.trim()).some((r) => {
+			let match: RegExpMatchArray | null;
+			if ((match = r.match(/^([\d.]+)\.\*$/))) {
+				const prefix = match[1].split('.').map((n) => parseInt(n, 10));
+				const numbers = version.trim().split('-')[0].split('.').map((n) => parseInt(n, 10));
+				return prefix.every((n, i) => numbers[i] === n);
+			}
+			if ((match = r.match(/^(.+)\+$/))) {
+				return XsltPackages.compareVersions(version, match[1]) >= 0;
+			}
+			if ((match = r.match(/^(.*?)\s*\bto\s+(.+)$/))) {
+				return (match[1] === '' || XsltPackages.compareVersions(version, match[1]) >= 0) && XsltPackages.compareVersions(version, match[2]) <= 0;
+			}
+			return XsltPackages.compareVersions(version, r) === 0;
+		});
+	}
+
 	// the package files the stylesheet uses - with xsl:use-package, from any module it imports or includes, and from the
 	// packages those use in turn - for Saxon's -lib option. Absolute paths, in the order found
 	public static libraryPaths(xsltFsPath: string): string[] {
@@ -48,8 +107,8 @@ export class XsltPackages {
 			}
 			visited.add(file);
 			const { usedPackages, references } = XsltPackages.moduleInfo(file);
-			for (const name of usedPackages) {
-				const pkg = packages.find((p) => p.name === name);
+			for (const used of usedPackages) {
+				const pkg = XsltPackages.find(packages, used.name, used.versionRange);
 				const pkgPath = pkg ? HrefPaths.settingsPath(pkg.path, workspace) : undefined;
 				if (pkgPath && !result.includes(pkgPath)) {
 					result.push(pkgPath);
@@ -69,7 +128,7 @@ export class XsltPackages {
 		}
 		try {
 			const text = fs.readFileSync(file, 'utf8');
-			return { usedPackages: ImportIndex.usedPackageNames(text), references: ImportIndex.moduleReferences(text, file) };
+			return { usedPackages: ImportIndex.usedPackages(text), references: ImportIndex.moduleReferences(text, file) };
 		} catch {
 			return { usedPackages: [], references: [] };
 		}

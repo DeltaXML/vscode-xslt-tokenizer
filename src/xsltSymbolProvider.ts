@@ -219,9 +219,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							} else if (dataObject.type === GlobalInstructionType.UsePackage) {
 								// TODO:
 								const basePath = path.dirname(document.fileName);
-								let packageLookup = xsltPackages.find((pkg) => {
-									return pkg.name === dataObject.name;
-								});
+								let packageLookup = XsltPackages.find(xsltPackages, dataObject.name, dataObject.version);
 								if (packageLookup && rootPath) {
 									result = HrefPaths.settingsPath(packageLookup.path, rootPath) === globals.href;
 								} else {
@@ -1316,9 +1314,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						result.push(resolvedName);
 					}
 				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
-					let packageLookup = xsltPackages.find((pkg) => {
-						return pkg.name === data.name;
-					});
+					let packageLookup = XsltPackages.find(xsltPackages, data.name, data.version);
 					if (packageLookup) {
 						let resolvedName = HrefPaths.settingsPath(packageLookup.path, rootPath);
 						if (resolvedName !== undefined && existingHrefs.indexOf(resolvedName) < 0) {
@@ -1343,9 +1339,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 						result.push(resolvedName);
 					}
 				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
-					let packageLookup = xsltPackages.find((pkg) => {
-						return pkg.name === data.name;
-					});
+					let packageLookup = XsltPackages.find(xsltPackages, data.name, data.version);
 					if (packageLookup) {
 						let resolvedName = HrefPaths.settingsPath(packageLookup.path, rootPath);
 						if (resolvedName !== undefined) {
