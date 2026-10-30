@@ -37,6 +37,8 @@ export interface XsltPackage {
 	name: string;
 	path: string;
 	version?: string;
+	// from the XSLT.resources.xsltPackages setting, rather than found in the workspace
+	fromSetting?: boolean;
 }
 
 export enum SelectionType {

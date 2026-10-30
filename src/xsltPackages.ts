@@ -22,13 +22,13 @@ export class XsltPackages {
 				continue;
 			}
 			if (entry.name) {
-				fromSetting.push({ name: entry.name, path: entry.path, version: entry.version });
+				fromSetting.push({ name: entry.name, path: entry.path, version: entry.version, fromSetting: true });
 				continue;
 			}
 			const filePath = workspace ? HrefPaths.settingsPath(entry.path, workspace) : path.isAbsolute(entry.path) ? entry.path : undefined;
 			const declaration = filePath ? XsltPackages.declarationOf(filePath) : undefined;
 			if (declaration) {
-				fromSetting.push({ name: declaration.name, path: entry.path, version: entry.version ?? declaration.version });
+				fromSetting.push({ name: declaration.name, path: entry.path, version: entry.version ?? declaration.version, fromSetting: true });
 			}
 		}
 		const found = ImportIndex.isEnabled() ? ImportIndex.instance.packages() : [];

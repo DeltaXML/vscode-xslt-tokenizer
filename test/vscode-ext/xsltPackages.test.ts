@@ -18,6 +18,7 @@ import { GlobalInstructionType } from '../../src/xslLexer';
 import { XSLTCodeActions } from '../../src/xsltCodeActions';
 import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
+import { ImportTreeProvider } from '../../src/importTreeProvider';
 
 suite('XSLT packages: declarations and uses', () => {
 	test('a package\'s name and version, from its root element', () => {
@@ -134,6 +135,27 @@ suite('XSLT packages: -lib for a stylesheet', () => {
 	test('completion of an xsl:use-package package-version: * and the versions of the package, highest first', async () => {
 		const found = await completions(`<xsl:stylesheet ${ns}>\n  <xsl:use-package name="urn:b" package-version="¦"/>\n</xsl:stylesheet>`);
 		assert.deepEqual(found.map((item) => item.label), ['*', '2', '1.5']);
+	});
+
+	test('the Imports view shows the packages used, with the version chosen - and a package not found', async () => {
+		const stylesheet = file('viewed.xsl', `<xsl:stylesheet ${ns}><xsl:import href="module.xsl"/><xsl:use-package name="urn:a"/><xsl:use-package name="urn:missing" package-version="2+"/></xsl:stylesheet>`);
+		await ImportIndex.instance.buildFrom([stylesheet]);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(stylesheet));
+		const provider = new ImportTreeProvider(() => document);
+		const [root] = provider.getChildren();
+		const children = provider.getChildren(root);
+		const items = children.map((node) => provider.getTreeItem(node));
+		assert.deepEqual(items.map((item) => item.label), ['module.xsl', 'a.xsl', 'urn:missing']);
+		assert.include(items[1].description as string, 'package a 1');
+		assert.strictEqual((items[1].iconPath as vscode.ThemeIcon).id, 'package');
+		assert.include(items[1].tooltip as string, 'version 1, from the workspace');
+		assert.include(items[2].description as string, 'not found');
+		assert.include(items[2].tooltip as string, 'package-version="2+"');
+		// a package's own packages are its children: urn:a uses urn:c
+		assert.deepEqual(provider.getChildren(children[1]).map((node) => provider.getTreeItem(node).label), ['c.xsl']);
+		// the module's package, with the version its package-version chooses
+		const moduleItems = provider.getChildren(children[0]).map((node) => provider.getTreeItem(node));
+		assert.deepEqual(moduleItems.map((item) => [item.label, item.description]), [['b.xsl', 'package b 2']]);
 	});
 
 	test('a task\'s -lib option - not with a Saxon configuration file', () => {
