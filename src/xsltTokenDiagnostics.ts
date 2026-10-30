@@ -5752,7 +5752,16 @@ export class XsltTokenDiagnostics {
 						}
 					}
 					break;
+				case 'xsl:attribute':
+				case 'xsl:call-template':
+				case 'xsl:element':
+				case 'xsl:key':
 				case 'xsl:function':
+				case 'xsl:merge-source':
+				case 'xsl:param':
+				case 'xsl:processing-instruction':
+				case 'xsl:variable':
+				case 'xsl:with-param':
 					if (!hasAttribute(element, 'name')) {
 						missingAttributeProblem(element, 'name');
 					}
