@@ -12,6 +12,10 @@ import { assert } from 'chai';
 import { ImportIndex } from '../../src/importIndex';
 import { XsltPackages } from '../../src/xsltPackages';
 import { SaxonTaskProvider } from '../../src/saxonTaskProvider';
+import * as vscode from 'vscode';
+import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
+import { GlobalInstructionType } from '../../src/xslLexer';
+import { XSLTCodeActions } from '../../src/xsltCodeActions';
 
 suite('XSLT packages: declarations and uses', () => {
 	test('a package\'s name and version, from its root element', () => {
@@ -114,5 +118,30 @@ suite('XSLT packages: -lib for a stylesheet', () => {
 		assert.sameMembers(option!.substring('-lib:'.length).split(path.delimiter), [a, b, c]);
 		assert.isUndefined(SaxonTaskProvider.libOption({ xsltFile: main, configFilename: 'saxon-config.xml' }));
 		assert.isUndefined(SaxonTaskProvider.libOption({ xsltFile: c }));
+	});
+});
+
+suite('XSLT packages: not found', () => {
+	test('the version a new package gets from the package-version range', () => {
+		assert.strictEqual(XsltPackages.lowestVersion('2.1'), '2.1');
+		assert.strictEqual(XsltPackages.lowestVersion('2+'), '2');
+		assert.strictEqual(XsltPackages.lowestVersion('1.2.*'), '1.2');
+		assert.strictEqual(XsltPackages.lowestVersion('1.5 to 2'), '1.5');
+		assert.isUndefined(XsltPackages.lowestVersion('*'));
+		assert.isUndefined(XsltPackages.lowestVersion('to 2'));
+		assert.isUndefined(XsltPackages.lowestVersion(undefined));
+	});
+
+	test('XTSE3000 on the name, with the quick fixes to create the package or add a package file', async () => {
+		const text = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">\n  <xsl:use-package name="http://example.com/strings" package-version="2+"/>\n</xsl:stylesheet>`;
+		const document = await vscode.workspace.openTextDocument({ content: text, language: 'xslt' });
+		const start = text.indexOf('"http://example.com/strings"');
+		const token = { line: 1, startCharacter: document.positionAt(start).character, length: '"http://example.com/strings"'.length, tokenType: 0, value: '' };
+		const diagnostic = XsltTokenDiagnostics.createPackageNotFoundDiagnostic({ name: 'http://example.com/strings', type: GlobalInstructionType.UsePackage, token, idNumber: 0, version: '"2+"' });
+		assert.strictEqual(diagnostic.message, `XTSE3000: Package 'http://example.com/strings' with package-version '2+' not found - in the workspace, or the XSLT.resources.xsltPackages setting`);
+		const actions = new XSLTCodeActions().provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic], only: undefined, triggerKind: vscode.CodeActionTriggerKind.Invoke }) ?? [];
+		const fixes = actions.filter((action) => action.command?.command === 'xslt-xpath.createPackage' || action.command?.command === 'xslt-xpath.addPackageFile');
+		assert.deepEqual(fixes.map((action) => action.title), [`Create Package 'http://example.com/strings'...`, 'Add Existing Package File...']);
+		assert.deepEqual(fixes[0].command!.arguments!.slice(0, 2), ['http://example.com/strings', '2+']);
 	});
 });

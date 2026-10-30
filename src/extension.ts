@@ -39,6 +39,8 @@ import { SaxonTypeAliases } from './saxonTypeAliases';
 import { CatalogSetting } from './catalogSetting';
 import { CatalogDocumentProvider } from './catalogDocumentProvider';
 import { ImportIndex } from './importIndex';
+import { XsltPackages } from './xsltPackages';
+import { HrefPaths } from './hrefPaths';
 import { ImportTreeProvider } from './importTreeProvider';
 import { FileSelection } from './fileSelection';
 import { XPathQuery } from './xpathQuery';
@@ -634,6 +636,60 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// the quick fix for a function with a prefix that isn't found: the prefix is added to those of functions the processing
 	// system provides - in the workspace folder's settings, the workspace's, or with no workspace, the user's
+	// the quick fixes for a package that isn't found: once the package file is known, the open modules are checked again
+	const packageFound = async (packagePath: string) => {
+		if (ImportIndex.isEnabled()) {
+			await ImportIndex.instance.buildFrom([packagePath]);
+		}
+		relintXsltModules();
+	};
+	// a new package file, with the name - where the user chooses, by default named from the URI's last part, beside the
+	// stylesheet - with the version the package-version asks for, if it's one version or a lowest one
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.createPackage', async (name: string, versionRange: string | undefined, uri: vscode.Uri) => {
+		const fileName = (name.split(/[/:#]/).filter((part) => part !== '').pop() ?? 'package').replace(/[^\w.-]/g, '-').replace(/\.xslt?$/, '') + '.xsl';
+		const target = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(path.join(path.dirname(uri.fsPath), fileName)), filters: { 'XSLT': ['xsl', 'xslt'] }, title: `Create Package '${name}'` });
+		if (!target) {
+			return;
+		}
+		const stylesheet = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString())?.getText() ?? '';
+		const xsltVersion = stylesheet.match(/<[\w.-]+:(?:stylesheet|transform|package)\s[^>]*?\bversion\s*=\s*["']([^"']+)["']/)?.[1] ?? '3.0';
+		const packageVersion = XsltPackages.lowestVersion(versionRange);
+		const text = `<?xml version="1.0" encoding="UTF-8"?>\n<xsl:package xmlns:xsl="http://www.w3.org/1999/XSL/Transform"\n    xmlns:xs="http://www.w3.org/2001/XMLSchema"\n    exclude-result-prefixes="#all"\n    name="${name}"${packageVersion ? `\n    package-version="${packageVersion}"` : ''}\n    version="${xsltVersion}">\n\n</xsl:package>\n`;
+		await vscode.workspace.fs.writeFile(target, Buffer.from(text, 'utf8'));
+		await packageFound(target.fsPath);
+		const editor = await vscode.window.showTextDocument(target, { viewColumn: vscode.ViewColumn.Beside });
+		editor.selection = new vscode.Selection(editor.document.lineCount - 3, 0, editor.document.lineCount - 3, 0);
+	}));
+	// an existing package file, e.g. outside the workspace, added to the XSLT.resources.xsltPackages setting by its path -
+	// if its xsl:package has the name, and a version in the range
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addPackageFile', async (name: string, versionRange: string | undefined, uri: vscode.Uri) => {
+		const picked = await vscode.window.showOpenDialog({ defaultUri: vscode.Uri.file(path.dirname(uri.fsPath)), filters: { 'XSLT': ['xsl', 'xslt'] }, title: `Package file for '${name}'`, canSelectMany: false });
+		if (!picked || picked.length === 0) {
+			return;
+		}
+		const packagePath = picked[0].fsPath;
+		let declaration: { name: string; version: string } | undefined;
+		try {
+			declaration = ImportIndex.packageDeclaration(Buffer.from(await vscode.workspace.fs.readFile(picked[0])).toString('utf8'));
+		} catch {
+			declaration = undefined;
+		}
+		if (!declaration || declaration.name !== name || !XsltPackages.versionMatches(declaration.version, versionRange)) {
+			const found = declaration ? `is package '${declaration.name}', version ${declaration.version}` : `isn't an xsl:package`;
+			vscode.window.showErrorMessage(`Add Existing Package File: ${path.basename(packagePath)} ${found} - not '${name}'${versionRange ? ` with package-version '${versionRange}'` : ''}.`);
+			return;
+		}
+		const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+		const relative = workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, packagePath) : undefined;
+		const settingPath = relative !== undefined && !path.isAbsolute(relative) ? relative.split(path.sep).join('/') : HrefPaths.fileUri(packagePath);
+		const config = vscode.workspace.getConfiguration('XSLT.resources', uri);
+		const target = workspaceFolder ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+		const inspected = config.inspect<object[]>('xsltPackages');
+		const current = (target === vscode.ConfigurationTarget.Workspace ? inspected?.workspaceValue : inspected?.globalValue) ?? [];
+		await config.update('xsltPackages', current.concat([{ path: settingPath }]), target);
+		await packageFound(packagePath);
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addExternalFunctionPrefix', async (prefix: string, uri?: vscode.Uri) => {
 		const config = vscode.workspace.getConfiguration(XsltTokenDiagnostics.externalFunctionPrefixesSection, uri);
 		const target = uri && vscode.workspace.getWorkspaceFolder(uri) ? vscode.ConfigurationTarget.WorkspaceFolder

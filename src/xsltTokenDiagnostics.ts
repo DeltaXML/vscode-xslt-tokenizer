@@ -159,7 +159,9 @@ export enum DiagnosticCode {
 	// a function in a namespace with a prefix, e.g. ext:lookup(), not found - see XSLT.validation.externalFunctionPrefixes
 	prefixedFunctionNotFound,
 	// an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
-	applyTemplatesDefaultMode
+	applyTemplatesDefaultMode,
+	// an xsl:use-package whose package isn't found - in the workspace or the XSLT.resources.xsltPackages setting
+	packageNotFound
 }
 
 export class XsltTokenDiagnostics {
@@ -5263,6 +5265,17 @@ export class XsltTokenDiagnostics {
 	}
 
 	// the problem is why the href has no file path, from HrefPaths.importProblem() - undefined when the file isn't found
+	// as Saxon reports it, XTSE3000 - on the xsl:use-package name
+	public static createPackageNotFoundDiagnostic(data: GlobalInstructionData): vscode.Diagnostic {
+		const token = data.token;
+		const range = new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length);
+		const versionRange = data.version?.replace(/^\s*["']|["']\s*$/g, '').trim();
+		const version = versionRange && versionRange !== '*' ? ` with package-version '${versionRange}'` : '';
+		const diagnostic = new vscode.Diagnostic(range, `XTSE3000: Package '${data.name}'${version} not found - in the workspace, or the XSLT.resources.xsltPackages setting`, vscode.DiagnosticSeverity.Error);
+		diagnostic.code = DiagnosticCode.packageNotFound;
+		return diagnostic;
+	}
+
 	public static createImportDiagnostic(data: GlobalInstructionData, problem?: ImportProblem): vscode.Diagnostic {
 		let token = data.token;
 		let line = token.line;

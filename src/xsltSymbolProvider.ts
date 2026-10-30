@@ -200,12 +200,17 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 			// hrefs that have no file path, e.g. file://folder/a.xsl, or a URI that the XML catalog doesn't map to a file - so
 			// they aren't imported
+			// and packages that aren't found - only once the workspace's packages are known, unless it isn't scanned
+			const packagesKnown = !ImportIndex.isEnabled() || ImportIndex.instance.built;
+			const packageErrors: GlobalInstructionData[] = [];
 			globalInstructionData.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
 					const problem = HrefPaths.importProblem(data.name, document.fileName);
 					if (problem) {
 						importErrors.push({ data, problem });
 					}
+				} else if (data.type === GlobalInstructionType.UsePackage && packagesKnown && !XsltPackages.find(xsltPackages, data.name, data.version)) {
+					packageErrors.push(data);
 				}
 			});
 
@@ -254,6 +259,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					importErrors.forEach((importError) => {
 						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem));
 					});
+					packageErrors.forEach((data) => importDiagnostics.push(XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data)));
 					let allDiagnostics = importDiagnostics.concat(diagnostics);
 					if (allDiagnostics.length > 0 && this.showDiagnostics()) {
 						this.collection.set(document.uri, allDiagnostics);

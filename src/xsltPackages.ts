@@ -94,6 +94,13 @@ export class XsltPackages {
 		});
 	}
 
+	// the version for a new package that a package-version range asks for: the version, or the lowest of 'V+', 'V.*' or
+	// 'V to W' - undefined for '*' or another range, so the package has the default version
+	public static lowestVersion(range: string | undefined): string | undefined {
+		const match = range?.trim().match(/^([\d.]+(?:-\S+)?)(?:\+|\.\*|\s+to\s+.+)?$/);
+		return match?.[1];
+	}
+
 	// the package files the stylesheet uses - with xsl:use-package, from any module it imports or includes, and from the
 	// packages those use in turn - for Saxon's -lib option. Absolute paths, in the order found
 	public static libraryPaths(xsltFsPath: string): string[] {

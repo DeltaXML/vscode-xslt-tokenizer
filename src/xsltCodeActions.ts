@@ -261,6 +261,18 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			action.command = { command: 'xslt-xpath.addExternalFunctionPrefix', title: action.title, arguments: [prefix, document.uri] };
 			codeActions.push(action);
 		});
+		// a package not found: create it, or add an existing package file to the setting
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.packageNotFound).slice(0, 1).forEach((diagnostic) => {
+			const name = document.getText(diagnostic.range).replace(/^["']|["']$/g, '');
+			const versionRange = diagnostic.message.match(/package-version '([^']*)'/)?.[1];
+			const create = new vscode.CodeAction(`Create Package '${name}'...`, vscode.CodeActionKind.QuickFix);
+			create.diagnostics = [diagnostic];
+			create.command = { command: 'xslt-xpath.createPackage', title: create.title, arguments: [name, versionRange, document.uri] };
+			const add = new vscode.CodeAction('Add Existing Package File...', vscode.CodeActionKind.QuickFix);
+			add.diagnostics = [diagnostic];
+			add.command = { command: 'xslt-xpath.addPackageFile', title: add.title, arguments: [name, versionRange, document.uri] };
+			codeActions.push(create, add);
+		});
 		// Saxon type aliases: a fix that runs the command to convert them in the workspace
 		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.saxonTypeAlias).slice(0, 1).forEach((diagnostic) => {
 			const action = new vscode.CodeAction(XsltCodeActionKind.convertSaxonTypeAliases, vscode.CodeActionKind.QuickFix);
