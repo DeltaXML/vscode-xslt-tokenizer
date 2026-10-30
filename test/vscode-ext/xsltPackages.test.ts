@@ -16,6 +16,8 @@ import * as vscode from 'vscode';
 import { XsltTokenDiagnostics } from '../../src/xsltTokenDiagnostics';
 import { GlobalInstructionType } from '../../src/xslLexer';
 import { XSLTCodeActions } from '../../src/xsltCodeActions';
+import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
+import { XSLTConfiguration } from '../../src/languageConfigurations';
 
 suite('XSLT packages: declarations and uses', () => {
 	test('a package\'s name and version, from its root element', () => {
@@ -110,6 +112,28 @@ suite('XSLT packages: -lib for a stylesheet', () => {
 
 	test('the packages used by the stylesheet, its modules and the packages they use - not others', () => {
 		assert.sameMembers(XsltPackages.libraryPaths(main), [a, b, c]);
+	});
+
+	const completions = async (text: string) => {
+		const offset = text.indexOf('¦');
+		const document = await vscode.workspace.openTextDocument({ content: text.replace('¦', ''), language: 'xslt' });
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, document.positionAt(offset), new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined });
+		const items = Array.isArray(result) ? result : result?.items ?? [];
+		return items.map((item) => ({ label: typeof item.label === 'string' ? item.label : item.label.label, range: item.range as vscode.Range | undefined }));
+	};
+
+	test('completion of an xsl:use-package name: each package once, replacing the URI typed so far', async () => {
+		const found = await completions(`<xsl:stylesheet ${ns}>\n  <xsl:use-package name="urn:¦"/>\n</xsl:stylesheet>`);
+		const names = found.map((item) => item.label);
+		['urn:a', 'urn:b', 'urn:c', 'urn:unused'].forEach((name) => assert.include(names, name));
+		assert.strictEqual(names.filter((name) => name === 'urn:b').length, 1);
+		const range = found.find((item) => item.label === 'urn:a')!.range!;
+		assert.strictEqual(range.end.character - range.start.character, 'urn:'.length);
+	});
+
+	test('completion of an xsl:use-package package-version: * and the versions of the package, highest first', async () => {
+		const found = await completions(`<xsl:stylesheet ${ns}>\n  <xsl:use-package name="urn:b" package-version="¦"/>\n</xsl:stylesheet>`);
+		assert.deepEqual(found.map((item) => item.label), ['*', '2', '1.5']);
 	});
 
 	test('a task\'s -lib option - not with a Saxon configuration file', () => {

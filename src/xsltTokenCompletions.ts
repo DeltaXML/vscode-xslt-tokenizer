@@ -15,7 +15,8 @@ import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTSnippets, Snippet } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
-import { XsltSymbolProvider } from './xsltSymbolProvider';
+import { XsltSymbolProvider, XsltPackage } from './xsltSymbolProvider';
+import { XsltPackages } from './xsltPackages';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
@@ -595,7 +596,9 @@ export class XsltTokenCompletions {
 								tagIdentifierName = variableName;
 
 								if (isOnRequiredToken) {
-									if (tagElementName === 'xsl:call-template') {
+									if (tagElementName === 'xsl:use-package') {
+										resultCompletions = XsltTokenCompletions.getPackageNameCompletions(document, position);
+									} else if (tagElementName === 'xsl:call-template') {
 										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
 									} else if (tagElementName === 'xsl:with-param' && elementStack.length > 0) {
 										// get name attribute of parent
@@ -711,6 +714,8 @@ export class XsltTokenCompletions {
 											if (attName === 'as') {
 												let completionStrings = XsltTokenCompletions.sequenceTypesFor(docType);
 												resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.TypeParameter);
+											} else if (attName === 'package-version' && tagElementName === 'xsl:use-package') {
+												resultCompletions = XsltTokenCompletions.getPackageVersionCompletions(document, position);
 											} else {
 												resultCompletions = XsltTokenCompletions.getXSLTAttributeValueCompletions(schemaQuery, position, tagElementName, attName);
 											}
@@ -2891,6 +2896,48 @@ export class XsltTokenCompletions {
 			}
 		});
 		return completionItems;
+	}
+
+	// the attribute value up to the position, from after its opening quote - replaced by a completion, as a package URI
+	// isn't a word, e.g. 'http://exa'
+	private static attributeValueRange(document: vscode.TextDocument, position: vscode.Position) {
+		const before = document.lineAt(position.line).text.substring(0, position.character);
+		const quote = Math.max(before.lastIndexOf('"'), before.lastIndexOf("'"));
+		return new vscode.Range(position.line, quote + 1, position.line, position.character);
+	}
+
+	// for an xsl:use-package name: the packages in the workspace and the XSLT.resources.xsltPackages setting - each once,
+	// with its versions
+	public static getPackageNameCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
+		const range = XsltTokenCompletions.attributeValueRange(document, position);
+		const byName = new Map<string, XsltPackage[]>();
+		XsltPackages.all().forEach((pkg) => byName.set(pkg.name, (byName.get(pkg.name) ?? []).concat(pkg)));
+		return [...byName].map(([name, packages]) => {
+			const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Module);
+			item.range = range;
+			const versions = [...new Set(packages.map((pkg) => pkg.version ?? '1'))].sort((a, b) => XsltPackages.compareVersions(b, a));
+			item.detail = `package-version ${versions.join(', ')}`;
+			item.documentation = packages.map((pkg) => `${pkg.version ?? '1'}: ${pkg.path}`).join('\n');
+			return item;
+		});
+	}
+
+	// for an xsl:use-package package-version: '*', and the versions of the package it names, highest first
+	public static getPackageVersionCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tag = text.substring(text.lastIndexOf('<', offset), text.indexOf('>', offset) + 1);
+		const name = tag.match(/(?<![\w.:-])name\s*=\s*(["'])([^"']*)\1/)?.[2].trim();
+		const versions = [...new Set(XsltPackages.all().filter((pkg) => pkg.name === name).map((pkg) => pkg.version ?? '1'))]
+			.sort((a, b) => XsltPackages.compareVersions(b, a));
+		const range = XsltTokenCompletions.attributeValueRange(document, position);
+		return ['*'].concat(versions).map((version, index) => {
+			const item = new vscode.CompletionItem(version, vscode.CompletionItemKind.Constant);
+			item.range = range;
+			item.sortText = String(index).padStart(3, '0');
+			item.detail = version === '*' ? 'any version - the highest is used' : `a version of ${name}`;
+			return item;
+		});
 	}
 
 	private static getSimpleInsertCompletions(completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
