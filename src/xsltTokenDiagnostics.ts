@@ -5694,6 +5694,7 @@ export class XsltTokenDiagnostics {
 		};
 		const elementProblem = (element: Element, error: ErrorType, value = element.name) => problem(element.offset + 1, element.nameLength, value, error);
 		const hasAttribute = (element: Element, name: string) => new RegExp(`\\s_?${name}\\s*=`).test(element.tag);
+		const getFirstMissingName = (element: Element, names: string[]) => names.find((name) => !hasAttribute(element, name)) ?? null;
 		const isConditional = (element: Element) => hasAttribute(element, 'use-when');
 		const isChild = (element: Element, name: string) => element.name === name && !isConditional(element);
 		const missingAttributeProblem = (element: Element, attributeName: string) =>
@@ -5744,8 +5745,11 @@ export class XsltTokenDiagnostics {
 					}
 					break;
 				case 'xsl:expose':
-					if (!hasAttribute(element, 'visibility')) {
-						missingAttributeProblem(element, 'visibility');
+					{
+						const missingName = getFirstMissingName(element, ['component','names','visibility']);
+						if (missingName) {
+							missingAttributeProblem(element, missingName);
+						}
 					}
 					break;
 				case 'xsl:function':
