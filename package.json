@@ -728,26 +728,25 @@
 					"default": "latest"
 				},
 				"XSLT.resources.xsltPackages": {
-					"description": "Associate file paths with xsl:package names",
+					"description": "XSLT packages for xsl:use-package, outside the workspace - packages in the workspace are found without this. Each package's name and version are read from its xsl:package element unless given here. The packages a stylesheet uses are passed to Saxon with its -lib option",
 					"type": "array",
 					"items": {
 						"type": "object",
 						"properties": {
 							"name": {
 								"type": "string",
-								"description": "XSLT Package Name"
+								"description": "XSLT Package Name - by default, the name in the package's xsl:package element"
 							},
 							"version": {
 								"type": "string",
-								"description": "XSLT Package Version"
+								"description": "XSLT Package Version - by default, the package-version in the package's xsl:package element"
 							},
 							"path": {
 								"type": "string",
-								"description": "Path to named XSLT Package"
+								"description": "Path to the XSLT Package, relative to the workspace folder, or a file: URI"
 							}
 						},
 						"required": [
-							"name",
 							"path"
 						]
 					}

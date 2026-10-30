@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { XsltPackages } from './xsltPackages';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
 import { ModulePrefixes } from './modulePrefixes';
@@ -264,7 +265,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			prefixBindings = this.xslLexer.prefixBindings;
 		}
 
-		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const xsltPackages: XsltPackage[] = XsltPackages.all();
 
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
@@ -411,7 +412,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 		}
 		
-		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const xsltPackages: XsltPackage[] = XsltPackages.all();
 
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;

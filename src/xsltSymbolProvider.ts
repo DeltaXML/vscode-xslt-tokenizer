@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { XsltPackages } from './xsltPackages';
 import { XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
 import { ModulePrefixes } from './modulePrefixes';
@@ -167,7 +168,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const languageConfig = { ...this.languageConfig, isVersion4 };
 		const globalInstructionData = this.xslLexer.globalInstructionData.slice();
 		const prefixBindings = this.xslLexer.prefixBindings;
-		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const xsltPackages: XsltPackage[] = XsltPackages.all();
 
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
@@ -382,7 +383,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		xslLexer.provideCharLevelState = true;
 		const allTokens = xslLexer.analyse(document.getText());
 		const globalInstructionData = xslLexer.globalInstructionData;
-		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const xsltPackages: XsltPackage[] = XsltPackages.all();
 		const { importedGlobals1, accumulatedHrefs } = await XsltSymbolProvider.processTopLevelImports(false, xslLexer, XsltSymbolProvider.importSymbolHrefs, document, globalInstructionData, xsltPackages, parent);
 		let summary: GlobalsSummary = { globals: importedGlobals1, hrefs: accumulatedHrefs };
 		for (let level = 0; summary.hrefs.length > 0 && level < 20; level++) {

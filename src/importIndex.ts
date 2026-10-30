@@ -34,6 +34,9 @@ export class ImportIndex {
 	// for each module, its imports and includes - and for each module, the modules importing or including it
 	private references = new Map<string, ModuleReference[]>();
 	private importers = new Map<string, Set<string>>();
+	// the modules that are packages, and the packages each module uses
+	private packageDeclarations = new Map<string, { name: string; version: string }>();
+	private usedPackages = new Map<string, string[]>();
 	private building: Promise<void> | undefined;
 	private isBuilt = false;
 	private watcher: vscode.FileSystemWatcher | undefined;
@@ -65,6 +68,56 @@ export class ImportIndex {
 		return references;
 	}
 
+	// for a module that's an xsl:package - its root element - the package's name and version (default '1')
+	public static packageDeclaration(text: string): { name: string; version: string } | undefined {
+		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
+		const root = withoutComments.match(/<(?![?!])[^\s>/]+[^>]*>/)?.[0];
+		const tag = root ? RecordTypes.xsltPattern(/^<xsl:package\s/, withoutComments).test(root) ? root : undefined : undefined;
+		const attribute = (name: string) => tag?.match(new RegExp(`(?<![\\w.:-])${name}\\s*=\\s*(["'])([^"']*)\\1`))?.[2].trim();
+		const name = attribute('name');
+		return name ? { name, version: attribute('package-version') || '1' } : undefined;
+	}
+
+	// the names of the packages an xsl:use-package uses in the text
+	public static usedPackageNames(text: string): string[] {
+		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
+		return [...withoutComments.matchAll(RecordTypes.xsltPattern(/<xsl:use-package\s[^>]*?(?<![\w.:-])name\s*=\s*(["'])([^"']+)\1/g, withoutComments))].map((match) => match[2].trim());
+	}
+
+	// a module's references, and what it declares or uses of packages
+	private index(file: string, text: string) {
+		this.setReferences(file, ImportIndex.moduleReferences(text, file));
+		const declaration = ImportIndex.packageDeclaration(text);
+		if (declaration) {
+			this.packageDeclarations.set(file, declaration);
+		} else {
+			this.packageDeclarations.delete(file);
+		}
+		const used = ImportIndex.usedPackageNames(text);
+		if (used.length > 0) {
+			this.usedPackages.set(file, used);
+		} else {
+			this.usedPackages.delete(file);
+		}
+	}
+
+	private forget(file: string) {
+		this.setReferences(file, []);
+		this.references.delete(file);
+		this.packageDeclarations.delete(file);
+		this.usedPackages.delete(file);
+	}
+
+	// the xsl:package modules in the workspace, by path
+	public packages(): { path: string; name: string; version: string }[] {
+		return [...this.packageDeclarations].map(([path, declaration]) => ({ path, ...declaration }));
+	}
+
+	// the names of the packages the module uses - with xsl:use-package
+	public usedPackagesOf(file: string): string[] {
+		return this.usedPackages.get(file) ?? [];
+	}
+
 	// the index is built: a request for the master of a module while it's building returns undefined - use
 	// whenBuilt() to wait for it
 	public get built() {
@@ -93,7 +146,7 @@ export class ImportIndex {
 		for (let i = 0; i < files.length; i += batchSize) {
 			await Promise.all(files.slice(i, i + batchSize).map(async (file) => {
 				try {
-					this.setReferences(file, ImportIndex.moduleReferences(await fs.promises.readFile(file, 'utf8'), file));
+					this.index(file, await fs.promises.readFile(file, 'utf8'));
 				} catch {
 					// unreadable: ignore
 				}
@@ -121,17 +174,16 @@ export class ImportIndex {
 				return;
 			}
 			try {
-				this.setReferences(uri.fsPath, ImportIndex.moduleReferences(await fs.promises.readFile(uri.fsPath, 'utf8'), uri.fsPath));
+				this.index(uri.fsPath, await fs.promises.readFile(uri.fsPath, 'utf8'));
 			} catch {
-				this.setReferences(uri.fsPath, []);
+				this.forget(uri.fsPath);
 			}
 			this.onDidChangeEmitter.fire();
 		};
 		this.watcher.onDidChange(update);
 		this.watcher.onDidCreate(update);
 		this.watcher.onDidDelete((uri) => {
-			this.setReferences(uri.fsPath, []);
-			this.references.delete(uri.fsPath);
+			this.forget(uri.fsPath);
 			this.onDidChangeEmitter.fire();
 		});
 	}

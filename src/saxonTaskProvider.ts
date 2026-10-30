@@ -15,6 +15,7 @@ import { LexPosition } from './xpLexer';
 import { CatalogSetting } from './catalogSetting';
 import { unquotedPath } from './settingPaths';
 import { RecordTypes } from './recordTypes';
+import { XsltPackages } from './xsltPackages';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -727,6 +728,10 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             // the XSLT.resources.catalog setting, as used for the task's hrefs in the editor
             commandLineArgs.push(catalogOption);
         }
+        const libOption = SaxonTaskProvider.libOption(xsltTask);
+        if (libOption) {
+            commandLineArgs.push(libOption);
+        }
         if (nogo) {
             commandLineArgs.push('-nogo');
         }
@@ -747,6 +752,31 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 
         const saxonClassName = altSaxonJarPath ? 'com.deltaxml.saxon.perf.AltTransform' : 'net.sf.saxon.Transform';
         return { classPath: classPaths, mainClass: saxonClassName, args: commandLineArgs.concat(saxonFeaturesCommand).concat(xsltParametersCommand) };
+    }
+
+    // Saxon's -lib option, for the packages the stylesheet uses with xsl:use-package (see XsltPackages) - Saxon finds
+    // each by the name and version in its xsl:package element. Not for a task with a Saxon configuration file, which
+    // may declare the packages itself
+    public static libOption(task: { xsltFile?: unknown; configFilename?: unknown }): string | undefined {
+        if (task.configFilename || typeof task.xsltFile !== 'string') {
+            return undefined;
+        }
+        const xsltFsPath = SaxonTaskProvider.taskFilePath(task.xsltFile);
+        const libraryPaths = xsltFsPath ? XsltPackages.libraryPaths(xsltFsPath) : [];
+        return libraryPaths.length > 0 ? '-lib:' + libraryPaths.join(path.delimiter) : undefined;
+    }
+
+    // a task's file path property: '${file}' is the active editor's file, and a path may be relative to the workspace
+    // folder, or start with '${workspaceFolder}' - undefined for another variable, e.g. ${command:...}
+    private static taskFilePath(value: string): string | undefined {
+        if (value === '${file}') {
+            return vscode.window.activeTextEditor?.document.uri.fsPath;
+        }
+        if (value.includes('${') && !value.startsWith('${workspaceFolder}')) {
+            return undefined;
+        }
+        const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        return folder ? SaxonTaskProvider.resolveStoredPath(value, folder) : path.isAbsolute(value) ? value : undefined;
     }
 
     private static testSaxon9902(saxonJarPath: string | undefined) {
