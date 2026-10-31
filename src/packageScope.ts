@@ -14,12 +14,15 @@ import { XSLTLightConfiguration } from './languageConfigurations';
 import { HrefPaths } from './hrefPaths';
 import { ModulePrefixes } from './modulePrefixes';
 import { XsltPackages } from './xsltPackages';
+import { RecordTypes } from './recordTypes';
+import { XdocNotes } from './xdocNote';
 import type { XsltPackage } from './xsltSymbolProvider';
 
 // a module of a package: the package's xsl:package module, or one it imports or includes
 interface PackageModule {
 	path: string;
 	mtime: number;
+	text: string;
 	data: GlobalInstructionData[];
 	exposes: GlobalInstructionData[];
 	bindings?: Map<string, string>;
@@ -90,8 +93,9 @@ export class PackageScope {
 	}
 
 	// problems with the xsl:accept and xsl:override elements of the module's xsl:use-package elements, and its
-	// declarations that have the name of a component it uses from a package
-	public static problems(usePackages: GlobalInstructionData[], declarations: GlobalInstructionData[], moduleBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[], workspace: string | undefined): PackageProblem[] {
+	// declarations that have the name of a component it uses from a package - the module's text is for the signatures
+	// of its declarations in xsl:override
+	public static problems(text: string, usePackages: GlobalInstructionData[], declarations: GlobalInstructionData[], moduleBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[], workspace: string | undefined): PackageProblem[] {
 		const problems: PackageProblem[] = [];
 		for (const usePackage of usePackages) {
 			const used = PackageScope.usedPackage(usePackage, xsltPackages, workspace, 0, new Set(), true);
@@ -141,6 +145,12 @@ export class PackageScope {
 					problems.push({ token: override.token, message: `XTSE3058: There is no ${kind} named '${override.name}' in package '${packageName}' to override` });
 				} else if (!matching.some((c) => c.visibility === 'public' || c.visibility === 'abstract')) {
 					problems.push({ token: override.token, message: `XTSE3060: The ${kind} '${override.name}' can't be overridden: it's ${matching[0].visibility} in package '${packageName}'` });
+				} else {
+					const overridden = matching.find((c) => c.visibility === 'public' || c.visibility === 'abstract')!;
+					const mismatch = PackageScope.signatureMismatch(text, override, overridden);
+					if (mismatch) {
+						problems.push({ token: override.token, message: `XTSE3070: The overriding ${kind} doesn't match the one in package '${packageName}': ${mismatch}` });
+					}
 				}
 			}
 			// a declaration of the module with the name of a component it can use from the package - outside xsl:override
@@ -165,6 +175,200 @@ export class PackageScope {
 		const pkg = XsltPackages.find(xsltPackages, usePackage.name, usePackage.version);
 		const used = pkg ? PackageScope.usedPackage(usePackage, xsltPackages, workspace, 0, new Set(), true) : undefined;
 		return pkg && used ? { pkg, path: HrefPaths.settingsPath(pkg.path, workspace ?? path.dirname(pkg.path)), available: used.available } : undefined;
+	}
+
+	// XTSE3070: how a declaration in xsl:override (in the text) differs from the component it overrides - undefined if
+	// they match. Saxon requires the same types, so they're compared as written: with their prefixes' namespaces and
+	// without whitespace, an omitted 'as' being item()*. A function's parameters are compared by position, and a
+	// template's by name, with their required and tunnel attributes - a template may leave out tunnel parameters, and add
+	// parameters that aren't required
+	private static signatureMismatch(text: string, override: GlobalInstructionData, component: GlobalInstructionData): string | undefined {
+		const componentText = component.href ? PackageScope.module(component.href)?.text : undefined;
+		const mine = PackageScope.signature(text, override);
+		const theirs = componentText !== undefined ? PackageScope.signature(componentText, component) : undefined;
+		if (!mine || !theirs) {
+			return undefined;
+		}
+		const shown = (as: string | undefined) => as === undefined ? 'none' : `'${as}'`;
+		switch (PackageScope.componentKind(override.type)) {
+			case 'variable':
+				return PackageScope.typesDiffer(mine.type, theirs.type) ? `its type is ${shown(mine.as)}, not ${shown(theirs.as)}` : undefined;
+			case 'function': {
+				const param = theirs.params.findIndex((p, i) => mine.params[i] && PackageScope.typesDiffer(mine.params[i].type, p.type));
+				if (param > -1) {
+					return `the type of parameter ${param + 1}, $${mine.params[param].name}, is ${shown(mine.params[param].as)}, not ${shown(theirs.params[param].as)}`;
+				}
+				return PackageScope.typesDiffer(mine.type, theirs.type) ? `its return type is ${shown(mine.as)}, not ${shown(theirs.as)}` : undefined;
+			}
+			case 'template': {
+				for (const p of theirs.params) {
+					const m = mine.params.find((candidate) => candidate.expandedName === p.expandedName);
+					if (!m && p.tunnel) {
+						// as Saxon allows (override-t-001)
+						continue;
+					} else if (!m) {
+						return `it has no parameter $${p.name}`;
+					} else if (PackageScope.typesDiffer(m.type, p.type)) {
+						return `the type of parameter $${p.name} is ${shown(m.as)}, not ${shown(p.as)}`;
+					} else if (m.required !== p.required) {
+						return `parameter $${p.name} is ${m.required ? 'required' : 'optional'}, not ${p.required ? 'required' : 'optional'}`;
+					} else if (m.tunnel !== p.tunnel) {
+						return `parameter $${p.name} is ${m.tunnel ? '' : 'not '}a tunnel parameter`;
+					}
+				}
+				const added = mine.params.find((m) => m.required && !theirs.params.some((p) => p.expandedName === m.expandedName));
+				if (added) {
+					return `its parameter $${added.name} is required, and isn't a parameter of the template it overrides`;
+				}
+				return PackageScope.typesDiffer(mine.type, theirs.type) ? `its type is ${shown(mine.as)}, not ${shown(theirs.as)}` : undefined;
+			}
+			default:
+				return undefined;
+		}
+	}
+
+	// a declaration's 'as' and its xsl:param children - with the types compared (see signatureMismatch)
+	private static signature(text: string, declaration: GlobalInstructionData) {
+		const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, declaration.token.line, declaration.token.startCharacter));
+		if (tagStart < 0) {
+			return undefined;
+		}
+		const bindings = declaration.prefixBindings;
+		const isTrue = (value: string | undefined) => value !== undefined && ['yes', 'true', '1'].includes(value.trim());
+		const as = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as');
+		const params = RecordTypes.childElements(text, RecordTypes.blankMarkup(text), tagStart, 'xsl:param').map((offset) => {
+			const name = (RecordTypes.attributeOfElementAt(text, offset + 1, 'name') ?? '').trim();
+			const paramAs = RecordTypes.attributeOfElementAt(text, offset + 1, 'as');
+			return {
+				name, expandedName: ModulePrefixes.expandedName(name, bindings), as: paramAs, type: PackageScope.normalType(paramAs, bindings),
+				required: isTrue(RecordTypes.attributeOfElementAt(text, offset + 1, 'required')), tunnel: isTrue(RecordTypes.attributeOfElementAt(text, offset + 1, 'tunnel'))
+			};
+		});
+		return { as, type: PackageScope.normalType(as, bindings), params };
+	}
+
+	// a type as it's compared: without whitespace, and with EQNames for prefixed names - item()* if there's none, and
+	// undefined, so it isn't compared, for a prefix the module's outermost element doesn't declare, e.g. one declared on
+	// the declaration
+	private static normalType(as: string | undefined, bindings: Map<string, string> | undefined) {
+		if (as === undefined) {
+			return 'item()*';
+		}
+		let unbound = false;
+		const type = RecordTypes.decodeReferences(as).text.replace(/\s+/g, '').replace(/(?<![\w.{}-])([A-Za-z_][\w.-]*):([A-Za-z_][\w.-]*)/g, (qname, prefix, local) => {
+			const uri = bindings?.get(prefix);
+			unbound = unbound || uri === undefined;
+			return uri !== undefined ? `Q{${uri}}${local}` : qname;
+		});
+		return unbound ? undefined : type;
+	}
+
+	private static typesDiffer(a: string | undefined, b: string | undefined) {
+		return a !== undefined && b !== undefined && a !== b;
+	}
+
+	// XTSE3085: in an xsl:package - unless it has declared-modes="no" - each mode used must be declared with xsl:mode,
+	// in the package's modules, or be a public mode of a package it uses. A mode is used by the mode attribute of a
+	// template rule or xsl:apply-templates, or the default-mode attribute of the xsl:package - and the unnamed mode by
+	// those without a mode attribute, where it's the default mode. Each mode is reported once, where it's first used. The
+	// declarations imported (importedGlobals) have the names of the text's module, with its bindings
+	public static modeProblems(text: string, bindings: Map<string, string> | undefined, importedGlobals: GlobalInstructionData[]): { offset: number, length: number, message: string }[] {
+		const scan = PackageScope.scanModes(text);
+		if (!scan.isPackage || scan.declaredModesNo) {
+			return [];
+		}
+		const expanded = (name: string) => ModulePrefixes.expandedName(name, bindings);
+		const declared = new Set(scan.declared.map(expanded));
+		importedGlobals.filter((g) => g.type === GlobalInstructionType.ModeInstruction).forEach((g) => declared.add(ModulePrefixes.expandedName(g.name, g.prefixBindings ?? bindings)));
+		// the unnamed mode may be declared in a module the package imports or includes
+		let unnamedDeclared = scan.unnamedDeclared;
+		const modules = new Set(importedGlobals.filter((g) => g.href && !(g as Partial<PackageComponent>).packageName).map((g) => g.href!));
+		for (const modulePath of modules) {
+			if (unnamedDeclared) {
+				break;
+			}
+			const module = PackageScope.module(modulePath);
+			unnamedDeclared = !!module && PackageScope.scanModes(module.text).unnamedDeclared;
+		}
+		const problems: { offset: number, length: number, message: string }[] = [];
+		const reported = new Set<string>();
+		for (const use of scan.uses) {
+			const isUnnamed = use.name === '#unnamed';
+			const key = isUnnamed ? use.name : expanded(use.name);
+			if (reported.has(key) || (isUnnamed ? unnamedDeclared : declared.has(key))) {
+				continue;
+			}
+			reported.add(key);
+			problems.push({ offset: use.offset, length: use.length, message: isUnnamed ?
+				'XTSE3085: The unnamed mode isn\'t declared - in a package, add <xsl:mode/> to use it, or set declared-modes="no" on the xsl:package' :
+				`XTSE3085: The mode '${use.name}' isn't declared - in a package, each mode used needs an xsl:mode declaration, unless the xsl:package has declared-modes="no"` });
+		}
+		return problems;
+	}
+
+	// the modes a module declares with top-level xsl:mode elements, and the modes it uses - with their offsets in the text
+	private static scanModes(text: string) {
+		const markup = RecordTypes.blankMarkup(text);
+		const prefix = RecordTypes.xsltPrefix(markup);
+		const attribute = (offset: number, name: string) => RecordTypes.attributeOfElementAt(text, offset + 1, name);
+		const result = { isPackage: false, declaredModesNo: false, declared: [] as string[], unnamedDeclared: false, uses: [] as { name: string, offset: number, length: number }[] };
+		// for each open element, the default mode within it
+		const stack: { name: string, defaultMode: string }[] = [];
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		let match: RegExpExecArray | null;
+		// a mode attribute's names, with their offsets - or the element's name, for the default mode, if it has none
+		const useModes = (offset: number, nameLength: number, defaultMode: string, ignored: string[]) => {
+			const value = attribute(offset, 'mode');
+			if (value === undefined) {
+				result.uses.push({ name: defaultMode, offset: offset + 1, length: nameLength });
+				return;
+			}
+			const valueOffset = RecordTypes.attributeValueOffset(text, offset + 1, 'mode') ?? offset + 1;
+			for (const token of value.matchAll(/\S+/g)) {
+				const name = token[0] === '#default' ? defaultMode : token[0];
+				if (!ignored.includes(token[0]) && !name.includes('{')) {
+					result.uses.push({ name, offset: valueOffset + token.index!, length: token[0].length });
+				}
+			}
+		};
+		while ((match = tagRgx.exec(markup)) !== null) {
+			const name = RecordTypes.xsltName(match[2], prefix);
+			if (match[1]) {
+				const index = stack.map((e) => e.name).lastIndexOf(name);
+				if (index > -1) {
+					stack.length = index;
+				}
+				continue;
+			}
+			const offset = match.index;
+			const isXslt = name.startsWith('xsl:');
+			const inherited = stack.length > 0 ? stack[stack.length - 1].defaultMode : '#unnamed';
+			const ownDefault = attribute(offset, isXslt ? 'default-mode' : `${prefix}:default-mode`)?.trim();
+			const defaultMode = ownDefault || inherited;
+			if (stack.length === 0) {
+				result.isPackage = name === 'xsl:package';
+				result.declaredModesNo = ['no', 'false', '0'].includes(attribute(offset, 'declared-modes')?.trim() ?? '');
+				if (ownDefault && ownDefault !== '#unnamed') {
+					const valueOffset = RecordTypes.attributeValueOffset(text, offset + 1, 'default-mode') ?? offset + 1;
+					result.uses.push({ name: ownDefault, offset: valueOffset, length: ownDefault.length });
+				}
+			} else if (stack.length === 1 && name === 'xsl:mode') {
+				const modeName = attribute(offset, 'name')?.trim();
+				if (modeName === undefined || modeName === '#unnamed') {
+					result.unnamedDeclared = true;
+				} else {
+					result.declared.push(modeName);
+				}
+			} else if (name === 'xsl:template' && attribute(offset, 'match') !== undefined) {
+				useModes(offset, match[2].length, defaultMode, ['#all']);
+			} else if (name === 'xsl:apply-templates') {
+				useModes(offset, match[2].length, defaultMode, ['#current']);
+			}
+			if (!match[3]) {
+				stack.push({ name, defaultMode });
+			}
+		}
+		return result;
 	}
 
 	// the components of a used package: all those it declares or accepts, and those available to the using module - for
@@ -280,8 +484,9 @@ export class PackageScope {
 		}
 		try {
 			const lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
-			const data = lexer.analyseLight(fs.readFileSync(file, 'utf8'));
-			const module: PackageModule = { path: file, mtime, data, exposes: lexer.exposes, bindings: lexer.prefixBindings };
+			const text = fs.readFileSync(file, 'utf8');
+			const data = lexer.analyseLight(text);
+			const module: PackageModule = { path: file, mtime, text, data, exposes: lexer.exposes, bindings: lexer.prefixBindings };
 			PackageScope.modules.set(file, module);
 			return module;
 		} catch {

@@ -243,7 +243,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 			this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
 			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols)
-				.concat(XsltSymbolProvider.packageDiagnostics(document.getText(), globalInstructionData, prefixBindings, xsltPackages));
+				.concat(XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, prefixBindings, xsltPackages, allImportedGlobals));
 			if (!XsltSymbolProvider.isOpenInEditor(document) || document.version !== version) {
 
 			} else {
@@ -395,7 +395,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const withPackages = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, importedGlobals, xsltPackages);
 		ModulePrefixes.toModule(withPackages, xslLexer.prefixBindings);
 		return XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, withPackages, [])
-			.concat(XsltSymbolProvider.packageDiagnostics(document.getText(), globalInstructionData, xslLexer.prefixBindings, xsltPackages));
+			.concat(XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, xslLexer.prefixBindings, xsltPackages, withPackages));
 	}
 
 	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol | undefined) {
@@ -1292,17 +1292,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return importedGlobals.concat(overrides, PackageScope.components(all, xsltPackages, PackageScope.workspaceFolder()));
 	}
 
-	// problems with the document's xsl:use-package elements, e.g. an xsl:accept of a component the package doesn't have
-	public static packageDiagnostics(documentText: string, globalInstructionData: GlobalInstructionData[], prefixBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[]): vscode.Diagnostic[] {
-		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(documentText, globalInstructionData, []);
+	// problems with the document's xsl:use-package elements, e.g. an xsl:accept of a component the package doesn't have -
+	// and for an xsl:package, its modes that aren't declared (importedGlobals have the document's prefixes)
+	public static packageDiagnostics(document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], prefixBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[], importedGlobals: GlobalInstructionData[]): vscode.Diagnostic[] {
+		const text = document.getText();
+		const diagnostics = PackageScope.modeProblems(text, prefixBindings, importedGlobals).map((problem) =>
+			new vscode.Diagnostic(new vscode.Range(document.positionAt(problem.offset), document.positionAt(problem.offset + problem.length)), problem.message, vscode.DiagnosticSeverity.Error));
+		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(text, globalInstructionData, []);
 		if (documentUsePackages.length === 0) {
-			return [];
+			return diagnostics;
 		}
 		const declarations = globalInstructionData.filter((g) => PackageScope.componentKind(g.type) !== undefined);
-		return PackageScope.problems(documentUsePackages, declarations, prefixBindings ?? documentBindings, xsltPackages, PackageScope.workspaceFolder()).map((problem) => {
+		return diagnostics.concat(PackageScope.problems(text, documentUsePackages, declarations, prefixBindings ?? documentBindings, xsltPackages, PackageScope.workspaceFolder()).map((problem) => {
 			const token = problem.token;
 			return new vscode.Diagnostic(new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length), problem.message, vscode.DiagnosticSeverity.Error);
-		});
+		}));
 	}
 
 	public static async processImportedGlobals(xsltPackages: XsltPackage[], importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {

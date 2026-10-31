@@ -13,7 +13,7 @@ import { XSLTHoverProvider } from '../../src/xsltHoverProvider';
 import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 
-const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" xmlns:q="urn:q" version="3.0"';
+const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" xmlns:q="urn:q" xmlns:s="urn:s" version="3.0"';
 
 suite('XSLT packages: visibility', () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-package-scope-'));
@@ -51,8 +51,16 @@ suite('XSLT packages: visibility', () => {
   <xsl:function name="q:f" visibility="public"><xsl:sequence select="p:wild()"/></xsl:function>
 </xsl:package>`);
 
+	const s = file('s.xsl', `<xsl:package name="urn:s" ${ns} declared-modes="no">
+  <xsl:function name="s:f" visibility="public" as="xs:string"><xsl:param name="a" as="xs:integer"/><xsl:sequence select="'f'"/></xsl:function>
+  <xsl:template name="s:t" visibility="public" as="xs:string"><xsl:param name="a" as="xs:integer"/><xsl:param name="r" as="xs:string" required="yes"/></xsl:template>
+  <xsl:template name="s:tt" visibility="public" as="xs:string"><xsl:param name="a" as="xs:integer"/><xsl:param name="tun" tunnel="yes" as="xs:integer" select="0"/></xsl:template>
+  <xsl:variable name="s:v" visibility="public" as="xs:integer" select="1"/>
+</xsl:package>`);
+	file('modes.xsl', `<xsl:stylesheet ${ns}><xsl:mode name="inc"/><xsl:mode/></xsl:stylesheet>`);
+
 	suiteSetup(() => {
-		XsltPackages.additional = [{ name: 'urn:p', path: p, version: '1.0' }, { name: 'urn:q', path: q }];
+		XsltPackages.additional = [{ name: 'urn:p', path: p, version: '1.0' }, { name: 'urn:q', path: q }, { name: 'urn:s', path: s }];
 	});
 	suiteTeardown(() => {
 		XsltPackages.additional = [];
@@ -129,6 +137,53 @@ suite('XSLT packages: visibility', () => {
 		await fails('', /XTSE3050: The function 'p:pub'/, '', '<xsl:function name="p:pub"><xsl:param name="a"/><xsl:sequence select="1"/></xsl:function>');
 		// a private component's name is free
 		await passes('<xsl:sequence select="p:none()"/>', '', '<xsl:function name="p:none"><xsl:sequence select="1"/></xsl:function>');
+	});
+
+	test('XTSE3070: an overriding declaration must have the same types, and a template the same parameters', async () => {
+		const overrides = async (declaration: string) => (await errors(`<xsl:override>${declaration}</xsl:override>`, '', '', 'urn:s')).filter((m) => m.startsWith('XTSE3070'));
+		const fn = (as: string, paramAs: string, param = 'b') => `<xsl:function name="s:f"${as}><xsl:param name="${param}"${paramAs}/><xsl:sequence select="'x'"/></xsl:function>`;
+		// another parameter name is allowed - and a type with a prefix declared on the declaration isn't compared
+		assert.deepEqual(await overrides(fn(' as="xsd:string" xmlns:xsd="http://www.w3.org/2001/XMLSchema"', ' as="xsd:integer"')), []);
+		assert.deepEqual(await overrides(fn(' as="xs:string"', ' as="xs:integer "')), []);
+		assert.match((await overrides(fn(' as="xs:string"', ' as="xs:decimal"')))[0], /the type of parameter 1, \$b, is 'xs:decimal', not 'xs:integer'/);
+		assert.match((await overrides(fn('', ' as="xs:integer"')))[0], /its return type is none, not 'xs:string'/);
+		const template = (params: string, as = ' as="xs:string"') => `<xsl:template name="s:t"${as}>${params}</xsl:template>`;
+		const a = '<xsl:param name="a" as="xs:integer"/>';
+		const r = '<xsl:param name="r" as="xs:string" required="yes"/>';
+		assert.deepEqual(await overrides(template(a + r + '<xsl:param name="extra"/>')), []);
+		// a tunnel parameter may be left out (override-t-001)
+		assert.deepEqual(await overrides('<xsl:template name="s:tt" as="xs:string">' + a + '</xsl:template>'), []);
+		assert.match((await overrides(template(r)))[0], /it has no parameter \$a/);
+		assert.match((await overrides(template(a + r + '<xsl:param name="x" required="yes"/>')))[0], /its parameter \$x is required/);
+		assert.match((await overrides(template(a + '<xsl:param name="r" as="xs:string"/>')))[0], /parameter \$r is optional, not required/);
+		assert.match((await overrides(template('<xsl:param name="a" as="xs:integer" tunnel="yes"/>' + r)))[0], /parameter \$a is a tunnel parameter/);
+		assert.match((await overrides(template(a + r, '')))[0], /its type is none, not 'xs:string'/);
+		assert.match((await overrides('<xsl:variable name="s:v" as="xs:decimal" select="1"/>'))[0], /its type is 'xs:decimal', not 'xs:integer'/);
+	});
+
+	let packageCount = 0;
+	test('XTSE3085: in a package, each mode used must be declared', async () => {
+		const modeErrors = async (content: string, attributes = '') => {
+			// a file, for the href of an xsl:include
+			const fsPath = file(`k${++packageCount}.xsl`, `<xsl:package name="urn:k" ${ns} ${attributes}>\n${content}\n</xsl:package>`);
+			const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(fsPath), 'xslt');
+			const diagnostics = await moduleDiagnostics.call(XsltSymbolProvider, document, false);
+			return diagnostics.map((d) => d.message).filter((m) => m.startsWith('XTSE3085'));
+		};
+		assert.match((await modeErrors('<xsl:template match="*"/>'))[0], /The unnamed mode isn't declared/);
+		assert.match((await modeErrors('<xsl:template name="t"><xsl:apply-templates mode="m"/></xsl:template>'))[0], /The mode 'm' isn't declared/);
+		assert.match((await modeErrors('<xsl:template match="*" mode="#unnamed"/>'))[0], /unnamed/);
+		assert.match((await modeErrors('', 'default-mode="m"'))[0], /The mode 'm'/);
+		assert.match((await modeErrors('<xsl:template name="t" default-mode="m"><xsl:apply-templates/></xsl:template>'))[0], /The mode 'm'/);
+		// a private mode of a used package isn't declared for the package using it
+		assert.match((await modeErrors('<xsl:use-package name="urn:p"/><xsl:template name="t"><xsl:apply-templates mode="p:m"/></xsl:template>'))[0], /p:m/);
+		assert.deepEqual(await modeErrors('<xsl:mode name="m"/><xsl:mode/><xsl:template match="*" mode="m #default"/><xsl:template name="t"><xsl:apply-templates mode="#current"/></xsl:template>'), []);
+		assert.deepEqual(await modeErrors('<xsl:template match="*" mode="#all"/>'), []);
+		assert.deepEqual(await modeErrors('<xsl:template match="*" mode="m"/>', 'declared-modes="no"'), []);
+		assert.deepEqual(await modeErrors('<xsl:mode name="m"/><xsl:template match="*"/>', 'default-mode="m"'), []);
+		assert.deepEqual(await modeErrors('<xsl:use-package name="urn:p"/><xsl:template name="t"><xsl:apply-templates mode="p:mpub"/></xsl:template>'), []);
+		// declared in an included module
+		assert.deepEqual(await modeErrors('<xsl:include href="modes.xsl"/><xsl:template match="*" mode="inc"/><xsl:template match="*"/>'), []);
 	});
 
 	test('the hover of an xsl:use-package: the package note and the components it gives', async () => {
