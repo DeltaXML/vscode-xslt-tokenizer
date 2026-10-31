@@ -25,7 +25,8 @@ suite('XSpec', () => {
 	file('sut.xsl', `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0">
   <xsl:variable name="f:greeting" select="'hello'"/>
   <xsl:function name="f:double"><xsl:param name="n"/><xsl:sequence select="$n * 2"/></xsl:function>
-  <xsl:template name="f:named"/>
+  <xsl:template name="f:named"><xsl:param name="size"/><xsl:param name="colour"/></xsl:template>
+  <xsl:template match="p" mode="f:para"/>
 </xsl:stylesheet>`);
 	file('shared.xspec', `<x:description ${xspecNs} stylesheet="sut.xsl">
   <x:variable name="shared-doc" select="'d'"/>
@@ -92,8 +93,8 @@ suite('XSpec', () => {
 	test('variables: x:variable and a global x:param are in scope - not the x:param of a call', async () => {
 		assert.deepEqual(await problems(xspec(`<x:param name="g" select="1"/>
 <x:scenario label="s"><x:variable name="v" select="$g"/><x:call function="f:double"><x:param select="$v"/></x:call><x:expect label="e" test="$v = 1"/></x:scenario>`)), []);
-		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call template="f:named"><x:param name="p" select="1"/></x:call><x:expect label="e" test="$p"/></x:scenario>`)),
-			['XPath: The variable/parameter $p cannot be resolved']);
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call template="f:named"><x:param name="size" select="1"/></x:call><x:expect label="e" test="$size"/></x:scenario>`)),
+			['XPath: The variable/parameter $size cannot be resolved']);
 	});
 
 	test('user content: any element, e.g. an XSLT element, or x:text - not other XSpec elements', async () => {
@@ -189,5 +190,34 @@ suite('XSpec', () => {
 		const scenario = symbols[0].children.find((symbol) => symbol.name.startsWith('x:scenario'));
 		assert.strictEqual(scenario?.name, 'x:scenario \u203A s');
 		assert.deepEqual(scenario?.children.map((symbol) => symbol.name), ['attributes', 'x:call \u203A f:double', 'x:expect \u203A e']);
+	});
+
+	test('x:call and x:context: the function, template and mode of the stylesheet under test, and the template\'s parameters', async () => {
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s">
+  <x:call template="f:named"><x:param name="size" select="1"/><x:param name="extra" tunnel="yes" select="2"/></x:call>
+  <x:expect label="e" select="()"/>
+  <x:scenario label="inherits the call"><x:call><x:param name="colour" select="'red'"/></x:call><x:expect label="e" select="()"/></x:scenario>
+</x:scenario>
+<x:scenario label="f"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" select="2"/></x:scenario>
+<x:scenario label="built-in"><x:call function="xs:integer"><x:param select="'1'"/></x:call><x:expect label="e" select="1"/></x:scenario>
+<x:scenario label="m"><x:context mode="f:para"><p/></x:context><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="default mode"><x:context mode="#default"><p/></x:context><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="a function in a variable"><x:variable name="fn" select="f:double#1"/><x:call function="fn" call-as="variable"><x:param select="1"/></x:call><x:expect label="e" select="2"/></x:scenario>`)), []);
+		const reported = await problems(xspec(`<x:scenario label="s"><x:call template="f:unnamed"/><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="p"><x:call template="f:named"><x:param name="weight" select="1"/></x:call><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="f"><x:call function="f:triple"><x:param select="1"/></x:call><x:expect label="e" select="3"/></x:scenario>
+<x:scenario label="m"><x:context mode="f:list"><p/></x:context><x:expect label="e" select="()"/></x:scenario>`));
+		assert.deepEqual(reported, [
+			'XSpec: template \'f:unnamed\' not found in the stylesheet under test',
+			'XSpec: parameter \'weight\' is not declared for template \'f:named\'',
+			'XSpec: function \'f:triple\' not found in the stylesheet under test',
+			'XSpec: mode \'f:list\' not found in the stylesheet under test']);
+	});
+
+	test('completion: the functions, templates and modes of the stylesheet under test, and a called template\'s parameters', async () => {
+		assert.include(await completions(xspec(`<x:scenario label="s"><x:call template="|"/></x:scenario>`)), 'f:named');
+		assert.include(await completions(xspec(`<x:scenario label="s"><x:call function="|"/></x:scenario>`)), 'f:double');
+		assert.include(await completions(xspec(`<x:scenario label="s"><x:context mode="|"/></x:scenario>`)), 'f:para');
+		assert.includeMembers(await completions(xspec(`<x:scenario label="s"><x:call template="f:named"><x:param name="|"/></x:call></x:scenario>`)), ['size', 'colour']);
 	});
 });

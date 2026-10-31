@@ -174,6 +174,8 @@ export class XsltTokenCompletions {
 		let xpathStack: XPathData[] = [];
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
+		// XSpec: the attribute of x:call whose value is a name, 'template' or 'function'
+		let xspecCallAttribute: string | undefined;
 		let tagElementName = '';
 		let startTagToken: XSLTToken | null = null;
 		let preXPathVariable = false;
@@ -565,6 +567,13 @@ export class XsltTokenCompletions {
 								}
 							} else if (attNameText === XsltTokenCompletions.xslUseAttSet) {
 								attType = AttributeType.UseAttributeSets;
+							} else if (tagType === TagType.XSLTstart && docType === DocumentTypes.XSPEC) {
+								// XSpec: the names of the stylesheet under test's templates, functions and modes, and of a called
+								// template's parameters
+								const isCallName = tagElementName === 'x:call' && (attNameText === 'template' || attNameText === 'function');
+								xspecCallAttribute = isCallName ? attNameText : undefined;
+								attType = isCallName || (tagElementName === 'x:param' && attNameText === 'name') ? AttributeType.InstructionName :
+									tagElementName === 'x:context' && attNameText === 'mode' ? AttributeType.InstructionMode : AttributeType.None;
 							}
 						} else {
 							attType = AttributeType.Xmlns;
@@ -599,9 +608,11 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (tagElementName === 'xsl:use-package') {
 										resultCompletions = XsltTokenCompletions.getPackageNameCompletions(document, position);
-									} else if (tagElementName === 'xsl:call-template') {
+									} else if (tagElementName === 'xsl:call-template' || (tagElementName === 'x:call' && xspecCallAttribute === 'template')) {
 										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
-									} else if (tagElementName === 'xsl:with-param' && elementStack.length > 0) {
+									} else if (tagElementName === 'x:call' && xspecCallAttribute === 'function') {
+										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Function, globalInstructionData, importedInstructionData);
+									} else if ((tagElementName === 'xsl:with-param' || tagElementName === 'x:param') && elementStack.length > 0) {
 										// get name attribute of parent
 										let parentElemment = elementStack[elementStack.length - 1];
 										if (parentElemment.symbolName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
@@ -652,7 +663,7 @@ export class XsltTokenCompletions {
 										completionStrings = completionStrings.concat(FunctionData.ixslEventName);
 									}
 									let allCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.Constant);
-									let labels: string[] = tagElementName === 'xsl:apply-templates' ? ['default', 'current'] : ['default', 'current', 'all'];
+									let labels: string[] = tagElementName === 'x:context' ? ['default'] : tagElementName === 'xsl:apply-templates' ? ['default', 'current'] : ['default', 'current', 'all'];
 									XsltTokenCompletions.createNonAlphanumericCompletions(document, position, labels, allCompletions);
 									resultCompletions = allCompletions;
 								}

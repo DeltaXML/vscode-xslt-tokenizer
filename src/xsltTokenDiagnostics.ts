@@ -23,6 +23,7 @@ import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
 import { FixedNamespaces } from './fixedNamespaces';
 import { HrefPaths, ImportProblem } from './hrefPaths';
+import * as fs from 'fs';
 
 enum HasCharacteristic {
 	unknown,
@@ -509,7 +510,9 @@ export class XsltTokenDiagnostics {
 		let rootXsltPrefix = 'xsl';
 		// XSpec: the prefixes bound to the XSpec namespace on the outermost element, e.g. x - for its variables, e.g. $x:result
 		const xspecPrefixes: string[] = [];
-		const xspecScope = docType === DocumentTypes.XSPEC ? XsltTokenDiagnostics.xspecScope(document.getText()) : undefined;
+		const xspecScope = docType === DocumentTypes.XSPEC ? XsltTokenDiagnostics.xspecScope(document.getText(), document.uri.scheme === 'file' ? document.fileName : undefined) : undefined;
+		// XSpec: prefixes for XSpec's own namespaces, e.g. for functions of its library that its tests use, which aren't checked
+		const xspecLibraryPrefixes: string[] = [];
 		// XSLT 1.0 backwards compatible mode, for the version attribute of the outermost element, e.g. version="1.0": XPath
 		// 1.0 compatibility mode, in which a string operand is converted to a number, e.g. '6' * 2
 		let isBackwardsCompatible = false;
@@ -998,6 +1001,9 @@ export class XsltTokenDiagnostics {
 										}
 										if (namespaceURI === XsltTokenDiagnostics.xspecNamespace) {
 											xspecPrefixes.push(pfx);
+										}
+										if (namespaceURI === XsltTokenDiagnostics.xspecNamespace || namespaceURI.startsWith('urn:x-xspec:')) {
+											xspecLibraryPrefixes.push(pfx);
 										} else if (xsltType === undefined && !xspecScope?.testsStylesheet) {
 											// the functions of an XQuery module, or a Schematron's, which aren't known
 											XsltTokenDiagnostics.externalFunctionPrefixes.push(pfx);
@@ -1528,8 +1534,26 @@ export class XsltTokenDiagnostics {
 								// the attribute this value is for - not the last in tagAttributeNames, which has no namespace declarations
 								const tagAttributeName = currentAttName !== '' ? currentAttName : undefined;
 								if (docType === DocumentTypes.XSPEC && tagType === TagType.XSLTstart && isLastPart && ['label', 'function', 'template'].includes(currentAttName)) {
-									// in the outline, e.g. x:scenario › the label, or x:call › the function called
+									// in the outline, e.g. x:scenario › the label, or x:call › the function called - and for an
+									// x:param in the x:call, the template whose parameter it is
 									tagIdentifierName = variableName.trim();
+									const callStart = document.offsetAt(new vscode.Position(valueToken.line, valueToken.startCharacter));
+									// the whole value - a name on more than one line, or with character references, e.g. &#x20;, isn't checked
+									const calledName = RecordTypes.attributeOfElementAt(documentText, callStart, currentWrittenAttName)?.trim() ?? '';
+									// call-as="variable", here or inherited from an outer x:call: the function is the value of a variable
+									// declared in the file or the stylesheet, not a function declared - an EQName isn't compared with the names declared
+									const isChecked = tagElementName === 'x:call' && !!xspecScope?.testsStylesheet && !calledName.includes('&') && !calledName.startsWith('Q{') &&
+										RecordTypes.attributeOfElementAt(documentText, callStart, 'call-as')?.trim() !== 'variable' && !xspecScope.declared.has(calledName) &&
+										!importedGlobalVarNames.includes(calledName);
+									if (isChecked) {
+										if (currentAttName === 'template' && !namedTemplates.get(calledName)) {
+											valueToken['error'] = ErrorType.TemplateNameUnresolved;
+											valueToken.value = calledName;
+										} else if (currentAttName === 'function' && !XsltTokenDiagnostics.isXSpecFunctionDeclared(calledName, checkedGlobalFnNames, xsltPrefixesToURIs, xspecLibraryPrefixes)) {
+											valueToken['error'] = ErrorType.XSpecFunctionUnresolved;
+											valueToken.value = calledName;
+										}
+									}
 								}
 								let isAVTbracket = valueToken.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
 								if (!isAVTbracket && schemaQuery && tagAttributeName && variableName.indexOf('{') === -1) {
@@ -1618,7 +1642,10 @@ export class XsltTokenDiagnostics {
 								}
 							}
 						}
-						if (!hasProblem && attType === AttributeType.InstructionMode && tagElementName === 'xsl:apply-templates') {
+						// XSpec: the mode of the stylesheet under test whose template rules x:context applies
+						const isXSpecContextMode = tagElementName === 'x:context' && !!xspecScope?.testsStylesheet && !variableName.trim().startsWith('Q{') &&
+							!RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(valueToken.line, valueToken.startCharacter)), currentWrittenAttName)?.includes('&');
+						if (!hasProblem && attType === AttributeType.InstructionMode && (tagElementName === 'xsl:apply-templates' || isXSpecContextMode)) {
 							if (globalModes.indexOf(variableName) < 0) {
 								valueToken['error'] = ErrorType.TemplateModeUnresolved;
 								valueToken.value = variableName;
@@ -1626,7 +1653,9 @@ export class XsltTokenDiagnostics {
 								hasProblem = true;
 							}
 						}
-						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length > 0 && tagElementName === 'xsl:with-param') {
+						// XSpec: a parameter of the template that x:call calls
+						const isXSpecCallParam = tagElementName === 'x:param' && elementStack[elementStack.length - 1]?.symbolName === 'x:call' && !!xspecScope?.testsStylesheet;
+						if (!hasProblem && attType === AttributeType.InstructionName && elementStack.length > 0 && (tagElementName === 'xsl:with-param' || isXSpecCallParam)) {
 							let callTemplateName = elementStack[elementStack.length - 1].symbolID;
 							let templateParams = namedTemplates.get(callTemplateName);
 							if (templateParams) {
@@ -3368,7 +3397,10 @@ export class XsltTokenDiagnostics {
 			allDiagnostics.forEach((d) => d.message = d.message
 				.replace(/^XSLT: instruction: (\S+) not valid in this context/, 'XSpec: element $1 is not allowed here')
 				.replace(/^XSLT: Invalid attribute on element/, 'XSpec: Invalid attribute on element')
-				.replace(/^XSLT: Invalid XSLT name/, 'XSpec: Invalid name'));
+				.replace(/^XSLT: Invalid XSLT name/, 'XSpec: Invalid name')
+				.replace(/^XSLT: xsl:template with name '(.*)' not found$/, "XSpec: template '$1' not found in the stylesheet under test")
+				.replace(/^XSLT: xsl:param '(.*)' is not declared for template '(.*)'$/, "XSpec: parameter '$1' is not declared for template '$2'")
+				.replace(/^XSLT: Template mode '(.*)' not used$/, "XSpec: mode '$1' not found in the stylesheet under test"));
 		}
 		// the quick fixes for missing record fields
 		const recordFixes = new Map<string, RecordFix>();
@@ -4305,8 +4337,11 @@ export class XsltTokenDiagnostics {
 
 	// an XSpec file: whether it tests a stylesheet, whose declarations are known - not an XQuery module, a Schematron or
 	// an XProc step - and the names of the variables and parameters it declares
-	private static xspecScope(documentText: string) {
+	// - its declarations are only known when the stylesheet is found: not with an xml:base, which the imports don't use
+	private static xspecScope(documentText: string, documentPath: string | undefined) {
 		const root = /<([\w.-]+:)?description\b[^>]*>/.exec(documentText)?.[0] ?? '';
+		const stylesheet = /\sstylesheet\s*=\s*(["'])(.*?)\1/.exec(root)?.[2];
+		const stylesheetPath = stylesheet !== undefined && !/\sxml:base\s*=/.test(root) ? HrefPaths.toPath(stylesheet, documentPath) : undefined;
 		// x:variable, and x:param as a global or scenario parameter - not one of x:call or x:context
 		const declared = new Set<string>();
 		const parents: string[] = [];
@@ -4325,7 +4360,7 @@ export class XsltTokenDiagnostics {
 				parents.push(localName);
 			}
 		}
-		return { testsStylesheet: /\sstylesheet\s*=/.test(root), declared };
+		return { testsStylesheet: !!stylesheetPath && fs.existsSync(stylesheetPath), declared };
 	}
 
 	// a variable reference that isn't resolved, which XSpec allows: one XSpec declares, e.g. $x:result - or for a module
@@ -4340,6 +4375,16 @@ export class XsltTokenDiagnostics {
 		const colon = name.indexOf(':');
 		const localName = name.startsWith(eqName) ? name.substring(eqName.length) : colon > 0 && xspecPrefixes.includes(name.substring(0, colon)) ? name.substring(colon + 1) : undefined;
 		return localName !== undefined && XsltTokenDiagnostics.xspecVariables.includes(localName);
+	}
+
+	// the function x:call calls: declared with any arity - the arity is the number of x:param elements, which may be in
+	// the x:call of an outer scenario - or a built-in function, e.g. fn:concat
+	private static isXSpecFunctionDeclared(name: string, functionNames: string[], prefixesToURIs: Map<string, XSLTnamespaces>, uncheckedPrefixes: string[]) {
+		const colon = name.indexOf(':');
+		const prefix = colon > 0 ? name.substring(0, colon) : undefined;
+		const isBuiltIn = prefix ? prefixesToURIs.has(prefix) : FunctionData.xpath40.some((nameWithArity) => nameWithArity.startsWith(name + '#'));
+		return isBuiltIn || (!!prefix && uncheckedPrefixes.includes(prefix)) || name.startsWith('Q{') ||
+			functionNames.some((nameWithArity) => nameWithArity.substring(0, nameWithArity.lastIndexOf('#')) === name);
 	}
 
 	public static xsltElementName(name: string, document: vscode.TextDocument) {
@@ -4749,6 +4794,9 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.TemplateNameUnresolved:
 					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
+					break;
+				case ErrorType.XSpecFunctionUnresolved:
+					msg = `XSpec: function '${tokenValue}' not found in the stylesheet under test`;
 					break;
 				case ErrorType.XSLTFunctionNamePrefix: {
 					errCode = DiagnosticCode.unresolvedGenericRef;

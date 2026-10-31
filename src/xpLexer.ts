@@ -1716,6 +1716,7 @@ export enum ErrorType {
     MissingPrefixInList,
     AnonymousFunctionSyntax,
     TemplateNameUnresolved,
+    XSpecFunctionUnresolved,
     TemplateModeUnresolved,
     AttributeSetUnresolved,
     AccumulatorNameUnresolved,
