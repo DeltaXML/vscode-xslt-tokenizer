@@ -35,6 +35,7 @@ import { XSLTReferenceProvider } from './xsltReferenceProvider';
 import { XSLTCodeActions } from './xsltCodeActions';
 import { PackageCodeLensProvider } from './packageCodeLens';
 import { PackageNavigationProvider } from './packageNavigation';
+import { PackageAnalysisView } from './packageAnalysisView';
 import { wrapWith } from './xsltWrap';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
@@ -647,6 +648,8 @@ export function activate(context: vscode.ExtensionContext) {
 	};
 	// a new package file, with the name - where the user chooses, by default named from the URI's last part, beside the
 	// stylesheet - with the version the package-version asks for, if it's one version or a lowest one
+	const packageAnalysisView = new PackageAnalysisView();
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.analyseAsPackage', (target?: vscode.Uri | { path: string }) => packageAnalysisView.analyse(target)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.overridePackageComponents', (uri: vscode.Uri, usePackageOffset: number) => XSLTCodeActions.overridePackageComponents(uri, usePackageOffset)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.createPackage', async (name: string, versionRange: string | undefined, uri: vscode.Uri) => {
 		const fileName = (name.split(/[/:#]/).filter((part) => part !== '').pop() ?? 'package').replace(/[^\w.-]/g, '-').replace(/\.xslt?$/, '') + '.xsl';

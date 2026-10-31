@@ -129,8 +129,8 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 			item.command = { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(node.path)] };
 		}
 		item.id = node.ancestors.concat(node.path).join('\n');
-		// the top-level stylesheet has a Quick Run action
-		item.contextValue = node.ancestors.length === 0 && exists ? 'topLevel' : 'module';
+		// the top-level stylesheet has a Quick Run action - an imported or included module, Analyse as Package
+		item.contextValue = node.ancestors.length === 0 && exists ? 'topLevel' : pkg ? 'package' : 'module';
 		return item;
 	}
 

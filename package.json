@@ -299,6 +299,12 @@
 				"icon": "$(debug-alt)"
 			},
 			{
+				"command": "xslt-xpath.analyseAsPackage",
+				"title": "Analyse as Package...",
+				"category": "XSLT",
+				"icon": "$(package)"
+			},
+			{
 				"command": "xslt-xpath.editQuickRunTask",
 				"title": "Edit Quick Run Task",
 				"category": "XSLT",
@@ -456,6 +462,11 @@
 					"command": "xslt-xpath.quickRunModule",
 					"when": "view == xslt-xpath.imports && viewItem == topLevel",
 					"group": "inline"
+				},
+				{
+					"command": "xslt-xpath.analyseAsPackage",
+					"when": "view == xslt-xpath.imports && viewItem == module",
+					"group": "packages"
 				}
 			],
 			"commandPalette": [
@@ -509,6 +520,10 @@
 				},
 				{
 					"command": "xslt-xpath.editQuickRunTask",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.analyseAsPackage",
 					"when": "editorLangId == xslt"
 				},
 				{
