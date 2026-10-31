@@ -251,9 +251,9 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				if (this.collection && this.docType !== DocumentTypes.SCH) {
 					let importDiagnostics: vscode.Diagnostic[] = [];
 					importErrors.forEach((importError) => {
-						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem));
+						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem, document.getText()));
 					});
-					packageErrors.forEach((data) => importDiagnostics.push(XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data)));
+					packageErrors.forEach((data) => importDiagnostics.push(XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data, document.getText())));
 					let allDiagnostics = importDiagnostics.concat(diagnostics);
 					if (allDiagnostics.length > 0 && this.showDiagnostics()) {
 						this.collection.set(document.uri, allDiagnostics);
@@ -1332,7 +1332,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			return withFixes(new vscode.Diagnostic(diagnostic.range, message, vscode.DiagnosticSeverity.Error), [abstract.fix], DiagnosticCode.abstractNotOverridden);
 		}).concat(PackageScope.problems(text, documentUsePackages, declarations, bindings, xsltPackages, workspace).map((problem) => {
 			const token = problem.token;
-			const diagnostic = new vscode.Diagnostic(new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length), problem.message, problem.isWarning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error);
+			// a problem with the xsl:use-package as a whole is on its element name, not its name attribute, a link
+			const range = (problem.onElement ? XsltTokenDiagnostics.elementNameRange(text, token) : undefined) ??
+				new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length);
+			const diagnostic = new vscode.Diagnostic(range, problem.message, problem.isWarning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error);
 			return withFixes(diagnostic, problem.fixes ?? [], problem.isWarning ? DiagnosticCode.abstractNotOverridden : DiagnosticCode.packageProblem);
 		}));
 	}

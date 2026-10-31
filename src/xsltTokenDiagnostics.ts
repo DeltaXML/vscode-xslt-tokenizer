@@ -5298,9 +5298,26 @@ export class XsltTokenDiagnostics {
 
 	// the problem is why the href has no file path, from HrefPaths.importProblem() - undefined when the file isn't found
 	// as Saxon reports it, XTSE3000 - on the xsl:use-package name
-	public static createPackageNotFoundDiagnostic(data: GlobalInstructionData): vscode.Diagnostic {
+	// the name of the element - e.g. xsl:use-package - with the attribute value that's the token: a problem with the
+	// element as a whole is shown there, not on a value that's a document link, whose underline hides the problem's -
+	// undefined if it isn't found
+	public static elementNameRange(text: string, token: BaseToken): vscode.Range | undefined {
+		const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, token.line, Math.max(0, token.startCharacter)));
+		const name = tagStart > -1 ? /^<([\w.:-]+)/.exec(text.substring(tagStart, tagStart + 100))?.[1] : undefined;
+		if (!name) {
+			return undefined;
+		}
+		const lineStart = text.lastIndexOf('\n', tagStart) + 1;
+		const line = text.substring(0, lineStart).split('\n').length - 1;
+		const character = tagStart + 1 - lineStart;
+		return new vscode.Range(line, character, line, character + name.length);
+	}
+
+	// on the name of the xsl:use-package, when the document's text is given - else on the package's name
+	public static createPackageNotFoundDiagnostic(data: GlobalInstructionData, text?: string): vscode.Diagnostic {
 		const token = data.token;
-		const range = new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length);
+		const range = (text !== undefined ? XsltTokenDiagnostics.elementNameRange(text, token) : undefined) ??
+			new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length);
 		const versionRange = data.version?.replace(/^\s*["']|["']\s*$/g, '').trim();
 		const version = versionRange && versionRange !== '*' ? ` with package-version '${versionRange}'` : '';
 		const diagnostic = new vscode.Diagnostic(range, `XTSE3000: Package '${data.name}'${version} not found - in the workspace, or the XSLT.resources.xsltPackages setting`, vscode.DiagnosticSeverity.Error);
@@ -5308,14 +5325,16 @@ export class XsltTokenDiagnostics {
 		return diagnostic;
 	}
 
-	public static createImportDiagnostic(data: GlobalInstructionData, problem?: ImportProblem): vscode.Diagnostic {
+	// on the name of the xsl:import or xsl:include, when the document's text is given - else on its href
+	public static createImportDiagnostic(data: GlobalInstructionData, problem?: ImportProblem, text?: string): vscode.Diagnostic {
 		let token = data.token;
 		let line = token.line;
 		let endChar = token.startCharacter + token.length;
 		const diagnostic: vscode.Diagnostic = {
 			code: '',
 			message: problem ? problem.message : `Included/imported file '${data.name}' not found`,
-			range: new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
+			range: (text !== undefined ? XsltTokenDiagnostics.elementNameRange(text, token) : undefined) ??
+				new vscode.Range(new vscode.Position(line, token.startCharacter), new vscode.Position(line, endChar)),
 			severity: problem?.warning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error,
 			source: '',
 		};

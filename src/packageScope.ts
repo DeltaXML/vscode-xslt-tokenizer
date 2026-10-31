@@ -50,6 +50,8 @@ export interface PackageProblem {
 	token: BaseToken;
 	message: string;
 	isWarning?: boolean;
+	// a problem with the element of the token as a whole: shown on its element name
+	onElement?: boolean;
 	// for an abstract component that isn't overridden: the fixes, which override it
 	fixes?: PackageFix[];
 }
@@ -147,7 +149,7 @@ export class PackageScope {
 				const names = abstracts.map((a) => a.kind === 'function' ? `${a.name}#${a.arity}` : a.kind === 'variable' ? '$' + a.name : a.name);
 				const all = PackageScope.overrideFix(text, usePackage, used.abstracts, moduleBindings, `Override the abstract components of package '${packageName}'`);
 				problems.push({
-					token: usePackage.token, isWarning: true,
+					token: usePackage.token, isWarning: true, onElement: true,
 					message: `Package '${packageName}' has abstract components that aren't overridden: ${names.join(', ')} - calling a component that depends on one stops the transformation (XTDE3052)`,
 					fixes: (all && abstracts.length > 1 ? [all] : []).concat(abstracts.map((a) => a.fix))
 				});

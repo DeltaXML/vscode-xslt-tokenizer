@@ -254,6 +254,9 @@ suite('XSLT packages: overriding abstract components', () => {
 	test('a warning lists the abstract components that aren\'t overridden, with fixes to override all or each', async () => {
 		const { diagnostics, actions } = await lint(stylesheet('<xsl:use-package name="urn:a"/>'));
 		const warning = diagnostics.find((d) => d.severity === vscode.DiagnosticSeverity.Warning)!;
+		// on the element's name, not the package's name - a document link
+		assert.strictEqual(warning.range.start.character, 3);
+		assert.strictEqual(warning.range.end.character - warning.range.start.character, 'xsl:use-package'.length);
 		assert.match(warning.message, /abstract components that aren't overridden: a:shape#1, a:t, \$a:v - .*XTDE3052/);
 		assert.deepEqual(actions(warning).map((a) => a.title), ["Override the abstract components of package 'urn:a'", 'Override abstract function a:shape#1', 'Override abstract template a:t', 'Override abstract variable $a:v']);
 	});

@@ -310,7 +310,8 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		});
 		// a package not found: create it, or add an existing package file to the setting
 		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.packageNotFound).slice(0, 1).forEach((diagnostic) => {
-			const name = document.getText(diagnostic.range).replace(/^["']|["']$/g, '');
+			// the problem is on the xsl:use-package element's name
+			const name = diagnostic.message.match(/Package '([^']*)'/)?.[1] ?? '';
 			const versionRange = diagnostic.message.match(/package-version '([^']*)'/)?.[1];
 			const create = new vscode.CodeAction(`Create Package '${name}'...`, vscode.CodeActionKind.QuickFix);
 			create.diagnostics = [diagnostic];

@@ -178,12 +178,14 @@ suite('XSLT packages: not found', () => {
 		assert.isUndefined(XsltPackages.lowestVersion(undefined));
 	});
 
-	test('XTSE3000 on the name, with the quick fixes to create the package or add a package file', async () => {
+	test('XTSE3000 on the element name, with the quick fixes to create the package or add a package file', async () => {
 		const text = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">\n  <xsl:use-package name="http://example.com/strings" package-version="2+"/>\n</xsl:stylesheet>`;
 		const document = await vscode.workspace.openTextDocument({ content: text, language: 'xslt' });
 		const start = text.indexOf('"http://example.com/strings"');
 		const token = { line: 1, startCharacter: document.positionAt(start).character, length: '"http://example.com/strings"'.length, tokenType: 0, value: '' };
-		const diagnostic = XsltTokenDiagnostics.createPackageNotFoundDiagnostic({ name: 'http://example.com/strings', type: GlobalInstructionType.UsePackage, token, idNumber: 0, version: '"2+"' });
+		const diagnostic = XsltTokenDiagnostics.createPackageNotFoundDiagnostic({ name: 'http://example.com/strings', type: GlobalInstructionType.UsePackage, token, idNumber: 0, version: '"2+"' }, text);
+		// not on the name, a document link, whose underline would hide the problem's
+		assert.strictEqual(document.getText(diagnostic.range), 'xsl:use-package');
 		assert.strictEqual(diagnostic.message, `XTSE3000: Package 'http://example.com/strings' with package-version '2+' not found - in the workspace, or the XSLT.resources.xsltPackages setting`);
 		const actions = new XSLTCodeActions().provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic], only: undefined, triggerKind: vscode.CodeActionTriggerKind.Invoke }) ?? [];
 		const fixes = actions.filter((action) => action.command?.command === 'xslt-xpath.createPackage' || action.command?.command === 'xslt-xpath.addPackageFile');
