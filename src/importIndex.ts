@@ -132,6 +132,11 @@ export class ImportIndex {
 		return this.usedPackages.get(file) ?? [];
 	}
 
+	// the modules that use a package with the name - with xsl:use-package
+	public usersOf(packageName: string): string[] {
+		return [...this.usedPackages].filter(([, used]) => used.some((u) => u.name === packageName)).map(([file]) => file);
+	}
+
 	// the index is built: a request for the master of a module while it's building returns undefined - use
 	// whenBuilt() to wait for it
 	public get built() {

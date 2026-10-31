@@ -16,6 +16,8 @@ import { ModulePrefixes } from './modulePrefixes';
 import { XsltPackages } from './xsltPackages';
 import { RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
+import { ImportIndex } from './importIndex';
+import { PackageEdits, TextEdit } from './packageEdits';
 import type { XsltPackage } from './xsltSymbolProvider';
 
 // a module of a package: the package's xsl:package module, or one it imports or includes
@@ -37,6 +39,13 @@ export interface PackageComponent extends GlobalInstructionData {
 	visibility: string;
 }
 
+type SignatureParam = NonNullable<ReturnType<typeof PackageScope['signature']>>['params'][number];
+
+// a declaration in xsl:override, with the package component it overrides
+export interface OverridingDeclaration extends GlobalInstructionData {
+	overridden?: PackageComponent;
+}
+
 export interface PackageProblem {
 	token: BaseToken;
 	message: string;
@@ -45,12 +54,10 @@ export interface PackageProblem {
 	fixes?: PackageFix[];
 }
 
-// an edit of the module's text: replacing start to end with the text - its XSLT names with the prefix xsl
+// a fix: edits of the module's text (see PackageEdits)
 export interface PackageFix {
 	title: string;
-	start: number;
-	end: number;
-	text: string;
+	edits: TextEdit[];
 }
 
 // an abstract component of a used package that the module doesn't override - named with the module's prefixes, as
@@ -120,6 +127,15 @@ export class PackageScope {
 	// of its declarations in xsl:override
 	public static problems(text: string, usePackages: GlobalInstructionData[], declarations: GlobalInstructionData[], moduleBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[], workspace: string | undefined): PackageProblem[] {
 		const problems: PackageProblem[] = [];
+		const markup = RecordTypes.blankMarkup(text);
+		const offsetOf = (token: BaseToken) => XdocNotes.offsetAt(text, token.line, token.startCharacter);
+		// a fix, if each of its edits could be made
+		const fix = (title: string, ...edits: (TextEdit | undefined)[]): PackageFix[] => edits.every((e) => e !== undefined) ? [{ title, edits: edits as TextEdit[] }] : [];
+		const removeDeclaration = (declaration: GlobalInstructionData) =>
+			fix('Remove the declaration', PackageEdits.removeElement(text, markup, text.lastIndexOf('<', offsetOf(declaration.token))));
+		// a name token of an attribute value from XslLexerLight, whose value token includes its quotes
+		const renameDeclaration = (declaration: GlobalInstructionData, names: string[]) => names.flatMap((name) =>
+			fix(`Change to '${name}'`, { start: offsetOf(declaration.token) + 1, end: offsetOf(declaration.token) + declaration.token.length - 1, text: name }));
 		for (const usePackage of usePackages) {
 			const used = PackageScope.usedPackage(usePackage, xsltPackages, workspace, 0, new Set(), true);
 			if (!used) {
@@ -138,32 +154,46 @@ export class PackageScope {
 			}
 			for (const accept of usePackage.accepts ?? []) {
 				const kinds = PackageScope.kinds(accept.component);
-				for (const nameToken of XslLexer.tokensInsideToken(accept.token, accept.name)) {
+				const nameTokens = XslLexer.tokensInsideToken(accept.token, accept.name);
+				const acceptStart = text.lastIndexOf('<', offsetOf(accept.token));
+				// the name removed - or the xsl:accept, if it's the only one
+				const remove = (nameToken: BaseToken) => nameTokens.length === 1 ? fix('Remove the xsl:accept', PackageEdits.removeElement(text, markup, acceptStart)) :
+					fix(`Remove '${nameToken.value}' from the xsl:accept`, PackageEdits.removeName(text, offsetOf(nameToken), nameToken.value.length));
+				const replace = (nameToken: BaseToken, names: string[]) => names.flatMap((name) => fix(`Change to '${name}'`, { start: offsetOf(nameToken), end: offsetOf(nameToken) + nameToken.value.length, text: name }));
+				for (const nameToken of nameTokens) {
 					const name = nameToken.value;
 					if (PackageScope.isWildcard(name)) {
 						continue;
 					}
+					const candidates = used.all.filter((c) => kinds.includes(PackageScope.componentKind(c.type) ?? ''));
 					if (name.startsWith('#')) {
-						problems.push({ token: nameToken, message: `XTSE0020: '${name}' isn't a name - the unnamed mode can't be accepted` });
+						problems.push({ token: nameToken, message: `XTSE0020: '${name}' isn't a name - the unnamed mode can't be accepted`, fixes: remove(nameToken) });
 						continue;
 					}
 					if (kinds.includes('function') && accept.component !== '*' && !name.includes('#')) {
-						problems.push({ token: nameToken, message: `XTSE3020: The function name '${name}' must have its arity, e.g. ${name}#1` });
+						// the arities of the package's functions with the name
+						const arities = [...new Set(candidates.filter((c) => c.type === GlobalInstructionType.Function && PackageScope.namePriority(name, accept.prefixBindings, c) === 3).map((c) => c.idNumber))].sort();
+						problems.push({ token: nameToken, message: `XTSE3020: The function name '${name}' must have its arity, e.g. ${name}#1`, fixes: replace(nameToken, arities.map((arity) => `${name}#${arity}`)) });
 						continue;
 					}
-					const matching = used.all.filter((c) => kinds.includes(PackageScope.componentKind(c.type) ?? '') && PackageScope.namePriority(name, accept.prefixBindings, c) === 3);
+					const matching = candidates.filter((c) => PackageScope.namePriority(name, accept.prefixBindings, c) === 3);
 					const kindLabel = accept.component === '*' ? 'component' : accept.component ?? 'component';
 					const overridden = matching.length > 0 && (usePackage.overrides ?? []).some((o) => matching.some((c) => PackageScope.overrides(o, c)));
 					if (overridden) {
-						problems.push({ token: nameToken, message: `XTSE3051: The ${kindLabel} '${name}' is overridden in this xsl:use-package, so it can't also be accepted` });
+						problems.push({ token: nameToken, message: `XTSE3051: The ${kindLabel} '${name}' is overridden in this xsl:use-package, so it can't also be accepted`, fixes: remove(nameToken) });
 					} else if (matching.length === 0) {
-						problems.push({ token: nameToken, message: `XTSE3030: No ${kindLabel} named '${name}' in package '${packageName}'` });
+						const names = candidates.filter((c) => c.packageVisibility !== 'private').map((c) => PackageScope.label(c, accept.prefixBindings).replace(/^(function|template|variable|parameter|attribute set|mode|item-type) \$?/, ''));
+						problems.push({ token: nameToken, message: `XTSE3030: No ${kindLabel} named '${name}' in package '${packageName}'`, fixes: replace(nameToken, RecordTypes.closestNames(name, [...new Set(names)])).concat(remove(nameToken)) });
 					} else if (matching.every((c) => c.packageVisibility === 'private')) {
-						problems.push({ token: nameToken, message: `XTSE3040: The ${kindLabel} '${name}' is private in package '${packageName}', so it can't be accepted` });
+						problems.push({ token: nameToken, message: `XTSE3040: The ${kindLabel} '${name}' is private in package '${packageName}', so it can't be accepted`, fixes: remove(nameToken) });
 					} else {
 						const widened = matching.find((c) => PackageScope.widens(c.packageVisibility, accept.visibility));
 						if (widened) {
-							problems.push({ token: nameToken, message: `XTSE3040: The ${kindLabel} '${name}' is ${widened.packageVisibility} in package '${packageName}', so it can't be accepted as ${accept.visibility}` });
+							const narrowest = widened.packageVisibility;
+							problems.push({
+								token: nameToken, message: `XTSE3040: The ${kindLabel} '${name}' is ${narrowest} in package '${packageName}', so it can't be accepted as ${accept.visibility}`,
+								fixes: fix(`Change the visibility to '${narrowest}'`, PackageEdits.withAttributes(text, markup, acceptStart, [['visibility', narrowest]])).concat(remove(nameToken))
+							});
 						}
 					}
 				}
@@ -175,14 +205,24 @@ export class PackageScope {
 				}
 				const matching = used.all.filter((c) => PackageScope.overrides(override, c));
 				if (matching.length === 0) {
-					problems.push({ token: override.token, message: `XTSE3058: There is no ${kind} named '${override.name}' in package '${packageName}' to override` });
+					// the names of the package's components of the kind that can be overridden
+					const names = used.all.filter((c) => PackageScope.componentKind(c.type) === kind && (c.visibility === 'public' || c.visibility === 'abstract'))
+						.map((c) => ModulePrefixes.nameIn(c, override.prefixBindings ?? moduleBindings));
+					problems.push({
+						token: override.token, message: `XTSE3058: There is no ${kind} named '${override.name}' in package '${packageName}' to override`,
+						fixes: renameDeclaration(override, RecordTypes.closestNames(override.name, [...new Set(names)])).concat(removeDeclaration(override))
+					});
 				} else if (!matching.some((c) => c.visibility === 'public' || c.visibility === 'abstract')) {
-					problems.push({ token: override.token, message: `XTSE3060: The ${kind} '${override.name}' can't be overridden: it's ${matching[0].visibility} in package '${packageName}'` });
+					problems.push({ token: override.token, message: `XTSE3060: The ${kind} '${override.name}' can't be overridden: it's ${matching[0].visibility} in package '${packageName}'`, fixes: removeDeclaration(override) });
 				} else {
 					const overridden = matching.find((c) => c.visibility === 'public' || c.visibility === 'abstract')!;
 					const mismatch = PackageScope.signatureMismatch(text, override, overridden);
 					if (mismatch) {
-						problems.push({ token: override.token, message: `XTSE3070: The overriding ${kind} doesn't match the one in package '${packageName}': ${mismatch}` });
+						const edits = PackageScope.signatureEdits(text, override, overridden, override.prefixBindings ?? moduleBindings);
+						problems.push({
+							token: override.token, message: `XTSE3070: The overriding ${kind} doesn't match the one in package '${packageName}': ${mismatch}`,
+							fixes: edits && edits.length > 0 ? fix(`Change the signature to match package '${packageName}'`, ...edits) : []
+						});
 					}
 				}
 			}
@@ -195,7 +235,12 @@ export class PackageScope {
 				const conflict = used.available.find((c) => PackageScope.componentKind(c.type) === kind && PackageScope.sameName(c, declaration.name, declaration.prefixBindings ?? moduleBindings)
 					&& (kind !== 'function' || PackageScope.aritiesOverlap(c, declaration)));
 				if (conflict) {
-					problems.push({ token: declaration.token, message: `XTSE3050: The ${kind} '${declaration.name}' has the name of a ${conflict.visibility} ${kind} in package '${packageName}' - to replace it, declare it in xsl:override` });
+					const declarationStart = text.lastIndexOf('<', offsetOf(declaration.token));
+					const moved = PackageScope.overrideInsertion(text, usePackage, (indent) => PackageEdits.reindented(text, markup, declarationStart, indent));
+					problems.push({
+						token: declaration.token, message: `XTSE3050: The ${kind} '${declaration.name}' has the name of a ${conflict.visibility} ${kind} in package '${packageName}' - to replace it, declare it in xsl:override`,
+						fixes: fix(`Move into the xsl:override of package '${packageName}'`, PackageEdits.removeElement(text, markup, declarationStart), moved)
+					});
 				}
 			}
 		}
@@ -212,6 +257,47 @@ export class PackageScope {
 			const used = PackageScope.usedPackage(usePackage, packages, workspace, 0, new Set(), true);
 			return used ? used.all.filter((c) => (usePackage.overrides ?? []).some((o) => PackageScope.overrides(o, c))) : [];
 		}), documentBindings);
+	}
+
+	// for each declaration in an xsl:override of the module, the package component it overrides, if there's one
+	public static overrideTargets(text: string): { override: GlobalInstructionData, original: PackageComponent }[] {
+		if (!text.includes('use-package')) {
+			return [];
+		}
+		const placeholder: GlobalInstructionData = { type: GlobalInstructionType.UsePackage, name: '', token: { line: 0, startCharacter: 0, length: 0, value: '', tokenType: 0 }, idNumber: 0 };
+		const { documentUsePackages } = PackageScope.usePackagesOf(text, [placeholder], []);
+		const packages = XsltPackages.all();
+		const workspace = PackageScope.workspaceFolder();
+		return documentUsePackages.flatMap((usePackage) => {
+			const used = (usePackage.overrides ?? []).length > 0 ? PackageScope.usedPackage(usePackage, packages, workspace, 0, new Set(), true) : undefined;
+			return (usePackage.overrides ?? []).flatMap((override) => {
+				const original = used?.all.find((c) => PackageScope.overrides(override, c) && (c.visibility === 'public' || c.visibility === 'abstract'));
+				return original ? [{ override, original }] : [];
+			});
+		});
+	}
+
+	// for the module of a package (its xsl:package module), its public and abstract components, each with the declarations
+	// in the workspace that override it - in the xsl:override of a module that uses the package, the version found here
+	public static overridesOf(packagePath: string): { component: PackageComponent, overrides: { path: string, declaration: GlobalInstructionData }[] }[] {
+		const module = PackageScope.module(packagePath);
+		const declaration = module ? ImportIndex.packageDeclaration(module.text) : undefined;
+		if (!module || !declaration) {
+			return [];
+		}
+		const packages = XsltPackages.all();
+		const workspace = PackageScope.workspaceFolder();
+		const pkg: XsltPackage = { name: declaration.name, path: packagePath, version: declaration.version };
+		const components = PackageScope.packageComponents(pkg, packagePath, packages, workspace, 0, new Set([packagePath]))
+			.filter((c) => c.href === packagePath && (c.packageVisibility === 'public' || c.packageVisibility === 'abstract'));
+		const users = ImportIndex.isEnabled() ? ImportIndex.instance.usersOf(declaration.name) : [];
+		const overrides = users.flatMap((user) => (PackageScope.module(user)?.data ?? [])
+			.filter((g) => {
+				const found = g.type === GlobalInstructionType.UsePackage && g.name === declaration.name ? XsltPackages.find(packages, g.name, g.version) : undefined;
+				return found !== undefined && HrefPaths.settingsPath(found.path, workspace ?? path.dirname(packagePath)) === packagePath;
+			})
+			.flatMap((usePackage) => (usePackage.overrides ?? []).map((o) => ({ path: user, declaration: o }))));
+		return components.map((component) => ({ component, overrides: overrides.filter((o) => PackageScope.overrides(o.declaration, component)) }));
 	}
 
 	// for the hover of an xsl:use-package: the package it uses, its path, and the components available - undefined if the
@@ -274,7 +360,7 @@ export class PackageScope {
 
 	// the indentation of the line with the offset
 	public static lineIndent(text: string, offset: number) {
-		return /^[ \t]*/.exec(text.substring(text.lastIndexOf('\n', offset - 1) + 1, offset))![0];
+		return PackageEdits.lineIndent(text, offset);
 	}
 
 	// the indentation step for content within a top-level element at the offset: its own indentation, as it's indented
@@ -287,70 +373,60 @@ export class PackageScope {
 	// an edit that adds declarations overriding the components to the xsl:use-package: to its xsl:override, or a new
 	// one - undefined if a component's declaration isn't found
 	public static overrideFix(text: string, usePackage: GlobalInstructionData, components: PackageComponent[], moduleBindings: Map<string, string> | undefined, title: string): PackageFix | undefined {
+		const edit = PackageScope.overrideInsertion(text, usePackage, (indent, step, isXslt40) => {
+			const skeletons: string[] = [];
+			for (const component of components) {
+				const skeleton = PackageScope.overrideSkeleton(component, moduleBindings, isXslt40, indent, step);
+				if (skeleton === undefined) {
+					return undefined;
+				}
+				skeletons.push(skeleton);
+			}
+			return skeletons.join('\n');
+		});
+		return edit ? { title, edits: [edit] } : undefined;
+	}
+
+	// an edit that adds declarations to the xsl:override of the xsl:use-package, or a new one - written by declarations()
+	// for lines with the indent, and the step for each level within them
+	private static overrideInsertion(text: string, usePackage: GlobalInstructionData, declarations: (indent: string, step: string, isXslt40: boolean) => string | undefined): TextEdit | undefined {
 		const markup = RecordTypes.blankMarkup(text);
-		const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, usePackage.token.line, usePackage.token.startCharacter));
-		const element = tagStart > -1 ? PackageScope.elementExtent(markup, tagStart) : undefined;
+		const tagStart = PackageScope.usePackageOffset(text, usePackage);
+		const element = tagStart > -1 ? PackageEdits.elementExtent(markup, tagStart) : undefined;
 		if (!element) {
 			return undefined;
 		}
-		const lineIndent = (offset: number) => PackageScope.lineIndent(text, offset);
+		const lineIndent = (offset: number) => PackageEdits.lineIndent(text, offset);
 		const useIndent = lineIndent(tagStart);
 		const step = PackageScope.indentStep(text, tagStart);
 		const override = RecordTypes.childElements(text, markup, tagStart, 'xsl:override')[0];
 		const overrideIndent = override !== undefined ? lineIndent(override) : useIndent + step;
-		const isXslt40 = PackageScope.isXslt40(markup);
-		const skeletons: string[] = [];
-		for (const component of components) {
-			const skeleton = PackageScope.overrideSkeleton(component, moduleBindings, isXslt40, overrideIndent + step, step);
-			if (skeleton === undefined) {
-				return undefined;
-			}
-			skeletons.push(skeleton);
+		const content = declarations(overrideIndent + step, step, PackageScope.isXslt40(markup));
+		if (content === undefined) {
+			return undefined;
 		}
-		const declarations = skeletons.join('\n');
-		const wrapped = `${overrideIndent}<xsl:override>\n${declarations}\n${overrideIndent}</xsl:override>`;
+		const wrapped = `${overrideIndent}<xsl:override>\n${content}\n${overrideIndent}</xsl:override>`;
 		if (element.selfClosing) {
 			const slash = markup.lastIndexOf('/', element.startTagEnd);
 			const end = markup.substring(0, slash).trimEnd().length;
-			return { title, start: end, end: element.startTagEnd, text: `>\n${wrapped}\n${useIndent}</xsl:use-package>` };
+			return { start: end, end: element.startTagEnd, text: `>\n${wrapped}\n${useIndent}</xsl:use-package>` };
 		}
-		const overrideElement = override !== undefined ? PackageScope.elementExtent(markup, override) : undefined;
+		const overrideElement = override !== undefined ? PackageEdits.elementExtent(markup, override) : undefined;
 		if (overrideElement?.selfClosing) {
-			return { title, start: override!, end: overrideElement.startTagEnd, text: wrapped.substring(overrideIndent.length) };
+			return { start: override!, end: overrideElement.startTagEnd, text: wrapped.substring(overrideIndent.length) };
 		}
 		// before the end tag of the xsl:override, or of the xsl:use-package - on its own line, if it's on one
 		const endTag = overrideElement ? overrideElement.endTagStart : element.endTagStart;
-		const content = overrideElement ? declarations : wrapped;
+		const inserted = overrideElement ? content : wrapped;
 		const lineStart = text.lastIndexOf('\n', endTag - 1) + 1;
 		return text.substring(lineStart, endTag).trim() === '' ?
-			{ title, start: lineStart, end: lineStart, text: content + '\n' } :
-			{ title, start: endTag, end: endTag, text: '\n' + content + '\n' + (overrideElement ? overrideIndent : useIndent) };
+			{ start: lineStart, end: lineStart, text: inserted + '\n' } :
+			{ start: endTag, end: endTag, text: '\n' + inserted + '\n' + (overrideElement ? overrideIndent : useIndent) };
 	}
 
-	// the end of an element's start tag, and the start of its end tag - the same for an empty element
-	private static elementExtent(markup: string, tagStart: number) {
-		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
-		tagRgx.lastIndex = tagStart;
-		const first = tagRgx.exec(markup);
-		if (!first || first.index !== tagStart || first[1]) {
-			return undefined;
-		}
-		if (first[3]) {
-			return { startTagEnd: tagRgx.lastIndex, endTagStart: tagRgx.lastIndex, selfClosing: true };
-		}
-		let depth = 1;
-		let match: RegExpExecArray | null;
-		while ((match = tagRgx.exec(markup)) !== null) {
-			if (match[1]) {
-				depth--;
-				if (depth === 0) {
-					return { startTagEnd: first.index + first[0].length, endTagStart: match.index, selfClosing: false };
-				}
-			} else if (!match[3]) {
-				depth++;
-			}
-		}
-		return undefined;
+	// the offset of the start tag of the xsl:use-package (from XslLexerLight)
+	private static usePackageOffset(text: string, usePackage: GlobalInstructionData) {
+		return text.lastIndexOf('<', XdocNotes.offsetAt(text, usePackage.token.line, usePackage.token.startCharacter));
 	}
 
 	private static isXslt40(markup: string) {
@@ -383,8 +459,7 @@ export class PackageScope {
 			noteLines.map((line) => line === '' ? '' : inner + step + line).join('\n') + `\n${inner}</xsl:note>`;
 		const stop = `${inner}<xsl:message terminate="yes">${escape(reference?.replace(/^template /, '') ?? name)} is not implemented</xsl:message>`;
 		const isTemplate = kind === 'template';
-		const params = signature.params.map((p) => `${inner}<xsl:param name="${p.name}"${attribute('as', p.rawAs)}` +
-			(isTemplate ? (p.required ? ' required="yes"' : '') + (p.tunnel ? ' tunnel="yes"' : '') + attribute('select', p.rawSelect) : attribute('required', p.rawRequired)) + '/>');
+		const params = signature.params.map((p) => inner + PackageScope.paramTag(p, isTemplate, translate));
 		const lines = (start: string, body: string[], end: string) => [indent + start, note, ...params, ...body, indent + end].join('\n');
 		switch (kind) {
 			case 'function':
@@ -406,6 +481,13 @@ export class PackageScope {
 			default:
 				return lines(`<xsl:attribute-set name="${name}"${isAbstract ? '' : ' use-attribute-sets="xsl:original"'}>`, [], '</xsl:attribute-set>');
 		}
+	}
+
+	// an xsl:param of a declaration that overrides the one with the parameter - its value's prefixes translated
+	private static paramTag(p: SignatureParam, isTemplate: boolean, translate: (value: string) => string) {
+		const attribute = (name: string, value: string | undefined) => value === undefined ? '' : ` ${name}="${translate(value)}"`;
+		return `<xsl:param name="${p.name}"${attribute('as', p.rawAs)}` +
+			(isTemplate ? (p.required ? ' required="yes"' : '') + (p.tunnel ? ' tunnel="yes"' : '') + attribute('select', p.rawSelect) : attribute('required', p.rawRequired)) + '/>';
 	}
 
 	// a value written with the prefixes of one module, with those of another: each prefix is replaced with one the
@@ -474,6 +556,80 @@ export class PackageScope {
 		}
 	}
 
+	// XTSE3070: the edits that give a declaration in xsl:override (in the text) the signature of the component it
+	// overrides - in the module's prefixes - keeping the names of a function's parameters, and the parameters a template
+	// adds, made optional - undefined if they can't be made
+	private static signatureEdits(text: string, override: GlobalInstructionData, component: GlobalInstructionData, moduleBindings: Map<string, string> | undefined): TextEdit[] | undefined {
+		const componentText = component.href ? PackageScope.module(component.href)?.text : undefined;
+		const mine = PackageScope.signature(text, override);
+		const theirs = componentText !== undefined ? PackageScope.signature(componentText, component) : undefined;
+		if (!mine || !theirs) {
+			return undefined;
+		}
+		const translate = (value: string | undefined) => value === undefined ? undefined : PackageScope.translatePrefixes(value, component.prefixBindings, moduleBindings);
+		const edits: (TextEdit | undefined)[] = [];
+		const change = (offset: number, changes: [string, string | undefined][]) => edits.push(PackageEdits.withAttributes(text, mine.markup, offset, changes));
+		if (PackageScope.typesDiffer(mine.type, theirs.type)) {
+			change(mine.tagStart, [['as', translate(theirs.rawAs)]]);
+		}
+		const kind = PackageScope.componentKind(override.type);
+		if (kind === 'function') {
+			theirs.params.forEach((p, i) => {
+				const m = mine.params[i];
+				if (m && PackageScope.typesDiffer(m.type, p.type)) {
+					change(m.offset, [['as', translate(p.rawAs)]]);
+				}
+			});
+		} else if (kind === 'template') {
+			const missing: SignatureParam[] = [];
+			for (const p of theirs.params) {
+				const m = mine.params.find((candidate) => candidate.expandedName === p.expandedName);
+				if (!m) {
+					if (!p.tunnel) {
+						missing.push(p);
+					}
+					continue;
+				}
+				const changes: [string, string | undefined][] = [];
+				if (PackageScope.typesDiffer(m.type, p.type)) {
+					changes.push(['as', translate(p.rawAs)]);
+				}
+				if (m.required !== p.required) {
+					changes.push(['required', p.required ? 'yes' : undefined]);
+				}
+				if (m.tunnel !== p.tunnel) {
+					changes.push(['tunnel', p.tunnel ? 'yes' : undefined]);
+				}
+				if (changes.length > 0) {
+					change(m.offset, changes);
+				}
+			}
+			mine.params.filter((m) => m.required && !theirs.params.some((p) => p.expandedName === m.expandedName)).forEach((m) => change(m.offset, [['required', undefined]]));
+			if (missing.length > 0) {
+				// after the last parameter - or the note, or the start tag
+				const declaration = PackageEdits.elementExtent(mine.markup, mine.tagStart);
+				if (!declaration || declaration.selfClosing) {
+					return undefined;
+				}
+				const last = mine.params[mine.params.length - 1]?.offset ?? RecordTypes.childElements(text, mine.markup, mine.tagStart, 'xsl:note')[0];
+				const position = last !== undefined ? PackageEdits.elementExtent(mine.markup, last)?.end : declaration.startTagEnd;
+				if (position === undefined) {
+					return undefined;
+				}
+				const indent = mine.params.length > 0 ? PackageEdits.lineIndent(text, mine.params[0].offset) : PackageEdits.lineIndent(text, mine.tagStart) + PackageScope.indentStep(text, mine.tagStart);
+				const inserted = missing.map((p) => `\n${indent}${PackageScope.paramTag(p, true, (value) => translate(value)!)}`).join('');
+				// a change of the last parameter's start tag ends where it's inserted: they're one edit
+				const adjoining = edits.find((edit) => edit?.end === position);
+				if (adjoining) {
+					adjoining.text += inserted;
+				} else {
+					edits.push({ start: position, end: position, text: inserted });
+				}
+			}
+		}
+		return edits.every((edit) => edit !== undefined) ? (edits as TextEdit[]).sort((a, b) => a.start - b.start) : undefined;
+	}
+
 	// a declaration's 'as' and its xsl:param children - with the types compared (see signatureMismatch)
 	private static signature(text: string, declaration: GlobalInstructionData) {
 		const tagStart = text.lastIndexOf('<', XdocNotes.offsetAt(text, declaration.token.line, declaration.token.startCharacter));
@@ -483,19 +639,20 @@ export class PackageScope {
 		const bindings = declaration.prefixBindings;
 		const isTrue = (value: string | undefined) => value !== undefined && ['yes', 'true', '1'].includes(value.trim());
 		const as = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as');
-		const params = RecordTypes.childElements(text, RecordTypes.blankMarkup(text), tagStart, 'xsl:param').map((offset) => {
+		const markup = RecordTypes.blankMarkup(text);
+		const params = RecordTypes.childElements(text, markup, tagStart, 'xsl:param').map((offset) => {
 			const name = (RecordTypes.attributeOfElementAt(text, offset + 1, 'name') ?? '').trim();
 			const paramAs = RecordTypes.attributeOfElementAt(text, offset + 1, 'as');
 			const required = RecordTypes.attributeOfElementAt(text, offset + 1, 'required');
 			return {
-				name, expandedName: ModulePrefixes.expandedName(name, bindings), as: paramAs, type: PackageScope.normalType(paramAs, bindings),
+				offset, name, expandedName: ModulePrefixes.expandedName(name, bindings), as: paramAs, type: PackageScope.normalType(paramAs, bindings),
 				required: isTrue(required), tunnel: isTrue(RecordTypes.attributeOfElementAt(text, offset + 1, 'tunnel')),
 				// as written, for a declaration that overrides it (see overrideSkeleton)
 				rawAs: RecordTypes.attributeOfElementAt(text, offset + 1, 'as', true), rawRequired: required?.trim(), rawSelect: RecordTypes.attributeOfElementAt(text, offset + 1, 'select', true)
 			};
 		});
 		const raw = (name: string) => RecordTypes.attributeOfElementAt(text, tagStart + 1, name, true);
-		return { as, type: PackageScope.normalType(as, bindings), params, rawAs: raw('as'), rawSelect: raw('select'), rawRequired: raw('required') };
+		return { tagStart, markup, as, type: PackageScope.normalType(as, bindings), params, rawAs: raw('as'), rawSelect: raw('select'), rawRequired: raw('required') };
 	}
 
 	// a type as it's compared: without whitespace, and with EQNames for prefixed names - item()* if there's none, and
@@ -523,7 +680,7 @@ export class PackageScope {
 	// template rule or xsl:apply-templates, or the default-mode attribute of the xsl:package - and the unnamed mode by
 	// those without a mode attribute, where it's the default mode. Each mode is reported once, where it's first used. The
 	// declarations imported (importedGlobals) have the names of the text's module, with its bindings
-	public static modeProblems(text: string, bindings: Map<string, string> | undefined, importedGlobals: GlobalInstructionData[]): { offset: number, length: number, message: string }[] {
+	public static modeProblems(text: string, bindings: Map<string, string> | undefined, importedGlobals: GlobalInstructionData[]): { offset: number, length: number, message: string, fixes: PackageFix[] }[] {
 		const scan = PackageScope.scanModes(text);
 		if (!scan.isPackage || scan.declaredModesNo) {
 			return [];
@@ -541,8 +698,16 @@ export class PackageScope {
 			const module = PackageScope.module(modulePath);
 			unnamedDeclared = !!module && PackageScope.scanModes(module.text).unnamedDeclared;
 		}
-		const problems: { offset: number, length: number, message: string }[] = [];
+		const problems: { offset: number, length: number, message: string, fixes: PackageFix[] }[] = [];
 		const reported = new Set<string>();
+		const markup = RecordTypes.blankMarkup(text);
+		const root = XdocNotes.rootOffset(markup);
+		const declaredModesNo = root !== undefined ? PackageEdits.withAttributes(text, markup, root, [['declared-modes', 'no']]) : undefined;
+		const modeFixes = (declaration: string): PackageFix[] => {
+			const insertion = root !== undefined ? PackageScope.modeInsertion(text, markup, root, declaration) : undefined;
+			return (insertion ? [{ title: `Add ${declaration}`, edits: [insertion] }] : [])
+				.concat(declaredModesNo ? [{ title: 'Set declared-modes="no" on the xsl:package', edits: [declaredModesNo] }] : []);
+		};
 		for (const use of scan.uses) {
 			const isUnnamed = use.name === '#unnamed';
 			const key = isUnnamed ? use.name : expanded(use.name);
@@ -550,11 +715,33 @@ export class PackageScope {
 				continue;
 			}
 			reported.add(key);
-			problems.push({ offset: use.offset, length: use.length, message: isUnnamed ?
+			problems.push({ offset: use.offset, length: use.length, fixes: modeFixes(isUnnamed ? '<xsl:mode/>' : `<xsl:mode name="${use.name}"/>`), message: isUnnamed ?
 				'XTSE3085: The unnamed mode isn\'t declared - in a package, add <xsl:mode/> to use it, or set declared-modes="no" on the xsl:package' :
 				`XTSE3085: The mode '${use.name}' isn't declared - in a package, each mode used needs an xsl:mode declaration, unless the xsl:package has declared-modes="no"` });
 		}
 		return problems;
+	}
+
+	// an edit that adds a top-level xsl:mode: after the last one, or before the first template, or at the end
+	private static modeInsertion(text: string, markup: string, root: number, declaration: string): TextEdit | undefined {
+		const modes = RecordTypes.childElements(text, markup, root, 'xsl:mode');
+		if (modes.length > 0) {
+			const end = PackageEdits.elementExtent(markup, modes[modes.length - 1])?.end;
+			return end === undefined ? undefined : { start: end, end, text: `\n${PackageEdits.lineIndent(text, modes[modes.length - 1])}${declaration}` };
+		}
+		const template = RecordTypes.childElements(text, markup, root, 'xsl:template')[0];
+		if (template !== undefined) {
+			const indent = PackageEdits.lineIndent(text, template);
+			return { start: template - indent.length, end: template - indent.length, text: `${indent}${declaration}\n` };
+		}
+		const rootElement = PackageEdits.elementExtent(markup, root);
+		if (!rootElement || rootElement.selfClosing) {
+			return undefined;
+		}
+		const lineStart = text.lastIndexOf('\n', rootElement.endTagStart - 1) + 1;
+		const ownLine = text.substring(lineStart, rootElement.endTagStart).trim() === '';
+		const step = PackageScope.indentStep(text, rootElement.startTagEnd);
+		return ownLine ? { start: lineStart, end: lineStart, text: `${step}${declaration}\n` } : { start: rootElement.endTagStart, end: rootElement.endTagStart, text: `\n${step}${declaration}\n` };
 	}
 
 	// the modes a module declares with top-level xsl:mode elements, and the modes it uses - with their offsets in the text

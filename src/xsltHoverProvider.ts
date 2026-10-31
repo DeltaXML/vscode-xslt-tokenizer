@@ -13,7 +13,7 @@ import { XsltTokenDefinitions } from "./xsltTokenDefintions";
 import { HrefPaths } from './hrefPaths';
 import { XdocReferences } from './xdocReferences';
 import { ModeHover } from './xsltModeHover';
-import { PackageScope, PackageComponent } from './packageScope';
+import { PackageScope, PackageComponent, OverridingDeclaration } from './packageScope';
 import { XsltPackages } from './xsltPackages';
 import { ModulePrefixes } from './modulePrefixes';
 
@@ -176,16 +176,18 @@ export class XSLTHoverProvider implements HoverProvider {
 		const paramList = declarationParamLabels(fn, document.getText()).join(', ');
 		const returnType = fn.returnType ? ` as ${fn.returnType}` : '';
 		const signature = `${fn.name}(${paramList})${returnType}`;
-		const description = XSLTHoverProvider.packageDescription(fn, 'function') ?? (fn.href ? `User-defined function, declared in ${path.basename(fn.href)}` : 'User-defined function, declared in this stylesheet');
-		const note = XSLTHoverProvider.declarationNote(document, fn);
+		const overriding = XSLTHoverProvider.overridingNote(document, fn, 'function');
+		const description = overriding?.description ?? XSLTHoverProvider.packageDescription(fn, 'function') ?? (fn.href ? `User-defined function, declared in ${path.basename(fn.href)}` : 'User-defined function, declared in this stylesheet');
+		const note = overriding ? overriding.note : XSLTHoverProvider.declarationNote(document, fn);
 		return this.createHover(signature, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
 	// a named template's signature and documentation note
 	private templateHover(document: TextDocument, template: GlobalInstructionData) {
-		const note = XSLTHoverProvider.declarationNote(document, template);
+		const overriding = XSLTHoverProvider.overridingNote(document, template, 'template');
+		const note = overriding ? overriding.note : XSLTHoverProvider.declarationNote(document, template);
 		const params = declarationParamLabels(template, document.getText()).join(', ');
-		const description = XSLTHoverProvider.packageDescription(template, 'template') ?? (template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet');
+		const description = overriding?.description ?? XSLTHoverProvider.packageDescription(template, 'template') ?? (template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet');
 		return this.createHover(`template ${template.name}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
@@ -510,8 +512,23 @@ export class XSLTHoverProvider implements HoverProvider {
 
 	// the documentation note - an xsl:note with format="xdoc-md" - of a function, template or item type declaration, in
 	// this document or the module declaring it
+	// a declaration's note - for one in the document, from its text, which may have unsaved changes
 	public static declarationNote(document: TextDocument, declaration: GlobalInstructionData) {
-		return XdocNotes.forGlobal(declaration, document.getText());
+		return XdocNotes.forGlobal(declaration.href === document.fileName ? { ...declaration, href: undefined } : declaration, document.getText());
+	}
+
+	// for a declaration in xsl:override, its note - or if it has none, that of the component it overrides, as Java's
+	// overriding methods inherit their documentation - and what it overrides
+	private static overridingNote(document: TextDocument, declaration: GlobalInstructionData, kind: string) {
+		const overridden = (declaration as OverridingDeclaration).overridden;
+		if (!overridden) {
+			return undefined;
+		}
+		const visibility = overridden.packageVisibility;
+		return {
+			note: XSLTHoverProvider.declarationNote(document, declaration) ?? XSLTHoverProvider.declarationNote(document, overridden),
+			description: `Overrides the ${visibility} ${kind} of package \`${overridden.packageName}\`${overridden.packageVersion ? ' ' + overridden.packageVersion : ''}, declared in ${path.basename(overridden.href ?? '')}`
+		};
 	}
 
 	// for the name of an xsl:call-template, the template's signature and documentation note - or for the name of an

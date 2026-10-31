@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { XsltPackages } from './xsltPackages';
-import { PackageScope, PackageFix, AbstractComponent } from './packageScope';
+import { PackageScope, PackageFix, AbstractComponent, OverridingDeclaration } from './packageScope';
 import { XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
 import { ModulePrefixes } from './modulePrefixes';
@@ -1288,7 +1288,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		if (all.length === 0) {
 			return importedGlobals;
 		}
-		const overrides = documentOverrides.map((declaration) => ({ ...declaration, href: document.fileName }));
+		// each with the component it overrides, e.g. for its documentation in hover help
+		const targets = documentOverrides.length > 0 ? PackageScope.overrideTargets(document.getText()) : [];
+		const overrides: OverridingDeclaration[] = documentOverrides.map((declaration) => ({
+			...declaration, href: document.fileName,
+			overridden: targets.find((t) => t.override.token.line === declaration.token.line && t.override.token.startCharacter === declaration.token.startCharacter)?.original
+		}));
 		return importedGlobals.concat(overrides, PackageScope.components(all, xsltPackages, PackageScope.workspaceFolder()));
 	}
 
@@ -1300,19 +1305,21 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const text = document.getText();
 		const fixes = new Map<string, PackageFix[]>();
 		PackageScope.fixes.set(document.uri.toString(), fixes);
+		const withFixes = (diagnostic: vscode.Diagnostic, problemFixes: PackageFix[], code = DiagnosticCode.packageProblem) => {
+			if (problemFixes.length > 0) {
+				diagnostic.code = code;
+				fixes.set(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message), problemFixes);
+			}
+			return diagnostic;
+		};
 		const result = diagnostics.concat(PackageScope.modeProblems(text, prefixBindings, importedGlobals).map((problem) =>
-			new vscode.Diagnostic(new vscode.Range(document.positionAt(problem.offset), document.positionAt(problem.offset + problem.length)), problem.message, vscode.DiagnosticSeverity.Error)));
+			withFixes(new vscode.Diagnostic(new vscode.Range(document.positionAt(problem.offset), document.positionAt(problem.offset + problem.length)), problem.message, vscode.DiagnosticSeverity.Error), problem.fixes)));
 		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(text, globalInstructionData, []);
 		if (documentUsePackages.length === 0) {
 			return result;
 		}
 		const bindings = prefixBindings ?? documentBindings;
 		const workspace = PackageScope.workspaceFolder();
-		const withFixes = (diagnostic: vscode.Diagnostic, problemFixes: PackageFix[]) => {
-			diagnostic.code = DiagnosticCode.abstractNotOverridden;
-			fixes.set(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message), problemFixes);
-			return diagnostic;
-		};
 		const abstracts = PackageScope.abstractsOf(text, documentUsePackages, bindings, xsltPackages, workspace);
 		const declarations = globalInstructionData.filter((g) => PackageScope.componentKind(g.type) !== undefined);
 		return result.map((diagnostic) => {
@@ -1322,11 +1329,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			}
 			const label = abstract.kind === 'function' ? `${abstract.name}#${abstract.arity}` : abstract.kind === 'variable' ? '$' + abstract.name : abstract.name;
 			const message = `The abstract ${abstract.kind === 'attribute-set' ? 'attribute set' : abstract.kind} ${label} of package '${abstract.packageName}' isn't overridden, so it can't be used here - override it in the xsl:use-package`;
-			return withFixes(new vscode.Diagnostic(diagnostic.range, message, vscode.DiagnosticSeverity.Error), [abstract.fix]);
+			return withFixes(new vscode.Diagnostic(diagnostic.range, message, vscode.DiagnosticSeverity.Error), [abstract.fix], DiagnosticCode.abstractNotOverridden);
 		}).concat(PackageScope.problems(text, documentUsePackages, declarations, bindings, xsltPackages, workspace).map((problem) => {
 			const token = problem.token;
 			const diagnostic = new vscode.Diagnostic(new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length), problem.message, problem.isWarning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error);
-			return problem.fixes ? withFixes(diagnostic, problem.fixes) : diagnostic;
+			return withFixes(diagnostic, problem.fixes ?? [], problem.isWarning ? DiagnosticCode.abstractNotOverridden : DiagnosticCode.packageProblem);
 		}));
 	}
 

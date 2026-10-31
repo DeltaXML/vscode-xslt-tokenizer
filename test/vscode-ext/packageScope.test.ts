@@ -13,6 +13,8 @@ import { XSLTHoverProvider } from '../../src/xsltHoverProvider';
 import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { XSLTCodeActions } from '../../src/xsltCodeActions';
+import { PackageCodeLensProvider } from '../../src/packageCodeLens';
+import { ImportIndex } from '../../src/importIndex';
 
 const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" xmlns:q="urn:q" xmlns:s="urn:s" version="3.0"';
 
@@ -360,5 +362,170 @@ suite('XSLT packages: overriding abstract components', () => {
 		assert.strictEqual(location?.uri.fsPath, pkg);
 		const hover = await new XSLTHoverProvider(provider, XSLTConfiguration.configuration).provideHover(document, position, new vscode.CancellationTokenSource().token);
 		assert.include((hover?.contents as vscode.MarkdownString[]).map((m) => m.value).join('\n'), 'Abstract function of package `urn:a`');
+	});
+});
+
+suite('XSLT packages: quick fixes', () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-package-fixes-'));
+	const p = path.join(dir, 'p.xsl');
+	fs.writeFileSync(p, `<xsl:package name="urn:p" package-version="1.0" ${ns}>
+  <xsl:mode/>
+  <xsl:function name="p:pub" visibility="public"><xsl:param name="a"/><xsl:sequence select="$a"/></xsl:function>
+  <xsl:function name="p:none" visibility="private"><xsl:sequence select="1"/></xsl:function>
+  <xsl:template name="p:tpub" visibility="public" as="xs:string"><xsl:param name="x" as="xs:integer"/><xsl:param name="r" required="yes"/></xsl:template>
+  <xsl:template name="p:tfin" visibility="final"/>
+</xsl:package>`);
+	suiteSetup(() => XsltPackages.additional = [{ name: 'urn:p', path: p }]);
+	suiteTeardown(() => {
+		XsltPackages.additional = [];
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	let count = 0;
+	const moduleDiagnostics = (XsltSymbolProvider as unknown as { moduleDiagnostics(d: vscode.TextDocument, parent: boolean | string): Promise<vscode.Diagnostic[]> }).moduleDiagnostics;
+	const lint = async (text: string) => {
+		const file = path.join(dir, `f${++count}.xsl`);
+		fs.writeFileSync(file, text);
+		const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(file), 'xslt');
+		return { document, diagnostics: await moduleDiagnostics.call(XsltSymbolProvider, document, false) };
+	};
+	// the titles of the fixes for the problem with the message, and the text with the fix with the title made
+	const fixes = async (text: string, message: RegExp, title?: string) => {
+		const { document, diagnostics } = await lint(text);
+		const diagnostic = diagnostics.find((d) => message.test(d.message));
+		assert.isDefined(diagnostic, `no ${message} in ${JSON.stringify(diagnostics.map((d) => d.message))}`);
+		const actions = (new XSLTCodeActions().provideCodeActions(document, diagnostic!.range, { diagnostics: [diagnostic!], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [])
+			.filter((action) => action.kind?.value === vscode.CodeActionKind.QuickFix.value);
+		const action = title !== undefined ? actions.find((a) => a.title === title) : undefined;
+		let fixed: string | undefined;
+		if (action) {
+			const edits = action.edit!.entries()[0][1].map((e) => ({ start: document.offsetAt(e.range.start), end: document.offsetAt(e.range.end), text: e.newText })).sort((a, b) => b.start - a.start);
+			fixed = edits.reduce((result, e) => result.substring(0, e.start) + e.text + result.substring(e.end), text);
+		}
+		return { titles: actions.map((a) => a.title), fixed };
+	};
+	const errorsOf = async (text: string) => (await lint(text)).diagnostics.filter((d) => d.severity === vscode.DiagnosticSeverity.Error).map((d) => d.message);
+	const stylesheet = (useChildren: string, topLevel = '') => `<xsl:stylesheet ${ns}>\n  <xsl:use-package name="urn:p">\n    ${useChildren}\n  </xsl:use-package>\n  ${topLevel}\n</xsl:stylesheet>`;
+
+	test('XTSE3020: a function name in xsl:accept gets its arity', async () => {
+		const { titles, fixed } = await fixes(stylesheet('<xsl:accept component="function" names="p:pub" visibility="private"/>'), /XTSE3020/, "Change to 'p:pub#1'");
+		assert.deepEqual(titles, ["Change to 'p:pub#1'"]);
+		assert.include(fixed, 'names="p:pub#1"');
+	});
+
+	test('XTSE3030: a name in xsl:accept is changed to a close one, or removed - with the xsl:accept, if it\'s the only name', async () => {
+		const text = stylesheet('<xsl:accept component="template" names="p:tpubb" visibility="private"/>');
+		const { titles, fixed } = await fixes(text, /XTSE3030/, "Change to 'p:tpub'");
+		assert.deepEqual(titles, ["Change to 'p:tpub'", "Change to 'p:tfin'", 'Remove the xsl:accept']);
+		assert.include(fixed, 'names="p:tpub"');
+		assert.notInclude((await fixes(text, /XTSE3030/, 'Remove the xsl:accept')).fixed, 'xsl:accept');
+		const two = await fixes(stylesheet('<xsl:accept component="template" names="p:tfin p:tpubb" visibility="private"/>'), /XTSE3030/, "Remove 'p:tpubb' from the xsl:accept");
+		assert.include(two.fixed, 'names="p:tfin"');
+	});
+
+	test('XTSE3040: a visibility that widens a component\'s is narrowed, or the private component\'s name removed', async () => {
+		const widened = await fixes(stylesheet('<xsl:accept component="template" names="p:tfin" visibility="public"/>'), /XTSE3040/, "Change the visibility to 'final'");
+		assert.include(widened.fixed, 'names="p:tfin" visibility="final"');
+		const priv = await fixes(stylesheet('<xsl:accept component="function" names="p:none#0 p:pub#1" visibility="hidden"/>'), /XTSE3040/, "Remove 'p:none#0' from the xsl:accept");
+		assert.include(priv.fixed, 'names="p:pub#1"');
+	});
+
+	test('XTSE3058 and XTSE3060: an overriding declaration is renamed to a close name, or removed', async () => {
+		const text = stylesheet('<xsl:override>\n      <xsl:template name="p:tpubb"/>\n    </xsl:override>');
+		const { titles, fixed } = await fixes(text, /XTSE3058/, "Change to 'p:tpub'");
+		assert.deepEqual(titles, ["Change to 'p:tpub'", 'Remove the declaration']);
+		assert.include(fixed, '<xsl:template name="p:tpub"/>');
+		assert.include((await fixes(text, /XTSE3058/, 'Remove the declaration')).fixed, '<xsl:override>\n    </xsl:override>');
+		const final = await fixes(stylesheet('<xsl:override>\n      <xsl:template name="p:tfin"/>\n    </xsl:override>'), /XTSE3060/, 'Remove the declaration');
+		assert.notInclude(final.fixed, 'p:tfin');
+	});
+
+	test('XTSE3070: the signature is changed to match the package\'s - keeping parameters the template adds, made optional', async () => {
+		const text = stylesheet('<xsl:override>\n      <xsl:template name="p:tpub">\n        <xsl:param name="x" as="xs:string" tunnel="yes"/>\n        <xsl:param name="mine" required="yes"/>\n        <xsl:sequence select="\'t\'"/>\n      </xsl:template>\n    </xsl:override>');
+		const { fixed } = await fixes(text, /XTSE3070/, "Change the signature to match package 'urn:p'");
+		assert.include(fixed, `<xsl:template name="p:tpub" as="xs:string">
+        <xsl:param name="x" as="xs:integer"/>
+        <xsl:param name="mine"/>
+        <xsl:param name="r" required="yes"/>
+        <xsl:sequence select="'t'"/>`);
+		assert.deepEqual((await errorsOf(fixed!)).filter((m) => m.startsWith('XTSE3070')), []);
+	});
+
+	test('XTSE3050: a declaration with a package component\'s name is moved into the xsl:override', async () => {
+		const text = `<xsl:stylesheet ${ns}>\n  <xsl:use-package name="urn:p"/>\n  <xsl:function name="p:pub">\n    <xsl:param name="a"/>\n    <xsl:sequence select="1"/>\n  </xsl:function>\n</xsl:stylesheet>`;
+		const { fixed } = await fixes(text, /XTSE3050/, "Move into the xsl:override of package 'urn:p'");
+		assert.strictEqual(fixed, `<xsl:stylesheet ${ns}>\n  <xsl:use-package name="urn:p">\n    <xsl:override>\n      <xsl:function name="p:pub">\n        <xsl:param name="a"/>\n        <xsl:sequence select="1"/>\n      </xsl:function>\n    </xsl:override>\n  </xsl:use-package>\n</xsl:stylesheet>`);
+		assert.deepEqual(await errorsOf(fixed!), []);
+	});
+
+	test('XTSE3085: an xsl:mode is added, or declared-modes="no"', async () => {
+		const text = `<xsl:package name="urn:k" ${ns}>\n  <xsl:template match="*" mode="m"/>\n  <xsl:template match="*"/>\n</xsl:package>`;
+		const named = await fixes(text, /XTSE3085: The mode 'm'/, 'Add <xsl:mode name="m"/>');
+		assert.deepEqual(named.titles, ['Add <xsl:mode name="m"/>', 'Set declared-modes="no" on the xsl:package']);
+		assert.include(named.fixed, '  <xsl:mode name="m"/>\n  <xsl:template match="*" mode="m"/>');
+		const unnamed = await fixes(named.fixed!, /XTSE3085: The unnamed mode/, 'Add <xsl:mode/>');
+		assert.include(unnamed.fixed, '  <xsl:mode name="m"/>\n  <xsl:mode/>\n');
+		assert.deepEqual((await errorsOf(unnamed.fixed!)).filter((m) => m.startsWith('XTSE3085')), []);
+		const no = await fixes(text, /XTSE3085/, 'Set declared-modes="no" on the xsl:package');
+		assert.include(no.fixed, 'version="3.0" declared-modes="no">');
+	});
+});
+
+suite('XSLT packages: overrides in code lenses and hover', () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-package-lenses-'));
+	const p = path.join(dir, 'p.xsl');
+	fs.writeFileSync(p, `<xsl:package name="urn:p" package-version="1.0" ${ns}>
+  <xsl:function name="p:pub" visibility="public">
+    <xsl:note format="xdoc-md">Returns its argument.</xsl:note>
+    <xsl:param name="a"/>
+    <xsl:sequence select="$a"/>
+  </xsl:function>
+  <xsl:template name="p:tpub" visibility="public"/>
+</xsl:package>`);
+	const user = path.join(dir, 'user.xsl');
+	const userText = `<xsl:stylesheet ${ns}>
+  <xsl:use-package name="urn:p">
+    <xsl:override>
+      <xsl:function name="p:pub">
+        <xsl:param name="a"/>
+        <xsl:sequence select="xsl:original($a)"/>
+      </xsl:function>
+    </xsl:override>
+  </xsl:use-package>
+  <xsl:template name="main"><xsl:sequence select="p:pub(1)"/></xsl:template>
+</xsl:stylesheet>`;
+	fs.writeFileSync(user, userText);
+	suiteSetup(async () => {
+		XsltPackages.additional = [{ name: 'urn:p', path: p, version: '1.0' }];
+		await ImportIndex.instance.buildFrom([p, user]);
+	});
+	suiteTeardown(() => {
+		XsltPackages.additional = [];
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+	const open = async (file: string) => vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(file), 'xslt');
+
+	test('an overriding declaration\'s lens goes to the component it overrides', async () => {
+		const lenses = new PackageCodeLensProvider().provideCodeLenses(await open(user));
+		assert.deepEqual(lenses.map((l) => [l.range.start.line, l.command?.title]), [[3, 'overrides public function p:pub#1 of package urn:p']]);
+		const [, , locations] = lenses[0].command!.arguments as [vscode.Uri, vscode.Position, vscode.Location[]];
+		assert.strictEqual(locations[0].uri.fsPath, p);
+		assert.strictEqual(locations[0].range.start.line, 1);
+	});
+
+	test('a package component\'s lens shows the declarations in the workspace that override it', async () => {
+		const lenses = new PackageCodeLensProvider().provideCodeLenses(await open(p));
+		assert.deepEqual(lenses.map((l) => [l.range.start.line, l.command?.title]), [[1, 'overridden in 1 module']]);
+		const [, , locations] = lenses[0].command!.arguments as [vscode.Uri, vscode.Position, vscode.Location[]];
+		assert.deepEqual(locations.map((l) => [l.uri.fsPath, l.range.start.line]), [[user, 3]]);
+	});
+
+	test('an overriding declaration without a note has the documentation of the one it overrides', async () => {
+		const document = await open(user);
+		const provider = new XSLTHoverProvider(new XsltDefinitionProvider(XSLTConfiguration.configuration), XSLTConfiguration.configuration);
+		const hover = await provider.provideHover(document, document.positionAt(userText.indexOf('p:pub(1)') + 2), new vscode.CancellationTokenSource().token);
+		const markdown = (hover?.contents as vscode.MarkdownString[]).map((m) => m.value).join('\n');
+		assert.include(markdown, 'Returns its argument.');
+		assert.include(markdown, 'Overrides the public function of package `urn:p` 1.0, declared in p.xsl');
 	});
 });

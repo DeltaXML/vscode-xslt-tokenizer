@@ -8,7 +8,7 @@ import { Data, RecordFix, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
-import { PackageScope } from './packageScope';
+import { PackageScope, PackageFix } from './packageScope';
 import { InlineRecordExtractionPlan, RecordExtraction, RecordExtractionPlan } from './recordExtraction';
 import { XdocNotes } from './xdocNote';
 import { ItemTypeSupport } from './itemTypeSupport';
@@ -259,9 +259,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (!fix) {
 			return;
 		}
+		await vscode.workspace.applyEdit(XSLTCodeActions.packageFixEdit(document, fix));
+	}
+
+	// the edits of a fix for a problem with packages (see PackageScope)
+	private static packageFixEdit(document: vscode.TextDocument, fix: PackageFix) {
 		const edit = new vscode.WorkspaceEdit();
-		edit.replace(uri, new vscode.Range(document.positionAt(fix.start), document.positionAt(fix.end)), XSLTCodeActions.inModule(document, fix.text));
-		await vscode.workspace.applyEdit(edit);
+		fix.edits.forEach((textEdit) => edit.replace(document.uri, new vscode.Range(document.positionAt(textEdit.start), document.positionAt(textEdit.end)), XSLTCodeActions.inModule(document, textEdit.text)));
+		return edit;
 	}
 
 	private static inModule(document: vscode.TextDocument, text: string) {
@@ -322,14 +327,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			action.command = { command: 'xslt-xpath.overridePackageComponents', title: action.title, arguments: [document.uri, usePackageOffset] };
 			codeActions.push(action);
 		}
-		// an abstract component of a used package that isn't overridden: fixes that override it, or all of them
+		// a problem with packages, e.g. an abstract component of a used package that isn't overridden: its fixes
 		const packageFixes = PackageScope.fixes.get(document.uri.toString());
-		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.abstractNotOverridden).forEach((diagnostic) => {
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.abstractNotOverridden || diagnostic.code === DiagnosticCode.packageProblem).forEach((diagnostic) => {
 			(packageFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message)) ?? []).forEach((fix) => {
 				const action = new vscode.CodeAction(fix.title, vscode.CodeActionKind.QuickFix);
 				action.diagnostics = [diagnostic];
-				action.edit = new vscode.WorkspaceEdit();
-				action.edit.replace(document.uri, new vscode.Range(document.positionAt(fix.start), document.positionAt(fix.end)), XSLTCodeActions.inModule(document, fix.text));
+				action.edit = XSLTCodeActions.packageFixEdit(document, fix);
 				codeActions.push(action);
 			});
 		});

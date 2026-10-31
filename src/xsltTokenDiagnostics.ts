@@ -163,7 +163,9 @@ export enum DiagnosticCode {
 	// an xsl:use-package whose package isn't found - in the workspace or the XSLT.resources.xsltPackages setting
 	packageNotFound,
 	// an abstract component of a used package that isn't overridden - with the fixes in PackageScope.fixes
-	abstractNotOverridden
+	abstractNotOverridden,
+	// another problem with packages, with fixes in PackageScope.fixes
+	packageProblem
 }
 
 export class XsltTokenDiagnostics {
