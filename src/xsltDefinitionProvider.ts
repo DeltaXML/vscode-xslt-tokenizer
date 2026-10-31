@@ -532,6 +532,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			if (withParamElements && withParamElements.length > 0) {
 				completions = withParamElements.concat(completions ?? []);
 			}
+			// in an xsl:override, a declaration overriding each component of the package
+			const overrides = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getOverrideCompletions(document, position) : undefined;
+			if (overrides && overrides.length > 0) {
+				completions = overrides.concat(completions ?? []);
+			}
 			if (argumentValues) {
 				completions = argumentValues.items.concat(completions ?? []);
 			}

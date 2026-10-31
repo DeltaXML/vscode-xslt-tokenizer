@@ -234,10 +234,54 @@ export class PackageScope {
 		return abstracts.flatMap((component) => {
 			const kind = PackageScope.componentKind(component.type)!;
 			const name = ModulePrefixes.nameIn(component, moduleBindings);
-			const label = kind === 'function' ? `${name}#${component.idNumber}` : kind === 'variable' ? '$' + name : name;
-			const fix = PackageScope.overrideFix(text, usePackage, [component], moduleBindings, `Override abstract ${kind === 'attribute-set' ? 'attribute set' : kind} ${label}`);
+			const fix = PackageScope.overrideFix(text, usePackage, [component], moduleBindings, `Override abstract ${PackageScope.label(component, moduleBindings)}`);
 			return fix ? [{ kind, name, arity: kind === 'function' ? component.idNumber : undefined, packageName: component.packageName, fix }] : [];
 		});
+	}
+
+	// e.g. 'function a:shape#1', 'template a:t', 'variable $a:v' or 'attribute set a:as' - named with the module's prefixes
+	public static label(component: PackageComponent, moduleBindings: Map<string, string> | undefined) {
+		const kind = PackageScope.componentKind(component.type);
+		const name = ModulePrefixes.nameIn(component, moduleBindings);
+		switch (kind) {
+			case 'function': return `function ${name}#${component.idNumber}`;
+			case 'variable': return `${component.type === GlobalInstructionType.Parameter ? 'parameter' : 'variable'} $${name}`;
+			case 'attribute-set': return `attribute set ${name}`;
+			default: return `${kind} ${name}`;
+		}
+	}
+
+	// for an xsl:use-package of the module (at the offset of its start tag), the components it can override: the public
+	// and abstract functions, templates, variables and attribute sets of the package that it doesn't already override
+	public static overridable(text: string, usePackageOffset: number) {
+		const placeholder: GlobalInstructionData = { type: GlobalInstructionType.UsePackage, name: '', token: { line: 0, startCharacter: 0, length: 0, value: '', tokenType: 0 }, idNumber: 0 };
+		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(text, [placeholder], []);
+		const usePackage = documentUsePackages.find((u) => text.lastIndexOf('<', XdocNotes.offsetAt(text, u.token.line, u.token.startCharacter)) === usePackageOffset);
+		const used = usePackage ? PackageScope.usedPackage(usePackage, XsltPackages.all(), PackageScope.workspaceFolder(), 0, new Set(), true) : undefined;
+		if (!usePackage || !used) {
+			return undefined;
+		}
+		const kinds = ['function', 'template', 'variable', 'attribute-set'];
+		const components = used.available.concat(used.abstracts).filter((c) => kinds.includes(PackageScope.componentKind(c.type) ?? '')
+			&& (c.packageVisibility === 'public' || c.packageVisibility === 'abstract'));
+		return { usePackage, components, bindings: documentBindings };
+	}
+
+	// the declaration that overrides the component, for a line with the indent - without the indent on its first line
+	public static skeleton(text: string, usePackageOffset: number, component: PackageComponent, moduleBindings: Map<string, string> | undefined, indent: string) {
+		return PackageScope.overrideSkeleton(component, moduleBindings, PackageScope.isXslt40(RecordTypes.blankMarkup(text)), indent, PackageScope.indentStep(text, usePackageOffset))?.substring(indent.length);
+	}
+
+	// the indentation of the line with the offset
+	public static lineIndent(text: string, offset: number) {
+		return /^[ \t]*/.exec(text.substring(text.lastIndexOf('\n', offset - 1) + 1, offset))![0];
+	}
+
+	// the indentation step for content within a top-level element at the offset: its own indentation, as it's indented
+	// by one step - or if it isn't indented, the document's first indentation
+	private static indentStep(text: string, offset: number) {
+		const indent = PackageScope.lineIndent(text, offset);
+		return indent !== '' ? indent : /\n([ \t]+)\S/.exec(text)?.[1] ?? '\t';
 	}
 
 	// an edit that adds declarations overriding the components to the xsl:use-package: to its xsl:override, or a new
@@ -249,10 +293,9 @@ export class PackageScope {
 		if (!element) {
 			return undefined;
 		}
-		const lineIndent = (offset: number) => /^[ \t]*/.exec(text.substring(text.lastIndexOf('\n', offset - 1) + 1, offset))![0];
+		const lineIndent = (offset: number) => PackageScope.lineIndent(text, offset);
 		const useIndent = lineIndent(tagStart);
-		// a top-level element is indented by one step - or if it isn't indented, the step is the document's first indent
-		const step = useIndent !== '' ? useIndent : /\n([ \t]+)\S/.exec(text)?.[1] ?? '\t';
+		const step = PackageScope.indentStep(text, tagStart);
 		const override = RecordTypes.childElements(text, markup, tagStart, 'xsl:override')[0];
 		const overrideIndent = override !== undefined ? lineIndent(override) : useIndent + step;
 		const isXslt40 = PackageScope.isXslt40(markup);

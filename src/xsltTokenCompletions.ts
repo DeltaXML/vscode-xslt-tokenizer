@@ -22,6 +22,7 @@ import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { RecordField, RecordType, RecordTypes, TemplateParamType } from './recordTypes';
 import { XdocNotes } from './xdocNote';
+import { PackageScope } from './packageScope';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { FixedNamespaces } from './fixedNamespaces';
 
@@ -2416,6 +2417,52 @@ export class XsltTokenCompletions {
 			item.documentation = new vscode.MarkdownString(`Parameter of ${owner}` + (param.text ? `\n\n${param.text}` : ''));
 			// before other element completions, in declaration order
 			item.sortText = '!' + String(index).padStart(4, '0');
+			items.push(item);
+		});
+		return items;
+	}
+
+	// in an xsl:override, after '<': a declaration overriding each component of the package that can be overridden and
+	// isn't already - its signature, a note, and a body (see PackageScope.overrideSkeleton) - before other element
+	// completions, abstract components first
+	public static getOverrideCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameStart = /<([\w.:-]*)$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		if (!nameStart) {
+			return undefined;
+		}
+		const tagStart = offset - nameStart[0].length;
+		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart);
+		const usePackage = ancestors[ancestors.length - 2];
+		if (ancestors[ancestors.length - 1]?.name !== 'xsl:override' || usePackage?.name !== 'xsl:use-package') {
+			return undefined;
+		}
+		const overridable = PackageScope.overridable(text, usePackage.offset);
+		if (!overridable) {
+			return undefined;
+		}
+		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		const indent = PackageScope.lineIndent(text, tagStart);
+		const prefix = XsltTokenDiagnostics.xsltPrefixOf(document);
+		const items: vscode.CompletionItem[] = [];
+		overridable.components.forEach((component, index) => {
+			const skeleton = PackageScope.skeleton(text, usePackage.offset, component, overridable.bindings, indent);
+			if (!skeleton) {
+				return;
+			}
+			const isAbstract = component.packageVisibility === 'abstract';
+			const item = new vscode.CompletionItem(`override ${PackageScope.label(component, overridable.bindings)}`, vscode.CompletionItemKind.Method);
+			// after the '<' typed
+			item.insertText = RecordTypes.withXsltPrefix(skeleton, prefix).substring(1);
+			item.filterText = nameStart[1] + item.label;
+			item.range = range;
+			item.detail = `${isAbstract ? 'Implements the abstract' : 'Overrides the'} ${PackageScope.componentKind(component.type)} of package ${component.packageName}`;
+			const note = XdocNotes.forGlobal(component, text);
+			if (note) {
+				item.documentation = new vscode.MarkdownString(XdocNotes.toMarkdown(note));
+			}
+			item.sortText = '!' + (isAbstract ? '0' : '1') + String(index).padStart(4, '0');
 			items.push(item);
 		});
 		return items;

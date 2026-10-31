@@ -645,6 +645,7 @@ export function activate(context: vscode.ExtensionContext) {
 	};
 	// a new package file, with the name - where the user chooses, by default named from the URI's last part, beside the
 	// stylesheet - with the version the package-version asks for, if it's one version or a lowest one
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.overridePackageComponents', (uri: vscode.Uri, usePackageOffset: number) => XSLTCodeActions.overridePackageComponents(uri, usePackageOffset)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.createPackage', async (name: string, versionRange: string | undefined, uri: vscode.Uri) => {
 		const fileName = (name.split(/[/:#]/).filter((part) => part !== '').pop() ?? 'package').replace(/[^\w.-]/g, '-').replace(/\.xslt?$/, '') + '.xsl';
 		const target = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(path.join(path.dirname(uri.fsPath), fileName)), filters: { 'XSLT': ['xsl', 'xslt'] }, title: `Create Package '${name}'` });

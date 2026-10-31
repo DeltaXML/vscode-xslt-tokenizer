@@ -223,6 +223,47 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	}
 
 	// text to insert in the document, with its prefix for XSLT, e.g. xslt:when for xsl:when (see RecordTypes.withXsltPrefix)
+	public static readonly overrideComponentsTitle = 'Override Package Components...';
+
+	// the offset of the start tag of the xsl:use-package with the position in it - or in its start tag
+	private static usePackageAt(document: vscode.TextDocument, position: vscode.Position): number | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const isUsePackage = (tagStart: number) => RecordTypes.xsltPattern(/^<xsl:use-package[\s/>]/, text).test(text.substring(tagStart, tagStart + 40));
+		const tagStart = text.lastIndexOf('<', offset);
+		if (tagStart > -1 && isUsePackage(tagStart) && !text.substring(tagStart, offset).includes('>')) {
+			return tagStart;
+		}
+		return RecordTypes.openElements(RecordTypes.blankMarkup(text), offset).reverse().find((element) => element.name === 'xsl:use-package')?.offset;
+	}
+
+	// the command for 'Override Package Components...': the components picked - abstract ones to begin with - are added to
+	// the xsl:use-package's xsl:override, each with a declaration overriding it (see PackageScope.overrideSkeleton)
+	public static async overridePackageComponents(uri: vscode.Uri, usePackageOffset: number) {
+		const document = await vscode.workspace.openTextDocument(uri);
+		const text = document.getText();
+		const overridable = PackageScope.overridable(text, usePackageOffset);
+		if (!overridable || overridable.components.length === 0) {
+			vscode.window.showInformationMessage('The package has no components to override - public or abstract, and not already overridden');
+			return;
+		}
+		const items = overridable.components.map((component) => ({
+			label: PackageScope.label(component, overridable.bindings), description: component.packageVisibility,
+			picked: component.packageVisibility === 'abstract', component
+		}));
+		const picked = await vscode.window.showQuickPick(items, { canPickMany: true, placeHolder: `Components of package '${overridable.usePackage.name}' to override` });
+		if (!picked || picked.length === 0) {
+			return;
+		}
+		const fix = PackageScope.overrideFix(text, overridable.usePackage, picked.map((item) => item.component), overridable.bindings, XSLTCodeActions.overrideComponentsTitle);
+		if (!fix) {
+			return;
+		}
+		const edit = new vscode.WorkspaceEdit();
+		edit.replace(uri, new vscode.Range(document.positionAt(fix.start), document.positionAt(fix.end)), XSLTCodeActions.inModule(document, fix.text));
+		await vscode.workspace.applyEdit(edit);
+	}
+
 	private static inModule(document: vscode.TextDocument, text: string) {
 		return RecordTypes.withXsltPrefix(text, XsltTokenDiagnostics.xsltPrefixOf(document));
 	}
@@ -274,6 +315,13 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			add.command = { command: 'xslt-xpath.addPackageFile', title: add.title, arguments: [name, versionRange, document.uri] };
 			codeActions.push(create, add);
 		});
+		// within an xsl:use-package: pick components of the package to override - as Java IDEs' 'Override/Implement Methods'
+		const usePackageOffset = XSLTCodeActions.usePackageAt(document, range.start);
+		if (usePackageOffset !== undefined && (PackageScope.overridable(document.getText(), usePackageOffset)?.components.length ?? 0) > 0) {
+			const action = new vscode.CodeAction(XSLTCodeActions.overrideComponentsTitle, vscode.CodeActionKind.Refactor);
+			action.command = { command: 'xslt-xpath.overridePackageComponents', title: action.title, arguments: [document.uri, usePackageOffset] };
+			codeActions.push(action);
+		}
 		// an abstract component of a used package that isn't overridden: fixes that override it, or all of them
 		const packageFixes = PackageScope.fixes.get(document.uri.toString());
 		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.abstractNotOverridden).forEach((diagnostic) => {

@@ -233,7 +233,9 @@ suite('XSLT packages: overriding abstract components', () => {
 		fs.writeFileSync(file, text);
 		const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(file), 'xslt');
 		const diagnostics: vscode.Diagnostic[] = await moduleDiagnostics.call(XsltSymbolProvider, document, false);
-		const actions = (diagnostic: vscode.Diagnostic) => new XSLTCodeActions().provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		// the quick fixes - not refactorings, e.g. Override Package Components...
+		const actions = (diagnostic: vscode.Diagnostic) => (new XSLTCodeActions().provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [])
+			.filter((action) => action.kind?.value === vscode.CodeActionKind.QuickFix.value);
 		// the text with the code action's edit
 		const applied = (action: vscode.CodeAction) => {
 			const [, edits] = action.edit!.entries()[0];
@@ -294,6 +296,57 @@ suite('XSLT packages: overriding abstract components', () => {
   <xsl:use-package name="urn:a"><xsl:accept component="*" names="*" visibility="abstract"/></xsl:use-package>
 </xsl:package>`);
 		assert.isUndefined(diagnostics.find((d) => d.severity === vscode.DiagnosticSeverity.Warning));
+	});
+
+	test('in an xsl:override, after \'<\': a declaration for each component that can be overridden, abstract ones first', async () => {
+		const text = stylesheet('<xsl:use-package name="urn:a">\n    <xsl:override>\n      <xsl:variable name="a:v" as="xs:integer" select="1"/>\n      <\n    </xsl:override>\n  </xsl:use-package>');
+		const file = path.join(dir, 'complete.xsl');
+		fs.writeFileSync(file, text);
+		const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(file), 'xslt');
+		const position = document.positionAt(text.indexOf('<\n    </xsl:override>') + 1);
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(document, position, new vscode.CancellationTokenSource().token, { triggerKind: vscode.CompletionTriggerKind.TriggerCharacter, triggerCharacter: '<' });
+		const items = (Array.isArray(result) ? result : result?.items ?? []).filter((item) => String(item.label).startsWith('override '))
+			.sort((a, b) => (a.sortText ?? '').localeCompare(b.sortText ?? ''));
+		// $a:v is overridden already
+		assert.deepEqual(items.map((item) => item.label), ['override function a:shape#1', 'override template a:t', 'override function a:describe#0']);
+		const insert = items[0].insertText as string;
+		assert.isTrue(insert.startsWith('xsl:function name="a:shape" as="xs:string">\n        <xsl:note'), insert);
+		assert.include(insert, '\n      </xsl:function>');
+		assert.include(items[2].insertText as string, '<xsl:sequence select="xsl:original()"/>');
+	});
+
+	test('Override Package Components...: the components picked are added to the xsl:override', async () => {
+		const text = stylesheet('<xsl:use-package name="urn:a"/>');
+		const file = path.join(dir, 'picker.xsl');
+		fs.writeFileSync(file, text);
+		const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(file), 'xslt');
+		const actions = new XSLTCodeActions().provideCodeActions(document, new vscode.Range(document.positionAt(text.indexOf('name="urn:a"') + 7), document.positionAt(text.indexOf('name="urn:a"') + 7)), { diagnostics: [], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		const action = actions.find((a) => a.title === XSLTCodeActions.overrideComponentsTitle)!;
+		assert.deepEqual(action.command?.arguments, [document.uri, text.indexOf('<xsl:use-package')]);
+		// the abstract components are picked to begin with - pick them and the public function
+		const window = vscode.window as unknown as { showQuickPick: unknown };
+		const showQuickPick = window.showQuickPick;
+		let offered: { label: string, description?: string, picked?: boolean }[] = [];
+		window.showQuickPick = async (items: { label: string, picked?: boolean }[]) => {
+			offered = items;
+			return items.filter((item) => item.picked || item.label === 'function a:describe#0');
+		};
+		try {
+			await XSLTCodeActions.overridePackageComponents(document.uri, text.indexOf('<xsl:use-package'));
+		} finally {
+			window.showQuickPick = showQuickPick;
+		}
+		assert.deepEqual(offered.map((item) => [item.label, item.description, item.picked]), [
+			['function a:describe#0', 'public', false], ['function a:shape#1', 'abstract', true], ['template a:t', 'abstract', true], ['variable $a:v', 'abstract', true]
+		].sort((a, b) => offered.findIndex((o) => o.label === a[0]) - offered.findIndex((o) => o.label === b[0])));
+		const fixed = document.getText();
+		['<xsl:function name="a:describe" as="xs:string">', '<xsl:function name="a:shape" as="xs:string">', '<xsl:template name="a:t" as="xs:string">', '<xsl:variable name="a:v" as="xs:integer">']
+			.forEach((start) => assert.include(fixed, start));
+		// not left with unsaved changes, for the tests that follow
+		const restore = new vscode.WorkspaceEdit();
+		restore.replace(document.uri, new vscode.Range(document.positionAt(0), document.positionAt(fixed.length)), text);
+		await vscode.workspace.applyEdit(restore);
+		await document.save();
 	});
 
 	test('in an overriding declaration\'s note, @see of what it overrides goes to the package\'s declaration', async () => {
