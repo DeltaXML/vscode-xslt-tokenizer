@@ -275,11 +275,59 @@ suite('XSLT packages: converting a library that shares the unnamed mode', () => 
 	test('what has to be reworked first: the stylesheet\'s xsl:mode for the unnamed mode, a rule that\'s also a named template, and a name found nowhere', async () => {
 		write('lib.xsl', sources['lib.xsl'].replace('</xsl:stylesheet>', '<xsl:template name="t"><xsl:call-template name="missing"/></xsl:template>\n</xsl:stylesheet>'));
 		write('custom.xsl', sources['custom.xsl'].replace('<xsl:include href="helper.xsl"/>', '<xsl:include href="helper.xsl"/><xsl:import href="plugin:x:y.xsl"/><xsl:mode on-no-match="deep-copy"/>')
-			.replace('<xsl:template match="note">', '<xsl:template match="note" name="note">'));
+			.replace('<xsl:template match="note">', '<xsl:template match="note" name="note">').replace('<xsl:template match="b">', '<xsl:template match="b" name="bold">'));
 		await ImportIndex.instance.buildFrom(Object.keys(sources).map((f) => path.join(dir, f)));
 		const blocked = await PackageConversion.analyse(path.join(dir, 'lib.xsl')) as ConversionAnalysis;
 		const blockers = blocked.items.filter((i) => i.severity === 'blocker');
+		// the rule named bold uses xsl:apply-imports, so it can't be split - note can be
 		assert.sameMembers(blockers.map((i) => i.subject), ['xsl:mode for the unnamed mode', 'a template rule that\'s also a named template', 'template missing']);
+		assert.deepEqual(blocked.items.filter((i) => i.subject === 'a template rule that\'s also a named template').map((i) => i.severity).sort(), ['blocker', 'change']);
 		assert.include(blockers.find((i) => i.subject === 'template missing')!.text, 'these imports or includes aren\'t found, so what they declare isn\'t known: plugin:x:y.xsl');
+	});
+});
+
+suite('XSLT packages: converting - a template rule that\'s also a named template', () => {
+	// split: the named template stays, and a rule that calls it moves into xsl:override - Saxon-PE 13.1 gives the same
+	// result before and after
+	const sources: { [file: string]: string } = {
+		'lib.xsl': `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:l="urn:lib">
+  <xsl:mode on-no-match="shallow-skip"/>
+  <xsl:template match="/"><out><xsl:apply-templates/><xsl:apply-templates select="//b" mode="l:list"/></out></xsl:template>
+  <xsl:template match="para"><p><xsl:apply-templates><xsl:with-param name="level" select="1"/></xsl:apply-templates></p></xsl:template>
+  <xsl:template match="b"><strong><xsl:apply-templates/></strong></xsl:template>
+  <xsl:template match="b" mode="l:list">[lib]</xsl:template>
+</xsl:stylesheet>`,
+		'custom.xsl': `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:l="urn:lib">
+  <xsl:import href="lib.xsl"/>
+  <xsl:template match="b" name="bold">
+    <xsl:param name="level" select="0"/>
+    <em level="{$level}"><xsl:apply-templates/></em>
+  </xsl:template>
+  <xsl:template match="b" mode="l:list" name="listed" priority="2">[custom <xsl:value-of select="name()"/>]</xsl:template>
+  <xsl:template name="extra"><xsl:call-template name="bold"/></xsl:template>
+</xsl:stylesheet>`
+	};
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-split-')));
+	suiteTeardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+	test('the named template stays, and a rule that calls it - passing its parameters - moves into xsl:override', async () => {
+		Object.entries(sources).forEach(([file, text]) => fs.writeFileSync(path.join(dir, file), text));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map((f) => path.join(dir, f)));
+		const analysis = await PackageConversion.analyse(path.join(dir, 'lib.xsl')) as ConversionAnalysis;
+		const edits = PackageConversion.convert(analysis, 'urn:lib', '1.0', 'l:default') as Map<string, { start: number, end: number, text: string }[]>;
+		assert.notTypeOf(edits, 'string', String(edits));
+		const file = path.join(dir, 'custom.xsl');
+		const custom = [...edits.get(file)!].sort((a, b) => b.start - a.start).reduce((text, e) => text.substring(0, e.start) + e.text + text.substring(e.end), sources['custom.xsl']);
+		assert.include(custom, `      <xsl:template match="b" mode="l:list" priority="2">
+        <xsl:call-template name="listed"/>
+      </xsl:template>
+      <xsl:template match="b" mode="l:default">
+        <xsl:param name="level" select="0"/>
+        <xsl:call-template name="bold">
+          <xsl:with-param name="level" select="$level"/>
+        </xsl:call-template>
+      </xsl:template>`);
+		assert.include(custom, '<xsl:template name="bold">\n    <xsl:param name="level" select="0"/>\n    <em level="{$level}"><xsl:apply-templates mode="l:default"/></em>');
+		assert.include(custom, '<xsl:template name="listed">[custom <xsl:value-of select="name()"/>]</xsl:template>');
 	});
 });
