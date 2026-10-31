@@ -77,6 +77,8 @@ export interface ElementData {
 	expectedChildElements: string[];
 	// the element's effective version: its version attribute (xsl:version for a literal result element), or its parent's
 	version?: number;
+	// the element's xpath-default-namespace (xsl:xpath-default-namespace for a literal result element), or its parent's
+	xpathDefaultNamespace?: string;
 	// forwards compatible mode: an XSLT element that isn't known, or not allowed where it is, and which is accepted - at the
 	// top level, or with an xsl:fallback child - whose content isn't checked, as it's ignored
 	isIgnored?: boolean;
@@ -180,6 +182,7 @@ export class XsltTokenDiagnostics {
 	// operators within a path expression, all other binary operators end the right-hand operand of the simple map operator '!'
 	static pathExprOps = new Set(['/', '//', '!', '?', '::', '()', '[]', '{}', '*:', '..']);
 	// binary operators with lower precedence than the pipeline operator '->', these end the pipeline's right-hand operand
+	static operatorsBeforeContextItem = new Set(['*', '+', '-', '=', '!=', '!', '|', '||', '&lt;', '&gt;', '&lt;=', '&gt;=', '×', '÷']);
 	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '×', '÷', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>', '&lt;', '&lt;=', '&gt;', '&gt;=', '&lt;&lt;', '&gt;&gt;',
 		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance'].concat(Data.nodeComparisons40));
 	static operators40 = new Set(['×', '÷', '=?>'].concat(Data.nodeComparisons40));
@@ -371,7 +374,9 @@ export class XsltTokenDiagnostics {
 					valid = expectedNames.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 				}
 			} else if ((type === ValidationType.XSLTAttribute || ((isSchematron || isDCP) && type === ValidationType.XMLAttribute)) && expectedAttributes) {
-				valid = expectedAttributes.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTAttributeNameError;
+				// a shadow attribute, e.g. _use-accumulators="{$a}", for any attribute of the XSLT element
+				const isShadow = type === ValidationType.XSLTAttribute && name.startsWith('_') && expectedAttributes.indexOf(name.substring(1)) > -1;
+				valid = isShadow || expectedAttributes.indexOf(name) > -1 ? NameValidationError.None : NameValidationError.XSLTAttributeNameError;
 				return valid;
 			}
 			if (valid === NameValidationError.None) {
@@ -502,6 +507,7 @@ export class XsltTokenDiagnostics {
 		let isBackwardsCompatible = false;
 		// the version attribute of the start tag being read - xsl:version for a literal result element
 		let tagVersion: number | undefined;
+		let tagXPathDefaultNamespace: string | undefined;
 		// the markup of the text, for an xsl:fallback child in forwards compatible mode - found when it's needed
 		let fallbackMarkup: string | undefined;
 		// forwards compatible mode, for an element whose effective version is higher than XSLT 3.0's, or 4.0's in an XSLT 4.0
@@ -887,7 +893,8 @@ export class XsltTokenDiagnostics {
 						// this is xslt or schematron element
 						incrementFunctionArity = false;
 						pendingTemplateParamErrors = [];
-						const writtenElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						// a close tag's name token includes any whitespace before its '>', e.g. </xsl:stylesheet >
+						const writtenElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document).trimEnd();
 						tagElementName = XsltTokenDiagnostics.xsltElementName(writtenElementName, document);
 						if (onRootStartTag && elementStack.length === 0 && writtenElementName.includes(':')) {
 							rootXsltPrefix = writtenElementName.substring(0, writtenElementName.indexOf(':'));
@@ -921,7 +928,7 @@ export class XsltTokenDiagnostics {
 						}
 						break;
 					case XSLTokenLevelState.elementName:
-						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document).trimEnd();
 						tagElementId++;
 						inheritedPrefixesCopy = inheritedPrefixes.slice();
 						if (isSchematron || tagElementName.startsWith('ixsl:')) {
@@ -942,6 +949,7 @@ export class XsltTokenDiagnostics {
 						switch (xmlCharType) {
 							case XMLCharState.lSt:
 								tagVersion = undefined;
+								tagXPathDefaultNamespace = undefined;
 								tagAttributeNames = [];
 								tagWrittenAttributeNames = [];
 								withinTypeDeclarationAttr = false;
@@ -1040,6 +1048,7 @@ export class XsltTokenDiagnostics {
 
 
 								const effectiveVersion = tagVersion ?? (elementStack.length > 0 ? elementStack[elementStack.length - 1].version : undefined);
+								const xpathDefaultNamespace = tagXPathDefaultNamespace ?? (elementStack.length > 0 ? elementStack[elementStack.length - 1].xpathDefaultNamespace : undefined);
 								const forwardsCompatible = isForwardsCompatible(effectiveVersion);
 								// within an element that forwards compatible mode accepts and ignores, nothing is checked
 								let isIgnored = elementStack.length > 0 && !!elementStack[elementStack.length - 1].isIgnored;
@@ -1190,12 +1199,12 @@ export class XsltTokenDiagnostics {
 											elementStack.push({
 												namespacePrefixes: inheritedPrefixesCopy, currentVariable: variableData, variables: newVariablesList,
 												symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren,
-												version: effectiveVersion, isIgnored
+												version: effectiveVersion, xpathDefaultNamespace, isIgnored
 											});
 										}
 									} else if (startTagToken) {
 										if (tagElementName === 'xsl:function') insideGlobalFunction = true;
-										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren, version: effectiveVersion, isIgnored });
+										elementStack.push({ namespacePrefixes: inheritedPrefixesCopy, variables: newVariablesList, symbolName: tagElementName, symbolID: tagIdentifierName, identifierToken: startTagToken, childSymbols: childSymbols, expectedChildElements: stackElementChildren, version: effectiveVersion, xpathDefaultNamespace, isIgnored });
 									}
 									inScopeVariablesList = [];
 									newVariablesList = [];
@@ -1318,8 +1327,8 @@ export class XsltTokenDiagnostics {
 									if (inheritedPrefixes.indexOf(prefix) < 0) {
 										// in case xmlns comes after an attribute using the prefix in the same element, e.g. select="$S:v"
 										// xmlns:S="…" - remove the problems for it: in the start tag, for a name with the prefix, e.g. S:v,
-										// @S:v, $S:v or the function S:f#1
-										const usesPrefix = (p: BaseToken) => (p.error === ErrorType.XPathPrefix || p.error === ErrorType.XSLTPrefix || p.error === ErrorType.XPathFunctionNamespace) &&
+										// @S:v, $S:v, the function S:f#1 or the type S:t, e.g. as="xs:integer*"
+										const usesPrefix = (p: BaseToken) => (p.error === ErrorType.XPathPrefix || p.error === ErrorType.XSLTPrefix || p.error === ErrorType.XPathFunctionNamespace || p.error === ErrorType.XPathTypeName) &&
 											new RegExp(`^[@$#~]?${prefix.replace(/[.-]/g, '\\$&')}:`).test(p.value);
 										const inStartTag = (p: BaseToken) => p.tagElementId === tagElementId || (!!startTagToken &&
 											(p.line > startTagToken.line || (p.line === startTagToken.line && p.startCharacter >= startTagToken.startCharacter)));
@@ -1419,6 +1428,9 @@ export class XsltTokenDiagnostics {
 						}
 						if (isLastPart && ((currentAttName === 'version' && tagElementName.startsWith('xsl:')) || currentAttName === 'xsl:version') && !isNaN(Number(variableName.trim()))) {
 							tagVersion = Number(variableName.trim());
+						}
+						if (isLastPart && ((currentAttName === 'xpath-default-namespace' && tagElementName.startsWith('xsl:')) || currentAttName === 'xsl:xpath-default-namespace')) {
+							tagXPathDefaultNamespace = variableName.trim();
 						}
 						let valueToken = token;
 						if (isSingleName && isContinuation) {
@@ -1528,7 +1540,7 @@ export class XsltTokenDiagnostics {
 						if (!hasProblem && attType === AttributeType.UseAttributeSets) {
 							// each name must be a declared attribute set
 							XslLexer.tokensInsideToken(namesToken, variableName).forEach((nameToken) => {
-								if (!globalAttributeSetNames.includes(nameToken.value) && nameToken.value !== 'xsl:original') {
+								if (!globalAttributeSetNames.includes(nameToken.value) && XsltTokenDiagnostics.xsltAttributeName(nameToken.value, document) !== 'xsl:original') {
 									problemTokens.push({ ...nameToken, tokenType: valueToken.tokenType, error: ErrorType.AttributeSetUnresolved });
 								}
 							});
@@ -1550,7 +1562,7 @@ export class XsltTokenDiagnostics {
 							});
 						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
-							if (!namedTemplates.get(variableName) && !(variableName === 'xsl:original' && XsltTokenDiagnostics.isInOverride(elementStack))) {
+							if (!namedTemplates.get(variableName) && !(XsltTokenDiagnostics.xsltAttributeName(variableName, document) === 'xsl:original' && XsltTokenDiagnostics.isInOverride(elementStack))) {
 								valueToken['error'] = ErrorType.TemplateNameUnresolved;
 								valueToken.value = variableName;
 								problemTokens.push(valueToken);
@@ -1849,9 +1861,9 @@ export class XsltTokenDiagnostics {
 							const isValidXPath4SpecialArg = (typeName === 'enum' && tType === TokenLevelState.string) ||
 								(isRecord && (tType === TokenLevelState.nodeNameTest || tType === TokenLevelState.string)) ||
 								(isRecord && XsltTokenDiagnostics.isOptionalFieldMarker(token, prevToken)) ||
-								(token.value === '()' && prevToken?.value === 'record') || !!token.choiceSeparator ||
+								(token.value === '()' && (prevToken?.value === 'record' || (prevToken?.value === 'function' && allTokens[index + 1]?.value === 'as'))) || !!token.choiceSeparator ||
 								// an EQName, e.g. Q{urn:x}para in element(Q{urn:x}para) - see checkBracedURILiterals
-								tType === TokenLevelState.uriLiteral;
+								tType === TokenLevelState.uriLiteral || tType === TokenLevelState.comment;
 							if (!isValidXPath4SpecialArg) {
 								token['error'] = ErrorType.XPathUnexpected;
 								problemTokens.push(token);
@@ -2419,6 +2431,9 @@ export class XsltTokenDiagnostics {
 								// either a number of an operator so show no error
 							} else if (tv === '?' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record' && XsltTokenDiagnostics.isOptionalFieldMarker(token, prevToken)) {
 								// optional record field, e.g. record(a? as xs:string)
+							} else if (tv === '?' && (prevToken.tokenType === TokenLevelState.simpleType || prevToken.tokenType === TokenLevelState.nodeNameTest) &&
+								XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'element' && XsltTokenDiagnostics.kindTestPart(allTokens, index) === 'type') {
+								// a nillable element's type annotation, e.g. element(item, xs:untyped?)
 							} else if (tv === '?') {
 								if (isXMLToken || prevToken.value === '.' || prevToken.tokenType === TokenLevelState.variable || prevToken.tokenType === TokenLevelState.comment || prevToken.tokenType === TokenLevelState.mapNameLookup) {
 									// don't check
@@ -2527,7 +2542,10 @@ export class XsltTokenDiagnostics {
 												break;
 											default:
 												// (+ or ++ are not ok
-												if ((pv === '&gt;' && (tv === '&gt;' || tv === '=')) || (pv === '&lt;' && (tv === '&lt;' || tv === '&gt;' || tv === '='))) {
+												// < and > may be numeric character references, e.g. 1&#60;=2
+												const ltGt = (v: string) => Data.numericLtGt.includes(v) ? (v.endsWith('60;') || v.toLowerCase().endsWith('3c;') ? '&lt;' : '&gt;') : v;
+												const [pvOp, tvOp] = [ltGt(pv), ltGt(tv)];
+												if ((pvOp === '&gt;' && (tvOp === '&gt;' || tvOp === '=')) || (pvOp === '&lt;' && (tvOp === '&lt;' || tvOp === '&gt;' || tvOp === '='))) {
 													// allow << <> >> <= >=
 												} else if (tv === 'as') {
 													// also permitted after an optional record field, e.g. record(a? as xs:string)
@@ -2539,7 +2557,9 @@ export class XsltTokenDiagnostics {
 													(pv === '?' && (tv === ',' || tv === ')')) ||
 													(tv === '?' && (pv === '(' || pv === ')' || pv === ',')) ||
 													(pv === '!' && tv === '?') ||
-													(pv === '[' && tv === '?')
+													(pv === '[' && tv === '?') ||
+													// the context item after an operator, e.g. $d*.
+													(tv === '.' && XsltTokenDiagnostics.operatorsBeforeContextItem.has(pvOp))
 												)) {
 													isXPathError = true;
 												}
@@ -2843,7 +2863,9 @@ export class XsltTokenDiagnostics {
 								break;
 							case CharLevelState.dSep:
 								const isEmptyBracketsToken = token.value === '()';
-								if (withinTypeDeclarationAttr && isEmptyBracketsToken && (prevToken?.value === 'function' || prevToken?.tokenType === TokenLevelState.simpleType) && prevToken?.value !== 'record') {
+								// function() is a test for a function with no parameters, when it has a return type, e.g. function() as xs:string
+								const isNoParamsFunctionTest = prevToken?.value === 'function' && allTokens[index + 1]?.value === 'as';
+								if (withinTypeDeclarationAttr && isEmptyBracketsToken && (prevToken?.value === 'function' || prevToken?.tokenType === TokenLevelState.simpleType) && prevToken?.value !== 'record' && !isNoParamsFunctionTest) {
 									prevToken['error'] = ErrorType.XPathTypeEmptyArity;
 									problemTokens.push(prevToken);
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
@@ -3082,6 +3104,11 @@ export class XsltTokenDiagnostics {
 							} else {
 								// XPath 4.0 named item type, declared with xsl:item-type
 								isValidType = (XsltTokenDiagnostics.isXPath40(docType) || hasItemTypes) && globalItemTypeNames.includes(tValue);
+								if (!isValidType && (tagXPathDefaultNamespace ?? elementStack[elementStack.length - 1]?.xpathDefaultNamespace) === 'http://www.w3.org/2001/XMLSchema') {
+									// an unprefixed type name is in the default namespace for types, e.g. 'string' with
+									// xpath-default-namespace="http://www.w3.org/2001/XMLSchema"
+									isValidType = tValue === 'numeric' || tValue === 'anyAtomicType' || FunctionData.schema.indexOf(tValue + '#1') > -1;
+								}
 							}
 						} else if (tParts.length === 2) {
 							let nsType = xsltPrefixesToURIs.get(tParts[0]);
@@ -4089,7 +4116,8 @@ export class XsltTokenDiagnostics {
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
-		if (inOverride && tokenValue === 'xsl:original') {
+		// xsl:original, with any prefix for the XSLT namespace, e.g. t:original
+		if (inOverride && (tokenValue === 'xsl:original' || (fNameParts.length === 2 && fNameParts[1].startsWith('original#') && xmlnsData.get(fNameParts[0]) === XSLTnamespaces.XSLT))) {
 			return { isValid: true, qFunctionName, fErrorType: ErrorType.None };
 		}
 		if (token.eqNameUri !== undefined) {
@@ -4293,7 +4321,7 @@ export class XsltTokenDiagnostics {
 		xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken | null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.startsWith('$') ? fullVarName.substring(1) : fullVarName.substring(1, fullVarName.length - 1);
-		if (varName === 'xsl:original' && XsltTokenDiagnostics.isInOverride(elementStack)) {
+		if (XsltTokenDiagnostics.xsltAttributeName(varName, document) === 'xsl:original' && XsltTokenDiagnostics.isInOverride(elementStack)) {
 			return null;
 		}
 		let result: BaseToken | null = null;

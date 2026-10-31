@@ -160,4 +160,56 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.deepEqual(await problems(stylesheet('<xsl:template name="main"/>', 'xsl:package', ' name="urn:simple" package-version="1.0"')), []);
 		assert.deepEqual(await problems(stylesheet('<xsl:use-package name="http://example.com/pkg/a" package-version="*"/>\n<xsl:template name="main"/>', 'xsl:package', ' name="urn:b"')), []);
 	});
+
+	test('a close tag with whitespace before its \'>\', e.g. </xsl:stylesheet > (bug-3801, match-088)', async () => {
+		assert.deepEqual(await problems('<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">\n<xsl:template match="/">\n<a/>\n</xsl:template >\n</xsl:stylesheet >'), []);
+	});
+
+	test('a type whose prefix is declared after it in the same start tag, e.g. as="xs:integer*" xmlns:xs="…" (sequence-0106, expression-4402)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:param name="x" select="\'1\'" as="xs:string" xmlns:xs="http://www.w3.org/2001/XMLSchema"/>\n<xsl:variable name="q" as="xs:integer *" select="1, 2" xmlns:xs="http://www.w3.org/2001/XMLSchema"/>')), []);
+		// still reported: a prefix that isn't declared
+		assert.deepEqual(await problems(stylesheet('<xsl:variable name="q" as="xq:integer" select="1"/>')), ['XPath: Invalid type: \'xq:integer\'']);
+	});
+
+	test('an unprefixed type with xpath-default-namespace for XML Schema, e.g. \'abc\' instance of string (use-when-0118, xpath-default-namespace-0401/0502)', async () => {
+		const xsd = 'http://www.w3.org/2001/XMLSchema';
+		assert.deepEqual(await problems(stylesheet('<xsl:template match="a" use-when="\'abc\' instance of string"><xsl:value-of select="1 instance of decimal"/></xsl:template>', 'xsl:stylesheet', ` xpath-default-namespace="${xsd}"`)), []);
+		assert.deepEqual(await problems(stylesheet(`<xsl:template match="/"><out xsl:xpath-default-namespace="${xsd}"><xsl:variable name="v" select="2.0" as="double"/><xsl:value-of select="$v instance of double"/></out></xsl:template>`)), []);
+		// still reported: outside its scope
+		assert.deepEqual(await problems(stylesheet(`<xsl:template match="/"><out xsl:xpath-default-namespace="${xsd}"/><xsl:variable name="v" select="2.0" as="double"/><xsl:value-of select="$v"/></xsl:template>`)), ['XPath: Invalid type: \'double\'']);
+	});
+
+	test('a shadow attribute for any attribute of an XSLT element, e.g. _use-accumulators (function-1025, accumulator-020)', async () => {
+		assert.deepEqual(await problems(stylesheet('<xsl:param name="p" select="1" static="yes"/>\n<xsl:mode _use-accumulators="{\'#all\'}"/>\n<xsl:decimal-format _zero-digit="{\'0\'}"/>\n<xsl:function name="f:f" xmlns:f="urn:f" as="element()" _new-each-time="{\'no\'}"><e/></xsl:function>')), []);
+		// still reported: a shadow of an attribute the element doesn't have
+		assert.lengthOf(await problems(stylesheet('<xsl:template name="main" _banana="custard"/>')), 1);
+	});
+
+	test('xsl:original with another prefix for the XSLT namespace, e.g. t:original (document-2401)', async () => {
+		const pkg = '<t:package name="urn:a" package-version="1.0" xmlns:t="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0">\n' +
+			'<t:use-package name="urn:b"><t:override><t:template name="go"><t:call-template name="t:original"/></t:template>' +
+			'<t:function name="f:f"><t:sequence select="t:original()"/></t:function><t:variable name="v" select="$t:original"/></t:override></t:use-package>\n</t:package>';
+		assert.deepEqual((await problems(pkg)).filter((m) => m.includes('original')), []);
+	});
+
+	test('XPath syntax: comments in a type, a nillable element test, *. and a character reference for \'<\' (as-1207, as-1203, date-078, boolean-058)', async () => {
+		const tpl = (body: string) => stylesheet(`<xsl:template match="/">${body}</xsl:template>`, 'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"');
+		const reported = new Map<string, string[]>();
+		for (const body of ['<xsl:variable name="v" select="/doc/comment()" as="(:simple:) comment() (:ok?:)"/><xsl:sequence select="$v"/>',
+			'<xsl:value-of select=". instance of element(item, xs:untyped?)"/><xsl:value-of select=". instance of element(*, xs:untyped?)+"/>',
+			'<xsl:value-of select="xs:date(\'2004-03-01\') + (xs:dayTimeDuration(\'P1D\')*.)"/>',
+			'<xsl:value-of select="1&#60;=2"/>']) {
+			reported.set(body, await problems(tpl(body)));
+		}
+		assert.deepEqual([...reported].filter(([, messages]) => messages.length > 0), []);
+	});
+
+	test('a function type in parentheses, e.g. as="(function() as xs:string*)*" (higher-order-functions-041)', async () => {
+		const fn = (as: string) => stylesheet(`<xsl:function name="f:f" xmlns:f="urn:f" as="${as}"><xsl:sequence select="()"/></xsl:function>`, 'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"');
+		const reported = new Map<string, string[]>();
+		for (const as of ['(function() as xs:string*)*', 'function() as xs:boolean', '(function(xs:string) as item()*)?']) {
+			reported.set(as, await problems(fn(as)));
+		}
+		assert.deepEqual([...reported].filter(([, messages]) => messages.length > 0), []);
+	});
 });

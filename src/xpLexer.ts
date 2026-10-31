@@ -1519,7 +1519,8 @@ export class XPathLexer {
                         } else if (prevTokenT === TokenLevelState.operator && (prevToken.value === ')') || prevToken.value === ']') {
                             // ($a) * 9 or count($a) * 8 or abc as map(*)* or $item as node()+
                             if (isTypeDeclaration && prevToken.value === ')' || (
-                                poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType ||
+                                // not after a constructor function call, e.g. (xs:dayTimeDuration('P1D')*.)
+                                poppedContext && ((poppedContext.tokenType === TokenLevelState.simpleType && !poppedContext.value.includes(':')) || poppedContext.tokenType === TokenLevelState.nodeType ||
                                     (poppedContext.tokenType === TokenLevelState.operator && (poppedContext.value === 'as' || poppedContext.value === 'of'))))) {
                                 currentToken.charType = CharLevelState.lName;
                                 currentToken.tokenType = TokenLevelState.nodeType;
