@@ -62,10 +62,17 @@ suite('XSLT packages: visibility', () => {
   <xsl:template name="s:tt" visibility="public" as="xs:string"><xsl:param name="a" as="xs:integer"/><xsl:param name="tun" tunnel="yes" as="xs:integer" select="0"/></xsl:template>
   <xsl:variable name="s:v" visibility="public" as="xs:integer" select="1"/>
 </xsl:package>`);
+	const types = file('types.xsl', `<xsl:package name="urn:types" package-version="1.0" ${ns.replace('version="3.0"', 'version="4.0"')}>
+  <xsl:item-type name="p:private-colour" as="enum('red', 'blue')"/>
+  <xsl:item-type name="p:private-person" as="record(name as xs:string)"/>
+	<xsl:expose component="item-type" names="p:public-colour p:public-person" visibility="public"/>
+	<xsl:item-type name="p:public-colour" as="enum('red', 'blue')"/>
+	<xsl:item-type name="p:public-person" as="record(name as xs:string)"/>
+</xsl:package>`);
 	file('modes.xsl', `<xsl:stylesheet ${ns}><xsl:mode name="inc"/><xsl:mode/></xsl:stylesheet>`);
 
 	suiteSetup(() => {
-		XsltPackages.additional = [{ name: 'urn:p', path: p, version: '1.0' }, { name: 'urn:q', path: q }, { name: 'urn:s', path: s }];
+		XsltPackages.additional = [{ name: 'urn:p', path: p, version: '1.0' }, { name: 'urn:q', path: q }, { name: 'urn:s', path: s }, { name: 'urn:types', path: types, version: '1.0' }];
 	});
 	suiteTeardown(() => {
 		XsltPackages.additional = [];
@@ -86,12 +93,50 @@ suite('XSLT packages: visibility', () => {
 	const passes = async (body: string, useChildren = '', topLevel = '', usePackage?: string) => {
 		assert.deepEqual(await errors(useChildren, body, topLevel, usePackage), []);
 	};
+	const itemTypeStylesheet = (body: string, useChildren = '') => `<xsl:stylesheet ${ns.replace('version="3.0"', 'version="4.0"')}>
+  <xsl:use-package name="urn:types">${useChildren}</xsl:use-package>
+  <xsl:template name="main">${body}</xsl:template>
+</xsl:stylesheet>`;
+	const itemTypeDiagnostics = async (body: string, useChildren = '') => {
+		const document = await vscode.workspace.openTextDocument({ content: itemTypeStylesheet(body, useChildren), language: 'xslt' });
+		return moduleDiagnostics.call(XsltSymbolProvider, document, false);
+	};
+	const itemTypeCompletions = async (body: string, useChildren = '') => {
+		const text = itemTypeStylesheet(body, useChildren);
+		const offset = text.indexOf('¦');
+		const document = await vscode.workspace.openTextDocument({ content: text.replace('¦', ''), language: 'xslt' });
+		const result = await new XsltDefinitionProvider(XSLTConfiguration.configuration).provideCompletionItems(
+			document, document.positionAt(offset), new vscode.CancellationTokenSource().token,
+			{ triggerKind: vscode.CompletionTriggerKind.Invoke, triggerCharacter: undefined }
+		);
+		return (Array.isArray(result) ? result : result?.items ?? []).map((item) => String(item.label));
+	};
 
 	test('public and final components are visible - private ones, by default or explicitly, are not', async () => {
 		await passes('<xsl:sequence select="p:pub(1), $p:vpub"/><xsl:call-template name="p:tpub"/><xsl:call-template name="p:tfin"/>');
 		await fails('<xsl:sequence select="p:none()"/>', /p:none/);
 		await fails('<xsl:sequence select="$p:v"/>', /\$p:v cannot be resolved/);
 		await fails('<xsl:call-template name="p:t"/>', /'p:t' not found/);
+	});
+
+	test('private-by-default enum and record item types are diagnosed and not completed by a using stylesheet', async () => {
+		const diagnostics = await itemTypeDiagnostics('<xsl:variable name="c" as="p:private-colour?" select="()"/><xsl:variable name="person" as="p:private-person?" select="()"/>');
+		const errors = diagnostics.filter((d) => d.severity === vscode.DiagnosticSeverity.Error).map((d) => d.message);
+		assert.include(errors, "XPath: The item type 'p:private-colour' is not declared - expected an xsl:item-type declaration with this name");
+		assert.include(errors, "XPath: The item type 'p:private-person' is not declared - expected an xsl:item-type declaration with this name");
+
+		const completions = await itemTypeCompletions('<xsl:variable name="v" as="p:¦" select="()"/>');
+		assert.notInclude(completions, 'p:private-colour');
+		assert.notInclude(completions, 'p:private-person');
+	});
+
+	test('public enum and record item types are usable and completed by a using stylesheet', async () => {
+		const diagnostics = await itemTypeDiagnostics('<xsl:variable name="c" as="p:public-colour?" select="()"/><xsl:variable name="person" as="p:public-person?" select="()"/>');
+		assert.deepEqual(diagnostics.filter((d) => d.severity === vscode.DiagnosticSeverity.Error).map((d) => d.message), []);
+
+		const completions = await itemTypeCompletions('<xsl:variable name="v" as="p:¦" select="()"/>');
+		assert.include(completions, 'p:public-colour');
+		assert.include(completions, 'p:public-person');
 	});
 
 	test('xsl:expose: by name, then by wildcard - a global xsl:param is public', async () => {
