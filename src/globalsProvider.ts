@@ -1,8 +1,8 @@
 // tslint:disable
 import { XslLexerLight } from "./xslLexerLight";
 import * as vscode from 'vscode';
-import {XSLTLightConfiguration} from './languageConfigurations';
-import { GlobalInstructionData } from "./xslLexer";
+import {XSLTLightConfiguration, XSpecConfiguration} from './languageConfigurations';
+import { GlobalInstructionData, GlobalInstructionType, XslLexer } from "./xslLexer";
 import * as fs from 'fs';
 
 export interface GlobalImportData {
@@ -24,7 +24,16 @@ export class GlobalsProvider {
 			// TODO: USE VSCODE API (but it needs a URI not a filepath) e.g. 
 			//const t = vscode.workspace.fs.readFile
 			const text = fs.readFileSync(href).toString('utf-8');
-			data = lexer.analyseLight(text);
+			if (href.endsWith('.xspec')) {
+				// an XSpec file that another imports: its global variables and parameters, and the stylesheets and XSpec
+				// files it uses
+				const xspecLexer = new XslLexer(XSpecConfiguration.configuration);
+				xspecLexer.analyse(text);
+				data = xspecLexer.globalInstructionData.filter((global) => [GlobalInstructionType.Variable, GlobalInstructionType.Parameter,
+					GlobalInstructionType.Import, GlobalInstructionType.Include].includes(global.type));
+			} else {
+				data = lexer.analyseLight(text);
+			}
 			return {data: data, error: false};
 		} catch (e) {
 			return {data: data, error: true};

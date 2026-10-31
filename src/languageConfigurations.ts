@@ -7,6 +7,7 @@ import { DCPSnippets } from './dcpSnippets';
 import { XSLTSnippets } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
 import { SchSchema } from './schSchema';
+import { XSpecSchema } from './xspecSchema';
 
 export class XSLTConfiguration {
 	// Note: Non-standard 'else', 'then', 'on-duplicates' can be used in Saxon 10.0
@@ -96,6 +97,21 @@ export class SchConfiguration {
 		docType: DocumentTypes.SCH,
 		rootElementSnippets: DCPSnippets.xsltRootTags
 	}; 
+}
+
+export class XSpecConfiguration {
+	// XSpec test descriptions (see src/xspecSchema.ts): the prefix is the one used for x:description
+	public static configuration: LanguageConfiguration = {
+		// the attributes of type x:xpath in the XSpec schema
+		expressionAtts: ['select', 'test', 'use-when', 'location'],
+		// x:param too, as a global parameter (see XsltTokenDiagnostics)
+		variableElementNames: ['x:variable'],
+		nativePrefix: 'x',
+		tvtAttributes: ['expand-text'],
+		nonNativeAvts: false,
+		schemaData: new XSpecSchema(),
+		docType: DocumentTypes.XSPEC
+	};
 }
 
 export class XProcConfiguration {

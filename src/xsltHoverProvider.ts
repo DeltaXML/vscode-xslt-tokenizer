@@ -40,6 +40,12 @@ export class XSLTHoverProvider implements HoverProvider {
 	}
 
 	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		if (this.languageConfiguration?.docType === DocumentTypes.XSPEC) {
+			const elementHover = this.xspecElementHover(document, position);
+			if (elementHover) {
+				return elementHover;
+			}
+		}
 		// XPath 4.0: a record field, e.g. 'r' in $c?r
 		const fieldReference = XsltTokenDiagnostics.recordFieldAt(document, position);
 		if (fieldReference) {
@@ -98,6 +104,24 @@ export class XSLTHoverProvider implements HoverProvider {
 		}
 
 		return undefined;
+	}
+
+	// an XSpec element's name, e.g. x:expect: its description in the XSpec schema
+	private xspecElementHover(document: TextDocument, position: Position): Hover | undefined {
+		const range = document.getWordRangeAtPosition(position, /<\/?[\w.-]+:[\w.-]+/);
+		const prefix = XsltDefinitionProvider.xspecPrefixOf(document);
+		const name = range ? document.getText(range).replace(/^<\/?/, '') : undefined;
+		if (!name?.startsWith(prefix + ':')) {
+			return undefined;
+		}
+		const detail = this.languageConfiguration?.schemaData?.elements['x:' + name.substring(prefix.length + 1)]?.detail;
+		if (!detail) {
+			return undefined;
+		}
+		const markdown = new MarkdownString();
+		markdown.appendCodeblock(`<${name}>`, 'xml');
+		markdown.appendText(detail);
+		return new Hover(markdown, range);
 	}
 
 	private async findUserFunctionHover(document: TextDocument, fnName: string, token: CancellationToken): Promise<Hover | undefined> {

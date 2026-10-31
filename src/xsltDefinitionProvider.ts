@@ -308,10 +308,14 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
 		let result = await this.completionItems(document, position, token, context);
-		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix
-		const prefix = this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
-		if (result && prefix !== 'xsl') {
-			result = Array.isArray(result) ? XsltDefinitionProvider.withXsltPrefix(result, prefix) : new vscode.CompletionList(XsltDefinitionProvider.withXsltPrefix(result.items, prefix), result.isIncomplete);
+		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix - or in an XSpec file, the items
+		// with its prefix for XSpec, e.g. t (see XsltTokenDiagnostics.xsltElementName)
+		const isXSpec = this.docType === DocumentTypes.XSPEC;
+		const fromPrefix = isXSpec ? 'x' : 'xsl';
+		const prefix = isXSpec ? XsltDefinitionProvider.xspecPrefixOf(document) : this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
+		if (result && prefix !== fromPrefix) {
+			result = Array.isArray(result) ? XsltDefinitionProvider.withXsltPrefix(result, prefix, fromPrefix) :
+				new vscode.CompletionList(XsltDefinitionProvider.withXsltPrefix(result.items, prefix, fromPrefix), result.isIncomplete);
 		}
 		if (result) {
 			XsltDefinitionProvider.fitToPrefixedWord(Array.isArray(result) ? result : result.items, document, position);
@@ -319,10 +323,15 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		return result;
 	}
 
+	// the prefix of an XSpec file's x:description, e.g. t for t:description - x if it has none
+	public static xspecPrefixOf(document: vscode.TextDocument) {
+		return /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>]*>)*<([\w.-]+):description\b/.exec(document.getText())?.[1] ?? 'x';
+	}
+
 	// copies of the items - which may be shared - with each name with the prefix xsl, in the label and the text inserted,
 	// with the prefix (see RecordTypes.withXsltPrefix)
-	private static withXsltPrefix(items: vscode.CompletionItem[], prefix: string): vscode.CompletionItem[] {
-		const text = (value: string) => RecordTypes.withXsltPrefix(value, prefix);
+	private static withXsltPrefix(items: vscode.CompletionItem[], prefix: string, fromPrefix = 'xsl'): vscode.CompletionItem[] {
+		const text = (value: string) => fromPrefix === 'xsl' ? RecordTypes.withXsltPrefix(value, prefix) : value.replace(new RegExp(`(?<![\\w.:-])${fromPrefix}:`, 'g'), prefix + ':');
 		return items.map((item) => {
 			const copy: vscode.CompletionItem = Object.assign(new vscode.CompletionItem(''), item);
 			copy.label = typeof item.label === 'string' ? text(item.label) : { ...item.label, label: text(item.label.label) };

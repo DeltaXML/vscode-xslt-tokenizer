@@ -1,5 +1,6 @@
 .vscode/**
 .vscode-test/**
+.vscode-test.*.js
 __tests__/**
 temp/**
 xslt-out/**

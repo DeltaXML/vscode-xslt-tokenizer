@@ -35,7 +35,7 @@ suite('XML selection commands', () => {
 		const keybinding = contributes.keybindings.find((k: { command: string }) => k.command === 'xslt-xpath.addXPathLocationToQueries');
 		assert.strictEqual(keybinding.key, 'alt+g');
 		assert.isUndefined(keybinding.mac);
-		assert.include(keybinding.when, 'editorLangId =~ /^(xml|dcp|sch|bpmn)$/');
+		assert.include(keybinding.when, 'editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/');
 		assert.isUndefined(contributes.commands.find((c: { command: string }) => c.command === 'xslt-xpath.gotoXPath'));
 	});
 

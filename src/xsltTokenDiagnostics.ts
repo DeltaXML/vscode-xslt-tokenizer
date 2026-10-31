@@ -289,6 +289,7 @@ export class XsltTokenDiagnostics {
 		const name = origType === ValidationType.AttributeNameTest && origNname.startsWith('@') ? origNname.substring(1) : origNname;
 		const isSchematron = docType === DocumentTypes.SCH;
 		const isDCP = docType === DocumentTypes.DCP;
+		const isXSpec = docType === DocumentTypes.XSPEC;
 		let valid = NameValidationError.None;
 		if (name.trim().length === 0) {
 			return NameValidationError.NameError;
@@ -312,7 +313,7 @@ export class XsltTokenDiagnostics {
 				if (type === ValidationType.XMLElement) {
 					// TODO: when within literal result element, iterate up stack until we get to an XSLT instruction:
 					const expectedNames: string[] = elementStack && elementStack.length > 0 ? elementStack[elementStack.length - 1].expectedChildElements : ['xsl:transform', 'xsl:stylesheet', 'xsl:package'];
-					if (prefix === 'xsl' || prefix === 'ixsl') {
+					if ((prefix === 'xsl' || prefix === 'ixsl') && !isXSpec) {
 						if (isSchematron) {
 							// TODO: check xslt elements within schematron
 							valid = NameValidationError.None;
@@ -331,6 +332,10 @@ export class XsltTokenDiagnostics {
 								}
 							}
 						}
+						return valid;
+					} else if (isXSpec && prefix === 'x') {
+						// an XSpec element - its name as the linter compares it, with the prefix x (see xsltElementName)
+						valid = (elementStack?.length === 0 ? ['x:description'] : expectedNames).includes(name) ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 						return valid;
 					} else if (isSchematron) {
 						if (prefix === 'sch') {
@@ -502,6 +507,9 @@ export class XsltTokenDiagnostics {
 		let onRootStartTag = true;
 		// the prefix of the outermost element, e.g. xsl:stylesheet, which must be bound to the XSLT namespace
 		let rootXsltPrefix = 'xsl';
+		// XSpec: the prefixes bound to the XSpec namespace on the outermost element, e.g. x - for its variables, e.g. $x:result
+		const xspecPrefixes: string[] = [];
+		const xspecScope = docType === DocumentTypes.XSPEC ? XsltTokenDiagnostics.xspecScope(document.getText()) : undefined;
 		// XSLT 1.0 backwards compatible mode, for the version attribute of the outermost element, e.g. version="1.0": XPath
 		// 1.0 compatibility mode, in which a string operand is converted to a number, e.g. '6' * 2
 		let isBackwardsCompatible = false;
@@ -913,6 +921,10 @@ export class XsltTokenDiagnostics {
 								currentXSLTIterateParams.push([]);
 							}
 							tagType = (xslVariable.indexOf(tagElementName) > -1) ? TagType.XSLTvar : TagType.XSLTstart;
+							if (docType === DocumentTypes.XSPEC && tagElementName === 'x:param' && ['x:description', 'x:scenario'].includes(elementStack[elementStack.length - 1]?.symbolName)) {
+								// a global parameter - not a parameter of a call, or of the template rules applied by x:context
+								tagType = TagType.XSLTvar;
+							}
 							let xsltToken: XSLTToken = token;
 							xsltToken['tagType'] = tagType;
 							startTagToken = token;
@@ -977,6 +989,21 @@ export class XsltTokenDiagnostics {
 								// e.g. a text value template in the element's content is not part of the last attribute
 								currentAttName = '';
 								// start-tag ended, we're now within the new element scope:
+								if (docType === DocumentTypes.XSPEC && onRootStartTag) {
+									// the known namespaces, e.g. xs for xs:integer(...), as in XSLT
+									rootXmlnsBindings.forEach(([pfx, namespaceURI]) => {
+										const xsltType = FunctionData.namespaceType(namespaceURI);
+										if (xsltType !== undefined) {
+											xsltPrefixesToURIs.set(pfx, xsltType);
+										}
+										if (namespaceURI === XsltTokenDiagnostics.xspecNamespace) {
+											xspecPrefixes.push(pfx);
+										} else if (xsltType === undefined && !xspecScope?.testsStylesheet) {
+											// the functions of an XQuery module, or a Schematron's, which aren't known
+											XsltTokenDiagnostics.externalFunctionPrefixes.push(pfx);
+										}
+									});
+								}
 								if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && onRootStartTag) {
 									rootXmlnsBindings.forEach((prefixNsPair) => {
 										let pfx = prefixNsPair[0];
@@ -1024,7 +1051,9 @@ export class XsltTokenDiagnostics {
 								let attsWithXmlnsErrors: string[] = [];
 								let attsWithNameErrors: string[] = [];
 								let xsltAttsWithNameErrors: string[] = [];
-								const attrValType = tagElementName.startsWith('xsl:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute;
+								// in XSpec, an XSLT element, e.g. in x:context, is user content
+								const attrValType = docType === DocumentTypes.XSPEC ? (tagType !== TagType.XMLstart && tagElementName.startsWith('x:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute) :
+									tagElementName.startsWith('xsl:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute;
 
 								let tunnelAttributeFound = false;
 								const checkPendingErrors = pendingTemplateParamErrors.length !== 0;
@@ -1181,6 +1210,8 @@ export class XsltTokenDiagnostics {
 										(docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40);
 									const stackElementChildren = isSchematron || docType === DocumentTypes.DCP ?
 										tagElementChildren :
+										// XSpec: an element of user content, e.g. in x:context, may only have x:text from XSpec
+										docType === DocumentTypes.XSPEC ? (attrValType === ValidationType.XMLAttribute ? ['x:text'] : tagElementChildren) :
 										isSimplifiedStylesheet ? XsltTokenDiagnostics.getExpectedElementNames('xsl:if', schemaQuery, elementStack)[0] :
 										attrValType === ValidationType.XMLAttribute && elementStack.length > 0 ?
 											elementStack[elementStack.length - 1].expectedChildElements :
@@ -1496,6 +1527,10 @@ export class XsltTokenDiagnostics {
 							case AttributeType.None:
 								// the attribute this value is for - not the last in tagAttributeNames, which has no namespace declarations
 								const tagAttributeName = currentAttName !== '' ? currentAttName : undefined;
+								if (docType === DocumentTypes.XSPEC && tagType === TagType.XSLTstart && isLastPart && ['label', 'function', 'template'].includes(currentAttName)) {
+									// in the outline, e.g. x:scenario › the label, or x:call › the function called
+									tagIdentifierName = variableName.trim();
+								}
 								let isAVTbracket = valueToken.length === 2 && (fullVariableName.charAt(1) === '{' || fullVariableName.charAt(0) === '}');
 								if (!isAVTbracket && schemaQuery && tagAttributeName && variableName.indexOf('{') === -1) {
 									const expectedValues = schemaQuery.getExpected(tagElementName, tagAttributeName);
@@ -2061,7 +2096,7 @@ export class XsltTokenDiagnostics {
 							}
 							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(globalVarName, document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 								xpathStack, inScopeVariablesList, elementStack);
-							if (unResolvedToken !== null) {
+							if (unResolvedToken !== null && !(xspecScope && XsltTokenDiagnostics.isXSpecVariable(token.value, xspecPrefixes, xspecScope))) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
@@ -3183,11 +3218,13 @@ export class XsltTokenDiagnostics {
 				}
 				if (!token.error && prevToken?.charType === CharLevelState.dSep && (prevToken.value === '=>' || prevToken.value === '=!>')) {
 					let isValid = false;
-					if (xpathTokenType !== TokenLevelState.function) {
+					// an EQName's URI, before the function's local name, e.g. => Q{http://www.w3.org/2005/xpath-functions/map}find('a')
+					const isEQNameFunction = xpathTokenType === TokenLevelState.uriLiteral && allTokens[index + 1]?.tokenType === TokenLevelState.function;
+					if (xpathTokenType !== TokenLevelState.function && !isEQNameFunction) {
 						// the implicit first argument only applies to a static function call, not to a dynamic call
 						incrementFunctionArity = false;
 					}
-					if (xpathCharType === CharLevelState.lB || xpathTokenType === TokenLevelState.function) {
+					if (xpathCharType === CharLevelState.lB || xpathTokenType === TokenLevelState.function || isEQNameFunction) {
 						isValid = true;
 					} else if (xpathTokenType === TokenLevelState.anonymousFunction || xpathTokenType === TokenLevelState.functionNameTest ||
 						xpathCharType === CharLevelState.lPr || xpathCharType === CharLevelState.lBr ||
@@ -3326,6 +3363,13 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
+		if (docType === DocumentTypes.XSPEC) {
+			// the problems with XSpec's elements and attributes, as XSpec's
+			allDiagnostics.forEach((d) => d.message = d.message
+				.replace(/^XSLT: instruction: (\S+) not valid in this context/, 'XSpec: element $1 is not allowed here')
+				.replace(/^XSLT: Invalid attribute on element/, 'XSpec: Invalid attribute on element')
+				.replace(/^XSLT: Invalid XSLT name/, 'XSpec: Invalid name'));
+		}
 		// the quick fixes for missing record fields
 		const recordFixes = new Map<string, RecordFix>();
 		problemTokens.forEach((token) => {
@@ -3785,7 +3829,8 @@ export class XsltTokenDiagnostics {
 
 		if (schemaQuery?.docType === DocumentTypes.DCP ||
 			(parentName.startsWith('xsl:') && schemaQuery && schemaQuery.docType === DocumentTypes.XSLT) ||
-			(parentName.startsWith('sch:') && schemaQuery && schemaQuery.docType === DocumentTypes.SCH)) {
+			(parentName.startsWith('sch:') && schemaQuery && schemaQuery.docType === DocumentTypes.SCH) ||
+			(parentName.startsWith('x:') && schemaQuery && schemaQuery.docType === DocumentTypes.XSPEC)) {
 			const allExpected = schemaQuery.getExpected(parentName);
 			const nameDetailArray = allExpected.elements;
 			expectedElements = nameDetailArray.map(item => item[0]);
@@ -4254,8 +4299,55 @@ export class XsltTokenDiagnostics {
 	// the name of an XSLT element - an xslElementName token - as it's compared, e.g. with the schema's names: with the
 	// prefix xsl, in an XSLT module that uses another prefix for the XSLT namespace, e.g. xslt:template in some W3C tests
 	// (see XslLexer.useRootPrefix) - in Schematron, as it's written
+	public static readonly xspecNamespace = 'http://www.jenitennison.com/xslt/xspec';
+	// the variables that XSpec declares, e.g. $x:result in x:expect, with a prefix for the XSpec namespace, or as an EQName
+	private static readonly xspecVariables = ['result', 'context', 'xspec-uri', 'document-properties', 'stylesheet-uri', 'is-external'];
+
+	// an XSpec file: whether it tests a stylesheet, whose declarations are known - not an XQuery module, a Schematron or
+	// an XProc step - and the names of the variables and parameters it declares
+	private static xspecScope(documentText: string) {
+		const root = /<([\w.-]+:)?description\b[^>]*>/.exec(documentText)?.[0] ?? '';
+		// x:variable, and x:param as a global or scenario parameter - not one of x:call or x:context
+		const declared = new Set<string>();
+		const parents: string[] = [];
+		for (const tag of documentText.matchAll(/<(\/?)(?:[\w.-]+:)?([\w.-]+)\b([^>]*?)(\/?)>/g)) {
+			const [, close, localName, attributes, selfClosing] = tag;
+			if (close) {
+				parents.pop();
+				continue;
+			}
+			const isParameter = localName === 'param' && ['description', 'scenario'].includes(parents[parents.length - 1]);
+			const name = (localName === 'variable' || isParameter) ? /\sname\s*=\s*(["'])\s*([^"']+?)\s*\1/.exec(attributes)?.[2] : undefined;
+			if (name) {
+				declared.add(name);
+			}
+			if (!selfClosing) {
+				parents.push(localName);
+			}
+		}
+		return { testsStylesheet: /\sstylesheet\s*=/.test(root), declared };
+	}
+
+	// a variable reference that isn't resolved, which XSpec allows: one XSpec declares, e.g. $x:result - or for a module
+	// that isn't a stylesheet, any - or one declared elsewhere in the file, e.g. in a shared scenario that x:like uses,
+	// whose variables are those of the scenario using it
+	private static isXSpecVariable(reference: string, xspecPrefixes: string[], xspecScope: { testsStylesheet: boolean, declared: Set<string> }) {
+		const name = reference.startsWith('$') ? reference.substring(1) : reference;
+		if (!xspecScope.testsStylesheet || xspecScope.declared.has(name)) {
+			return true;
+		}
+		const eqName = `Q{${XsltTokenDiagnostics.xspecNamespace}}`;
+		const colon = name.indexOf(':');
+		const localName = name.startsWith(eqName) ? name.substring(eqName.length) : colon > 0 && xspecPrefixes.includes(name.substring(0, colon)) ? name.substring(colon + 1) : undefined;
+		return localName !== undefined && XsltTokenDiagnostics.xspecVariables.includes(localName);
+	}
+
 	public static xsltElementName(name: string, document: vscode.TextDocument) {
 		const colon = name.indexOf(':');
+		if (colon > 0 && document.languageId === 'xspec') {
+			// an XSpec element, e.g. t:scenario, is compared as x:scenario
+			return 'x' + name.substring(colon);
+		}
 		return colon > 0 && document.languageId === 'xslt' && !name.startsWith('xsl:') ? 'xsl' + name.substring(colon) : name;
 	}
 

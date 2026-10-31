@@ -21,7 +21,8 @@ export enum DocumentTypes {
     XPath,
 	DCP,
     SCH,
-	Other
+	Other,
+	XSPEC
 }
 
 export enum XMLCharState {
@@ -296,6 +297,10 @@ export class XslLexer {
         if (this.languageConfiguration.nativePrefix === 'xsl') {
             const root = /^([^:]+):(stylesheet|transform|package)$/.exec(rootName);
             this.setNativePrefix(root ? root[1] : 'xsl');
+        } else if (this.languageConfiguration.docType === DocumentTypes.XSPEC) {
+            // XSpec: the prefix of x:description, e.g. t:description
+            const root = /^([^:]+):description$/.exec(rootName);
+            this.setNativePrefix(root ? root[1] : this.languageConfiguration.nativePrefix);
         }
     }
 
@@ -1055,7 +1060,10 @@ export class XslLexer {
                             currentParamNamePushed = false;
                             pendingParamSelect = undefined;
                             topLevelParamNamePushed = false;
-                            if (xmlElementStack.length === 0 && tokenChars.length > 5) {
+                            if (xmlElementStack.length === 0 && this.docType === DocumentTypes.XSPEC) {
+                                // x:description's stylesheet: the stylesheet under test, whose declarations the tests use
+                                tagGlobalInstructionType = isNativeElement && tagElementName === 'description' ? GlobalInstructionType.Import : GlobalInstructionType.Unknown;
+                            } else if (xmlElementStack.length === 0 && tokenChars.length > 5) {
                                 tagGlobalInstructionType = GlobalInstructionType.RootXSLT;
                             } if (xmlElementStack.length === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
@@ -1159,7 +1167,8 @@ export class XslLexer {
                                     isExpandTextAttribute = false;
                                     isGlobalVersion = true;
                                 } else if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
-                                     && (attName === 'href' || (this.languageConfiguration.docType === DocumentTypes.DCP && this.languageConfiguration.linkElementAttrNames && attName === this.languageConfiguration?.linkElementAttrNames[1]))) {
+                                     && (this.docType === DocumentTypes.XSPEC ? attName === (tagElementName === 'import' ? 'href' : 'stylesheet') :
+                                        attName === 'href' || (this.languageConfiguration.docType === DocumentTypes.DCP && this.languageConfiguration.linkElementAttrNames && attName === this.languageConfiguration?.linkElementAttrNames[1]))) {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionName = true;
                                 } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
@@ -1345,7 +1354,9 @@ export class XslLexer {
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage || tagGlobalInstructionType === GlobalInstructionType.RootXSLT) {
+                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage || tagGlobalInstructionType === GlobalInstructionType.RootXSLT ||
+                                (xmlElementStack.length === 0 && this.docType === DocumentTypes.XSPEC)) {
+                                // e.g. the namespace declarations of the outermost element (see rootAttributes)
                                 storeToken = true;
                             }
                             if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode || isUseAccumulatorsAttribute || isDefaultModeAttribute) {
@@ -1428,6 +1439,10 @@ export class XslLexer {
                                         exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
                                     }
                                 }
+                            } else if (this.docType === DocumentTypes.XSPEC) {
+                                // XSpec user content, e.g. in x:context: an attribute value template where expand-text applies
+                                const expandText = expandTextValue ?? (xmlElementStack.length > 0 ? xmlElementStack[xmlElementStack.length - 1].expandText : false);
+                                exit = expandText && !attName.startsWith(this.nativePrefix + ':') ? ExitCondition.CurlyBrace : ExitCondition.None;
                             } else if (this.nonNativeAvts && !attName.startsWith(this.nativePrefix + ':')) {
                                 // not an XSLT attribute of a literal result element, e.g. xsl:use-attribute-sets, whose value may
                                 // have an EQName, e.g. Q{http://example.com/}set1 - an AVT
@@ -1727,6 +1742,14 @@ export class XslLexer {
             }
             if (instructionType === GlobalInstructionType.Unknown && this.languageConfiguration.linkElementAttrNames && this.languageConfiguration.linkElementAttrNames[0] === elementName) {
                 instructionType = GlobalInstructionType.Import;
+            }
+        } else if (isNative && this.languageConfiguration.docType === DocumentTypes.XSPEC) {
+            nativeName = elementName.substring(this.nativePrefixLength);
+            if (isRootChild) {
+                // global variables and parameters, helper stylesheets, and other XSpec files - whose global variables and
+                // parameters are in scope (see GlobalsProvider)
+                instructionType = nativeName === 'variable' ? GlobalInstructionType.Variable : nativeName === 'param' ? GlobalInstructionType.Parameter :
+                    nativeName === 'helper' ? GlobalInstructionType.Import : nativeName === 'import' ? GlobalInstructionType.Include : GlobalInstructionType.Unknown;
             }
         } else if (isNative) {
             nativeName = elementName.substring(this.nativePrefixLength);

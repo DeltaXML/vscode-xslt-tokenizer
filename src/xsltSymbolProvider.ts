@@ -376,8 +376,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	}
 
 	// the diagnostics of the module, with its imports and includes, and the parent (see processTopLevelImports)
-	private static async moduleDiagnostics(document: vscode.TextDocument, parent: boolean | string): Promise<vscode.Diagnostic[]> {
-		const xslLexer = new XslLexer(XSLTConfiguration.configuration);
+	private static async moduleDiagnostics(document: vscode.TextDocument, parent: boolean | string, languageConfig: LanguageConfiguration = XSLTConfiguration.configuration): Promise<vscode.Diagnostic[]> {
+		const xslLexer = new XslLexer(languageConfig);
 		xslLexer.provideCharLevelState = true;
 		const allTokens = xslLexer.analyse(document.getText());
 		const globalInstructionData = xslLexer.globalInstructionData;
@@ -395,7 +395,7 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		const withPackages = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, importedGlobals, xsltPackages);
 		ModulePrefixes.toModule(withPackages, xslLexer.prefixBindings);
 		return XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, xslLexer.prefixBindings, xsltPackages, withPackages,
-			XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, withPackages, []));
+			XsltTokenDiagnostics.calculateDiagnostics({ ...languageConfig, isVersion4: xslLexer.isXSLT40 }, languageConfig.docType, document, allTokens, globalInstructionData, withPackages, []));
 	}
 
 	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol | undefined) {

@@ -14,7 +14,7 @@ import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { SaxonTaskProvider, QuickRunTaskType } from './saxonTaskProvider';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import { SaxonCTaskProvider } from './saxonCTaskProvider';
-import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration } from './languageConfigurations';
+import { XSLTConfiguration, XPathConfiguration, XMLConfiguration, XSLTLightConfiguration, DCPConfiguration, SchConfiguration, XSpecConfiguration } from './languageConfigurations';
 import { SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XslLexer, LanguageConfiguration, DocumentTypes, GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { DocumentChangeHandler } from './documentChangeHandler';
@@ -190,6 +190,11 @@ export function activate(context: vscode.ExtensionContext) {
 	const schSymbolProvider = new XsltSymbolProvider(SchConfiguration.configuration, schDiagnosticsCollection);
 	const schDefintiionProvider = new XsltDefinitionProvider(SchConfiguration.configuration);
 	const schLinkProvider = new FullDocumentLinkProvider(SchConfiguration.configuration);
+
+	const xspecDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xspec');
+	const xspecSymbolProvider = new XsltSymbolProvider(XSpecConfiguration.configuration, xspecDiagnosticsCollection);
+	const xspecDefinitionProvider = new XsltDefinitionProvider(XSpecConfiguration.configuration);
+	const xspecLinkProvider = new FullDocumentLinkProvider(XSpecConfiguration.configuration);
 
 	const xmlDefinitionProvider = new XsltDefinitionProvider(XMLConfiguration.configuration);
 	const xpathDefinitionProvider = new XsltDefinitionProvider(XPathConfiguration.configuration);
@@ -447,20 +452,25 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xslt' }, xsltSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'dcp' }, dcpSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'sch' }, schSymbolProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xspec' }, xspecSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'xml' }, xmlSymbolProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentSymbolProvider({ language: 'bpmn' }, bpmnSymbolProvider));
-	requestSymbolsForProblems(context, ['xslt', 'dcp', 'sch', 'xml', 'bpmn']);
+	requestSymbolsForProblems(context, ['xslt', 'dcp', 'sch', 'xspec', 'xml', 'bpmn']);
 	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xslt' }, xsltDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider({ language: 'xspec' }, xspecDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xslt' }, xsltDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'dcp' }, dcpDefintiionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'sch' }, schDefintiionProvider));
+	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, xspecDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xml' }, xmlDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xpath' }, xpathDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, schLinkProvider));
+	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xspec' }, xspecLinkProvider));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider(xsltDefintiionProvider, XSLTConfiguration.configuration)));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider(xpathDefinitionProvider, XPathConfiguration.configuration)));
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, new XSLTHoverProvider(xspecDefinitionProvider, XSpecConfiguration.configuration)));
 	// '"', "'" and '<' for the parameters of a named template, in an xsl:call-template
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xslt' }, new XSLTSignatureHelpProvider(XSLTConfiguration.configuration, xsltDefintiionProvider), '(', ',', '"', '\'', '<'));
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xpath' }, new XSLTSignatureHelpProvider(XPathConfiguration.configuration), '(', ','));
@@ -1185,6 +1195,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xslt' }, new XsltSemanticTokensProvider(XSLTConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'dcp' }, new XsltSemanticTokensProvider(DCPConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'sch' }, new XsltSemanticTokensProvider(SchConfiguration.configuration), legend));
+	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'xspec' }, new XsltSemanticTokensProvider(XSpecConfiguration.configuration), legend));
 	context.subscriptions.push(vscode.languages.registerDocumentSemanticTokensProvider({ language: 'bpmn' }, new XsltSemanticTokensProvider(XMLConfiguration.configuration), legend));
 
 	const xpathDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xpath');
@@ -1199,6 +1210,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let xmlFormatter = new XMLDocumentFormattingProvider(XMLConfiguration.configuration);
 	let dcpFormatter = new XMLDocumentFormattingProvider(DCPConfiguration.configuration);
 	let schFormatter = new XMLDocumentFormattingProvider(SchConfiguration.configuration);
+	let xspecFormatter = new XMLDocumentFormattingProvider(XSpecConfiguration.configuration);
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xslt',
 		xsltFormatter));
@@ -1209,7 +1221,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Tab on an empty line, in XSLT and XML: to the indentation for its context (see the keybinding's 'when')
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.tabToIndentation', () =>
-		XMLDocumentFormattingProvider.tabToIndentation(vscode.window.activeTextEditor, vscode.window.activeTextEditor?.document.languageId === 'xslt' ? xsltFormatter : xmlFormatter)));
+		XMLDocumentFormattingProvider.tabToIndentation(vscode.window.activeTextEditor, vscode.window.activeTextEditor?.document.languageId === 'xslt' ? xsltFormatter :
+			vscode.window.activeTextEditor?.document.languageId === 'xspec' ? xspecFormatter : xmlFormatter)));
 
 	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xpath',
 		xpathFormatter));
@@ -1238,6 +1251,13 @@ export function activate(context: vscode.ExtensionContext) {
 		schFormatter));
 	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('sch',
 		schFormatter, '\n', '/'));
+
+	context.subscriptions.push(vscode.languages.registerDocumentFormattingEditProvider('xspec',
+		xspecFormatter));
+	context.subscriptions.push(vscode.languages.registerDocumentRangeFormattingEditProvider('xspec',
+		xspecFormatter));
+	context.subscriptions.push(vscode.languages.registerOnTypeFormattingEditProvider('xspec',
+		xspecFormatter, '\n', '/'));
 
 	// used to locate bundled resources (xslt-resources) by task providers and code actions
 	SaxonTaskProvider.extensionURI = context.extensionUri;
