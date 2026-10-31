@@ -1320,6 +1320,16 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 		const bindings = prefixBindings ?? documentBindings;
 		const workspace = PackageScope.workspaceFolder();
+		// XTSE3008: in a module that's imported - directly, or through xsl:include - as Saxon reports it
+		const importer = document.uri.scheme === 'file' && ImportIndex.isEnabled() && ImportIndex.instance.built ? XsltSymbolProvider.importerOf(document.fileName) : undefined;
+		if (importer) {
+			documentUsePackages.forEach((usePackage) => {
+				const range = XsltTokenDiagnostics.elementNameRange(text, usePackage.token);
+				if (range) {
+					result.push(new vscode.Diagnostic(range, `XTSE3008: xsl:use-package can't be in an imported module - ${path.basename(importer)} imports this one${XsltSymbolProvider.importerOf(document.fileName, new Set(), true) ? '' : ', through xsl:include'}: it belongs in the top-level stylesheet`, vscode.DiagnosticSeverity.Error));
+				}
+			});
+		}
 		const abstracts = PackageScope.abstractsOf(text, documentUsePackages, bindings, xsltPackages, workspace);
 		const declarations = globalInstructionData.filter((g) => PackageScope.componentKind(g.type) !== undefined);
 		return result.map((diagnostic) => {
@@ -1338,6 +1348,25 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			const diagnostic = new vscode.Diagnostic(range, problem.message, problem.isWarning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error);
 			return withFixes(diagnostic, problem.fixes ?? [], problem.isWarning ? DiagnosticCode.abstractNotOverridden : DiagnosticCode.packageProblem);
 		}));
+	}
+
+	// the module that imports the module, directly - or that imports a module including it - undefined if there's none.
+	// With directly, only a module that imports it
+	private static importerOf(file: string, visited = new Set<string>(), directly = false): string | undefined {
+		for (const importer of ImportIndex.instance.importersOf(file)) {
+			const reference = ImportIndex.instance.referencesOf(importer).find((r) => path.normalize(r.path) === path.normalize(file));
+			if (reference && !reference.isInclude) {
+				return importer;
+			}
+			if (!directly && reference?.isInclude && !visited.has(importer)) {
+				visited.add(importer);
+				const indirect = XsltSymbolProvider.importerOf(importer, visited);
+				if (indirect) {
+					return indirect;
+				}
+			}
+		}
+		return undefined;
 	}
 
 	// whether a diagnostic's message is for a reference to the component that isn't found

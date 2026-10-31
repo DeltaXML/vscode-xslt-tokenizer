@@ -68,7 +68,14 @@ export class PackageEdits {
 		const lineStart = text.lastIndexOf('\n', tagStart - 1) + 1;
 		const lineEnd = text.indexOf('\n', extent.end);
 		const ownLine = text.substring(lineStart, tagStart).trim() === '' && text.substring(extent.end, lineEnd === -1 ? text.length : lineEnd).trim() === '';
-		return ownLine ? { start: lineStart, end: lineEnd === -1 ? text.length : lineEnd + 1, text: '' } : { start: tagStart, end: extent.end, text: '' };
+		if (!ownLine) {
+			return { start: tagStart, end: extent.end, text: '' };
+		}
+		const end = lineEnd === -1 ? text.length : lineEnd + 1;
+		// between blank lines, one of them too, so they don't accumulate
+		const blankBefore = /\n[ \t]*\r?\n$/.test(text.substring(0, lineStart));
+		const blankAfter = /^[ \t]*\r?\n/.exec(text.substring(end));
+		return { start: lineStart, end: blankBefore && blankAfter ? end + blankAfter[0].length : end, text: '' };
 	}
 
 	// the element's text, indented as it would be on a line with the indent

@@ -10,15 +10,22 @@ import { ImportIndex } from './importIndex';
 import { ImportPrecedence } from './importPrecedence';
 import { RecordTypes } from './recordTypes';
 import { ModulePrefixes } from './modulePrefixes';
-import { GlobalInstructionType, XslLexer } from './xslLexer';
+import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, XslLexer } from './xslLexer';
+import * as vscode from 'vscode';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { XslLexerLight } from './xslLexerLight';
 import { XSLTConfiguration, XSLTLightConfiguration } from './languageConfigurations';
 import { TokenLevelState } from './xpLexer';
+import { XdocNotes } from './xdocNote';
+import { HrefPaths } from './hrefPaths';
+import { PackageEdits, TextEdit } from './packageEdits';
+import { PackageScope } from './packageScope';
 
-// a line of a module (0-based)
+// a line of a module (0-based) - and the offset of the element there, where it's known
 export interface Place {
 	path: string;
 	line: number;
+	offset?: number;
 }
 
 // what a conversion does about an item: makes a change - or needs a decision, e.g. code that behaves differently in a
@@ -47,12 +54,32 @@ export interface ConversionAnalysis {
 	packageName: string;
 	packageVersion: string;
 	items: ConversionItem[];
+	// what a conversion does - see PackageConversion.convert
+	plan: ConversionPlan;
 }
 
-type Kind = 'function' | 'template' | 'variable' | 'attribute-set' | 'mode' | 'key' | 'accumulator' | 'decimal-format' | 'character-map';
+export interface ConversionPlan {
+	scans: Map<string, ModuleScan>;
+	trees: Map<string, Set<string>>;
+	// the library's declarations made public, and the stylesheets' declarations moved into xsl:override - with their
+	// top-level stylesheet - for overrides, and callbacks, which get an abstract declaration in the package
+	publicDeclarations: Declaration[];
+	overrides: { declaration: Declaration, top: string }[];
+	callbacks: Declaration[];
+	// the library's named modes made public - with their xsl:mode, if they have one - and the stylesheets' template rules
+	// in them, moved into xsl:override
+	publicModes: { mode: string, declaration?: Declaration }[];
+	movedRules: { rule: ModeUse, top: string }[];
+	// the library's declarations copied into each top-level stylesheet: keys, xsl:strip-space, xsl:output etc.
+	copies: { place: Place, kind: string, name?: string }[];
+	// the conversion waits for these: blockers, and the unnamed mode, which phase 3 handles
+	preventing: ConversionItem[];
+}
+
+export type Kind = 'function' | 'template' | 'variable' | 'attribute-set' | 'mode' | 'key' | 'accumulator' | 'decimal-format' | 'character-map';
 
 // a top-level declaration of a module
-interface Declaration {
+export interface Declaration {
 	kind: Kind;
 	name: string;
 	expandedName: string;
@@ -64,7 +91,7 @@ interface Declaration {
 }
 
 // a use of a declaration - for a function, with an arity, if known
-interface Use {
+export interface Use {
 	kind: Kind;
 	name: string;
 	expandedName: string;
@@ -73,12 +100,12 @@ interface Use {
 }
 
 // a template rule's modes, or an xsl:apply-templates's - '#unnamed' for the unnamed mode, '#all' for a rule in all modes
-interface ModeUse {
+export interface ModeUse {
 	modes: string[];
 	place: Place;
 }
 
-interface ModuleScan {
+export interface ModuleScan {
 	path: string;
 	declarations: Declaration[];
 	uses: Use[];
@@ -90,9 +117,16 @@ interface ModuleScan {
 	outputs: Place[];
 	globalContextItem: Place[];
 	namespaceAliases: Place[];
-	// global variables whose value may depend on the context item - which a library package doesn't have
-	contextVariables: Declaration[];
+	// the global variables and parameters - to check whether their values use the context item, which a library package
+	// doesn't have (see contextVariables)
+	globalVariables: Declaration[];
 	isPackage: boolean;
+	text: string;
+	// the module's prefix for XSLT, and its namespace bindings
+	prefix: string;
+	bindings?: Map<string, string>;
+	// its top-level xsl:import and xsl:include elements, with the modules they refer to
+	references: { path: string, offset: number, isImport: boolean }[];
 }
 
 /**
@@ -115,7 +149,7 @@ interface ModuleScan {
 export class PackageConversion {
 
 	// undefined, with the reason, if the module can't be analysed as a library
-	public static analyse(libraryPath: string): ConversionAnalysis | string {
+	public static async analyse(libraryPath: string): Promise<ConversionAnalysis | string> {
 		const library = path.normalize(libraryPath);
 		const libraryModules = PackageConversion.tree(library);
 		const scans = new Map<string, ModuleScan>();
@@ -144,11 +178,14 @@ export class PackageConversion {
 		const userUses = userScans.flatMap((s) => s.uses);
 		const libraryUses = libraryScans.flatMap((s) => s.uses);
 		const components: Kind[] = ['function', 'template', 'variable', 'attribute-set'];
+		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], publicModes: [], movedRules: [], copies: [], preventing: [] };
+		const topOf = (file: string) => topLevels.find((top) => trees.get(top)!.has(file)) ?? topLevels[0];
 
 		// the library's components that the stylesheets use - a global parameter is public anyway
 		for (const declaration of libraryDeclarations.filter((d) => components.includes(d.kind) && !d.isParam)) {
 			const uses = userUses.filter((u) => PackageConversion.refersTo(u, declaration));
 			if (uses.length > 0) {
+				plan.publicDeclarations.push(declaration);
 				items.push({ section: 'visibility', severity: 'change', subject: PackageConversion.label(declaration), text: 'made public, as the stylesheets use it', places: [declaration.place, ...uses.map((u) => u.place)] });
 			}
 		}
@@ -162,6 +199,21 @@ export class PackageConversion {
 				const overridden = libraryDeclarations.find((d) => d.kind === declaration.kind && d.expandedName === declaration.expandedName && PackageConversion.aritiesOverlap(d, declaration));
 				if (!overridden || items.some((i) => i.section === 'override' && i.places[0].path === declaration.place.path && i.places[0].line === declaration.place.line)) {
 					continue;
+				}
+				// an override's signature must be the library's (XTSE3070) - an import's needn't be
+				const mismatch = rank(declaration.place.path) > rank(overridden.place.path) ? PackageConversion.signatureMismatch(scan(declaration.place.path), declaration, scan(overridden.place.path), overridden) : undefined;
+				if (mismatch) {
+					items.push({
+						section: 'blockers', severity: 'blocker', subject: PackageConversion.label(declaration),
+						text: `it overrides the library's by import precedence, but in a package an override must have the same signature (XTSE3070): ${mismatch}`, places: [declaration.place, overridden.place]
+					});
+					continue;
+				}
+				if (rank(declaration.place.path) > rank(overridden.place.path)) {
+					plan.overrides.push({ declaration, top });
+					if (!overridden.isParam) {
+						plan.publicDeclarations.push(overridden);
+					}
 				}
 				items.push(rank(declaration.place.path) > rank(overridden.place.path) ?
 					{ section: 'override', severity: 'change', subject: PackageConversion.label(declaration), text: `moved into xsl:override - it overrides the library's by import precedence${overridden.isParam ? '' : ', and the library\'s is made public'}`, places: [declaration.place, overridden.place] } :
@@ -183,6 +235,10 @@ export class PackageConversion {
 				callbacks.set(key, entry);
 			}
 		}
+		callbacks.forEach(({ declaration }) => {
+			plan.callbacks.push(declaration);
+			plan.overrides.push({ declaration, top: topOf(declaration.place.path) });
+		});
 		callbacks.forEach(({ declaration, uses }) => items.push({
 			section: 'abstract', severity: 'change', subject: PackageConversion.label(declaration),
 			text: 'declared in the package as abstract, as the library uses it - the stylesheet\'s declaration is moved into xsl:override',
@@ -205,6 +261,9 @@ export class PackageConversion {
 				const sharedRules = libraryModeRules.length > 0 && applies.length > 0;
 				const sharedApplies = rules.length > 0 && libraryApplies.some((a) => a.modes.includes(mode));
 				if (sharedRules || sharedApplies) {
+					plan.preventing.push({
+						section: 'modes', severity: 'decision', subject: 'the unnamed mode', text: 'a package\'s unnamed mode is private to it', places: []
+					});
 					items.push({
 						section: 'modes', severity: 'decision', subject: 'the unnamed mode',
 						text: `a package's unnamed mode is private to it: the library's ${libraryModeRules.length} template rules in it won't be applied by the stylesheets' xsl:apply-templates, nor the stylesheets' rules by the library's - give the library's rules a named mode, and apply templates in it`,
@@ -214,9 +273,11 @@ export class PackageConversion {
 				continue;
 			}
 			if (applies.length > 0 || rules.length > 0) {
+				plan.publicModes.push({ mode, declaration: libraryDeclarations.find((d) => d.kind === 'mode' && d.name === mode) });
 				items.push({ section: 'modes', severity: 'change', subject: `mode ${mode}`, text: 'declared public with xsl:mode, as the stylesheets use it', places: [...libraryModeRules.slice(0, 1), ...applies, ...rules].map((u) => u.place) });
 			}
 			if (rules.length > 0) {
+				rules.forEach((rule) => plan.movedRules.push({ rule, top: topOf(rule.place.path) }));
 				items.push({ section: 'modes', severity: 'change', subject: `${rules.length} template ${rules.length === 1 ? 'rule' : 'rules'} in mode ${mode}`, text: 'moved into xsl:override - rules can only be added to a package\'s mode there', places: rules.map((r) => r.place) });
 			}
 		}
@@ -234,28 +295,252 @@ export class PackageConversion {
 			for (const declaration of libraryDeclarations.filter((d) => d.kind === kind)) {
 				const uses = userUses.filter((u) => u.kind === kind && u.expandedName === declaration.expandedName);
 				if (uses.length > 0) {
+					plan.copies.push({ place: declaration.place, kind, name: declaration.expandedName });
 					items.push({ section: 'not-shared', severity: 'change', subject: `${label} ${declaration.name}`, text: `copied into the stylesheets that use it - a package's ${label}s aren't shared`, places: [declaration.place, ...uses.map((u) => u.place)] });
 				}
 			}
 		}
+		libraryScans.flatMap((s) => s.stripSpace).forEach((place) => plan.copies.push({ place, kind: 'strip-space' }));
+		libraryScans.flatMap((s) => s.outputs).forEach((place) => plan.copies.push({ place, kind: 'output' }));
 		libraryScans.flatMap((s) => s.stripSpace).forEach((place) => items.push({ section: 'not-shared', severity: 'change', subject: 'xsl:strip-space / xsl:preserve-space', text: 'copied into each top-level stylesheet - in a package, it doesn\'t apply to the documents processed', places: [place] }));
 		libraryScans.flatMap((s) => s.outputs).forEach((place) => items.push({ section: 'not-shared', severity: 'change', subject: 'xsl:output', text: 'copied into each top-level stylesheet without one - a package\'s output declarations are ignored', places: [place] }));
 		libraryScans.flatMap((s) => s.namespaceAliases).forEach((place) => items.push({ section: 'not-shared', severity: 'decision', subject: 'xsl:namespace-alias', text: 'applies only to the package\'s own literal result elements', places: [place] }));
 
 		// what must be reworked first
 		libraryScans.flatMap((s) => s.globalContextItem).forEach((place) => items.push({ section: 'blockers', severity: 'blocker', subject: 'xsl:global-context-item', text: 'a package that declares a global context item can\'t be used as a library package (XTTE0590)', places: [place] }));
-		libraryScans.flatMap((s) => s.contextVariables).forEach((declaration) => items.push({
+		const contextVariables = (await Promise.all(libraryScans.map((s) => PackageConversion.contextVariables(s)))).flat();
+		contextVariables.forEach((declaration) => items.push({
 			section: 'blockers', severity: 'blocker', subject: PackageConversion.label(declaration),
 			text: 'its value may use the context item - a library package has no global context item, so it would fail (XPDY0002): pass the document as a parameter, or move the variable into the stylesheet', places: [declaration.place]
 		}));
 
-		const declaration = ImportIndex.packageDeclaration(fs.readFileSync(library, 'utf8'));
+		plan.preventing.push(...items.filter((i) => i.severity === 'blocker'));
 		return {
 			library, libraryModules, topLevels, userModules,
-			packageName: declaration?.name ?? PackageConversion.proposedName(library, libraryDeclarations),
+			packageName: PackageConversion.proposedName(library, libraryDeclarations),
 			packageVersion: '1.0',
-			items
+			items, plan
 		};
+	}
+
+	// the edits that convert the library to a package, by module - or why it can't be converted. The library's root
+	// element becomes xsl:package, with the name and version, and declared-modes="no", so its modes needn't all be
+	// declared - its components that the stylesheets use or override get visibility="public", its named modes they use
+	// a public xsl:mode, and their callbacks an abstract declaration. In each top-level stylesheet's tree, the xsl:import
+	// or xsl:include of the library becomes an xsl:use-package, with an xsl:override for the declarations and template
+	// rules that override the library's - moved there, with xsl:apply-imports changed to xsl:next-match - and the
+	// stylesheet gets copies of the declarations a package doesn't share. The edits' XSLT names have the prefix xsl.
+	public static convert(analysis: ConversionAnalysis, packageName: string, packageVersion: string): Map<string, TextEdit[]> | string {
+		const plan = analysis.plan;
+		if (plan.preventing.length > 0) {
+			return `${plan.preventing.length} ${plan.preventing.length === 1 ? 'item needs' : 'items need'} reworking first: ${[...new Set(plan.preventing.map((i) => i.subject))].join(', ')}`;
+		}
+		const edits = new Map<string, TextEdit[]>();
+		const add = (file: string, edit: TextEdit | undefined) => {
+			if (!edit) {
+				throw new Error(`An element in ${path.basename(file)} wasn't found`);
+			}
+			const fileEdits = edits.get(file) ?? [];
+			// insertions at the same place are made in order
+			const same = fileEdits.find((e) => e.start === edit.start && e.end === edit.start && edit.end === edit.start);
+			if (same) {
+				same.text += edit.text;
+			} else {
+				fileEdits.push(edit);
+			}
+			edits.set(file, fileEdits);
+		};
+		const scanOf = (file: string) => plan.scans.get(file)!;
+		// an element removed once, though in the trees of more than one top-level stylesheet
+		const removed = new Set<string>();
+		const remove = (file: string, offset: number) => {
+			if (!removed.has(`${file}#${offset}`)) {
+				removed.add(`${file}#${offset}`);
+				add(file, PackageEdits.removeElement(scanOf(file).text, markupOf(file), offset));
+			}
+		};
+		const markups = new Map<string, string>();
+		const markupOf = (file: string) => {
+			let markup = markups.get(file);
+			if (markup === undefined) {
+				markup = RecordTypes.blankMarkup(scanOf(file).text);
+				markups.set(file, markup);
+			}
+			return markup;
+		};
+		const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+		try {
+			// the library: its root element, components, modes and abstract declarations
+			const library = scanOf(analysis.library);
+			const libraryMarkup = markupOf(analysis.library);
+			const root = XdocNotes.rootOffset(libraryMarkup);
+			const rootElement = root !== undefined ? PackageEdits.elementExtent(libraryMarkup, root) : undefined;
+			if (root === undefined || !rootElement || rootElement.selfClosing) {
+				return 'The library\'s xsl:stylesheet element isn\'t found';
+			}
+			const rootTag = PackageEdits.withAttributes(library.text, libraryMarkup, root, [['name', packageName], ['package-version', packageVersion], ['declared-modes', 'no']])!;
+			rootTag.text = rootTag.text.replace(/^<([\w.-]+:)?(stylesheet|transform)\b/, '<$1package');
+			add(analysis.library, rootTag);
+			const endTag = /^<\/([\w.-]+:)?(stylesheet|transform)/.exec(library.text.substring(rootElement.endTagStart));
+			if (endTag) {
+				add(analysis.library, { start: rootElement.endTagStart, end: rootElement.endTagStart + endTag[0].length, text: `</${endTag[1] ?? ''}package` });
+			}
+			const madePublic = new Set<string>();
+			const makePublic = (place: Place) => {
+				const key = `${place.path}#${place.offset}`;
+				if (place.offset !== undefined && !madePublic.has(key)) {
+					madePublic.add(key);
+					add(place.path, PackageEdits.withAttributes(scanOf(place.path).text, markupOf(place.path), place.offset, [['visibility', 'public']]));
+				}
+			};
+			plan.publicDeclarations.filter((d) => !d.isParam).forEach((d) => makePublic(d.place));
+			// new declarations, at the end of the library's root element
+			const step = PackageConversion.indentStep(library.text, rootElement.startTagEnd);
+			const added: string[] = [];
+			plan.publicModes.forEach(({ mode, declaration }) => declaration?.place.offset !== undefined ? makePublic(declaration.place) :
+				added.push(`<xsl:mode name="${escape(mode)}" visibility="public"/>`));
+			plan.callbacks.forEach((callback) => added.push(PackageConversion.abstractDeclaration(scanOf(callback.place.path), markupOf(callback.place.path), callback, library.bindings, step)));
+			if (added.length > 0) {
+				const lineStart = library.text.lastIndexOf('\n', rootElement.endTagStart - 1) + 1;
+				const text = added.map((declaration) => step + declaration.replace(/\n/g, '\n' + step)).join('\n') + '\n';
+				add(analysis.library, library.text.substring(lineStart, rootElement.endTagStart).trim() === '' ?
+					{ start: lineStart, end: lineStart, text } : { start: rootElement.endTagStart, end: rootElement.endTagStart, text: '\n' + text });
+			}
+
+			// each top-level stylesheet's tree
+			for (const top of analysis.topLevels) {
+				const tree = plan.trees.get(top)!;
+				const users = [...tree].filter((file) => !analysis.libraryModules.includes(file));
+				// the references to the library's modules: the library's own first
+				const references = users.flatMap((file) => scanOf(file).references.filter((r) => analysis.libraryModules.includes(r.path)).map((r) => ({ ...r, file })))
+					.sort((a, b) => Number(b.path === analysis.library) - Number(a.path === analysis.library));
+				if (references.length === 0) {
+					continue;
+				}
+				// xsl:use-package can't be in an imported module (XTSE3008): it goes in the top-level module, after its
+				// imports, and the references to the library's modules are removed
+				references.forEach((r) => remove(r.file, r.offset));
+				const importer = scanOf(top);
+				const importerMarkup = markupOf(top);
+				const topRoot = XdocNotes.rootOffset(importerMarkup);
+				const topRootElement = topRoot !== undefined ? PackageEdits.elementExtent(importerMarkup, topRoot) : undefined;
+				if (!topRootElement) {
+					throw new Error(`The xsl:stylesheet element of ${path.basename(top)} wasn't found`);
+				}
+				const imports = importer.references.filter((r) => r.isImport);
+				const lastImport = imports.length > 0 ? imports[imports.length - 1] : undefined;
+				const insertAt = lastImport ? PackageEdits.elementExtent(importerMarkup, lastImport.offset)!.end : topRootElement.startTagEnd;
+				const topStep = PackageConversion.indentStep(importer.text, topRootElement.startTagEnd);
+				const indent = lastImport ? PackageEdits.lineIndent(importer.text, lastImport.offset) : topStep;
+				// the declarations and template rules moved into the xsl:override
+				const moved: string[] = [];
+				const move = (place: Place, isRule: boolean) => {
+					const source = scanOf(place.path);
+					const sourceMarkup = markupOf(place.path);
+					let text = PackageEdits.reindented(source.text, sourceMarkup, place.offset!, indent + topStep + topStep);
+					if (text === undefined) {
+						throw new Error(`An element in ${path.basename(place.path)} wasn't found`);
+					}
+					if (isRule) {
+						text = text.replace(new RegExp(`(</?${source.prefix}:)apply-imports\\b`, 'g'), '$1next-match');
+					} else {
+						// the declaration's name, with the importing module's prefix for its namespace
+						text = text.replace(/^(\s*<[^\s/>]+[^>]*?\sname\s*=\s*)(["'])([^"']*)\2/, (_match, before, quote, name) =>
+							before + quote + PackageScope.translatePrefixes(name, source.bindings, importer.bindings) + quote);
+					}
+					moved.push(PackageConversion.withNamespaces(text, source.bindings, importer.bindings));
+					remove(place.path, place.offset!);
+				};
+				plan.overrides.filter((o) => o.top === top).forEach((o) => move(o.declaration.place, false));
+				plan.movedRules.filter((r) => r.top === top).forEach((r) => move(r.rule.place, true));
+				const name = `name="${escape(packageName)}" package-version="${escape(packageVersion)}"`;
+				const usePackage = moved.length === 0 ? `<xsl:use-package ${name}/>` :
+					`<xsl:use-package ${name}>\n${indent + topStep}<xsl:override>\n${moved.join('\n')}\n${indent + topStep}</xsl:override>\n${indent}</xsl:use-package>`;
+				// after the imports, which must come first - the removed import of the library, if it's the last, aside
+				const insertAfter = lastImport && references.some((r) => r.file === top && r.offset === lastImport.offset) ?
+					(imports.length > 1 ? PackageEdits.elementExtent(importerMarkup, imports[imports.length - 2].offset)!.end : topRootElement.startTagEnd) : insertAt;
+				add(top, { start: insertAfter, end: insertAfter, text: `\n${indent}${usePackage}` });
+
+				// copies of the declarations a package doesn't share, after the xsl:use-package
+				const topScan = scanOf(top);
+				const topMarkup = markupOf(top);
+				const has = (kind: string, name?: string) => kind === 'strip-space' ? topScan.stripSpace.length > 0 : kind === 'output' ? topScan.outputs.length > 0 :
+					topScan.declarations.some((d) => d.kind === kind && d.expandedName === name);
+				const copies = plan.copies.filter((c) => !has(c.kind, c.name) && c.place.offset !== undefined);
+				if (copies.length > 0) {
+					const after = insertAfter;
+					const copyIndent = indent;
+					const text = copies.map((c) => {
+						const source = scanOf(c.place.path);
+						const copy = PackageEdits.reindented(source.text, markupOf(c.place.path), c.place.offset!, copyIndent)!;
+						return '\n' + PackageConversion.withNamespaces(copy, source.bindings, topScan.bindings);
+					}).join('');
+					add(top, { start: after, end: after, text });
+				}
+			}
+		} catch (error) {
+			return error instanceof Error ? error.message : String(error);
+		}
+		// with the prefix each module uses for XSLT
+		edits.forEach((fileEdits, file) => {
+			fileEdits.forEach((edit) => edit.text = RecordTypes.withXsltPrefix(edit.text, scanOf(file).prefix));
+			fileEdits.sort((a, b) => a.start - b.start);
+		});
+		return edits;
+	}
+
+	// how a stylesheet's declaration's signature differs from the library's it would override - undefined if they match
+	private static signatureMismatch(userScan: ModuleScan, declaration: Declaration, libraryScan: ModuleScan, overridden: Declaration) {
+		const asGlobal = (scan: ModuleScan, d: Declaration): GlobalInstructionData => {
+			const offset = d.place.offset ?? 0;
+			const lineStart = scan.text.lastIndexOf('\n', offset - 1) + 1;
+			const type = d.kind === 'function' ? GlobalInstructionType.Function : d.kind === 'template' ? GlobalInstructionType.Template :
+				d.kind === 'variable' ? (d.isParam ? GlobalInstructionType.Parameter : GlobalInstructionType.Variable) : GlobalInstructionType.AttributeSet;
+			return { type, name: d.name, idNumber: d.arity ?? 0, href: scan.path, prefixBindings: scan.bindings, token: { line: d.place.line, startCharacter: offset - lineStart + 1, length: 0, value: '', tokenType: 0 } };
+		};
+		return PackageScope.signatureMismatch(userScan.text, asGlobal(userScan, declaration), asGlobal(libraryScan, overridden));
+	}
+
+	// an abstract declaration in the package for a declaration of a stylesheet that the library uses - with its name,
+	// type and parameters, in the library's prefixes
+	private static abstractDeclaration(scan: ModuleScan, markup: string, declaration: Declaration, libraryBindings: Map<string, string> | undefined, step: string) {
+		const text = scan.text;
+		const tagStart = declaration.place.offset!;
+		const translate = (value: string) => PackageScope.translatePrefixes(value, scan.bindings, libraryBindings);
+		const attribute = (offset: number, name: string, value = RecordTypes.attributeOfElementAt(text, offset + 1, name, true)) => value === undefined ? '' : ` ${name}="${translate(value)}"`;
+		const name = translate(declaration.name);
+		const as = attribute(tagStart, 'as');
+		const params = RecordTypes.childElements(text, markup, tagStart, 'xsl:param').map((offset) =>
+			`${step}<xsl:param${attribute(offset, 'name')}${attribute(offset, 'as')}${attribute(offset, 'required')}${attribute(offset, 'tunnel')}/>`);
+		switch (declaration.kind) {
+			case 'function':
+				return `<xsl:function name="${name}"${as} visibility="abstract">${params.length > 0 ? '\n' + params.join('\n') + '\n' : ''}</xsl:function>`;
+			case 'template':
+				return `<xsl:template name="${name}"${as} visibility="abstract">${params.length > 0 ? '\n' + params.join('\n') + '\n' : ''}</xsl:template>`;
+			case 'variable':
+				return `<xsl:variable name="${name}"${as} visibility="abstract"/>`;
+			default:
+				return `<xsl:attribute-set name="${name}" visibility="abstract"/>`;
+		}
+	}
+
+	// an element moved or copied to another module, with declarations of the namespaces of its prefixes that the other
+	// module doesn't declare as the module it's from does
+	private static withNamespaces(element: string, from: Map<string, string> | undefined, to: Map<string, string> | undefined) {
+		if (!from) {
+			return element;
+		}
+		const used = new Set([...element.matchAll(/(?<![\w.{}-])([A-Za-z_][\w.-]*):[A-Za-z_*]/g)].map((m) => m[1]));
+		const missing = [...used].filter((prefix) => prefix !== 'xml' && from.has(prefix) && to?.get(prefix) !== from.get(prefix) && from.get(prefix) !== 'http://www.w3.org/1999/XSL/Transform');
+		if (missing.length === 0) {
+			return element;
+		}
+		const declarations = missing.map((prefix) => ` xmlns:${prefix}="${from.get(prefix)!.replace(/"/g, '&quot;')}"`).join('');
+		return element.replace(/^(\s*<[^\s/>]+)/, `$1${declarations}`);
+	}
+
+	private static indentStep(text: string, offset: number) {
+		return PackageScope.lineIndent(text, offset) || /\n([ \t]+)\S/.exec(text)?.[1] || '\t';
 	}
 
 	// a name for the package: the namespace of most of the library's function names - or a URN from its file name
@@ -307,13 +592,15 @@ export class PackageConversion {
 		const text = fs.readFileSync(file, 'utf8');
 		const result: ModuleScan = {
 			path: file, declarations: [], uses: [], rules: [], applies: [], applyImports: [], stripSpace: [], outputs: [], globalContextItem: [],
-			namespaceAliases: [], contextVariables: [], isPackage: ImportIndex.packageDeclaration(text) !== undefined
+			namespaceAliases: [], globalVariables: [], isPackage: ImportIndex.packageDeclaration(text) !== undefined,
+			text, prefix: 'xsl', references: []
 		};
 		const light = new XslLexerLight(XSLTLightConfiguration.configuration);
 		const globals = light.analyseLight(text);
 		const bindings = light.prefixBindings;
+		result.bindings = bindings;
 		const expanded = (name: string) => ModulePrefixes.expandedName(name.trim(), bindings);
-		const place = (line: number): Place => ({ path: file, line });
+		const place = (line: number, offset?: number): Place => ({ path: file, line, offset });
 		const kinds = new Map<GlobalInstructionType, Kind>([
 			[GlobalInstructionType.Function, 'function'], [GlobalInstructionType.Template, 'template'], [GlobalInstructionType.Variable, 'variable'],
 			[GlobalInstructionType.Parameter, 'variable'], [GlobalInstructionType.AttributeSet, 'attribute-set'], [GlobalInstructionType.ModeInstruction, 'mode'],
@@ -326,7 +613,8 @@ export class PackageConversion {
 			}
 			const optional = global.memberOptional?.filter((o) => o).length ?? 0;
 			result.declarations.push({
-				kind, name: global.name, expandedName: expanded(global.name), place: place(global.token.line),
+				kind, name: global.name, expandedName: expanded(global.name),
+				place: place(global.token.line, text.lastIndexOf('<', XdocNotes.offsetAt(text, global.token.line, Math.max(0, global.token.startCharacter)))),
 				arity: kind === 'function' ? global.idNumber : undefined, minArity: kind === 'function' ? global.idNumber - optional : undefined,
 				isParam: global.type === GlobalInstructionType.Parameter
 			});
@@ -359,6 +647,7 @@ export class PackageConversion {
 		// uses and declarations in XSLT elements and attributes
 		const markup = RecordTypes.blankMarkup(text);
 		const prefix = RecordTypes.xsltPrefix(markup);
+		result.prefix = prefix;
 		const attribute = (offset: number, name: string) => RecordTypes.attributeOfElementAt(text, offset + 1, name);
 		const lineOf = (offset: number) => text.substring(0, offset).split('\n').length - 1;
 		const stack: { name: string, defaultMode: string }[] = [];
@@ -384,43 +673,51 @@ export class PackageConversion {
 				switch (name) {
 					case 'xsl:strip-space':
 					case 'xsl:preserve-space':
-						result.stripSpace.push(place(line));
+						result.stripSpace.push(place(line, offset));
 						break;
 					case 'xsl:output':
 						if (attribute(offset, 'name') === undefined) {
-							result.outputs.push(place(line));
+							result.outputs.push(place(line, offset));
 						}
 						break;
 					case 'xsl:global-context-item':
 						result.globalContextItem.push(place(line));
 						break;
+					case 'xsl:import':
+					case 'xsl:include': {
+						const href = attribute(offset, 'href');
+						const referenced = href !== undefined ? HrefPaths.toPath(HrefPaths.fromAttribute(href), file) : undefined;
+						if (referenced) {
+							result.references.push({ path: path.normalize(referenced), offset, isImport: name === 'xsl:import' });
+						}
+						break;
+					}
 					case 'xsl:namespace-alias':
 						result.namespaceAliases.push(place(line));
 						break;
 					case 'xsl:decimal-format': {
 						const formatName = attribute(offset, 'name');
 						if (formatName) {
-							result.declarations.push({ kind: 'decimal-format', name: formatName, expandedName: expanded(formatName), place: place(line) });
+							result.declarations.push({ kind: 'decimal-format', name: formatName, expandedName: expanded(formatName), place: place(line, offset) });
 						}
 						break;
 					}
 					case 'xsl:variable':
 					case 'xsl:param': {
-						const select = attribute(offset, 'select');
 						const variableName = attribute(offset, 'name');
-						if (variableName && select !== undefined && PackageConversion.mayUseContext(select)) {
-							result.contextVariables.push({ kind: 'variable', name: variableName, expandedName: expanded(variableName), place: place(line), isParam: name === 'xsl:param' });
+						if (variableName) {
+							result.globalVariables.push({ kind: 'variable', name: variableName, expandedName: expanded(variableName), place: place(line, offset), isParam: name === 'xsl:param' });
 						}
 						break;
 					}
 				}
 			}
 			if (name === 'xsl:template' && attribute(offset, 'match') !== undefined) {
-				result.rules.push({ modes: modes(attribute(offset, 'mode')), place: place(line) });
+				result.rules.push({ modes: modes(attribute(offset, 'mode')), place: place(line, offset) });
 			} else if (name === 'xsl:apply-templates') {
 				result.applies.push({ modes: modes(attribute(offset, 'mode')).filter((m) => m !== '#current'), place: place(line) });
 			} else if (name === 'xsl:apply-imports') {
-				result.applyImports.push(place(line));
+				result.applyImports.push(place(line, offset));
 			} else if (name === 'xsl:call-template') {
 				names(attribute(offset, 'name')).forEach((n) => use('template', n, line));
 			}
@@ -440,10 +737,43 @@ export class PackageConversion {
 		return result;
 	}
 
-	// a global variable's select, whose value may depend on the context item: an absolute or relative path, '.', or a
-	// function of the context, e.g. root() or name() - string literals aside
-	public static mayUseContext(select: string) {
-		const expression = select.replace(/"[^"]*"|'[^']*'/g, '""');
-		return /(^|[\s(,[!=<>+*|-])\/|^\s*\.|[(,]\s*\.\s*[),]|\b(root|name|local-name|namespace-uri|base-uri|document-uri|position|last|string|data|number|node-name|generate-id|path|has-children)\s*\(\s*\)|^\s*(@|[\p{L}_][\p{L}\p{N}_.-]*(:[\p{L}_][\p{L}\p{N}_.-]*)?\s*($|\/|\[))/u.test(expression);
+	// the global variables and parameters of a module whose values use the context item: each value - its select, or
+	// its content - is linted as the body of a function, where there's no context item, so the linter reports what needs
+	// one, e.g. a path, '.' or name()
+	private static async contextVariables(scan: ModuleScan): Promise<Declaration[]> {
+		const candidates = scan.globalVariables.filter((v) => v.place.offset !== undefined);
+		const markup = RecordTypes.blankMarkup(scan.text);
+		const root = XdocNotes.rootOffset(markup);
+		const rootElement = root !== undefined ? PackageEdits.elementExtent(markup, root) : undefined;
+		if (candidates.length === 0 || root === undefined || !rootElement) {
+			return [];
+		}
+		const xsl = scan.prefix;
+		const rootTag = scan.text.substring(root, rootElement.startTagEnd).replace(/^<([\w.-]+:)?(stylesheet|transform|package)\b/, `<${xsl}:stylesheet`)
+			.replace(/\/?>$/, ' xmlns:zcx="urn:x-context-check">');
+		const lines: string[] = [rootTag];
+		const ranges: { variable: Declaration, start: number, end: number }[] = [];
+		candidates.forEach((variable, index) => {
+			const extent = PackageEdits.elementExtent(markup, variable.place.offset!);
+			if (!extent) {
+				return;
+			}
+			const select = RecordTypes.attributeOfElementAt(scan.text, variable.place.offset! + 1, 'select', true);
+			const body = select !== undefined ? `<${xsl}:sequence select="${select.replace(/"/g, '&quot;')}"/>` : extent.selfClosing ? undefined : scan.text.substring(extent.startTagEnd, extent.endTagStart);
+			if (body === undefined) {
+				return;
+			}
+			const start = lines.join('\n').split('\n').length;
+			lines.push(`<${xsl}:function name="zcx:v${index}">`, body, `</${xsl}:function>`);
+			ranges.push({ variable, start, end: lines.join('\n').split('\n').length - 1 });
+		});
+		lines.push(`</${xsl}:stylesheet>`);
+		const document = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'xslt' });
+		const lexer = new XslLexer(XSLTConfiguration.configuration);
+		lexer.provideCharLevelState = true;
+		const tokens = lexer.analyse(document.getText());
+		const diagnostics = XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: lexer.isXSLT40 }, DocumentTypes.XSLT, document, tokens, lexer.globalInstructionData, [], []);
+		const lines_ = diagnostics.filter((d) => /Context-item is missing/.test(d.message)).map((d) => d.range.start.line);
+		return ranges.filter((r) => lines_.some((line) => line >= r.start && line <= r.end)).map((r) => r.variable);
 	}
 }

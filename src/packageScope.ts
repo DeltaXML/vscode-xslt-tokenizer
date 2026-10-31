@@ -527,7 +527,7 @@ export class PackageScope {
 
 	// a value written with the prefixes of one module, with those of another: each prefix is replaced with one the
 	// other module binds to its namespace, or the name with an EQName
-	private static translatePrefixes(value: string, from: Map<string, string> | undefined, to: Map<string, string> | undefined) {
+	public static translatePrefixes(value: string, from: Map<string, string> | undefined, to: Map<string, string> | undefined) {
 		if (!from || !to) {
 			return value;
 		}
@@ -546,7 +546,7 @@ export class PackageScope {
 	// without whitespace, an omitted 'as' being item()*. A function's parameters are compared by position, and a
 	// template's by name, with their required and tunnel attributes - a template may leave out tunnel parameters, and add
 	// parameters that aren't required
-	private static signatureMismatch(text: string, override: GlobalInstructionData, component: GlobalInstructionData): string | undefined {
+	public static signatureMismatch(text: string, override: GlobalInstructionData, component: GlobalInstructionData): string | undefined {
 		const componentText = component.href ? PackageScope.module(component.href)?.text : undefined;
 		const mine = PackageScope.signature(text, override);
 		const theirs = componentText !== undefined ? PackageScope.signature(componentText, component) : undefined;

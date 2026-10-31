@@ -650,6 +650,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// stylesheet - with the version the package-version asks for, if it's one version or a lowest one
 	const packageAnalysisView = new PackageAnalysisView();
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.analyseAsPackage', (target?: vscode.Uri | { path: string }) => packageAnalysisView.analyse(target)));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.convertToPackage', (target?: vscode.Uri | { path: string }) => packageAnalysisView.convert(target)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.overridePackageComponents', (uri: vscode.Uri, usePackageOffset: number) => XSLTCodeActions.overridePackageComponents(uri, usePackageOffset)));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.createPackage', async (name: string, versionRange: string | undefined, uri: vscode.Uri) => {
 		const fileName = (name.split(/[/:#]/).filter((part) => part !== '').pop() ?? 'package').replace(/[^\w.-]/g, '-').replace(/\.xslt?$/, '') + '.xsl';

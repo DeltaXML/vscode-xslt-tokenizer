@@ -20,20 +20,82 @@ import { ConversionAnalysis, ConversionItem, ConversionSection, PackageConversio
 export class PackageAnalysisView {
 
 	public async analyse(target?: vscode.Uri | { path: string }) {
+		const analysis = await PackageAnalysisView.analysisOf(target);
+		if (analysis) {
+			await PackageAnalysisView.showReport(analysis);
+		}
+	}
+
+	// the 'Convert to Package' command: the library is converted, with the name and version given, in a refactoring that
+	// the Refactor Preview shows - unless it can't be, when the analysis is shown
+	public async convert(target?: vscode.Uri | { path: string }) {
+		const analysis = await PackageAnalysisView.analysisOf(target);
+		if (!analysis) {
+			return;
+		}
+		const library = path.basename(analysis.library);
+		const showAnalysis = 'Show Analysis';
+		if (analysis.plan.preventing.length > 0) {
+			const choice = await vscode.window.showWarningMessage(`${library} can't be converted to a package yet: ${PackageConversion.convert(analysis, '', '')}`, showAnalysis);
+			if (choice === showAnalysis) {
+				await PackageAnalysisView.showReport(analysis);
+			}
+			return;
+		}
+		const name = await vscode.window.showInputBox({
+			title: `Convert ${library} to a Package`, prompt: 'The package\'s name - a URI', value: analysis.packageName,
+			validateInput: (value) => /^\S+$/.test(value) ? undefined : 'A name without spaces, e.g. http://example.com/strings'
+		});
+		const version = name ? await vscode.window.showInputBox({
+			title: `Convert ${library} to a Package`, prompt: 'The package\'s version', value: analysis.packageVersion,
+			validateInput: (value) => /^\d+(\.\d+)*(-\S+)?$/.test(value.trim()) ? undefined : 'A version, e.g. 1.0 or 2.1.0-beta'
+		}) : undefined;
+		if (!name || !version) {
+			return;
+		}
+		const edits = PackageConversion.convert(analysis, name, version.trim());
+		if (typeof edits === 'string') {
+			vscode.window.showWarningMessage(`${library} can't be converted to a package: ${edits}`);
+			return;
+		}
+		const workspaceEdit = new vscode.WorkspaceEdit();
+		for (const [file, fileEdits] of edits) {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+			if (document.isDirty) {
+				vscode.window.showWarningMessage(`Save ${path.basename(file)} before converting ${library} to a package`);
+				return;
+			}
+			const label = { label: `Convert ${library} to package ${name}`, needsConfirmation: true };
+			fileEdits.forEach((edit) => workspaceEdit.replace(document.uri, new vscode.Range(document.positionAt(edit.start), document.positionAt(edit.end)), edit.text, label));
+		}
+		if (await vscode.workspace.applyEdit(workspaceEdit, { isRefactoring: true })) {
+			const decisions = analysis.items.filter((i) => i.severity === 'decision');
+			if (decisions.length > 0 && await vscode.window.showInformationMessage(`${library} is converted to package ${name}: ${decisions.length} ${decisions.length === 1 ? 'item needs' : 'items need'} a decision - see the analysis`, showAnalysis) === showAnalysis) {
+				await PackageAnalysisView.showReport(analysis);
+			}
+		}
+	}
+
+	private static async analysisOf(target?: vscode.Uri | { path: string }) {
 		const file = target instanceof vscode.Uri ? target.fsPath : target?.path ?? vscode.window.activeTextEditor?.document.fileName;
 		if (!file) {
-			return;
+			return undefined;
 		}
 		if (!ImportIndex.isEnabled()) {
 			vscode.window.showWarningMessage('The workspace isn\'t scanned for stylesheets - see the XSLT.resources.inferParentFromWorkspace setting');
-			return;
+			return undefined;
 		}
 		await ImportIndex.instance.whenBuilt();
-		const analysis = PackageConversion.analyse(file);
+		const analysis = await PackageConversion.analyse(file);
 		if (typeof analysis === 'string') {
 			vscode.window.showInformationMessage(`${path.basename(file)}: ${analysis}`);
-			return;
+			return undefined;
 		}
+		return analysis;
+	}
+
+	private static async showReport(analysis: ConversionAnalysis) {
+		const file = analysis.library;
 		const folder = path.join(os.tmpdir(), 'xslt-package-analysis');
 		fs.mkdirSync(folder, { recursive: true });
 		const report = path.join(folder, `${path.basename(file)} as a package.md`);
@@ -86,6 +148,9 @@ export class PackageAnalysisView {
 			`- **Stylesheets using it**: ${files(analysis.topLevels)}`, '',
 			verdict, ''
 		];
+		if (analysis.plan.preventing.length === 0) {
+			lines.push('To convert it, run **XSLT: Convert to Package...** - the changes are shown in the Refactor Preview before they\'re made.', '');
+		}
 		for (const [section, title, description] of PackageAnalysisView.sections) {
 			const items = analysis.items.filter((i) => i.section === section);
 			if (items.length === 0) {

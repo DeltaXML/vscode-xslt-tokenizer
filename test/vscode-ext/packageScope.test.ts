@@ -167,6 +167,19 @@ suite('XSLT packages: visibility', () => {
 	});
 
 	let packageCount = 0;
+	test('XTSE3008: xsl:use-package in a module that\'s imported - directly, or through xsl:include - not one that\'s only included', async () => {
+		const top = file('top3008.xsl', `<xsl:stylesheet ${ns}><xsl:import href="imported3008.xsl"/><xsl:include href="included3008.xsl"/></xsl:stylesheet>`);
+		const imported = file('imported3008.xsl', `<xsl:stylesheet ${ns}><xsl:include href="inner3008.xsl"/><xsl:use-package name="urn:p"/></xsl:stylesheet>`);
+		const inner = file('inner3008.xsl', `<xsl:stylesheet ${ns}><xsl:use-package name="urn:p"/></xsl:stylesheet>`);
+		const included = file('included3008.xsl', `<xsl:stylesheet ${ns}><xsl:use-package name="urn:p"/></xsl:stylesheet>`);
+		await ImportIndex.instance.buildFrom([top, imported, inner, included]);
+		const xtse3008 = async (fsPath: string) => (await moduleDiagnostics.call(XsltSymbolProvider, await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(fsPath), 'xslt'), false))
+			.map((d) => d.message).filter((m) => m.startsWith('XTSE3008'));
+		assert.deepEqual(await xtse3008(imported), ['XTSE3008: xsl:use-package can\'t be in an imported module - top3008.xsl imports this one: it belongs in the top-level stylesheet']);
+		assert.deepEqual(await xtse3008(inner), ['XTSE3008: xsl:use-package can\'t be in an imported module - top3008.xsl imports this one, through xsl:include: it belongs in the top-level stylesheet']);
+		assert.deepEqual(await xtse3008(included), []);
+	});
+
 	test('XTSE3085: in a package, each mode used must be declared', async () => {
 		const modeErrors = async (content: string, attributes = '') => {
 			// a file, for the href of an xsl:include
