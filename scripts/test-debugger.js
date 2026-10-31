@@ -1737,7 +1737,7 @@ async function testAnalyzeString(saxonJar) {
 // a logpoint's {$*}: the local variables in scope, one per line, names aligned - as the Locals scope shows them,
 // including an XPath expression's range variables; after other text, on the lines below it
 async function testLogpointLocals(saxonJar) {
-    const log = async (file, line, logMessage) => {
+    const log = async (file, line, logMessage, raw = false) => {
         const dap = new DapClient(saxonJar);
         await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, file)}`, `-s:${path.join(fixtures, 'basic.xml')}`] }, { [file]: [{ line, logMessage }] });
         const terminated = dap.event('terminated');
@@ -1745,7 +1745,7 @@ async function testLogpointLocals(saxonJar) {
         await dap.request('disconnect', {}).catch(() => undefined);
         await dap.exited;
         return dap.events.filter((e) => e.event === 'output' && e.body.category === 'console' && e.body.line === line)
-            .map((e) => e.body.output.replace(/\x1b\[[0-9;]*m/g, ''));
+            .map((e) => raw ? e.body.output : e.body.output.replace(/\x1b\[[0-9;]*m/g, ''));
     };
     // the nearer $x hides the outer one
     // as xdm:debug-color writes them, with the frame's name as the title: in order where maps keep it (Saxon 13) - in
@@ -1772,6 +1772,19 @@ async function testLogpointLocals(saxonJar) {
     // as xdm:trace writes it (see testLogpointValues)
     logged = await log('basic.xsl', 5, 'children: {*}');
     assert.match(logged[0], /^children: \/items\n<items>\n {3}<item n="1"\/>/);
+    // in color, each line's colors are its own: the Debug Console shows each line of an output event on its own, so a
+    // color still set at a line's end - which a terminal carries to the next line - would be lost
+    for (const [file, line, message] of [['scopes.xsl', 13, 'item {number(@n)}: {$*}'], ['basic.xsl', 5, 'children: {*}']]) {
+        for (const output of await log(file, line, message, true)) {
+            output.split('\n').forEach((text, index) => {
+                let active = false;
+                for (const sgr of text.matchAll(/\x1b\[([0-9;]*)m/g)) {
+                    active = !/^0*$/.test(sgr[1]);
+                }
+                assert.ok(!active, `line ${index + 1} of ${JSON.stringify(output)} ends with a color set`);
+            });
+        }
+    }
 }
 
 async function testXPathForms(saxonJar) {

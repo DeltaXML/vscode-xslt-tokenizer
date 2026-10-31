@@ -1231,7 +1231,8 @@ final class Debugger {
                     // shown already, before going back
                     return false;
                 }
-                dap.event("output", Json.obj().with("category", "console").with("output", interpolate(bp.logMessage, frame) + "\n")
+                // each line with its own colors (see Ansi)
+                dap.event("output", Json.obj().with("category", "console").with("output", Ansi.perLine(interpolate(bp.logMessage, frame)) + "\n")
                         .with("source", Json.obj().with("path", path)).with("line", line));
                 return false;
             }
