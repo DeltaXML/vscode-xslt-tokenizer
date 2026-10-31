@@ -53,6 +53,8 @@ export interface ConversionAnalysis {
 	// a name and version for the package
 	packageName: string;
 	packageVersion: string;
+	// where the library shares the unnamed mode: a name for the package's mode it becomes, with the library's prefixes
+	unnamedModeName: string;
 	items: ConversionItem[];
 	// what a conversion does - see PackageConversion.convert
 	plan: ConversionPlan;
@@ -72,8 +74,10 @@ export interface ConversionPlan {
 	movedRules: { rule: ModeUse, top: string }[];
 	// the library's declarations copied into each top-level stylesheet: keys, xsl:strip-space, xsl:output etc.
 	copies: { place: Place, kind: string, name?: string }[];
-	// the conversion waits for these: blockers, and the unnamed mode, which phase 3 handles
+	// the conversion waits for these: what has to be reworked first
 	preventing: ConversionItem[];
+	// the library shares the unnamed mode with the stylesheets: it becomes a named, public mode of the package
+	renameUnnamed: boolean;
 }
 
 export type Kind = 'function' | 'template' | 'variable' | 'attribute-set' | 'mode' | 'key' | 'accumulator' | 'decimal-format' | 'character-map';
@@ -103,6 +107,9 @@ export interface Use {
 export interface ModeUse {
 	modes: string[];
 	place: Place;
+	// the mode attribute, as written - and for a template rule, whether it's also a named template
+	modeAttribute?: string;
+	isNamed?: boolean;
 }
 
 export interface ModuleScan {
@@ -120,6 +127,10 @@ export interface ModuleScan {
 	// the global variables and parameters - to check whether their values use the context item, which a library package
 	// doesn't have (see contextVariables)
 	globalVariables: Declaration[];
+	// its top-level xsl:mode elements without a name, which declare the unnamed mode - and whether its outermost element
+	// has a default-mode attribute
+	unnamedModes: Place[];
+	hasDefaultMode: boolean;
 	isPackage: boolean;
 	text: string;
 	// the module's prefix for XSLT, and its namespace bindings
@@ -127,6 +138,8 @@ export interface ModuleScan {
 	bindings?: Map<string, string>;
 	// its top-level xsl:import and xsl:include elements, with the modules they refer to
 	references: { path: string, offset: number, isImport: boolean }[];
+	// its xsl:import and xsl:include hrefs that aren't found, e.g. a URI an XML catalog would resolve
+	unresolved: { href: string, place: Place }[];
 }
 
 /**
@@ -178,7 +191,7 @@ export class PackageConversion {
 		const userUses = userScans.flatMap((s) => s.uses);
 		const libraryUses = libraryScans.flatMap((s) => s.uses);
 		const components: Kind[] = ['function', 'template', 'variable', 'attribute-set'];
-		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], publicModes: [], movedRules: [], copies: [], preventing: [] };
+		const plan: ConversionPlan = { scans, trees, publicDeclarations: [], overrides: [], callbacks: [], publicModes: [], movedRules: [], copies: [], preventing: [], renameUnnamed: false };
 		const topOf = (file: string) => topLevels.find((top) => trees.get(top)!.has(file)) ?? topLevels[0];
 
 		// the library's components that the stylesheets use - a global parameter is public anyway
@@ -221,13 +234,22 @@ export class PackageConversion {
 			}
 		}
 
-		// the library's references to declarations that only the stylesheets have
+		// the library's references to declarations that only the stylesheets have - and to those found nowhere, e.g. in a
+		// module whose import isn't resolved, which a package can't have: functions in a namespace with user-defined
+		// functions, named templates and attribute sets (variables aside, as local ones aren't told apart)
 		const callbacks = new Map<string, { declaration: Declaration, uses: Use[] }>();
+		const unresolved = new Map<string, Use[]>();
+		const functionNamespaces = new Set(libraryDeclarations.concat(userDeclarations).filter((d) => d.kind === 'function').map((d) => /^Q\{([^}]*)\}/.exec(d.expandedName)?.[1]));
+		const checked = (use: Use) => use.kind === 'template' || use.kind === 'attribute-set' || (use.kind === 'function' && functionNamespaces.has(/^Q\{([^}]*)\}/.exec(use.expandedName)?.[1]));
 		for (const use of libraryUses.filter((u) => components.includes(u.kind))) {
 			if (libraryDeclarations.some((d) => PackageConversion.refersTo(use, d))) {
 				continue;
 			}
 			const declaration = userDeclarations.find((d) => PackageConversion.refersTo(use, d));
+			if (!declaration && checked(use)) {
+				const key = `${use.kind} ${use.name}`;
+				unresolved.set(key, (unresolved.get(key) ?? []).concat(use));
+			}
 			if (declaration) {
 				const key = `${declaration.kind} ${declaration.expandedName}#${declaration.arity ?? ''}`;
 				const entry = callbacks.get(key) ?? { declaration, uses: [] };
@@ -235,6 +257,13 @@ export class PackageConversion {
 				callbacks.set(key, entry);
 			}
 		}
+		const unresolvedImports = libraryScans.concat(userScans).flatMap((s) => s.unresolved);
+		const notFound = unresolvedImports.length > 0 ? ` - these imports or includes aren't found, so what they declare isn't known: ${[...new Set(unresolvedImports.map((u) => u.href))].join(', ')} (the XML catalog setting may resolve them)` : '';
+		unresolved.forEach((uses, key) => items.push({
+			section: 'blockers', severity: 'blocker', subject: key.replace(/^attribute-set /, 'attribute set '),
+			text: `the library uses it, but it isn't declared in the library or the stylesheets found to use it - a package must declare all it uses, as abstract if a stylesheet provides it${notFound}`,
+			places: uses.map((u) => u.place)
+		}));
 		callbacks.forEach(({ declaration }) => {
 			plan.callbacks.push(declaration);
 			plan.overrides.push({ declaration, top: topOf(declaration.place.path) });
@@ -261,14 +290,29 @@ export class PackageConversion {
 				const sharedRules = libraryModeRules.length > 0 && applies.length > 0;
 				const sharedApplies = rules.length > 0 && libraryApplies.some((a) => a.modes.includes(mode));
 				if (sharedRules || sharedApplies) {
-					plan.preventing.push({
-						section: 'modes', severity: 'decision', subject: 'the unnamed mode', text: 'a package\'s unnamed mode is private to it', places: []
-					});
+					// a package's unnamed mode is private to it: it becomes a named, public mode
+					plan.renameUnnamed = true;
 					items.push({
-						section: 'modes', severity: 'decision', subject: 'the unnamed mode',
-						text: `a package's unnamed mode is private to it: the library's ${libraryModeRules.length} template rules in it won't be applied by the stylesheets' xsl:apply-templates, nor the stylesheets' rules by the library's - give the library's rules a named mode, and apply templates in it`,
+						section: 'modes', severity: 'change', subject: 'the unnamed mode',
+						text: `a package's unnamed mode is private to it, so it becomes a named, public mode of the package - its name is asked for when converting. The library's ${libraryModeRules.length} template ${libraryModeRules.length === 1 ? 'rule' : 'rules'} in it stay as they are; the stylesheets' ${rules.length} ${rules.length === 1 ? 'rule moves' : 'rules move'} into xsl:override, their ${applies.length} xsl:apply-templates get the mode, and each top-level stylesheet gets a template rule that starts the transformation in it`,
 						places: [...libraryModeRules.slice(0, 3), ...applies.slice(0, 3), ...rules.slice(0, 3)].map((u) => u.place)
 					});
+					userScans.flatMap((s) => s.unnamedModes).forEach((place) => items.push({
+						section: 'blockers', severity: 'blocker', subject: 'xsl:mode for the unnamed mode',
+						text: 'the stylesheet sets properties of the unnamed mode, e.g. on-no-match - once it\'s the package\'s mode, the stylesheet can\'t change them, as a mode can\'t be overridden: move them to the library\'s xsl:mode', places: [place]
+					}));
+					userRules.filter((r) => r.modes.includes('#all')).forEach((rule) => items.push({
+						section: 'modes', severity: 'decision', subject: 'a template rule in all modes',
+						text: 'it won\'t apply in the package\'s mode the unnamed mode becomes - only the stylesheet\'s own modes: if it should, copy it into xsl:override with the mode', places: [rule.place]
+					}));
+					rules.filter((r) => r.isNamed).forEach((rule) => items.push({
+						section: 'blockers', severity: 'blocker', subject: 'a template rule that\'s also a named template',
+						text: 'moved into xsl:override, it would also override a named template the package doesn\'t have (XTSE3058): split it into a template rule and a named template', places: [rule.place]
+					}));
+					rules.filter((r) => r.modes.some((m) => m !== '#unnamed')).forEach((rule) => items.push({
+						section: 'blockers', severity: 'blocker', subject: 'a template rule in the unnamed mode and others',
+						text: 'only a rule in the package\'s mode can move into xsl:override: split it into a rule for the unnamed mode and one for the others', places: [rule.place]
+					}));
 				}
 				continue;
 			}
@@ -276,6 +320,10 @@ export class PackageConversion {
 				plan.publicModes.push({ mode, declaration: libraryDeclarations.find((d) => d.kind === 'mode' && d.name === mode) });
 				items.push({ section: 'modes', severity: 'change', subject: `mode ${mode}`, text: 'declared public with xsl:mode, as the stylesheets use it', places: [...libraryModeRules.slice(0, 1), ...applies, ...rules].map((u) => u.place) });
 			}
+			rules.filter((r) => r.isNamed).forEach((rule) => items.push({
+				section: 'blockers', severity: 'blocker', subject: 'a template rule that\'s also a named template',
+				text: 'moved into xsl:override, it would also override a named template the package doesn\'t have (XTSE3058): split it into a template rule and a named template', places: [rule.place]
+			}));
 			if (rules.length > 0) {
 				rules.forEach((rule) => plan.movedRules.push({ rule, top: topOf(rule.place.path) }));
 				items.push({ section: 'modes', severity: 'change', subject: `${rules.length} template ${rules.length === 1 ? 'rule' : 'rules'} in mode ${mode}`, text: 'moved into xsl:override - rules can only be added to a package\'s mode there', places: rules.map((r) => r.place) });
@@ -315,10 +363,12 @@ export class PackageConversion {
 		}));
 
 		plan.preventing.push(...items.filter((i) => i.severity === 'blocker'));
+		const packageName = PackageConversion.proposedName(library, libraryDeclarations);
+		// with the library's prefix for the package's namespace, if it has one
+		const prefix = [...(scan(library).bindings ?? new Map<string, string>())].find(([, uri]) => uri === packageName)?.[0];
 		return {
-			library, libraryModules, topLevels, userModules,
-			packageName: PackageConversion.proposedName(library, libraryDeclarations),
-			packageVersion: '1.0',
+			library, libraryModules, topLevels, userModules, packageName, packageVersion: '1.0',
+			unnamedModeName: prefix ? `${prefix}:default` : 'default',
 			items, plan
 		};
 	}
@@ -330,10 +380,18 @@ export class PackageConversion {
 	// or xsl:include of the library becomes an xsl:use-package, with an xsl:override for the declarations and template
 	// rules that override the library's - moved there, with xsl:apply-imports changed to xsl:next-match - and the
 	// stylesheet gets copies of the declarations a package doesn't share. The edits' XSLT names have the prefix xsl.
-	public static convert(analysis: ConversionAnalysis, packageName: string, packageVersion: string): Map<string, TextEdit[]> | string {
+	// Where the library shares the unnamed mode with the stylesheets, it becomes the named, public mode unnamedMode, with
+	// the library's prefixes: the library's modules get default-mode="..." and its unnamed xsl:mode the name - the
+	// stylesheets' template rules in the unnamed mode move into xsl:override, in the mode, and their xsl:apply-templates
+	// get the mode - and each top-level stylesheet gets a template rule in its unnamed mode, where the transformation
+	// starts, that applies templates in the mode, as a package's mode can't be the initial mode
+	public static convert(analysis: ConversionAnalysis, packageName: string, packageVersion: string, unnamedMode?: string): Map<string, TextEdit[]> | string {
 		const plan = analysis.plan;
 		if (plan.preventing.length > 0) {
 			return `${plan.preventing.length} ${plan.preventing.length === 1 ? 'item needs' : 'items need'} reworking first: ${[...new Set(plan.preventing.map((i) => i.subject))].join(', ')}`;
+		}
+		if (plan.renameUnnamed && !unnamedMode) {
+			return 'the library shares the unnamed mode with the stylesheets: a name is needed for the package\'s mode it becomes';
 		}
 		const edits = new Map<string, TextEdit[]>();
 		const add = (file: string, edit: TextEdit | undefined) => {
@@ -378,7 +436,15 @@ export class PackageConversion {
 			if (root === undefined || !rootElement || rootElement.selfClosing) {
 				return 'The library\'s xsl:stylesheet element isn\'t found';
 			}
-			const rootTag = PackageEdits.withAttributes(library.text, libraryMarkup, root, [['name', packageName], ['package-version', packageVersion], ['declared-modes', 'no']])!;
+			const renaming = plan.renameUnnamed && unnamedMode !== undefined;
+			// the mode, as written in a module
+			const modeIn = (scan: ModuleScan) => PackageScope.translatePrefixes(unnamedMode ?? '', library.bindings, scan.bindings);
+			const withMode = (scan: ModuleScan, value: string | undefined) => (value?.trim().split(/\s+/) ?? ['#default']).map((m) => m === '#unnamed' || m === '#default' ? modeIn(scan) : m).join(' ');
+			const rootChanges: [string, string | undefined][] = [['name', packageName], ['package-version', packageVersion], ['declared-modes', 'no']];
+			if (renaming && !library.hasDefaultMode) {
+				rootChanges.push(['default-mode', modeIn(library)]);
+			}
+			const rootTag = PackageEdits.withAttributes(library.text, libraryMarkup, root, rootChanges)!;
 			rootTag.text = rootTag.text.replace(/^<([\w.-]+:)?(stylesheet|transform)\b/, '<$1package');
 			add(analysis.library, rootTag);
 			const endTag = /^<\/([\w.-]+:)?(stylesheet|transform)/.exec(library.text.substring(rootElement.endTagStart));
@@ -399,6 +465,23 @@ export class PackageConversion {
 			const added: string[] = [];
 			plan.publicModes.forEach(({ mode, declaration }) => declaration?.place.offset !== undefined ? makePublic(declaration.place) :
 				added.push(`<xsl:mode name="${escape(mode)}" visibility="public"/>`));
+			if (renaming) {
+				// the library's other modules, the template rules and xsl:apply-templates naming the unnamed mode, and its
+				// declarations - which with the mode's name, declare the mode
+				for (const module of analysis.libraryModules) {
+					const scan = scanOf(module);
+					const moduleRoot = XdocNotes.rootOffset(markupOf(module));
+					if (module !== analysis.library && !scan.hasDefaultMode && moduleRoot !== undefined) {
+						add(module, PackageEdits.withAttributes(scan.text, markupOf(module), moduleRoot, [['default-mode', modeIn(scan)]]));
+					}
+					scan.rules.concat(scan.applies).filter((r) => r.modeAttribute?.split(/\s+/).includes('#unnamed') && r.place.offset !== undefined)
+						.forEach((r) => add(module, PackageEdits.withAttributes(scan.text, markupOf(module), r.place.offset!, [['mode', withMode(scan, r.modeAttribute)]])));
+					scan.unnamedModes.forEach((place) => add(module, PackageEdits.withAttributes(scan.text, markupOf(module), place.offset!, [['name', modeIn(scan)], ['visibility', 'public']])));
+				}
+				if (analysis.libraryModules.every((module) => scanOf(module).unnamedModes.length === 0)) {
+					added.push(`<xsl:mode name="${escape(modeIn(library))}" visibility="public"/>`);
+				}
+			}
 			plan.callbacks.forEach((callback) => added.push(PackageConversion.abstractDeclaration(scanOf(callback.place.path), markupOf(callback.place.path), callback, library.bindings, step)));
 			if (added.length > 0) {
 				const lineStart = library.text.lastIndexOf('\n', rootElement.endTagStart - 1) + 1;
@@ -407,6 +490,8 @@ export class PackageConversion {
 					{ start: lineStart, end: lineStart, text } : { start: rootElement.endTagStart, end: rootElement.endTagStart, text: '\n' + text });
 			}
 
+			// the elements moved into an xsl:override - the xsl:apply-templates in them are changed as they're moved
+			const movedElements: { path: string, start: number, end: number }[] = [];
 			// each top-level stylesheet's tree
 			for (const top of analysis.topLevels) {
 				const tree = plan.trees.get(top)!;
@@ -434,12 +519,23 @@ export class PackageConversion {
 				const indent = lastImport ? PackageEdits.lineIndent(importer.text, lastImport.offset) : topStep;
 				// the declarations and template rules moved into the xsl:override
 				const moved: string[] = [];
-				const move = (place: Place, isRule: boolean) => {
+				const move = (place: Place, isRule: boolean, inUnnamedMode = false) => {
 					const source = scanOf(place.path);
 					const sourceMarkup = markupOf(place.path);
 					let text = PackageEdits.reindented(source.text, sourceMarkup, place.offset!, indent + topStep + topStep);
 					if (text === undefined) {
 						throw new Error(`An element in ${path.basename(place.path)} wasn't found`);
+					}
+					movedElements.push({ path: place.path, start: place.offset!, end: PackageEdits.elementExtent(sourceMarkup, place.offset!)!.end });
+					if (renaming) {
+						// in the stylesheet's module, the mode has its prefix
+						text = PackageConversion.withApplyTemplatesMode(text, source.prefix, withMode.bind(undefined, importer));
+						if (inUnnamedMode) {
+							// the rule's mode
+							const tagStart = text.indexOf('<');
+							const ruleMode = PackageEdits.withAttributes(text, RecordTypes.blankMarkup(text), tagStart, [['mode', withMode(importer, RecordTypes.attributeOfElementAt(text, tagStart + 1, 'mode'))]])!;
+							text = text.substring(0, ruleMode.start) + ruleMode.text + text.substring(ruleMode.end);
+						}
 					}
 					if (isRule) {
 						text = text.replace(new RegExp(`(</?${source.prefix}:)apply-imports\\b`, 'g'), '$1next-match');
@@ -453,6 +549,16 @@ export class PackageConversion {
 				};
 				plan.overrides.filter((o) => o.top === top).forEach((o) => move(o.declaration.place, false));
 				plan.movedRules.filter((r) => r.top === top).forEach((r) => move(r.rule.place, true));
+				if (renaming) {
+					users.flatMap((file) => scanOf(file).rules).filter((r) => r.modes.includes('#unnamed') && r.place.offset !== undefined).forEach((r) => move(r.place, true, true));
+					// the template rule that starts the transformation - in the unnamed mode - in the package's mode
+					const lineStart = importer.text.lastIndexOf('\n', topRootElement.endTagStart - 1) + 1;
+					const entry = [`<!-- the transformation starts in the unnamed mode: this applies templates in the mode of package ${escape(packageName)} that it became -->`,
+						'<xsl:template match=".">', `${topStep}<xsl:apply-templates select="." mode="${escape(modeIn(importer))}"/>`, '</xsl:template>']
+						.map((line) => topStep + line).join('\n') + '\n';
+					add(top, importer.text.substring(lineStart, topRootElement.endTagStart).trim() === '' ? { start: lineStart, end: lineStart, text: entry } :
+						{ start: topRootElement.endTagStart, end: topRootElement.endTagStart, text: '\n' + entry });
+				}
 				const name = `name="${escape(packageName)}" package-version="${escape(packageVersion)}"`;
 				const usePackage = moved.length === 0 ? `<xsl:use-package ${name}/>` :
 					`<xsl:use-package ${name}>\n${indent + topStep}<xsl:override>\n${moved.join('\n')}\n${indent + topStep}</xsl:override>\n${indent}</xsl:use-package>`;
@@ -478,6 +584,19 @@ export class PackageConversion {
 					add(top, { start: after, end: after, text });
 				}
 			}
+			// the stylesheets' xsl:apply-templates in the unnamed mode, other than in elements moved, get the mode
+			if (renaming) {
+				const changed = new Set<string>();
+				for (const module of analysis.userModules) {
+					const scan = scanOf(module);
+					scan.applies.filter((a) => a.modes.includes('#unnamed') && a.place.offset !== undefined && !changed.has(`${module}#${a.place.offset}`) &&
+						!movedElements.some((m) => m.path === module && a.place.offset! > m.start && a.place.offset! < m.end))
+						.forEach((a) => {
+							changed.add(`${module}#${a.place.offset}`);
+							add(module, PackageEdits.withAttributes(scan.text, markupOf(module), a.place.offset!, [['mode', withMode(scan, a.modeAttribute)]]));
+						});
+				}
+			}
 		} catch (error) {
 			return error instanceof Error ? error.message : String(error);
 		}
@@ -499,6 +618,28 @@ export class PackageConversion {
 			return { type, name: d.name, idNumber: d.arity ?? 0, href: scan.path, prefixBindings: scan.bindings, token: { line: d.place.line, startCharacter: offset - lineStart + 1, length: 0, value: '', tokenType: 0 } };
 		};
 		return PackageScope.signatureMismatch(userScan.text, asGlobal(userScan, declaration), asGlobal(libraryScan, overridden));
+	}
+
+	// the text of an element, with the xsl:apply-templates in it that are in the unnamed mode - without a mode, or with
+	// #default or #unnamed - given the mode (mode gives their mode attribute's new value)
+	private static withApplyTemplatesMode(text: string, prefix: string, mode: (value: string | undefined) => string) {
+		const markup = RecordTypes.blankMarkup(text);
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		const changes: TextEdit[] = [];
+		let match: RegExpExecArray | null;
+		while ((match = tagRgx.exec(markup)) !== null) {
+			if (match[1] || match[2] !== `${prefix}:apply-templates`) {
+				continue;
+			}
+			const value = RecordTypes.attributeOfElementAt(text, match.index + 1, 'mode');
+			if (value === undefined || value.trim().split(/\s+/).some((m) => m === '#default' || m === '#unnamed')) {
+				const edit = PackageEdits.withAttributes(text, markup, match.index, [['mode', mode(value)]]);
+				if (edit) {
+					changes.push(edit);
+				}
+			}
+		}
+		return changes.sort((a, b) => b.start - a.start).reduce((result, e) => result.substring(0, e.start) + e.text + result.substring(e.end), text);
 	}
 
 	// an abstract declaration in the package for a declaration of a stylesheet that the library uses - with its name,
@@ -541,6 +682,16 @@ export class PackageConversion {
 
 	private static indentStep(text: string, offset: number) {
 		return PackageScope.lineIndent(text, offset) || /\n([ \t]+)\S/.exec(text)?.[1] || '\t';
+	}
+
+	// a problem with a name for the mode the unnamed mode becomes - a QName with a prefix the library declares, or an
+	// EQName - undefined if there's none
+	public static modeNameProblem(analysis: ConversionAnalysis, name: string): string | undefined {
+		const match = /^(?:Q\{[^}]*\}|([\p{L}_][\p{L}\p{N}_.-]*):)?[\p{L}_][\p{L}\p{N}_.-]*$/u.exec(name.trim());
+		if (!match) {
+			return 'A mode name, e.g. lib:default';
+		}
+		return match[1] && !analysis.plan.scans.get(analysis.library)?.bindings?.has(match[1]) ? `The library doesn't declare the prefix '${match[1]}'` : undefined;
 	}
 
 	// a name for the package: the namespace of most of the library's function names - or a URN from its file name
@@ -592,8 +743,8 @@ export class PackageConversion {
 		const text = fs.readFileSync(file, 'utf8');
 		const result: ModuleScan = {
 			path: file, declarations: [], uses: [], rules: [], applies: [], applyImports: [], stripSpace: [], outputs: [], globalContextItem: [],
-			namespaceAliases: [], globalVariables: [], isPackage: ImportIndex.packageDeclaration(text) !== undefined,
-			text, prefix: 'xsl', references: []
+			namespaceAliases: [], globalVariables: [], unnamedModes: [], hasDefaultMode: false, isPackage: ImportIndex.packageDeclaration(text) !== undefined,
+			text, prefix: 'xsl', references: [], unresolved: []
 		};
 		const light = new XslLexerLight(XSLTLightConfiguration.configuration);
 		const globals = light.analyseLight(text);
@@ -687,8 +838,10 @@ export class PackageConversion {
 					case 'xsl:include': {
 						const href = attribute(offset, 'href');
 						const referenced = href !== undefined ? HrefPaths.toPath(HrefPaths.fromAttribute(href), file) : undefined;
-						if (referenced) {
+						if (referenced && fs.existsSync(referenced)) {
 							result.references.push({ path: path.normalize(referenced), offset, isImport: name === 'xsl:import' });
+						} else if (href !== undefined) {
+							result.unresolved.push({ href, place: place(line, offset) });
 						}
 						break;
 					}
@@ -712,10 +865,15 @@ export class PackageConversion {
 					}
 				}
 			}
+			if (stack.length === 0) {
+				result.hasDefaultMode = attribute(offset, isXslt ? 'default-mode' : `${prefix}:default-mode`) !== undefined;
+			} else if (stack.length === 1 && name === 'xsl:mode' && attribute(offset, 'name') === undefined) {
+				result.unnamedModes.push(place(line, offset));
+			}
 			if (name === 'xsl:template' && attribute(offset, 'match') !== undefined) {
-				result.rules.push({ modes: modes(attribute(offset, 'mode')), place: place(line, offset) });
+				result.rules.push({ modes: modes(attribute(offset, 'mode')), place: place(line, offset), modeAttribute: attribute(offset, 'mode'), isNamed: attribute(offset, 'name') !== undefined });
 			} else if (name === 'xsl:apply-templates') {
-				result.applies.push({ modes: modes(attribute(offset, 'mode')).filter((m) => m !== '#current'), place: place(line) });
+				result.applies.push({ modes: modes(attribute(offset, 'mode')).filter((m) => m !== '#current'), place: place(line, offset), modeAttribute: attribute(offset, 'mode') });
 			} else if (name === 'xsl:apply-imports') {
 				result.applyImports.push(place(line, offset));
 			} else if (name === 'xsl:call-template') {

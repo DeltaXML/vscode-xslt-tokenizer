@@ -878,7 +878,8 @@ export class PackageScope {
 		const modes = available.filter((c) => c.type === GlobalInstructionType.ModeInstruction);
 		if (modes.length > 0) {
 			for (const module of PackageScope.packageModules(pkgPath)) {
-				module.data.filter((g) => g.type === GlobalInstructionType.ModeTemplate && !g.isDefaultMode).forEach((rule) => {
+				// with a default-mode attribute, e.g. on the xsl:package, for its rules without a mode attribute
+				module.data.filter((g) => g.type === GlobalInstructionType.ModeTemplate).forEach((rule) => {
 					const ruleBindings = rule.prefixBindings ?? module.bindings;
 					if (modes.some((mode) => PackageScope.sameName(mode, rule.name, ruleBindings))) {
 						available.push({ ...rule, href: module.path, prefixBindings: ruleBindings, packageName: pkg.name, packageVersion: pkg.version, packageVisibility: 'public', visibility: 'public' });

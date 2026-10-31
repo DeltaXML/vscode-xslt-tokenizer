@@ -50,10 +50,16 @@ export class PackageAnalysisView {
 			title: `Convert ${library} to a Package`, prompt: 'The package\'s version', value: analysis.packageVersion,
 			validateInput: (value) => /^\d+(\.\d+)*(-\S+)?$/.test(value.trim()) ? undefined : 'A version, e.g. 1.0 or 2.1.0-beta'
 		}) : undefined;
-		if (!name || !version) {
+		// the unnamed mode, which a package can't share, becomes a named mode
+		const mode = name && version && analysis.plan.renameUnnamed ? await vscode.window.showInputBox({
+			title: `Convert ${library} to a Package`, value: analysis.unnamedModeName,
+			prompt: 'The library shares the unnamed mode with the stylesheets, which a package can\'t: the name of the public mode it becomes',
+			validateInput: (value) => PackageConversion.modeNameProblem(analysis, value)
+		}) : undefined;
+		if (!name || !version || (analysis.plan.renameUnnamed && !mode)) {
 			return;
 		}
-		const edits = PackageConversion.convert(analysis, name, version.trim());
+		const edits = PackageConversion.convert(analysis, name, version.trim(), mode?.trim());
 		if (typeof edits === 'string') {
 			vscode.window.showWarningMessage(`${library} can't be converted to a package: ${edits}`);
 			return;

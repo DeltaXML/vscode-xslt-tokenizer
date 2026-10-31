@@ -76,8 +76,8 @@ suite('XSLT packages: analysing a library as a package', () => {
 		assert.deepEqual(subjects('abstract'), ['change: function c:hook#1']);
 	});
 
-	test('modes: a named mode is made public, the stylesheet\'s rules in it overrides - the unnamed mode and xsl:apply-imports need decisions', () => {
-		assert.sameMembers(subjects('modes'), ['change: mode c:list', 'change: 1 template rule in mode c:list', 'decision: the unnamed mode', 'decision: xsl:apply-imports']);
+	test('modes: a named mode is made public, the stylesheet\'s rules in it overrides, the unnamed mode becomes a named mode - xsl:apply-imports needs a decision', () => {
+		assert.sameMembers(subjects('modes'), ['change: mode c:list', 'change: 1 template rule in mode c:list', 'change: the unnamed mode', 'decision: xsl:apply-imports']);
 	});
 
 	test('keys, xsl:strip-space and xsl:output aren\'t shared by a package - a global variable using the context item fails in one', () => {
@@ -192,5 +192,94 @@ suite('XSLT packages: converting a library to a package', () => {
 	test('a library with a blocker, or the unnamed mode shared, isn\'t converted', () => {
 		const blocked = { plan: { preventing: [{ subject: 'variable $c:root' }] } } as unknown as ConversionAnalysis;
 		assert.strictEqual(PackageConversion.convert(blocked, 'urn:x', '1.0'), '1 item needs reworking first: variable $c:root');
+	});
+});
+
+suite('XSLT packages: converting a library that shares the unnamed mode', () => {
+	// custom.xsl customizes lib.xsl's template rules in the unnamed mode - converted, the unnamed mode becomes the package's
+	// mode l:default, and Saxon-PE 13.1 gives the same result for both
+	const sources: { [file: string]: string } = {
+		'lib.xsl': `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:l="urn:lib">
+  <xsl:mode on-no-match="shallow-skip"/>
+  <xsl:template match="/"><out><xsl:apply-templates/></out></xsl:template>
+  <xsl:template match="para"><p><xsl:apply-templates/></p></xsl:template>
+  <xsl:template match="b"><strong><xsl:apply-templates/></strong></xsl:template>
+</xsl:stylesheet>`,
+		'custom.xsl': `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:import href="lib.xsl"/>
+  <xsl:include href="helper.xsl"/>
+  <xsl:template match="b"><em><xsl:apply-imports/></em></xsl:template>
+  <xsl:template match="note"><n><xsl:apply-templates/></n></xsl:template>
+</xsl:stylesheet>`,
+		'helper.xsl': `<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <xsl:template name="all"><xsl:apply-templates select="//para"/></xsl:template>
+</xsl:stylesheet>`
+	};
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'package-unnamed-')));
+	const write = (file: string, text: string) => fs.writeFileSync(path.join(dir, file), text);
+	let analysis: ConversionAnalysis;
+	const converted = new Map<string, string>();
+	suiteSetup(async () => {
+		Object.entries(sources).forEach(([file, text]) => write(file, text));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map((f) => path.join(dir, f)));
+		analysis = await PackageConversion.analyse(path.join(dir, 'lib.xsl')) as ConversionAnalysis;
+		const edits = PackageConversion.convert(analysis, 'urn:lib', '1.0', 'l:default');
+		assert.notTypeOf(edits, 'string', String(edits));
+		for (const [file, fileEdits] of edits as Map<string, { start: number, end: number, text: string }[]>) {
+			let text = fs.readFileSync(file, 'utf8');
+			[...fileEdits].sort((a, b) => b.start - a.start).forEach((e) => text = text.substring(0, e.start) + e.text + text.substring(e.end));
+			converted.set(path.basename(file), text);
+		}
+	});
+	suiteTeardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+	test('the unnamed mode becomes a named mode - a name is proposed, and needed', () => {
+		assert.isTrue(analysis.plan.renameUnnamed);
+		assert.strictEqual(analysis.unnamedModeName, 'l:default');
+		assert.strictEqual(PackageConversion.convert(analysis, 'urn:lib', '1.0'), 'the library shares the unnamed mode with the stylesheets: a name is needed for the package\'s mode it becomes');
+		assert.isUndefined(PackageConversion.modeNameProblem(analysis, 'l:default'));
+		assert.isUndefined(PackageConversion.modeNameProblem(analysis, 'Q{urn:x}m'));
+		assert.strictEqual(PackageConversion.modeNameProblem(analysis, 'x:default'), 'The library doesn\'t declare the prefix \'x\'');
+		assert.strictEqual(PackageConversion.modeNameProblem(analysis, 'two words'), 'A mode name, e.g. lib:default');
+	});
+
+	test('the library: its default mode, and its unnamed xsl:mode, are the named mode, which is public', () => {
+		const lib = converted.get('lib.xsl')!;
+		assert.include(lib, 'name="urn:lib" package-version="1.0" declared-modes="no" default-mode="l:default">');
+		assert.include(lib, '<xsl:mode on-no-match="shallow-skip" name="l:default" visibility="public"/>');
+		assert.include(lib, '<xsl:template match="para"><p><xsl:apply-templates/></p></xsl:template>');
+	});
+
+	test('the stylesheet: its rules move into xsl:override in the mode, its xsl:apply-templates use it, and a rule starts the transformation in it', () => {
+		const custom = converted.get('custom.xsl')!;
+		// custom.xsl has no prefix for the namespace: an EQName
+		assert.include(custom, '<xsl:template match="b" mode="Q{urn:lib}default"><em><xsl:next-match/></em></xsl:template>');
+		assert.include(custom, '<xsl:template match="note" mode="Q{urn:lib}default"><n><xsl:apply-templates mode="Q{urn:lib}default"/></n></xsl:template>');
+		assert.include(custom, '<xsl:template match=".">\n    <xsl:apply-templates select="." mode="Q{urn:lib}default"/>\n  </xsl:template>');
+		assert.include(converted.get('helper.xsl'), '<xsl:apply-templates select="//para" mode="Q{urn:lib}default"/>');
+	});
+
+	test('the converted modules have no problems', async () => {
+		converted.forEach((text, file) => write(file, text));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map((f) => path.join(dir, f)));
+		const moduleDiagnostics = (XsltSymbolProvider as unknown as { moduleDiagnostics(d: vscode.TextDocument, parent: boolean | string): Promise<vscode.Diagnostic[]> }).moduleDiagnostics;
+		for (const file of Object.keys(sources)) {
+			const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(path.join(dir, file)), 'xslt');
+			// helper.xsl as the extension lints it: with custom.xsl, which includes it
+			const parent = file === 'helper.xsl' ? path.join(dir, 'custom.xsl') : false;
+			const errors = (await moduleDiagnostics.call(XsltSymbolProvider, document, parent)).filter((d) => d.severity <= vscode.DiagnosticSeverity.Warning);
+			assert.deepEqual(errors.map((d) => `${file}:${d.range.start.line + 1} ${d.message}`), []);
+		}
+	});
+
+	test('what has to be reworked first: the stylesheet\'s xsl:mode for the unnamed mode, a rule that\'s also a named template, and a name found nowhere', async () => {
+		write('lib.xsl', sources['lib.xsl'].replace('</xsl:stylesheet>', '<xsl:template name="t"><xsl:call-template name="missing"/></xsl:template>\n</xsl:stylesheet>'));
+		write('custom.xsl', sources['custom.xsl'].replace('<xsl:include href="helper.xsl"/>', '<xsl:include href="helper.xsl"/><xsl:import href="plugin:x:y.xsl"/><xsl:mode on-no-match="deep-copy"/>')
+			.replace('<xsl:template match="note">', '<xsl:template match="note" name="note">'));
+		await ImportIndex.instance.buildFrom(Object.keys(sources).map((f) => path.join(dir, f)));
+		const blocked = await PackageConversion.analyse(path.join(dir, 'lib.xsl')) as ConversionAnalysis;
+		const blockers = blocked.items.filter((i) => i.severity === 'blocker');
+		assert.sameMembers(blockers.map((i) => i.subject), ['xsl:mode for the unnamed mode', 'a template rule that\'s also a named template', 'template missing']);
+		assert.include(blockers.find((i) => i.subject === 'template missing')!.text, 'these imports or includes aren\'t found, so what they declare isn\'t known: plugin:x:y.xsl');
 	});
 });
