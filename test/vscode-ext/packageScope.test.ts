@@ -295,6 +295,12 @@ suite('XSLT packages: overriding abstract components', () => {
 		assert.deepEqual(actions(error).map((a) => a.title), ['Override abstract function a:shape#1']);
 	});
 
+	test('an abstract function has no body, and its parameters aren\'t used - neither is reported', async () => {
+		const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(pkg), 'xslt');
+		const diagnostics: vscode.Diagnostic[] = await moduleDiagnostics.call(XsltSymbolProvider, document, false);
+		assert.deepEqual(diagnostics.map((d) => `${d.range.start.line}:${d.range.start.character} ${d.message}`), []);
+	});
+
 	test('a package may pass an abstract component on with xsl:accept visibility="abstract"', async () => {
 		const { diagnostics } = await lint(`<xsl:package name="urn:k" version="3.0" declared-modes="no" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:a="urn:a">
   <xsl:use-package name="urn:a"><xsl:accept component="*" names="*" visibility="abstract"/></xsl:use-package>
@@ -568,5 +574,8 @@ suite('XSLT packages: overrides in code lenses and hover', () => {
 		const markdown = (hover?.contents as vscode.MarkdownString[]).map((m) => m.value).join('\n');
 		assert.include(markdown, 'Returns its argument.');
 		assert.include(markdown, 'Overrides the public function of package `urn:p` 1.0, declared in p.xsl');
+		// on the name of the declaration in xsl:override
+		const onName = await provider.provideHover(document, document.positionAt(userText.indexOf('name="p:pub"') + 8), new vscode.CancellationTokenSource().token);
+		assert.include((onName?.contents as vscode.MarkdownString[]).map((m) => m.value).join('\n'), 'Returns its argument.');
 	});
 });

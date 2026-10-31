@@ -13,6 +13,7 @@ import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
+import { ImportIndex } from './importIndex';
 import { RecordType, RecordTypes, FieldReference, EnumValueReference, ItemTypeAsRange } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
@@ -524,6 +525,15 @@ export class XsltTokenDiagnostics {
 		// XPath 4.0 record types: xsl:item-type declarations, and the 'as' of global variables and parameters
 		let itemTypeDeclarations = new Map<string, string>();
 		const documentText = document.getText();
+		// an abstract function or template, in an XSLT package: it has no body, and its parameters aren't used
+		const isAbstract = (startTag: BaseToken | undefined) => !!startTag &&
+			RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(startTag.line, startTag.startCharacter)) + 1, 'visibility')?.trim() === 'abstract';
+		const isAbstractParam = (elementName: string) => elementName === 'xsl:param' && elementStack.length > 0 && isAbstract(elementStack[elementStack.length - 1].identifierToken);
+		// in a package, a global parameter, or a public, final or abstract global variable, is for the stylesheets that
+		// use it - so it isn't unused when the package doesn't use it
+		const isPackage = ImportIndex.packageDeclaration(documentText) !== undefined;
+		const isPackageInterface = (global: GlobalInstructionData) => isPackage && (global.type === GlobalInstructionType.Parameter ||
+			['public', 'final', 'abstract'].includes(RecordTypes.attributeOfElementAt(documentText, document.offsetAt(new vscode.Position(global.token.line, Math.max(0, global.token.startCharacter))), 'visibility')?.trim() ?? ''));
 		RecordTypes.itemTypeOffsets = new Map<string, number>();
 		RecordTypes.fieldReferences = [];
 		RecordTypes.enumValueReferences = [];
@@ -603,7 +613,9 @@ export class XsltTokenDiagnostics {
 						problemTokens.push(instruction.token);
 					}
 					globalVariableData.push({ token: instruction.token, name: instruction.name });
-					xsltVariableDeclarations.push(instruction.token);
+					if (!isPackageInterface(instruction)) {
+						xsltVariableDeclarations.push(instruction.token);
+					}
 					break;
 				case GlobalInstructionType.Function:
 					XsltTokenDiagnostics.checkOptionalParams(instruction, docType, problemTokens);
@@ -1069,7 +1081,7 @@ export class XsltTokenDiagnostics {
 								}
 
 								if (tagElementName === 'xsl:function' && startTagToken) {
-									functionContent = { token: startTagToken, name: tagIdentifierName, hasContent: false };
+									functionContent = { token: startTagToken, name: tagIdentifierName, hasContent: isAbstract(startTagToken) };
 									if (xmlCharType === XMLCharState.rSelfCt || xmlCharType === XMLCharState.rSelfCtNoAtt) {
 										XsltTokenDiagnostics.checkFunctionContent(functionContent, problemTokens);
 										functionContent = null;
@@ -1169,7 +1181,7 @@ export class XsltTokenDiagnostics {
 									const childSymbols: vscode.DocumentSymbol[] = XsltTokenDiagnostics.initChildrenSymbols(tagAttributeSymbols);
 
 									if (variableData !== null) {
-										if (elementStack.length > 1) {
+										if (elementStack.length > 1 && !isAbstractParam(tagElementName)) {
 											xsltVariableDeclarations.push(variableData.token);
 										}
 										if (startTagToken) {
@@ -1200,7 +1212,9 @@ export class XsltTokenDiagnostics {
 											} else {
 												inScopeVariablesList.push(variableData);
 											}
-											xsltVariableDeclarations.push(variableData.token);
+											if (!isAbstractParam(tagElementName)) {
+												xsltVariableDeclarations.push(variableData.token);
+											}
 										} else {
 											inScopeVariablesList = [];
 										}

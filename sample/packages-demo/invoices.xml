@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<invoices>
+    <invoice number="1001" country="GB">
+        <customer>Ada Lovelace</customer>
+        <line description="Analytical engine, gears" quantity="12" price="4.50"/>
+        <line description="Punched cards (box of 500)" quantity="3" price="18.00"/>
+    </invoice>
+    <invoice number="1002" country="DE">
+        <customer>Carl Friedrich Gauss</customer>
+        <line description="Measuring chain" quantity="2" price="65.00"/>
+        <line description="Heliotrope" quantity="1" price="240.00"/>
+    </invoice>
+    <invoice number="1003" country="US">
+        <customer>Grace Hopper</customer>
+        <line description="Compiler manual" quantity="5" price="12.25"/>
+    </invoice>
+</invoices>

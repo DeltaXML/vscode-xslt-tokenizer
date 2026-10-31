@@ -496,9 +496,10 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (token.isCancellationRequested) {
 			return undefined;
 		}
-		// the declaration in this document whose name is at that position
+		// the declaration in this document whose name is at that position - or in its xsl:override, which is added to
+		// those imported (see XsltSymbolProvider.withPackageComponents)
 		const namePosition = document.positionAt(declarationName.nameStart);
-		const declaration = globalInstructionData.find((g) => (g.type === GlobalInstructionType.Function || g.type === GlobalInstructionType.Template || g.type === GlobalInstructionType.ItemType) &&
+		const declaration = globalInstructionData.concat(allImportedGlobals.filter((g) => g.href === document.fileName)).find((g) => (g.type === GlobalInstructionType.Function || g.type === GlobalInstructionType.Template || g.type === GlobalInstructionType.ItemType) &&
 			g.name === declarationName.name && g.token.line === namePosition.line && namePosition.character >= g.token.startCharacter && namePosition.character <= g.token.startCharacter + g.token.length);
 		if (!declaration) {
 			return undefined;
