@@ -18,6 +18,9 @@ import * as vscode from 'vscode';
 
 
 export class XslLexerLight extends XslLexer {
+    // the xsl:expose elements of an xsl:package (see PackageScope)
+    public exposes: GlobalInstructionData[] = [];
+
     // the namespace bindings for the names of the declarations of a module's text (see ModulePrefixes)
     public static prefixBindingsOf(text: string) {
         const lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
@@ -29,6 +32,7 @@ export class XslLexerLight extends XslLexer {
 
         this.globalInstructionData = [];
         this.globalModeData = [];
+        this.exposes = [];
         this.setNativePrefix(this.languageConfiguration.nativePrefix);
         let rootNamed = false;
         let contextGlobalStart = 0;
@@ -71,6 +75,15 @@ export class XslLexerLight extends XslLexer {
         let isUseAccumulatorsAttribute = false;
         let pendingParamSelect: string|undefined;
         let topLevelParamNamePushed = false;
+        // packages: a declaration's visibility, read before its name - the xsl:expose or xsl:accept whose attributes
+        // are read - the index of the top-level xsl:use-package's declaration, if the element is within one, and the
+        // depth of the declarations: 1, or 3 for those in its xsl:override, whose declarations they are added to
+        let pendingVisibility: string | undefined;
+        let packageTarget: GlobalInstructionData | undefined;
+        let packageAttribute: string | undefined;
+        let usePackageStart = -1;
+        let declarationDepth = 1;
+        let overrideParent: GlobalInstructionData | undefined;
 
         while (lCharCount < xslLength + 1) {
             lCharCount++;
@@ -110,7 +123,9 @@ export class XslLexerLight extends XslLexer {
                             break;
                         case XMLCharState.lEn:
                             // the outermost element's name too, for its prefix (see useRootPrefix)
-                            if (xmlElementStack <= 1 || xmlElementStack === 2 && tokenChars.length < 5) {
+                            // and within an xsl:use-package, those of xsl:override's declarations and their parameters
+                            if (xmlElementStack <= 1 || xmlElementStack === 2 && tokenChars.length < 5 ||
+                                usePackageStart > -1 && xmlElementStack <= 4) {
                                 tokenChars.push(currentChar);
                                 storeToken = true;
                             } else {
@@ -140,11 +155,41 @@ export class XslLexerLight extends XslLexer {
                             currentParamNamePushed = false;
                             pendingParamSelect = undefined;
                             topLevelParamNamePushed = false;
+                            pendingVisibility = undefined;
+                            packageTarget = undefined;
+                            // the element's depth, the outermost's 0 - the count is already one more for a start tag without
+                            // attributes, and is one less after an end tag
+                            const tagDepth = nextState === XMLCharState.rStNoAtt || isCloseTag ? xmlElementStack - 1 : xmlElementStack;
+                            if (!isCloseTag && tagDepth === 1) {
+                                declarationDepth = 1;
+                                usePackageStart = tagGlobalInstructionType === GlobalInstructionType.UsePackage ? this.globalInstructionData.length : -1;
+                            }
+                            const usePackage = usePackageStart > -1 ? this.globalInstructionData[usePackageStart] : undefined;
+                            if (!isCloseTag && isNativeElement) {
+                                const tagPlaceholder: BaseToken = { line: lineNumber, startCharacter: lineNumberChar, length: 0, value: '', tokenType: XSLTokenLevelState.attributeValue };
+                                if (tagDepth === 1 && elementProperties.nativeName === 'expose') {
+                                    packageTarget = { type: GlobalInstructionType.Expose, name: '', token: tagPlaceholder, idNumber: 0 };
+                                    this.exposes.push(packageTarget);
+                                } else if (usePackage?.type === GlobalInstructionType.UsePackage && tagDepth === 2 && elementProperties.nativeName === 'accept') {
+                                    packageTarget = { type: GlobalInstructionType.Accept, name: '', token: tagPlaceholder, idNumber: 0 };
+                                    (usePackage.accepts ??= []).push(packageTarget);
+                                } else if (usePackage?.type === GlobalInstructionType.UsePackage && tagDepth === 3) {
+                                    // a declaration in xsl:override (the only child with children), recorded as a top-level one is
+                                    const overrideType = this.getElementProperties(tokenChars, true).instructionType;
+                                    if (overrideType !== GlobalInstructionType.Unknown) {
+                                        tagGlobalInstructionType = overrideType;
+                                        contextGlobalInstructionType = overrideType;
+                                        contextGlobalStart = this.globalInstructionData.length;
+                                        declarationDepth = 3;
+                                        overrideParent = usePackage;
+                                    }
+                                }
+                            }
                             if (xmlElementStack === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
                                 // the declarations recorded for this top-level element come after this
                                 contextGlobalStart = this.globalInstructionData.length;
-                            } else if (xmlElementStack === 2 
+                            } else if (xmlElementStack === declarationDepth + 1 
                                 && (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template)
                                 && isNativeElement && elementProperties.nativeName === 'param') {
                                     collectParamName = true;
@@ -166,6 +211,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lAn:
                             if ((xmlElementStack === 1 && tagGlobalInstructionType !== GlobalInstructionType.Unknown) ||
                                 xmlElementStack === 2 && contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage ||
+                                usePackageStart > -1 ||
                                 (xmlElementStack === 1 && isNativeElement) ||
                                 // the root element: it isn't known to be native until its xmlns attributes are read
                                 (xmlElementStack === 0 && !xmlnsPrefixesOnly)) {
@@ -225,6 +271,12 @@ export class XslLexerLight extends XslLexer {
                                 };
                                 this.globalInstructionData.push(gData);
                             }
+                            packageAttribute = undefined;
+                            if (packageTarget && (attName === 'component' || attName === 'names' || attName === 'visibility')) {
+                                packageAttribute = attName;
+                            } else if (xmlElementStack === declarationDepth && tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'visibility') {
+                                packageAttribute = attName;
+                            }
                             tokenChars = [];
                             storeToken = false;
                             break;
@@ -243,6 +295,21 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.escSqAvt:
                             if (xmlElementStack === 0 && ModulePrefixes.isBindingAttribute(attName)) {
                                 rootAttributes.set(attName, tokenChars.join(''));
+                            }
+                            if (packageAttribute) {
+                                const value = tokenChars.join('');
+                                const valueToken: BaseToken = { line: lineNumber, length: value.length + 2, startCharacter: lineNumberChar - (value.length + 2), value, tokenType: XSLTokenLevelState.attributeValue };
+                                if (packageTarget && packageAttribute === 'names') {
+                                    packageTarget.name = value;
+                                    packageTarget.token = valueToken;
+                                } else if (packageTarget) {
+                                    packageTarget[packageAttribute as 'component' | 'visibility'] = value.trim();
+                                } else if (tagInstructionNameAdded && this.globalInstructionData.length > 0) {
+                                    this.globalInstructionData[this.globalInstructionData.length - 1].visibility = value.trim();
+                                } else {
+                                    pendingVisibility = value.trim();
+                                }
+                                packageAttribute = undefined;
                             }
                             if (isDefaultModeAttribute) {
                                 const defaultMode = tokenChars.join('').trim();
@@ -282,6 +349,13 @@ export class XslLexerLight extends XslLexer {
                                     modeTokens.forEach((modeToken) => targetGlobal.push({type: globalType, name: modeToken.value, token: modeToken, idNumber: 0}));
                                 } else {
                                     const newGlobal: GlobalInstructionData = {type: globalType, name: XslLexer.globalName(globalType, attValue), token: tkn, idNumber: 0};
+                                    if (pendingVisibility !== undefined) {
+                                        newGlobal.visibility = pendingVisibility;
+                                        pendingVisibility = undefined;
+                                    }
+                                    if (declarationDepth === 3 && overrideParent && xmlElementStack === 3) {
+                                        (overrideParent.overrides ??= []).push(newGlobal);
+                                    }
                                     if (pendingDeclaredType !== undefined) {
                                         newGlobal.declaredType = pendingDeclaredType;
                                         pendingDeclaredType = undefined;
@@ -384,7 +458,7 @@ export class XslLexerLight extends XslLexer {
                         case XMLCharState.lDq:
                             if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage
                                  || isGlobalInstructionName || isGlobalInstructionMode || isParamDefaultSelectAttribute || isTypeDeclarationAttribute || isUseAccumulatorsAttribute || isDefaultModeAttribute
-                                 || (xmlElementStack === 0 && ModulePrefixes.isBindingAttribute(attName))) {
+                                 || packageAttribute !== undefined || (xmlElementStack === 0 && ModulePrefixes.isBindingAttribute(attName))) {
                                 storeToken = true;
                             }
                            break;
@@ -435,6 +509,12 @@ export class XslLexerLight extends XslLexer {
         const globals = this.globalInstructionData.concat(this.globalModeData);
         this.prefixBindings = ModulePrefixes.fromRootAttributes(rootAttributes);
         ModulePrefixes.resolve(globals, this.prefixBindings);
+        // the names in xsl:expose, xsl:accept and xsl:override are the module's
+        this.exposes.forEach((expose) => expose.prefixBindings = this.prefixBindings);
+        globals.filter((g) => g.type === GlobalInstructionType.UsePackage).forEach((usePackage) => {
+            usePackage.accepts?.forEach((accept) => accept.prefixBindings = this.prefixBindings);
+            usePackage.overrides?.forEach((override) => override.prefixBindings = this.prefixBindings);
+        });
         return globals;
     }
 

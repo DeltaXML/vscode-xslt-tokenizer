@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { XsltPackages } from './xsltPackages';
+import { PackageScope } from './packageScope';
 import { XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
 import { ModulePrefixes } from './modulePrefixes';
@@ -198,7 +199,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			let symbols: vscode.DocumentSymbol[] = [];
 			let allImportedGlobals: GlobalInstructionData[] = [];
 			let importErrors: { data: GlobalInstructionData, problem?: ImportProblem }[] = [];
-			const rootPath = vscode.workspace.rootPath;
 
 			// hrefs that have no file path, e.g. file://folder/a.xsl, or a URI that the XML catalog doesn't map to a file - so
 			// they aren't imported
@@ -223,16 +223,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 							let result = false;
 							if (dataObject.type === GlobalInstructionType.Import || dataObject.type === GlobalInstructionType.Include) {
 								result = HrefPaths.toPath(dataObject.name, document.fileName) === globals.href;
-							} else if (dataObject.type === GlobalInstructionType.UsePackage) {
-								// TODO:
-								const basePath = path.dirname(document.fileName);
-								let packageLookup = XsltPackages.find(xsltPackages, dataObject.name, dataObject.version);
-								if (packageLookup && rootPath) {
-									result = HrefPaths.settingsPath(packageLookup.path, rootPath) === globals.href;
-								} else {
-									result = false;
-								}
-
 							}
 							return result;
 						});
@@ -247,11 +237,13 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					});
 				}
 			});
+			allImportedGlobals = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, allImportedGlobals, xsltPackages);
 			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 			this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols);
+			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols)
+				.concat(XsltSymbolProvider.packageDiagnostics(document.getText(), globalInstructionData, prefixBindings, xsltPackages));
 			if (!XsltSymbolProvider.isOpenInEditor(document) || document.version !== version) {
 
 			} else {
@@ -400,8 +392,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			global['href'] = globals.href;
 			importedGlobals.push(global);
 		}));
-		ModulePrefixes.toModule(importedGlobals, xslLexer.prefixBindings);
-		return XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, importedGlobals, []);
+		const withPackages = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, importedGlobals, xsltPackages);
+		ModulePrefixes.toModule(withPackages, xslLexer.prefixBindings);
+		return XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, withPackages, [])
+			.concat(XsltSymbolProvider.packageDiagnostics(document.getText(), globalInstructionData, xslLexer.prefixBindings, xsltPackages));
 	}
 
 	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol | undefined) {
@@ -1286,6 +1280,31 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return currentSymbol;
 	}
 
+	// the declarations imported, with the components of the packages that the stylesheet's modules use - the document
+	// (text and globalInstructionData) and those it imports or includes (see PackageScope)
+	// - and the document's declarations in xsl:override, which replace those of the package
+	public static withPackageComponents(document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], importedGlobals: GlobalInstructionData[], xsltPackages: XsltPackage[]): GlobalInstructionData[] {
+		const { all, documentOverrides } = PackageScope.usePackagesOf(document.getText(), globalInstructionData, importedGlobals);
+		if (all.length === 0) {
+			return importedGlobals;
+		}
+		const overrides = documentOverrides.map((declaration) => ({ ...declaration, href: document.fileName }));
+		return importedGlobals.concat(overrides, PackageScope.components(all, xsltPackages, PackageScope.workspaceFolder()));
+	}
+
+	// problems with the document's xsl:use-package elements, e.g. an xsl:accept of a component the package doesn't have
+	public static packageDiagnostics(documentText: string, globalInstructionData: GlobalInstructionData[], prefixBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[]): vscode.Diagnostic[] {
+		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(documentText, globalInstructionData, []);
+		if (documentUsePackages.length === 0) {
+			return [];
+		}
+		const declarations = globalInstructionData.filter((g) => PackageScope.componentKind(g.type) !== undefined);
+		return PackageScope.problems(documentUsePackages, declarations, prefixBindings ?? documentBindings, xsltPackages, PackageScope.workspaceFolder()).map((problem) => {
+			const token = problem.token;
+			return new vscode.Diagnostic(new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length), problem.message, vscode.DiagnosticSeverity.Error);
+		});
+	}
+
 	public static async processImportedGlobals(xsltPackages: XsltPackage[], importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {
 		let level2Globals: Promise<ImportedGlobals[]>[] = [];
 		let level2Hrefs = XsltSymbolProvider.accumulateImportHrefs(xsltPackages, importedGlobals1, level1Hrefs);
@@ -1310,9 +1329,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}
 	}
 
+	// the paths of the modules imported or included - not packages, which aren't imported: their components are added by
+	// withPackageComponents
 	public static accumulateImportHrefs(xsltPackages: XsltPackage[], importedGlobals: ImportedGlobals[], existingHrefs: string[]): string[] {
 		let result: string[] = [];
-		const rootPath = vscode.workspace.rootPath;
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
@@ -1320,15 +1340,6 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 					if (resolvedName !== undefined && existingHrefs.indexOf(resolvedName) < 0) {
 						existingHrefs.push(resolvedName);
 						result.push(resolvedName);
-					}
-				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
-					let packageLookup = XsltPackages.find(xsltPackages, data.name, data.version);
-					if (packageLookup) {
-						let resolvedName = HrefPaths.settingsPath(packageLookup.path, rootPath);
-						if (resolvedName !== undefined && existingHrefs.indexOf(resolvedName) < 0) {
-							existingHrefs.push(resolvedName);
-							result.push(resolvedName);
-						}
 					}
 				}
 			});
@@ -1338,21 +1349,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	private static getImportHrefs(xsltPackages: XsltPackage[], importedGlobals: ImportedGlobals[]): string[] {
 		let result: string[] = [];
-		const rootPath = vscode.workspace.rootPath;
 		importedGlobals.forEach((importedG) => {
 			importedG.data.forEach((data) => {
 				if (data.type === GlobalInstructionType.Import || data.type === GlobalInstructionType.Include) {
 					let resolvedName = HrefPaths.toPath(data.name, importedG.href);
 					if (resolvedName !== undefined) {
 						result.push(resolvedName);
-					}
-				} else if (rootPath && data.type === GlobalInstructionType.UsePackage) {
-					let packageLookup = XsltPackages.find(xsltPackages, data.name, data.version);
-					if (packageLookup) {
-						let resolvedName = HrefPaths.settingsPath(packageLookup.path, rootPath);
-						if (resolvedName !== undefined) {
-							result.push(resolvedName);
-						}
 					}
 				}
 			});

@@ -180,6 +180,13 @@ export interface GlobalInstructionData {
     defaultSelect?: string;
     // for a name that's a QName: the namespace bindings of the module that declares it (see ModulePrefixes)
     prefixBindings?: Map<string, string>;
+    // a declaration's visibility attribute - or an xsl:expose or xsl:accept's, with its component attribute and, as the
+    // name, its names attribute (found by XslLexerLight only, see PackageScope)
+    visibility?: string;
+    component?: string;
+    // for an xsl:use-package: its xsl:accept elements, and the declarations in its xsl:override elements
+    accepts?: GlobalInstructionData[];
+    overrides?: GlobalInstructionData[];
 }
 
 export class XslLexer {
@@ -1800,7 +1807,10 @@ export enum GlobalInstructionType {
     ItemType,
     // not a declaration: an accumulator name listed in a use-accumulators attribute, e.g. on xsl:mode
     AccumulatorUse,
-    CharacterMap
+    CharacterMap,
+    // not declarations: an xsl:expose, in XslLexerLight.exposes, and an xsl:accept, in its xsl:use-package's accepts
+    Expose,
+    Accept
 }
 
 

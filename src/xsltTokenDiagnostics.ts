@@ -1532,7 +1532,7 @@ export class XsltTokenDiagnostics {
 							});
 						}
 						if (!hasProblem && attType === AttributeType.InstructionName && tagElementName === 'xsl:call-template') {
-							if (!namedTemplates.get(variableName)) {
+							if (!namedTemplates.get(variableName) && !(variableName === 'xsl:original' && XsltTokenDiagnostics.isInOverride(elementStack))) {
 								valueToken['error'] = ErrorType.TemplateNameUnresolved;
 								valueToken.value = variableName;
 								problemTokens.push(valueToken);
@@ -2761,7 +2761,7 @@ export class XsltTokenDiagnostics {
 												}
 											}
 											if (!(regexSpecial || withinTypeDeclarationAttr)) {
-												let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity);
+												let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, poppedData.function, checkedGlobalFnNames, poppedData.functionArity, XsltTokenDiagnostics.isInOverride(elementStack));
 												if (!isValid) {
 													poppedData.function['error'] = fErrorType;
 													poppedData.function['value'] = qFunctionName;
@@ -2831,7 +2831,7 @@ export class XsltTokenDiagnostics {
 								} else if (isEmptyBracketsToken && prevToken?.tokenType === TokenLevelState.function) {
 									const fnArity = incrementFunctionArity ? 1 : 0;
 									incrementFunctionArity = false;
-									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity);
+									let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, prevToken, checkedGlobalFnNames, fnArity, XsltTokenDiagnostics.isInOverride(elementStack));
 									if (!isValid) {
 										prevToken['error'] = fErrorType;
 										prevToken['value'] = qFunctionName;
@@ -2997,7 +2997,7 @@ export class XsltTokenDiagnostics {
 							}
 							break;
 						}
-						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, token, checkedGlobalFnNames);
+						let { isValid, qFunctionName, fErrorType } = XsltTokenDiagnostics.isValidFunctionName(docType, xpathPrefixes(), xsltPrefixesToURIs, token, checkedGlobalFnNames, undefined, XsltTokenDiagnostics.isInOverride(elementStack));
 						if (!isValid) {
 							token['error'] = fErrorType;
 							token['value'] = qFunctionName;
@@ -4051,7 +4051,12 @@ export class XsltTokenDiagnostics {
 		}
 	}
 
-	public static isValidFunctionName(docType: DocumentTypes, xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number) {
+	// xsl:original, within an xsl:override, refers to the component it overrides (XSLT 3.0, 3.5.3.3)
+	public static isInOverride(elementStack: ElementData[]) {
+		return elementStack.some((element) => element.symbolName === 'xsl:override');
+	}
+
+	public static isValidFunctionName(docType: DocumentTypes, xmlnsPrefixes: string[], xmlnsData: Map<string, XSLTnamespaces>, token: BaseToken, checkedGlobalFnNames: string[], arity?: number, inOverride = false) {
 		const useXPath40 = XsltTokenDiagnostics.isXPath40(docType);
 		let isParseHTMLFnWarning = false;
 		let tokenValue;
@@ -4066,6 +4071,9 @@ export class XsltTokenDiagnostics {
 		let fNameParts = qFunctionName.split(':');
 		let isValid = false;
 		let fErrorType = ErrorType.XPathFunction;
+		if (inOverride && tokenValue === 'xsl:original') {
+			return { isValid: true, qFunctionName, fErrorType: ErrorType.None };
+		}
 		if (token.eqNameUri !== undefined) {
 			// e.g. Q{urn:f}double(1): only checked against the stylesheet functions declared with EQNames in its namespace -
 			// a function in another namespace, e.g. fn or an extension function's, isn't checked
@@ -4267,6 +4275,9 @@ export class XsltTokenDiagnostics {
 		xpathStack: XPathData[], inScopeVariablesList: VariableData[], elementStack: ElementData[]): BaseToken | null {
 		let fullVarName = XsltTokenDiagnostics.getTextForToken(token.line, token, document);
 		let varName = fullVarName.startsWith('$') ? fullVarName.substring(1) : fullVarName.substring(1, fullVarName.length - 1);
+		if (varName === 'xsl:original' && XsltTokenDiagnostics.isInOverride(elementStack)) {
+			return null;
+		}
 		let result: BaseToken | null = null;
 		let globalVariable = null;
 
@@ -5764,7 +5775,6 @@ export class XsltTokenDiagnostics {
 				case 'xsl:element':
 				case 'xsl:key':
 				case 'xsl:function':
-				case 'xsl:merge-source':
 				case 'xsl:param':
 				case 'xsl:processing-instruction':
 				case 'xsl:variable':

@@ -296,6 +296,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				});
 			}
 		});
+		if (this.docType !== DocumentTypes.XPath) {
+			allImportedGlobals = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, allImportedGlobals, xsltPackages);
+		}
 		ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 		// highest import precedence first: the first declaration with a name is the one used
 		allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
@@ -452,6 +455,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
+			if (this.docType !== DocumentTypes.XPath) {
+				allImportedGlobals = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, allImportedGlobals, xsltPackages);
+			}
 			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);

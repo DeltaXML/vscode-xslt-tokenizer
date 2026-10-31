@@ -11,6 +11,8 @@ import type { XsltPackage } from './xsltSymbolProvider';
 export class XsltPackages {
 	// the name and version of packages outside the workspace, read for setting entries with only a path
 	private static declarations = new Map<string, { name: string; version: string } | undefined>();
+	// packages known otherwise, e.g. from a W3C test case's environment (see test/w3c-suite/w3cLint.test.ts)
+	public static additional: XsltPackage[] = [];
 
 	// paths are absolute, or for the setting's, as written - resolved with HrefPaths.settingsPath
 	public static all(): XsltPackage[] {
@@ -32,7 +34,7 @@ export class XsltPackages {
 			}
 		}
 		const found = ImportIndex.isEnabled() ? ImportIndex.instance.packages() : [];
-		return fromSetting.concat(found);
+		return fromSetting.concat(XsltPackages.additional, found);
 	}
 
 	// the package an xsl:use-package uses: of those with the name, the highest version that its package-version (default

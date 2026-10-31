@@ -15,10 +15,12 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
+import { XsltSymbolProvider, XsltPackage } from '../../src/xsltSymbolProvider';
+import { XsltPackages } from '../../src/xsltPackages';
+import { ImportIndex } from '../../src/importIndex';
 
 type Expectation = 'compiles' | 'dynamic-error' | 'static-error' | 'maybe-static';
-interface TestCase { suite: string, set: string, name: string, stylesheets: string[], expectation: Expectation, errorCodes: string[], skipped?: string }
+interface TestCase { suite: string, set: string, name: string, stylesheets: string[], packages: XsltPackage[], expectation: Expectation, errorCodes: string[], skipped?: string }
 interface Problem { file: string, line: number, severity: string, message: string }
 
 // static errors are reported when a stylesheet is compiled; XPTY0004 may be static or dynamic
@@ -55,7 +57,12 @@ function testCases(suiteDir: string, setFilter: RegExp | undefined): TestCase[] 
 		}
 		const setPath = path.join(suiteDir, file);
 		const text = fs.readFileSync(setPath, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
-		const setDependencies = /<dependencies>([\s\S]*?)<\/dependencies>(?=[\s\S]*<test-case)/.exec(text.substring(0, text.indexOf('<test-case')))?.[1] ?? '';
+		// the named environments, which test cases refer to - for the packages they use
+		const environments = new Map<string, string>();
+		for (const env of text.match(/<environment\s+name\s*=\s*["'][^"']*["'][\s\S]*?<\/environment>/g) ?? []) {
+			environments.set(attribute(/<environment\s[^>]*>/.exec(env)![0], 'name') ?? '', env);
+		}
+		const setDependencies =/<dependencies>([\s\S]*?)<\/dependencies>(?=[\s\S]*<test-case)/.exec(text.substring(0, text.indexOf('<test-case')))?.[1] ?? '';
 		for (const block of text.match(/<test-case\s[\s\S]*?<\/test-case>/g) ?? []) {
 			const name = attribute(/<test-case\s[^>]*>/.exec(block)![0], 'name') ?? '';
 			const test = /<test>([\s\S]*?)<\/test>/.exec(block)?.[1] ?? '';
@@ -63,6 +70,20 @@ function testCases(suiteDir: string, setFilter: RegExp | undefined): TestCase[] 
 			const stylesheets = (test.match(/<(stylesheet|package)\s[^>]*>/g) ?? [])
 				.filter((tag) => !/\srole\s*=\s*["']secondary/.test(tag))
 				.map((tag) => attribute(tag, 'file')).filter((f): f is string => !!f).map((f) => path.join(path.dirname(setPath), f));
+			// the packages it may use: the secondary packages - in the test, or its environment
+			const environmentRef = /<environment\s+ref\s*=\s*["']([^"']*)["']/.exec(block)?.[1];
+			const packageTags = (block + (environmentRef ? environments.get(environmentRef) ?? '' : '')).match(/<package\s[^>]*>/g) ?? [];
+			// as Saxon's -lib finds them: by the name and version of their xsl:package, which may not be the catalog's
+			const packages: XsltPackage[] = packageTags.filter((tag) => attribute(tag, 'file') && attribute(tag, 'role') === 'secondary').map((tag) => {
+				const packagePath = path.join(path.dirname(setPath), attribute(tag, 'file')!);
+				let declaration: { name: string, version: string } | undefined;
+				try {
+					declaration = ImportIndex.packageDeclaration(fs.readFileSync(packagePath, 'utf8'));
+				} catch {
+					declaration = undefined;
+				}
+				return { name: declaration?.name ?? attribute(tag, 'uri') ?? '', version: declaration?.version ?? attribute(tag, 'package-version') ?? '1', path: packagePath };
+			});
 			const result = /<result>([\s\S]*?)<\/result>/.exec(block)?.[1] ?? '';
 			const errorCodes = (result.match(/<error\s[^>]*>/g) ?? []).map((tag) => attribute(tag, 'code') ?? '*');
 			// an any-of with an assertion and an error, e.g. an optional feature: may or may not compile
@@ -71,7 +92,7 @@ function testCases(suiteDir: string, setFilter: RegExp | undefined): TestCase[] 
 				errorCodes.some(isStatic) && !hasAssertion ? 'static-error' : 'maybe-static';
 			const dependencies = (/<dependencies>([\s\S]*?)<\/dependencies>/.exec(block)?.[1] ?? '') + setDependencies;
 			const skipped = stylesheets.length === 0 ? 'no stylesheet' : unsupported(dependencies, suite) ?? (stylesheets.some((s) => !fs.existsSync(s)) ? 'missing file' : undefined);
-			cases.push({ suite, set, name, stylesheets, expectation, errorCodes, skipped });
+			cases.push({ suite, set, name, stylesheets, packages, expectation, errorCodes, skipped });
 		}
 	}
 	return cases;
@@ -104,8 +125,11 @@ suite('W3C XSLT test suites: lint', function () {
 				let problems: Problem[] = [];
 				let exception: string | undefined;
 				if (!testCase.skipped) {
+					XsltPackages.additional = testCase.packages;
 					for (const file of testCase.stylesheets) {
-						let entry = linted.get(file);
+						// a stylesheet linted with other packages is linted again
+						const key = [file, ...testCase.packages.map((p) => p.path)].join(' ');
+						let entry = linted.get(key);
 						if (!entry) {
 							try {
 								fs.writeFileSync(progress, file);
@@ -117,7 +141,7 @@ suite('W3C XSLT test suites: lint', function () {
 							} catch (error) {
 								entry = { problems: [], exception: String(error instanceof Error ? error.stack ?? error.message : error).split('\n').slice(0, 4).join(' | ') };
 							}
-							linted.set(file, entry);
+							linted.set(key, entry);
 						}
 						problems = problems.concat(entry.problems);
 						exception = exception ?? entry.exception;

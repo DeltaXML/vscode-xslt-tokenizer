@@ -13,6 +13,9 @@ import { XsltTokenDefinitions } from "./xsltTokenDefintions";
 import { HrefPaths } from './hrefPaths';
 import { XdocReferences } from './xdocReferences';
 import { ModeHover } from './xsltModeHover';
+import { PackageScope, PackageComponent } from './packageScope';
+import { XsltPackages } from './xsltPackages';
+import { ModulePrefixes } from './modulePrefixes';
 
 enum CharType {
 	none,
@@ -68,7 +71,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			if (!this.definitionProvider) {
 				return undefined;
 			}
-			return this.findModuleNoteHover(document, position) ?? await this.findVariableHover(document, position, token) ?? await this.findModuleHover(document, position) ??
+			return this.findModuleNoteHover(document, position) ?? await this.findVariableHover(document, position, token) ?? await this.findModuleHover(document, position) ?? this.findPackageHover(document, position) ??
 				await this.findDeclarationHover(document, position, token) ?? await this.findTemplateHover(document, position, token) ??
 				await ModeHover.hover(document, position, token) ?? await this.findItemTypeHover(document, position, token);
 		}
@@ -173,7 +176,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const paramList = declarationParamLabels(fn, document.getText()).join(', ');
 		const returnType = fn.returnType ? ` as ${fn.returnType}` : '';
 		const signature = `${fn.name}(${paramList})${returnType}`;
-		const description = fn.href ? `User-defined function, declared in ${path.basename(fn.href)}` : 'User-defined function, declared in this stylesheet';
+		const description = XSLTHoverProvider.packageDescription(fn, 'function') ?? (fn.href ? `User-defined function, declared in ${path.basename(fn.href)}` : 'User-defined function, declared in this stylesheet');
 		const note = XSLTHoverProvider.declarationNote(document, fn);
 		return this.createHover(signature, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
@@ -182,7 +185,7 @@ export class XSLTHoverProvider implements HoverProvider {
 	private templateHover(document: TextDocument, template: GlobalInstructionData) {
 		const note = XSLTHoverProvider.declarationNote(document, template);
 		const params = declarationParamLabels(template, document.getText()).join(', ');
-		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
+		const description = XSLTHoverProvider.packageDescription(template, 'template') ?? (template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet');
 		return this.createHover(`template ${template.name}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
@@ -300,6 +303,75 @@ export class XSLTHoverProvider implements HoverProvider {
 		}
 		const note = XdocNotes.moduleNote(moduleText);
 		return this.createHover(`module ${path.basename(modulePath)}`, `${note ? XdocNotes.toMarkdown(note) + '\n\n---\n' : ''}Stylesheet module: ${modulePath}${catalogText ? '\n\n' + catalogText : ''}`);
+	}
+
+	// for a component of a used package, e.g. 'Public function of package urn:shapes 1.2, declared in shapes.xsl'
+	private static packageDescription(global: GlobalInstructionData, kind: string) {
+		const component = global as Partial<PackageComponent>;
+		if (!component.packageName) {
+			return undefined;
+		}
+		const visibility = component.visibility ?? 'public';
+		const version = component.packageVersion ? ` ${component.packageVersion}` : '';
+		const declaredIn = global.href ? `, declared in ${path.basename(global.href)}` : '';
+		return `${visibility.charAt(0).toUpperCase()}${visibility.substring(1)} ${kind} of package \`${component.packageName}\`${version}${declaredIn}`;
+	}
+
+	// for the name of an xsl:use-package: the package's note, where it's found, and the components it gives the
+	// stylesheet - after the xsl:accept elements, and without those the xsl:override replaces
+	private findPackageHover(document: TextDocument, position: Position): Hover | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset);
+		if (tagStart < 0 || !RecordTypes.xsltPattern(/^<xsl:use-package\s/, text).test(text.substring(tagStart, tagStart + 40))) {
+			return undefined;
+		}
+		const nameStart = RecordTypes.attributeValueOffset(text, tagStart + 1, 'name');
+		const name = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name');
+		if (nameStart === undefined || !name || offset < nameStart || offset > nameStart + name.length) {
+			return undefined;
+		}
+		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(text, [{ type: GlobalInstructionType.UsePackage, name, token: { line: 0, startCharacter: 0, length: 0, value: '', tokenType: 0 }, idNumber: 0 }], []);
+		const nameLine = document.positionAt(nameStart).line;
+		const usePackage = documentUsePackages.find((u) => u.name === name.trim() && u.token.line === nameLine) ?? documentUsePackages.find((u) => u.name === name.trim());
+		const used = usePackage ? PackageScope.usedBy(usePackage, XsltPackages.all(), PackageScope.workspaceFolder()) : undefined;
+		if (!used || !used.path) {
+			return undefined;
+		}
+		let packageText = '';
+		try {
+			packageText = workspace.textDocuments.find((d) => d.fileName === used.path)?.getText() ?? fs.readFileSync(used.path, 'utf8');
+		} catch {
+			packageText = '';
+		}
+		const note = packageText ? XdocNotes.moduleNote(packageText) : undefined;
+		const from = used.pkg.fromSetting ? 'the XSLT.resources.xsltPackages setting' : 'the workspace';
+		const version = used.pkg.version ?? '1';
+		const location = `Package \`${used.pkg.name}\` version ${version}, from ${from}: [${workspace.asRelativePath(used.path)}](${Uri.file(used.path).toString()})`;
+		const components = XSLTHoverProvider.componentsMarkdown(ModulePrefixes.inModule(used.available, documentBindings));
+		return this.createHover(`package ${used.pkg.name} ${version}`, `${note ? XdocNotes.toMarkdown(note) + '\n\n---\n' : ''}${location}\n\n${components}`);
+	}
+
+	// the components available from a package, by kind - at most a few of each, in name order
+	private static componentsMarkdown(components: GlobalInstructionData[]) {
+		const maxShown = 12;
+		const kinds: [GlobalInstructionType[], string, (g: GlobalInstructionData) => string][] = [
+			[[GlobalInstructionType.Function], 'Functions', (g) => `${g.name}#${g.idNumber}`],
+			[[GlobalInstructionType.Template], 'Named templates', (g) => g.name],
+			[[GlobalInstructionType.Variable, GlobalInstructionType.Parameter], 'Variables and parameters', (g) => '$' + g.name],
+			[[GlobalInstructionType.ModeInstruction], 'Modes', (g) => g.name],
+			[[GlobalInstructionType.AttributeSet], 'Attribute sets', (g) => g.name],
+			[[GlobalInstructionType.ItemType], 'Item types', (g) => g.name]
+		];
+		const lines: string[] = [];
+		for (const [types, label, display] of kinds) {
+			const names = [...new Set(components.filter((c) => types.includes(c.type)).map(display))].sort();
+			if (names.length > 0) {
+				const shown = names.slice(0, maxShown).map((n) => `\`${n}\``).join(', ');
+				lines.push(`**${label}** (${names.length}): ${shown}${names.length > maxShown ? ', …' : ''}`);
+			}
+		}
+		return lines.length > 0 ? lines.join('\n\n') : 'No public components';
 	}
 
 	// how the XML catalog resolved an href, e.g. 'Resolved by the uri entry in catalogs/libraries.xml, via catalog.xml'
