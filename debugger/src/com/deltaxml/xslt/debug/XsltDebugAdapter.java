@@ -276,6 +276,8 @@ public final class XsltDebugAdapter {
         private final XsltDebugAdapter adapter;
         private final String category;
         private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        // a color set in the output so far, and not reset - for the next line, written as another event (see Ansi)
+        private final String[] color = new String[1];
         private boolean linked;
         private String linkPath;
         private int linkLine;
@@ -326,7 +328,8 @@ public final class XsltDebugAdapter {
             if (buffer.size() > 0 && adapter.muted) {
                 buffer.reset();
             } else if (buffer.size() > 0) {
-                String text = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+                // each line with its own colors, e.g. from xdm:debug-color (see Ansi)
+                String text = Ansi.perLine(new String(buffer.toByteArray(), StandardCharsets.UTF_8), color);
                 buffer.reset();
                 Json.Obj event = Json.obj().with("category", category).with("output", text);
                 if (linked && linkPath != null && linkLine > 0) {

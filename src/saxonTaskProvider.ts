@@ -14,6 +14,8 @@ import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { LexPosition } from './xpLexer';
 import { CatalogSetting } from './catalogSetting';
 import { unquotedPath } from './settingPaths';
+import { RecordTypes } from './recordTypes';
+import { XsltPackages } from './xsltPackages';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -133,6 +135,38 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return tasks.find((t) => SaxonTaskProvider.isQuickRunTaskFor(t, taskType, xsltFsPath, xmlSourceFsPath, workspaceFolder.uri.fsPath))?.label;
     }
 
+    // the source of the first workspace folder's quick-run task for the stylesheet: its fsPath, null for a task with no
+    // source, or undefined with no task - see quickRunTaskSourceIn
+    public static async quickRunTaskSource(taskType: QuickRunTaskType, xsltFsPath: string): Promise<string | null | undefined> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return undefined;
+        }
+        let text: string;
+        try {
+            text = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'tasks.json'))).toString('utf8');
+        } catch {
+            return undefined;
+        }
+        return SaxonTaskProvider.quickRunTaskSourceIn(jsc.parse(text)?.tasks || [], taskType, xsltFsPath, workspaceFolder.uri.fsPath);
+    }
+
+    // of the quick-run tasks for the stylesheet - of the selected type if there are any, else of any type - the last
+    // one's source (the most recently added, unless edited since): its fsPath, or null for a task with no source,
+    // starting from xsl:initial-template. Tasks whose source is a variable, e.g. '${file}', are left out
+    public static quickRunTaskSourceIn(tasks: vscode.TaskDefinition[], taskType: QuickRunTaskType, xsltFsPath: string, workspaceFolderFsPath: string): string | null | undefined {
+        const quickRunTypes = Object.keys(SaxonTaskProvider.quickRunProcessorNames);
+        const forStylesheet = tasks.filter((t) => quickRunTypes.includes(t.type) && typeof t.xsltFile === 'string' &&
+            SaxonTaskProvider.resolveStoredPath(t.xsltFile, workspaceFolderFsPath) === path.normalize(xsltFsPath) &&
+            !(typeof t.xmlSource === 'string' && t.xmlSource.includes('${') && !t.xmlSource.startsWith('${workspaceFolder}')));
+        const ofType = forStylesheet.filter((t) => t.type === taskType);
+        const task = (ofType.length > 0 ? ofType : forStylesheet).pop();
+        if (!task) {
+            return undefined;
+        }
+        return typeof task.xmlSource === 'string' && task.xmlSource !== '' ? SaxonTaskProvider.resolveStoredPath(task.xmlSource, workspaceFolderFsPath) : null;
+    }
+
     // finds (or persists, on first use) a task of the given quick-run type ('xslt', 'xslt-js' or 'xslt-c') in
     // .vscode/tasks.json for this xsltFile/xmlSource pair, so the user can subsequently add xslt parameters etc. by
     // hand - an undefined xmlSourceFsPath means no source document, starting from xsl:initial-template instead.
@@ -221,6 +255,15 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         }
         await vscode.workspace.fs.writeFile(workspaceTaskUri, Buffer.from(text, 'utf8'));
         return { label, created: true };
+    }
+
+    // the offset and length in tasks.json's text of the first task (by its definition) that matches - e.g. to show a
+    // Quick Run task for editing
+    public static taskRange(text: string, matches: (definition: vscode.TaskDefinition) => boolean): { offset: number; length: number } | undefined {
+        const root = jsc.parseTree(text);
+        const tasksNode = root ? jsc.findNodeAtLocation(root, ['tasks']) : undefined;
+        const taskNode = tasksNode?.type === 'array' ? tasksNode.children?.find((node) => node.type === 'object' && matches(jsc.getNodeValue(node))) : undefined;
+        return taskNode ? { offset: taskNode.offset, length: taskNode.length } : undefined;
     }
 
     // the labels of the tasks picked for each quick-run type, stylesheet and source, when several tasks are for them -
@@ -384,7 +427,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         offset += character;
         // attribute values can't contain '<', so the last one before the name starts the tag
         const tagStart = text.lastIndexOf('<', offset);
-        if (tagStart < 0 || !text.startsWith('<xsl:param', tagStart)) {
+        if (tagStart < 0 || !text.startsWith(RecordTypes.xsltTag(text, 'param'), tagStart)) {
             return undefined;
         }
         let tagEnd = -1;
@@ -685,6 +728,10 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             // the XSLT.resources.catalog setting, as used for the task's hrefs in the editor
             commandLineArgs.push(catalogOption);
         }
+        const libOption = SaxonTaskProvider.libOption(xsltTask);
+        if (libOption) {
+            commandLineArgs.push(libOption);
+        }
         if (nogo) {
             commandLineArgs.push('-nogo');
         }
@@ -705,6 +752,31 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 
         const saxonClassName = altSaxonJarPath ? 'com.deltaxml.saxon.perf.AltTransform' : 'net.sf.saxon.Transform';
         return { classPath: classPaths, mainClass: saxonClassName, args: commandLineArgs.concat(saxonFeaturesCommand).concat(xsltParametersCommand) };
+    }
+
+    // Saxon's -lib option, for the packages the stylesheet uses with xsl:use-package (see XsltPackages) - Saxon finds
+    // each by the name and version in its xsl:package element. Not for a task with a Saxon configuration file, which
+    // may declare the packages itself
+    public static libOption(task: { xsltFile?: unknown; configFilename?: unknown }): string | undefined {
+        if (task.configFilename || typeof task.xsltFile !== 'string') {
+            return undefined;
+        }
+        const xsltFsPath = SaxonTaskProvider.taskFilePath(task.xsltFile);
+        const libraryPaths = xsltFsPath ? XsltPackages.libraryPaths(xsltFsPath) : [];
+        return libraryPaths.length > 0 ? '-lib:' + libraryPaths.join(path.delimiter) : undefined;
+    }
+
+    // a task's file path property: '${file}' is the active editor's file, and a path may be relative to the workspace
+    // folder, or start with '${workspaceFolder}' - undefined for another variable, e.g. ${command:...}
+    private static taskFilePath(value: string): string | undefined {
+        if (value === '${file}') {
+            return vscode.window.activeTextEditor?.document.uri.fsPath;
+        }
+        if (value.includes('${') && !value.startsWith('${workspaceFolder}')) {
+            return undefined;
+        }
+        const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        return folder ? SaxonTaskProvider.resolveStoredPath(value, folder) : path.isAbsolute(value) ? value : undefined;
     }
 
     private static testSaxon9902(saxonJarPath: string | undefined) {

@@ -159,6 +159,15 @@ describe('XmlCatalog.resolve(): how a URI is resolved', () => {
 		expect(resolution?.chain).to.deep.equal(['/cat/catalog.xml', '/cat/one/catalog.xml', '/cat/one/two.xml']);
 	});
 
+	it('DITA-OT\'s plugin: URIs - rewriteURI entries with a scheme of its own, a rewritePrefix up a folder, in a nextCatalog', () => {
+		const { catalog: dita } = catalogOf({
+			'/dita-ot/catalog-dita.xml': `<catalog ${ns}><nextCatalog catalog="plugins/org.dita.base/catalog-dita.xml"/></catalog>`,
+			'/dita-ot/plugins/org.dita.base/catalog-dita.xml': `<catalog ${ns}><rewriteURI uriStartString="plugin:org.dita.base:" rewritePrefix="../org.dita.base/"/><rewriteURI uriStartString="plugin:org.lwdita:" rewritePrefix="../org.lwdita/"/></catalog>`,
+		}, '/dita-ot/catalog-dita.xml');
+		expect(dita.resolve('plugin:org.dita.base:xsl/common/dita-utilities.xsl')?.uri).to.equal('file:///dita-ot/plugins/org.dita.base/xsl/common/dita-utilities.xsl');
+		expect(dita.resolve('plugin:org.lwdita:xsl/hi-d.xsl')?.uri).to.equal('file:///dita-ot/plugins/org.lwdita/xsl/hi-d.xsl');
+	});
+
 	it('HrefPaths.catalogResolution(): the href as it\'s written, or its absolute URI', () => {
 		HrefPaths.catalog = catalog;
 		try {

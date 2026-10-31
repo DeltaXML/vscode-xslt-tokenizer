@@ -7,6 +7,7 @@
  * - a map may have entries that are not fields of the record
  */
 import { BaseToken, CharLevelState, ErrorType, TokenLevelState } from './xpLexer';
+import { XslLexer } from './xslLexer';
 
 export interface RecordField {
 	name: string;
@@ -818,7 +819,7 @@ export class RecordTypes {
 	// whether it's handled: XSLT 4.0, the xsl:map has a duplicates attribute, e.g. duplicates="fn($a, $b) { $a + $b }"
 	public static duplicateMapEntryKeys(text: string, markup: string): { key: string, offset: number, handled: boolean }[] {
 		const duplicates: { key: string, offset: number, handled: boolean }[] = [];
-		[...markup.matchAll(/<xsl:map[\s>]/g)].forEach((mapMatch) => {
+		[...markup.matchAll(RecordTypes.xsltPattern(/<xsl:map[\s>]/g, markup))].forEach((mapMatch) => {
 			const keys = new Set<string>();
 			const handled = RecordTypes.attributeOfElementAt(text, mapMatch.index! + 1, 'duplicates') !== undefined;
 			RecordTypes.childElements(text, markup, mapMatch.index!, 'xsl:map-entry').forEach((entryOffset) => {
@@ -851,16 +852,61 @@ export class RecordTypes {
 		return text.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g, (m) => ' '.repeat(m.length));
 	}
 
-	// the elements whose start tags are before the offset and are not yet closed there, outermost first
+	private static lastPrefixText: string | undefined;
+	private static lastPrefix = 'xsl';
+
+	// the prefix of the XSLT instructions of a stylesheet module's text, or its markup: that of its outermost element,
+	// when it's a stylesheet, transform or package - usually xsl, but e.g. xslt in some W3C tests - as the lexer finds it
+	// (see XslLexer.rootPrefix)
+	public static xsltPrefix(text: string): string {
+		if (text !== RecordTypes.lastPrefixText) {
+			RecordTypes.lastPrefixText = text;
+			RecordTypes.lastPrefix = XslLexer.rootPrefix(text);
+		}
+		return RecordTypes.lastPrefix;
+	}
+
+	// the name of an element or attribute, as it's compared: an XSLT name with the prefix xsl, for a module whose
+	// prefix for XSLT is another, e.g. xsl:template for xslt:template
+	public static xsltName(name: string, prefix: string): string {
+		return prefix !== 'xsl' && name.startsWith(prefix + ':') ? 'xsl' + name.substring(prefix.length) : name;
+	}
+
+	// text to insert in a module whose prefix for XSLT is another, e.g. a snippet with xsl:when elements: with that prefix
+	// - in such a module, xsl isn't usually bound, so a QName with the prefix xsl is an XSLT name
+	public static withXsltPrefix(inserted: string, prefix: string): string {
+		return prefix === 'xsl' ? inserted : inserted.replace(/(?<![\w.:-])xsl:/g, prefix + ':');
+	}
+
+	// a name found in the module's text, e.g. by an xsltPattern, as it's compared (see xsltName)
+	public static xsltNameIn(text: string, name: string | undefined): string | undefined {
+		return name === undefined ? undefined : RecordTypes.xsltName(name, RecordTypes.xsltPrefix(text));
+	}
+
+	// a pattern with XSLT names with the prefix xsl, e.g. /<xsl:iterate[\s>]/, for the module's text, or its markup: with
+	// the module's prefix for XSLT instead (see xsltPrefix)
+	public static xsltPattern(pattern: RegExp, text: string): RegExp {
+		const prefix = RecordTypes.xsltPrefix(text);
+		return prefix === 'xsl' ? pattern : new RegExp(pattern.source.replace(/(?<![\w.-])xsl:/g, prefix.replace(/[.-]/g, '\\$&') + ':'), pattern.flags);
+	}
+
+	// the start of the start tag of an XSLT instruction, as it's written in the module's text, e.g. '<xsl:iterate'
+	public static xsltTag(text: string, localName: string): string {
+		return `<${RecordTypes.xsltPrefix(text)}:${localName}`;
+	}
+
+	// the elements whose start tags are before the offset and are not yet closed there, outermost first - with XSLT
+	// names with the prefix xsl (see xsltName)
 	public static openElements(markup: string, end: number): { name: string, offset: number }[] {
 		const ancestors: { name: string, offset: number }[] = [];
+		const prefix = RecordTypes.xsltPrefix(markup);
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		let match: RegExpExecArray | null;
 		while ((match = tagRgx.exec(markup)) !== null && match.index < end) {
 			if (match[1]) {
 				ancestors.pop();
 			} else if (!match[3]) {
-				ancestors.push({ name: match[2], offset: match.index });
+				ancestors.push({ name: RecordTypes.xsltName(match[2], prefix), offset: match.index });
 			}
 		}
 		return ancestors;
@@ -870,6 +916,7 @@ export class RecordTypes {
 	public static openElementsAt(markup: string, offsets: number[]): { name: string, offset: number }[][] {
 		const result: { name: string, offset: number }[][] = [];
 		const ancestors: { name: string, offset: number }[] = [];
+		const prefix = RecordTypes.xsltPrefix(markup);
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		let match: RegExpExecArray | null = tagRgx.exec(markup);
 		for (const offset of offsets) {
@@ -877,7 +924,7 @@ export class RecordTypes {
 				if (match[1]) {
 					ancestors.pop();
 				} else if (!match[3]) {
-					ancestors.push({ name: match[2], offset: match.index });
+					ancestors.push({ name: RecordTypes.xsltName(match[2], prefix), offset: match.index });
 				}
 				match = tagRgx.exec(markup);
 			}
@@ -890,6 +937,7 @@ export class RecordTypes {
 	// for key="'a'", with the offsets of their start tags
 	public static mapEntryKeys(text: string, markup: string, mapOffset: number): { key: string, offset: number }[] {
 		const keys: { key: string, offset: number }[] = [];
+		const prefix = RecordTypes.xsltPrefix(markup);
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		tagRgx.lastIndex = mapOffset;
 		let depth = 0;
@@ -900,7 +948,7 @@ export class RecordTypes {
 					break;
 				}
 			} else {
-				if (depth === 1 && match[2] === 'xsl:map-entry') {
+				if (depth === 1 && RecordTypes.xsltName(match[2], prefix) === 'xsl:map-entry') {
 					const key = /^\s*(['"])((?:(?!\1).)*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, match.index + 1, 'key') ?? '');
 					if (key) {
 						keys.push({ key: key[2], offset: match.index });
@@ -930,7 +978,7 @@ export class RecordTypes {
 	// element containing it
 	private static mapInstructionType(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType, depth = 0): string | undefined {
 		const { name, offset } = ancestors[index];
-		const ownType = name === 'xsl:record' && offset > -1 ? RecordTypes.attributeOfElementAt(text, offset + 1, 'xsl:as') : undefined;
+		const ownType = name === 'xsl:record' && offset > -1 ? RecordTypes.attributeOfElementAt(text, offset + 1, RecordTypes.xsltPrefix(text) + ':as') : undefined;
 		return ownType ?? RecordTypes.contentType(text, ancestors, index, itemTypes, templateParamType, depth);
 	}
 
@@ -1005,6 +1053,7 @@ export class RecordTypes {
 	// the offsets of the start tags of the child elements with the name, of the element whose start tag is at offset
 	public static childElements(text: string, markup: string, offset: number, name: string): number[] {
 		const children: number[] = [];
+		const prefix = RecordTypes.xsltPrefix(markup);
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		tagRgx.lastIndex = offset;
 		let depth = 0;
@@ -1015,7 +1064,7 @@ export class RecordTypes {
 					break;
 				}
 			} else {
-				if (depth === 1 && match[2] === name) {
+				if (depth === 1 && RecordTypes.xsltName(match[2], prefix) === name) {
 					children.push(match.index);
 				}
 				if (!match[3]) {

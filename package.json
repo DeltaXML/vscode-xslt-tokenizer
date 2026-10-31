@@ -299,6 +299,48 @@
 				"icon": "$(debug-alt)"
 			},
 			{
+				"command": "xslt-xpath.analyseAsPackage",
+				"title": "Analyse as Package...",
+				"category": "XSLT",
+				"icon": "$(package)"
+			},
+			{
+				"command": "xslt-xpath.convertToPackage",
+				"title": "Convert to Package...",
+				"category": "XSLT",
+				"icon": "$(package)"
+			},
+			{
+				"command": "xslt-xpath.editQuickRunTask",
+				"title": "Edit Quick Run Task",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.editQuickRunTaskSaxonJ",
+				"title": "Edit Quick Run and Debug Task (SaxonJ)",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.editQuickRunTaskSaxonJS",
+				"title": "Edit Quick Run Task (SaxonJS)",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.editQuickRunTaskSaxonC",
+				"title": "Edit Quick Run Task (SaxonC)",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.editDebugTask",
+				"title": "Edit Debug Task (SaxonJ)",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
 				"command": "xslt-xpath.showDebugOutput",
 				"title": "Show Debug Output",
 				"category": "XSLT",
@@ -426,6 +468,16 @@
 					"command": "xslt-xpath.quickRunModule",
 					"when": "view == xslt-xpath.imports && viewItem == topLevel",
 					"group": "inline"
+				},
+				{
+					"command": "xslt-xpath.analyseAsPackage",
+					"when": "view == xslt-xpath.imports && viewItem == module",
+					"group": "packages"
+				},
+				{
+					"command": "xslt-xpath.convertToPackage",
+					"when": "view == xslt-xpath.imports && viewItem == module",
+					"group": "packages"
 				}
 			],
 			"commandPalette": [
@@ -476,6 +528,34 @@
 				{
 					"command": "xslt-xpath.debugXslt",
 					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTask",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.analyseAsPackage",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.convertToPackage",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonJ",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonJS",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonC",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.editDebugTask",
+					"when": "editorLangId == xslt && xslt-xpath.quickRunProcessor != 'xslt'"
 				}
 			],
 			"editor/title/run": [
@@ -483,6 +563,26 @@
 					"command": "xslt-xpath.debugXslt",
 					"when": "resourceLangId == xslt",
 					"group": "navigation@1"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonJ",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt'",
+					"group": "navigation@2"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonJS",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
+					"group": "navigation@2"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonC",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
+					"group": "navigation@2"
+				},
+				{
+					"command": "xslt-xpath.editDebugTask",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor != 'xslt'",
+					"group": "navigation@3"
 				}
 			],
 			"debug/toolBar": [
@@ -658,26 +758,25 @@
 					"default": "latest"
 				},
 				"XSLT.resources.xsltPackages": {
-					"description": "Associate file paths with xsl:package names",
+					"description": "XSLT packages for xsl:use-package, outside the workspace - packages in the workspace are found without this. Each package's name and version are read from its xsl:package element unless given here. The packages a stylesheet uses are passed to Saxon with its -lib option",
 					"type": "array",
 					"items": {
 						"type": "object",
 						"properties": {
 							"name": {
 								"type": "string",
-								"description": "XSLT Package Name"
+								"description": "XSLT Package Name - by default, the name in the package's xsl:package element"
 							},
 							"version": {
 								"type": "string",
-								"description": "XSLT Package Version"
+								"description": "XSLT Package Version - by default, the package-version in the package's xsl:package element"
 							},
 							"path": {
 								"type": "string",
-								"description": "Path to named XSLT Package"
+								"description": "Path to the XSLT Package, relative to the workspace folder, or a file: URI"
 							}
 						},
 						"required": [
-							"name",
 							"path"
 						]
 					}
@@ -1950,6 +2049,7 @@
 		"watch": "tsc -watch -p ./",
 		"test": "npm run compile && node scripts/run-vscode-tests.js --extensionDevelopmentPath=.",
 		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts",
+		"w3c-lint": "tsc -p ./ && node scripts/run-vscode-tests.js --config .vscode-test.w3c.js --extensionDevelopmentPath=.",
 		"generate-xpath40-functions": "xslt3 -xsl:resources/xslt/saxon-functions-to-typescript.xsl -s:resources/data/saxon-functions.xml -o:src/xpath40FunctionDetails.ts",
 		"update-saxon-functions": "curl -sfL https://www.saxonica.com/documentation13/doc/functions.xml -o resources/data/saxon-functions.xml && npm run generate-xpath40-functions"
 	},

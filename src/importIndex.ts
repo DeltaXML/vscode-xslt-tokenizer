@@ -11,8 +11,15 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { HrefPaths } from './hrefPaths';
+import { RecordTypes } from './recordTypes';
 
 // an xsl:import or xsl:include of a module: its resolved path
+// an xsl:use-package: the name of the package it uses, and its package-version, if any
+export interface UsedPackage {
+	name: string;
+	versionRange?: string;
+}
+
 export interface ModuleReference {
 	path: string;
 	isInclude: boolean;
@@ -33,6 +40,9 @@ export class ImportIndex {
 	// for each module, its imports and includes - and for each module, the modules importing or including it
 	private references = new Map<string, ModuleReference[]>();
 	private importers = new Map<string, Set<string>>();
+	// the modules that are packages, and the packages each module uses
+	private packageDeclarations = new Map<string, { name: string; version: string }>();
+	private usedPackages = new Map<string, UsedPackage[]>();
 	private building: Promise<void> | undefined;
 	private isBuilt = false;
 	private watcher: vscode.FileSystemWatcher | undefined;
@@ -53,7 +63,7 @@ export class ImportIndex {
 	public static moduleReferences(text: string, modulePath: string): ModuleReference[] {
 		const references: ModuleReference[] = [];
 		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
-		for (const match of withoutComments.matchAll(/<xsl:(import|include)\s[^>]*?(?<![\w.:-])href\s*=\s*(["'])([^"'{}]+)\2/g)) {
+		for (const match of withoutComments.matchAll(RecordTypes.xsltPattern(/<xsl:(import|include)\s[^>]*?(?<![\w.:-])href\s*=\s*(["'])([^"'{}]+)\2/g, withoutComments))) {
 			const referencePath = HrefPaths.toPath(HrefPaths.fromAttribute(match[3]), modulePath);
 			if (referencePath === undefined) {
 				// not a file, e.g. an http: URI
@@ -62,6 +72,69 @@ export class ImportIndex {
 			references.push({ path: referencePath, isInclude: match[1] === 'include' });
 		}
 		return references;
+	}
+
+	// for a module that's an xsl:package - its root element - the package's name and version (default '1')
+	public static packageDeclaration(text: string): { name: string; version: string } | undefined {
+		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
+		const root = withoutComments.match(/<(?![?!])[^\s>/]+[^>]*>/)?.[0];
+		const tag = root ? RecordTypes.xsltPattern(/^<xsl:package\s/, withoutComments).test(root) ? root : undefined : undefined;
+		const attribute = (name: string) => tag?.match(new RegExp(`(?<![\\w.:-])${name}\\s*=\\s*(["'])([^"']*)\\1`))?.[2].trim();
+		const name = attribute('name');
+		return name ? { name, version: attribute('package-version') || '1' } : undefined;
+	}
+
+	// the packages the xsl:use-package elements in the text use: their names and package-version ranges
+	public static usedPackages(text: string): UsedPackage[] {
+		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
+		const attribute = (tag: string, name: string) => tag.match(new RegExp(`(?<![\\w.:-])${name}\\s*=\\s*(["'])([^"']*)\\1`))?.[2].trim();
+		const used: UsedPackage[] = [];
+		for (const match of withoutComments.matchAll(RecordTypes.xsltPattern(/<xsl:use-package\s[^>]*>/g, withoutComments))) {
+			const name = attribute(match[0], 'name');
+			if (name) {
+				used.push({ name, versionRange: attribute(match[0], 'package-version') });
+			}
+		}
+		return used;
+	}
+
+	// a module's references, and what it declares or uses of packages
+	private index(file: string, text: string) {
+		this.setReferences(file, ImportIndex.moduleReferences(text, file));
+		const declaration = ImportIndex.packageDeclaration(text);
+		if (declaration) {
+			this.packageDeclarations.set(file, declaration);
+		} else {
+			this.packageDeclarations.delete(file);
+		}
+		const used = ImportIndex.usedPackages(text);
+		if (used.length > 0) {
+			this.usedPackages.set(file, used);
+		} else {
+			this.usedPackages.delete(file);
+		}
+	}
+
+	private forget(file: string) {
+		this.setReferences(file, []);
+		this.references.delete(file);
+		this.packageDeclarations.delete(file);
+		this.usedPackages.delete(file);
+	}
+
+	// the xsl:package modules in the workspace, by path
+	public packages(): { path: string; name: string; version: string }[] {
+		return [...this.packageDeclarations].map(([path, declaration]) => ({ path, ...declaration }));
+	}
+
+	// the packages the module uses - with xsl:use-package
+	public usedPackagesOf(file: string): UsedPackage[] {
+		return this.usedPackages.get(file) ?? [];
+	}
+
+	// the modules that use a package with the name - with xsl:use-package
+	public usersOf(packageName: string): string[] {
+		return [...this.usedPackages].filter(([, used]) => used.some((u) => u.name === packageName)).map(([file]) => file);
 	}
 
 	// the index is built: a request for the master of a module while it's building returns undefined - use
@@ -92,7 +165,7 @@ export class ImportIndex {
 		for (let i = 0; i < files.length; i += batchSize) {
 			await Promise.all(files.slice(i, i + batchSize).map(async (file) => {
 				try {
-					this.setReferences(file, ImportIndex.moduleReferences(await fs.promises.readFile(file, 'utf8'), file));
+					this.index(file, await fs.promises.readFile(file, 'utf8'));
 				} catch {
 					// unreadable: ignore
 				}
@@ -120,17 +193,16 @@ export class ImportIndex {
 				return;
 			}
 			try {
-				this.setReferences(uri.fsPath, ImportIndex.moduleReferences(await fs.promises.readFile(uri.fsPath, 'utf8'), uri.fsPath));
+				this.index(uri.fsPath, await fs.promises.readFile(uri.fsPath, 'utf8'));
 			} catch {
-				this.setReferences(uri.fsPath, []);
+				this.forget(uri.fsPath);
 			}
 			this.onDidChangeEmitter.fire();
 		};
 		this.watcher.onDidChange(update);
 		this.watcher.onDidCreate(update);
 		this.watcher.onDidDelete((uri) => {
-			this.setReferences(uri.fsPath, []);
-			this.references.delete(uri.fsPath);
+			this.forget(uri.fsPath);
 			this.onDidChangeEmitter.fire();
 		});
 	}

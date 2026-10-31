@@ -15,12 +15,14 @@ import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTSnippets, Snippet } from './xsltSnippets';
 import { XMLSnippets } from './xmlSnippets';
-import { XsltSymbolProvider } from './xsltSymbolProvider';
+import { XsltSymbolProvider, XsltPackage } from './xsltSymbolProvider';
+import { XsltPackages } from './xsltPackages';
 import { XSLTConfiguration } from './languageConfigurations';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { XMLDocumentFormattingProvider } from './xmlDocumentFormattingProvider';
 import { RecordField, RecordType, RecordTypes, TemplateParamType } from './recordTypes';
 import { XdocNotes } from './xdocNote';
+import { PackageScope } from './packageScope';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { FixedNamespaces } from './fixedNamespaces';
 
@@ -306,7 +308,7 @@ export class XsltTokenCompletions {
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenCompletions.xsltStartTokenNumber);
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
-						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						tagElementName = XsltTokenDiagnostics.xsltElementName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						if (tagType === TagType.Start) {
 							if (tagElementName === 'xsl:iterate') {
 								currentXSLTIterateParams.push([]);
@@ -518,7 +520,7 @@ export class XsltTokenCompletions {
 					case XSLTokenLevelState.attributeName:
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
-						attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						attNameText = XsltTokenDiagnostics.xsltAttributeName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						// track the select attribute of an xsl:variable/xsl:param so its bound
 						// expression's start token can be captured precisely (see VariableData.selectExprStartIndex)
 						awaitingSelectExprStart = tagType === TagType.XSLTvar && xmlTokenType === XSLTokenLevelState.attributeName && attNameText === 'select';
@@ -595,7 +597,9 @@ export class XsltTokenCompletions {
 								tagIdentifierName = variableName;
 
 								if (isOnRequiredToken) {
-									if (tagElementName === 'xsl:call-template') {
+									if (tagElementName === 'xsl:use-package') {
+										resultCompletions = XsltTokenCompletions.getPackageNameCompletions(document, position);
+									} else if (tagElementName === 'xsl:call-template') {
 										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
 									} else if (tagElementName === 'xsl:with-param' && elementStack.length > 0) {
 										// get name attribute of parent
@@ -711,6 +715,8 @@ export class XsltTokenCompletions {
 											if (attName === 'as') {
 												let completionStrings = XsltTokenCompletions.sequenceTypesFor(docType);
 												resultCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.TypeParameter);
+											} else if (attName === 'package-version' && tagElementName === 'xsl:use-package') {
+												resultCompletions = XsltTokenCompletions.getPackageVersionCompletions(document, position);
 											} else {
 												resultCompletions = XsltTokenCompletions.getXSLTAttributeValueCompletions(schemaQuery, position, tagElementName, attName);
 											}
@@ -1255,7 +1261,7 @@ export class XsltTokenCompletions {
 		const offset = document.offsetAt(position);
 		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, offset)), offset);
 		for (let i = ancestors.length - 1; i > -1; i--) {
-			const value = RecordTypes.attributeOfElementAt(text, ancestors[i].offset + 1, ancestors[i].name.startsWith('xsl:') ? 'expand-text' : 'xsl:expand-text');
+			const value = RecordTypes.attributeOfElementAt(text, ancestors[i].offset + 1, ancestors[i].name.startsWith('xsl:') ? 'expand-text' : RecordTypes.xsltPrefix(text) + ':expand-text');
 			if (value !== undefined) {
 				return ['yes', 'true', '1'].includes(value.trim());
 			}
@@ -1432,7 +1438,7 @@ export class XsltTokenCompletions {
 		// the XPath is a select attribute, or the content of an XSLT 4.0 xsl:select element
 		const firstOffset = document.offsetAt(new vscode.Position(allTokens[first].line, allTokens[first].startCharacter));
 		const selectElementStart = document.getText().lastIndexOf('<', firstOffset);
-		const isSelectElement = /^<xsl:select(?:\s[^<>]*)?>\s*$/.test(document.getText().substring(selectElementStart, firstOffset));
+		const isSelectElement = XsltTokenDiagnostics.xsltPatternOf(/^<xsl:select(?:\s[^<>]*)?>\s*$/, document).test(document.getText().substring(selectElementStart, firstOffset));
 		if (attributeName !== 'select' && !isSelectElement) {
 			return undefined;
 		}
@@ -1771,7 +1777,7 @@ export class XsltTokenCompletions {
 	public static getNoteCompletions(document: vscode.TextDocument, position: vscode.Position, globals: GlobalInstructionData[] = []): vscode.CompletionItem[] | undefined {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
-		const noteStart = offset > 0 ? text.lastIndexOf('<xsl:note', offset - 1) : -1;
+		const noteStart = offset > 0 ? text.lastIndexOf(RecordTypes.xsltTag(text, 'note'), offset - 1) : -1;
 		const startTagEnd = noteStart > -1 ? text.indexOf('>', noteStart) : -1;
 		// the cursor is after the note's start tag, with no other markup since, except CDATA sections - and it may be in one
 		const contentBefore = startTagEnd > -1 && startTagEnd < offset ? text.substring(startTagEnd + 1, offset).replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '') : '<';
@@ -1946,7 +1952,7 @@ export class XsltTokenCompletions {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset - 1);
-		const test = /^<xsl:when\s(?:[^<>]*\s)?test\s*=\s*(["'])((?:(?!\1)[^<>])*)$/.exec(text.substring(tagStart, offset));
+		const test = RecordTypes.xsltPattern(/^<xsl:when\s(?:[^<>]*\s)?test\s*=\s*(["'])((?:(?!\1)[^<>])*)$/, text).exec(text.substring(tagStart, offset));
 		if (tagStart < 0 || !test) {
 			return undefined;
 		}
@@ -1996,7 +2002,7 @@ export class XsltTokenCompletions {
 		// an empty select, or one with a string literal being typed, e.g. select="'|'" - [3] is the string literal's quote -
 		// or the content of an XSLT 4.0 xsl:select element, e.g. <xsl:select>|
 		const emptySelect = /^<([\w.:-]+)\s(?:[^<>]*\s)?select\s*=\s*(["'])\s*(?:(?!\2)(['"])[^'"<>]*)?$/.exec(text.substring(tagStart, offset)) ??
-			/^<(xsl:select)(?:\s[^<>]*)?>()\s*(?:(['"])[^'"<>]*)?$/.exec(text.substring(tagStart, offset));
+			RecordTypes.xsltPattern(/^<(xsl:select)(?:\s[^<>]*)?>()\s*(?:(['"])[^'"<>]*)?$/, text).exec(text.substring(tagStart, offset));
 		if (tagStart < 0 || !emptySelect) {
 			return undefined;
 		}
@@ -2047,7 +2053,7 @@ export class XsltTokenCompletions {
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset - 1);
 		// [1] is the attribute name typed so far
-		const namePosition = tagStart > -1 ? /^<xsl:record(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s+([\w.-]*)$/.exec(text.substring(tagStart, offset)) : null;
+		const namePosition = tagStart > -1 ? RecordTypes.xsltPattern(/^<xsl:record(?:\s+[\w.:-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s+([\w.-]*)$/, text).exec(text.substring(tagStart, offset)) : null;
 		if (!namePosition) {
 			return undefined;
 		}
@@ -2416,6 +2422,52 @@ export class XsltTokenCompletions {
 		return items;
 	}
 
+	// in an xsl:override, after '<': a declaration overriding each component of the package that can be overridden and
+	// isn't already - its signature, a note, and a body (see PackageScope.overrideSkeleton) - before other element
+	// completions, abstract components first
+	public static getOverrideCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameStart = /<([\w.:-]*)$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		if (!nameStart) {
+			return undefined;
+		}
+		const tagStart = offset - nameStart[0].length;
+		const ancestors = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart);
+		const usePackage = ancestors[ancestors.length - 2];
+		if (ancestors[ancestors.length - 1]?.name !== 'xsl:override' || usePackage?.name !== 'xsl:use-package') {
+			return undefined;
+		}
+		const overridable = PackageScope.overridable(text, usePackage.offset);
+		if (!overridable) {
+			return undefined;
+		}
+		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		const indent = PackageScope.lineIndent(text, tagStart);
+		const prefix = XsltTokenDiagnostics.xsltPrefixOf(document);
+		const items: vscode.CompletionItem[] = [];
+		overridable.components.forEach((component, index) => {
+			const skeleton = PackageScope.skeleton(text, usePackage.offset, component, overridable.bindings, indent);
+			if (!skeleton) {
+				return;
+			}
+			const isAbstract = component.packageVisibility === 'abstract';
+			const item = new vscode.CompletionItem(`override ${PackageScope.label(component, overridable.bindings)}`, vscode.CompletionItemKind.Method);
+			// after the '<' typed
+			item.insertText = RecordTypes.withXsltPrefix(skeleton, prefix).substring(1);
+			item.filterText = nameStart[1] + item.label;
+			item.range = range;
+			item.detail = `${isAbstract ? 'Implements the abstract' : 'Overrides the'} ${PackageScope.componentKind(component.type)} of package ${component.packageName}`;
+			const note = XdocNotes.forGlobal(component, text);
+			if (note) {
+				item.documentation = new vscode.MarkdownString(XdocNotes.toMarkdown(note));
+			}
+			item.sortText = '!' + (isAbstract ? '0' : '1') + String(index).padStart(4, '0');
+			items.push(item);
+		});
+		return items;
+	}
+
 	// XPath 4.0 record types: where an xsl:map would have a record type, e.g. in an xsl:variable declared with one, an
 	// xsl:map with an xsl:map-entry for each field, and an xsl:record with an attribute for each field, for an element name
 	// after '<' - undefined if it's not such a position
@@ -2493,7 +2545,7 @@ export class XsltTokenCompletions {
 		const tagStart = text.lastIndexOf('<', offset - 1);
 		const tagText = text.substring(tagStart, offset);
 		// the attribute value typed so far may be the start of a string literal, e.g. key="'na
-		const keyValue = /^<xsl:map-entry\s(?:[^<>]*\s)?key\s*=\s*(["'])((?:(?!\1)[^<>])*)$/.exec(tagText);
+		const keyValue = RecordTypes.xsltPattern(/^<xsl:map-entry\s(?:[^<>]*\s)?key\s*=\s*(["'])((?:(?!\1)[^<>])*)$/, text).exec(tagText);
 		if (tagStart < 0 || !keyValue) {
 			return undefined;
 		}
@@ -2893,6 +2945,48 @@ export class XsltTokenCompletions {
 		return completionItems;
 	}
 
+	// the attribute value up to the position, from after its opening quote - replaced by a completion, as a package URI
+	// isn't a word, e.g. 'http://exa'
+	private static attributeValueRange(document: vscode.TextDocument, position: vscode.Position) {
+		const before = document.lineAt(position.line).text.substring(0, position.character);
+		const quote = Math.max(before.lastIndexOf('"'), before.lastIndexOf("'"));
+		return new vscode.Range(position.line, quote + 1, position.line, position.character);
+	}
+
+	// for an xsl:use-package name: the packages in the workspace and the XSLT.resources.xsltPackages setting - each once,
+	// with its versions
+	public static getPackageNameCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
+		const range = XsltTokenCompletions.attributeValueRange(document, position);
+		const byName = new Map<string, XsltPackage[]>();
+		XsltPackages.all().forEach((pkg) => byName.set(pkg.name, (byName.get(pkg.name) ?? []).concat(pkg)));
+		return [...byName].map(([name, packages]) => {
+			const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Module);
+			item.range = range;
+			const versions = [...new Set(packages.map((pkg) => pkg.version ?? '1'))].sort((a, b) => XsltPackages.compareVersions(b, a));
+			item.detail = `package-version ${versions.join(', ')}`;
+			item.documentation = packages.map((pkg) => `${pkg.version ?? '1'}: ${pkg.path}`).join('\n');
+			return item;
+		});
+	}
+
+	// for an xsl:use-package package-version: '*', and the versions of the package it names, highest first
+	public static getPackageVersionCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tag = text.substring(text.lastIndexOf('<', offset), text.indexOf('>', offset) + 1);
+		const name = tag.match(/(?<![\w.:-])name\s*=\s*(["'])([^"']*)\1/)?.[2].trim();
+		const versions = [...new Set(XsltPackages.all().filter((pkg) => pkg.name === name).map((pkg) => pkg.version ?? '1'))]
+			.sort((a, b) => XsltPackages.compareVersions(b, a));
+		const range = XsltTokenCompletions.attributeValueRange(document, position);
+		return ['*'].concat(versions).map((version, index) => {
+			const item = new vscode.CompletionItem(version, vscode.CompletionItemKind.Constant);
+			item.range = range;
+			item.sortText = String(index).padStart(3, '0');
+			item.detail = version === '*' ? 'any version - the highest is used' : `a version of ${name}`;
+			return item;
+		});
+	}
+
 	private static getSimpleInsertCompletions(completionStrings: string[], kind: vscode.CompletionItemKind, excludeChar?: string) {
 		let completionItems: vscode.CompletionItem[] = [];
 		completionStrings.forEach((name) => {
@@ -3137,6 +3231,11 @@ export class XsltTokenCompletions {
 					newItem3.documentation = "start and close tags";
 					newItem3.insertText = new vscode.SnippetString('${1:element}>\n\t${0}\n</element>');
 					completionItems.push(newItem3);
+				} else if (tagName === 'xsl:expose') {
+					useCurrent = false;
+					const newItem = new vscode.CompletionItem(tagName, vscode.CompletionItemKind.Struct);
+					newItem.insertText = new vscode.SnippetString('xsl:expose component="${1:function}" names="${2:f:*}" visibility="${3:public}"/>$0');
+					completionItems.push(newItem);
 				} else if (tagName === 'xsl:message') {
 					useCurrent = false;
 					if (inScopeVariablesList.length > 0) {

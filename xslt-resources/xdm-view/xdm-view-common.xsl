@@ -131,12 +131,15 @@
           zxd:step-label($node, 'processing-instruction(' || $target || ')',
             function($n as node()) as xs:boolean { $n instance of processing-instruction() and name($n) eq $target })"/>
       </xsl:when>
-      <xsl:otherwise> <!-- element -->
+      <xsl:when test="$node instance of document-node()">
+        <xsl:sequence select="''"/>
+      </xsl:when>
+      <xsl:when test="$node instance of element()">
         <xsl:variable name="nm" as="xs:QName" select="node-name($node)"/>
         <xsl:sequence select="
           zxd:step-label($node, name($node),
             function($n as node()) as xs:boolean { $n instance of element() and node-name($n) eq $nm })"/>
-      </xsl:otherwise>
+      </xsl:when>
     </xsl:choose>
   </xsl:function>
 

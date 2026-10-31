@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import { LanguageConfiguration } from "./xslLexer";
 import { XsltPackage } from './xsltSymbolProvider';
 import { HrefPaths } from './hrefPaths';
+import { XsltPackages } from './xsltPackages';
 
 
 export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
@@ -18,7 +19,7 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 	provideDocumentLinks(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.DocumentLink[] {
 		let data: GlobalInstructionData[] = this.lexer.analyseLight(document.getText());
 		let result: vscode.DocumentLink[] = [];
-		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const xsltPackages: XsltPackage[] = XsltPackages.all();
 		const rootPath = vscode.workspace.rootPath;
 
 
@@ -35,9 +36,7 @@ export class DocumentLinkProvider implements vscode.DocumentLinkProvider {
 				link.tooltip = HrefPaths.linkTooltip(instruction.name, document.fileName);
 				result.push(link);
 			} else if (instruction.type === GlobalInstructionType.UsePackage) {
-				let packageLookup = xsltPackages.find((pkg) => {
-					return pkg.name === instruction.name;
-				});
+				let packageLookup = XsltPackages.find(xsltPackages, instruction.name, instruction.version);
 				if (packageLookup && rootPath) {
 					const packagePath = HrefPaths.settingsPath(packageLookup.path, rootPath);
 					if (packagePath === undefined) {

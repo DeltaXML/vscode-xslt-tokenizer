@@ -21,6 +21,20 @@ import { XsltEmptySteps } from '../../src/xsltEmptySteps';
 
 const fixtures = path.resolve(__dirname, '..', '..', '..', 'debugger', 'test');
 
+// starting a debug session saves the unsaved editors in the active group (debug.saveBeforeStart): an untitled document
+// left open by another suite would get a Save As dialog, which waits for an answer - so, for a suite, none are saved
+function noSaveBeforeStart() {
+	const config = () => vscode.workspace.getConfiguration('debug');
+	let saved: string | undefined;
+	suiteSetup(async () => {
+		saved = config().inspect<string>('saveBeforeStart')?.globalValue;
+		await config().update('saveBeforeStart', 'none', vscode.ConfigurationTarget.Global);
+	});
+	suiteTeardown(async () => {
+		await config().update('saveBeforeStart', saved, vscode.ConfigurationTarget.Global);
+	});
+}
+
 suite('XSLT debugger - configurations', () => {
 	suiteSetup(() => {
 		// tasks locate the bundled xslt-resources jars
@@ -296,6 +310,7 @@ suite('XSLT debugger - Saxon\'s problems', () => {
 
 suite('XSLT debugger - sessions that fail to start', function () {
 	this.timeout(30000);
+	noSaveBeforeStart();
 	const fixture = path.join(fixtures, 'basic.xsl');
 	// not a jar at all, but with a Saxon jar's name
 	const notAJar = path.join(os.tmpdir(), 'xslt-debug-test', 'saxon-he-13.0.jar');
@@ -343,6 +358,7 @@ suite('XSLT debugger - sessions that fail to start', function () {
 
 suite('XSLT debugger - debug sessions', function () {
 	this.timeout(60000);
+	noSaveBeforeStart();
 	const saxonJar = process.env.XSLT_TEST_SAXON_JAR;
 
 	// the adapter's 'stopped' events, and the stack trace when each occurred

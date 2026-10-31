@@ -56,7 +56,7 @@ export class RecordExtraction {
 		let record: { recordType: string, fieldNames: string[] } | undefined;
 		let valueElement: { name: string, offset: number } | undefined;
 		let ancestors: { name: string, offset: number }[];
-		if (/^<xsl:map[\s/>]/.test(text.substring(selectionStart, selectionStart + 9))) {
+		if (RecordTypes.xsltPattern(/^<xsl:map[\s/>]/, text).test(text.substring(selectionStart, selectionStart + 40))) {
 			// the selection is one xsl:map element, from its start tag to its end
 			if (RecordExtraction.elementEnd(markup, selectionStart) !== selectionEnd) {
 				return undefined;
@@ -68,7 +68,7 @@ export class RecordExtraction {
 			const tagStart = text.lastIndexOf('<', selectionStart);
 			const before = text.substring(tagStart, selectionStart);
 			const attribute = /^<([\w.:-]+)\s(?:[^<>]*\s)?select\s*=\s*(["'])\s*$/.exec(before);
-			const selectElement = /^<xsl:select(?:\s[^<>]*)?>\s*$/.test(before);
+			const selectElement = RecordTypes.xsltPattern(/^<xsl:select(?:\s[^<>]*)?>\s*$/, text).test(before);
 			const after = text.substring(selectionEnd, selectionEnd + 200).trimStart();
 			const isWholeValue = attribute ? after.startsWith(attribute[2]) : selectElement && after.startsWith('</xsl:select>');
 			if (tagStart < 0 || !isWholeValue) {
@@ -168,7 +168,7 @@ export class RecordExtraction {
 		}
 		// the name of the field whose type it is, e.g. address for address as record(...), or 'home address'?
 		const field = /(?:^|[\s(,])([A-Za-z_][\w.-]*|'(?:[^']|'')*')\??\s+as\s+$/.exec(value.substring(0, span[0]));
-		const existingNames = [...text.matchAll(/<xsl:item-type\s[^>]*name\s*=\s*["']([^"']*)["']/g)].map((match) => match[1]);
+		const existingNames = [...text.matchAll(RecordTypes.xsltPattern(/<xsl:item-type\s[^>]*name\s*=\s*["']([^"']*)["']/g, text))].map((match) => match[1]);
 		const fieldName = field ? field[1].replace(/^'|'$/g, '').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') : '';
 		let typeName = RecordExtraction.newTypeName(existingNames);
 		if (/^[A-Za-z_]/.test(fieldName)) {
@@ -245,7 +245,7 @@ export class RecordExtraction {
 	// the xsl:item-type declarations in the document whose record types have the field names, in any order
 	public static matchingRecordTypes(text: string, fieldNames: string[]) {
 		const itemTypes = new Map<string, string>();
-		const declarations = [...text.matchAll(/<xsl:item-type\s/g)].map((match) => ({
+		const declarations = [...text.matchAll(RecordTypes.xsltPattern(/<xsl:item-type\s/g, text))].map((match) => ({
 			name: RecordTypes.attributeOfElementAt(text, match.index! + 1, 'name'),
 			as: RecordTypes.attributeOfElementAt(text, match.index! + 1, 'as')
 		}));

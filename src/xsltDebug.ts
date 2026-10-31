@@ -158,7 +158,8 @@ export class XsltDebug {
 				return { start: m.index, end: m.index + m[0].length, expression: '$' + m[1] };
 			}
 		}
-		const declaration = new RegExp(`<xsl:(?:variable|param)\\b[^>]*?\\sname\\s*=\\s*(["'])(${name})\\1`, 'gu');
+		// with any prefix for XSLT, e.g. xslt:variable: the line doesn't have the module's outermost element
+		const declaration = new RegExp(`<[\\w.-]+:(?:variable|param)\\b[^>]*?\\sname\\s*=\\s*(["'])(${name})\\1`, 'gu');
 		for (let m = declaration.exec(lineText); m; m = declaration.exec(lineText)) {
 			const start = m.index + m[0].length - 1 - m[2].length;
 			if (character >= start && character <= start + m[2].length) {

@@ -140,6 +140,8 @@ export enum ModifierState {
 }
 
 export class Data {
+    // the operators < and > written as numeric character references, e.g. 1&#60;2
+    public static numericLtGt = ['&#60;', '&#x3C;', '&#x3c;', '&#62;', '&#x3E;', '&#x3e;'];
     // ';' ends an XPath 4.0 namespace declaration, e.g. declare namespace p = 'uri'; - '×' and '÷' are XPath 4.0's
     // multiplication and division operators
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%', ';', '×', '÷'];
@@ -158,7 +160,7 @@ export class Data {
         "else", "eq", "except",
         "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "union", "&lt;", "&gt;"].concat(Data.nodeComparisons40);
+        "then", "to", "union", "&lt;", "&gt;", ...Data.numericLtGt].concat(Data.nodeComparisons40);
 
 
     // axes added in XPath 4.0:
@@ -188,7 +190,7 @@ export class Data {
         "else", "eq", "except",
         "function", "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "map", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "treat", "union", "&lt;", "&gt;"].concat(Data.nodeComparisons40);
+        "then", "to", "treat", "union", "&lt;", "&gt;", ...Data.numericLtGt].concat(Data.nodeComparisons40);
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
     // 'key' and 'value' are for XPath 4.0 map bindings: for key $k value $v in map-expression
@@ -420,6 +422,9 @@ export class XPathLexer {
                 } else if (nesting < 0 && char === '*') {
                     nesting = 0;
                     resolvedEarly = true;
+                } else if (char === '*' && this.numberChars[this.numberChars.length - 1] === '}') {
+                    // the wildcard of an EQName, e.g. @Q{urn:a}*
+                    resolvedEarly = true;
                 }
             // no-break intentional
             case CharLevelState.lName:
@@ -436,7 +441,9 @@ export class XPathLexer {
                     // the URI of an EQName variable, e.g. $Q{urn:a}name
                     rv = existing;
                     this.inVarUri = char !== '}';
-                } else if (existing === CharLevelState.lVar && char === 'Q' && nextChar === '{' && this.numberChars.length === 1) {
+                } else if (char === 'Q' && nextChar === '{' && this.numberChars.length === 1 &&
+                    (existing === CharLevelState.lVar || existing === CharLevelState.lAttr || (existing === CharLevelState.lName && this.numberChars[0] === '#'))) {
+                    // an EQName after $, @ or # (an XPath 4.0 QName literal), e.g. $Q{urn:a}name, @Q{urn:a}name or #Q{urn:a}name
                     rv = existing;
                     this.inVarUri = true;
                 } else if (resolvedEarly) {
@@ -632,6 +639,8 @@ export class XPathLexer {
                             currentLabelState !== CharLevelState.lBt &&
                             currentLabelState !== CharLevelState.mBt &&
                             currentLabelState !== CharLevelState.escBt &&
+                            // the end of a braced URI literal, e.g. Q{urn:a}b, $Q{urn:a}v or @Q{urn:a}b
+                            currentLabelState !== CharLevelState.lUri && !this.inVarUri &&
                             currentChar === "}") {
                             let isNestedOk = false;
                             for (var x = 0; x < nestedTokenStack.length; x++) {
@@ -849,7 +858,10 @@ export class XPathLexer {
                         case CharLevelState.lWs:
                         case CharLevelState.lUri:
                             if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq && currentLabelState !== CharLevelState.escBt) {
-                                this.update(poppedContext, result, tokenChars, currentLabelState);
+                                // in a type declaration, a name ended by whitespace and then an occurrence indicator is a type, e.g.
+                                // xs:integer in 'xs:integer *'
+                                const isTypeWithIndicator = isTypeDeclaration && nextLabelState === CharLevelState.lWs && XPathLexer.isOccurrenceIndicatorAfter(xpath, i - 1);
+                                this.update(poppedContext, result, tokenChars, currentLabelState, isTypeWithIndicator);
                             }
                             tokenChars.push(currentChar);
                             break;
@@ -960,6 +972,13 @@ export class XPathLexer {
         return result;
     }
 
+    // whether the first character from the offset that isn't whitespace is an occurrence indicator: '*', '+' or '?'
+    private static isOccurrenceIndicatorAfter(xpath: string, offset: number) {
+        const following = /\s*([*+?])/y;
+        following.lastIndex = offset;
+        return following.test(xpath);
+    }
+
     private update(poppedContext: Token | null | undefined, result: Token[], tokenChars: string[], charState: CharLevelState, isTypeDeclaration = false) {
         if (tokenChars.length > 0) {
             this.updateResult(poppedContext, result, new BasicToken(tokenChars.join(''), charState, isTypeDeclaration));
@@ -1047,6 +1066,10 @@ export class XPathLexer {
                 } else if (lastToken.value === ',') {
                     isTypeDeclaration = lastToken2.tokenType === TokenLevelState.simpleType || lastToken2.tokenType === TokenLevelState.nodeType;
                 }
+            }
+            if (prevToken?.tokenType === TokenLevelState.uriLiteral && newToken.charType === CharLevelState.lName) {
+                // the local name of an EQName, e.g. attribute in Q{f}attribute('x')
+                newToken.eqNameUri = prevToken.value;
             }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
             this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration, result);
@@ -1315,7 +1338,10 @@ export class XPathLexer {
     }
 
     private updateTokenBeforeBrackets(prevToken: Token, isTypeDeclaration = false) {
-        if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
+        if (prevToken.eqNameUri !== undefined && (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.nodeType)) {
+            // a function whose name is an EQName, even with the local name of a kind test, e.g. Q{f}attribute('x')
+            prevToken.tokenType = TokenLevelState.function;
+        } else if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
             if (Data.nodeTypes.indexOf(prevToken.value) > -1) {
                 prevToken.tokenType = TokenLevelState.nodeType;
             } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
@@ -1475,10 +1501,10 @@ export class XPathLexer {
                         currentToken.tokenType = TokenLevelState.nodeType;
                     }
                 } else if (isStar && (
-                    prevTokenT === TokenLevelState.attributeNameTest ||
+                    (prevTokenT === TokenLevelState.attributeNameTest && (prevToken.value === '@' || prevToken.value.endsWith('*'))) ||
                     prevTokenT === TokenLevelState.uriLiteral)
                 ) {
-                    // @* or {example.com}*
+                    // @* (or @ *) or {example.com}* - not after an attribute's name, e.g. @price * @qty, a multiplication
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
                 } else if (isStar && prevTokenT === TokenLevelState.operator && prevToken.value === '?') {
@@ -1493,7 +1519,8 @@ export class XPathLexer {
                         } else if (prevTokenT === TokenLevelState.operator && (prevToken.value === ')') || prevToken.value === ']') {
                             // ($a) * 9 or count($a) * 8 or abc as map(*)* or $item as node()+
                             if (isTypeDeclaration && prevToken.value === ')' || (
-                                poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType ||
+                                // not after a constructor function call, e.g. (xs:dayTimeDuration('P1D')*.)
+                                poppedContext && ((poppedContext.tokenType === TokenLevelState.simpleType && !poppedContext.value.includes(':')) || poppedContext.tokenType === TokenLevelState.nodeType ||
                                     (poppedContext.tokenType === TokenLevelState.operator && (poppedContext.value === 'as' || poppedContext.value === 'of'))))) {
                                 currentToken.charType = CharLevelState.lName;
                                 currentToken.tokenType = TokenLevelState.nodeType;
@@ -1839,6 +1866,7 @@ export enum ErrorType {
     DuplicateCharacterMapName,
     // an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
     ApplyTemplatesDefaultMode,
+	MissingXsltAttribute,
 }
 
 export interface BaseToken {

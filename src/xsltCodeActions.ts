@@ -8,6 +8,7 @@ import { Data, RecordFix, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { PackageScope, PackageFix } from './packageScope';
 import { InlineRecordExtractionPlan, RecordExtraction, RecordExtractionPlan } from './recordExtraction';
 import { XdocNotes } from './xdocNote';
 import { ItemTypeSupport } from './itemTypeSupport';
@@ -141,7 +142,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const { document, plan } = this.recordExtraction!;
 		const isExtract = codeAction.title === XsltCodeActionKind.extractRecordType;
 		const text = document.getText();
-		const existingNames = [...text.matchAll(/<xsl:item-type\s[^>]*name\s*=\s*["']([^"']*)["']/g)].map((match) => match[1]);
+		const existingNames = [...text.matchAll(RecordTypes.xsltPattern(/<xsl:item-type\s[^>]*name\s*=\s*["']([^"']*)["']/g, text))].map((match) => match[1]);
 		const typeName = isExtract ? RecordExtraction.newTypeName(existingNames) : this.recordExtraction!.existingTypes.find((name) => codeAction.title === XSLTCodeActions.useRecordTypeTitle(name))!;
 		codeAction.edit = new vscode.WorkspaceEdit();
 		const { asEdit, itemTypeInsert } = plan;
@@ -167,7 +168,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 	private addItemTypeEdit(edit: vscode.WorkspaceEdit, document: vscode.TextDocument, typeName: string, recordType: string, itemTypeInsert: { offset: number, indent: string, isAfter: boolean }) {
 		const declaration = `<xsl:item-type name="${typeName}" as="${recordType}"/>`;
 		const insertPosition = document.positionAt(itemTypeInsert.offset);
-		edit.insert(document.uri, insertPosition, itemTypeInsert.isAfter ? `\n${itemTypeInsert.indent}${declaration}` : `${itemTypeInsert.indent}${declaration}\n`);
+		edit.insert(document.uri, insertPosition, XSLTCodeActions.inModule(document, itemTypeInsert.isAfter ? `\n${itemTypeInsert.indent}${declaration}` : `${itemTypeInsert.indent}${declaration}\n`));
 		// the new type's name, after the edit - the xsl:item-type is before the type's use
 		const nameLine = insertPosition.line + (itemTypeInsert.isAfter ? 1 : 0);
 		this.executeRenameCommand(nameLine, itemTypeInsert.indent.length + '<xsl:item-type name="'.length, document.uri);
@@ -182,7 +183,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		let tabStop = 1;
 		const snippet = fix.text.replace(/[$}\\]/g, '\\$&').replace(/ description(?=\n|$)/g, () => ` \${${tabStop++}:description}`);
 		const position = new vscode.Position(fix.line, fix.character);
-		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, position), new vscode.SnippetString(snippet));
+		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, position), new vscode.SnippetString(XSLTCodeActions.inModule(document, snippet)));
 		// the lines have the indentation
 		snippetEdit.keepWhitespace = true;
 		action.edit.set(document.uri, [snippetEdit]);
@@ -200,7 +201,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const snippetText = text.replace(/[$}\\]/g, '\\$&');
 		const withCursor = snippetText.replace(/select=""/, 'select="$0"') !== snippetText ? snippetText.replace(/select=""/, 'select="$0"') :
 			snippetText.replace(/(<xsl:when test="[^"]*">(?:\n[ \t]*)?)/, '$1$$0');
-		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, end), new vscode.SnippetString(withCursor));
+		const snippetEdit = new vscode.SnippetTextEdit(new vscode.Range(position, end), new vscode.SnippetString(XSLTCodeActions.inModule(document, withCursor)));
 		// the text already has the indentation
 		snippetEdit.keepWhitespace = true;
 		action.edit.set(document.uri, [snippetEdit]);
@@ -217,8 +218,59 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const action = new vscode.CodeAction(XsltCodeActionKind.addMissingRecordFields, vscode.CodeActionKind.QuickFix);
 		action.diagnostics = [diagnostic];
 		action.edit = new vscode.WorkspaceEdit();
-		action.edit.insert(document.uri, position, text);
+		action.edit.insert(document.uri, position, XSLTCodeActions.inModule(document, text));
 		return action;
+	}
+
+	// text to insert in the document, with its prefix for XSLT, e.g. xslt:when for xsl:when (see RecordTypes.withXsltPrefix)
+	public static readonly overrideComponentsTitle = 'Override Package Components...';
+
+	// the offset of the start tag of the xsl:use-package with the position in it - or in its start tag
+	private static usePackageAt(document: vscode.TextDocument, position: vscode.Position): number | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const isUsePackage = (tagStart: number) => RecordTypes.xsltPattern(/^<xsl:use-package[\s/>]/, text).test(text.substring(tagStart, tagStart + 40));
+		const tagStart = text.lastIndexOf('<', offset);
+		if (tagStart > -1 && isUsePackage(tagStart) && !text.substring(tagStart, offset).includes('>')) {
+			return tagStart;
+		}
+		return RecordTypes.openElements(RecordTypes.blankMarkup(text), offset).reverse().find((element) => element.name === 'xsl:use-package')?.offset;
+	}
+
+	// the command for 'Override Package Components...': the components picked - abstract ones to begin with - are added to
+	// the xsl:use-package's xsl:override, each with a declaration overriding it (see PackageScope.overrideSkeleton)
+	public static async overridePackageComponents(uri: vscode.Uri, usePackageOffset: number) {
+		const document = await vscode.workspace.openTextDocument(uri);
+		const text = document.getText();
+		const overridable = PackageScope.overridable(text, usePackageOffset);
+		if (!overridable || overridable.components.length === 0) {
+			vscode.window.showInformationMessage('The package has no components to override - public or abstract, and not already overridden');
+			return;
+		}
+		const items = overridable.components.map((component) => ({
+			label: PackageScope.label(component, overridable.bindings), description: component.packageVisibility,
+			picked: component.packageVisibility === 'abstract', component
+		}));
+		const picked = await vscode.window.showQuickPick(items, { canPickMany: true, placeHolder: `Components of package '${overridable.usePackage.name}' to override` });
+		if (!picked || picked.length === 0) {
+			return;
+		}
+		const fix = PackageScope.overrideFix(text, overridable.usePackage, picked.map((item) => item.component), overridable.bindings, XSLTCodeActions.overrideComponentsTitle);
+		if (!fix) {
+			return;
+		}
+		await vscode.workspace.applyEdit(XSLTCodeActions.packageFixEdit(document, fix));
+	}
+
+	// the edits of a fix for a problem with packages (see PackageScope)
+	private static packageFixEdit(document: vscode.TextDocument, fix: PackageFix) {
+		const edit = new vscode.WorkspaceEdit();
+		fix.edits.forEach((textEdit) => edit.replace(document.uri, new vscode.Range(document.positionAt(textEdit.start), document.positionAt(textEdit.end)), XSLTCodeActions.inModule(document, textEdit.text)));
+		return edit;
+	}
+
+	private static inModule(document: vscode.TextDocument, text: string) {
+		return RecordTypes.withXsltPrefix(text, XsltTokenDiagnostics.xsltPrefixOf(document));
 	}
 
 	public provideCodeActions(document: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext): vscode.CodeAction[] | undefined {
@@ -256,6 +308,36 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			action.command = { command: 'xslt-xpath.addExternalFunctionPrefix', title: action.title, arguments: [prefix, document.uri] };
 			codeActions.push(action);
 		});
+		// a package not found: create it, or add an existing package file to the setting
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.packageNotFound).slice(0, 1).forEach((diagnostic) => {
+			// the problem is on the xsl:use-package element's name
+			const name = diagnostic.message.match(/Package '([^']*)'/)?.[1] ?? '';
+			const versionRange = diagnostic.message.match(/package-version '([^']*)'/)?.[1];
+			const create = new vscode.CodeAction(`Create Package '${name}'...`, vscode.CodeActionKind.QuickFix);
+			create.diagnostics = [diagnostic];
+			create.command = { command: 'xslt-xpath.createPackage', title: create.title, arguments: [name, versionRange, document.uri] };
+			const add = new vscode.CodeAction('Add Existing Package File...', vscode.CodeActionKind.QuickFix);
+			add.diagnostics = [diagnostic];
+			add.command = { command: 'xslt-xpath.addPackageFile', title: add.title, arguments: [name, versionRange, document.uri] };
+			codeActions.push(create, add);
+		});
+		// within an xsl:use-package: pick components of the package to override - as Java IDEs' 'Override/Implement Methods'
+		const usePackageOffset = XSLTCodeActions.usePackageAt(document, range.start);
+		if (usePackageOffset !== undefined && (PackageScope.overridable(document.getText(), usePackageOffset)?.components.length ?? 0) > 0) {
+			const action = new vscode.CodeAction(XSLTCodeActions.overrideComponentsTitle, vscode.CodeActionKind.Refactor);
+			action.command = { command: 'xslt-xpath.overridePackageComponents', title: action.title, arguments: [document.uri, usePackageOffset] };
+			codeActions.push(action);
+		}
+		// a problem with packages, e.g. an abstract component of a used package that isn't overridden: its fixes
+		const packageFixes = PackageScope.fixes.get(document.uri.toString());
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.abstractNotOverridden || diagnostic.code === DiagnosticCode.packageProblem).forEach((diagnostic) => {
+			(packageFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message)) ?? []).forEach((fix) => {
+				const action = new vscode.CodeAction(fix.title, vscode.CodeActionKind.QuickFix);
+				action.diagnostics = [diagnostic];
+				action.edit = XSLTCodeActions.packageFixEdit(document, fix);
+				codeActions.push(action);
+			});
+		});
 		// Saxon type aliases: a fix that runs the command to convert them in the workspace
 		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.saxonTypeAlias).slice(0, 1).forEach((diagnostic) => {
 			const action = new vscode.CodeAction(XsltCodeActionKind.convertSaxonTypeAliases, vscode.CodeActionKind.QuickFix);
@@ -278,7 +360,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 						const action = new vscode.CodeAction(XsltCodeActionKind.excludeNote, vscode.CodeActionKind.QuickFix);
 						action.diagnostics = [diagnostic];
 						action.edit = new vscode.WorkspaceEdit();
-						action.edit.insert(document.uri, new vscode.Position(fix.line, fix.character), fix.text);
+						action.edit.insert(document.uri, new vscode.Position(fix.line, fix.character), XSLTCodeActions.inModule(document, fix.text));
 						codeActions.push(action);
 					} else if (diagnostic.code === DiagnosticCode.recordFieldUnknown) {
 						// a fix for each field name that could replace the unknown one, closest first
@@ -368,7 +450,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				const action = new vscode.CodeAction(XsltCodeActionKind.addDocumentationNote, vscode.CodeActionKind.RefactorRewrite);
 				action.edit = new vscode.WorkspaceEdit();
 				const noteRange = new vscode.Range(document.positionAt(note.insertOffset), document.positionAt(note.insertOffset + note.replaceLength));
-				const snippetEdit = new vscode.SnippetTextEdit(noteRange, new vscode.SnippetString(note.snippet));
+				const snippetEdit = new vscode.SnippetTextEdit(noteRange, new vscode.SnippetString(XSLTCodeActions.inModule(document, note.snippet)));
 				// the snippet has the indentation
 				snippetEdit.keepWhitespace = true;
 				action.edit.set(document.uri, [snippetEdit]);
@@ -526,7 +608,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 				codeAction.edit = new vscode.WorkspaceEdit();
 				const prefixWS = this.getWhitespaceBeforeRangeLine(document, newXmlnsRange);
 				codeAction.edit.insert(document.uri, newXmlnsRange.start, `xmlns:xdm="${'http://deltaxignia.com/ns/xdm-persistence'}"` + '\n' + prefixWS);
-				codeAction.edit.insert(document.uri, firstChildElement.range.start, `<xsl:include href="${xdmViewIncludePath}"/>` + '\n\t');
+				codeAction.edit.insert(document.uri, firstChildElement.range.start, XSLTCodeActions.inModule(document, `<xsl:include href="${xdmViewIncludePath}"/>`) + '\n\t');
 			}
 		}
 	}
@@ -735,7 +817,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		const fullRange = this.extendRangeToFullLines(range);
 		codeAction.edit = new vscode.WorkspaceEdit();
 		//codeAction.edit.replace(document.uri, new vscode.Range(range.start, range.start.translate(0, 2)), text);
-		codeAction.edit.replace(document.uri, fullRange, text);
+		codeAction.edit.replace(document.uri, fullRange, XSLTCodeActions.inModule(document, text));
 		return codeAction;
 	}
 
@@ -937,11 +1019,11 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 					const wsBeforeFirstChar = parentStartLine.text.substring(0, firstCharOnFirstLine);
 					instrText += wsBeforeFirstChar;
 				}
-				codeAction.edit.insert(document.uri, attrParentRange.start, instrText);
+				codeAction.edit.insert(document.uri, attrParentRange.start, XSLTCodeActions.inModule(document, instrText));
 			}
 
 		}
-		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, replacementAll);
+		codeAction.edit.replace(document.uri, fullRangeWithoutLeadingWS, XSLTCodeActions.inModule(document, replacementAll));
 
 		const functionParamLines = requiredParamNames.map((argName) => {
 			let argType = (argName === ExtractFunctionParams.position || argName === ExtractFunctionParams.last) ?
@@ -960,7 +1042,7 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 
 		const allFunctionText = functionHeadText + functionParamLines.join('') + finalCorrectText + functionFootText;
 		if (!forXSLTVariable) {
-			codeAction.edit.insert(document.uri, targetRange.end, allFunctionText);
+			codeAction.edit.insert(document.uri, targetRange.end, XSLTCodeActions.inModule(document, allFunctionText));
 		}
 		let fnStartLineIncrement = (replacementIsVariable && forXSLTemplate) || addRegexMapInstruction ? 1 : 0;
 		if (addMergeGroupMapInstruction) {

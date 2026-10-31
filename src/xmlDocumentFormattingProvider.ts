@@ -145,6 +145,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	};
 
 	private formatRange(document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions): vscode.TextEdit[] {
+		// the end tag of an xsl:note, with the document's prefix for XSLT, e.g. </xslt:note
+		const noteEndTag = `</${XsltTokenDiagnostics.xsltPrefixOf(document)}:note`;
 		let result: vscode.TextEdit[] = [];
 		// on-type formatting stops once the new line is formatted - the line before it may be formatted first. After Enter,
 		// that's after the new line's first token, even when its indentation is right already, e.g. from VS Code's own
@@ -233,7 +235,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			noteBaseIndent = Number.MAX_SAFE_INTEGER;
 			for (let l = startTagLine + 1; l < document.lineCount; l++) {
 				const line = document.lineAt(l);
-				if (line.text.trimStart().startsWith('</xsl:note')) {
+				if (line.text.trimStart().startsWith(noteEndTag)) {
 					break;
 				}
 				if (!line.isEmptyOrWhitespace) {
@@ -288,7 +290,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						complexStateStack = [[0, [], false]];
 						emptyStackIsElseBlock = false;
 						isXSLTStartTag = true;
-						elementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						elementName = XsltTokenDiagnostics.xsltElementName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						isPreserveSpaceElement = elementName === 'xsl:text';
 						break;
 					case XSLTokenLevelState.elementName:
@@ -354,7 +356,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								}
 								break;
 							case XMLCharState.lCt:
-								isNoteEndTag = withinNote && document.lineAt(lineNumber).text.startsWith('</xsl:note', token.startCharacter);
+								isNoteEndTag = withinNote && document.lineAt(lineNumber).text.startsWith(noteEndTag, token.startCharacter);
 								// outdent, by the number of elements the close tag closes - one, unless its name is still
 								// being typed:
 								closedElementCount = 1;

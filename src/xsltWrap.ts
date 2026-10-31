@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import { RecordTypes } from './recordTypes';
 import { SchemaQuery } from './schemaQuery';
 import { XSLTConfiguration } from './languageConfigurations';
+import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 
 // an instruction, or a literal result element, to wrap the selected instructions in: its start and end lines, as
 // snippet text, with '\t' for each indentation step - the selection is the content of the element 'contentParent',
@@ -138,7 +139,8 @@ export function wrappersFor(text: string, target: { start: number, end: number }
 			depth--;
 		} else {
 			if (depth === 0) {
-				selectedNames.push(match[2].startsWith('xsl:') ? match[2] : literalElement);
+				const name = RecordTypes.xsltNameIn(text, match[2])!;
+				selectedNames.push(name.startsWith('xsl:') ? name : literalElement);
 			}
 			depth += match[3] ? 0 : 1;
 		}
@@ -210,5 +212,7 @@ export async function wrapWith(uri?: vscode.Uri, start?: number, end?: number) {
 	const tabSize = typeof editor.options.tabSize === 'number' ? editor.options.tabSize : 2;
 	const edit = wrapEdit(text, target, picked.wrapper, insertSpaces ? ' '.repeat(tabSize) : '\t');
 	const range = new vscode.Range(editor.document.positionAt(edit.start), editor.document.positionAt(edit.end));
-	await editor.insertSnippet(new vscode.SnippetString(edit.snippet), range, { undoStopBefore: true, undoStopAfter: true, keepWhitespace: true });
+	// with the document's prefix for XSLT, e.g. xslt:if
+	const snippet = RecordTypes.withXsltPrefix(edit.snippet, XsltTokenDiagnostics.xsltPrefixOf(editor.document));
+	await editor.insertSnippet(new vscode.SnippetString(snippet), range, { undoStopBefore: true, undoStopAfter: true, keepWhitespace: true });
 }

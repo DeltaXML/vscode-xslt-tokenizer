@@ -37,6 +37,33 @@ describe('XPathLexer', () => {
             expect(result[0].tokenType).equal(TokenLevelState.number);
             expect(result[0].value).equal('123.45');
         });
+
+        // each token as 'value:type'
+        const labels = (xpath: string, isTypeDeclaration = false) => new XPathLexer().analyse(xpath, null, {line: 0, startCharacter: 0, documentOffset: 0}, isTypeDeclaration)
+            .map((t) => `${t.value}:${TokenLevelState[t.tokenType]}`);
+
+        it('should take * after an attribute name as multiplication, and after @ as a wildcard', () => {
+            expect(labels('@price * @qty')).to.deep.equal(['@price:attributeNameTest', '*:operator', '@qty:attributeNameTest']);
+            expect(labels('$i/@val*2')).to.deep.equal(['$i:variable', '/:operator', '@val:attributeNameTest', '*:operator', '2:number']);
+            expect(labels('@*')).to.deep.equal(['@*:attributeNameTest']);
+        });
+
+        it('should take an EQName after @ or # as one token, with a wildcard', () => {
+            expect(labels('@Q{urn:a}b')).to.deep.equal(['@Q{urn:a}b:attributeNameTest']);
+            expect(labels('@Q{}*')).to.deep.equal(['@Q{}*:attributeNameTest']);
+            expect(labels('#Q{urn:a}b')).to.deep.equal(['#Q{urn:a}b:functionNameTest']);
+            expect(labels('@Q{urn:a}b * 2')).to.deep.equal(['@Q{urn:a}b:attributeNameTest', '*:operator', '2:number']);
+        });
+
+        it('should take an EQName with the local name of a kind test, before brackets, as a function', () => {
+            expect(labels("Q{f}attribute('x')")).to.deep.equal(['Q{f}:uriLiteral', 'attribute:function', '(:operator', "'x':string", '):operator']);
+            expect(labels('attribute(a)')).to.deep.equal(['attribute:nodeType', '(:operator', 'a:nodeNameTest', '):operator']);
+        });
+
+        it('should take an occurrence indicator after whitespace in a type declaration as part of the type', () => {
+            expect(labels('xs:integer *', true)).to.deep.equal(['xs:integer:simpleType', '*:simpleType']);
+            expect(labels('xs:string ?', true)).to.deep.equal(['xs:string:simpleType', '?:simpleType']);
+        });
     });
 
     describe('reset()', () => {

@@ -260,6 +260,10 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
                 // the XSLT.resources.catalog setting, as used for the task's hrefs in the editor
                 commandLineArgs.push(catalogOption);
             }
+            const libOption = SaxonTaskProvider.libOption(xsltTask);
+            if (libOption) {
+                commandLineArgs.push(libOption);
+            }
             if (nogo) {
                 commandLineArgs.push('-nogo');
             }

@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { PackageScope } from './packageScope';
+import { XsltPackages } from './xsltPackages';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
 import { ModulePrefixes } from './modulePrefixes';
@@ -161,7 +163,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		}
 		const text = document.getText();
 		const reference = XdocReferences.at(text, document.offsetAt(position));
-		return reference ? { reference, target: XdocReferences.resolve(reference, globals, text)[0] } : undefined;
+		return reference ? { reference, target: XdocReferences.resolve(reference, globals, text, undefined, reference.inOverride ? PackageScope.overriddenBy(text, globals) : [])[0] } : undefined;
 	}
 
 	// the location of the name of the declaration a note's reference refers to
@@ -264,7 +266,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			prefixBindings = this.xslLexer.prefixBindings;
 		}
 
-		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const xsltPackages: XsltPackage[] = XsltPackages.all();
 
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
@@ -295,6 +297,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				});
 			}
 		});
+		if (this.docType !== DocumentTypes.XPath) {
+			allImportedGlobals = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, allImportedGlobals, xsltPackages);
+		}
 		ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 		// highest import precedence first: the first declaration with a name is the one used
 		allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
@@ -302,11 +307,39 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
-		const result = await this.completionItems(document, position, token, context);
+		let result = await this.completionItems(document, position, token, context);
+		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix
+		const prefix = this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
+		if (result && prefix !== 'xsl') {
+			result = Array.isArray(result) ? XsltDefinitionProvider.withXsltPrefix(result, prefix) : new vscode.CompletionList(XsltDefinitionProvider.withXsltPrefix(result.items, prefix), result.isIncomplete);
+		}
 		if (result) {
 			XsltDefinitionProvider.fitToPrefixedWord(Array.isArray(result) ? result : result.items, document, position);
 		}
 		return result;
+	}
+
+	// copies of the items - which may be shared - with each name with the prefix xsl, in the label and the text inserted,
+	// with the prefix (see RecordTypes.withXsltPrefix)
+	private static withXsltPrefix(items: vscode.CompletionItem[], prefix: string): vscode.CompletionItem[] {
+		const text = (value: string) => RecordTypes.withXsltPrefix(value, prefix);
+		return items.map((item) => {
+			const copy: vscode.CompletionItem = Object.assign(new vscode.CompletionItem(''), item);
+			copy.label = typeof item.label === 'string' ? text(item.label) : { ...item.label, label: text(item.label.label) };
+			if (typeof item.insertText === 'string') {
+				copy.insertText = text(item.insertText);
+			} else if (item.insertText) {
+				copy.insertText = new vscode.SnippetString(text(item.insertText.value));
+			}
+			if (item.filterText) {
+				copy.filterText = text(item.filterText);
+			}
+			if (item.textEdit) {
+				copy.textEdit = new vscode.TextEdit(item.textEdit.range, text(item.textEdit.newText));
+			}
+			copy.additionalTextEdits = item.additionalTextEdits?.map((edit) => new vscode.TextEdit(edit.range, text(edit.newText)));
+			return copy;
+		});
 	}
 
 	// The language's word pattern takes a QName as one word, prefix and all (e.g. 'fn:co'), and an item without a
@@ -355,8 +388,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			const text = XPathQuery.isQueryFile(document) ? XPathQuery.separateBlockAt(document.getText(), position.line) : document.getText();
 			allTokens = this.getXPLexer().analyse(text, ExitCondition.None, lexPosition);
 			globalInstructionData = XPathSemanticTokensProvider.getGlobalInstructionData();
-			// names from the XML file: for the query file, the one it runs on
-			uri = XPathQuery.isQueryFile(document) ? XPathQuery.target : DocumentChangeHandler.lastActiveXMLEditor?.document.uri;
+			// names from the XML file: for the query file, the one it runs on - otherwise the XML context file, as shown
+			// in the status bar
+			uri = XPathQuery.isQueryFile(document) ? XPathQuery.target : DocumentChangeHandler.lastActiveXMLNonXSLUri ?? undefined;
 
 		} else {
 			if (this.docType === DocumentTypes.XSLT || this.docType === DocumentTypes.DCP) {
@@ -382,7 +416,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			}
 		}
 		
-		const xsltPackages: XsltPackage[] = <XsltPackage[]>vscode.workspace.getConfiguration('XSLT.resources').get('xsltPackages');
+		const xsltPackages: XsltPackage[] = XsltPackages.all();
 
 		// Import/include XSLT - ensuring no duplicates
 		const localImportedHrefs = XsltSymbolProvider.importSymbolHrefs;
@@ -422,6 +456,9 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 					});
 				}		
 			});
+			if (this.docType !== DocumentTypes.XPath) {
+				allImportedGlobals = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, allImportedGlobals, xsltPackages);
+			}
 			ModulePrefixes.toModule(allImportedGlobals, prefixBindings);
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
@@ -494,6 +531,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			const withParamElements = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getWithParamElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
 			if (withParamElements && withParamElements.length > 0) {
 				completions = withParamElements.concat(completions ?? []);
+			}
+			// in an xsl:override, a declaration overriding each component of the package
+			const overrides = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getOverrideCompletions(document, position) : undefined;
+			if (overrides && overrides.length > 0) {
+				completions = overrides.concat(completions ?? []);
 			}
 			if (argumentValues) {
 				completions = argumentValues.items.concat(completions ?? []);

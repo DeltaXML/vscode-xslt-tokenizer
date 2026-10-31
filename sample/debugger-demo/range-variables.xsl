@@ -40,7 +40,9 @@
           $y := count($line) + 31,
           $a := count($line) + 32,
           $b := count($line) + 33,
-          $c := count($line) + 34,
+          $c := if ($b gt 50) then
+            89 else 
+              count($line) + 34,
           $sum := $x + $y + $a + $c + $b
         return 
           xs:integer($line/@qty) * $sum + xs:decimal($line/@price) * (1 - $discount)"/>

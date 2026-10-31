@@ -150,7 +150,8 @@ suite('Href problems: the import diagnostics of XsltSymbolProvider', () => {
 		const host = folder.split('/')[1];
 		assert.deepEqual(await importProblems(href), [{
 			message: `Included/imported file '${href}' can't be resolved: '${host}' is the URI's host, not a folder - a file: URI for a path has three slashes, e.g. file://${folder}/lib.xsl`,
-			text: `"${href}"`
+			// on the element's name, not the href - a document link, whose underline would hide the problem's
+			text: 'xsl:import'
 		}]);
 	});
 
