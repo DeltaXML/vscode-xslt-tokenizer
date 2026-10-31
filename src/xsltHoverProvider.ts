@@ -139,7 +139,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const globals = globalInstructionData.concat(allImportedGlobals);
 		const itemTypes = globals.filter((g) => g.type === GlobalInstructionType.ItemType);
 		const markup = RecordTypes.blankMarkup(text);
-		const target = XdocReferences.resolve(reference, globals, text, markup)[0];
+		const target = XdocReferences.resolve(reference, globals, text, markup, reference.inOverride ? PackageScope.overriddenBy(text, globals) : [])[0];
 		if (target?.paramOffset !== undefined) {
 			return this.localParamHover(text, markup, target.paramOffset, itemTypes) ?? null;
 		} else if (!target) {

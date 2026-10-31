@@ -8,6 +8,7 @@ import { Data, RecordFix, XPathLexer } from './xpLexer';
 import { possDocumentSymbol, SelectionType, XsltSymbolProvider } from './xsltSymbolProvider';
 import { XsltTokenDefinitions } from './xsltTokenDefintions';
 import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { PackageScope } from './packageScope';
 import { InlineRecordExtractionPlan, RecordExtraction, RecordExtractionPlan } from './recordExtraction';
 import { XdocNotes } from './xdocNote';
 import { ItemTypeSupport } from './itemTypeSupport';
@@ -272,6 +273,17 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 			add.diagnostics = [diagnostic];
 			add.command = { command: 'xslt-xpath.addPackageFile', title: add.title, arguments: [name, versionRange, document.uri] };
 			codeActions.push(create, add);
+		});
+		// an abstract component of a used package that isn't overridden: fixes that override it, or all of them
+		const packageFixes = PackageScope.fixes.get(document.uri.toString());
+		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.abstractNotOverridden).forEach((diagnostic) => {
+			(packageFixes?.get(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message)) ?? []).forEach((fix) => {
+				const action = new vscode.CodeAction(fix.title, vscode.CodeActionKind.QuickFix);
+				action.diagnostics = [diagnostic];
+				action.edit = new vscode.WorkspaceEdit();
+				action.edit.replace(document.uri, new vscode.Range(document.positionAt(fix.start), document.positionAt(fix.end)), XSLTCodeActions.inModule(document, fix.text));
+				codeActions.push(action);
+			});
 		});
 		// Saxon type aliases: a fix that runs the command to convert them in the workspace
 		context.diagnostics.filter((diagnostic) => diagnostic.code === DiagnosticCode.saxonTypeAlias).slice(0, 1).forEach((diagnostic) => {

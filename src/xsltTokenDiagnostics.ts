@@ -161,7 +161,9 @@ export enum DiagnosticCode {
 	// an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
 	applyTemplatesDefaultMode,
 	// an xsl:use-package whose package isn't found - in the workspace or the XSLT.resources.xsltPackages setting
-	packageNotFound
+	packageNotFound,
+	// an abstract component of a used package that isn't overridden - with the fixes in PackageScope.fixes
+	abstractNotOverridden
 }
 
 export class XsltTokenDiagnostics {

@@ -12,6 +12,7 @@ import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSLTHoverProvider } from '../../src/xsltHoverProvider';
 import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
+import { XSLTCodeActions } from '../../src/xsltCodeActions';
 
 const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" xmlns:q="urn:q" xmlns:s="urn:s" version="3.0"';
 
@@ -207,5 +208,104 @@ suite('XSLT packages: visibility', () => {
 		const hover = await provider.provideHover(document, document.positionAt(text.indexOf('p:pub(') + 2), new vscode.CancellationTokenSource().token);
 		const markdown = (hover?.contents as vscode.MarkdownString[]).map((m) => m.value).join('\n');
 		assert.include(markdown, 'Public function of package `urn:p` 1.0, declared in p.xsl');
+	});
+});
+
+suite('XSLT packages: overriding abstract components', () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-package-overrides-'));
+	const pkg = path.join(dir, 'a.xsl');
+	fs.writeFileSync(pkg, `<xsl:package name="urn:a" version="3.0" declared-modes="no" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:a="urn:a" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:function name="a:shape" visibility="abstract" as="xs:string"><xsl:param name="n" as="xs:integer"/></xsl:function>
+  <xsl:function name="a:describe" visibility="public" as="xs:string"><xsl:sequence select="'shape: ' || a:shape(3)"/></xsl:function>
+  <xsl:template name="a:t" visibility="abstract" as="xs:string"><xsl:param name="x" as="xs:string" required="yes"/><xsl:param name="tun" tunnel="yes" select="0"/></xsl:template>
+  <xsl:variable name="a:v" visibility="abstract" as="xs:integer"/>
+</xsl:package>`);
+	suiteSetup(() => XsltPackages.additional = [{ name: 'urn:a', path: pkg }]);
+	suiteTeardown(() => {
+		XsltPackages.additional = [];
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	let count = 0;
+	const moduleDiagnostics = (XsltSymbolProvider as unknown as { moduleDiagnostics(d: vscode.TextDocument, parent: boolean | string): Promise<vscode.Diagnostic[]> }).moduleDiagnostics;
+	const lint = async (text: string) => {
+		const file = path.join(dir, `u${++count}.xsl`);
+		fs.writeFileSync(file, text);
+		const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(file), 'xslt');
+		const diagnostics: vscode.Diagnostic[] = await moduleDiagnostics.call(XsltSymbolProvider, document, false);
+		const actions = (diagnostic: vscode.Diagnostic) => new XSLTCodeActions().provideCodeActions(document, diagnostic.range, { diagnostics: [diagnostic], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+		// the text with the code action's edit
+		const applied = (action: vscode.CodeAction) => {
+			const [, edits] = action.edit!.entries()[0];
+			const edit = edits[0];
+			return text.substring(0, document.offsetAt(edit.range.start)) + edit.newText + text.substring(document.offsetAt(edit.range.end));
+		};
+		return { diagnostics, actions, applied };
+	};
+	const stylesheet = (usePackage: string, body = '', version = '3.0', prefix = 'a') =>
+		`<xsl:stylesheet version="${version}" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:${prefix}="urn:a" xmlns:xs="http://www.w3.org/2001/XMLSchema">\n  ${usePackage}\n  <xsl:template name="main">${body}</xsl:template>\n</xsl:stylesheet>`;
+
+	test('a warning lists the abstract components that aren\'t overridden, with fixes to override all or each', async () => {
+		const { diagnostics, actions } = await lint(stylesheet('<xsl:use-package name="urn:a"/>'));
+		const warning = diagnostics.find((d) => d.severity === vscode.DiagnosticSeverity.Warning)!;
+		assert.match(warning.message, /abstract components that aren't overridden: a:shape#1, a:t, \$a:v - .*XTDE3052/);
+		assert.deepEqual(actions(warning).map((a) => a.title), ["Override the abstract components of package 'urn:a'", 'Override abstract function a:shape#1', 'Override abstract template a:t', 'Override abstract variable $a:v']);
+	});
+
+	test('the skeletons: the package\'s signature, a TODO note with @see, and a body that stops - then no problems', async () => {
+		const text = stylesheet('<xsl:use-package name="urn:a"/>', '', '3.0', 'z');
+		const { diagnostics, actions, applied } = await lint(text);
+		const fixed = applied(actions(diagnostics.find((d) => d.severity === vscode.DiagnosticSeverity.Warning)!)[0]);
+		// with the stylesheet's prefix for the package's namespace
+		assert.include(fixed, `  <xsl:use-package name="urn:a">
+    <xsl:override>
+      <xsl:function name="z:shape" as="xs:string">
+        <xsl:note use-when="false()" format="xdoc-md">
+          TODO: implement the abstract function of package urn:a.
+
+          @see z:shape#1
+        </xsl:note>
+        <xsl:param name="n" as="xs:integer"/>
+        <xsl:message terminate="yes">z:shape#1 is not implemented</xsl:message>
+      </xsl:function>
+      <xsl:template name="z:t" as="xs:string">`);
+		assert.include(fixed, '<xsl:param name="x" as="xs:string" required="yes"/>\n        <xsl:param name="tun" tunnel="yes" select="0"/>');
+		assert.include(fixed, '    </xsl:override>\n  </xsl:use-package>');
+		assert.deepEqual((await lint(fixed)).diagnostics.filter((d) => d.severity <= vscode.DiagnosticSeverity.Warning).map((d) => d.message), []);
+	});
+
+	test('in XSLT 4.0, the note isn\'t excluded - and the declarations go in the existing xsl:override', async () => {
+		const text = stylesheet('<xsl:use-package name="urn:a">\n    <xsl:override>\n      <xsl:variable name="a:v" as="xs:integer" select="1"/>\n    </xsl:override>\n  </xsl:use-package>', '', '4.0');
+		const { diagnostics, actions, applied } = await lint(text);
+		const fixed = applied(actions(diagnostics.find((d) => d.severity === vscode.DiagnosticSeverity.Warning)!)[0]);
+		assert.include(fixed, '      <xsl:variable name="a:v" as="xs:integer" select="1"/>\n      <xsl:function name="a:shape" as="xs:string">\n        <xsl:note format="xdoc-md">');
+		assert.notInclude(fixed, '$a:v is not implemented');
+	});
+
+	test('a reference to an abstract component that isn\'t overridden says so, with a fix to override it', async () => {
+		const { diagnostics, actions } = await lint(stylesheet('<xsl:use-package name="urn:a"/>', '<xsl:sequence select="a:shape(1)"/>'));
+		const error = diagnostics.find((d) => d.message.startsWith('The abstract function'))!;
+		assert.strictEqual(error.message, "The abstract function a:shape#1 of package 'urn:a' isn't overridden, so it can't be used here - override it in the xsl:use-package");
+		assert.deepEqual(actions(error).map((a) => a.title), ['Override abstract function a:shape#1']);
+	});
+
+	test('a package may pass an abstract component on with xsl:accept visibility="abstract"', async () => {
+		const { diagnostics } = await lint(`<xsl:package name="urn:k" version="3.0" declared-modes="no" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:a="urn:a">
+  <xsl:use-package name="urn:a"><xsl:accept component="*" names="*" visibility="abstract"/></xsl:use-package>
+</xsl:package>`);
+		assert.isUndefined(diagnostics.find((d) => d.severity === vscode.DiagnosticSeverity.Warning));
+	});
+
+	test('in an overriding declaration\'s note, @see of what it overrides goes to the package\'s declaration', async () => {
+		const text = stylesheet('<xsl:use-package name="urn:a">\n    <xsl:override>\n      <xsl:function name="a:shape" as="xs:string">\n        <xsl:note use-when="false()" format="xdoc-md">\n          @see a:shape#1\n        </xsl:note>\n        <xsl:param name="n" as="xs:integer"/>\n        <xsl:sequence select="\'s\'"/>\n      </xsl:function>\n    </xsl:override>\n  </xsl:use-package>');
+		const file = path.join(dir, 'see.xsl');
+		fs.writeFileSync(file, text);
+		const document = await vscode.languages.setTextDocumentLanguage(await vscode.workspace.openTextDocument(file), 'xslt');
+		const position = document.positionAt(text.indexOf('@see a:shape') + 7);
+		const provider = new XsltDefinitionProvider(XSLTConfiguration.configuration);
+		const location = await provider.provideDefinition(document, position, new vscode.CancellationTokenSource().token);
+		assert.strictEqual(location?.uri.fsPath, pkg);
+		const hover = await new XSLTHoverProvider(provider, XSLTConfiguration.configuration).provideHover(document, position, new vscode.CancellationTokenSource().token);
+		assert.include((hover?.contents as vscode.MarkdownString[]).map((m) => m.value).join('\n'), 'Abstract function of package `urn:a`');
 	});
 });

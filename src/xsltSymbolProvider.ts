@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import { XsltPackages } from './xsltPackages';
-import { PackageScope } from './packageScope';
+import { PackageScope, PackageFix, AbstractComponent } from './packageScope';
 import { XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes } from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
 import { ModulePrefixes } from './modulePrefixes';
-import { XsltTokenDiagnostics } from './xsltTokenDiagnostics';
+import { DiagnosticCode, XsltTokenDiagnostics } from './xsltTokenDiagnostics';
 import { GlobalsProvider } from './globalsProvider';
 import * as path from 'path';
 import { exit } from 'process';
@@ -242,8 +242,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			// highest import precedence first: the first declaration with a name is the one used
 			allImportedGlobals = ImportPrecedence.sort(allImportedGlobals, document.fileName);
 			this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
-			let diagnostics = XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols)
-				.concat(XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, prefixBindings, xsltPackages, allImportedGlobals));
+			let diagnostics = XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, prefixBindings, xsltPackages, allImportedGlobals,
+				XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols));
 			if (!XsltSymbolProvider.isOpenInEditor(document) || document.version !== version) {
 
 			} else {
@@ -394,8 +394,8 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		}));
 		const withPackages = XsltSymbolProvider.withPackageComponents(document, globalInstructionData, importedGlobals, xsltPackages);
 		ModulePrefixes.toModule(withPackages, xslLexer.prefixBindings);
-		return XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, withPackages, [])
-			.concat(XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, xslLexer.prefixBindings, xsltPackages, withPackages));
+		return XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, xslLexer.prefixBindings, xsltPackages, withPackages,
+			XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4: xslLexer.isXSLT40 }, DocumentTypes.XSLT, document, allTokens, globalInstructionData, withPackages, []));
 	}
 
 	public static selectTextWithSymbol(symbol: vscode.DocumentSymbol | undefined) {
@@ -1292,21 +1292,61 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return importedGlobals.concat(overrides, PackageScope.components(all, xsltPackages, PackageScope.workspaceFolder()));
 	}
 
-	// problems with the document's xsl:use-package elements, e.g. an xsl:accept of a component the package doesn't have -
-	// and for an xsl:package, its modes that aren't declared (importedGlobals have the document's prefixes)
-	public static packageDiagnostics(document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], prefixBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[], importedGlobals: GlobalInstructionData[]): vscode.Diagnostic[] {
+	// the document's diagnostics, with the problems with its xsl:use-package elements, e.g. an xsl:accept of a component
+	// the package doesn't have - and for an xsl:package, its modes that aren't declared (importedGlobals have the
+	// document's prefixes). A reference to an abstract component that isn't overridden, which isn't found, is reported
+	// as that, with a fix to override it - the fixes are kept in PackageScope.fixes
+	public static packageDiagnostics(document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], prefixBindings: Map<string, string> | undefined, xsltPackages: XsltPackage[], importedGlobals: GlobalInstructionData[], diagnostics: vscode.Diagnostic[]): vscode.Diagnostic[] {
 		const text = document.getText();
-		const diagnostics = PackageScope.modeProblems(text, prefixBindings, importedGlobals).map((problem) =>
-			new vscode.Diagnostic(new vscode.Range(document.positionAt(problem.offset), document.positionAt(problem.offset + problem.length)), problem.message, vscode.DiagnosticSeverity.Error));
+		const fixes = new Map<string, PackageFix[]>();
+		PackageScope.fixes.set(document.uri.toString(), fixes);
+		const result = diagnostics.concat(PackageScope.modeProblems(text, prefixBindings, importedGlobals).map((problem) =>
+			new vscode.Diagnostic(new vscode.Range(document.positionAt(problem.offset), document.positionAt(problem.offset + problem.length)), problem.message, vscode.DiagnosticSeverity.Error)));
 		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(text, globalInstructionData, []);
 		if (documentUsePackages.length === 0) {
-			return diagnostics;
+			return result;
 		}
+		const bindings = prefixBindings ?? documentBindings;
+		const workspace = PackageScope.workspaceFolder();
+		const withFixes = (diagnostic: vscode.Diagnostic, problemFixes: PackageFix[]) => {
+			diagnostic.code = DiagnosticCode.abstractNotOverridden;
+			fixes.set(XsltTokenDiagnostics.recordFixKey(diagnostic.range, diagnostic.message), problemFixes);
+			return diagnostic;
+		};
+		const abstracts = PackageScope.abstractsOf(text, documentUsePackages, bindings, xsltPackages, workspace);
 		const declarations = globalInstructionData.filter((g) => PackageScope.componentKind(g.type) !== undefined);
-		return diagnostics.concat(PackageScope.problems(text, documentUsePackages, declarations, prefixBindings ?? documentBindings, xsltPackages, PackageScope.workspaceFolder()).map((problem) => {
+		return result.map((diagnostic) => {
+			const abstract = abstracts.find((a) => XsltSymbolProvider.isReferenceTo(diagnostic.message, a));
+			if (!abstract) {
+				return diagnostic;
+			}
+			const label = abstract.kind === 'function' ? `${abstract.name}#${abstract.arity}` : abstract.kind === 'variable' ? '$' + abstract.name : abstract.name;
+			const message = `The abstract ${abstract.kind === 'attribute-set' ? 'attribute set' : abstract.kind} ${label} of package '${abstract.packageName}' isn't overridden, so it can't be used here - override it in the xsl:use-package`;
+			return withFixes(new vscode.Diagnostic(diagnostic.range, message, vscode.DiagnosticSeverity.Error), [abstract.fix]);
+		}).concat(PackageScope.problems(text, documentUsePackages, declarations, bindings, xsltPackages, workspace).map((problem) => {
 			const token = problem.token;
-			return new vscode.Diagnostic(new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length), problem.message, vscode.DiagnosticSeverity.Error);
+			const diagnostic = new vscode.Diagnostic(new vscode.Range(token.line, token.startCharacter, token.line, token.startCharacter + token.length), problem.message, problem.isWarning ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error);
+			return problem.fixes ? withFixes(diagnostic, problem.fixes) : diagnostic;
 		}));
+	}
+
+	// whether a diagnostic's message is for a reference to the component that isn't found
+	private static isReferenceTo(message: string, component: AbstractComponent) {
+		const match = (pattern: RegExp) => pattern.exec(message);
+		switch (component.kind) {
+			case 'function': {
+				const found = match(/^XPath: Function: '(.+)' with (\d+) arguments not found$/);
+				return !!found && found[1] === component.name && Number(found[2]) === component.arity;
+			}
+			case 'template':
+				return match(/^XSLT: xsl:template with name '(.+)' not found$/)?.[1] === component.name;
+			case 'attribute-set':
+				return match(/^XSLT: xsl:attribute-set with name '(.+)' not found$/)?.[1] === component.name;
+			case 'variable':
+				return match(/^XPath: The variable\/parameter:? \$(\S+) cannot be resolved/)?.[1] === component.name;
+			default:
+				return false;
+		}
 	}
 
 	public static async processImportedGlobals(xsltPackages: XsltPackage[], importedGlobals1: ImportedGlobals[], level1Hrefs: string[], topLevel: boolean): Promise<GlobalsSummary> {

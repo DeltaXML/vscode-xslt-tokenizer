@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { PackageScope } from './packageScope';
 import { XsltPackages } from './xsltPackages';
 import {XslLexer, LanguageConfiguration, GlobalInstructionData, GlobalInstructionType, DocumentTypes} from './xslLexer';
 import { ImportPrecedence } from './importPrecedence';
@@ -162,7 +163,7 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		}
 		const text = document.getText();
 		const reference = XdocReferences.at(text, document.offsetAt(position));
-		return reference ? { reference, target: XdocReferences.resolve(reference, globals, text)[0] } : undefined;
+		return reference ? { reference, target: XdocReferences.resolve(reference, globals, text, undefined, reference.inOverride ? PackageScope.overriddenBy(text, globals) : [])[0] } : undefined;
 	}
 
 	// the location of the name of the declaration a note's reference refers to
