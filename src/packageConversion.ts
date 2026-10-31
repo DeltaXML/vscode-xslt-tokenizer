@@ -154,8 +154,9 @@ export interface ModuleScan {
  *   xsl:override - and the library's must be public, not final
  * - a library's reference to a declaration only in the stylesheet (a callback) needs an abstract declaration in the
  *   package, which the stylesheet overrides
- * - template rules in a package's mode can only be added in xsl:override, and the unnamed mode isn't shared at all
- * - keys, accumulators, decimal formats, character maps, xsl:strip-space and xsl:output aren't shared
+ * - template rules in a package's mode can only be added in xsl:override, and the unnamed mode isn't exposed at all
+ * - keys, accumulators, decimal formats, character maps, xsl:strip-space and xsl:output aren't exposed as package
+ *   components: they apply only to the package's own code
  * - a global variable that uses the context item fails in a library package (XPDY0002): it has no global context item
  * - xsl:apply-imports can't be used in xsl:override (XTSE3460) - xsl:next-match can
  * It's lexical: names are compared by namespace URI, and uses found from the lexer's tokens and the attributes that
@@ -366,7 +367,7 @@ export class PackageConversion {
 				const uses = userUses.filter((u) => u.kind === kind && u.expandedName === declaration.expandedName);
 				if (uses.length > 0) {
 					plan.copies.push({ place: declaration.place, kind, name: declaration.expandedName });
-					items.push({ section: 'not-shared', severity: 'change', subject: `${label} ${declaration.name}`, text: `copied into the stylesheets that use it - a package's ${label}s aren't shared`, places: [declaration.place, ...uses.map((u) => u.place)] });
+					items.push({ section: 'not-shared', severity: 'change', subject: `${label} ${declaration.name}`, text: `copied into the stylesheets that use it - a package doesn't expose its ${label}s as components`, places: [declaration.place, ...uses.map((u) => u.place)] });
 				}
 			}
 		}

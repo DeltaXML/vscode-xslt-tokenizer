@@ -123,7 +123,7 @@ export class PackageAnalysisView {
 		['override', 'Overrides', 'A stylesheet\'s declaration with the name of the library\'s must be in xsl:override.'],
 		['abstract', 'Abstract components', 'The library uses these, but only the stylesheets declare them.'],
 		['modes', 'Modes and template rules', ''],
-		['not-shared', 'Not shared by a package', 'A package keeps these to itself, so the stylesheets need their own.']
+		['not-shared', 'Not exposed by a package', 'These apply only to a package\'s own code, so the stylesheets need their own.']
 	];
 
 	// the report: a summary, then the items by section - each with a link to its first place, and its other places in a
