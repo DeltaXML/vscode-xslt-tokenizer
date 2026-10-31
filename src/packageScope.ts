@@ -300,6 +300,39 @@ export class PackageScope {
 		return components.map((component) => ({ component, overrides: overrides.filter((o) => PackageScope.overrides(o.declaration, component)) }));
 	}
 
+	// for the name of a public or abstract component of a package (the module at packagePath) at the position, the
+	// declarations in the workspace that override it - undefined if the position isn't on one
+	public static overridersAt(packagePath: string, position: { line: number, character: number }) {
+		return PackageScope.overridesOf(packagePath).find(({ component }) => PackageScope.isOnName(component, position))?.overrides;
+	}
+
+	// for the name of a declaration in an xsl:override of the module at the position - or within it, for xsl:original - the
+	// package component it overrides
+	public static originalAt(text: string, position: { line: number, character: number }, withinDeclaration = false) {
+		const targets = PackageScope.overrideTargets(text);
+		const onName = targets.find(({ override }) => PackageScope.isOnName(override, position));
+		if (onName || !withinDeclaration) {
+			return onName?.original;
+		}
+		// the declaration that's a child of an xsl:override, with the position in it
+		const markup = RecordTypes.blankMarkup(text);
+		const ancestors = RecordTypes.openElements(markup, XdocNotes.offsetAt(text, position.line, position.character));
+		const index = ancestors.findIndex((element, i) => i > 0 && ancestors[i - 1].name === 'xsl:override');
+		return index > -1 ? targets.find(({ override }) => text.lastIndexOf('<', XdocNotes.offsetAt(text, override.token.line, override.token.startCharacter)) === ancestors[index].offset)?.original : undefined;
+	}
+
+	// a declaration's name, from XslLexerLight: its attribute value, with its quotes
+	private static isOnName(declaration: GlobalInstructionData, position: { line: number, character: number }) {
+		const token = declaration.token;
+		return token.line === position.line && position.character >= token.startCharacter && position.character <= token.startCharacter + token.length;
+	}
+
+	// the location of a declaration's name, without its quotes
+	public static nameLocation(filePath: string, declaration: GlobalInstructionData) {
+		const token = declaration.token;
+		return { path: filePath, line: token.line, start: token.startCharacter + 1, end: token.startCharacter + Math.max(1, token.length - 1) };
+	}
+
 	// for the hover of an xsl:use-package: the package it uses, its path, and the components available - undefined if the
 	// package isn't found
 	public static usedBy(usePackage: GlobalInstructionData, xsltPackages: XsltPackage[], workspace: string | undefined) {

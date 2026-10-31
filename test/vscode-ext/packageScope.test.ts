@@ -14,6 +14,8 @@ import { XsltDefinitionProvider } from '../../src/xsltDefinitionProvider';
 import { XSLTConfiguration } from '../../src/languageConfigurations';
 import { XSLTCodeActions } from '../../src/xsltCodeActions';
 import { PackageCodeLensProvider } from '../../src/packageCodeLens';
+import { PackageNavigationProvider } from '../../src/packageNavigation';
+import { XSLTReferenceProvider } from '../../src/xsltReferenceProvider';
 import { ImportIndex } from '../../src/importIndex';
 
 const ns = 'xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:p" xmlns:q="urn:q" xmlns:s="urn:s" version="3.0"';
@@ -518,6 +520,45 @@ suite('XSLT packages: overrides in code lenses and hover', () => {
 		assert.deepEqual(lenses.map((l) => [l.range.start.line, l.command?.title]), [[1, 'overridden in 1 module']]);
 		const [, , locations] = lenses[0].command!.arguments as [vscode.Uri, vscode.Position, vscode.Location[]];
 		assert.deepEqual(locations.map((l) => [l.uri.fsPath, l.range.start.line]), [[user, 3]]);
+	});
+
+	test('Go to Implementations: from a package component, or a reference to it, to the declarations overriding it', async () => {
+		const source = new vscode.CancellationTokenSource().token;
+		const navigation = new PackageNavigationProvider();
+		const pkg = await open(p);
+		const fromDeclaration = await navigation.provideImplementation(pkg, pkg.positionAt(pkg.getText().indexOf('"p:pub"') + 3), source);
+		assert.deepEqual(fromDeclaration?.map((l) => [l.uri.fsPath, l.range.start.line, l.range.start.character]), [[user, 3, userText.split('\n')[3].indexOf('p:pub')]]);
+		const callerText = `<xsl:stylesheet ${ns}>\n  <xsl:use-package name="urn:p"/>\n  <xsl:template name="main"><xsl:sequence select="p:pub(1)"/></xsl:template>\n</xsl:stylesheet>`;
+		const caller = path.join(dir, 'caller.xsl');
+		fs.writeFileSync(caller, callerText);
+		const callerDocument = await open(caller);
+		const fromCall = await navigation.provideImplementation(callerDocument, callerDocument.positionAt(callerText.indexOf('p:pub(') + 2), source);
+		assert.deepEqual(fromCall?.map((l) => l.uri.fsPath), [user]);
+	});
+
+	test('Go to Declaration: from an overriding declaration, or xsl:original in it, to the package component', async () => {
+		const navigation = new PackageNavigationProvider();
+		const document = await open(user);
+		for (const position of [document.positionAt(userText.indexOf('"p:pub"') + 3), document.positionAt(userText.indexOf('xsl:original(') + 5)]) {
+			const location = navigation.provideDeclaration(document, position);
+			assert.deepEqual([location?.uri.fsPath, location?.range.start.line], [p, 1]);
+		}
+		assert.isUndefined(navigation.provideDeclaration(document, document.positionAt(userText.indexOf('name="main"') + 7)));
+	});
+
+	test('Find All References includes the overriding declarations, and the overridden component - a rename doesn\'t', async () => {
+		const source = new vscode.CancellationTokenSource().token;
+		const pkg = await open(p);
+		const pkgPosition = pkg.positionAt(pkg.getText().indexOf('"p:pub"') + 3);
+		const references = await new XSLTReferenceProvider().provideReferences(pkg, pkgPosition, { includeDeclaration: true }, source);
+		assert.isTrue(references?.some((l) => l.uri.fsPath === user && l.range.start.line === 3), JSON.stringify(references?.map((l) => [l.uri.fsPath, l.range.start.line])));
+		const document = await open(user);
+		const fromOverride = await new XSLTReferenceProvider().provideReferences(document, document.positionAt(userText.indexOf('"p:pub"') + 3), { includeDeclaration: true }, source);
+		assert.isTrue(fromOverride?.some((l) => l.uri.fsPath === p && l.range.start.line === 1));
+		const renamer = new XSLTReferenceProvider();
+		await renamer.prepareRename(pkg, pkgPosition, source);
+		const edit = await renamer.provideRenameEdits(pkg, pkgPosition, 'p:renamed', source);
+		assert.deepEqual(edit?.entries().map(([uri]) => uri.fsPath), [p]);
 	});
 
 	test('an overriding declaration without a note has the documentation of the one it overrides', async () => {

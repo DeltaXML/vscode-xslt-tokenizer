@@ -34,6 +34,7 @@ import { XsltTokenCompletions } from './xsltTokenCompletions';
 import { XSLTReferenceProvider } from './xsltReferenceProvider';
 import { XSLTCodeActions } from './xsltCodeActions';
 import { PackageCodeLensProvider } from './packageCodeLens';
+import { PackageNavigationProvider } from './packageNavigation';
 import { wrapWith } from './xsltWrap';
 import { ItemTypeSupport } from './itemTypeSupport';
 import { SaxonTypeAliases } from './saxonTypeAliases';
@@ -1169,6 +1170,9 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xslt', new XSLTCodeActions(), { providedCodeActionKinds: XSLTCodeActions.providedCodeActionKinds }));
 	context.subscriptions.push(vscode.languages.registerCodeLensProvider('xslt', new PackageCodeLensProvider()));
+	const packageNavigation = new PackageNavigationProvider();
+	context.subscriptions.push(vscode.languages.registerImplementationProvider('xslt', packageNavigation));
+	context.subscriptions.push(vscode.languages.registerDeclarationProvider('xslt', packageNavigation));
 	context.subscriptions.push(
 		vscode.commands.registerCommand(XSLTCodeActions.COMMAND, () => vscode.env.openExternal(vscode.Uri.parse('https://unicode.org/emoji/charts-12.0/full-emoji-list.html')))
 	);
