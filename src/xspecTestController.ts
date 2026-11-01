@@ -12,6 +12,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { XSpecTests, XSpecTestNode, XSpecResult, XSpecTestKind } from './xspecTests';
 import { XSpecRunner, XSpecFiles } from './xspecRunner';
+import { parseXml, localName, descendants } from './xspecXml';
+import { XSpecSourceMap } from './xspecSourceMap';
 
 // XSpec's tests in the Test Explorer: an item for each XSpec file, with its scenarios and expectations - run, or
 // debugged with the XSLT debugger, by XSpecRunner's steps. One scenario is run with XSpec's force-focus, and the outcomes
@@ -23,6 +25,9 @@ export class XSpecTestController {
 	public createRun: ((request: vscode.TestRunRequest) => vscode.TestRun) | undefined;
 	public readonly runProfile: vscode.TestRunProfile;
 	public readonly debugProfile: vscode.TestRunProfile;
+	public readonly coverageProfile: vscode.TestRunProfile;
+	// the coverage of each file in the last coverage run, by URI, for its details
+	private readonly coverageDetails = new Map<string, vscode.FileCoverageDetail[]>();
 	private readonly controller: vscode.TestController;
 	// the items of each XSpec file, by their key (see XSpecTests.key) - with an occurrence number for repeated labels
 	private readonly itemsByFile = new Map<string, Map<string, vscode.TestItem>>();
@@ -40,6 +45,8 @@ export class XSpecTestController {
 		};
 		this.runProfile = this.controller.createRunProfile('Run', vscode.TestRunProfileKind.Run, (request, token) => this.runTests(request, token, false), true);
 		this.debugProfile = this.controller.createRunProfile('Debug', vscode.TestRunProfileKind.Debug, (request, token) => this.runTests(request, token, true), true);
+		this.coverageProfile = this.controller.createRunProfile('Coverage', vscode.TestRunProfileKind.Coverage, (request, token) => this.runTests(request, token, false, true), true);
+		this.coverageProfile.loadDetailedCoverage = async (_run, fileCoverage) => this.coverageDetails.get(fileCoverage.uri.toString()) ?? [];
 		XSpecTestController.instance = this;
 
 		const watcher = vscode.workspace.createFileSystemWatcher('**/*.xspec');
@@ -129,7 +136,7 @@ export class XSpecTestController {
 		return unique;
 	}
 
-	private async runTests(request: vscode.TestRunRequest, token: vscode.CancellationToken, debug: boolean) {
+	private async runTests(request: vscode.TestRunRequest, token: vscode.CancellationToken, debug: boolean, coverage = false) {
 		const run = this.createRun?.(request) ?? this.controller.createTestRun(request);
 		// the items to run, by file: undefined for the whole file
 		const byFile = new Map<string, vscode.TestItem[] | undefined>();
@@ -157,7 +164,7 @@ export class XSpecTestController {
 			await this.updateFile(fileItem.uri!);
 			// one scenario: the scenario of an expectation; otherwise the whole file
 			const scenario = items?.length === 1 ? this.scenarioOf(items[0]) : undefined;
-			await this.runFile(run, fileItem, scenario, token, debug);
+			await this.runFile(run, fileItem, scenario, token, debug, coverage);
 		}
 		run.end();
 	}
@@ -176,7 +183,7 @@ export class XSpecTestController {
 		return all;
 	}
 
-	private async runFile(run: vscode.TestRun, fileItem: vscode.TestItem, scenario: vscode.TestItem | undefined, token: vscode.CancellationToken, debug: boolean) {
+	private async runFile(run: vscode.TestRun, fileItem: vscode.TestItem, scenario: vscode.TestItem | undefined, token: vscode.CancellationToken, debug: boolean, coverage = false) {
 		const xspecPath = fileItem.uri!.fsPath;
 		const items = this.items(scenario ?? fileItem);
 		items.forEach((item) => run.started(item));
@@ -226,7 +233,8 @@ export class XSpecTestController {
 		}
 		const runOnce = async () => {
 			const resultTime = fs.existsSync(files.result) ? fs.statSync(files.result).mtimeMs : 0;
-			const outcome = debug ? await this.debugRunner(xspecPath, files, scenario?.label) : await XSpecRunner.run(xspecPath, files, token);
+			const outcome = debug || coverage ? await this.debugRunner(xspecPath, files, scenario?.label, coverage ? (hits) => this.addCoverage(run, xspecPath, files, hits) : undefined) :
+				await XSpecRunner.run(xspecPath, files, token);
 			return { ran: outcome, hasResult: fs.existsSync(files.result) && fs.statSync(files.result).mtimeMs > resultTime };
 		};
 		let { ran, hasResult } = await runOnce();
@@ -251,6 +259,47 @@ export class XSpecTestController {
 			(report.ok ? `Report: ${files.html}\r\n` : ''));
 	}
 
+	// the coverage of the modules the tests ran: the stylesheet tested and those it uses - not the test runner, or
+	// XSpec's own modules. Each instruction's start tag, in a function or template, is a statement - not run, if it has
+	// no hits - and each function and template a declaration
+	private addCoverage(run: vscode.TestRun, xspecPath: string, files: XSpecFiles, hits: { [path: string]: { [line: string]: number } }) {
+		const xspecHome = XSpecRunner.home(vscode.Uri.file(xspecPath));
+		const isOwn = (file: string) => XSpecSourceMap.samePath(file, files.compiled) || (!!xspecHome && path.normalize(file).startsWith(path.normalize(xspecHome))) ||
+			path.dirname(file) === path.dirname(files.compiled);
+		for (const [file, lines] of Object.entries(hits)) {
+			if (isOwn(file) || !fs.existsSync(file) || !/\.xslt?$/i.test(file)) {
+				continue;
+			}
+			const text = fs.readFileSync(file, 'utf8');
+			const lineOf = (offset: number) => text.substring(0, offset).split('\n').length;
+			const hitsAt = (line: number) => lines[String(line)] ?? 0;
+			const statements = new Map<number, number>();
+			const declarations: vscode.DeclarationCoverage[] = [];
+			for (const declaration of parseXml(text)?.children ?? []) {
+				const kind = localName(declaration.name);
+				if (kind !== 'template' && kind !== 'function') {
+					continue;
+				}
+				const first = lineOf(declaration.start);
+				const name = declaration.attributes.get('name') ?? `match="${declaration.attributes.get('match') ?? ''}"`;
+				const range = new vscode.Range(first - 1, 0, lineOf(declaration.end) - 1, 0);
+				const body = descendants(declaration).map((element) => lineOf(element.start));
+				// a declaration is run when its start, or anything in it, is
+				const declarationHits = Math.max(hitsAt(first), ...body.map(hitsAt), 0);
+				declarations.push(new vscode.DeclarationCoverage(`${kind === 'function' ? 'function' : 'template'} ${name}`, declarationHits, range));
+				[first, ...body].forEach((line) => statements.set(line, Math.max(statements.get(line) ?? 0, hitsAt(line))));
+			}
+			// lines arrived at that aren't start tags, e.g. those of a multi-line XPath expression
+			Object.entries(lines).forEach(([line, count]) => statements.set(Number(line), Math.max(statements.get(Number(line)) ?? 0, count)));
+			const details: vscode.FileCoverageDetail[] = [...statements].sort((a, b) => a[0] - b[0])
+				.map(([line, count]) => new vscode.StatementCoverage(count, new vscode.Position(line - 1, 0)));
+			details.push(...declarations);
+			const uri = vscode.Uri.file(file);
+			this.coverageDetails.set(uri.toString(), details);
+			run.addCoverage(vscode.FileCoverage.fromDetails(uri, details));
+		}
+	}
+
 	// the test runner for the whole file, when the scenario's on its own couldn't be compiled or run
 	private wholeFileInstead(run: vscode.TestRun, scenario: vscode.TestItem, xspecPath: string, files: XSpecFiles, source: string, token: vscode.CancellationToken) {
 		const note = `XSpec: the scenario '${scenario.label}' couldn't be run on its own, with XSpec's force-focus - all the file's tests are run instead`;
@@ -261,8 +310,14 @@ export class XSpecTestController {
 
 	// the test runner, run by the XSLT debugger - its breakpoints in the stylesheet under test, which the runner
 	// imports, are where it stops
-	private debugRunner(xspecPath: string, files: XSpecFiles, label: string | undefined): Promise<{ ok: boolean, output: string }> {
+	// - for coverage, without debugging: the debugger counts the hits of each line, sent when the run ends
+	private debugRunner(xspecPath: string, files: XSpecFiles, label: string | undefined, onCoverage?: (hits: { [path: string]: { [line: string]: number } }) => void): Promise<{ ok: boolean, output: string }> {
 		return new Promise((resolve) => {
+			const coverageEvents = onCoverage ? vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
+				if (event.event === 'xsltCoverage' && event.session.name === name) {
+					onCoverage(event.body?.files ?? {});
+				}
+			}) : undefined;
 			const name = `XSpec: ${label ?? path.basename(xspecPath)}`;
 			let session: vscode.DebugSession | undefined;
 			const started = vscode.debug.onDidStartDebugSession((s) => {
@@ -274,11 +329,13 @@ export class XSpecTestController {
 				if (s === session) {
 					started.dispose();
 					terminated.dispose();
+					coverageEvents?.dispose();
 					resolve({ ok: true, output: '' });
 				}
 			});
 			const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(xspecPath));
-			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, resultPath: files.result, xspecFile: xspecPath }).then((ok) => {
+			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, resultPath: files.result, xspecFile: xspecPath,
+				...(onCoverage ? { coverage: true } : {}) }, onCoverage ? { noDebug: true } : undefined).then((ok) => {
 				if (!ok) {
 					started.dispose();
 					terminated.dispose();

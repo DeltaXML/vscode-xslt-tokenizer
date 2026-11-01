@@ -63,6 +63,10 @@ final class Debugger {
     // --- launch configuration (DAP thread, before start)
     private final List<String> saxonArgs = new ArrayList<String>();
     private boolean stopOnEntry;
+    // a run without debugging, e.g. for coverage: nothing pauses it
+    private boolean noDebug;
+    // with "coverage": the number of times each line of each module is arrived at, by path - sent when the run ends
+    private Map<String, Map<Integer, Integer>> coverage;
     private boolean messageEscaping;
 
     // --- breakpoints: normalised file path -> line -> breakpoint (written by the DAP thread at any time)
@@ -264,6 +268,8 @@ final class Debugger {
             throw new IllegalArgumentException("the launch request has no 'saxonArgs'");
         }
         stopOnEntry = Json.bool(args, "stopOnEntry");
+        noDebug = Json.bool(args, "noDebug");
+        coverage = Json.bool(args, "coverage") ? new HashMap<String, Map<Integer, Integer>>() : null;
         // as for an 'xslt' task: "on" keeps Saxon's own xsl:message output, which escapes characters XML doesn't allow
         messageEscaping = "on".equals(Json.string(args, "messageEscaping"));
     }
@@ -451,6 +457,7 @@ final class Debugger {
                 System.out.flush();
                 System.err.flush();
                 sendOutputs(null, false);
+                sendCoverage();
                 dap.event("exited", Json.obj().with("exitCode", exitCode));
                 dap.event("terminated", Json.obj());
             }
@@ -832,6 +839,18 @@ final class Debugger {
         if (replayTo < 0) {
             // output after this event that the Debug Console has shown already isn't shown again
             dap.muted = event <= shownTo;
+        }
+        if (coverage != null && onNewLine) {
+            Map<Integer, Integer> lineHits = coverage.get(path);
+            if (lineHits == null) {
+                lineHits = new HashMap<Integer, Integer>();
+                coverage.put(path, lineHits);
+            }
+            Integer hits = lineHits.get(top.line);
+            lineHits.put(top.line, hits == null ? 1 : hits + 1);
+        }
+        if (reason != null && noDebug) {
+            reason = null;
         }
         if (reason != null) {
             pauseRequested = false;
@@ -1225,6 +1244,22 @@ final class Debugger {
         return className.equals("TemplateRule") || className.equals("NamedTemplate") || className.equals("UserFunction");
     }
 
+    // the coverage collected: the hits of each line, by path, e.g. {"/a.xsl": {"12": 3}}
+    private void sendCoverage() {
+        if (coverage == null) {
+            return;
+        }
+        Json.Obj files = Json.obj();
+        for (Map.Entry<String, Map<Integer, Integer>> file : coverage.entrySet()) {
+            Json.Obj lines = Json.obj();
+            for (Map.Entry<Integer, Integer> line : file.getValue().entrySet()) {
+                lines.with(String.valueOf(line.getKey()), line.getValue());
+            }
+            files.with(file.getKey(), lines);
+        }
+        dap.event("xsltCoverage", Json.obj().with("files", files));
+    }
+
     private boolean breakpointHit(String path, int line, Frame frame) {
         Map<Integer, Breakpoint> lines = breakpoints.get(path);
         Breakpoint bp = lines == null ? null : lines.get(line);
@@ -1603,7 +1638,7 @@ final class Debugger {
         }
         if (replayTo >= 0) {
             resumeAsBefore(events, true);
-        } else if (!error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
+        } else if (!noDebug && !error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
             pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "unhandled", DYNAMIC_ERROR));
         }
     }
@@ -1621,7 +1656,7 @@ final class Debugger {
         }
         if (replayTo >= 0) {
             resumeAsBefore(events, true);
-        } else if (breakOnCaughtErrors && !frames.isEmpty()) {
+        } else if (!noDebug && breakOnCaughtErrors && !frames.isEmpty()) {
             String code = error.getErrorCodeQName() == null ? "" : error.getErrorCodeQName().getLocalPart();
             pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "always", CAUGHT_ERROR));
         }

@@ -14,7 +14,7 @@ import { XsltPackages } from '../../src/xsltPackages';
 const saxonJar = process.env.XSPEC_SAXON_JAR;
 
 // a test run that records the outcome of each item, by its label
-function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscode.TestMessage[]>): vscode.TestRun {
+function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscode.TestMessage[]>, coverages: vscode.FileCoverage[] = []): vscode.TestRun {
 	const record = (status: string) => (item: vscode.TestItem, message?: vscode.TestMessage | readonly vscode.TestMessage[]) => {
 		outcomes.set(item.label, status);
 		if (message) {
@@ -24,7 +24,7 @@ function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscod
 	return {
 		name: 'test', token: new vscode.CancellationTokenSource().token, isPersisted: false,
 		enqueued: record('enqueued'), started: record('started'), skipped: record('skipped'), passed: record('passed'),
-		failed: record('failed'), errored: record('errored'), appendOutput: () => undefined, addCoverage: () => undefined, end: () => undefined,
+		failed: record('failed'), errored: record('errored'), appendOutput: () => undefined, addCoverage: (coverage: vscode.FileCoverage) => coverages.push(coverage), end: () => undefined,
 		onDidDispose: new vscode.EventEmitter<void>().event
 	} as unknown as vscode.TestRun;
 }
@@ -295,5 +295,43 @@ suite('XSpec: running tests', function () {
 		xspec.createRun = undefined;
 		assert.strictEqual(outcomes.get('is nine'), 'passed', JSON.stringify([...outcomes]));
 		assert.strictEqual(outcomes.get('a box'), 'passed');
+	});
+
+	test('coverage: the lines of the stylesheet tested that the tests ran, and its functions and templates', async () => {
+		const tested = path.join(dir, 'covered.xsl');
+		fs.writeFileSync(tested, [
+			'<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0">',
+			'  <xsl:function name="f:used">',
+			'    <xsl:param name="n"/>',
+			'    <xsl:sequence select="$n + 1"/>',
+			'  </xsl:function>',
+			'  <xsl:function name="f:unused">',
+			'    <xsl:sequence select="0"/>',
+			'  </xsl:function>',
+			'</xsl:stylesheet>'].join('\n'));
+		const coveredXspec = path.join(dir, 'covered.xspec');
+		fs.writeFileSync(coveredXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="covered.xsl">
+  <x:scenario label="used"><x:call function="f:used"><x:param select="1"/></x:call><x:expect label="is two" select="2"/></x:scenario>
+</x:description>`);
+		const xspec = XSpecTestController.instance!;
+		const uri = vscode.Uri.file(coveredXspec);
+		await vscode.workspace.openTextDocument(uri);
+		const fileItem = xspec.testController.items.get(uri.toString())!;
+		const outcomes = new Map<string, string>();
+		const coverages: vscode.FileCoverage[] = [];
+		xspec.createRun = () => recordingRun(outcomes, new Map(), coverages);
+		await xspec.coverageProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		assert.strictEqual(outcomes.get('is two'), 'passed', JSON.stringify([...outcomes]));
+		const coverage = coverages.find((c) => path.basename(c.uri.fsPath) === 'covered.xsl');
+		assert.isDefined(coverage, coverages.map((c) => c.uri.fsPath).join(', '));
+		const details = await xspec.coverageProfile.loadDetailedCoverage!({} as vscode.TestRun, coverage!, new vscode.CancellationTokenSource().token);
+		const declarations = details.filter((d): d is vscode.DeclarationCoverage => d instanceof vscode.DeclarationCoverage).map((d) => `${d.name} ${d.executed ? 'run' : 'not run'}`);
+		assert.deepEqual(declarations, ['function f:used run', 'function f:unused not run']);
+		// the line of f:unused's xsl:sequence isn't run
+		const statements = details.filter((d): d is vscode.StatementCoverage => d instanceof vscode.StatementCoverage);
+		const at = (line: number) => statements.find((d) => (d.location as vscode.Position).line === line - 1)?.executed;
+		assert.isOk(at(4));
+		assert.strictEqual(at(7), 0);
 	});
 });
