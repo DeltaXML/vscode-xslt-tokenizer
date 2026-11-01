@@ -118,6 +118,11 @@ export function parseXml(text: string): XmlElement | undefined {
 			}
 		}
 	}
+	// the elements left open, e.g. while the file is edited, end with the text
+	stack.forEach((element) => {
+		element.contentEnd = text.length;
+		element.end = text.length;
+	});
 	return root;
 }
 

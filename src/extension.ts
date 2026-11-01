@@ -7,6 +7,9 @@
  *  Contributors:
  *  DeltaXML Ltd. - XPath/XSLT Lexer/Syntax Highlighter
  */
+import * as fs from 'fs';
+import { XSpecRunner } from './xspecRunner';
+import { XSpecTestController } from './xspecTestController';
 import * as vscode from 'vscode';
 import { XdocNotes } from './xdocNote';
 import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
@@ -1261,6 +1264,20 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// used to locate bundled resources (xslt-resources) by task providers and code actions
 	SaxonTaskProvider.extensionURI = context.extensionUri;
+
+	// XSpec's tests in the Test Explorer, run with the bundled XSpec (see XSpecRunner)
+	XSpecRunner.extensionUri = context.extensionUri;
+	new XSpecTestController(context);
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecRunFile', () => vscode.commands.executeCommand('testing.runCurrentFile')));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecOpenReport', async (uri?: vscode.Uri) => {
+		const xspecPath = (uri ?? vscode.window.activeTextEditor?.document.uri)?.fsPath;
+		const html = xspecPath ? XSpecRunner.files(xspecPath).html : undefined;
+		if (!html || !fs.existsSync(html)) {
+			vscode.window.showInformationMessage('XSpec: there\'s no report yet - run the tests first.');
+			return;
+		}
+		await vscode.env.openExternal(vscode.Uri.file(html));
+	}));
 
 	let workspaceRoot = vscode.workspace.rootPath;
 	if (!workspaceRoot) {

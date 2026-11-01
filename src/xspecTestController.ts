@@ -1,0 +1,322 @@
+/**
+ *  Copyright (c) 2026 DeltaXignia Ltd. and others.
+ *  All rights reserved. This program and the accompanying materials
+ *  are made available under the terms of the MIT license
+ *  which accompanies this distribution.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd.
+ */
+import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
+import { XSpecTests, XSpecTestNode, XSpecResult, XSpecTestKind } from './xspecTests';
+import { XSpecRunner, XSpecFiles } from './xspecRunner';
+
+// XSpec's tests in the Test Explorer: an item for each XSpec file, with its scenarios and expectations - run, or
+// debugged with the XSLT debugger, by XSpecRunner's steps. One scenario is run with XSpec's force-focus, and the outcomes
+// in XSpec's result XML are matched with the items by their labels (see XSpecTests)
+export class XSpecTestController {
+	public static readonly id = 'xspec';
+	// the one the extension creates - and for testing, a replacement for the test runs it creates, e.g. to record them
+	public static instance: XSpecTestController | undefined;
+	public createRun: ((request: vscode.TestRunRequest) => vscode.TestRun) | undefined;
+	public readonly runProfile: vscode.TestRunProfile;
+	public readonly debugProfile: vscode.TestRunProfile;
+	private readonly controller: vscode.TestController;
+	// the items of each XSpec file, by their key (see XSpecTests.key) - with an occurrence number for repeated labels
+	private readonly itemsByFile = new Map<string, Map<string, vscode.TestItem>>();
+	private readonly kinds = new WeakMap<vscode.TestItem, XSpecTestKind>();
+
+	constructor(context: vscode.ExtensionContext) {
+		this.controller = vscode.tests.createTestController(XSpecTestController.id, 'XSpec');
+		context.subscriptions.push(this.controller);
+		this.controller.resolveHandler = async (item) => {
+			if (!item) {
+				await this.discoverFiles();
+			} else if (item.uri) {
+				await this.updateFile(item.uri);
+			}
+		};
+		this.runProfile = this.controller.createRunProfile('Run', vscode.TestRunProfileKind.Run, (request, token) => this.runTests(request, token, false), true);
+		this.debugProfile = this.controller.createRunProfile('Debug', vscode.TestRunProfileKind.Debug, (request, token) => this.runTests(request, token, true), true);
+		XSpecTestController.instance = this;
+
+		const watcher = vscode.workspace.createFileSystemWatcher('**/*.xspec');
+		context.subscriptions.push(watcher,
+			watcher.onDidCreate((uri) => this.fileItem(uri)),
+			watcher.onDidChange((uri) => this.updateFile(uri)),
+			watcher.onDidDelete((uri) => this.removeFile(uri)),
+			vscode.workspace.onDidOpenTextDocument((document) => this.updateDocument(document)),
+			vscode.workspace.onDidChangeTextDocument((event) => this.updateDocument(event.document)));
+		vscode.workspace.textDocuments.forEach((document) => this.updateDocument(document));
+	}
+
+	public get testController() {
+		return this.controller;
+	}
+
+	private async discoverFiles() {
+		const uris = await vscode.workspace.findFiles('**/*.xspec', '**/node_modules/**');
+		uris.forEach((uri) => this.fileItem(uri));
+	}
+
+	private fileItem(uri: vscode.Uri): vscode.TestItem {
+		let item = this.controller.items.get(uri.toString());
+		if (!item) {
+			item = this.controller.createTestItem(uri.toString(), path.basename(uri.fsPath), uri);
+			item.canResolveChildren = true;
+			this.controller.items.add(item);
+		}
+		return item;
+	}
+
+	private removeFile(uri: vscode.Uri) {
+		this.controller.items.delete(uri.toString());
+		this.itemsByFile.delete(uri.fsPath);
+	}
+
+	private updateDocument(document: vscode.TextDocument) {
+		if (document.uri.scheme === 'file' && document.languageId === 'xspec') {
+			this.setChildren(this.fileItem(document.uri), document.getText());
+		}
+	}
+
+	private async updateFile(uri: vscode.Uri) {
+		const open = vscode.workspace.textDocuments.find((document) => document.uri.toString() === uri.toString());
+		try {
+			this.setChildren(this.fileItem(uri), open ? open.getText() : fs.readFileSync(uri.fsPath, 'utf8'));
+		} catch {
+			this.removeFile(uri);
+		}
+	}
+
+	// the items for the scenarios and expectations in the file's text
+	private setChildren(fileItem: vscode.TestItem, text: string) {
+		const lineStarts = [0];
+		for (let i = text.indexOf('\n'); i > -1; i = text.indexOf('\n', i + 1)) {
+			lineStarts.push(i + 1);
+		}
+		const position = (offset: number) => {
+			let line = lineStarts.length - 1;
+			while (line > 0 && lineStarts[line] > offset) {
+				line--;
+			}
+			return new vscode.Position(line, offset - lineStarts[line]);
+		};
+		const items = new Map<string, vscode.TestItem>();
+		const create = (node: XSpecTestNode): vscode.TestItem => {
+			const key = this.uniqueKey(items, XSpecTests.key(fileItem.uri!.fsPath, node.labelPath));
+			const item = this.controller.createTestItem(`${fileItem.id}\u001f${key}`, node.label, fileItem.uri);
+			item.range = new vscode.Range(position(node.start), position(Math.max(node.start, node.end)));
+			item.tags = node.pending ? [new vscode.TestTag('pending')] : [];
+			items.set(key, item);
+			this.kinds.set(item, node.kind);
+			node.children.forEach((child) => item.children.add(create(child)));
+			return item;
+		};
+		fileItem.children.replace(XSpecTests.testTree(text).map(create));
+		fileItem.canResolveChildren = false;
+		this.itemsByFile.set(fileItem.uri!.fsPath, items);
+	}
+
+	// the key, with an occurrence number if it's already used, e.g. for two expectations with the same label
+	private uniqueKey(used: Map<string, unknown>, key: string) {
+		let unique = key;
+		for (let n = 2; used.has(unique); n++) {
+			unique = `${key}\u001f#${n}`;
+		}
+		return unique;
+	}
+
+	private async runTests(request: vscode.TestRunRequest, token: vscode.CancellationToken, debug: boolean) {
+		const run = this.createRun?.(request) ?? this.controller.createTestRun(request);
+		// the items to run, by file: undefined for the whole file
+		const byFile = new Map<string, vscode.TestItem[] | undefined>();
+		const requested: vscode.TestItem[] = [];
+		if (request.include) {
+			requested.push(...request.include);
+		} else {
+			await this.discoverFiles();
+			this.controller.items.forEach((item) => requested.push(item));
+		}
+		for (const item of requested) {
+			const file = item.uri!.fsPath;
+			const isFile = item.id === item.uri!.toString();
+			if (isFile) {
+				byFile.set(file, undefined);
+			} else if (!byFile.has(file) || byFile.get(file)) {
+				byFile.set(file, [...(byFile.get(file) ?? []), item]);
+			}
+		}
+		for (const [file, items] of byFile) {
+			if (token.isCancellationRequested) {
+				break;
+			}
+			const fileItem = this.fileItem(vscode.Uri.file(file));
+			await this.updateFile(fileItem.uri!);
+			// one scenario: the scenario of an expectation; otherwise the whole file
+			const scenario = items?.length === 1 ? this.scenarioOf(items[0]) : undefined;
+			await this.runFile(run, fileItem, scenario, token, debug);
+		}
+		run.end();
+	}
+
+	private scenarioOf(item: vscode.TestItem): vscode.TestItem | undefined {
+		return this.kinds.get(item) === 'expect' ? item.parent : item;
+	}
+
+	private keyOf(item: vscode.TestItem) {
+		return item.id.substring(item.id.indexOf('\u001f') + 1);
+	}
+
+	private items(item: vscode.TestItem): vscode.TestItem[] {
+		const all: vscode.TestItem[] = [item];
+		item.children.forEach((child) => all.push(...this.items(child)));
+		return all;
+	}
+
+	private async runFile(run: vscode.TestRun, fileItem: vscode.TestItem, scenario: vscode.TestItem | undefined, token: vscode.CancellationToken, debug: boolean) {
+		const xspecPath = fileItem.uri!.fsPath;
+		const items = this.items(scenario ?? fileItem);
+		items.forEach((item) => run.started(item));
+		const errored = (message: string) => {
+			items.forEach((item) => run.errored(item, new vscode.TestMessage(message)));
+			run.appendOutput(message.replace(/\n/g, '\r\n') + '\r\n');
+		};
+		const problem = XSpecRunner.problem(fileItem.uri);
+		if (problem) {
+			errored(problem);
+			vscode.window.showErrorMessage(problem);
+			return;
+		}
+		const channel = XSpecRunner.output();
+		channel.appendLine(`XSpec: ${scenario ? `scenario '${scenario.label}' in ` : ''}${xspecPath}`);
+		const files = XSpecRunner.files(xspecPath);
+		const prepared = await XSpecRunner.prepare(xspecPath, files, token);
+		if (!prepared.ok) {
+			errored(`XSpec: the Schematron couldn't be prepared for testing - see the XSpec output.\n${prepared.output.trim()}`);
+			channel.show(true);
+			return;
+		}
+		let compiled = await XSpecRunner.compile(xspecPath, files, token, undefined, prepared.source);
+		if (compiled.ok && scenario) {
+			// the scenario's ID, from the test runner compiled for all of them - then only it is compiled
+			const ids = XSpecTests.scenarioIds(fs.readFileSync(files.compiled, 'utf8'));
+			const key = this.keyOf(scenario);
+			const occurrence = /\u001f#(\d+)$/.exec(key);
+			const id = ids.get(occurrence ? key.substring(0, occurrence.index) : key)?.[occurrence ? Number(occurrence[1]) - 1 : 0];
+			compiled = id ? await XSpecRunner.compile(xspecPath, files, token, id, prepared.source) : compiled;
+		}
+		if (!compiled.ok) {
+			errored(`XSpec: the tests couldn't be compiled - see the XSpec output.\n${compiled.output.trim()}`);
+			channel.show(true);
+			return;
+		}
+		const resultTime = fs.existsSync(files.result) ? fs.statSync(files.result).mtimeMs : 0;
+		const ran = debug ? await this.debugRunner(xspecPath, files, scenario?.label) : await XSpecRunner.run(xspecPath, files, token);
+		const hasResult = fs.existsSync(files.result) && fs.statSync(files.result).mtimeMs > resultTime;
+		if (!ran.ok || !hasResult) {
+			errored(`XSpec: the tests didn't run to the end - see the XSpec output.\n${ran.output.trim()}`);
+			channel.show(true);
+			return;
+		}
+		const results = XSpecTests.parseResults(fs.readFileSync(files.result, 'utf8'));
+		this.applyResults(run, fileItem, results);
+		const report = await XSpecRunner.report(xspecPath, files, token);
+		run.appendOutput(`XSpec: ${results.filter((r) => r.kind === 'expect' && r.status === 'passed').length} passed, ${results.filter((r) => r.kind === 'expect' && r.status === 'failed').length} failed, ${results.filter((r) => r.kind === 'expect' && r.status === 'pending').length} pending\r\n` +
+			(report.ok ? `Report: ${files.html}\r\n` : ''));
+	}
+
+	// the test runner, run by the XSLT debugger - its breakpoints in the stylesheet under test, which the runner
+	// imports, are where it stops
+	private debugRunner(xspecPath: string, files: XSpecFiles, label: string | undefined): Promise<{ ok: boolean, output: string }> {
+		// the report is written by an xsl:result-document with no href, to the principal result - which the debugger
+		// writes again, empty, when the run ends (a debugger bug): so here it's written to the result file itself
+		const runner = fs.readFileSync(files.compiled, 'utf8');
+		const reportStart = '<xsl:result-document format="Q{{http://www.jenitennison.com/xslt/xspec}}xml-report-serialization-parameters"';
+		if (runner.includes(reportStart)) {
+			const href = vscode.Uri.file(files.result).toString().replace(/[{}]/g, (brace) => brace + brace);
+			fs.writeFileSync(files.compiled, runner.replace(reportStart, `<xsl:result-document href="${href}" format="Q{{http://www.jenitennison.com/xslt/xspec}}xml-report-serialization-parameters"`));
+		}
+		return new Promise((resolve) => {
+			const name = `XSpec: ${label ?? path.basename(xspecPath)}`;
+			let session: vscode.DebugSession | undefined;
+			const started = vscode.debug.onDidStartDebugSession((s) => {
+				if (s.name === name) {
+					session = s;
+				}
+			});
+			const terminated = vscode.debug.onDidTerminateDebugSession((s) => {
+				if (s === session) {
+					started.dispose();
+					terminated.dispose();
+					resolve({ ok: true, output: '' });
+				}
+			});
+			const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(xspecPath));
+			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, xspecFile: xspecPath }).then((ok) => {
+				if (!ok) {
+					started.dispose();
+					terminated.dispose();
+					resolve({ ok: false, output: 'XSpec: the debugger didn\'t start' });
+				}
+			});
+		});
+	}
+
+	// the outcomes, for the items with their labels - and, e.g. for the expectations of a shared scenario used with
+	// x:like, or of an imported XSpec file, new items
+	private applyResults(run: vscode.TestRun, runFileItem: vscode.TestItem, results: XSpecResult[]) {
+		const seen = new Map<string, number>();
+		for (const result of results) {
+			const file = result.file ?? runFileItem.uri!.fsPath;
+			const baseKey = XSpecTests.key(file, result.labelPath);
+			const n = (seen.get(baseKey) ?? 0) + 1;
+			seen.set(baseKey, n);
+			const key = n === 1 ? baseKey : `${baseKey}\u001f#${n}`;
+			const item = this.itemFor(file, key, result);
+			if (!item) {
+				continue;
+			}
+			if (result.status === 'passed') {
+				run.passed(item);
+			} else if (result.status === 'pending') {
+				run.skipped(item);
+			} else if (result.kind === 'scenario') {
+				run.failed(item, new vscode.TestMessage('A test in the scenario failed'));
+			} else {
+				const message = result.expected !== undefined && result.actual !== undefined ?
+					vscode.TestMessage.diff(`Failed: ${result.labelPath[result.labelPath.length - 1]}`, result.expected, result.actual) :
+					new vscode.TestMessage(`Failed: ${result.labelPath[result.labelPath.length - 1]}`);
+				if (item.uri && item.range) {
+					message.location = new vscode.Location(item.uri, item.range);
+				}
+				run.failed(item, message);
+			}
+		}
+	}
+
+	private itemFor(file: string, key: string, result: XSpecResult): vscode.TestItem | undefined {
+		if (!this.itemsByFile.has(file) && fs.existsSync(file)) {
+			const fileItem = this.fileItem(vscode.Uri.file(file));
+			this.setChildren(fileItem, fs.readFileSync(file, 'utf8'));
+		}
+		const items = this.itemsByFile.get(file);
+		if (!items) {
+			return undefined;
+		}
+		let item = items.get(key);
+		if (!item && result.labelPath.length > 1) {
+			// e.g. from a shared scenario: under its scenario, if that's known
+			const parent = items.get(XSpecTests.key(file, result.labelPath.slice(0, -1)));
+			if (parent) {
+				item = this.controller.createTestItem(`${parent.uri!.toString()}\u001f${key}`, result.labelPath[result.labelPath.length - 1], parent.uri);
+				parent.children.add(item);
+				items.set(key, item);
+				this.kinds.set(item, result.kind);
+			}
+		}
+		return item;
+	}
+}

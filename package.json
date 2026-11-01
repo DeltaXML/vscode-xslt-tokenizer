@@ -373,6 +373,18 @@
 				"command": "xslt-xpath.showDebugOutputFromVariable",
 				"title": "Show Output",
 				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.xspecRunFile",
+				"title": "Run XSpec Tests",
+				"category": "XSpec",
+				"icon": "$(beaker)"
+			},
+			{
+				"command": "xslt-xpath.xspecOpenReport",
+				"title": "Open XSpec Report",
+				"category": "XSpec",
+				"icon": "$(preview)"
 			}
 		],
 		"views": {
@@ -466,6 +478,16 @@
 					"command": "xslt-xpath.quickRunXsltSaxonC",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.xspecRunFile",
+					"when": "editorLangId == xspec",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.xspecOpenReport",
+					"when": "editorLangId == xspec",
 					"group": "navigation"
 				}
 			],
@@ -808,6 +830,12 @@
 					"default": false,
 					"scope": "window",
 					"description": "When debugging with SaxonJ, open the output written so far - beside the stylesheet - at the first pause where there is some. Otherwise, it's opened with the 'Show Debug Output' button on the debug toolbar, 'Show Output' on an output in the Variables view's Output section, or 'XSLT: Show Debug Output'."
+				},
+				"XSLT.xspec.home": {
+					"type": "string",
+					"default": "",
+					"scope": "resource",
+					"markdownDescription": "The folder of an XSpec installation, e.g. a newer release, to compile and run XSpec tests with - by default the XSpec 4.1.2 bundled with the extension is used. Tests are run with the Saxon jar of `#XSLT.tasks.saxonJar#`."
 				}
 			}
 		},
@@ -2054,6 +2082,9 @@
 		"breakpoints": [
 			{
 				"language": "xslt"
+			},
+			{
+				"language": "xspec"
 			}
 		],
 		"viewsWelcome": [
