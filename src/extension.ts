@@ -9,6 +9,7 @@
  */
 import * as fs from 'fs';
 import { XSpecRunner } from './xspecRunner';
+import { XSpecHrefs } from './xspecHrefs';
 import { XSpecTestController } from './xspecTestController';
 import * as vscode from 'vscode';
 import { XdocNotes } from './xdocNote';
@@ -197,7 +198,6 @@ export function activate(context: vscode.ExtensionContext) {
 	const xspecDiagnosticsCollection = vscode.languages.createDiagnosticCollection('xspec');
 	const xspecSymbolProvider = new XsltSymbolProvider(XSpecConfiguration.configuration, xspecDiagnosticsCollection);
 	const xspecDefinitionProvider = new XsltDefinitionProvider(XSpecConfiguration.configuration);
-	const xspecLinkProvider = new FullDocumentLinkProvider(XSpecConfiguration.configuration);
 
 	const xmlDefinitionProvider = new XsltDefinitionProvider(XMLConfiguration.configuration);
 	const xpathDefinitionProvider = new XsltDefinitionProvider(XPathConfiguration.configuration);
@@ -470,7 +470,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'dcp' }, dcpLinkProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, schLinkProvider));
-	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xspec' }, xspecLinkProvider));
+	// each file an XSpec file refers to, e.g. x:context's href, resolved as XSpec resolves it (see XSpecHrefs)
+	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xspec' }, { provideDocumentLinks: (document) => XSpecHrefs.links(document) }));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider(xsltDefintiionProvider, XSLTConfiguration.configuration)));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider(xpathDefinitionProvider, XPathConfiguration.configuration)));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, new XSLTHoverProvider(xspecDefinitionProvider, XSpecConfiguration.configuration)));

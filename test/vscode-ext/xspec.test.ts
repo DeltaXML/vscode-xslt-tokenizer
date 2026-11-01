@@ -117,6 +117,7 @@ suite('XSpec', () => {
 	});
 
 	test('a test of an XQuery module or a Schematron: its functions and variables aren\'t known, so aren\'t reported', async () => {
+		file('module.xqm', 'module namespace f = "urn:f";');
 		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call function="f:any"><x:param select="$f:anything"/></x:call><x:expect label="e" select="1"/></x:scenario>`,
 			' query="urn:f" query-at="module.xqm"')), []);
 	});
@@ -250,5 +251,21 @@ suite('XSpec', () => {
 		const offset = sut.getText().indexOf('name="f:double"') + 7;
 		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', sut.uri, sut.positionAt(offset), 'f:triple');
 		assert.deepEqual(edit.get(vscode.Uri.file(tested)).map((e) => e.newText), ['g:triple', 'g:triple']);
+	});
+
+	test('files: a link for each file an XSpec file refers to, e.g. x:context\'s href - and a problem for one that isn\'t found', async () => {
+		file('input.xml', '<doc/>');
+		fs.mkdirSync(path.join(dir, 'data'), { recursive: true });
+		fs.writeFileSync(path.join(dir, 'data', 'expected.xml'), '<doc/>');
+		const content = xspec(`<x:import href="shared.xspec"/>
+<x:scenario label="s"><x:context href="input.xml?strip-space=yes"/><x:expect label="e" href="expected.xml" xml:base="data/"/></x:scenario>
+<x:scenario label="t"><x:context href="missing.xml"/><x:expect label="e" select="1"/></x:scenario>`);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file(`files${count++}.xspec`, content)));
+		const links = await vscode.commands.executeCommand<vscode.DocumentLink[]>('vscode.executeLinkProvider', document.uri);
+		const targets = links.map((link) => `${document.getText(link.range)} ${path.relative(dir, link.target!.fsPath)}`);
+		assert.includeMembers(targets, ['sut.xsl sut.xsl', 'shared.xspec shared.xspec', 'input.xml?strip-space=yes input.xml', `expected.xml ${path.join('data', 'expected.xml')}`, 'missing.xml missing.xml']);
+		const reported = await problems(content);
+		assert.lengthOf(reported, 1, reported.join('\n'));
+		assert.match(reported[0], /^XSpec: the file 'missing\.xml' of the href attribute isn't found/);
 	});
 });

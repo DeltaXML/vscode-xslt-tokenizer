@@ -250,6 +250,10 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
 				if (this.collection && this.docType !== DocumentTypes.SCH) {
 					let importDiagnostics: vscode.Diagnostic[] = [];
+					// an XSpec file's references to files are checked as XSpec resolves them, e.g. with an xml:base (see XSpecHrefs)
+					if (this.docType === DocumentTypes.XSPEC) {
+						importErrors = [];
+					}
 					importErrors.forEach((importError) => {
 						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem, document.getText()));
 					});

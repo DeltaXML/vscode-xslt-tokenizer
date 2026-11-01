@@ -24,6 +24,7 @@ import { SaxonTypeAliases } from './saxonTypeAliases';
 import { FixedNamespaces } from './fixedNamespaces';
 import { HrefPaths, ImportProblem } from './hrefPaths';
 import * as fs from 'fs';
+import { XSpecHrefs } from './xspecHrefs';
 
 enum HasCharacteristic {
 	unknown,
@@ -3393,6 +3394,8 @@ export class XsltTokenDiagnostics {
 		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		if (docType === DocumentTypes.XSPEC) {
+			// the files it refers to that aren't found
+			allDiagnostics.push(...XSpecHrefs.problems(document));
 			// the problems with XSpec's elements and attributes, as XSpec's
 			allDiagnostics.forEach((d) => d.message = d.message
 				.replace(/^XSLT: instruction: (\S+) not valid in this context/, 'XSpec: element $1 is not allowed here')
