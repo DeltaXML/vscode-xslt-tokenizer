@@ -1,3 +1,4 @@
+import { XSpecReferences } from './xspecReferences';
 import * as vscode from 'vscode';
 import { XSLTnamespaces, FunctionData } from './functionData';
 import { XSLTConfiguration } from './languageConfigurations';
@@ -265,6 +266,12 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 					} catch (error) {
 						console.error(error);
 					}
+				}
+				// for a function or named template: its uses in the XSpec files that test it, e.g. x:call function="f:double"
+				if (declaration && declarationDocument && !declaration.isParam) {
+					const modules = XSpecReferences.modulesOf(declaration.file, await ImportIndex.moduleTrees(declarationDocument));
+					const kind = declaration.elementName === 'xsl:function' ? 'function' : 'template';
+					locations = locations.concat(await XSpecReferences.find(kind, declaration.expandedName, modules));
 				}
 			}
 		}

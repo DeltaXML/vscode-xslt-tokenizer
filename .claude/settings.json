@@ -51,7 +51,9 @@
       "Bash(grep -n -i -B3 -A12 \"goto xpath\\\\|XML Selection\\\\|Select Element\" navigation.xml editing.xml)",
       "Bash(cat layout.xml)",
       "Bash(DEBUGGER_TEST=testOneLineDeclarations node scripts/test-debugger.js /Users/phil.fearon/opt/DeltaNova-2026.1.0.0/saxon-pe-12.4.jar)",
-      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"PROBE\")"
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"PROBE\")",
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"find all references to a function\")",
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"XPath documents\")"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

@@ -231,4 +231,24 @@ suite('XSpec', () => {
 		assert.strictEqual(await where(`<x:scenario label="s"><x:call template="f:named"><x:param name="si|ze" select="1"/></x:call></x:scenario>`), 'sut.xsl:4');
 		assert.strictEqual(await where(`<x:scenario label="s"><x:context mode="f:pa|ra"><p/></x:context></x:scenario>`), 'sut.xsl:5');
 	});
+
+	test('find all references to a function or template of the stylesheet: its uses in the XSpec files testing it, with any prefix', async () => {
+		const tested = file(`refs${count++}.xspec`, `<x:description ${xspecNs} xmlns:g="urn:f" stylesheet="sut.xsl">
+  <x:scenario label="s"><x:call function="g:double"><x:param select="1"/></x:call><x:expect label="e" test="g:double(1) = 2"/></x:scenario>
+  <x:scenario label="t"><x:call template="g:named"/><x:expect label="e" select="()"/></x:scenario>
+</x:description>`);
+		await vscode.workspace.openTextDocument(vscode.Uri.file(tested));
+		const sut = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(dir, 'sut.xsl')));
+		const referencesAt = async (name: string) => {
+			const offset = sut.getText().indexOf(`name="${name}"`) + 7;
+			const locations = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', sut.uri, sut.positionAt(offset));
+			return locations.filter((l) => l.uri.fsPath === tested).map((l) => `${l.range.start.line + 1}:${(vscode.workspace.textDocuments.find((d) => d.uri.fsPath === tested)!).getText(l.range)}`);
+		};
+		assert.deepEqual(await referencesAt('f:double'), ['2:g:double', '2:g:double']);
+		assert.deepEqual(await referencesAt('f:named'), ['3:g:named']);
+		// renamed in the XSpec file too, keeping its prefix
+		const offset = sut.getText().indexOf('name="f:double"') + 7;
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', sut.uri, sut.positionAt(offset), 'f:triple');
+		assert.deepEqual(edit.get(vscode.Uri.file(tested)).map((e) => e.newText), ['g:triple', 'g:triple']);
+	});
 });

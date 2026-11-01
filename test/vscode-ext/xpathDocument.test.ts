@@ -26,6 +26,9 @@ const cases: [string, [string, string][]][] = [
 	// XPath 4.0 operators:
 	["(1, 2) -> sum(.)", []],
 	["(-1, -2) =!> abs()", []],
+	// the context item or root alone, e.g. a query file's first expression - it had no token before it to check
+	[".", []],
+	["/", []],
 	// still reported:
 	["unknown-function(1)", [["XPath: Function: 'unknown-function' with 1 arguments not found", 'unknown-function']]],
 	["{ 'a': 1, }", [['XPath: Expression context - unexpected token here: } ', '}']]],

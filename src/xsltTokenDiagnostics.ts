@@ -3839,7 +3839,8 @@ export class XsltTokenDiagnostics {
 				} else if (prevToken.value === '/' || prevToken.value === '.') {
 					// these are ok provided that the previous token was XSLT or previous token was ,;
 					let prevToken2 = allTokens[index - 2];
-					let tokenBeforePrevWasXSLT = prevToken2.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
+					// or the whole expression, e.g. '.' alone, as in an XPath query file
+					let tokenBeforePrevWasXSLT = !prevToken2 || prevToken2.tokenType >= XsltTokenDiagnostics.xsltStartTokenNumber;
 					isValid = tokenBeforePrevWasXSLT || (
 						prevToken2.tokenType === TokenLevelState.operator &&
 						prevToken2.charType !== CharLevelState.rB &&
