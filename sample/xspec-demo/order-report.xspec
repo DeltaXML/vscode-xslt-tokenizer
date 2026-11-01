@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Tests of order-report.xsl's functions and named template - run them from the Test Explorer, or with the
+    'Run Tests' button in the editor title.
+
+    Things to try:
+    - the ▶ and debug buttons beside each scenario: run or debug one scenario on its own
+    - a breakpoint on an x:call or x:expect line, then Debug: execution pauses there, with $x:result at x:expect
+    - change the expected value of 'a line under 10 items' to 25.00: the failure shows the expected and actual results
+    - Go to Definition on o:line-total in x:call
+    - after '<' within x:call: completion of the x:param for each parameter
+-->
+<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec"
+               xmlns:o="http://example.com/orders"
+               xmlns:xs="http://www.w3.org/2001/XMLSchema"
+               stylesheet="order-report.xsl">
+
+   <x:scenario label="o:line-total">
+      <x:call function="o:line-total"/>
+
+      <x:scenario label="a line under 10 items">
+         <x:call>
+            <x:param as="xs:integer" select="2"/><!-- $quantity -->
+            <x:param as="xs:decimal" select="12.50"/><!-- $price -->
+         </x:call>
+         <x:expect label="is the quantity times the price" select="25.00"/>
+      </x:scenario>
+
+      <x:scenario label="a line of 10 items">
+         <x:call>
+            <x:param as="xs:integer" select="10"/>
+            <x:param as="xs:decimal" select="5"/>
+         </x:call>
+         <x:expect label="has a 10% discount" select="45.0"/>
+      </x:scenario>
+   </x:scenario>
+
+   <x:scenario label="o:format-amount">
+      <x:call function="o:format-amount">
+         <x:param as="xs:decimal" select="1234.5"/>
+      </x:call>
+      <x:expect label="is in pounds, with two decimal places" select="'£1,234.50'"/>
+      <x:expect label="starts with the currency symbol" test="starts-with($x:result, '£')"/>
+   </x:scenario>
+
+   <x:scenario label="o:heading">
+      <x:call template="o:heading">
+         <x:param name="title" select="'Orders'"/>
+      </x:call>
+      <x:expect label="is an h1 by default">
+         <h1>Orders</h1>
+      </x:expect>
+
+      <x:scenario label="at level 2">
+         <x:call>
+            <x:param name="level" select="2"/>
+         </x:call>
+         <x:expect label="is an h2">
+            <h2>Orders</h2>
+         </x:expect>
+      </x:scenario>
+   </x:scenario>
+
+   <x:scenario label="o:format-amount of a negative amount" pending="to do: decide how refunds are shown">
+      <x:call function="o:format-amount">
+         <x:param as="xs:decimal" select="-5"/>
+      </x:call>
+      <x:expect label="is shown in brackets" select="'(£5.00)'"/>
+   </x:scenario>
+
+</x:description>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Tests of the currency package: XSpec runs a package as a separate transformation, with run-as="external", so only
+    its public functions can be called.
+
+    Things to try:
+    - call c:rate, which is private: it's reported
+    - in an x:expect's test, call c:round: with run-as="external", the package's functions can only be called with x:call
+-->
+<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec"
+               xmlns:c="http://example.com/currency"
+               xmlns:xs="http://www.w3.org/2001/XMLSchema"
+               run-as="external"
+               stylesheet="currency.xsl">
+
+   <x:scenario label="c:convert">
+      <x:call function="c:convert">
+         <x:param as="xs:decimal" select="10"/><!-- $amount -->
+         <x:param as="xs:string" select="'EUR'"/><!-- $currency -->
+      </x:call>
+      <x:expect label="converts pounds to euros" select="11.70"/>
+   </x:scenario>
+
+   <x:scenario label="c:round">
+      <x:call function="c:round">
+         <x:param as="xs:decimal" select="2.675"/>
+      </x:call>
+      <x:expect label="rounds half to even, to 2 decimal places" select="2.68"/>
+   </x:scenario>
+
+</x:description>

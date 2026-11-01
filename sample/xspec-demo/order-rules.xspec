@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Tests of order-report.xsl's template rules: each x:context is the input the rules are applied to, and each
+    x:expect the output expected. '...' in an expected result matches any content.
+
+    Things to try:
+    - hover over x:context or x:expect: XSpec's description of the element
+    - the outline (Outline view) lists the scenarios by their labels
+    - a breakpoint in the template rule for 'line' in order-report.xsl, then Debug one of these scenarios
+-->
+<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec"
+               stylesheet="order-report.xsl">
+
+   <!-- shared by the scenarios with x:like: the line's product is its first cell -->
+   <x:scenario label="a table row for the line" shared="yes">
+      <x:expect label="has the product in its first cell" test="$x:result/td[1] = 'Pens'"/>
+   </x:scenario>
+
+   <x:scenario label="a line">
+      <x:context>
+         <line product="Pens" quantity="3" price="1.20"/>
+      </x:context>
+      <x:like label="a table row for the line"/>
+      <x:expect label="is a row with the product, quantity and total">
+         <tr>
+            <td>Pens</td>
+            <td>3</td>
+            <td>£3.60</td>
+         </tr>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="an order">
+      <x:context>
+         <order id="A1">
+            <line product="Pens" quantity="3" price="1.20"/>
+            <line product="Paper" quantity="10" price="4.00"/>
+         </order>
+      </x:context>
+      <x:expect label="is a section with a row for each line" test="count($x:result/table/tr) = 2"/>
+      <x:expect label="has the order's total, after the discount" test="$x:result/p[@class = 'total'] = 'Total: £39.60'"/>
+      <x:expect label="is a section with the order's id">
+         <section id="A1">...</section>
+      </x:expect>
+   </x:scenario>
+
+</x:description>
