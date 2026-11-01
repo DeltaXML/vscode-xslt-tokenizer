@@ -97,7 +97,8 @@ suite('XSpec: running tests', function () {
 	test('run one scenario, with XSpec\'s force-focus: the others aren\'t run', async () => {
 		const { outcomes } = await runItems((file) => [child(child(file, 'doubling'), 'two')]);
 		assert.strictEqual(outcomes.get('is four'), 'passed');
-		assert.notStrictEqual(outcomes.get('becomes q'), 'passed');
+		// the others' outcomes aren't changed, e.g. to skipped, as XSpec reports them pending
+		assert.deepEqual([...outcomes.keys()].sort(), ['is four', 'two'], JSON.stringify([...outcomes]));
 	});
 
 	test('debug a scenario: the test runner is run by the XSLT debugger, and the outcomes are shown', async () => {

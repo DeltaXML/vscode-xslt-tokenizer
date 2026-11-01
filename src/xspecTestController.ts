@@ -209,9 +209,9 @@ export class XSpecTestController {
 			const occurrence = /\u001f#(\d+)$/.exec(key);
 			const id = ids.get(occurrence ? key.substring(0, occurrence.index) : key)?.[occurrence ? Number(occurrence[1]) - 1 : 0];
 			const focused = id ? await XSpecRunner.compile(xspecPath, files, token, id, prepared.source) : undefined;
-			// XSpec can't always make a test runner for one scenario on its own - e.g. with run-as="external", a scenario's
-			// variable using $x:context gives XPST0008 - so the whole file is run instead. When debugging, the runner is
-			// checked first, as the debugger would report its errors
+			// XSpec can't always make a test runner for one scenario on its own - e.g. the variable of a scenario made
+			// pending by the focus, using its $x:context, gives XPST0008 - so the whole file is run instead. When debugging,
+			// the runner is checked first, as the debugger would report its errors
 			const usable = focused?.ok && (!debug || (await XSpecRunner.check(xspecPath, files, token)).ok);
 			if (focused && !usable) {
 				compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token);
@@ -230,8 +230,12 @@ export class XSpecTestController {
 			return { ran: outcome, hasResult: fs.existsSync(files.result) && fs.statSync(files.result).mtimeMs > resultTime };
 		};
 		let { ran, hasResult } = await runOnce();
-		if ((!ran.ok || !hasResult) && focusedId && scenario && !token.isCancellationRequested) {
+		// not when debugging: the run may have ended at an error being debugged, or been stopped - and the runner has
+		// been checked
+		if ((!ran.ok || !hasResult) && focusedId && scenario && !debug && !token.isCancellationRequested) {
 			compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token);
+			// all the file's tests run, so all their outcomes are shown
+			focusedId = undefined;
 			({ ran, hasResult } = compiled.ok ? await runOnce() : { ran: compiled, hasResult: false });
 		}
 		if (!ran.ok || !hasResult) {
@@ -240,7 +244,8 @@ export class XSpecTestController {
 			return;
 		}
 		const results = XSpecTests.parseResults(fs.readFileSync(files.result, 'utf8'));
-		this.applyResults(run, fileItem, results);
+		// for one scenario: only its outcomes - the others are pending, as XSpec's force-focus makes them, but keep theirs
+		this.applyResults(run, fileItem, results, focusedId ? scenario : undefined);
 		const report = await XSpecRunner.report(xspecPath, files, token);
 		run.appendOutput(`XSpec: ${results.filter((r) => r.kind === 'expect' && r.status === 'passed').length} passed, ${results.filter((r) => r.kind === 'expect' && r.status === 'failed').length} failed, ${results.filter((r) => r.kind === 'expect' && r.status === 'pending').length} pending\r\n` +
 			(report.ok ? `Report: ${files.html}\r\n` : ''));
@@ -285,7 +290,7 @@ export class XSpecTestController {
 
 	// the outcomes, for the items with their labels - and, e.g. for the expectations of a shared scenario used with
 	// x:like, or of an imported XSpec file, new items
-	private applyResults(run: vscode.TestRun, runFileItem: vscode.TestItem, results: XSpecResult[]) {
+	private applyResults(run: vscode.TestRun, runFileItem: vscode.TestItem, results: XSpecResult[], within?: vscode.TestItem) {
 		const seen = new Map<string, number>();
 		for (const result of results) {
 			const file = result.file ?? runFileItem.uri!.fsPath;
@@ -294,7 +299,7 @@ export class XSpecTestController {
 			seen.set(baseKey, n);
 			const key = n === 1 ? baseKey : `${baseKey}\u001f#${n}`;
 			const item = this.itemFor(file, key, result);
-			if (!item) {
+			if (!item || (within && !this.isWithin(item, within))) {
 				continue;
 			}
 			if (result.status === 'passed') {
@@ -313,6 +318,16 @@ export class XSpecTestController {
 				run.failed(item, message);
 			}
 		}
+	}
+
+	// by ID: the tree is made again from the file before a run, so the item run may be an earlier one
+	private isWithin(item: vscode.TestItem, ancestor: vscode.TestItem) {
+		for (let i: vscode.TestItem | undefined = item; i; i = i.parent) {
+			if (i.id === ancestor.id) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private itemFor(file: string, key: string, result: XSpecResult): vscode.TestItem | undefined {
