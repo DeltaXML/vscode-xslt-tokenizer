@@ -376,13 +376,13 @@
 			},
 			{
 				"command": "xslt-xpath.xspecRunFile",
-				"title": "Run XSpec Tests",
+				"title": "Run Tests",
 				"category": "XSpec",
 				"icon": "$(beaker)"
 			},
 			{
 				"command": "xslt-xpath.xspecOpenReport",
-				"title": "Open XSpec Report",
+				"title": "Open Report",
 				"category": "XSpec",
 				"icon": "$(preview)"
 			}

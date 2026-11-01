@@ -110,7 +110,7 @@ suite('XSpec: running tests', function () {
 		// line 2: f:double's xsl:sequence
 		const breakpoint = new vscode.SourceBreakpoint(new vscode.Location(sut, new vscode.Position(1, 60)));
 		vscode.debug.addBreakpoints([breakpoint]);
-		// the line, and the function and its parameters, of each stop - the instruction, then its XPath expression
+		// the line, and the function and its parameters, of each stop
 		const stops: number[] = [];
 		const inputs: string[] = [];
 		const tracker = vscode.debug.registerDebugAdapterTrackerFactory('xslt-saxon', {
@@ -129,9 +129,8 @@ suite('XSpec: running tests', function () {
 		});
 		try {
 			const { outcomes } = await runItems((file) => [child(child(file, 'doubling'), 'two')], true);
-			assert.isNotEmpty(stops);
-			assert.deepEqual([...new Set(stops)], [2]);
-			assert.deepEqual([...new Set(inputs)], ['f:double#1 $n=2']);
+			assert.deepEqual(stops, [2]);
+			assert.deepEqual(inputs, ['f:double#1 $n=2']);
 			assert.strictEqual(outcomes.get('is four'), 'passed');
 		} finally {
 			tracker.dispose();

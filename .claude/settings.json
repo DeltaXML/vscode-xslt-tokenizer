@@ -49,7 +49,8 @@
       "Bash(node scripts/test-debugger.js debugger/lib/Saxon-HE-12.9.jar:debugger/lib/xmlresolver-5.3.3.jar)",
       "Read(//Users/phil.fearon/Documents/github/deltaxml.github.io/vscode-xslt-xpath/authoring/**)",
       "Bash(grep -n -i -B3 -A12 \"goto xpath\\\\|XML Selection\\\\|Select Element\" navigation.xml editing.xml)",
-      "Bash(cat layout.xml)"
+      "Bash(cat layout.xml)",
+      "Bash(DEBUGGER_TEST=testOneLineDeclarations node scripts/test-debugger.js /Users/phil.fearon/opt/DeltaNova-2026.1.0.0/saxon-pe-12.4.jar)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

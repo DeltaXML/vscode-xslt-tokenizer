@@ -231,14 +231,6 @@ export class XSpecTestController {
 	// the test runner, run by the XSLT debugger - its breakpoints in the stylesheet under test, which the runner
 	// imports, are where it stops
 	private debugRunner(xspecPath: string, files: XSpecFiles, label: string | undefined): Promise<{ ok: boolean, output: string }> {
-		// the report is written by an xsl:result-document with no href, to the principal result - which the debugger
-		// writes again, empty, when the run ends (a debugger bug): so here it's written to the result file itself
-		const runner = fs.readFileSync(files.compiled, 'utf8');
-		const reportStart = '<xsl:result-document format="Q{{http://www.jenitennison.com/xslt/xspec}}xml-report-serialization-parameters"';
-		if (runner.includes(reportStart)) {
-			const href = vscode.Uri.file(files.result).toString().replace(/[{}]/g, (brace) => brace + brace);
-			fs.writeFileSync(files.compiled, runner.replace(reportStart, `<xsl:result-document href="${href}" format="Q{{http://www.jenitennison.com/xslt/xspec}}xml-report-serialization-parameters"`));
-		}
 		return new Promise((resolve) => {
 			const name = `XSpec: ${label ?? path.basename(xspecPath)}`;
 			let session: vscode.DebugSession | undefined;
@@ -255,7 +247,7 @@ export class XSpecTestController {
 				}
 			});
 			const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(xspecPath));
-			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, xspecFile: xspecPath }).then((ok) => {
+			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, resultPath: files.result, xspecFile: xspecPath }).then((ok) => {
 				if (!ok) {
 					started.dispose();
 					terminated.dispose();

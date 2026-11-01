@@ -763,6 +763,10 @@ final class Debugger {
         // the first instruction within an xsl:for-each (or other focus instruction) on its own line, e.g.
         // <xsl:for-each select="item"><x/></xsl:for-each>: arrived at for each item, as the body on a line of its own is
         boolean firstInFocus = onSameLine && top.lineStart == null && traceable != top.owner;
+        // the first instruction within a template, named template or function, on the line it was entered at - which
+        // Step Into stops at, but not a breakpoint, as the template or function stopped there just before: a breakpoint
+        // on <xsl:function ...><xsl:sequence select="..."/></xsl:function> stops once for each call
+        boolean firstInDeclaration = firstInFocus && isDeclaration(top.owner);
         boolean arrivingAgain = onSameLine && (traceable == top.lineStart || top.newIteration || firstInFocus);
         boolean onNewLine = !onSameLine || arrivingAgain;
         top.newIteration = false;
@@ -818,7 +822,7 @@ final class Debugger {
             reason = "entry";
         } else if (isCall && functionBreakpointHit(traceable, properties, top)) {
             reason = "function breakpoint";
-        } else if (onNewLine && !lazyArrival && !justStoppedHere && breakpointHit(path, top.line, top)) {
+        } else if (onNewLine && !lazyArrival && !justStoppedHere && !firstInDeclaration && breakpointHit(path, top.line, top)) {
             // checked once each time execution arrives at the line - not for each instruction Saxon reports on it -
             // including again, e.g. for the next iteration of a loop on one line
             reason = "breakpoint";
@@ -1213,6 +1217,12 @@ final class Debugger {
             case OUT: return callDepth < stepCallDepth;
             default: return false;
         }
+    }
+
+    // a template rule, named template or function - not a focus instruction, e.g. xsl:for-each
+    private static boolean isDeclaration(Traceable owner) {
+        String className = owner == null ? "" : owner.getClass().getSimpleName();
+        return className.equals("TemplateRule") || className.equals("NamedTemplate") || className.equals("UserFunction");
     }
 
     private boolean breakpointHit(String path, int line, Frame frame) {
