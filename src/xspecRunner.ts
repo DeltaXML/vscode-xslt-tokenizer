@@ -130,6 +130,11 @@ export class XSpecRunner {
 		return XSpecRunner.saxon('Compiling the tests', uri, forceFocus ? args.concat('force-focus=' + forceFocus) : args, token);
 	}
 
+	// whether the test runner compiles, without running it
+	public static check(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
+		return XSpecRunner.saxon('Checking the test runner', vscode.Uri.file(xspecPath), ['-xsl:' + files.compiled, '-nogo'], token);
+	}
+
 	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
 		return XSpecRunner.saxon('Running the tests', vscode.Uri.file(xspecPath), ['-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token);
 	}

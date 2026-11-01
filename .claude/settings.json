@@ -54,7 +54,16 @@
       "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"PROBE\")",
       "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"find all references to a function\")",
       "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"XPath documents\")",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(sed -n 95,102p authoring/navigation.xml)",
+      "Bash(grep -n 'class=\"shortcut\"' authoring/navigation.xml)",
+      "Bash(wc -l authoring/features.xml)",
+      "Bash(grep -n \"<h3\\\\|<h2\\\\|class=\\\\\"\\\\|<div\\\\|<img\\\\|<figure\" authoring/features.xml)",
+      "Bash(sed -n 1,12p authoring/features.xml)",
+      "Bash(sed -n 115,160p authoring/features.xml)",
+      "Bash(sed -i '' 's/^- \\\\[XSpec support\\\\]\\(xspec-support-planned.md\\) — .*$/- [XSpec support]\\(xspec-support-planned.md\\) — editing, Test Explorer runs, debugging, Schematron, navigation, docs; going into 2.1 \\(decided 2026-11-01\\)/' MEMORY.md)",
+      "Bash(grep -n \"xspec-support\" MEMORY.md)",
+      "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"can't compile on its own\")"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

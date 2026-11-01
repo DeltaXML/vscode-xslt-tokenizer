@@ -200,22 +200,40 @@ export class XSpecTestController {
 			return;
 		}
 		let compiled = await XSpecRunner.compile(xspecPath, files, token, undefined, prepared.source);
+		// the scenario run on its own, with XSpec's force-focus
+		let focusedId: string | undefined;
 		if (compiled.ok && scenario) {
 			// the scenario's ID, from the test runner compiled for all of them - then only it is compiled
 			const ids = XSpecTests.scenarioIds(fs.readFileSync(files.compiled, 'utf8'));
 			const key = this.keyOf(scenario);
 			const occurrence = /\u001f#(\d+)$/.exec(key);
 			const id = ids.get(occurrence ? key.substring(0, occurrence.index) : key)?.[occurrence ? Number(occurrence[1]) - 1 : 0];
-			compiled = id ? await XSpecRunner.compile(xspecPath, files, token, id, prepared.source) : compiled;
+			const focused = id ? await XSpecRunner.compile(xspecPath, files, token, id, prepared.source) : undefined;
+			// XSpec can't always make a test runner for one scenario on its own - e.g. with run-as="external", a scenario's
+			// variable using $x:context gives XPST0008 - so the whole file is run instead. When debugging, the runner is
+			// checked first, as the debugger would report its errors
+			const usable = focused?.ok && (!debug || (await XSpecRunner.check(xspecPath, files, token)).ok);
+			if (focused && !usable) {
+				compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token);
+			} else if (focused) {
+				focusedId = id;
+			}
 		}
 		if (!compiled.ok) {
 			errored(`XSpec: the tests couldn't be compiled - see the XSpec output.\n${compiled.output.trim()}`);
 			channel.show(true);
 			return;
 		}
-		const resultTime = fs.existsSync(files.result) ? fs.statSync(files.result).mtimeMs : 0;
-		const ran = debug ? await this.debugRunner(xspecPath, files, scenario?.label) : await XSpecRunner.run(xspecPath, files, token);
-		const hasResult = fs.existsSync(files.result) && fs.statSync(files.result).mtimeMs > resultTime;
+		const runOnce = async () => {
+			const resultTime = fs.existsSync(files.result) ? fs.statSync(files.result).mtimeMs : 0;
+			const outcome = debug ? await this.debugRunner(xspecPath, files, scenario?.label) : await XSpecRunner.run(xspecPath, files, token);
+			return { ran: outcome, hasResult: fs.existsSync(files.result) && fs.statSync(files.result).mtimeMs > resultTime };
+		};
+		let { ran, hasResult } = await runOnce();
+		if ((!ran.ok || !hasResult) && focusedId && scenario && !token.isCancellationRequested) {
+			compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token);
+			({ ran, hasResult } = compiled.ok ? await runOnce() : { ran: compiled, hasResult: false });
+		}
 		if (!ran.ok || !hasResult) {
 			errored(`XSpec: the tests didn't run to the end - see the XSpec output.\n${ran.output.trim()}`);
 			channel.show(true);
@@ -226,6 +244,14 @@ export class XSpecTestController {
 		const report = await XSpecRunner.report(xspecPath, files, token);
 		run.appendOutput(`XSpec: ${results.filter((r) => r.kind === 'expect' && r.status === 'passed').length} passed, ${results.filter((r) => r.kind === 'expect' && r.status === 'failed').length} failed, ${results.filter((r) => r.kind === 'expect' && r.status === 'pending').length} pending\r\n` +
 			(report.ok ? `Report: ${files.html}\r\n` : ''));
+	}
+
+	// the test runner for the whole file, when the scenario's on its own couldn't be compiled or run
+	private wholeFileInstead(run: vscode.TestRun, scenario: vscode.TestItem, xspecPath: string, files: XSpecFiles, source: string, token: vscode.CancellationToken) {
+		const note = `XSpec: the scenario '${scenario.label}' couldn't be run on its own, with XSpec's force-focus - all the file's tests are run instead`;
+		XSpecRunner.output().appendLine(note);
+		run.appendOutput(note + '\r\n');
+		return XSpecRunner.compile(xspecPath, files, token, undefined, source);
 	}
 
 	// the test runner, run by the XSLT debugger - its breakpoints in the stylesheet under test, which the runner

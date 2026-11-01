@@ -212,4 +212,36 @@ suite('XSpec: running tests', function () {
 			vscode.debug.removeBreakpoints(breakpoints);
 		}
 	});
+
+	test('run one scenario that XSpec can\'t compile on its own (run-as="external"): the whole file is run instead', async () => {
+		fs.writeFileSync(path.join(dir, 'modes.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:template match="p" mode="m"><q/></xsl:template>
+</xsl:stylesheet>`);
+		const externalXspec = path.join(dir, 'external.xspec');
+		fs.writeFileSync(externalXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:myv="urn:myv" run-as="external" stylesheet="modes.xsl">
+  <x:scenario label="stored" shared="yes"><x:variable name="myv:v" select="$x:context"/></x:scenario>
+  <x:scenario label="with context">
+    <x:context><p/></x:context>
+    <x:like label="stored"/>
+    <x:scenario label="first"><x:context mode="m"/><x:expect label="has a context" test="exists($x:context)"/></x:scenario>
+    <x:scenario label="second"><x:context mode="m"/><x:expect label="has a result" test="exists($x:result)"/></x:scenario>
+  </x:scenario>
+</x:description>`);
+		const xspec = XSpecTestController.instance!;
+		const uri = vscode.Uri.file(externalXspec);
+		await vscode.workspace.openTextDocument(uri);
+		const fileItem = xspec.testController.items.get(uri.toString())!;
+		const outcomes = new Map<string, string>();
+		xspec.createRun = () => recordingRun(outcomes, new Map());
+		await xspec.runProfile.runHandler(new vscode.TestRunRequest([child(child(fileItem, 'with context'), 'second')]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		assert.strictEqual(outcomes.get('has a result'), 'passed', JSON.stringify([...outcomes]));
+		assert.strictEqual(outcomes.get('has a context'), 'passed');
+		// and debugged
+		const debugOutcomes = new Map<string, string>();
+		xspec.createRun = () => recordingRun(debugOutcomes, new Map());
+		await xspec.debugProfile.runHandler(new vscode.TestRunRequest([child(child(fileItem, 'with context'), 'second')]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		assert.strictEqual(debugOutcomes.get('has a result'), 'passed', JSON.stringify([...debugOutcomes]));
+	});
 });
