@@ -10,10 +10,13 @@ import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, Glob
 import { CharLevelState, TokenLevelState, BaseToken, ErrorType, Data, XPathLexer, ExitCondition, RecordFix } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
 import { SchemaQuery } from './schemaQuery';
-import { XSLTConfiguration } from './languageConfigurations';
+import { XSLTConfiguration, XSLTLightConfiguration } from './languageConfigurations';
 import { SimpleTypeNames } from './xsltSchema';
 import { XPathFunctionDetails } from './xpathFunctionDetails';
 import { ImportIndex } from './importIndex';
+import { ModulePrefixes } from './modulePrefixes';
+import { PackageScope } from './packageScope';
+import { XsltPackages } from './xsltPackages';
 import { RecordType, RecordTypes, FieldReference, EnumValueReference, ItemTypeAsRange } from './recordTypes';
 import { RecordExtraction } from './recordExtraction';
 import { XdocNotes, XdocTag } from './xdocNote';
@@ -25,6 +28,8 @@ import { FixedNamespaces } from './fixedNamespaces';
 import { HrefPaths, ImportProblem } from './hrefPaths';
 import * as fs from 'fs';
 import { XSpecHrefs } from './xspecHrefs';
+import { XslLexerLight } from './xslLexerLight';
+import { XSpecSourceMap } from './xspecSourceMap';
 
 enum HasCharacteristic {
 	unknown,
@@ -717,7 +722,21 @@ export class XsltTokenDiagnostics {
 			}
 		});
 
+		// XSpec, run-as="external": the stylesheet tested isn't imported into the test runner, so its functions and global
+		// variables can't be used in XPath expressions - only with x:call - unlike a helper's
+		const xspecExternalModules = xspecScope?.externalModules;
+		const isXSpecExternal = (instruction: GlobalInstructionData) => !!xspecExternalModules && !!instruction.href &&
+			[...xspecExternalModules].some((module) => XSpecSourceMap.samePath(module, instruction.href!));
+		// those functions, which x:call may call
+		const xspecExternalFnNames: string[] = [];
 		importedInstructionData.forEach((instruction) => {
+			if (isXSpecExternal(instruction) && (instruction.type === GlobalInstructionType.Variable || instruction.type === GlobalInstructionType.Parameter)) {
+				return;
+			}
+			if (isXSpecExternal(instruction) && instruction.type === GlobalInstructionType.Function) {
+				xspecExternalFnNames.push(...XsltTokenDiagnostics.functionNamesWithArity(instruction));
+				return;
+			}
 			switch (instruction.type) {
 				case GlobalInstructionType.Variable:
 				case GlobalInstructionType.Parameter:
@@ -1547,10 +1566,15 @@ export class XsltTokenDiagnostics {
 										RecordTypes.attributeOfElementAt(documentText, callStart, 'call-as')?.trim() !== 'variable' && !xspecScope.declared.has(calledName) &&
 										!importedGlobalVarNames.includes(calledName);
 									if (isChecked) {
-										if (currentAttName === 'template' && !namedTemplates.get(calledName)) {
+										const packagePublic = xspecScope.isExternal ? xspecScope.packagePublic : undefined;
+										if (packagePublic && !packagePublic.has(`${currentAttName} ${ModulePrefixes.expandedName(calledName, new Map(rootXmlnsBindings))}`)) {
+											// a package, run externally: only its public components can be called (XTDE0041)
+											valueToken['error'] = ErrorType.XSpecNotPublic;
+											valueToken.value = `${currentAttName}\u001f${calledName}\u001f${xspecScope.packageName}`;
+										} else if (currentAttName === 'template' && !namedTemplates.get(calledName)) {
 											valueToken['error'] = ErrorType.TemplateNameUnresolved;
 											valueToken.value = calledName;
-										} else if (currentAttName === 'function' && !XsltTokenDiagnostics.isXSpecFunctionDeclared(calledName, checkedGlobalFnNames, xsltPrefixesToURIs, xspecLibraryPrefixes)) {
+										} else if (currentAttName === 'function' && !XsltTokenDiagnostics.isXSpecFunctionDeclared(calledName, checkedGlobalFnNames.concat(xspecExternalFnNames), xsltPrefixesToURIs, xspecLibraryPrefixes)) {
 											valueToken['error'] = ErrorType.XSpecFunctionUnresolved;
 											valueToken.value = calledName;
 										}
@@ -3396,6 +3420,21 @@ export class XsltTokenDiagnostics {
 		if (docType === DocumentTypes.XSPEC) {
 			// the files it refers to that aren't found
 			allDiagnostics.push(...XSpecHrefs.problems(document));
+			// with run-as="external", a function of the stylesheet tested called in an XPath expression: why it's not found
+			if (xspecExternalFnNames.length > 0) {
+				allDiagnostics.forEach((d) => {
+					const call = /^XPath: Function: '(.*)' with (\d+) arguments not found$/.exec(d.message);
+					if (call && xspecExternalFnNames.includes(`${call[1]}#${call[2]}`)) {
+						d.message = `XSpec: with run-as="external", the function '${call[1]}' of the stylesheet tested can't be called in an XPath expression - only with x:call, as the stylesheet isn't imported into the test runner`;
+					}
+				});
+			}
+			// a package can't be imported into the test runner, as XSpec imports the stylesheet tested by default
+			const stylesheetHref = xspecScope?.packageName && !xspecScope.isExternal ? XSpecHrefs.find(documentText, document.fileName).find((href) => href.element === 'description' && href.attribute === 'stylesheet') : undefined;
+			if (stylesheetHref) {
+				allDiagnostics.push(new vscode.Diagnostic(new vscode.Range(document.positionAt(stylesheetHref.start), document.positionAt(stylesheetHref.end)),
+					`XSpec: '${stylesheetHref.value}' is the package ${xspecScope!.packageName} - XSpec can only test a package with run-as="external" on x:description`, vscode.DiagnosticSeverity.Error));
+			}
 			// the problems with XSpec's elements and attributes, as XSpec's
 			allDiagnostics.forEach((d) => d.message = d.message
 				.replace(/^XSLT: instruction: (\S+) not valid in this context/, 'XSpec: element $1 is not allowed here')
@@ -4364,7 +4403,57 @@ export class XsltTokenDiagnostics {
 				parents.push(localName);
 			}
 		}
-		return { testsStylesheet: !!stylesheetPath && fs.existsSync(stylesheetPath), declared };
+		const testsStylesheet = !!stylesheetPath && fs.existsSync(stylesheetPath);
+		const helperPaths = [...documentText.matchAll(/<(?:[\w.-]+:)?helper\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)].map((match) => HrefPaths.toPath(match[2], documentPath)).filter((p): p is string => !!p);
+		const externalModules = testsStylesheet && XsltTokenDiagnostics.isRunAsExternal(root) ? XsltTokenDiagnostics.xspecExternalModules(stylesheetPath!, helperPaths) : undefined;
+		return { testsStylesheet, declared, externalModules, ...XsltTokenDiagnostics.xspecPackage(root, testsStylesheet ? stylesheetPath : undefined) };
+	}
+
+	// an XSpec file whose stylesheet is an xsl:package: its name, whether it's run externally - as it must be, as XSpec
+	// can't import a package - and the expanded names of its public functions and templates (by PackageScope's rules)
+	// as 'function Q{uri}local', when the package is found, e.g. in the workspace
+	private static xspecPackage(root: string, stylesheetPath: string | undefined): { packageName?: string, isExternal?: boolean, packagePublic?: Set<string> } {
+		const packageText = stylesheetPath ? fs.readFileSync(stylesheetPath, 'utf8') : undefined;
+		const declaration = packageText ? ImportIndex.packageDeclaration(packageText) : undefined;
+		if (!declaration) {
+			return {};
+		}
+		const usePackage: GlobalInstructionData = { type: GlobalInstructionType.UsePackage, name: declaration.name, version: declaration.version, token: { line: 0, startCharacter: 0, length: 0, value: declaration.name, tokenType: 0 }, idNumber: 0 };
+		const components = PackageScope.components([usePackage], XsltPackages.all(), PackageScope.workspaceFolder())
+			.filter((component) => component.type === GlobalInstructionType.Function || component.type === GlobalInstructionType.Template);
+		const packagePublic = components.length > 0 ? new Set(components.map((component) =>
+			`${component.type === GlobalInstructionType.Function ? 'function' : 'template'} ${ModulePrefixes.expandedName(component.name, component.prefixBindings)}`)) : undefined;
+		return { packageName: declaration.name, isExternal: XsltTokenDiagnostics.isRunAsExternal(root), packagePublic };
+	}
+
+	private static isRunAsExternal(root: string) {
+		return /\srun-as\s*=\s*(["'])\s*external\s*\1/.test(root);
+	}
+
+	// the modules of the stylesheet tested - it and those it imports or includes - not those of a helper, which are
+	// imported into the test runner
+	private static xspecExternalModules(stylesheetPath: string, helperPaths: string[]): Set<string> {
+		const tree = (start: string) => {
+			const modules = new Set<string>();
+			const visit = (file: string) => {
+				if (modules.has(file) || !fs.existsSync(file)) {
+					return;
+				}
+				modules.add(file);
+				const lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
+				lexer.analyseLight(fs.readFileSync(file, 'utf8')).filter((g) => g.type === GlobalInstructionType.Import || g.type === GlobalInstructionType.Include)
+					.forEach((g) => {
+						const reference = HrefPaths.toPath(g.name, file);
+						if (reference) {
+							visit(path.normalize(reference));
+						}
+					});
+			};
+			visit(path.normalize(start));
+			return modules;
+		};
+		const helpers = new Set(helperPaths.flatMap((helper) => [...tree(helper)]));
+		return new Set([...tree(stylesheetPath)].filter((module) => !helpers.has(module)));
 	}
 
 	// a variable reference that isn't resolved, which XSpec allows: one XSpec declares, e.g. $x:result - or for a module
@@ -4799,6 +4888,11 @@ export class XsltTokenDiagnostics {
 				case ErrorType.TemplateNameUnresolved:
 					msg = `XSLT: xsl:template with name '${tokenValue}' not found`;
 					break;
+				case ErrorType.XSpecNotPublic: {
+					const [kind, name, packageName] = tokenValue.split('\u001f');
+					msg = `XSpec: the ${kind} '${name}' isn't public in the package ${packageName} - only its public functions and templates can be called`;
+					break;
+				}
 				case ErrorType.XSpecFunctionUnresolved:
 					msg = `XSpec: function '${tokenValue}' not found in the stylesheet under test`;
 					break;

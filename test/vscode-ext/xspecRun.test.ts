@@ -273,4 +273,27 @@ suite('XSpec: running tests', function () {
 			XsltPackages.additional = [];
 		}
 	});
+
+	test('a package tested externally: run-as="external", with the package as the stylesheet tested', async () => {
+		const packagePath = path.join(dir, 'external-shapes.xsl');
+		fs.writeFileSync(packagePath, `<xsl:package name="urn:external-shapes" package-version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:s="urn:s" version="3.0">
+  <xsl:function name="s:area" visibility="public"><xsl:param name="w"/><xsl:sequence select="$w * $w"/></xsl:function>
+  <xsl:template name="s:box" visibility="public"><box/></xsl:template>
+</xsl:package>`);
+		const packageXspec = path.join(dir, 'external-shapes.xspec');
+		fs.writeFileSync(packageXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:s="urn:s" run-as="external" stylesheet="external-shapes.xsl">
+  <x:scenario label="area"><x:call function="s:area"><x:param select="3"/></x:call><x:expect label="is nine" select="9"/></x:scenario>
+  <x:scenario label="box"><x:call template="s:box"/><x:expect label="a box"><box/></x:expect></x:scenario>
+</x:description>`);
+		const xspec = XSpecTestController.instance!;
+		const uri = vscode.Uri.file(packageXspec);
+		await vscode.workspace.openTextDocument(uri);
+		const fileItem = xspec.testController.items.get(uri.toString())!;
+		const outcomes = new Map<string, string>();
+		xspec.createRun = () => recordingRun(outcomes, new Map());
+		await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		assert.strictEqual(outcomes.get('is nine'), 'passed', JSON.stringify([...outcomes]));
+		assert.strictEqual(outcomes.get('a box'), 'passed');
+	});
 });

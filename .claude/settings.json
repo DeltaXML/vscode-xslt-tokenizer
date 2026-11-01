@@ -65,7 +65,9 @@
       "Bash(grep -n \"xspec-support\" MEMORY.md)",
       "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"can't compile on its own\")",
       "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"XSpec authoring\")",
-      "Bash(grep -v \"^\\\\s*$\")"
+      "Bash(grep -v \"^\\\\s*$\")",
+      "Bash(grep -n \"For an <code>xsl:package</code>\" -A 8 authoring/xspec.xml)",
+      "Bash(grep -n \"run-as=\\\\\"external\\\\\"\" authoring/xspec.xml)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

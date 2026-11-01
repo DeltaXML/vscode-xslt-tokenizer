@@ -1717,6 +1717,7 @@ export enum ErrorType {
     AnonymousFunctionSyntax,
     TemplateNameUnresolved,
     XSpecFunctionUnresolved,
+    XSpecNotPublic,
     TemplateModeUnresolved,
     AttributeSetUnresolved,
     AccumulatorNameUnresolved,

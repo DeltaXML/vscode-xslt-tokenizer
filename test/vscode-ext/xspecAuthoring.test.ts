@@ -148,7 +148,7 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		assert.include(text, '<x:call function="f:extra"/>');
 	});
 
-	test('a test file for a package: its public functions and templates, used with x:helper, with an empty stylesheet tested', async () => {
+	test('a test file for a package: its public functions and templates, run as XSpec runs it externally', async () => {
 		const packagePath = path.join(dir, `shapes${count++}.xsl`);
 		fs.writeFileSync(packagePath, `<xsl:package name="urn:shapes" package-version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:s="urn:s" version="3.0">
   <xsl:function name="s:area" visibility="public"><xsl:param name="w"/><xsl:sequence select="$w * $w"/></xsl:function>
@@ -159,15 +159,43 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		try {
 			const editor = await XSpecScenario.createFile(vscode.Uri.file(packagePath));
 			const text = editor!.document.getText();
-			const baseName = path.basename(packagePath, '.xsl');
-			assert.include(text, `stylesheet="${baseName}-xspec-harness.xsl"`);
-			assert.include(text, '<x:helper package-name="urn:shapes" package-version="1.0"/>');
+			assert.include(text, 'run-as="external"');
+			assert.include(text, `stylesheet="${path.basename(packagePath)}"`);
+			assert.notInclude(text, 'x:helper');
 			assert.include(text, '<x:call function="s:area">');
 			assert.include(text, '<x:call template="s:box"/>');
 			assert.notInclude(text, 's:hidden');
-			assert.isTrue(fs.existsSync(path.join(dir, `${baseName}-xspec-harness.xsl`)));
 			await editor!.document.save();
 			assert.deepEqual((await moduleDiagnostics.call(XsltSymbolProvider, editor!.document, false, XSpecConfiguration.configuration)).map((d) => d.message), []);
+		} finally {
+			XsltPackages.additional = [];
+		}
+	});
+
+	test('checks for a package tested externally, and for XPath in an external test', async () => {
+		const packagePath = path.join(dir, `checked${count++}.xsl`);
+		fs.writeFileSync(packagePath, `<xsl:package name="urn:checked" package-version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:s="urn:s" version="3.0">
+  <xsl:function name="s:area" visibility="public"><xsl:param name="w"/><xsl:sequence select="$w * $w"/></xsl:function>
+  <xsl:function name="s:hidden"><xsl:sequence select="1"/></xsl:function>
+</xsl:package>`);
+		XsltPackages.additional = [{ name: 'urn:checked', version: '1.0', path: packagePath }];
+		const lint = async (runAs: string, body: string) => {
+			const xspecPath = path.join(dir, `checked${count++}.xspec`);
+			fs.writeFileSync(xspecPath, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:s="urn:s"${runAs} stylesheet="${path.basename(packagePath)}">\n${body}\n</x:description>`);
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+			return (await moduleDiagnostics.call(XsltSymbolProvider, document, false, XSpecConfiguration.configuration)).map((d) => d.message);
+		};
+		try {
+			// only public components can be called
+			assert.deepEqual(await lint(' run-as="external"', '<x:scenario label="s"><x:call function="s:area"><x:param select="1"/></x:call><x:expect label="e" select="1"/></x:scenario>'), []);
+			assert.deepEqual(await lint(' run-as="external"', '<x:scenario label="s"><x:call function="s:hidden"/><x:expect label="e" select="1"/></x:scenario>'),
+				['XSpec: the function \'s:hidden\' isn\'t public in the package urn:checked - only its public functions and templates can be called']);
+			// a package can't be imported into the test runner
+			const imported = await lint('', '<x:scenario label="s"><x:call function="s:area"><x:param select="1"/></x:call><x:expect label="e" select="1"/></x:scenario>');
+			assert.include(imported, 'XSpec: \'' + path.basename(packagePath) + '\' is the package urn:checked - XSpec can only test a package with run-as="external" on x:description');
+			// the stylesheet tested isn't imported, so its functions can't be called in XPath
+			const inXPath = await lint(' run-as="external"', '<x:scenario label="s"><x:call function="s:area"><x:param select="1"/></x:call><x:expect label="e" test="$x:result = s:area(1)"/></x:scenario>');
+			assert.deepEqual(inXPath, ['XSpec: with run-as="external", the function \'s:area\' of the stylesheet tested can\'t be called in an XPath expression - only with x:call, as the stylesheet isn\'t imported into the test runner']);
 		} finally {
 			XsltPackages.additional = [];
 		}

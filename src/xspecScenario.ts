@@ -309,8 +309,8 @@ export class XSpecScenario {
 	}
 
 	// the command: an XSpec file for the whole stylesheet or package - a pending scenario for each declaration it doesn't
-	// test yet - in the XSpec file that tests it, or a new one beside it. For a package, which XSpec can't import as the
-	// stylesheet under test, the XSpec file uses it with x:helper, and tests an empty stylesheet beside it
+	// test yet - in the XSpec file that tests it, or a new one beside it. A package is tested with run-as="external", as
+	// XSpec can't import it into the test runner
 	public static async createFile(stylesheetUri: vscode.Uri, target?: vscode.Uri): Promise<vscode.TextEditor | undefined> {
 		const stylesheet = await vscode.workspace.openTextDocument(stylesheetUri);
 		const text = stylesheet.getText();
@@ -324,19 +324,11 @@ export class XSpecScenario {
 		const used = new Map<string, string>();
 		declarations.forEach((declaration) => XSpecScenario.bindingsUsed(declaration, bindings).forEach((uri, p) => used.set(p, uri)));
 		if (!fs.existsSync(xspecUri.fsPath)) {
-			let tested = path.basename(stylesheetPath);
-			let helper = '';
-			if (packageDeclaration) {
-				tested = `${baseName}-xspec-harness.xsl`;
-				const harness = path.join(path.dirname(stylesheetPath), tested);
-				if (!fs.existsSync(harness)) {
-					fs.writeFileSync(harness, `<?xml version="1.0" encoding="UTF-8"?>\n<!-- the stylesheet tested by ${baseName}.xspec: XSpec imports the stylesheet it tests, which a package can't be, so the\n     package is used with x:helper there -->\n<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>\n`);
-				}
-				const version = packageDeclaration.version ? ` package-version="${packageDeclaration.version}"` : '';
-				helper = `\n   <x:helper package-name="${packageDeclaration.name}"${version}/>`;
-			}
+			// a package is tested as XSpec runs it externally, with fn:transform() - not imported into the test runner,
+			// which a package can't be - so only its public components can be called, as by a stylesheet using it
+			const runAs = packageDeclaration ? '\n               run-as="external"' : '';
 			const xmlns = [...used].map(([p, uri]) => `\n               xmlns:${p}="${uri}"`).join('');
-			fs.writeFileSync(xspecUri.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"${xmlns}\n               stylesheet="${tested}">${helper}\n</x:description>\n`);
+			fs.writeFileSync(xspecUri.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"${xmlns}${runAs}\n               stylesheet="${path.basename(stylesheetPath)}">\n</x:description>\n`);
 			xspecUri = vscode.Uri.file(xspecUri.fsPath);
 		}
 		const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(xspecUri));

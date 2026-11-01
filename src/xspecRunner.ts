@@ -89,6 +89,13 @@ export class XSpecRunner {
 		};
 	}
 
+	// the stylesheet an XSpec file tests - its path
+	public static stylesheetOf(xspecPath: string): string | undefined {
+		const text = fs.readFileSync(xspecPath, 'utf8');
+		const href = /<(?:[\w.-]+:)?description\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/.exec(text)?.[2];
+		return href === undefined ? undefined : href.startsWith('file:') ? vscode.Uri.parse(href).fsPath : path.resolve(path.dirname(xspecPath), href);
+	}
+
 	// the Schematron an XSpec file tests - its path, or undefined for a stylesheet's XSpec
 	public static schematron(xspecPath: string): string | undefined {
 		const text = fs.readFileSync(xspecPath, 'utf8');
@@ -137,8 +144,10 @@ export class XSpecRunner {
 	}
 
 	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
-		// the packages the runner uses - for an x:helper's package-name, and those the stylesheet under test uses
-		const libraryPaths = XsltPackages.libraryPaths(files.compiled);
+		// the packages the runner uses - for an x:helper's package-name, and those the stylesheet under test uses - and
+		// with run-as="external", which doesn't import the stylesheet, those it uses
+		const stylesheet = XSpecRunner.stylesheetOf(xspecPath);
+		const libraryPaths = [...new Set(XsltPackages.libraryPaths(files.compiled).concat(stylesheet && fs.existsSync(stylesheet) ? XsltPackages.libraryPaths(stylesheet) : []))];
 		const lib = libraryPaths.length > 0 ? ['-lib:' + libraryPaths.join(path.delimiter)] : [];
 		return XSpecRunner.saxon('Running the tests', vscode.Uri.file(xspecPath), [...lib, '-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token);
 	}
