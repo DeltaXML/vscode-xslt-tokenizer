@@ -376,6 +376,18 @@ final class BreakableLines {
         return result;
     }
 
+    // the lines where an instruction Saxon traces starts - for coverage, the lines that can be run: not, e.g., a
+    // function's xsl:param, or an xsl:note
+    List<Integer> executableLines() {
+        java.util.TreeSet<Integer> lines = new java.util.TreeSet<Integer>();
+        for (Tag tag : tags) {
+            if (tag.untracedReason == null) {
+                lines.add(tag.startLine);
+            }
+        }
+        return new ArrayList<Integer>(lines);
+    }
+
     // An instruction is shown, and its breakpoints set, at the first line of its start tag - where users expect it -
     // though Saxon reports it at the tag's end (see displayLine). A line of a multi-line XPath expression, other than
     // the tag's first, is the expression's: it's stopped at when the expression is stepped through

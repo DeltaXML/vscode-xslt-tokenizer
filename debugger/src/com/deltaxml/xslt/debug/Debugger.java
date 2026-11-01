@@ -1255,7 +1255,9 @@ final class Debugger {
             for (Map.Entry<Integer, Integer> line : file.getValue().entrySet()) {
                 lines.with(String.valueOf(line.getKey()), line.getValue());
             }
-            files.with(file.getKey(), lines);
+            // and the lines that can be run, which have no hits if they weren't
+            BreakableLines breakable = sourceLines(file.getKey());
+            files.with(file.getKey(), Json.obj().with("hits", lines).with("executable", breakable == null ? new ArrayList<Integer>() : breakable.executableLines()));
         }
         dap.event("xsltCoverage", Json.obj().with("files", files));
     }

@@ -18,6 +18,9 @@ import { XSpecSourceMap } from './xspecSourceMap';
 // XSpec's tests in the Test Explorer: an item for each XSpec file, with its scenarios and expectations - run, or
 // debugged with the XSLT debugger, by XSpecRunner's steps. One scenario is run with XSpec's force-focus, and the outcomes
 // in XSpec's result XML are matched with the items by their labels (see XSpecTests)
+// the debugger's coverage of each module, by path: the hits of each line, and the lines that can be run
+type CoverageFiles = { [path: string]: { hits: { [line: string]: number }, executable: number[] } };
+
 export class XSpecTestController {
 	public static readonly id = 'xspec';
 	// the one the extension creates - and for testing, a replacement for the test runs it creates, e.g. to record them
@@ -262,11 +265,11 @@ export class XSpecTestController {
 	// the coverage of the modules the tests ran: the stylesheet tested and those it uses - not the test runner, or
 	// XSpec's own modules. Each instruction's start tag, in a function or template, is a statement - not run, if it has
 	// no hits - and each function and template a declaration
-	private addCoverage(run: vscode.TestRun, xspecPath: string, files: XSpecFiles, hits: { [path: string]: { [line: string]: number } }) {
+	private addCoverage(run: vscode.TestRun, xspecPath: string, files: XSpecFiles, hits: CoverageFiles) {
 		const xspecHome = XSpecRunner.home(vscode.Uri.file(xspecPath));
 		const isOwn = (file: string) => XSpecSourceMap.samePath(file, files.compiled) || (!!xspecHome && path.normalize(file).startsWith(path.normalize(xspecHome))) ||
 			path.dirname(file) === path.dirname(files.compiled);
-		for (const [file, lines] of Object.entries(hits)) {
+		for (const [file, { hits: lines, executable }] of Object.entries(hits)) {
 			if (isOwn(file) || !fs.existsSync(file) || !/\.xslt?$/i.test(file)) {
 				continue;
 			}
@@ -287,8 +290,10 @@ export class XSpecTestController {
 				// a declaration is run when its start, or anything in it, is
 				const declarationHits = Math.max(hitsAt(first), ...body.map(hitsAt), 0);
 				declarations.push(new vscode.DeclarationCoverage(`${kind === 'function' ? 'function' : 'template'} ${name}`, declarationHits, range));
-				[first, ...body].forEach((line) => statements.set(line, Math.max(statements.get(line) ?? 0, hitsAt(line))));
 			}
+			// the lines that can be run, as the debugger finds them - not, e.g., a function's xsl:param, which is shown as
+			// not executable - with their hits, if any
+			executable.forEach((line) => statements.set(line, hitsAt(line)));
 			// lines arrived at that aren't start tags, e.g. those of a multi-line XPath expression
 			Object.entries(lines).forEach(([line, count]) => statements.set(Number(line), Math.max(statements.get(Number(line)) ?? 0, count)));
 			const details: vscode.FileCoverageDetail[] = [...statements].sort((a, b) => a[0] - b[0])
@@ -311,7 +316,7 @@ export class XSpecTestController {
 	// the test runner, run by the XSLT debugger - its breakpoints in the stylesheet under test, which the runner
 	// imports, are where it stops
 	// - for coverage, without debugging: the debugger counts the hits of each line, sent when the run ends
-	private debugRunner(xspecPath: string, files: XSpecFiles, label: string | undefined, onCoverage?: (hits: { [path: string]: { [line: string]: number } }) => void): Promise<{ ok: boolean, output: string }> {
+	private debugRunner(xspecPath: string, files: XSpecFiles, label: string | undefined, onCoverage?: (hits: CoverageFiles) => void): Promise<{ ok: boolean, output: string }> {
 		return new Promise((resolve) => {
 			const coverageEvents = onCoverage ? vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
 				if (event.event === 'xsltCoverage' && event.session.name === name) {

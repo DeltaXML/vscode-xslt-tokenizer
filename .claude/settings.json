@@ -70,7 +70,9 @@
       "Bash(grep -n \"run-as=\\\\\"external\\\\\"\" authoring/xspec.xml)",
       "Bash(sed -i '' 's/^- \\\\[Coverage \\(parked\\)\\\\]\\(coverage-tc-idea.md\\) — .*$/- [Coverage \\(parked\\)]\\(coverage-tc-idea.md\\) — 2026-10-29 plan; 2026-11-01 XSpec coverage proposal \\(Run with Coverage via debugger trace listener\\) in xspec-support-planned.md/' MEMORY.md)",
       "Bash(grep -c \"XSpec coverage proposal\" MEMORY.md)",
-      "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"coverage:\")"
+      "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"coverage:\")",
+      "Bash(grep -n \"^\\\\s*\\\\\\(public \\\\|static \\\\|private \\\\\\)*[A-Za-z<>\\\\[\\\\], ]* [a-zA-Z]*\\(.*\\) *{\" debugger/src/com/deltaxml/xslt/debug/BreakableLines.java)",
+      "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=.)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"
