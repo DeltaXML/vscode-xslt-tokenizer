@@ -19,7 +19,8 @@ import { XSpecSourceMap } from './xspecSourceMap';
 // debugged with the XSLT debugger, by XSpecRunner's steps. One scenario is run with XSpec's force-focus, and the outcomes
 // in XSpec's result XML are matched with the items by their labels (see XSpecTests)
 // the debugger's coverage of each module, by path: the hits of each line, and the lines that can be run
-type CoverageFiles = { [path: string]: { hits: { [line: string]: number }, executable: number[] } };
+// - each as the first and last lines of an instruction's start tag, up to a multi-line expression in it
+type CoverageFiles = { [path: string]: { hits: { [line: string]: number }, executable: [number, number][] } };
 
 export class XSpecTestController {
 	public static readonly id = 'xspec';
@@ -276,7 +277,8 @@ export class XSpecTestController {
 			const text = fs.readFileSync(file, 'utf8');
 			const lineOf = (offset: number) => text.substring(0, offset).split('\n').length;
 			const hitsAt = (line: number) => lines[String(line)] ?? 0;
-			const statements = new Map<number, number>();
+			// the hits of each statement, by its first line, and its last line
+			const statements = new Map<number, { hits: number, last: number }>();
 			const declarations: vscode.DeclarationCoverage[] = [];
 			for (const declaration of parseXml(text)?.children ?? []) {
 				const kind = localName(declaration.name);
@@ -291,13 +293,18 @@ export class XSpecTestController {
 				const declarationHits = Math.max(hitsAt(first), ...body.map(hitsAt), 0);
 				declarations.push(new vscode.DeclarationCoverage(`${kind === 'function' ? 'function' : 'template'} ${name}`, declarationHits, range));
 			}
-			// the lines that can be run, as the debugger finds them - not, e.g., a function's xsl:param, which is shown as
-			// not executable - with their hits, if any
-			executable.forEach((line) => statements.set(line, hitsAt(line)));
+			// the instructions that can be run, as the debugger finds them - not, e.g., a function's xsl:param, which is
+			// shown as not executable - with their hits, if any. All the lines of a multi-line start tag are shown with it,
+			// but not the later lines of a multi-line expression: its parts, e.g. an else branch, may not have been run
+			executable.forEach(([line, last]) => statements.set(line, { hits: hitsAt(line), last }));
 			// lines arrived at that aren't start tags, e.g. those of a multi-line XPath expression
-			Object.entries(lines).forEach(([line, count]) => statements.set(Number(line), Math.max(statements.get(Number(line)) ?? 0, count)));
+			Object.entries(lines).forEach(([line, count]) => {
+				const statement = statements.get(Number(line));
+				statements.set(Number(line), { hits: Math.max(statement?.hits ?? 0, count), last: statement?.last ?? Number(line) });
+			});
 			const details: vscode.FileCoverageDetail[] = [...statements].sort((a, b) => a[0] - b[0])
-				.map(([line, count]) => new vscode.StatementCoverage(count, new vscode.Position(line - 1, 0)));
+				.map(([line, { hits, last }]) => new vscode.StatementCoverage(hits, last === line ? new vscode.Position(line - 1, 0) :
+					new vscode.Range(line - 1, 0, last - 1, text.split('\n')[last - 1]?.length ?? 0)));
 			details.push(...declarations);
 			const uri = vscode.Uri.file(file);
 			this.coverageDetails.set(uri.toString(), details);

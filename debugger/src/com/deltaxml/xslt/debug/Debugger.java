@@ -1257,7 +1257,7 @@ final class Debugger {
             }
             // and the lines that can be run, which have no hits if they weren't
             BreakableLines breakable = sourceLines(file.getKey());
-            files.with(file.getKey(), Json.obj().with("hits", lines).with("executable", breakable == null ? new ArrayList<Integer>() : breakable.executableLines()));
+            files.with(file.getKey(), Json.obj().with("hits", lines).with("executable", breakable == null ? new ArrayList<List<Integer>>() : breakable.executableLines()));
         }
         dap.event("xsltCoverage", Json.obj().with("files", files));
     }

@@ -376,16 +376,27 @@ final class BreakableLines {
         return result;
     }
 
-    // the lines where an instruction Saxon traces starts - for coverage, the lines that can be run: not, e.g., a
-    // function's xsl:param, or an xsl:note
-    List<Integer> executableLines() {
-        java.util.TreeSet<Integer> lines = new java.util.TreeSet<Integer>();
+    // the instructions Saxon traces - for coverage, the lines that can be run: not, e.g., a function's xsl:param, or an
+    // xsl:note - each as its first and last lines: those of its start tag, but not the later lines of a multi-line
+    // expression, whose parts - e.g. an else branch - aren't traced unless stepped through, so may not have been run
+    List<List<Integer>> executableLines() {
+        java.util.TreeMap<Integer, Integer> lastLines = new java.util.TreeMap<Integer, Integer>();
         for (Tag tag : tags) {
             if (tag.untracedReason == null) {
-                lines.add(tag.startLine);
+                int last = tag.endLine;
+                for (XPathAttribute attribute : tag.xpathAttributes) {
+                    if (attribute.lastLine > attribute.line) {
+                        last = Math.min(last, attribute.line);
+                    }
+                }
+                lastLines.merge(tag.startLine, last, Math::max);
             }
         }
-        return new ArrayList<Integer>(lines);
+        List<List<Integer>> lines = new ArrayList<List<Integer>>();
+        for (java.util.Map.Entry<Integer, Integer> line : lastLines.entrySet()) {
+            lines.add(java.util.Arrays.asList(line.getKey(), line.getValue()));
+        }
+        return lines;
     }
 
     // An instruction is shown, and its breakpoints set, at the first line of its start tag - where users expect it -

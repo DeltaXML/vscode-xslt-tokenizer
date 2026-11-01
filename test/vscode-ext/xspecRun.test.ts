@@ -315,11 +315,16 @@ suite('XSpec: running tests', function () {
 			'      [. lt 9]',
 			'      ! (. * 2)"/>',
 			'  </xsl:function>',
+			'  <xsl:function name="f:tag">',
+			'    <xsl:sequence',
+			'        select="1"/>',
+			'  </xsl:function>',
 			'</xsl:stylesheet>'].join('\n'));
 		const coveredXspec = path.join(dir, 'covered.xspec');
 		fs.writeFileSync(coveredXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="covered.xsl">
   <x:scenario label="used"><x:call function="f:used"><x:param select="1"/></x:call><x:expect label="is two" select="2"/></x:scenario>
   <x:scenario label="chain"><x:call function="f:chain"><x:param select="1 to 10"/></x:call><x:expect label="filtered" select="(4, 6, 8, 10, 12, 14, 16)"/></x:scenario>
+  <x:scenario label="tag"><x:call function="f:tag"/><x:expect label="is one" select="1"/></x:scenario>
 </x:description>`);
 		const xspec = XSpecTestController.instance!;
 		const uri = vscode.Uri.file(coveredXspec);
@@ -335,19 +340,27 @@ suite('XSpec: running tests', function () {
 		assert.isDefined(coverage, coverages.map((c) => c.uri.fsPath).join(', '));
 		const details = await xspec.coverageProfile.loadDetailedCoverage!({} as vscode.TestRun, coverage!, new vscode.CancellationTokenSource().token);
 		const declarations = details.filter((d): d is vscode.DeclarationCoverage => d instanceof vscode.DeclarationCoverage).map((d) => `${d.name} ${d.executed ? 'run' : 'not run'}`);
-		assert.deepEqual(declarations, ['function f:used run', 'function f:unused not run', 'function f:chain run']);
+		assert.deepEqual(declarations, ['function f:used run', 'function f:unused not run', 'function f:chain run', 'function f:tag run']);
 		// the line of f:unused's xsl:sequence isn't run
 		const statements = details.filter((d): d is vscode.StatementCoverage => d instanceof vscode.StatementCoverage);
-		const at = (line: number) => statements.find((d) => (d.location as vscode.Position).line === line - 1)?.executed;
+		const firstLine = (d: vscode.StatementCoverage) => d.location instanceof vscode.Range ? d.location.start.line : d.location.line;
+		const at = (line: number) => statements.find((d) => firstLine(d) === line - 1)?.executed;
 		assert.isOk(at(4));
 		assert.strictEqual(at(7), 0);
 		// f:used's xsl:param can't be run, so isn't a statement: all of f:used's are run
 		assert.isUndefined(at(3));
-		const used = statements.filter((d) => { const line = (d.location as vscode.Position).line + 1; return line >= 2 && line <= 5; });
+		const used = statements.filter((d) => { const line = firstLine(d) + 1; return line >= 2 && line <= 5; });
 		assert.isNotEmpty(used);
-		assert.isTrue(used.every((d) => !!d.executed), JSON.stringify(statements.map((d) => [(d.location as vscode.Position).line + 1, d.executed])));
-		// a multi-line expression is one statement, at its instruction: the lines of f:chain's predicates aren't others
+		assert.isTrue(used.every((d) => !!d.executed), JSON.stringify(statements.map((d) => [firstLine(d) + 1, d.executed])));
+		// a multi-line expression is one statement, at its instruction: the lines of f:chain's predicates aren't others,
+		// nor shown with it, as their parts aren't traced, so may not have been run
 		assert.isOk(at(11));
 		[12, 13, 14].forEach((line) => assert.isUndefined(at(line), `line ${line}`));
+		assert.instanceOf(statements.find((d) => firstLine(d) === 10)!.location, vscode.Position);
+		// but all of a multi-line start tag is
+		const tag = statements.find((d) => firstLine(d) === 16)!;
+		assert.isOk(tag.executed);
+		assert.instanceOf(tag.location, vscode.Range);
+		assert.strictEqual((tag.location as vscode.Range).end.line, 17);
 	});
 });
