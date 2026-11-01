@@ -1,3 +1,4 @@
+import { XSpecScenario } from './xspecScenario';
 import * as vscode from 'vscode';
 import { PackageScope } from './packageScope';
 import { XsltPackages } from './xsltPackages';
@@ -541,6 +542,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				this.docType === DocumentTypes.XSPEC ? XsltTokenCompletions.getXSpecParamElementCompletions(document, position, XsltDefinitionProvider.xspecPrefixOf(document), globalInstructionData, allImportedGlobals) : undefined;
 			if (withParamElements && withParamElements.length > 0) {
 				completions = withParamElements.concat(completions ?? []);
+			}
+			// XSpec: a scenario for each declaration of the module tested that has none yet
+			const scenarioElements = this.docType === DocumentTypes.XSPEC ? XSpecScenario.scenarioCompletions(document, position) : undefined;
+			if (scenarioElements && scenarioElements.length > 0) {
+				completions = scenarioElements.concat(completions ?? []);
 			}
 			// in an xsl:override, a declaration overriding each component of the package
 			const overrides = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getOverrideCompletions(document, position) : undefined;

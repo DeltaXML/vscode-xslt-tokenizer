@@ -16,6 +16,7 @@ import { XslLexerLight } from './xslLexerLight';
 import { XSpecReferences } from './xspecReferences';
 import { parseXml } from './xspecXml';
 import { XSpecTests } from './xspecTests';
+import { HrefPaths } from './hrefPaths';
 import { XSpecSourceMap } from './xspecSourceMap';
 import { ImportIndex } from './importIndex';
 import { ModulePrefixes } from './modulePrefixes';
@@ -200,6 +201,101 @@ export class XSpecScenario {
 				declaration.mode !== undefined && has([GlobalInstructionType.ModeInstruction, GlobalInstructionType.ModeTemplate], declaration.mode));
 	}
 
+	// the declarations a test file has scenarios for: of a stylesheet, or those a package's users can call or apply
+	private static declarationsOf(text: string, modulePath: string): XSpecDeclaration[] {
+		const packageDeclaration = ImportIndex.packageDeclaration(text);
+		return packageDeclaration ? XSpecScenario.packageDeclarations(text, packageDeclaration.name, packageDeclaration.version, modulePath) : XSpecScenario.declarations(text);
+	}
+
+	// the module an XSpec file tests: the package of its x:helper, if it has one - else its stylesheet
+	public static testedModule(xspecText: string, xspecPath: string): string | undefined {
+		const helper = /<(?:[\w.-]+:)?helper\b[^>]*>/.exec(xspecText)?.[0];
+		const packageName = helper ? /\spackage-name\s*=\s*(["'])(.*?)\1/.exec(helper)?.[2] : undefined;
+		if (packageName) {
+			const version = /\spackage-version\s*=\s*(["'])(.*?)\1/.exec(helper!)?.[2];
+			const found = XsltPackages.find(XsltPackages.all(), packageName, version);
+			const packagePath = found ? HrefPaths.settingsPath(found.path, PackageScope.workspaceFolder() ?? path.dirname(xspecPath)) : undefined;
+			if (packagePath) {
+				return packagePath;
+			}
+		}
+		const root = /<(?:[\w.-]+:)?description\b[^>]*>/.exec(xspecText)?.[0];
+		const href = root ? /\sstylesheet\s*=\s*(["'])(.*?)\1/.exec(root)?.[2] : undefined;
+		return href !== undefined ? HrefPaths.toPath(href, xspecPath) : undefined;
+	}
+
+	// the declarations of the module an XSpec file tests that it has no scenario for
+	public static untested(xspecText: string, xspecPath: string): { modulePath: string, moduleText: string, declarations: XSpecDeclaration[] } | undefined {
+		const modulePath = XSpecScenario.testedModule(xspecText, xspecPath);
+		if (!modulePath || !fs.existsSync(modulePath)) {
+			return undefined;
+		}
+		const open = vscode.workspace.textDocuments.find((document) => document.uri.scheme === 'file' && XSpecSourceMap.samePath(document.uri.fsPath, modulePath));
+		const moduleText = open ? open.getText() : fs.readFileSync(modulePath, 'utf8');
+		return { modulePath, moduleText, declarations: XSpecScenario.declarationsOf(moduleText, modulePath).filter((declaration) => !XSpecScenario.isTested(xspecText, declaration)) };
+	}
+
+	// in an XSpec file, after '<' where a scenario may be - in x:description or x:scenario - a completion for each
+	// declaration of the module tested that has no scenario yet: the scenario's snippet, with the prefix x (see
+	// XsltDefinitionProvider), and the namespaces it uses added to x:description
+	public static scenarioCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameStart = /<([\w.:-]*)$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		const root = nameStart ? parseXml(text) : undefined;
+		if (!nameStart || !root || document.uri.scheme !== 'file') {
+			return undefined;
+		}
+		const prefix = root.name.includes(':') ? root.name.substring(0, root.name.indexOf(':') + 1) : '';
+		const tagStart = offset - nameStart[0].length;
+		const parent = RecordTypes.openElements(RecordTypes.blankMarkup(text), tagStart).pop();
+		if (parent?.name !== prefix + 'description' && parent?.name !== prefix + 'scenario') {
+			return undefined;
+		}
+		const untested = XSpecScenario.untested(text, document.fileName);
+		if (!untested || untested.declarations.length === 0) {
+			return [];
+		}
+		const declared = new Map([...root.attributes].filter(([name]) => name.startsWith('xmlns:')).map(([name, uri]) => [name.substring(6), uri]));
+		const moduleBindings = XslLexerLight.prefixBindingsOf(untested.moduleText);
+		const rootTagEnd = text.lastIndexOf('>', root.contentStart - 1);
+		const bindingsAt = document.positionAt(text.charAt(rootTagEnd - 1) === '/' ? rootTagEnd - 1 : rootTagEnd);
+		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		return untested.declarations.map((declaration, index) => {
+			const used = XSpecScenario.bindingsUsed(declaration, moduleBindings);
+			const onScenario = new Map([...used].filter(([p, uri]) => declared.has(p) && declared.get(p) !== uri));
+			const added = [...used].filter(([p]) => !declared.has(p));
+			const item = new vscode.CompletionItem(`x:scenario for ${declaration.kind === 'rule' ? `template rule ${declaration.name}` : declaration.name}`, vscode.CompletionItemKind.Snippet);
+			item.insertText = new vscode.SnippetString(XSpecScenario.snippet(declaration, 'x', onScenario).substring(1));
+			item.range = range;
+			item.detail = `no scenario yet - the ${declaration.kind === 'rule' ? 'template rule' : declaration.kind} in ${path.basename(untested.modulePath)}`;
+			if (added.length > 0) {
+				item.additionalTextEdits = [vscode.TextEdit.insert(bindingsAt, added.map(([p, uri]) => ` xmlns:${p}="${uri}"`).join(''))];
+			}
+			// before other element completions, in declaration order
+			item.sortText = '!' + String(index).padStart(4, '0');
+			return item;
+		});
+	}
+
+	// in the start tag of x:description: the action adding a pending scenario for each declaration not tested yet
+	public static codeActions(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] {
+		const text = document.getText();
+		const root = document.uri.scheme === 'file' ? parseXml(text) : undefined;
+		const offset = document.offsetAt(range.start);
+		if (!root || offset <= root.start || offset >= root.contentStart) {
+			return [];
+		}
+		const untested = XSpecScenario.untested(text, document.fileName);
+		if (!untested || untested.declarations.length === 0) {
+			return [];
+		}
+		const count = untested.declarations.length;
+		const action = new vscode.CodeAction(`Add pending scenarios for ${count} ${count === 1 ? 'function or template' : 'functions and templates'} with no scenario yet`, vscode.CodeActionKind.Refactor);
+		action.command = { command: XSpecScenario.fileCommand, title: action.title, arguments: [vscode.Uri.file(untested.modulePath), document.uri] };
+		return [action];
+	}
+
 	// whether an XSpec file already has a scenario for the declaration: an x:call of it, or one with its label
 	private static isTested(xspecText: string, declaration: XSpecDeclaration) {
 		const quoted = declaration.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -215,14 +311,14 @@ export class XSpecScenario {
 	// the command: an XSpec file for the whole stylesheet or package - a pending scenario for each declaration it doesn't
 	// test yet - in the XSpec file that tests it, or a new one beside it. For a package, which XSpec can't import as the
 	// stylesheet under test, the XSpec file uses it with x:helper, and tests an empty stylesheet beside it
-	public static async createFile(stylesheetUri: vscode.Uri): Promise<vscode.TextEditor | undefined> {
+	public static async createFile(stylesheetUri: vscode.Uri, target?: vscode.Uri): Promise<vscode.TextEditor | undefined> {
 		const stylesheet = await vscode.workspace.openTextDocument(stylesheetUri);
 		const text = stylesheet.getText();
 		const stylesheetPath = stylesheetUri.fsPath;
 		const baseName = path.basename(stylesheetPath, path.extname(stylesheetPath));
 		const packageDeclaration = ImportIndex.packageDeclaration(text);
-		const declarations = packageDeclaration ? XSpecScenario.packageDeclarations(text, packageDeclaration.name, packageDeclaration.version, stylesheetPath) : XSpecScenario.declarations(text);
-		const testing = await XSpecReferences.testFiles(stylesheetPath);
+		const declarations = XSpecScenario.declarationsOf(text, stylesheetPath);
+		const testing = target ? [target] : await XSpecReferences.testFiles(stylesheetPath);
 		let xspecUri = testing[0] ?? vscode.Uri.file(path.join(path.dirname(stylesheetPath), baseName + '.xspec'));
 		const bindings = XslLexerLight.prefixBindingsOf(text);
 		const used = new Map<string, string>();

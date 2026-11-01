@@ -1271,10 +1271,13 @@ export function activate(context: vscode.ExtensionContext) {
 	XSpecRunner.extensionUri = context.extensionUri;
 	new XSpecTestController(context);
 	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.command, (uri: vscode.Uri, offset: number) => XSpecScenario.create(uri, offset)));
-	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.fileCommand, (uri?: vscode.Uri) => {
+	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.fileCommand, (uri?: vscode.Uri, xspecUri?: vscode.Uri) => {
 		const stylesheetUri = uri ?? vscode.window.activeTextEditor?.document.uri;
-		return stylesheetUri ? XSpecScenario.createFile(stylesheetUri) : undefined;
+		return stylesheetUri ? XSpecScenario.createFile(stylesheetUri, xspecUri) : undefined;
 	}));
+	// in an XSpec file: pending scenarios for the declarations of the module tested that have none yet
+	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, range) => XSpecScenario.codeActions(document, range) },
+		{ providedCodeActionKinds: [vscode.CodeActionKind.Refactor] }));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecRunFile', () => vscode.commands.executeCommand('testing.runCurrentFile')));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecOpenReport', async (uri?: vscode.Uri) => {
 		const xspecPath = (uri ?? vscode.window.activeTextEditor?.document.uri)?.fsPath;

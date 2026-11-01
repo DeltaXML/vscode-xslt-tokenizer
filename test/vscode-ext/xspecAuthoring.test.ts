@@ -172,4 +172,35 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 			XsltPackages.additional = [];
 		}
 	});
+
+	test('in an XSpec file: completion and a code action for the functions and templates with no scenario yet', async () => {
+		const uri = stylesheet(`untested${count++}.xsl`);
+		const xspecPath = path.join(dir, `untested${count++}.xspec`);
+		const content = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.basename(uri.fsPath)}">
+  <x:scenario label="area"><x:call function="f:area"><x:param select="1"/><x:param select="'a'"/></x:call><x:expect label="e" select="1"/></x:scenario>
+  |
+</x:description>`;
+		const offset = content.indexOf('|');
+		fs.writeFileSync(xspecPath, content.replace('|', '<'));
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(xspecPath));
+		await vscode.window.showTextDocument(document);
+		const list = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(offset + 1));
+		const scenarios = list.items.filter((item) => (typeof item.label === 'string' ? item.label : item.label.label).includes(' for '));
+		assert.deepEqual(scenarios.map((item) => item.label), ['x:scenario for f:heading', 'x:scenario for template rule list/item[@id]']);
+		// xs, for the template's parameter type, is added to x:description
+		assert.include(scenarios[0].additionalTextEdits?.map((edit) => edit.newText).join(''), 'xmlns:xs="http://www.w3.org/2001/XMLSchema"');
+		// the code action in x:description's start tag
+		const position = document.positionAt(content.indexOf('stylesheet'));
+		const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>('vscode.executeCodeActionProvider', document.uri, new vscode.Range(position, position));
+		const action = actions.find((a) => a.title.startsWith('Add pending scenarios'));
+		assert.strictEqual(action?.title, 'Add pending scenarios for 2 functions and templates with no scenario yet');
+		// not where a scenario can't be, e.g. in an x:call
+		const inCall = content.indexOf('<x:param select="1"/>') + 1;
+		const callList = await vscode.commands.executeCommand<vscode.CompletionList>('vscode.executeCompletionItemProvider', document.uri, document.positionAt(inCall));
+		assert.isFalse(callList.items.some((item) => (typeof item.label === 'string' ? item.label : item.label.label).includes(' for ')));
+		await vscode.commands.executeCommand(action!.command!.command, ...action!.command!.arguments!);
+		const text = document.getText();
+		assert.strictEqual((text.match(/pending="to do"/g) ?? []).length, 2);
+		assert.include(text, '<x:call template="f:heading">');
+	});
 });
