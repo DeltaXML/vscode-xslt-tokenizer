@@ -385,6 +385,11 @@
 				"title": "Open Report",
 				"category": "XSpec",
 				"icon": "$(preview)"
+			},
+			{
+				"command": "xslt-xpath.createXSpecFile",
+				"title": "Create Test File",
+				"category": "XSpec"
 			}
 		],
 		"views": {
@@ -416,6 +421,11 @@
 					"submenu": "xslt-xpath.xmlSelection",
 					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/",
 					"group": "2_xml@1"
+				},
+				{
+					"command": "xslt-xpath.createXSpecFile",
+					"when": "editorLangId == xslt",
+					"group": "xspec"
 				}
 			],
 			"xslt-xpath.xmlSelection": [
@@ -591,6 +601,10 @@
 				{
 					"command": "xslt-xpath.editDebugTask",
 					"when": "editorLangId == xslt && xslt-xpath.quickRunProcessor != 'xslt'"
+				},
+				{
+					"command": "xslt-xpath.createXSpecFile",
+					"when": "editorLangId == xslt"
 				}
 			],
 			"editor/title/run": [

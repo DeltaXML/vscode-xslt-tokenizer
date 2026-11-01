@@ -11,6 +11,7 @@ import { XSpecScenario } from '../../src/xspecScenario';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSpecConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
+import { XsltPackages } from '../../src/xsltPackages';
 
 const stylesheetText = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:f="urn:f" version="3.0">
@@ -121,5 +122,54 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		assert.deepEqual(await labels(`<x:scenario label="s"><x:call function="f:area"><x:param select="2"/>\n<|\n</x:call></x:scenario>`), ['x:param label']);
 		// with the file's prefix for XSpec
 		assert.deepEqual(await labels(`<t:scenario label="s"><t:call template="f:heading"><t:param name="text" select="'a'"/>\n<|\n</t:call></t:scenario>`, 't'), ['t:param depth']);
+	});
+
+	test('a test file for a whole stylesheet: a pending scenario for each function and template, then for those added later', async () => {
+		const uri = stylesheet(`whole${count++}.xsl`);
+		const editor = await XSpecScenario.createFile(uri);
+		let text = editor!.document.getText();
+		assert.strictEqual(editor!.document.uri.fsPath, uri.fsPath.replace(/\.xsl$/, '.xspec'));
+		assert.strictEqual((text.match(/<x:scenario /g) ?? []).length, 3);
+		assert.strictEqual((text.match(/pending="to do"/g) ?? []).length, 3);
+		assert.include(text, '<x:call function="f:area">');
+		assert.include(text, '<x:call template="f:heading">');
+		assert.include(text, '<x:context mode="f:summary">');
+		await editor!.document.save();
+		assert.deepEqual((await moduleDiagnostics.call(XsltSymbolProvider, editor!.document, false, XSpecConfiguration.configuration)).map((d) => d.message), []);
+		// a function added to the stylesheet: only its scenario is added
+		const stylesheetDocument = await vscode.workspace.openTextDocument(uri);
+		const added = new vscode.WorkspaceEdit();
+		added.insert(uri, stylesheetDocument.positionAt(stylesheetText.lastIndexOf('</xsl:stylesheet>')), '<xsl:function name="f:extra"><xsl:sequence select="1"/></xsl:function>\n');
+		await vscode.workspace.applyEdit(added);
+		await stylesheetDocument.save();
+		await XSpecScenario.createFile(uri);
+		text = editor!.document.getText();
+		assert.strictEqual((text.match(/<x:scenario /g) ?? []).length, 4);
+		assert.include(text, '<x:call function="f:extra"/>');
+	});
+
+	test('a test file for a package: its public functions and templates, used with x:helper, with an empty stylesheet tested', async () => {
+		const packagePath = path.join(dir, `shapes${count++}.xsl`);
+		fs.writeFileSync(packagePath, `<xsl:package name="urn:shapes" package-version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:s="urn:s" version="3.0">
+  <xsl:function name="s:area" visibility="public"><xsl:param name="w"/><xsl:sequence select="$w * $w"/></xsl:function>
+  <xsl:function name="s:hidden"><xsl:sequence select="1"/></xsl:function>
+  <xsl:template name="s:box" visibility="public"/>
+</xsl:package>`);
+		XsltPackages.additional = [{ name: 'urn:shapes', version: '1.0', path: packagePath }];
+		try {
+			const editor = await XSpecScenario.createFile(vscode.Uri.file(packagePath));
+			const text = editor!.document.getText();
+			const baseName = path.basename(packagePath, '.xsl');
+			assert.include(text, `stylesheet="${baseName}-xspec-harness.xsl"`);
+			assert.include(text, '<x:helper package-name="urn:shapes" package-version="1.0"/>');
+			assert.include(text, '<x:call function="s:area">');
+			assert.include(text, '<x:call template="s:box"/>');
+			assert.notInclude(text, 's:hidden');
+			assert.isTrue(fs.existsSync(path.join(dir, `${baseName}-xspec-harness.xsl`)));
+			await editor!.document.save();
+			assert.deepEqual((await moduleDiagnostics.call(XsltSymbolProvider, editor!.document, false, XSpecConfiguration.configuration)).map((d) => d.message), []);
+		} finally {
+			XsltPackages.additional = [];
+		}
 	});
 });

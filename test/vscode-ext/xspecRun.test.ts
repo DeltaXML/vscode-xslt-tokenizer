@@ -9,6 +9,7 @@ import { assert } from 'chai';
 import * as vscode from 'vscode';
 import { XSpecTestController } from '../../src/xspecTestController';
 import { XSpecTests } from '../../src/xspecTests';
+import { XsltPackages } from '../../src/xsltPackages';
 
 const saxonJar = process.env.XSPEC_SAXON_JAR;
 
@@ -244,5 +245,32 @@ suite('XSpec: running tests', function () {
 		await xspec.debugProfile.runHandler(new vscode.TestRunRequest([child(child(fileItem, 'with context'), 'second')]), new vscode.CancellationTokenSource().token);
 		xspec.createRun = undefined;
 		assert.strictEqual(debugOutcomes.get('has a result'), 'passed', JSON.stringify([...debugOutcomes]));
+	});
+
+	test('a package\'s tests: used with x:helper - and passed to Saxon with -lib, as the runner uses it', async () => {
+		const packagePath = path.join(dir, 'shapes.xsl');
+		fs.writeFileSync(packagePath, `<xsl:package name="urn:shapes" package-version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:s="urn:s" version="3.0">
+  <xsl:function name="s:area" visibility="public"><xsl:param name="w"/><xsl:sequence select="$w * $w"/></xsl:function>
+</xsl:package>`);
+		fs.writeFileSync(path.join(dir, 'shapes-xspec-harness.xsl'), '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>');
+		const packageXspec = path.join(dir, 'shapes.xspec');
+		fs.writeFileSync(packageXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:s="urn:s" stylesheet="shapes-xspec-harness.xsl">
+  <x:helper package-name="urn:shapes" package-version="1.0"/>
+  <x:scenario label="area"><x:call function="s:area"><x:param select="3"/></x:call><x:expect label="is nine" select="9"/></x:scenario>
+</x:description>`);
+		XsltPackages.additional = [{ name: 'urn:shapes', version: '1.0', path: packagePath }];
+		try {
+			const xspec = XSpecTestController.instance!;
+			const uri = vscode.Uri.file(packageXspec);
+			await vscode.workspace.openTextDocument(uri);
+			const fileItem = xspec.testController.items.get(uri.toString())!;
+			const outcomes = new Map<string, string>();
+			xspec.createRun = () => recordingRun(outcomes, new Map());
+			await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			assert.strictEqual(outcomes.get('is nine'), 'passed', JSON.stringify([...outcomes]));
+		} finally {
+			XsltPackages.additional = [];
+		}
 	});
 });

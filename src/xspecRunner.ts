@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import { spawn } from 'child_process';
 import { unquotedPath } from './settingPaths';
 import { CatalogSetting } from './catalogSetting';
+import { XsltPackages } from './xsltPackages';
 
 // XSpec's steps for an XSpec file that tests a stylesheet, as XSpec's own command line (bin/xspec.sh) runs them, each a
 // Saxon transform: compile the tests to a stylesheet, the test runner - run it, for the result XML - and format the
@@ -136,7 +137,10 @@ export class XSpecRunner {
 	}
 
 	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
-		return XSpecRunner.saxon('Running the tests', vscode.Uri.file(xspecPath), ['-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token);
+		// the packages the runner uses - for an x:helper's package-name, and those the stylesheet under test uses
+		const libraryPaths = XsltPackages.libraryPaths(files.compiled);
+		const lib = libraryPaths.length > 0 ? ['-lib:' + libraryPaths.join(path.delimiter)] : [];
+		return XSpecRunner.saxon('Running the tests', vscode.Uri.file(xspecPath), [...lib, '-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token);
 	}
 
 	public static report(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {

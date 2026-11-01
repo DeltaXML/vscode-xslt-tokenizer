@@ -1166,6 +1166,13 @@ export class XslLexer {
                                 } else if (tagGlobalInstructionType === GlobalInstructionType.RootXSLT && attName === 'version') {
                                     isExpandTextAttribute = false;
                                     isGlobalVersion = true;
+                                } else if (this.docType === DocumentTypes.XSPEC && tagElementName === 'helper' && attName === 'package-name') {
+                                    // XSpec's x:helper for a package: in the test runner, an xsl:use-package - its version
+                                    // in package-version, after this
+                                    isExpandTextAttribute = false;
+                                    tagGlobalInstructionType = GlobalInstructionType.UsePackage;
+                                    contextGlobalInstructionType = GlobalInstructionType.UsePackage;
+                                    isGlobalInstructionName = true;
                                 } else if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
                                      && (this.docType === DocumentTypes.XSPEC ? attName === (tagElementName === 'import' ? 'href' : 'stylesheet') :
                                         attName === 'href' || (this.languageConfiguration.docType === DocumentTypes.DCP && this.languageConfiguration.linkElementAttrNames && attName === this.languageConfiguration?.linkElementAttrNames[1]))) {

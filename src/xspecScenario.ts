@@ -16,6 +16,12 @@ import { XslLexerLight } from './xslLexerLight';
 import { XSpecReferences } from './xspecReferences';
 import { parseXml } from './xspecXml';
 import { XSpecTests } from './xspecTests';
+import { XSpecSourceMap } from './xspecSourceMap';
+import { ImportIndex } from './importIndex';
+import { ModulePrefixes } from './modulePrefixes';
+import { XsltPackages } from './xsltPackages';
+import { PackageScope } from './packageScope';
+import { GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 
 // A new XSpec scenario for a stylesheet's function, named template or template rule - in an XSpec file that tests the
 // stylesheet, or a new one beside it, <name>.xspec - inserted as a snippet, to complete the parameters' values and the
@@ -33,6 +39,16 @@ export interface XSpecDeclaration {
 
 export class XSpecScenario {
 	public static readonly command = 'xslt-xpath.createXSpecScenario';
+	public static readonly fileCommand = 'xslt-xpath.createXSpecFile';
+
+	// the cursor is in the start tag of the stylesheet's or package's outermost element
+	public static isInRootTag(text: string, offset: number) {
+		const markup = RecordTypes.blankMarkup(text);
+		const rootStart = markup.search(/<(?![?!])/);
+		const tagEnd = rootStart > -1 ? markup.indexOf('>', rootStart) : -1;
+		return rootStart > -1 && offset > rootStart && offset <= tagEnd &&
+			RecordTypes.xsltPattern(/^<xsl:(stylesheet|transform|package)[\s>]/, text).test(text.substring(rootStart, rootStart + 40));
+	}
 
 	// the declaration whose start tag the offset is in: a top-level xsl:function, or xsl:template with a name or match
 	public static declarationAt(text: string, offset: number): XSpecDeclaration | undefined {
@@ -73,14 +89,14 @@ export class XSpecScenario {
 
 	// the scenario, as a snippet with a tab stop for each value to give - with the prefix x for XSpec, and the bindings
 	// to declare on it for the names it uses, e.g. for the function's prefix
-	public static snippet(declaration: XSpecDeclaration, prefix: string, bindings: Map<string, string>): string {
+	public static snippet(declaration: XSpecDeclaration, prefix: string, bindings: Map<string, string>, pending?: string): string {
 		const x = (name: string) => `${prefix ? prefix + ':' : ''}${name}`;
 		const escape = (value: string) => value.replace(/[$}\\]/g, '\\$&');
 		const quote = (value: string) => escape(value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'));
 		let stop = 1;
 		const xmlns = [...bindings].map(([p, uri]) => ` xmlns:${p}="${quote(uri)}"`).join('');
 		const label = declaration.kind === 'rule' ? `template rule ${declaration.name}` : declaration.name;
-		const lines = [`<${x('scenario')} label="\${${stop++}:${quote(label)}}"${xmlns}>`];
+		const lines = [`<${x('scenario')} label="\${${stop++}:${quote(label)}}"${pending ? ` pending="${quote(pending)}"` : ''}${xmlns}>`];
 		const param = (p: { name: string, as?: string }, named: boolean) =>
 			`\t\t<${x('param')}${named ? ` name="${quote(p.name)}"` : ''}${p.as ? ` as="${quote(p.as)}"` : ''} select="\${${stop++}:${escape(XSpecScenario.exampleValue(p.as))}}"/>` +
 			(named ? '' : `<!-- ${escape(p.name.startsWith('$') ? p.name : '$' + p.name)} -->`);
@@ -155,6 +171,106 @@ export class XSpecScenario {
 			fs.writeFileSync(beside.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"\n               stylesheet="${path.basename(stylesheetPath)}">\n</x:description>\n`);
 		}
 		return beside;
+	}
+
+	// the top-level functions, named templates and template rules of a stylesheet, in order
+	public static declarations(text: string): XSpecDeclaration[] {
+		const markup = RecordTypes.blankMarkup(text);
+		const declarations: XSpecDeclaration[] = [];
+		for (const match of markup.matchAll(RecordTypes.xsltPattern(/<xsl:(function|template)[\s/>]/g, markup))) {
+			const declaration = XSpecScenario.declarationAt(text, match.index! + 1);
+			if (declaration) {
+				declarations.push(declaration);
+			}
+		}
+		return declarations;
+	}
+
+	// the declarations of a package that a stylesheet using it can call or apply: its public functions and named
+	// templates, and its template rules in public modes - by PackageScope's rules
+	private static packageDeclarations(text: string, name: string, version: string, packagePath: string): XSpecDeclaration[] {
+		const usePackage: GlobalInstructionData = { type: GlobalInstructionType.UsePackage, name, version, token: { line: 0, startCharacter: 0, length: 0, value: name, tokenType: 0 }, idNumber: 0 };
+		const available = PackageScope.components([usePackage], XsltPackages.all(), PackageScope.workspaceFolder())
+			.filter((component) => !component.href || XSpecSourceMap.samePath(component.href, packagePath));
+		const bindings = XslLexerLight.prefixBindingsOf(text);
+		const expanded = (qname: string, componentBindings?: Map<string, string>) => ModulePrefixes.expandedName(qname, componentBindings ?? bindings);
+		const has = (types: GlobalInstructionType[], qname: string) => available.some((component) => types.includes(component.type) && expanded(component.name, component.prefixBindings) === expanded(qname));
+		return XSpecScenario.declarations(text).filter((declaration) => declaration.kind === 'function' ? has([GlobalInstructionType.Function], declaration.name) :
+			declaration.kind === 'template' ? has([GlobalInstructionType.Template], declaration.name) :
+				declaration.mode !== undefined && has([GlobalInstructionType.ModeInstruction, GlobalInstructionType.ModeTemplate], declaration.mode));
+	}
+
+	// whether an XSpec file already has a scenario for the declaration: an x:call of it, or one with its label
+	private static isTested(xspecText: string, declaration: XSpecDeclaration) {
+		const quoted = declaration.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		return declaration.kind === 'rule' ? new RegExp(`label\\s*=\\s*"template rule ${quoted}"`).test(xspecText) :
+			new RegExp(`\\s${declaration.kind}\\s*=\\s*["']\\s*${quoted}\\s*["']`).test(xspecText);
+	}
+
+	// a snippet's text, with each tab stop's default value
+	private static snippetText(snippet: string) {
+		return snippet.replace(/\$\{\d+:((?:\\.|[^}\\])*)\}/g, '$1').replace(/\$\{\d+\}|\$\d+/g, '').replace(/\\([$}\\])/g, '$1');
+	}
+
+	// the command: an XSpec file for the whole stylesheet or package - a pending scenario for each declaration it doesn't
+	// test yet - in the XSpec file that tests it, or a new one beside it. For a package, which XSpec can't import as the
+	// stylesheet under test, the XSpec file uses it with x:helper, and tests an empty stylesheet beside it
+	public static async createFile(stylesheetUri: vscode.Uri): Promise<vscode.TextEditor | undefined> {
+		const stylesheet = await vscode.workspace.openTextDocument(stylesheetUri);
+		const text = stylesheet.getText();
+		const stylesheetPath = stylesheetUri.fsPath;
+		const baseName = path.basename(stylesheetPath, path.extname(stylesheetPath));
+		const packageDeclaration = ImportIndex.packageDeclaration(text);
+		const declarations = packageDeclaration ? XSpecScenario.packageDeclarations(text, packageDeclaration.name, packageDeclaration.version, stylesheetPath) : XSpecScenario.declarations(text);
+		const testing = await XSpecReferences.testFiles(stylesheetPath);
+		let xspecUri = testing[0] ?? vscode.Uri.file(path.join(path.dirname(stylesheetPath), baseName + '.xspec'));
+		const bindings = XslLexerLight.prefixBindingsOf(text);
+		const used = new Map<string, string>();
+		declarations.forEach((declaration) => XSpecScenario.bindingsUsed(declaration, bindings).forEach((uri, p) => used.set(p, uri)));
+		if (!fs.existsSync(xspecUri.fsPath)) {
+			let tested = path.basename(stylesheetPath);
+			let helper = '';
+			if (packageDeclaration) {
+				tested = `${baseName}-xspec-harness.xsl`;
+				const harness = path.join(path.dirname(stylesheetPath), tested);
+				if (!fs.existsSync(harness)) {
+					fs.writeFileSync(harness, `<?xml version="1.0" encoding="UTF-8"?>\n<!-- the stylesheet tested by ${baseName}.xspec: XSpec imports the stylesheet it tests, which a package can't be, so the\n     package is used with x:helper there -->\n<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>\n`);
+				}
+				const version = packageDeclaration.version ? ` package-version="${packageDeclaration.version}"` : '';
+				helper = `\n   <x:helper package-name="${packageDeclaration.name}"${version}/>`;
+			}
+			const xmlns = [...used].map(([p, uri]) => `\n               xmlns:${p}="${uri}"`).join('');
+			fs.writeFileSync(xspecUri.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"${xmlns}\n               stylesheet="${tested}">${helper}\n</x:description>\n`);
+			xspecUri = vscode.Uri.file(xspecUri.fsPath);
+		}
+		const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(xspecUri));
+		const xspecText = editor.document.getText();
+		const untested = declarations.filter((declaration) => !XSpecScenario.isTested(xspecText, declaration));
+		if (untested.length === 0) {
+			vscode.window.showInformationMessage(`XSpec: ${path.basename(xspecUri.fsPath)} has a scenario for each ${packageDeclaration ? 'public function and template of the package' : 'function and template of the stylesheet'} already.`);
+			return editor;
+		}
+		const root = parseXml(xspecText);
+		const prefix = root?.name.includes(':') ? root.name.substring(0, root.name.indexOf(':')) : '';
+		const declared = new Map([...(root?.attributes ?? new Map<string, string>())].filter(([name]) => name.startsWith('xmlns:')).map(([name, uri]) => [name.substring(6), uri]));
+		const added = [...used].filter(([p]) => !declared.has(p));
+		const onScenario = new Map([...used].filter(([p, uri]) => declared.has(p) && declared.get(p) !== uri));
+		const step = ' '.repeat(Number(vscode.workspace.getConfiguration('editor', { languageId: 'xspec' }).get('tabSize')) || 3);
+		const scenarios = untested.map((declaration) => XSpecScenario.snippetText(XSpecScenario.snippet(declaration, prefix, onScenario, 'to do'))
+			.split('\n').map((line) => step + line.replace(/\t/g, step)).join('\n')).join('\n');
+		const note = `${step}<!-- a pending scenario for each ${packageDeclaration ? 'public function and template of the package' : 'function and template of the stylesheet'}: give it its parameters'\n${step}     values and expected result, then remove its pending attribute -->`;
+		const closing = xspecText.lastIndexOf(`</${prefix ? prefix + ':' : ''}description`);
+		await editor.edit((edit) => {
+			if (root && added.length > 0) {
+				const tagEnd = xspecText.lastIndexOf('>', root.contentStart - 1);
+				edit.insert(editor.document.positionAt(xspecText.charAt(tagEnd - 1) === '/' ? tagEnd - 1 : tagEnd), added.map(([p, uri]) => ` xmlns:${p}="${uri}"`).join(''));
+			}
+			const at = editor.document.positionAt(closing > -1 ? closing : xspecText.length);
+			const lineStart = new vscode.Position(at.line, 0);
+			const onOwnLine = /^\s*$/.test(editor.document.getText(new vscode.Range(lineStart, at)));
+			edit.insert(onOwnLine ? lineStart : at, (onOwnLine ? '' : '\n') + note + '\n' + scenarios + '\n');
+		});
+		return editor;
 	}
 
 	// the command: the scenario for the declaration at the offset of the stylesheet, inserted at the end of the XSpec file

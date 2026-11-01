@@ -1071,6 +1071,10 @@ export class PackageScope {
 			const lexer = new XslLexerLight(XSLTLightConfiguration.configuration);
 			documentUsePackages = lexer.analyseLight(documentText).filter((g) => g.type === GlobalInstructionType.UsePackage);
 			documentBindings = lexer.prefixBindings;
+			if (documentUsePackages.length === 0) {
+				// not XSLT, e.g. an XSpec file's x:helper for a package, as its lexer records it
+				documentUsePackages = documentData.filter((g) => g.type === GlobalInstructionType.UsePackage);
+			}
 		}
 		const imported = importedGlobals.filter((g) => g.type === GlobalInstructionType.UsePackage);
 		// the document's declarations in xsl:override, which the lexer for the document doesn't record

@@ -1271,6 +1271,10 @@ export function activate(context: vscode.ExtensionContext) {
 	XSpecRunner.extensionUri = context.extensionUri;
 	new XSpecTestController(context);
 	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.command, (uri: vscode.Uri, offset: number) => XSpecScenario.create(uri, offset)));
+	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.fileCommand, (uri?: vscode.Uri) => {
+		const stylesheetUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+		return stylesheetUri ? XSpecScenario.createFile(stylesheetUri) : undefined;
+	}));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecRunFile', () => vscode.commands.executeCommand('testing.runCurrentFile')));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecOpenReport', async (uri?: vscode.Uri) => {
 		const xspecPath = (uri ?? vscode.window.activeTextEditor?.document.uri)?.fsPath;
