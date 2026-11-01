@@ -2374,6 +2374,57 @@ export class XsltTokenCompletions {
 
 	public static readonly xdmTraceSnippetLabel = 'xdm:trace(…, label) - pretty-printed trace';
 
+	// XSpec: an x:param for each parameter not already passed, for an element name after '<' in an x:call - of the template it
+	// calls, by name, or of the function, in order, with its type - undefined if it's not such a position. With the prefix
+	// x, which is the XSpec file's when they're shown (see XsltDefinitionProvider)
+	public static getXSpecParamElementCompletions(document: vscode.TextDocument, position: vscode.Position, prefix: string, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameStart = /<([\w.:-]*)$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		if (!nameStart) {
+			return undefined;
+		}
+		const tagStart = offset - nameStart[0].length;
+		const markup = RecordTypes.blankMarkup(text);
+		const parent = RecordTypes.openElements(markup, tagStart).pop();
+		if (parent?.name !== `${prefix ? prefix + ':' : ''}call`) {
+			return undefined;
+		}
+		const templateName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'template')?.trim();
+		const functionName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'function')?.trim();
+		const all = globalInstructionData.concat(importedInstructionData);
+		const declaration = templateName ? all.find((data) => data.type === GlobalInstructionType.Template && data.name === templateName) :
+			// the function with the most parameters, of those with the name
+			all.filter((data) => data.type === GlobalInstructionType.Function && data.name === functionName)
+				.sort((a, b) => (b.memberNames?.length ?? 0) - (a.memberNames?.length ?? 0))[0];
+		if (!declaration?.memberNames) {
+			return undefined;
+		}
+		const passed = RecordTypes.childElements(text, markup, parent.offset, `${prefix ? prefix + ':' : ''}param`)
+			.map((childOffset) => RecordTypes.attributeOfElementAt(text, childOffset + 1, 'name')?.trim());
+		const note = XdocNotes.forGlobal(declaration, text);
+		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		const items: vscode.CompletionItem[] = [];
+		declaration.memberNames.forEach((name, index) => {
+			// a template's parameters by name - a function's in order, after those passed
+			if (templateName ? passed.includes(name) : index < passed.length) {
+				return;
+			}
+			const type = declaration.memberTypes?.[index];
+			const as = type ? ` as="${type}"` : '';
+			const item = new vscode.CompletionItem(`x:param ${name}`, vscode.CompletionItemKind.Variable);
+			item.insertText = new vscode.SnippetString(templateName ? `x:param name="${name}"${as} select="$1"/>$0` : `x:param${as} select="$1"/><!-- \\$${name} -->$0`);
+			item.range = range;
+			item.detail = type ?? 'item()*';
+			const paramText = note ? XdocNotes.paramText(note, name) : undefined;
+			item.documentation = new vscode.MarkdownString(`Parameter of the ${templateName ? 'template' : 'function'}: ${templateName ?? functionName}` + (paramText ? `\n\n${paramText}` : ''));
+			// before other element completions, in declaration order
+			item.sortText = '!' + String(index).padStart(4, '0');
+			items.push(item);
+		});
+		return items;
+	}
+
 	// an xsl:with-param for each parameter not already passed, for an element name after '<' in an xsl:call-template - the
 	// called template's parameters - or in an xsl:next-iteration - the xsl:iterate's parameters - undefined if it's not such
 	// a position

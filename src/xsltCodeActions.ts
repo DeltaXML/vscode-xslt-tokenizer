@@ -1,3 +1,4 @@
+import { XSpecScenario } from './xspecScenario';
 import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
 import { XPathSemanticTokensProvider } from './extension';
@@ -439,6 +440,14 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (wrap && wrappersFor(wrapText, wrap, isWrapVersion4).length > 0) {
 			const action = new vscode.CodeAction(XsltCodeActionKind.wrapWith, vscode.CodeActionKind.RefactorRewrite);
 			action.command = { command: 'xslt-xpath.wrapWith', title: XsltCodeActionKind.wrapWith, arguments: [document.uri, document.offsetAt(range.start), document.offsetAt(range.end)] };
+			codeActions.push(action);
+		}
+
+		// an XSpec scenario testing the function, named template or template rule at the cursor (see XSpecScenario)
+		const xspecDeclaration = document.uri.scheme === 'file' ? XSpecScenario.declarationAt(document.getText(), document.offsetAt(range.start)) : undefined;
+		if (xspecDeclaration) {
+			const action = new vscode.CodeAction(XSpecScenario.title(xspecDeclaration), vscode.CodeActionKind.Refactor);
+			action.command = { command: XSpecScenario.command, title: action.title, arguments: [document.uri, document.offsetAt(range.start)] };
 			codeActions.push(action);
 		}
 

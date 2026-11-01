@@ -44,6 +44,24 @@ export class XSpecReferences {
 		return locations;
 	}
 
+	// the XSpec files - in the workspace, or open in an editor - whose x:description is for the stylesheet
+	public static async testFiles(stylesheetPath: string): Promise<vscode.Uri[]> {
+		const uris = await vscode.workspace.findFiles('**/*.xspec', '**/node_modules/**');
+		vscode.workspace.textDocuments.filter((document) => document.languageId === 'xspec' && document.uri.scheme === 'file' && !uris.some((uri) => uri.toString() === document.uri.toString()))
+			.forEach((document) => uris.push(document.uri));
+		return uris.filter((uri) => {
+			try {
+				const open = vscode.workspace.textDocuments.find((document) => document.uri.toString() === uri.toString());
+				const text = open ? open.getText() : fs.readFileSync(uri.fsPath, 'utf8');
+				const href = /<(?:[\w.-]+:)?description\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/.exec(text)?.[2];
+				const stylesheet = href !== undefined ? HrefPaths.toPath(href, uri.fsPath) : undefined;
+				return stylesheet !== undefined && XSpecSourceMap.samePath(stylesheet, stylesheetPath);
+			} catch {
+				return false;
+			}
+		});
+	}
+
 	// whether the XSpec file's stylesheet, or a helper's, is one of the modules
 	private static testsAny(text: string, xspecPath: string, modules: string[]) {
 		const hrefs = [...text.matchAll(/<(?:[\w.-]+:)?(?:description|helper)\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)].map((match) => match[2]);

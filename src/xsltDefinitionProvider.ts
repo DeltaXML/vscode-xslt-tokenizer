@@ -537,7 +537,8 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				completions = mapEntryElements.concat(completions ?? []);
 			}
 			// an xsl:with-param for each parameter of the called template not already passed
-			const withParamElements = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getWithParamElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			const withParamElements = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getWithParamElementCompletions(document, position, globalInstructionData, allImportedGlobals) :
+				this.docType === DocumentTypes.XSPEC ? XsltTokenCompletions.getXSpecParamElementCompletions(document, position, XsltDefinitionProvider.xspecPrefixOf(document), globalInstructionData, allImportedGlobals) : undefined;
 			if (withParamElements && withParamElements.length > 0) {
 				completions = withParamElements.concat(completions ?? []);
 			}
