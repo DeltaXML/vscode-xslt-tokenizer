@@ -220,4 +220,15 @@ suite('XSpec', () => {
 		assert.include(await completions(xspec(`<x:scenario label="s"><x:context mode="|"/></x:scenario>`)), 'f:para');
 		assert.includeMembers(await completions(xspec(`<x:scenario label="s"><x:call template="f:named"><x:param name="|"/></x:call></x:scenario>`)), ['size', 'colour']);
 	});
+
+	test('go to definition: the function or template x:call calls, a parameter it passes, and the mode of x:context', async () => {
+		const where = async (body: string) => {
+			const locations = await at(xspec(body), 'vscode.executeDefinitionProvider') as (vscode.Location | vscode.LocationLink)[];
+			return locations.map((l) => 'uri' in l ? `${path.basename(l.uri.fsPath)}:${l.range.start.line + 1}` : `${path.basename(l.targetUri.fsPath)}:${l.targetRange.start.line + 1}`).join(',');
+		};
+		assert.strictEqual(await where(`<x:scenario label="s"><x:call function="f:dou|ble"><x:param select="1"/></x:call></x:scenario>`), 'sut.xsl:3');
+		assert.strictEqual(await where(`<x:scenario label="s"><x:call template="f:na|med"/></x:scenario>`), 'sut.xsl:4');
+		assert.strictEqual(await where(`<x:scenario label="s"><x:call template="f:named"><x:param name="si|ze" select="1"/></x:call></x:scenario>`), 'sut.xsl:4');
+		assert.strictEqual(await where(`<x:scenario label="s"><x:context mode="f:pa|ra"><p/></x:context></x:scenario>`), 'sut.xsl:5');
+	});
 });

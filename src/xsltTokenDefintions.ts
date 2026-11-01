@@ -109,6 +109,9 @@ export class XsltTokenDefinitions {
 		let xpathStack: XPathData[] = [];
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
+		// XSpec: the attribute of x:call whose value is a name, 'template' or 'function' (see XSpecTestController)
+		let xspecCallAttribute: string | undefined;
+		const isXSpec = document.languageId === 'xspec';
 		let tagElementName = '';
 		let startTagToken: XSLTToken | null = null;
 		let preXPathVariable = false;
@@ -341,7 +344,8 @@ export class XsltTokenDefinitions {
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDefinitions.xslNameAtt ? AttributeType.Variable : AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
-							if (attNameText === XsltTokenDefinitions.xslNameAtt) {
+							xspecCallAttribute = isXSpec && tagElementName === 'x:call' && (attNameText === 'template' || attNameText === 'function') ? attNameText : undefined;
+							if (attNameText === XsltTokenDefinitions.xslNameAtt || xspecCallAttribute) {
 								attType = AttributeType.InstructionName;
 							} else if (attNameText === XsltTokenDefinitions.xslModeAtt) {
 								attType = AttributeType.InstructionMode;
@@ -391,16 +395,25 @@ export class XsltTokenDefinitions {
 
 								if (isOnRequiredToken) {
 									let instruction: GlobalInstructionData | undefined = undefined;
-									if (tagElementName === 'xsl:call-template') {
+									if (xspecCallAttribute === 'function') {
+										// the function an XSpec scenario calls, in the stylesheet under test
+										instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Function);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
+										if (resultLocation) {
+											resultLocation.instruction = instruction;
+										}
+										resultInputToken = { token: token, type: GlobalInstructionType.Function };
+									} else if (tagElementName === 'xsl:call-template' || xspecCallAttribute === 'template') {
 										instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 										if (resultLocation) {
 											resultLocation.instruction = instruction;
 										}
 										resultInputToken = { token: token, type: GlobalInstructionType.Template };
-									} else if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
+									} else if (elementStack.length > 0 && (tagElementName === 'xsl:with-param' || (isXSpec && tagElementName === 'x:param'))) {
 										const {symbolName, symbolID} = elementStack[elementStack.length - 1];
-										if (symbolName === 'xsl:call-template') {
+										// or an XSpec x:param in an x:call of a template
+										if (symbolName === 'xsl:call-template' || (isXSpec && symbolName === 'x:call')) {
 										  const callTempDefn = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, symbolID, GlobalInstructionType.Template);
 											if (callTempDefn && callTempDefn.memberNames) {
 												const paramIndex = callTempDefn.memberNames.indexOf(variableName);
