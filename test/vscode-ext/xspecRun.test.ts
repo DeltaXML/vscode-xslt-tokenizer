@@ -168,6 +168,7 @@ suite('XSpec: running tests', function () {
 		fs.writeFileSync(path.join(dir, 'invoice.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
   <xsl:template match="order"><invoice id="{@id}"><line sku="a" qty="2"/><line sku="b" qty="1"/></invoice></xsl:template>
   <xsl:function name="f:summary" xmlns:f="urn:f"><xsl:sequence select="map { 'id': 'A1', 'lines': 2 }"/></xsl:function>
+  <xsl:template name="paras"><para>1</para><para>2</para><para>3</para></xsl:template>
 </xsl:stylesheet>`);
 		const invoiceXspec = path.join(dir, 'invoice.xspec');
 		fs.writeFileSync(invoiceXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" xmlns:xs="http://www.w3.org/2001/XMLSchema" stylesheet="invoice.xsl">
@@ -183,6 +184,14 @@ suite('XSpec: running tests', function () {
   <x:scenario label="a summary">
     <x:call function="f:summary"/>
     <x:expect label="its map" select="map { 'lines': 3, 'id': 'A1' }"/>
+  </x:scenario>
+  <x:scenario label="some paragraphs">
+    <x:call template="paras"/>
+    <x:expect label="its paragraphs">
+      <para>1</para>
+      <para>4</para>
+      <para>3</para>
+    </x:expect>
   </x:scenario>
 </x:description>`);
 		const xspec = XSpecTestController.instance!;
@@ -203,6 +212,10 @@ suite('XSpec: running tests', function () {
 		const mapDiff = messages.get('its map')![0];
 		assert.strictEqual(mapDiff.expectedOutput, 'map{\n  "lines": 3,\n  "id": "A1"\n}');
 		assert.strictEqual(mapDiff.actualOutput, 'map{\n  "lines": 2,\n  "id": "A1"\n}');
+		// elements without a wrapper: one on each line, without blank lines between them
+		const parasDiff = messages.get('its paragraphs')![0];
+		assert.strictEqual(parasDiff.expectedOutput, '<para>1</para>\n<para>4</para>\n<para>3</para>');
+		assert.strictEqual(parasDiff.actualOutput, '<para>1</para>\n<para>2</para>\n<para>3</para>');
 		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'invoice-result.html')), 'the HTML report');
 	});
 

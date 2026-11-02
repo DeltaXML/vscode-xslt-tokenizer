@@ -152,12 +152,16 @@
     <xsl:param name="node" as="node()"/>
     <xsl:variable name="options" as="map(*)" select="map { 'method': 'xml', 'indent': true(), 'omit-xml-declaration': true() }"/>
     <!-- each start tag on one line, so tags only wrapped on one side don't differ -->
-    <xsl:try>
-      <xsl:sequence select="serialize($node, map:put($options, QName('http://saxon.sf.net/', 'line-length'), 1000000))"/>
-      <xsl:catch>
-        <xsl:sequence select="serialize($node, $options)"/>
-      </xsl:catch>
-    </xsl:try>
+    <xsl:variable name="serialised" as="xs:string">
+      <xsl:try>
+        <xsl:sequence select="serialize($node, map:put($options, QName('http://saxon.sf.net/', 'line-length'), 1000000))"/>
+        <xsl:catch>
+          <xsl:sequence select="serialize($node, $options)"/>
+        </xsl:catch>
+      </xsl:try>
+    </xsl:variable>
+    <!-- without the line break indenting ends an element with, as the nodes of a sequence are joined by one -->
+    <xsl:sequence select="replace($serialised, '\n+$', '')"/>
   </xsl:function>
 
   <!-- with only the namespaces its names need -->
