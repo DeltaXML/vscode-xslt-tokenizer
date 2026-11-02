@@ -148,12 +148,13 @@ export class XSpecRunner {
 		return XSpecRunner.saxon('Checking the test runner', uri, [...XSpecRunner.syntaxExtensions(uri), '-xsl:' + files.compiled, '-nogo'], token);
 	}
 
-	// Saxon's syntax extensions - XPath 4.0 syntax, and e.g. record types in an XSLT 3.0 stylesheet - as for a task or a
-	// debug session without the allowSyntaxExtensions40 property: on, unless Saxon-HE, which fails every transform with
-	// them on. They're needed to compile the stylesheet tested, which the test runner imports - or, with
-	// run-as="external", compiles with fn:transform(), which has the same configuration
+	// Saxon's syntax extensions - XPath 4.0 syntax, and e.g. record types in an XSLT 3.0 stylesheet - by the
+	// XSLT.xspec.allowSyntaxExtensions setting, as for a task's allowSyntaxExtensions40: by default on, unless Saxon-HE,
+	// which fails every transform with them on. They're needed to compile the stylesheet tested, which the test runner
+	// imports - or, with run-as="external", compiles with fn:transform(), which has the same configuration
 	private static syntaxExtensions(uri: vscode.Uri): string[] {
-		return SaxonTaskProvider.syntaxExtensions40Value(undefined, XSpecRunner.saxonJar(uri)) === 'on' ? ['--allowSyntaxExtensions:on'] : [];
+		const setting = vscode.workspace.getConfiguration('XSLT.xspec', uri).get<string>('allowSyntaxExtensions');
+		return SaxonTaskProvider.syntaxExtensions40Value(setting, XSpecRunner.saxonJar(uri)) === 'on' ? ['--allowSyntaxExtensions:on'] : [];
 	}
 
 	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {

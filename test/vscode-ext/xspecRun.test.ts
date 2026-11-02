@@ -255,6 +255,20 @@ suite('XSpec: running tests', function () {
 			xspec.createRun = undefined;
 			assert.strictEqual(outcomes.get('is three'), 'passed', `${runAs}: ${JSON.stringify([...outcomes])} ${JSON.stringify([...messages].map(([k, m]) => [k, m.map((x) => x.message)]))}`);
 		}
+		// with the XSLT.xspec.allowSyntaxExtensions setting off, the record type is an error
+		const settings = vscode.workspace.getConfiguration('XSLT.xspec');
+		await settings.update('allowSyntaxExtensions', 'off', vscode.ConfigurationTarget.Global);
+		try {
+			const xspec = XSpecTestController.instance!;
+			const fileItem = xspec.testController.items.get(vscode.Uri.file(path.join(dir, 'points-import.xspec')).toString())!;
+			const outcomes = new Map<string, string>();
+			xspec.createRun = () => recordingRun(outcomes, new Map());
+			await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			assert.strictEqual(outcomes.get('is three'), 'errored', JSON.stringify([...outcomes]));
+		} finally {
+			await settings.update('allowSyntaxExtensions', undefined, vscode.ConfigurationTarget.Global);
+		}
 	});
 
 	test('debug: breakpoints on the XSpec file\'s x:call and x:expect stop there, with $x:result at the expectation', async () => {

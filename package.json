@@ -862,6 +862,22 @@
 					"default": true,
 					"scope": "resource",
 					"description": "In XSpec files, fade the pending scenarios and expectations - in x:pending, or with a pending attribute - which XSpec doesn't run, other than the reason they're pending."
+				},
+				"XSLT.xspec.allowSyntaxExtensions": {
+					"type": "string",
+					"enum": [
+						"auto",
+						"on",
+						"off"
+					],
+					"enumDescriptions": [
+						"On, unless the Saxon jar is Saxon-HE, which fails every transform with them on",
+						"Always on",
+						"Always off"
+					],
+					"default": "auto",
+					"scope": "resource",
+					"markdownDescription": "Run XSpec tests with Saxon's syntax extensions (`--allowSyntaxExtensions:on`), so the stylesheet tested can use XPath 4.0 syntax, or e.g. record types in an XSLT 3.0 stylesheet - as for a task's `allowSyntaxExtensions40`."
 				}
 			}
 		},

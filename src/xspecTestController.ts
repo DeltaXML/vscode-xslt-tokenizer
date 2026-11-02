@@ -351,6 +351,8 @@ export class XSpecTestController {
 			});
 			const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(xspecPath));
 			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, resultPath: files.result, xspecFile: xspecPath,
+				// Saxon's syntax extensions, as for a run (see XSpecRunner)
+				allowSyntaxExtensions40: vscode.workspace.getConfiguration('XSLT.xspec', vscode.Uri.file(xspecPath)).get<string>('allowSyntaxExtensions') ?? 'auto',
 				...(onCoverage ? { coverage: true } : {}) }, onCoverage ? { noDebug: true } : undefined).then((ok) => {
 				if (!ok) {
 					started.dispose();
