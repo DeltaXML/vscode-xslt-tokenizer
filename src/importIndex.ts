@@ -100,6 +100,12 @@ export class ImportIndex {
 
 	// a module's references, and what it declares or uses of packages
 	private index(file: string, text: string) {
+		// not XSpec's test runner, which imports the stylesheet it tests - it would be taken as that stylesheet's
+		// top-level stylesheet, and be reported as not found when it's deleted
+		if (ImportIndex.isXSpecRunner(text)) {
+			this.forget(file);
+			return;
+		}
 		this.setReferences(file, ImportIndex.moduleReferences(text, file));
 		const declaration = ImportIndex.packageDeclaration(text);
 		if (declaration) {
@@ -113,6 +119,11 @@ export class ImportIndex {
 		} else {
 			this.usedPackages.delete(file);
 		}
+	}
+
+	// a stylesheet XSpec compiled from an XSpec file: its test runner, with its x:xspec-uri variable near the start
+	public static isXSpecRunner(text: string) {
+		return /\sname="Q\{http:\/\/www\.jenitennison\.com\/xslt\/xspec\}xspec-uri"/.test(text.substring(0, 10000));
 	}
 
 	private forget(file: string) {
