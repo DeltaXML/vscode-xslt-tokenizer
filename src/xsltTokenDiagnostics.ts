@@ -3040,8 +3040,9 @@ export class XsltTokenDiagnostics {
 						} else if (token.value === 'get' && !token.error && !XsltTokenDiagnostics.isXPath40(docType)) {
 							token.error = ErrorType.NodeTestRequiresXPath40;
 							problemTokens.push(token);
-						} else if (token.value === '*' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record') {
-							// Saxon 13 has dropped extensible record types, e.g. record(*) or record(a, *)
+						} else if (token.value === '*' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record' && (prevToken?.value === '(' || prevToken?.value === ',')) {
+							// Saxon 13 has dropped extensible record types, e.g. record(*) or record(a, *) - a '*' where a field
+							// would be, not an occurrence indicator, e.g. in record(ids as my:id*)
 							token.error = ErrorType.ExtensibleRecordType;
 							problemTokens.push(token);
 						}
