@@ -387,6 +387,11 @@
 				"icon": "$(preview)"
 			},
 			{
+				"command": "xslt-xpath.xspecDeleteGeneratedFiles",
+				"title": "Delete Generated Files",
+				"category": "XSpec"
+			},
+			{
 				"command": "xslt-xpath.createXSpecFile",
 				"title": "Create Test File",
 				"category": "XSpec"
@@ -506,6 +511,11 @@
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
 					"when": "view == xslt-xpath.imports",
 					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.xspecDeleteGeneratedFiles",
+					"when": "view == testing.explorer && xslt-xpath.hasXSpecFiles",
+					"group": "xspec@1"
 				}
 			],
 			"view/item/context": [

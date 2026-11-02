@@ -87,6 +87,7 @@ export class XSpecTestController {
 			item = this.controller.createTestItem(uri.toString(), path.basename(uri.fsPath), uri);
 			item.canResolveChildren = true;
 			this.controller.items.add(item);
+			XSpecTestController.setHasFiles(true);
 		}
 		return item;
 	}
@@ -94,6 +95,17 @@ export class XSpecTestController {
 	private removeFile(uri: vscode.Uri) {
 		this.controller.items.delete(uri.toString());
 		this.itemsByFile.delete(uri.fsPath);
+		XSpecTestController.setHasFiles(this.controller.items.size > 0);
+	}
+
+	// the context key for the Test Explorer's menu items for XSpec, e.g. XSpec: Delete Generated Files - which is shown
+	// for the tests of other languages too
+	private static hasFiles: boolean | undefined;
+	private static setHasFiles(hasFiles: boolean) {
+		if (XSpecTestController.hasFiles !== hasFiles) {
+			XSpecTestController.hasFiles = hasFiles;
+			vscode.commands.executeCommand('setContext', 'xslt-xpath.hasXSpecFiles', hasFiles);
+		}
 	}
 
 	private updateDocument(document: vscode.TextDocument) {

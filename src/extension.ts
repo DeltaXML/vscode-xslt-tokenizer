@@ -12,6 +12,7 @@ import { XSpecRunner } from './xspecRunner';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecLabels } from './xspecLabels';
 import { XSpecCompat } from './xspecCompat';
+import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
 import { XSpecTestController } from './xspecTestController';
 import * as vscode from 'vscode';
@@ -1286,6 +1287,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecCompat.codeActions(document, context.diagnostics) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecRunFile', () => vscode.commands.executeCommand('testing.runCurrentFile')));
+	// the files the tests leave in the xspec folders - with the reports, or keeping them
+	context.subscriptions.push(vscode.commands.registerCommand(XSpecCleanup.command, () => XSpecCleanup.run()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecOpenReport', async (uri?: vscode.Uri) => {
 		const xspecPath = (uri ?? vscode.window.activeTextEditor?.document.uri)?.fsPath;
 		const html = xspecPath ? XSpecRunner.files(xspecPath).html : undefined;

@@ -14,6 +14,7 @@ import { LanguageConfiguration } from '../../src/xslLexer';
 import { XSpecLabels } from '../../src/xspecLabels';
 import { XSpecCompat } from '../../src/xspecCompat';
 import { XSpecTestController } from '../../src/xspecTestController';
+import { XSpecCleanup } from '../../src/xspecCleanup';
 
 const xspecNs = 'xmlns:x="http://www.jenitennison.com/xslt/xspec"';
 
@@ -288,6 +289,26 @@ suite('XSpec', () => {
 		assert.strictEqual(lines[3], '1 of them stopped for tests written for XSpec before 1.0 - the XSLT.xspec.legacyCompatibility setting runs them as that did');
 		// all run to the end
 		assert.deepEqual(XSpecTestController.summary(outcomes.slice(0, 2)).trim().split('\n'), ['XSpec: 2 files - 15 passed, 1 failed, 2 pending - 2 ran to the end']);
+	});
+
+	test('generated files: those a run names, in the xspec folder beside their XSpec file - not the XSpec files, in a folder named xspec too', () => {
+		// as in a project with its tests in an xspec folder: the runs' files are in xspec/xspec
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cleanup-'));
+		const tests = path.join(root, 'xspec');
+		fs.mkdirSync(path.join(tests, 'xspec'), { recursive: true });
+		const write = (file: string) => {
+			fs.writeFileSync(path.join(tests, file), '<a/>');
+			return path.join(tests, file);
+		};
+		write('a.xspec');
+		write('a-sch.xspec');
+		const generated = ['xspec/a-compiled.xsl', 'xspec/a-result.xml', 'xspec/a-result.html', 'xspec/a-diffs.json', 'xspec/a-sch-preprocessed.xsl'].map(write);
+		// not generated: an XSpec file, a stylesheet of the project's that's named like one, without a.xspec beside it, and
+		// a package's harness
+		const kept = [write('b-compiled.xsl'), write('xspec/c-compiled.xsl'), write('a-xspec-harness.xsl'), path.join(tests, 'a.xspec')];
+		const candidates = generated.concat(kept);
+		assert.deepEqual(XSpecCleanup.generatedFiles(candidates, false), generated);
+		assert.deepEqual(XSpecCleanup.generatedFiles(candidates, true), generated.filter((file) => !file.endsWith('-result.html')));
 	});
 
 	test('pending: faded, other than the reason - x:pending\'s label, or a pending attribute\'s value - and once, within x:pending', () => {
