@@ -164,9 +164,10 @@ suite('XSpec: running tests', function () {
 		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'doc-sch-preprocessed.xsl')), 'the Schematron compiled to XSLT');
 	});
 
-	test('a failed expectation with XML: the diff\'s values as XSpec compares them - no namespace declarations, attributes sorted, no indentation whitespace', async () => {
+	test('a failed expectation: the diff\'s values as XSpec compares them - XML without namespace declarations, attributes sorted, no indentation whitespace; a map as text', async () => {
 		fs.writeFileSync(path.join(dir, 'invoice.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
   <xsl:template match="order"><invoice id="{@id}"><line sku="a" qty="2"/><line sku="b" qty="1"/></invoice></xsl:template>
+  <xsl:function name="f:summary" xmlns:f="urn:f"><xsl:sequence select="map { 'id': 'A1', 'lines': 2 }"/></xsl:function>
 </xsl:stylesheet>`);
 		const invoiceXspec = path.join(dir, 'invoice.xspec');
 		fs.writeFileSync(invoiceXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" xmlns:xs="http://www.w3.org/2001/XMLSchema" stylesheet="invoice.xsl">
@@ -178,6 +179,10 @@ suite('XSpec: running tests', function () {
         <line qty="3" sku="b"/>
       </invoice>
     </x:expect>
+  </x:scenario>
+  <x:scenario label="a summary">
+    <x:call function="f:summary"/>
+    <x:expect label="its map" select="map { 'id': 'A1', 'lines': 3 }"/>
   </x:scenario>
 </x:description>`);
 		const xspec = XSpecTestController.instance!;
@@ -193,6 +198,10 @@ suite('XSpec: running tests', function () {
 		// only the second line differs
 		assert.strictEqual(diff.expectedOutput, '<invoice id="7">\n   <line qty="2" sku="a"/>\n   <line qty="3" sku="b"/>\n</invoice>');
 		assert.strictEqual(diff.actualOutput, '<invoice id="7">\n   <line qty="2" sku="a"/>\n   <line qty="1" sku="b"/>\n</invoice>');
+		// a map: as XSpec reports it, without the pseudo element it's in
+		const mapDiff = messages.get('its map')![0];
+		assert.strictEqual(mapDiff.expectedOutput, 'map{"id":"A1",\n "lines":3}');
+		assert.strictEqual(mapDiff.actualOutput, 'map{"id":"A1",\n "lines":2}');
 		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'invoice-result.html')), 'the HTML report');
 	});
 

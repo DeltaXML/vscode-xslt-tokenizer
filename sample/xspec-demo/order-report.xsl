@@ -31,6 +31,22 @@
     <xsl:sequence select="'£' || format-number($amount, '#,##0.00')"/>
   </xsl:function>
 
+  <!-- an order's id, number of lines and total, as a map -->
+  <xsl:function name="o:summary" as="map(xs:string, item())">
+    <xsl:param name="order" as="element(order)"/>
+    <xsl:sequence select="map {
+      'id': string($order/@id),
+      'lines': count($order/line),
+      'total': sum($order/line ! o:line-total(xs:integer(@quantity), xs:decimal(@price)))
+    }"/>
+  </xsl:function>
+
+  <!-- the products of an order's lines, as an array -->
+  <xsl:function name="o:products" as="array(xs:string)">
+    <xsl:param name="order" as="element(order)"/>
+    <xsl:sequence select="array { $order/line/@product ! string() }"/>
+  </xsl:function>
+
   <xsl:template name="o:heading">
     <xsl:param name="title" as="xs:string"/>
     <xsl:param name="level" as="xs:integer" select="1"/>

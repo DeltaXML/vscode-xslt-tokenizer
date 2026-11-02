@@ -39,7 +39,18 @@
       <xsl:apply-templates select="$content" mode="diff:normalise"/>
     </xsl:variable>
     <xsl:sequence select="if (empty($value)) then () else if (empty($nodes)) then string($value/@select)
+      else if ($nodes[1] instance of element() and namespace-uri($nodes[1]) eq 'http://www.jenitennison.com/xslt/xspec'
+        and starts-with(local-name($nodes[1]), 'pseudo-'))
+        then string-join($nodes ! diff:pseudo-item(.), ',&#10;')
       else string-join($nodes ! diff:serialise(.), '&#10;')"/>
+  </xsl:function>
+
+  <!-- an item of a sequence XSpec reports as pseudo elements, e.g. x:pseudo-map: a map, array, function or atomic value as
+    the text XSpec gives it - without its blank lines - and a node as itself -->
+  <xsl:function name="diff:pseudo-item" as="xs:string">
+    <xsl:param name="item" as="element()"/>
+    <xsl:sequence select="if ($item/*) then string-join($item/node() ! diff:serialise(.), '&#10;')
+      else replace(string($item), '\n\s*\n', '&#10;')"/>
   </xsl:function>
 
   <xsl:function name="diff:serialise" as="xs:string">
