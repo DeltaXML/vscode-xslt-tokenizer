@@ -53,6 +53,24 @@
     <xsl:element name="h{$level}">{$title}</xsl:element>
   </xsl:template>
 
+  <xsl:template name="o:repeatParasSection">
+    <xsl:param name="text" as="xs:string"/>
+    <xsl:param name="repeats" as="xs:integer" select="1"/>
+    <section>
+      <xsl:for-each select="1 to $repeats">
+        <para><xsl:value-of select="$text || ' ' || position()"/></para>
+      </xsl:for-each>
+    </section>
+  </xsl:template>
+
+  <xsl:template name="o:repeatParas">
+    <xsl:param name="text" as="xs:string"/>
+    <xsl:param name="repeats" as="xs:integer" select="1"/>
+      <xsl:for-each select="1 to $repeats">
+        <para><xsl:value-of select="$text || ' ' || position()"/></para>
+      </xsl:for-each>
+  </xsl:template>
+
   <xsl:template match="/orders">
     <html>
       <body>

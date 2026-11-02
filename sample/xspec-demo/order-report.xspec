@@ -90,6 +90,32 @@
       </x:scenario>
    </x:scenario>
 
+   <x:scenario label="o:repeatParasSection">
+      <x:call template="o:repeatParasSection">
+         <x:param name="text" as="xs:string" select="'paragraph:'"/>
+         <x:param name="repeats" as="xs:integer" select="3"/>
+      </x:call>
+      <x:expect label="the result">
+         <section>
+            <para>paragraph: 1</para>
+            <para>paragraph: 2</para>
+            <para>paragraph: 3</para>
+         </section>
+      </x:expect>
+   </x:scenario>
+
+   <x:scenario label="o:repeatParas">
+      <x:call template="o:repeatParas">
+         <x:param name="text" as="xs:string" select="'paragraph:'"/>
+         <x:param name="repeats" as="xs:integer" select="3"/>
+      </x:call>
+      <x:expect label="the result">
+         <para>paragraph: 1</para>
+         <para>paragraph: 2</para>
+         <para>paragraph: 3</para>
+      </x:expect>
+   </x:scenario>
+
    <x:scenario label="o:format-amount of a negative amount" pending="to do: decide how refunds are shown">
       <x:call function="o:format-amount">
          <x:param as="xs:decimal" select="-5"/>
