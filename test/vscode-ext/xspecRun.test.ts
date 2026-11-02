@@ -235,6 +235,28 @@ suite('XSpec: running tests', function () {
 		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'invoice-result.html')), 'the HTML report');
 	});
 
+	test('Saxon\'s syntax extensions: a stylesheet before XSLT 4.0 with a record type is run - imported, or with run-as="external"', async () => {
+		fs.writeFileSync(path.join(dir, 'points.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="urn:f" version="3.0">
+  <xsl:item-type name="f:point" as="record(x as xs:double, y as xs:double)"/>
+  <xsl:function name="f:sum" as="xs:double" visibility="public"><xsl:param name="p" as="f:point"/><xsl:sequence select="$p?x + $p?y"/></xsl:function>
+</xsl:stylesheet>`);
+		for (const runAs of ['import', 'external']) {
+			const pointsXspec = path.join(dir, `points-${runAs}.xspec`);
+			fs.writeFileSync(pointsXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="points.xsl" run-as="${runAs}">
+  <x:scenario label="sum"><x:call function="f:sum"><x:param select="map { 'x': 1e0, 'y': 2e0 }"/></x:call><x:expect label="is three" select="3e0"/></x:scenario>
+</x:description>`);
+			const xspec = XSpecTestController.instance!;
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(pointsXspec));
+			const fileItem = xspec.testController.items.get(document.uri.toString())!;
+			const outcomes = new Map<string, string>();
+			const messages = new Map<string, vscode.TestMessage[]>();
+			xspec.createRun = () => recordingRun(outcomes, messages);
+			await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			assert.strictEqual(outcomes.get('is three'), 'passed', `${runAs}: ${JSON.stringify([...outcomes])} ${JSON.stringify([...messages].map(([k, m]) => [k, m.map((x) => x.message)]))}`);
+		}
+	});
+
 	test('debug: breakpoints on the XSpec file\'s x:call and x:expect stop there, with $x:result at the expectation', async () => {
 		const linesXspec = path.join(dir, 'lines.xspec');
 		fs.writeFileSync(linesXspec, [

@@ -14,6 +14,7 @@ import { spawn } from 'child_process';
 import { unquotedPath } from './settingPaths';
 import { CatalogSetting } from './catalogSetting';
 import { XsltPackages } from './xsltPackages';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 
 // XSpec's steps for an XSpec file that tests a stylesheet, as XSpec's own command line (bin/xspec.sh) runs them, each a
 // Saxon transform: compile the tests to a stylesheet, the test runner - run it, for the result XML - and format the
@@ -143,7 +144,16 @@ export class XSpecRunner {
 
 	// whether the test runner compiles, without running it
 	public static check(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
-		return XSpecRunner.saxon('Checking the test runner', vscode.Uri.file(xspecPath), ['-xsl:' + files.compiled, '-nogo'], token);
+		const uri = vscode.Uri.file(xspecPath);
+		return XSpecRunner.saxon('Checking the test runner', uri, [...XSpecRunner.syntaxExtensions(uri), '-xsl:' + files.compiled, '-nogo'], token);
+	}
+
+	// Saxon's syntax extensions - XPath 4.0 syntax, and e.g. record types in an XSLT 3.0 stylesheet - as for a task or a
+	// debug session without the allowSyntaxExtensions40 property: on, unless Saxon-HE, which fails every transform with
+	// them on. They're needed to compile the stylesheet tested, which the test runner imports - or, with
+	// run-as="external", compiles with fn:transform(), which has the same configuration
+	private static syntaxExtensions(uri: vscode.Uri): string[] {
+		return SaxonTaskProvider.syntaxExtensions40Value(undefined, XSpecRunner.saxonJar(uri)) === 'on' ? ['--allowSyntaxExtensions:on'] : [];
 	}
 
 	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
@@ -152,7 +162,8 @@ export class XSpecRunner {
 		const stylesheet = XSpecRunner.stylesheetOf(xspecPath);
 		const libraryPaths = [...new Set(XsltPackages.libraryPaths(files.compiled).concat(stylesheet && fs.existsSync(stylesheet) ? XsltPackages.libraryPaths(stylesheet) : []))];
 		const lib = libraryPaths.length > 0 ? ['-lib:' + libraryPaths.join(path.delimiter)] : [];
-		return XSpecRunner.saxon('Running the tests', vscode.Uri.file(xspecPath), [...lib, '-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token);
+		const uri = vscode.Uri.file(xspecPath);
+		return XSpecRunner.saxon('Running the tests', uri, [...XSpecRunner.syntaxExtensions(uri), ...lib, '-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token);
 	}
 
 	// XSpec's HTML report - and, by the extension's stylesheet that imports XSpec's reporter, the expected and actual
@@ -164,8 +175,10 @@ export class XSpecRunner {
 		if (fs.existsSync(files.diffs)) {
 			fs.rmSync(files.diffs);
 		}
+		// with the syntax extensions, as maps are reported in XPath 4.0's syntax with them, e.g. {"a": 1}, and evaluated
+		// for the diffs
 		return XSpecRunner.saxon('Formatting the report', uri, withDiffs ?
-			['-s:' + files.result, '-xsl:' + withDiffs, '-o:' + files.html, 'reporter=' + vscode.Uri.file(reporter).toString(), 'diffs-uri=' + vscode.Uri.file(files.diffs).toString()] :
+			[...XSpecRunner.syntaxExtensions(uri), '-s:' + files.result, '-xsl:' + withDiffs, '-o:' + files.html, 'reporter=' + vscode.Uri.file(reporter).toString(), 'diffs-uri=' + vscode.Uri.file(files.diffs).toString()] :
 			['-s:' + files.result, '-xsl:' + reporter, '-o:' + files.html], token);
 	}
 
