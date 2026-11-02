@@ -12,6 +12,7 @@ import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSpecConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
 import { XsltPackages } from '../../src/xsltPackages';
+import { XSLTCodeActions } from '../../src/xsltCodeActions';
 
 const stylesheetText = `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:f="urn:f" version="3.0">
@@ -157,7 +158,7 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 </xsl:package>`);
 		XsltPackages.additional = [{ name: 'urn:shapes', version: '1.0', path: packagePath }];
 		try {
-			const editor = await XSpecScenario.createFile(vscode.Uri.file(packagePath));
+			const editor = await XSpecScenario.createFile(vscode.Uri.file(packagePath), undefined, 'external');
 			const text = editor!.document.getText();
 			assert.include(text, 'run-as="external"');
 			assert.include(text, `stylesheet="${path.basename(packagePath)}"`);
@@ -167,6 +168,40 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 			assert.notInclude(text, 's:hidden');
 			await editor!.document.save();
 			assert.deepEqual((await moduleDiagnostics.call(XsltSymbolProvider, editor!.document, false, XSpecConfiguration.configuration)).map((d) => d.message), []);
+		} finally {
+			XsltPackages.additional = [];
+		}
+	});
+
+	test('a test file for a package, using it with x:helper: a stylesheet that does nothing, and the package\'s public functions and templates', async () => {
+		const packagePath = path.join(dir, `parts${count++}.xsl`);
+		fs.writeFileSync(packagePath, `<xsl:package name="urn:parts" package-version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:s="urn:s" version="3.0">
+  <xsl:function name="s:area" visibility="public"><xsl:param name="w"/><xsl:sequence select="$w * $w"/></xsl:function>
+  <xsl:function name="s:hidden"><xsl:sequence select="1"/></xsl:function>
+</xsl:package>`);
+		XsltPackages.additional = [{ name: 'urn:parts', version: '2.0', path: packagePath }];
+		try {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(packagePath));
+			// a code action for each way XSpec tests a package
+			const actions = new XSLTCodeActions().provideCodeActions(document, new vscode.Range(0, 5, 0, 5), { diagnostics: [], triggerKind: vscode.CodeActionTriggerKind.Invoke, only: undefined }) ?? [];
+			assert.deepEqual(actions.map((a) => a.title).filter((t) => t.startsWith('Create XSpec test file')).map((t) => /\((.*)\)$/.exec(t)?.[1]), ['run-as="external"', 'x:helper package-name']);
+
+			const editor = await XSpecScenario.createFile(vscode.Uri.file(packagePath), undefined, 'helper');
+			const text = editor!.document.getText();
+			const harness = `${path.basename(packagePath, '.xsl')}-xspec-harness.xsl`;
+			assert.include(text, `stylesheet="${harness}"`);
+			assert.include(text, '<x:helper package-name="urn:parts" package-version="2.0"/>');
+			assert.notInclude(text, 'run-as');
+			assert.include(text, '<x:call function="s:area">');
+			assert.notInclude(text, 's:hidden');
+			assert.include(fs.readFileSync(path.join(dir, harness), 'utf8'), '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>');
+			await editor!.document.save();
+			assert.deepEqual((await moduleDiagnostics.call(XsltSymbolProvider, editor!.document, false, XSpecConfiguration.configuration)).map((d) => d.message), []);
+			// a function that isn't public, as for a stylesheet using the package
+			const privateCall = vscode.Uri.file(path.join(dir, `private${count++}.xspec`));
+			fs.writeFileSync(privateCall.fsPath, text.replace('function="s:area"', 'function="s:hidden"'));
+			const privateMessages = (await moduleDiagnostics.call(XsltSymbolProvider, await vscode.workspace.openTextDocument(privateCall), false, XSpecConfiguration.configuration)).map((d) => d.message);
+			assert.isTrue(privateMessages.some((m) => m.includes('s:hidden')), JSON.stringify(privateMessages));
 		} finally {
 			XsltPackages.additional = [];
 		}

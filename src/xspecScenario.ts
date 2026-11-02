@@ -28,6 +28,8 @@ import { GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 // stylesheet, or a new one beside it, <name>.xspec - inserted as a snippet, to complete the parameters' values and the
 // expected result: x:call with an x:param for each of the function's parameters, in order and with their types, or of
 // the template's (not tunnel parameters), or for a template rule, x:context with its mode and an element it matches
+export type XSpecPackageForm = 'external' | 'helper';
+
 export interface XSpecDeclaration {
 	kind: 'function' | 'template' | 'rule';
 	// the function's or template's name, or the template rule's match pattern
@@ -308,10 +310,18 @@ export class XSpecScenario {
 		return snippet.replace(/\$\{\d+:((?:\\.|[^}\\])*)\}/g, '$1').replace(/\$\{\d+\}|\$\d+/g, '').replace(/\\([$}\\])/g, '$1');
 	}
 
+	// the two ways XSpec tests a package - as it can't import one into the test runner: run as a separate transformation,
+	// with run-as="external", and only its public components called with x:call - or used by the test runner, with
+	// x:helper's package-name, as by a stylesheet using it, so its public functions can be called in XPath expressions
+	// too, with a stylesheet that does nothing as the stylesheet XSpec requires
+	public static readonly packageForms: { form: XSpecPackageForm, label: string, detail: string }[] = [
+		{ form: 'external', label: 'Run the package as a separate transformation (run-as="external")', detail: 'Only its public functions and templates can be called, with x:call' },
+		{ form: 'helper', label: 'Use the package in the test runner (x:helper package-name)', detail: 'As a stylesheet using it does - its public functions can be called in XPath expressions too' }
+	];
+
 	// the command: an XSpec file for the whole stylesheet or package - a pending scenario for each declaration it doesn't
-	// test yet - in the XSpec file that tests it, or a new one beside it. A package is tested with run-as="external", as
-	// XSpec can't import it into the test runner
-	public static async createFile(stylesheetUri: vscode.Uri, target?: vscode.Uri): Promise<vscode.TextEditor | undefined> {
+	// test yet - in the XSpec file that tests it, or a new one beside it. For a package, in the form chosen, or asked
+	public static async createFile(stylesheetUri: vscode.Uri, target?: vscode.Uri, packageForm?: XSpecPackageForm): Promise<vscode.TextEditor | undefined> {
 		const stylesheet = await vscode.workspace.openTextDocument(stylesheetUri);
 		const text = stylesheet.getText();
 		const stylesheetPath = stylesheetUri.fsPath;
@@ -324,11 +334,30 @@ export class XSpecScenario {
 		const used = new Map<string, string>();
 		declarations.forEach((declaration) => XSpecScenario.bindingsUsed(declaration, bindings).forEach((uri, p) => used.set(p, uri)));
 		if (!fs.existsSync(xspecUri.fsPath)) {
-			// a package is tested as XSpec runs it externally, with fn:transform() - not imported into the test runner,
-			// which a package can't be - so only its public components can be called, as by a stylesheet using it
-			const runAs = packageDeclaration ? '\n               run-as="external"' : '';
+			if (packageDeclaration && !packageForm) {
+				const picked = await vscode.window.showQuickPick(XSpecScenario.packageForms.map((f) => ({ label: f.label, detail: f.detail, form: f.form })), { placeHolder: 'How the XSpec file tests the package' });
+				if (!picked) {
+					return undefined;
+				}
+				packageForm = picked.form;
+			}
 			const xmlns = [...used].map(([p, uri]) => `\n               xmlns:${p}="${uri}"`).join('');
-			fs.writeFileSync(xspecUri.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n<x:description xmlns:x="${XSpecTests.namespace}"${xmlns}${runAs}\n               stylesheet="${path.basename(stylesheetPath)}">\n</x:description>\n`);
+			const attribute = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+			let content: string;
+			if (packageDeclaration && packageForm === 'helper') {
+				// the stylesheet XSpec requires, which does nothing - the package is used as x:helper's
+				const harness = path.join(path.dirname(stylesheetPath), `${baseName}-xspec-harness.xsl`);
+				if (!fs.existsSync(harness)) {
+					fs.writeFileSync(harness, `<?xml version="1.0" encoding="UTF-8"?>\n<!-- the stylesheet ${path.basename(xspecUri.fsPath)} names, as XSpec requires one: the package it tests is used by its x:helper -->\n<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>\n`);
+				}
+				content = `<x:description xmlns:x="${XSpecTests.namespace}"${xmlns}\n               stylesheet="${path.basename(harness)}">\n` +
+					`   <x:helper package-name="${attribute(packageDeclaration.name)}" package-version="${attribute(packageDeclaration.version)}"/>\n</x:description>\n`;
+			} else {
+				// a package run externally, with fn:transform() - only its public components can be called
+				const runAs = packageDeclaration ? '\n               run-as="external"' : '';
+				content = `<x:description xmlns:x="${XSpecTests.namespace}"${xmlns}${runAs}\n               stylesheet="${path.basename(stylesheetPath)}">\n</x:description>\n`;
+			}
+			fs.writeFileSync(xspecUri.fsPath, `<?xml version="1.0" encoding="UTF-8"?>\n${content}`);
 			xspecUri = vscode.Uri.file(xspecUri.fsPath);
 		}
 		const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(xspecUri));

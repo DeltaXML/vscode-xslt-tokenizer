@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import { XSpecRunner } from './xspecRunner';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecLabels } from './xspecLabels';
-import { XSpecScenario } from './xspecScenario';
+import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
 import { XSpecTestController } from './xspecTestController';
 import * as vscode from 'vscode';
 import { XdocNotes } from './xdocNote';
@@ -1274,9 +1274,9 @@ export function activate(context: vscode.ExtensionContext) {
 	XSpecRunner.extensionUri = context.extensionUri;
 	new XSpecTestController(context);
 	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.command, (uri: vscode.Uri, offset: number) => XSpecScenario.create(uri, offset)));
-	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.fileCommand, (uri?: vscode.Uri, xspecUri?: vscode.Uri) => {
+	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.fileCommand, (uri?: vscode.Uri, xspecUri?: vscode.Uri, packageForm?: XSpecPackageForm) => {
 		const stylesheetUri = uri ?? vscode.window.activeTextEditor?.document.uri;
-		return stylesheetUri ? XSpecScenario.createFile(stylesheetUri, xspecUri) : undefined;
+		return stylesheetUri ? XSpecScenario.createFile(stylesheetUri, xspecUri, packageForm) : undefined;
 	}));
 	// in an XSpec file: pending scenarios for the declarations of the module tested that have none yet
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, range) => XSpecScenario.codeActions(document, range) },
