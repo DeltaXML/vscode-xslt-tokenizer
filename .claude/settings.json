@@ -72,7 +72,9 @@
       "Bash(grep -c \"XSpec coverage proposal\" MEMORY.md)",
       "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"coverage:\")",
       "Bash(grep -n \"^\\\\s*\\\\\\(public \\\\|static \\\\|private \\\\\\)*[A-Za-z<>\\\\[\\\\], ]* [a-zA-Z]*\\(.*\\) *{\" debugger/src/com/deltaxml/xslt/debug/BreakableLines.java)",
-      "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=.)"
+      "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=.)",
+      "Bash(ls common *)",
+      "Bash(grep -rln \"deep-equal\" --include=*.xsl .)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

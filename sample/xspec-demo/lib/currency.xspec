@@ -25,7 +25,7 @@
       <x:call function="c:round">
          <x:param as="xs:decimal" select="2.675"/>
       </x:call>
-      <x:expect label="rounds half to even, to 2 decimal places" select="2.68"/>
+      <x:expect label="rounds half to even, to 2 decimal places" select="2.69"/>
    </x:scenario>
 
 </x:description>

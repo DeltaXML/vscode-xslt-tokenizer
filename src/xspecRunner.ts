@@ -26,6 +26,8 @@ export interface XSpecFiles {
 	compiled: string;
 	result: string;
 	html: string;
+	// for VS Code's diff of each failed expectation: its expected and actual values, as XSpec compares them
+	diffs: string;
 }
 
 export interface XSpecStepOutcome {
@@ -85,7 +87,8 @@ export class XSpecRunner {
 		const name = path.basename(xspecPath, path.extname(xspecPath)) + suffix;
 		return {
 			schematronXsl: path.join(folder, `${name}-sch-preprocessed.xsl`), schematronXspec: path.join(folder, `${name}-sch-preprocessed.xspec`),
-			compiled: path.join(folder, `${name}-compiled.xsl`), result: path.join(folder, `${name}-result.xml`), html: path.join(folder, `${name}-result.html`)
+			compiled: path.join(folder, `${name}-compiled.xsl`), result: path.join(folder, `${name}-result.xml`), html: path.join(folder, `${name}-result.html`),
+			diffs: path.join(folder, `${name}-diffs.json`)
 		};
 	}
 
@@ -152,9 +155,18 @@ export class XSpecRunner {
 		return XSpecRunner.saxon('Running the tests', vscode.Uri.file(xspecPath), [...lib, '-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token);
 	}
 
+	// XSpec's HTML report - and, by the extension's stylesheet that imports XSpec's reporter, the expected and actual
+	// values of the failed expectations, as XSpec compares them, for VS Code's diffs
 	public static report(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
 		const uri = vscode.Uri.file(xspecPath);
-		return XSpecRunner.saxon('Formatting the report', uri, ['-s:' + files.result, '-xsl:' + path.join(XSpecRunner.home(uri)!, 'src', 'reporter', 'format-xspec-report.xsl'), '-o:' + files.html], token);
+		const reporter = path.join(XSpecRunner.home(uri)!, 'src', 'reporter', 'format-xspec-report.xsl');
+		const withDiffs = XSpecRunner.extensionUri ? path.join(XSpecRunner.extensionUri.fsPath, 'xslt-resources', 'xspec-diff', 'xspec-diff.xsl') : undefined;
+		if (fs.existsSync(files.diffs)) {
+			fs.rmSync(files.diffs);
+		}
+		return XSpecRunner.saxon('Formatting the report', uri, withDiffs ?
+			['-s:' + files.result, '-xsl:' + withDiffs, '-o:' + files.html, 'reporter=' + vscode.Uri.file(reporter).toString(), 'diffs-uri=' + vscode.Uri.file(files.diffs).toString()] :
+			['-s:' + files.result, '-xsl:' + reporter, '-o:' + files.html], token);
 	}
 
 	private static saxon(step: string, uri: vscode.Uri, saxonArgs: string[], token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {

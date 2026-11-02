@@ -81,11 +81,12 @@ suite('XSpec: running tests', function () {
 		assert.isTrue(tree[2].pending);
 	});
 
-	test('run a file: each expectation and scenario passed, failed or pending - with the expected and actual results', async () => {
+	test('run a file: each expectation passed, failed or pending - with the expected and actual results', async () => {
 		const { outcomes, messages } = await runItems((file) => [file]);
 		assert.strictEqual(outcomes.get('is four'), 'passed');
 		assert.strictEqual(outcomes.get('is five'), 'failed');
-		assert.strictEqual(outcomes.get('three'), 'failed');
+		// only the expectations are tests, as XSpec counts them: a scenario's state comes from those in it
+		assert.isUndefined(outcomes.get('three'));
 		assert.strictEqual(outcomes.get('becomes q'), 'passed');
 		assert.strictEqual(outcomes.get('is two'), 'skipped');
 		const diff = messages.get('is five')![0];
@@ -99,7 +100,7 @@ suite('XSpec: running tests', function () {
 		const { outcomes } = await runItems((file) => [child(child(file, 'doubling'), 'two')]);
 		assert.strictEqual(outcomes.get('is four'), 'passed');
 		// the others' outcomes aren't changed, e.g. to skipped, as XSpec reports them pending
-		assert.deepEqual([...outcomes.keys()].sort(), ['is four', 'two'], JSON.stringify([...outcomes]));
+		assert.deepEqual([...outcomes.keys()].sort(), ['is four'], JSON.stringify([...outcomes]));
 	});
 
 	test('debug a scenario: the test runner is run by the XSLT debugger, and the outcomes are shown', async () => {
@@ -156,10 +157,43 @@ suite('XSpec: running tests', function () {
 		xspec.createRun = () => recordingRun(outcomes, new Map());
 		await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
 		xspec.createRun = undefined;
-		assert.strictEqual(outcomes.get('titled'), 'passed', JSON.stringify([...outcomes]));
-		assert.strictEqual(outcomes.get('valid'), 'passed');
-		assert.strictEqual(outcomes.get('untitled'), 'failed');
+		// the expectations, by label: titled's 'not assert has-title' passed, then untitled's failed
+		assert.strictEqual(outcomes.get('valid'), 'passed', JSON.stringify([...outcomes]));
+		assert.strictEqual(outcomes.get('not assert has-title'), 'failed');
+		assert.isUndefined(outcomes.get('untitled'));
 		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'doc-sch-preprocessed.xsl')), 'the Schematron compiled to XSLT');
+	});
+
+	test('a failed expectation with XML: the diff\'s values as XSpec compares them - no namespace declarations, attributes sorted, no indentation whitespace', async () => {
+		fs.writeFileSync(path.join(dir, 'invoice.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:template match="order"><invoice id="{@id}"><line sku="a" qty="2"/><line sku="b" qty="1"/></invoice></xsl:template>
+</xsl:stylesheet>`);
+		const invoiceXspec = path.join(dir, 'invoice.xspec');
+		fs.writeFileSync(invoiceXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" xmlns:xs="http://www.w3.org/2001/XMLSchema" stylesheet="invoice.xsl">
+  <x:scenario label="an order">
+    <x:context><order id="7"/></x:context>
+    <x:expect label="its invoice">
+      <invoice id="7">
+        <line qty="2" sku="a"/>
+        <line qty="3" sku="b"/>
+      </invoice>
+    </x:expect>
+  </x:scenario>
+</x:description>`);
+		const xspec = XSpecTestController.instance!;
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(invoiceXspec));
+		const fileItem = xspec.testController.items.get(document.uri.toString())!;
+		const outcomes = new Map<string, string>();
+		const messages = new Map<string, vscode.TestMessage[]>();
+		xspec.createRun = () => recordingRun(outcomes, messages);
+		await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		assert.strictEqual(outcomes.get('its invoice'), 'failed', JSON.stringify([...outcomes]));
+		const diff = messages.get('its invoice')![0];
+		// only the second line differs
+		assert.strictEqual(diff.expectedOutput, '<invoice id="7">\n   <line qty="2" sku="a"/>\n   <line qty="3" sku="b"/>\n</invoice>');
+		assert.strictEqual(diff.actualOutput, '<invoice id="7">\n   <line qty="2" sku="a"/>\n   <line qty="1" sku="b"/>\n</invoice>');
+		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'invoice-result.html')), 'the HTML report');
 	});
 
 	test('debug: breakpoints on the XSpec file\'s x:call and x:expect stop there, with $x:result at the expectation', async () => {
@@ -364,3 +398,4 @@ suite('XSpec: running tests', function () {
 		assert.strictEqual((tag.location as vscode.Range).end.line, 17);
 	});
 });
+

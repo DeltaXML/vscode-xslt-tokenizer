@@ -7,6 +7,7 @@
  *  Contributors:
  *  DeltaXML Ltd.
  */
+import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import { XmlElement, parseXml, localName, descendants } from './xspecXml';
 
@@ -234,5 +235,24 @@ export class XSpecTests {
 		}
 		const indent = /^[ \t]*/.exec(xml)?.[0] ?? '';
 		return xml.split('\n').map((line) => line.startsWith(indent) ? line.substring(indent.length) : line.trimStart()).join('\n');
+	}
+
+	// the expected and actual values of the failed expectations as XSpec compares them, from the diffs file the report
+	// step writes (see xslt-resources/xspec-diff), in place of those in the result XML - as serialised there, they may
+	// differ in what XSpec ignores: namespace declarations, the order of attributes and whitespace-only text
+	public static useDiffs(results: XSpecResult[], diffsPath: string) {
+		let diffs: { [id: string]: { expected?: string, actual?: string } };
+		try {
+			diffs = JSON.parse(fs.readFileSync(diffsPath, 'utf8'));
+		} catch {
+			return;
+		}
+		for (const result of results) {
+			const diff = result.kind === 'expect' && result.status === 'failed' ? diffs[result.id] : undefined;
+			if (diff) {
+				result.expected = diff.expected?.trimEnd() ?? result.expected;
+				result.actual = diff.actual?.trimEnd() ?? result.actual;
+			}
+		}
 	}
 }

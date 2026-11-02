@@ -189,7 +189,10 @@ export class XSpecTestController {
 
 	private async runFile(run: vscode.TestRun, fileItem: vscode.TestItem, scenario: vscode.TestItem | undefined, token: vscode.CancellationToken, debug: boolean, coverage = false) {
 		const xspecPath = fileItem.uri!.fsPath;
-		const items = this.items(scenario ?? fileItem);
+		// only the expectations are tests, as XSpec counts them: a scenario's state comes from those in it, so isn't
+		// counted too - unless the run's of one without any
+		const tests = this.items(scenario ?? fileItem).filter((item) => this.kinds.get(item) === 'expect');
+		const items = tests.length > 0 ? tests : [scenario ?? fileItem];
 		items.forEach((item) => run.started(item));
 		const errored = (message: string) => {
 			items.forEach((item) => run.errored(item, new vscode.TestMessage(message)));
@@ -256,9 +259,10 @@ export class XSpecTestController {
 			return;
 		}
 		const results = XSpecTests.parseResults(fs.readFileSync(files.result, 'utf8'));
+		const report = await XSpecRunner.report(xspecPath, files, token);
+		XSpecTests.useDiffs(results, files.diffs);
 		// for one scenario: only its outcomes - the others are pending, as XSpec's force-focus makes them, but keep theirs
 		this.applyResults(run, fileItem, results, focusedId ? scenario : undefined);
-		const report = await XSpecRunner.report(xspecPath, files, token);
 		run.appendOutput(`XSpec: ${results.filter((r) => r.kind === 'expect' && r.status === 'passed').length} passed, ${results.filter((r) => r.kind === 'expect' && r.status === 'failed').length} failed, ${results.filter((r) => r.kind === 'expect' && r.status === 'pending').length} pending\r\n` +
 			(report.ok ? `Report: ${files.html}\r\n` : ''));
 	}
@@ -368,15 +372,14 @@ export class XSpecTestController {
 			seen.set(baseKey, n);
 			const key = n === 1 ? baseKey : `${baseKey}\u001f#${n}`;
 			const item = this.itemFor(file, key, result);
-			if (!item || (within && !this.isWithin(item, within))) {
+			// a scenario's state is that of the expectations in it
+			if (!item || (within && !this.isWithin(item, within)) || result.kind === 'scenario') {
 				continue;
 			}
 			if (result.status === 'passed') {
 				run.passed(item);
 			} else if (result.status === 'pending') {
 				run.skipped(item);
-			} else if (result.kind === 'scenario') {
-				run.failed(item, new vscode.TestMessage('A test in the scenario failed'));
 			} else {
 				const message = result.expected !== undefined && result.actual !== undefined ?
 					vscode.TestMessage.diff(`Failed: ${result.labelPath[result.labelPath.length - 1]}`, result.expected, result.actual) :
