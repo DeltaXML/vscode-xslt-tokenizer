@@ -266,4 +266,61 @@ suite('XSpec authoring: a scenario for a function or template', () => {
 		assert.strictEqual((text.match(/pending="to do"/g) ?? []).length, 2);
 		assert.include(text, '<x:call template="f:heading">');
 	});
+
+	test('an XSpec file with no outermost element: x:description after \'<\', for each stylesheet beside it, or above an xspec folder - with its name first', async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xspec-root-'));
+		fs.mkdirSync(path.join(root, 'xspec'));
+		fs.writeFileSync(path.join(root, 'order.xsl'), '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:o="urn:o" version="3.0"><xsl:function name="o:total"><xsl:param name="n"/><xsl:sequence select="$n"/></xsl:function></xsl:stylesheet>');
+		fs.writeFileSync(path.join(root, 'shapes.xsl'), '<xsl:package name="urn:shapes" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>');
+		const completions = async (file: string, content: string) => {
+			fs.writeFileSync(path.join(root, file), content);
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(root, file)));
+			return XSpecScenario.rootCompletions(document, document.positionAt(content.length));
+		};
+		const labels = (items: vscode.CompletionItem[]) => items.map((c) => c.label);
+		const body = (item: vscode.CompletionItem) => (item.insertText as vscode.SnippetString).value;
+		// for each stylesheet beside it - the one with its name first, preselected - then empty
+		const beside = (await completions('order.xspec', '<'))!;
+		assert.deepEqual(labels(beside), ['x:description with pending scenarios for order.xsl', 'x:description with pending scenarios for shapes.xsl',
+			'x:description for a stylesheet', 'x:description for a Schematron']);
+		assert.isTrue(beside[0].preselect);
+		assert.isFalse(beside[1].preselect);
+		assert.include(body(beside[0]), 'x:description xmlns:x="http://www.jenitennison.com/xslt/xspec"');
+		assert.include(body(beside[0]), 'xmlns:xs="http://www.w3.org/2001/XMLSchema"');
+		assert.include(body(beside[0]), 'stylesheet="order.xsl"');
+		assert.include(body(beside[0]), '</x:description>');
+		// a package: run externally
+		assert.include(body(beside[1]), 'run-as="external"');
+		assert.notInclude(body(beside[0]), 'run-as');
+		// empty: a choice of the stylesheets
+		assert.include(body(beside[2]), 'stylesheet="${1|order.xsl,shapes.xsl|}"');
+		// in an xspec folder: those in the folder above
+		const inFolder = (await completions('xspec/order.xspec', '<?xml version="1.0"?>\n<x:d'))!;
+		assert.deepEqual(labels(inFolder).slice(0, 2), ['x:description with pending scenarios for ../order.xsl', 'x:description with pending scenarios for ../shapes.xsl']);
+		// none with its name: the others, none preselected
+		const other = (await completions('other.xspec', '<'))!;
+		assert.deepEqual(labels(other).slice(0, 2), ['x:description with pending scenarios for order.xsl', 'x:description with pending scenarios for shapes.xsl']);
+		assert.isFalse(other.some((c) => c.preselect));
+		// no stylesheet: a placeholder
+		fs.mkdirSync(path.join(root, 'empty'));
+		const none = (await completions('empty/none.xspec', '<'))!;
+		assert.deepEqual(labels(none), ['x:description for a stylesheet', 'x:description for a Schematron']);
+		assert.include(body(none[0]), 'stylesheet="${1:stylesheet.xsl}"');
+		// not once there's an outermost element
+		assert.isUndefined(await completions('started.xspec', '<x:description stylesheet="order.xsl">\n<'));
+
+		// with pending scenarios: x:description, then a scenario for each function and template, as the code action adds
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(root, 'order.xspec')));
+		const editor = await vscode.window.showTextDocument(document);
+		const first = beside[0];
+		await editor.insertSnippet(first.insertText as vscode.SnippetString, first.range as vscode.Range);
+		await vscode.commands.executeCommand(first.command!.command, ...first.command!.arguments!);
+		const text = editor.document.getText();
+		assert.match(text, /^<x:description xmlns:x="http:\/\/www\.jenitennison\.com\/xslt\/xspec"/);
+		assert.include(text, 'stylesheet="order.xsl"');
+		assert.include(text, 'xmlns:o="urn:o"');
+		assert.include(text, '<x:call function="o:total">');
+		assert.include(text, 'pending="to do"');
+		assert.match(text, /<\/x:description>\s*$/);
+	});
 });

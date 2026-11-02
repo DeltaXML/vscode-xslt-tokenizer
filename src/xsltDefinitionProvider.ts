@@ -317,6 +317,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
+		// an XSpec file with no outermost element yet: x:description
+		const xspecRoot = this.docType === DocumentTypes.XSPEC ? XSpecScenario.rootCompletions(document, position) : undefined;
+		if (xspecRoot) {
+			return xspecRoot;
+		}
 		let result = await this.completionItems(document, position, token, context);
 		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix - or in an XSpec file, the items
 		// with its prefix for XSpec, e.g. t (see XsltTokenDiagnostics.xsltElementName)

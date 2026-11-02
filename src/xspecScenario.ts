@@ -390,6 +390,81 @@ export class XSpecScenario {
 		return editor;
 	}
 
+	// in an XSpec file with no outermost element yet, after '<': x:description, with the XSpec and XML Schema namespaces,
+	// for a stylesheet - and a package, run as XSpec runs it, externally - or a Schematron: those beside it or, for one in
+	// an xspec folder, in the folder above, the one with the XSpec file's name first - for each stylesheet, with a pending
+	// scenario for each of its functions and templates
+	public static rootCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const before = /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>]*>)*<([\w.:-]*)$/.exec(text.substring(0, offset));
+		if (!before || text.substring(offset).trim() !== '') {
+			return undefined;
+		}
+		const range = new vscode.Range(document.positionAt(offset - before[1].length), position);
+		const xspecPath = document.uri.scheme === 'file' ? document.fileName : undefined;
+		// the stylesheets - or Schematrons - beside the XSpec file and, for one in an xspec folder, in the folder above: the
+		// one with its name first, then the others by name - not those a test run makes, or a package test's harness
+		const candidates = (extensions: string[]) => {
+			if (!xspecPath) {
+				return [];
+			}
+			const name = path.basename(xspecPath, path.extname(xspecPath));
+			const folders = [path.dirname(xspecPath)].concat(path.basename(path.dirname(xspecPath)) === 'xspec' ? [path.dirname(path.dirname(xspecPath))] : []);
+			const found: { path: string, href: string, isNamed: boolean }[] = [];
+			for (const folder of folders) {
+				let files: string[] = [];
+				try {
+					files = fs.readdirSync(folder);
+				} catch {
+					continue;
+				}
+				for (const file of files.filter((f) => extensions.includes(path.extname(f)) && !/-(compiled|sch-preprocessed|xspec-harness)\.xslt?$/.test(f)).sort()) {
+					const filePath = path.join(folder, file);
+					found.push({ path: filePath, href: path.relative(path.dirname(xspecPath), filePath).split(path.sep).join('/'), isNamed: path.basename(file, path.extname(file)) === name });
+				}
+			}
+			return found.filter((f) => f.isNamed).concat(found.filter((f) => !f.isNamed)).slice(0, 10);
+		};
+		const quote = (value: string) => value.replace(/[$}\\]/g, '\\$&').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+		const indent = ' '.repeat('<x:description '.length);
+		// value: the attribute's snippet text, e.g. a tab stop with a default, or a choice
+		const item = (label: string, attribute: string, value: string, extra: string, documentation: string, sortText: string) => {
+			const completion = new vscode.CompletionItem(label, vscode.CompletionItemKind.Snippet);
+			completion.insertText = new vscode.SnippetString(`x:description xmlns:x="${XSpecTests.namespace}"\n${indent}xmlns:xs="http://www.w3.org/2001/XMLSchema"${extra}\n` +
+				`${indent}${attribute}="${value}">\n\t$0\n</x:description>`);
+			completion.range = range;
+			completion.documentation = new vscode.MarkdownString(documentation);
+			completion.sortText = sortText;
+			return completion;
+		};
+		// a tab stop with the default, or a choice of the candidates
+		const valueOf = (found: { href: string }[], placeholder: string) => found.length > 1 ?
+			`\${1|${found.map((f) => quote(f.href).replace(/[,|]/g, '\\$&')).join(',')}|}` : `\${1:${quote(found[0]?.href ?? placeholder)}}`;
+		const stylesheets = candidates(['.xsl', '.xslt']).map((f) => ({ ...f, isPackage: !!ImportIndex.packageDeclaration(fs.readFileSync(f.path, 'utf8')) }));
+		const schematrons = candidates(['.sch']);
+		const runAs = `\n${indent}run-as="external"`;
+		const hint = '\n\nThen, in its start tag, the code action (⌘. or Ctrl+.) adds a pending scenario for each function and template of the stylesheet.';
+		const single = stylesheets.length === 1 ? stylesheets[0] : undefined;
+		const items = [
+			item('x:description for a stylesheet', 'stylesheet', valueOf(stylesheets, 'stylesheet.xsl'), single?.isPackage ? runAs : '',
+				`XSpec tests of a stylesheet${single?.isPackage ? ' - a package, run as XSpec runs it, externally' : ''}${single ? `: \`${single.href}\`` : stylesheets.length > 1 ? ' - one of those nearby' : ''}${hint}`, '1'),
+			item('x:description for a Schematron', 'schematron', valueOf(schematrons, 'schema.sch'), '', `XSpec tests of a Schematron${schematrons.length === 1 ? `: \`${schematrons[0].href}\`` : ''}`, '2')
+		];
+		// first, for each stylesheet found: with its scenarios too - pending, to complete - as the code action adds them;
+		// the one with the XSpec file's name preselected
+		if (xspecPath) {
+			stylesheets.forEach((stylesheet, index) => {
+				const withScenarios = item(`x:description with pending scenarios for ${stylesheet.href}`, 'stylesheet', quote(stylesheet.href), stylesheet.isPackage ? runAs : '',
+					`XSpec tests of \`${stylesheet.href}\`${stylesheet.isPackage ? ', a package, run as XSpec runs it, externally' : ''}: a pending scenario for each ${stylesheet.isPackage ? 'public ' : ''}function and template, to complete - give each its values and expected result, then remove its pending attribute`, `0${String(index).padStart(2, '0')}`);
+				withScenarios.preselect = index === 0 && stylesheet.isNamed;
+				withScenarios.command = { command: XSpecScenario.fileCommand, title: withScenarios.label as string, arguments: [vscode.Uri.file(stylesheet.path), document.uri, stylesheet.isPackage ? 'external' : undefined] };
+				items.splice(index, 0, withScenarios);
+			});
+		}
+		return items;
+	}
+
 	// the command: the scenario for the declaration at the offset of the stylesheet, inserted at the end of the XSpec file
 	public static async create(stylesheetUri: vscode.Uri, offset: number): Promise<vscode.TextEditor | undefined> {
 		const stylesheet = await vscode.workspace.openTextDocument(stylesheetUri);
