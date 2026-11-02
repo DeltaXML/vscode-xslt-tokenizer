@@ -276,19 +276,29 @@ suite('XSpec', () => {
 	});
 
 	test('a run of more than one file: a summary of the expectations, and the files that stopped - with the setting for old XSpec tests', async () => {
-		const outcomes = [
+		const outcomes: Parameters<typeof XSpecTestController.summary>[0] = [
 			{ file: '/w/a.xspec', passed: 10, failed: 1, pending: 2 },
 			{ file: '/w/b.xspec', passed: 5, failed: 0, pending: 0 },
 			{ file: '/w/c.xspec', passed: 0, failed: 0, pending: 0, stopped: 'ERROR in x:expect (\'e\'): Boolean @test must not be accompanied by @as, @href, @select, or child node.' },
 			{ file: '/w/d.xspec', passed: 0, failed: 0, pending: 0, stopped: 'XTSE0165  I/O error reported by XML parser' }
 		];
-		const lines = XSpecTestController.summary(outcomes).trim().split('\n');
-		assert.strictEqual(lines[0], 'XSpec: 4 files - 15 passed, 1 failed, 2 pending - 2 ran to the end, 2 stopped:');
-		assert.match(lines[1], /c\.xspec: ERROR in x:expect \('e'\): Boolean @test/);
-		assert.match(lines[2], /d\.xspec: XTSE0165/);
-		assert.strictEqual(lines[3], '1 of them stopped for tests written for XSpec before 1.0 - the XSLT.xspec.legacyCompatibility setting runs them as that did');
+		outcomes.push({ file: '/w/e.xspec', passed: 0, failed: 0, pending: 0, stopped: 'XTSE0165  I/O error reported by XML parser', stoppedDetail: 'missing.xsl' });
+		const lines = XSpecTestController.summary(outcomes).trim().split('\n').slice(1).map((line) => line.replace(/\/w\//, ''));
+		// by reason, the most first - with the file's detail: the x:expect's label, or the file not found
+		assert.deepEqual(lines, [
+			'XSpec: 5 files - 15 passed, 1 failed, 2 pending - 2 ran to the end, 3 stopped:',
+			'  XTSE0165  I/O error reported by XML parser - 2 files:',
+			'    d.xspec',
+			'    e.xspec - missing.xsl',
+			'  x:expect with a boolean @test and @select, @as, @href or content:',
+			'    c.xspec - \'e\'',
+			'1 of them stopped for tests written for XSpec before 1.0 - the XSLT.xspec.legacyCompatibility setting runs them as that did'
+		]);
+		outcomes.pop();
 		// all run to the end
-		assert.deepEqual(XSpecTestController.summary(outcomes.slice(0, 2)).trim().split('\n'), ['XSpec: 2 files - 15 passed, 1 failed, 2 pending - 2 ran to the end']);
+		assert.deepEqual(XSpecTestController.summary(outcomes.slice(0, 2)).trim().split('\n').slice(1), ['XSpec: 2 files - 15 passed, 1 failed, 2 pending - 2 ran to the end']);
+		// cancelled: of all the files requested
+		assert.match(XSpecTestController.summary(outcomes.slice(0, 2), 60), /XSpec: 2 files of 60 - the run was cancelled - 15 passed/);
 	});
 
 	test('generated files: those a run names, in the xspec folder beside their XSpec file - not the XSpec files, in a folder named xspec too', () => {

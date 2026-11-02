@@ -14,7 +14,7 @@ import { XsltPackages } from '../../src/xsltPackages';
 const saxonJar = process.env.XSPEC_SAXON_JAR;
 
 // a test run that records the outcome of each item, by its label
-function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscode.TestMessage[]>, coverages: vscode.FileCoverage[] = []): vscode.TestRun {
+function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscode.TestMessage[]>, coverages: vscode.FileCoverage[] = [], output: string[] = []): vscode.TestRun {
 	const record = (status: string) => (item: vscode.TestItem, message?: vscode.TestMessage | readonly vscode.TestMessage[]) => {
 		outcomes.set(item.label, status);
 		if (message) {
@@ -24,7 +24,7 @@ function recordingRun(outcomes: Map<string, string>, messages: Map<string, vscod
 	return {
 		name: 'test', token: new vscode.CancellationTokenSource().token, isPersisted: false,
 		enqueued: record('enqueued'), started: record('started'), skipped: record('skipped'), passed: record('passed'),
-		failed: record('failed'), errored: record('errored'), appendOutput: () => undefined, addCoverage: (coverage: vscode.FileCoverage) => coverages.push(coverage), end: () => undefined,
+		failed: record('failed'), errored: record('errored'), appendOutput: (text: string) => output.push(text), addCoverage: (coverage: vscode.FileCoverage) => coverages.push(coverage), end: () => undefined,
 		onDidDispose: new vscode.EventEmitter<void>().event
 	} as unknown as vscode.TestRun;
 }
@@ -298,6 +298,27 @@ suite('XSpec: running tests', function () {
 		} finally {
 			await settings.update('allowSyntaxExtensions', undefined, vscode.ConfigurationTarget.Global);
 		}
+	});
+
+	test('a run of more than one file: the summary at the end of the output - with a file that stopped', async () => {
+		const xspec = XSpecTestController.instance!;
+		const stopping = path.join(dir, 'stopping.xspec');
+		fs.writeFileSync(stopping, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="sut.xsl">
+  <x:scenario label="stops"><x:context><p/></x:context><x:expect label="boolean with select" select="1" test="exists(q)"/></x:scenario>
+</x:description>`);
+		const items = await Promise.all([xspecPath, stopping].map(async (file) => {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+			return xspec.testController.items.get(document.uri.toString())!;
+		}));
+		const output: string[] = [];
+		xspec.createRun = () => recordingRun(new Map(), new Map(), [], output);
+		await xspec.runProfile.runHandler(new vscode.TestRunRequest(items), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		const text = output.join('');
+		assert.match(text, /stopping\.xspec: stopped - ERROR in x:expect \('stops boolean with select'\)/);
+		const summary = text.substring(text.lastIndexOf('─'));
+		assert.match(summary, /XSpec: 2 files - 2 passed, 1 failed, 1 pending - 1 ran to the end, 1 stopped:/, text);
+		assert.match(summary, /1 of them stopped for tests written for XSpec before 1\.0/);
 	});
 
 	test('legacy compatibility: tests written for XSpec 0.5 - a boolean test with select, a test that isn\'t boolean without one, xs undeclared', async () => {

@@ -24,7 +24,9 @@ interface XSpecFileOutcome {
 	passed: number;
 	failed: number;
 	pending: number;
+	// why it stopped - Saxon's error, or XSpec's - and for an I/O error, the file
 	stopped?: string;
+	stoppedDetail?: string;
 }
 
 // the debugger's coverage of each module, by path: the hits of each line, and the lines that can be run
@@ -182,6 +184,7 @@ export class XSpecTestController {
 			}
 		}
 		const outcomes: XSpecFileOutcome[] = [];
+		this.problemsShown.clear();
 		for (const [file, items] of byFile) {
 			if (token.isCancellationRequested) {
 				break;
@@ -190,10 +193,17 @@ export class XSpecTestController {
 			await this.updateFile(fileItem.uri!);
 			// one scenario: the scenario of an expectation; otherwise the whole file
 			const scenario = items?.length === 1 ? this.scenarioOf(items[0]) : undefined;
-			outcomes.push(await this.runFile(run, fileItem, scenario, token, debug, coverage));
+			try {
+				outcomes.push(await this.runFile(run, fileItem, scenario, token, debug, coverage));
+			} catch (error) {
+				// not expected: reported, and the other files run
+				const message = error instanceof Error ? error.message : String(error);
+				run.appendOutput(`XSpec: ${vscode.workspace.asRelativePath(file)}: stopped - ${message}\r\n`);
+				outcomes.push({ file, passed: 0, failed: 0, pending: 0, stopped: message });
+			}
 		}
 		if (outcomes.length > 1) {
-			run.appendOutput(XSpecTestController.summary(outcomes).replace(/\n/g, '\r\n'));
+			run.appendOutput(XSpecTestController.summary(outcomes, token.isCancellationRequested ? byFile.size : undefined).replace(/\n/g, '\r\n'));
 		}
 		run.end();
 	}
@@ -201,18 +211,43 @@ export class XSpecTestController {
 	// for a run of more than one file: the expectations passed, failed and pending, in all of them, and the files that
 	// stopped, with why - and, for those stopped by XSpec 4 for tests written for XSpec before 1.0, the setting that runs
 	// them as that did
-	public static summary(outcomes: XSpecFileOutcome[]): string {
+	// - of those run, when the run's cancelled, of all the files requested
+	public static summary(outcomes: XSpecFileOutcome[], requested?: number): string {
 		const total = (key: 'passed' | 'failed' | 'pending') => outcomes.reduce((sum, outcome) => sum + outcome[key], 0);
 		const stopped = outcomes.filter((outcome) => outcome.stopped !== undefined);
-		const lines = [`\nXSpec: ${outcomes.length} files - ${total('passed')} passed, ${total('failed')} failed, ${total('pending')} pending` +
+		const lines = ['', '─'.repeat(60), `XSpec: ${outcomes.length} files${requested !== undefined ? ` of ${requested} - the run was cancelled` : ''} - ${total('passed')} passed, ${total('failed')} failed, ${total('pending')} pending` +
 			` - ${outcomes.length - stopped.length} ran to the end${stopped.length > 0 ? `, ${stopped.length} stopped:` : ''}`];
-		stopped.forEach((outcome) => lines.push(`  ${vscode.workspace.asRelativePath(outcome.file)}: ${outcome.stopped}`));
+		// the files that stopped, by why: the most first, and each with a detail, e.g. the label of the x:expect
+		const byReason = new Map<string, string[]>();
+		for (const outcome of stopped) {
+			const { reason, detail } = XSpecTestController.stoppedReason(outcome);
+			const file = vscode.workspace.asRelativePath(outcome.file) + (detail ? ` - ${detail}` : '');
+			byReason.set(reason, [...(byReason.get(reason) ?? []), file]);
+		}
+		[...byReason].sort((a, b) => b[1].length - a[1].length).forEach(([reason, files]) => {
+			lines.push(`  ${reason}${files.length > 1 ? ` - ${files.length} files` : ''}:`, ...files.sort().map((file) => `    ${file}`));
+		});
 		const legacy = stopped.filter((outcome) => /(Boolean|Non-boolean) @test must( not)? be accompanied/.test(outcome.stopped!));
 		if (legacy.length > 0 && !vscode.workspace.getConfiguration('XSLT.xspec').get<boolean>('legacyCompatibility', false)) {
 			lines.push(`${legacy.length} of them stopped for tests written for XSpec before 1.0 - the XSLT.xspec.legacyCompatibility setting runs them as that did`);
 		}
 		return lines.join('\n') + '\n';
 	}
+
+	// why a file stopped, short - XSpec's messages for an x:expect, without its label, which is the detail, shortened
+	private static stoppedReason(outcome: XSpecFileOutcome): { reason: string, detail?: string } {
+		const expect = /^ERROR in x:expect \('(.*)'\): (.*)$/.exec(outcome.stopped ?? '');
+		if (!expect) {
+			return { reason: outcome.stopped ?? '', detail: outcome.stoppedDetail };
+		}
+		const label = expect[1].length > 60 ? expect[1].substring(0, 59) + '…' : expect[1];
+		const reason = /^Boolean @test must not be accompanied/.test(expect[2]) ? 'x:expect with a boolean @test and @select, @as, @href or content' :
+			/^Non-boolean @test must be accompanied/.test(expect[2]) ? 'x:expect with a @test that isn\'t boolean, and no @select, @as, @href or content' : `x:expect: ${expect[2]}`;
+		return { reason, detail: `'${label}'` };
+	}
+
+	// the problems shown in the run, so each is shown once
+	private readonly problemsShown = new Set<string>();
 
 	private scenarioOf(item: vscode.TestItem): vscode.TestItem | undefined {
 		return this.kinds.get(item) === 'expect' ? item.parent : item;
@@ -236,20 +271,30 @@ export class XSpecTestController {
 		const tests = this.items(scenario ?? fileItem).filter((item) => this.kinds.get(item) === 'expect');
 		const items = tests.length > 0 ? tests : [scenario ?? fileItem];
 		items.forEach((item) => run.started(item));
-		// the file's tests couldn't be run: why - with the first error in Saxon's output, for the summary
+		// the file's tests couldn't be run: why, in each test's message - and in the output, the first error in Saxon's
+		// output, which the XSpec output channel has all of
 		const errored = (message: string) => {
 			items.forEach((item) => run.errored(item, new vscode.TestMessage(message)));
-			run.appendOutput(message.replace(/\n/g, '\r\n') + '\r\n');
 			const lines = message.split('\n').map((line) => line.trim()).filter((line) => line !== '');
 			// Saxon's error code and message, e.g. 'XTSE0165  I/O error ...', after its 'Error on line ...' - or XSpec's, e.g.
 			// 'ERROR in x:expect (...): ...'
-			outcome.stopped = lines.find((line, index) => index > 0 && /^\w*:?\s*\b(XPST|XPTY|XPDY|XTSE|XTDE|XTTE|XTMM|FO[A-Z]{2}|SXXP|SXXF)\d{4}\b/.test(line) && !/XTMM9000/.test(line)) ??
-				lines.find((line, index) => index > 0 && /ERROR|Error/.test(line)) ?? lines[0] ?? '';
+			const coded = lines.findIndex((line, index) => index > 0 && /^\w*:?\s*\b(XPST|XPTY|XPDY|XTSE|XTDE|XTTE|XTMM|FO[A-Z]{2}|SXXP|SXXF)\d{4}\b/.test(line) && !/XTMM9000/.test(line));
+			outcome.stopped = coded > -1 ? lines[coded] : lines.find((line, index) => index > 0 && /ERROR|Error/.test(line)) ?? lines[0] ?? '';
+			// the file of an I/O error, e.g. a module imported that isn't found, which Saxon gives on the next line
+			const ioFile = coded > -1 ? /^file:(\S+?)\.?(\s|$)/.exec(lines[coded + 1] ?? '')?.[1] : undefined;
+			if (ioFile) {
+				outcome.stoppedDetail = path.basename(ioFile);
+			}
+			run.appendOutput(`XSpec: ${vscode.workspace.asRelativePath(xspecPath)}: stopped - ${outcome.stopped}\r\n`);
 			return outcome;
 		};
 		const problem = XSpecRunner.problem(fileItem.uri);
 		if (problem) {
-			vscode.window.showErrorMessage(problem);
+			// once in a run of many files, e.g. that there's no Saxon jar
+			if (!this.problemsShown.has(problem)) {
+				this.problemsShown.add(problem);
+				vscode.window.showErrorMessage(problem);
+			}
 			return errored(problem);
 		}
 		const channel = XSpecRunner.output();
