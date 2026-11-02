@@ -850,6 +850,18 @@
 					"default": "",
 					"scope": "resource",
 					"markdownDescription": "The folder of an XSpec installation, e.g. a newer release, to compile and run XSpec tests with - by default the XSpec 4.1.2 bundled with the extension is used. Tests are run with the Saxon jar of `#XSLT.tasks.saxonJar#`."
+				},
+				"XSLT.xspec.emphasiseLabels": {
+					"type": "boolean",
+					"default": true,
+					"scope": "resource",
+					"description": "In XSpec files, show scenario labels in bold and expectation labels in italic, so the scenarios read like headings with their expectations under them."
+				},
+				"XSLT.xspec.fadePending": {
+					"type": "boolean",
+					"default": true,
+					"scope": "resource",
+					"description": "In XSpec files, fade the pending scenarios and expectations - in x:pending, or with a pending attribute - which XSpec doesn't run, other than the reason they're pending."
 				}
 			}
 		},

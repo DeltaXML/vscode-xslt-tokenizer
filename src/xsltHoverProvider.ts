@@ -3,7 +3,7 @@ import * as fs from "fs";
 import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument, Uri, workspace } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
-import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration } from "./xslLexer";
+import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XslLexer } from "./xslLexer";
 import { LexPosition } from "./xpLexer";
 import { XsltTokenDiagnostics } from "./xsltTokenDiagnostics";
 import { XdocNotes } from "./xdocNote";
@@ -41,7 +41,7 @@ export class XSLTHoverProvider implements HoverProvider {
 
 	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
 		if (this.languageConfiguration?.docType === DocumentTypes.XSPEC) {
-			const elementHover = this.xspecElementHover(document, position);
+			const elementHover = this.xspecElementHover(document, position) ?? await this.xspecCallHover(document, position, token);
 			if (elementHover) {
 				return elementHover;
 			}
@@ -122,6 +122,63 @@ export class XSLTHoverProvider implements HoverProvider {
 		markdown.appendCodeblock(`<${name}>`, 'xml');
 		markdown.appendText(detail);
 		return new Hover(markdown, range);
+	}
+
+	// in an XSpec file: x:call's function or template, the declaration's signature and documentation note, as for a call
+	// of it in the stylesheet - or the name of an x:param of an x:call of a template, the parameter's documentation
+	private async xspecCallHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		if (!this.definitionProvider) {
+			return undefined;
+		}
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const prefix = XsltDefinitionProvider.xspecPrefixOf(document);
+		const tagStart = text.lastIndexOf('<', offset);
+		const tagName = /^<([\w.-]+:)?([\w.-]+)\s/.exec(text.substring(tagStart, tagStart + 60));
+		if (!tagName || (tagName[1] ?? '') !== (prefix ? prefix + ':' : '') || (tagName[2] !== 'call' && tagName[2] !== 'param')) {
+			return undefined;
+		}
+		const on = (attribute: string) => {
+			const valueStart = RecordTypes.attributeValueOffset(text, tagStart + 1, attribute);
+			const value = RecordTypes.attributeOfElementAt(text, tagStart + 1, attribute);
+			return valueStart !== undefined && value && offset >= valueStart && offset <= valueStart + value.length ? value.trim() : undefined;
+		};
+		let call: { kind: 'function' | 'template', name: string, offset: number } | undefined;
+		let paramName: string | undefined;
+		if (tagName[2] === 'call') {
+			const fn = on('function');
+			const template = fn ? undefined : on('template');
+			call = fn ? { kind: 'function', name: fn, offset: tagStart } : template ? { kind: 'template', name: template, offset: tagStart } : undefined;
+		} else {
+			// an x:param of an x:call of a template
+			paramName = on('name');
+			const parent = paramName ? RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart).pop() : undefined;
+			const template = parent && parent.name === `${prefix ? prefix + ':' : ''}call` ? RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'template') : undefined;
+			call = template ? { kind: 'template', name: template.trim(), offset: parent!.offset } : undefined;
+		}
+		if (!call) {
+			return undefined;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+		const type = call.kind === 'function' ? GlobalInstructionType.Function : GlobalInstructionType.Template;
+		const candidates = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === type && g.name === call!.name);
+		if (candidates.length === 0) {
+			return undefined;
+		} else if (paramName) {
+			return this.paramHover(document, candidates[0], paramName);
+		} else if (call.kind === 'template') {
+			return this.templateHover(document, candidates[0]);
+		}
+		// the function with as many parameters as the x:call passes, if there's one - else the one with the most
+		const callEnd = text.indexOf('>', call.offset);
+		const callContent = text[callEnd - 1] === '/' ? '' : text.substring(callEnd, text.indexOf(`</${prefix ? prefix + ':' : ''}call`, callEnd));
+		const passed = (callContent.match(new RegExp(`<${prefix ? prefix + ':' : ''}param[\\s/>]`, 'g')) ?? []).length;
+		const fn = candidates.find((g) => XslLexer.functionArityMatches(g, passed)) ?? candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
+		return this.functionHover(document, fn);
 	}
 
 	private async findUserFunctionHover(document: TextDocument, fnName: string, token: CancellationToken): Promise<Hover | undefined> {

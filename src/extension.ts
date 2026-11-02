@@ -10,6 +10,7 @@
 import * as fs from 'fs';
 import { XSpecRunner } from './xspecRunner';
 import { XSpecHrefs } from './xspecHrefs';
+import { XSpecLabels } from './xspecLabels';
 import { XSpecScenario } from './xspecScenario';
 import { XSpecTestController } from './xspecTestController';
 import * as vscode from 'vscode';
@@ -473,6 +474,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'sch' }, schLinkProvider));
 	// each file an XSpec file refers to, e.g. x:context's href, resolved as XSpec resolves it (see XSpecHrefs)
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xspec' }, { provideDocumentLinks: (document) => XSpecHrefs.links(document) }));
+	// scenario labels in bold and expectation labels in italic
+	XSpecLabels.register(context);
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xslt' }, new XSLTHoverProvider(xsltDefintiionProvider, XSLTConfiguration.configuration)));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xpath' }, new XSLTHoverProvider(xpathDefinitionProvider, XPathConfiguration.configuration)));
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, new XSLTHoverProvider(xspecDefinitionProvider, XSpecConfiguration.configuration)));

@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSpecConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
+import { XSpecLabels } from '../../src/xspecLabels';
 
 const xspecNs = 'xmlns:x="http://www.jenitennison.com/xslt/xspec"';
 
@@ -220,6 +221,77 @@ suite('XSpec', () => {
 		assert.include(await completions(xspec(`<x:scenario label="s"><x:call function="|"/></x:scenario>`)), 'f:double');
 		assert.include(await completions(xspec(`<x:scenario label="s"><x:context mode="|"/></x:scenario>`)), 'f:para');
 		assert.includeMembers(await completions(xspec(`<x:scenario label="s"><x:call template="f:named"><x:param name="|"/></x:call></x:scenario>`)), ['size', 'colour']);
+	});
+
+	test('labels: a scenario\'s, to show in bold, and an expectation\'s, in italic - as an attribute or x:label, with the XSpec prefix', () => {
+		const text = `<t:description xmlns:t="http://www.jenitennison.com/xslt/xspec" stylesheet="sut.xsl">
+  <t:scenario label="the total">
+    <t:context><scenario label="user content"/></t:context>
+    <t:expect label='is 2' select="2"/>
+    <t:scenario><t:label>with a discount</t:label>
+      <t:expect-not-assert id="a" label="no error"/>
+    </t:scenario>
+  </t:scenario>
+</t:description>`;
+		const { scenarios, expectations } = XSpecLabels.find(text);
+		const texts = (offsets: [number, number][]) => offsets.map(([start, end]) => text.substring(start, end));
+		assert.deepEqual(texts(scenarios), ['the total', 'with a discount']);
+		assert.deepEqual(texts(expectations), ['is 2', 'no error']);
+	});
+
+	test('pending: faded, other than the reason - x:pending\'s label, or a pending attribute\'s value - and once, within x:pending', () => {
+		const text = `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="sut.xsl">
+  <x:pending label="to do">
+    <x:scenario label="a" pending="inner"><x:expect label="e" select="1"/></x:scenario>
+  </x:pending>
+  <x:scenario label="b" pending="refunds"><x:expect label="f" select="1"/></x:scenario>
+  <x:scenario label="c"><x:expect label="g" pending="later" select="1"/></x:scenario>
+</x:description>`;
+		const { pending } = XSpecLabels.find(text);
+		const pendingElement = text.substring(text.indexOf('<x:pending'), text.indexOf('</x:pending>') + '</x:pending>'.length);
+		assert.deepEqual(pending.map(([start, end]) => text.substring(start, end)), [
+			'<x:pending label="', pendingElement.substring(pendingElement.indexOf('to do') + 'to do'.length),
+			'<x:scenario label="b" pending="', '"><x:expect label="f" select="1"/></x:scenario>',
+			'<x:expect label="g" pending="', '" select="1"/>'
+		]);
+	});
+
+	test('hover: the function or template x:call calls - its signature and documentation note - and a parameter passed by name', async () => {
+		file('noted.xsl', `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="4.0">
+  <xsl:function name="f:half" as="xs:double">
+    <xsl:note format="xdoc-md">
+      Halves a number.
+
+      @param $n the number
+    </xsl:note>
+    <xsl:param name="n" as="xs:double"/>
+    <xsl:sequence select="$n div 2"/>
+  </xsl:function>
+  <xsl:function name="f:half" as="xs:double">
+    <xsl:param name="n" as="xs:double"/>
+    <xsl:param name="round" as="xs:boolean"/>
+    <xsl:sequence select="$n div 2"/>
+  </xsl:function>
+  <xsl:template name="f:box">
+    <xsl:note format="xdoc-md">
+      Draws a box.
+
+      @param $size the width and height, in cm
+    </xsl:note>
+    <xsl:param name="size" as="xs:integer"/>
+  </xsl:template>
+</xsl:stylesheet>`);
+		const hover = async (body: string) => hoverText(await at(xspec(body, ' stylesheet="noted.xsl"'), 'vscode.executeHoverProvider'));
+		// the function with as many parameters as are passed
+		const fn = await hover(`<x:scenario label="s"><x:call function="f:ha|lf"><x:param select="1"/></x:call></x:scenario>`);
+		assert.include(fn, 'f:half($n as xs:double) as xs:double');
+		assert.include(fn, 'Halves a number.');
+		const fn2 = await hover(`<x:scenario label="s"><x:call function="f:ha|lf"><x:param select="1"/><x:param select="true()"/></x:call></x:scenario>`);
+		assert.include(fn2, '$round as xs:boolean');
+		const template = await hover(`<x:scenario label="s"><x:call template="f:b|ox"/></x:scenario>`);
+		assert.include(template, 'template f:box');
+		assert.include(template, 'Draws a box.');
+		assert.include(await hover(`<x:scenario label="s"><x:call template="f:box"><x:param name="si|ze" select="1"/></x:call></x:scenario>`), 'the width and height, in cm');
 	});
 
 	test('go to definition: the function or template x:call calls, a parameter it passes, and the mode of x:context', async () => {
