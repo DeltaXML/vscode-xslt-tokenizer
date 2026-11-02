@@ -7,6 +7,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { XSpecScenario } from './xspecScenario';
+import { XslLexerLight } from './xslLexerLight';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
@@ -251,13 +253,13 @@ export class XsltTokenCompletions {
 								if (prevToken.line === requiredLine && prevToken.startCharacter + prevToken.length > requiredChar) {
 									// we're within the attribute value
 								} else {
-									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
+									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames, document);
 								}
 								break;
 							case XSLTokenLevelState.elementName:
 							case XSLTokenLevelState.xslElementName:
 							case XSLTokenLevelState.attributeName:
-								resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
+								resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames, document);
 								break;
 						}
 					} else {
@@ -400,7 +402,7 @@ export class XsltTokenCompletions {
 									variableData.selectExprStartIndex = pendingSelectExprIndex;
 								}
 								if (isOnRequiredToken) {
-									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
+									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames, document);
 								}
 								tagAttributeNames = [];
 								if (isXSLT && onRootStartTag) {
@@ -3424,7 +3426,7 @@ export class XsltTokenCompletions {
 	}
 
 
-	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery | undefined, pos: vscode.Position, xsltParent: string, existingAttrs: string[]) {
+	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery | undefined, pos: vscode.Position, xsltParent: string, existingAttrs: string[], document?: vscode.TextDocument) {
 		if (!schemaQuery) {
 			return this.getXSLTSnippetCompletions(XMLSnippets.generalAttributes);
 		}
@@ -3449,6 +3451,8 @@ export class XsltTokenCompletions {
 		let xmlnsCompletions: vscode.CompletionItem[] = [];
 		if (schemaQuery.docType === DocumentTypes.XSLT && (xsltParent === 'xsl:stylesheet' || xsltParent === 'xsl:transforrm' || xsltParent === 'xsl:package')) {
 			xmlnsCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltXMLNS);
+		} else if (schemaQuery.docType === DocumentTypes.XSPEC && xsltParent === 'x:description' && document) {
+			xmlnsCompletions = XsltTokenCompletions.getXSpecXmlnsCompletions(document);
 		}
 
 		let isXSLT = xsltParent.startsWith('xsl:');
@@ -3460,6 +3464,44 @@ export class XsltTokenCompletions {
 		}
 
 		return completionItems.concat(xmlnsCompletions);
+	}
+
+	// in an XSpec file's x:description: a namespace declaration for each prefix of the stylesheet under test's - first -
+	// then XSpec's, if it's not declared, and the common ones offered on a stylesheet's root element - not those declared
+	private static getXSpecXmlnsCompletions(document: vscode.TextDocument): vscode.CompletionItem[] {
+		const text = document.getText();
+		const rootTag = /<(?:[\w.-]+:)?description\b[^>]*>?/.exec(text)?.[0] ?? '';
+		const declared = new Set([...rootTag.matchAll(/\sxmlns:([\w.-]+)\s*=/g)].map((m) => m[1]));
+		const items: vscode.CompletionItem[] = [];
+		const add = (prefix: string, uri: string, description: string, group: string, sortGroup: string) => {
+			if (declared.has(prefix)) {
+				return;
+			}
+			declared.add(prefix);
+			const item = new vscode.CompletionItem({ label: `xmlns:${prefix}`, description: group }, vscode.CompletionItemKind.Struct);
+			item.insertText = new vscode.SnippetString(`xmlns:${prefix}="${uri.replace(/[$}\\]/g, '\\$&').replace(/"/g, '&quot;')}"$0`);
+			item.documentation = new vscode.MarkdownString(description);
+			item.sortText = `${sortGroup}${prefix}`;
+			items.push(item);
+		};
+		// the stylesheet under test's - or for a package tested with x:helper, the package's
+		const tested = document.uri.scheme === 'file' ? XSpecScenario.testedModule(text, document.fileName) : undefined;
+		if (tested && fs.existsSync(tested)) {
+			const testedText = fs.readFileSync(tested, 'utf8');
+			XslLexerLight.prefixBindingsOf(testedText)?.forEach((uri, prefix) => {
+				if (prefix && prefix !== 'xsl' && uri !== 'http://www.w3.org/1999/XSL/Transform') {
+					add(prefix, uri, `\`${uri}\` - declared by the stylesheet under test, ${path.basename(tested)}`, 'stylesheet under test', '0');
+				}
+			});
+		}
+		add('x', 'http://www.jenitennison.com/xslt/xspec', 'The XSpec namespace', 'XSpec', '1');
+		for (const snippet of XSLTSnippets.xsltXMLNS) {
+			const common = /^xmlns:([\w.-]+)="([^"]*)"/.exec(snippet.body);
+			if (common && common[1] !== 'xsl') {
+				add(common[1], common[2], snippet.description, 'common', '2');
+			}
+		}
+		return items;
 	}
 
 	private static getXSLTAttributeValueCompletions(schemaQuery: SchemaQuery | undefined, pos: vscode.Position, xsltParent: string, currentAttribute: string) {

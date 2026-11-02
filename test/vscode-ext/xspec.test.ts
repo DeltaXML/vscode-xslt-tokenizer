@@ -156,6 +156,21 @@ suite('XSpec', () => {
 		assert.includeMembers(values, ['yes', 'no']);
 	});
 
+	test('completion: namespace declarations on x:description - the stylesheet under test\'s, then common ones - not those declared', async () => {
+		const labels = await completions(`<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="sut.xsl" xmlns:map="http://www.w3.org/2005/xpath-functions/map" |>\n</x:description>`);
+		const xmlns = labels.filter((label) => label.startsWith('xmlns:'));
+		assert.include(xmlns, 'xmlns:f');
+		assert.include(xmlns, 'xmlns:xs');
+		assert.include(xmlns, 'xmlns:array');
+		for (const declared of ['xmlns:x', 'xmlns:map', 'xmlns:xsl']) {
+			assert.notInclude(xmlns, declared);
+		}
+		// with another prefix for XSpec: x is offered for XSpec, as it isn't declared
+		const prefixed = (await completions(`<t:description xmlns:t="http://www.jenitennison.com/xslt/xspec" stylesheet="sut.xsl" |>\n</t:description>`)).filter((label) => label.startsWith('xmlns:'));
+		assert.include(prefixed, 'xmlns:f');
+		assert.include(prefixed, 'xmlns:x');
+	});
+
 	test('completion: with the outermost element\'s prefix for XSpec, e.g. t:', async () => {
 		const elements = await completions(xspec(`<t:scenario label="s">\n  <|\n</t:scenario>`, ' stylesheet="sut.xsl"', 't'));
 		assert.include(elements, 't:expect', elements.join(', '));
