@@ -845,6 +845,12 @@
 					"scope": "window",
 					"description": "When debugging with SaxonJ, open the output written so far - beside the stylesheet - at the first pause where there is some. Otherwise, it's opened with the 'Show Debug Output' button on the debug toolbar, 'Show Output' on an output in the Variables view's Output section, or 'XSLT: Show Debug Output'."
 				},
+				"XSLT.validation.xslt40UnionPriorities": {
+					"type": "boolean",
+					"default": false,
+					"scope": "resource",
+					"markdownDescription": "Warn, in every stylesheet before XSLT 4.0, about a template rule whose union pattern has branches of different default priorities - which XSLT 4.0 gives one priority, the highest, so another rule may be chosen. Without the setting, the warning is only for XSLT 4.0 stylesheets, and those run with Saxon's syntax extensions as they use item types or notes - where 4.0's rule applies already."
+				},
 				"XSLT.xspec.home": {
 					"type": "string",
 					"default": "",
@@ -967,7 +973,7 @@
 							"off"
 						],
 						"enumDescriptions": [
-							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
 							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
 							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
 						],
@@ -1291,7 +1297,7 @@
 							"off"
 						],
 						"enumDescriptions": [
-							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
 							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
 							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
 						],
@@ -2000,7 +2006,7 @@
 									"off"
 								],
 								"enumDescriptions": [
-									"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+									"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
 									"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
 									"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
 								],

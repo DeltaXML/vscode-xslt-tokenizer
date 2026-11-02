@@ -87,7 +87,11 @@
       "Bash(sed -n 437,460p out/cals-tables__xspec__cals-populate-colnames-compiled.xsl)",
       "Bash(awk '/<scenario id=\"scenario1\"/,/<\\\\/scenario>/' out-compat/cals-tables__xspec__cals-populate-colnames-result.xml)",
       "Bash(node classify.js /Users/phil.fearon/copy-of-rnd-branch-of-xsl/xsl)",
-      "Bash(cut -f2 classified.tsv)"
+      "Bash(cut -f2 classified.tsv)",
+      "Bash(java -cp /Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform --allowSyntaxExtensions:on -s:in.xml -xsl:u.xsl)",
+      "Bash(sed 's/version=\"3.0\"/version=\"4.0\"/' u.xsl)",
+      "Bash(java -cp /Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform --allowSyntaxExtensions:on -s:in.xml -xsl:u4.xsl)",
+      "Bash(grep \"\\\\.xsl$\")"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

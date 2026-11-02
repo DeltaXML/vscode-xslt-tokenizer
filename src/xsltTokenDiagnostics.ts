@@ -30,6 +30,7 @@ import * as fs from 'fs';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XSpecCompat } from './xspecCompat';
+import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
 
@@ -3420,6 +3421,10 @@ export class XsltTokenDiagnostics {
 			}
 		});
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
+		if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && !testingAsAttribute) {
+			// template rules whose union patterns' branches have different default priorities: XSLT 4.0 changes the rule chosen
+			allDiagnostics.push(...UnionPatternPriority.problems(document, docType === DocumentTypes.XSLT40 || !!languageConfig.isVersion4));
+		}
 		if (docType === DocumentTypes.XSPEC) {
 			// the files it refers to that aren't found
 			allDiagnostics.push(...XSpecHrefs.problems(document));

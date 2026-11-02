@@ -16,6 +16,8 @@ import { CatalogSetting } from './catalogSetting';
 import { unquotedPath } from './settingPaths';
 import { RecordTypes } from './recordTypes';
 import { XsltPackages } from './xsltPackages';
+import { SyntaxExtensions } from './syntaxExtensions';
+import * as fs from 'fs';
 
 function pathSeparator() {
     if (os.platform() === 'win32') {
@@ -96,13 +98,24 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
         return this.getTask(_task.definition);
     }
 
-    // 'auto' (the default): XPath 4.0 syntax is enabled unless the processor is Saxon-HE - with Saxon-HE 13, enabling it
-    // makes every transform fail with a licence error, whereas with Saxon-PE/EE it's harmless for pre-4.0 stylesheets
-    public static syntaxExtensions40Value(setting: string | undefined, saxonPath: string | undefined): string {
+    // 'auto' (the default): XPath 4.0 syntax is enabled for a stylesheet that needs it - XSLT 4.0, or one using item types
+    // or notes, in any module of its compile (see SyntaxExtensions) - unless the processor is Saxon-HE: with Saxon-HE 13,
+    // enabling it makes every transform fail with a licence error. Not for other stylesheets, as Saxon 13 then runs a
+    // stylesheet before 4.0 with some of 4.0's rules, e.g. the priority of a union pattern. For a stylesheet that isn't
+    // known, e.g. a task's xsltFile with a variable other than ${file} or ${workspaceFolder}, or isn't found: enabled
+    public static syntaxExtensions40Value(setting: string | undefined, saxonPath: string | undefined, xsltFsPath?: string): string {
         if (setting === 'on' || setting === 'off') {
             return setting;
         }
-        return SaxonTaskProvider.isSaxonHE(saxonPath) ? 'off' : 'on';
+        if (SaxonTaskProvider.isSaxonHE(saxonPath)) {
+            return 'off';
+        }
+        return xsltFsPath === undefined || !fs.existsSync(xsltFsPath) || SyntaxExtensions.needed([xsltFsPath]) ? 'on' : 'off';
+    }
+
+    // the stylesheet a task runs, if it's known
+    public static taskXsltPath(task: { xsltFile?: unknown }): string | undefined {
+        return typeof task.xsltFile === 'string' ? SaxonTaskProvider.taskFilePath(task.xsltFile) : undefined;
     }
 
     // e.g. .../SaxonHE13-0J/saxon-he-13.0.jar, saxon9he.jar or .../SaxonCHE-macos-arm64-13-0-0/bin
@@ -710,7 +723,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
                     break;
                 case 'allowSyntaxExtensions40':
                     isXSLT40 = true;
-                    commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonJarPath));
+                    commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonJarPath, SaxonTaskProvider.taskXsltPath(xsltTask)));
                     break;
                 case 'messageEscaping':
                     useSaxonTextEmitter = propValue === "off" || (propValue === "adaptive" && isPriorToSaxon9902);
@@ -718,7 +731,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
             }
         }
 
-        if (xsltTask.allowSyntaxExtensions40 === undefined && SaxonTaskProvider.syntaxExtensions40Value(undefined, taskSaxonJarPath) === 'on') {
+        if (xsltTask.allowSyntaxExtensions40 === undefined && SaxonTaskProvider.syntaxExtensions40Value(undefined, taskSaxonJarPath, SaxonTaskProvider.taskXsltPath(xsltTask)) === 'on') {
             // no setting: as for 'auto'
             isXSLT40 = true;
             commandLineArgs.push('--allowSyntaxExtensions:on');

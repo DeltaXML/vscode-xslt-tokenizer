@@ -15,8 +15,7 @@ import { unquotedPath } from './settingPaths';
 import { CatalogSetting } from './catalogSetting';
 import { XsltPackages } from './xsltPackages';
 import { SaxonTaskProvider } from './saxonTaskProvider';
-import { ItemTypeSupport } from './itemTypeSupport';
-import { ImportIndex } from './importIndex';
+import { SyntaxExtensions } from './syntaxExtensions';
 import { HrefPaths } from './hrefPaths';
 
 // XSpec's steps for an XSpec file that tests a stylesheet, as XSpec's own command line (bin/xspec.sh) runs them, each a
@@ -194,29 +193,13 @@ export class XSpecRunner {
 		// from the stylesheet and the helpers: their hrefs, resolved against the XSpec file
 		const starts = [...xspecText.matchAll(/<(?:[\w.-]+:)?(?:description|helper)\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)]
 			.map((m) => m[2].startsWith('file:') ? vscode.Uri.parse(m[2]).fsPath : path.resolve(path.dirname(xspecPath), m[2]));
-		const visited = new Set<string>();
-		const visit = (file: string): boolean => {
-			if (visited.has(file) || visited.size > 500) {
-				return false;
-			}
-			visited.add(file);
-			const text = read(file);
-			if (text === undefined) {
-				return false;
-			}
-			if (ItemTypeSupport.syntaxExtensionsReason(text, true)) {
-				return true;
-			}
-			return ImportIndex.moduleReferences(text, file).some((reference) => visit(reference.path)) ||
-				XsltPackages.libraryPaths(file).some((pkg) => visit(pkg));
-		};
 		// and the packages of its x:helper elements
 		const helperPackages = [...xspecText.matchAll(/<(?:[\w.-]+:)?helper\b[^>]*?\spackage-name\s*=\s*(["'])(.*?)\1[^>]*>/g)].map((m) => {
 			const version = /\spackage-version\s*=\s*(["'])(.*?)\1/.exec(m[0])?.[2];
 			const found = XsltPackages.find(XsltPackages.all(), m[2], version);
 			return found ? HrefPaths.settingsPath(found.path, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(xspecPath)) : undefined;
 		}).filter((p): p is string => !!p);
-		return starts.concat(helperPackages).some(visit);
+		return SyntaxExtensions.needed(starts.concat(helperPackages));
 	}
 
 	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
