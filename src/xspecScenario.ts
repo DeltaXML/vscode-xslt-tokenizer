@@ -202,7 +202,7 @@ export class XSpecScenario {
 	}
 
 	// the declarations a test file has scenarios for: of a stylesheet, or those a package's users can call or apply
-	private static declarationsOf(text: string, modulePath: string): XSpecDeclaration[] {
+	public static declarationsOf(text: string, modulePath: string): XSpecDeclaration[] {
 		const packageDeclaration = ImportIndex.packageDeclaration(text);
 		return packageDeclaration ? XSpecScenario.packageDeclarations(text, packageDeclaration.name, packageDeclaration.version, modulePath) : XSpecScenario.declarations(text);
 	}

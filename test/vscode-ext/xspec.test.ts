@@ -256,6 +256,13 @@ suite('XSpec', () => {
 		]);
 	});
 
+	test('hover: x:description\'s stylesheet - where it is, and its functions and templates that have no scenario yet', async () => {
+		const text = hoverText(await at(xspec(`<x:scenario label="s"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" select="2"/></x:scenario>`, ' stylesheet="s|ut.xsl"'), 'vscode.executeHoverProvider'));
+		assert.include(text, 'module sut.xsl');
+		assert.include(text, `Stylesheet under test: ${path.join(dir, 'sut.xsl')}`);
+		assert.include(text, '1 of its 3 functions and templates have a scenario - not: template `f:named`, template rule `p`');
+	});
+
 	test('hover: the function or template x:call calls - its signature and documentation note - and a parameter passed by name', async () => {
 		file('noted.xsl', `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="4.0">
   <xsl:function name="f:half" as="xs:double">

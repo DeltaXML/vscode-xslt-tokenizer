@@ -16,6 +16,8 @@ import { ModeHover } from './xsltModeHover';
 import { PackageScope, PackageComponent, OverridingDeclaration } from './packageScope';
 import { XsltPackages } from './xsltPackages';
 import { ModulePrefixes } from './modulePrefixes';
+import { XSpecHrefs } from './xspecHrefs';
+import { XSpecScenario } from './xspecScenario';
 
 enum CharType {
 	none,
@@ -41,7 +43,7 @@ export class XSLTHoverProvider implements HoverProvider {
 
 	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
 		if (this.languageConfiguration?.docType === DocumentTypes.XSPEC) {
-			const elementHover = this.xspecElementHover(document, position) ?? await this.xspecCallHover(document, position, token);
+			const elementHover = this.xspecElementHover(document, position) ?? this.xspecStylesheetHover(document, position) ?? await this.xspecCallHover(document, position, token);
 			if (elementHover) {
 				return elementHover;
 			}
@@ -122,6 +124,47 @@ export class XSLTHoverProvider implements HoverProvider {
 		markdown.appendCodeblock(`<${name}>`, 'xml');
 		markdown.appendText(detail);
 		return new Hover(markdown, range);
+	}
+
+	// in an XSpec file: x:description's stylesheet - the stylesheet or package tested - or an x:helper's: its module note,
+	// where it is and, for the one tested, the functions and templates that have no scenario yet
+	private xspecStylesheetHover(document: TextDocument, position: Position): Hover | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const href = document.uri.scheme === 'file' ? XSpecHrefs.find(text, document.fileName).find((h) => h.attribute === 'stylesheet' && offset >= h.start && offset <= h.end) : undefined;
+		const modulePath = href ? HrefPaths.toPath(href.value, href.basePath) : undefined;
+		if (!href || modulePath === undefined) {
+			return undefined;
+		}
+		const open = workspace.textDocuments.find((d) => d.fileName === modulePath);
+		let moduleText: string;
+		try {
+			moduleText = open ? open.getText() : fs.readFileSync(modulePath, 'utf8');
+		} catch {
+			return this.createHover(`module ${path.basename(modulePath)}`, `Stylesheet: ${modulePath} (not found)`);
+		}
+		const tested = href.element === 'description';
+		const packageTag = /<(?:[\w.-]+:)?package\b[^>]*>/.exec(moduleText)?.[0];
+		const packageName = packageTag ? /\sname\s*=\s*(["'])(.*?)\1/.exec(packageTag)?.[2] : undefined;
+		const packageVersion = packageTag ? /\spackage-version\s*=\s*(["'])(.*?)\1/.exec(packageTag)?.[2] : undefined;
+		const signature = packageName ? `package ${packageName}${packageVersion ? ' ' + packageVersion : ''}` : `module ${path.basename(modulePath)}`;
+		const parts: string[] = [];
+		const note = XdocNotes.moduleNote(moduleText);
+		if (note) {
+			parts.push(XdocNotes.toMarkdown(note), '---');
+		}
+		parts.push(`${tested ? (packageName ? 'Package' : 'Stylesheet') + ' under test' : 'Helper stylesheet'}: ${modulePath}`);
+		if (tested) {
+			// for a package, its public and final components, which are all its tests can use
+			const declarations = XSpecScenario.declarationsOf(moduleText, modulePath);
+			const untested = XSpecScenario.untested(text, document.fileName)?.declarations ?? [];
+			const name = (d: { kind: string, name: string }) => d.kind === 'function' ? `\`${d.name}\`` : d.kind === 'template' ? `template \`${d.name}\`` : `template rule \`${d.name}\``;
+			if (declarations.length > 0) {
+				parts.push(`${declarations.length - untested.length} of its ${declarations.length} functions and templates have a scenario` +
+					(untested.length > 0 ? ` - not: ${untested.slice(0, 10).map(name).join(', ')}${untested.length > 10 ? `, and ${untested.length - 10} more` : ''}` : ''));
+			}
+		}
+		return this.createHover(signature, parts.join('\n\n'));
 	}
 
 	// in an XSpec file: x:call's function or template, the declaration's signature and documentation note, as for a call
