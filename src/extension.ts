@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import { XSpecRunner } from './xspecRunner';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecLabels } from './xspecLabels';
+import { XSpecCompat } from './xspecCompat';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
 import { XSpecTestController } from './xspecTestController';
 import * as vscode from 'vscode';
@@ -1281,6 +1282,9 @@ export function activate(context: vscode.ExtensionContext) {
 	// in an XSpec file: pending scenarios for the declarations of the module tested that have none yet
 	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, range) => XSpecScenario.codeActions(document, range) },
 		{ providedCodeActionKinds: [vscode.CodeActionKind.Refactor] }));
+	// quick fixes for x:expect elements that XSpec 4 stops the run for (see XSpecCompat)
+	context.subscriptions.push(vscode.languages.registerCodeActionsProvider('xspec', { provideCodeActions: (document, _range, context) => XSpecCompat.codeActions(document, context.diagnostics) },
+		{ providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecRunFile', () => vscode.commands.executeCommand('testing.runCurrentFile')));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.xspecOpenReport', async (uri?: vscode.Uri) => {
 		const xspecPath = (uri ?? vscode.window.activeTextEditor?.document.uri)?.fsPath;

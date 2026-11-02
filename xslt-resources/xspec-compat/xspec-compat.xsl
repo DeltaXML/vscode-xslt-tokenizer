@@ -8,7 +8,9 @@
     compared with the empty sequence - XSpec 4 stops with 'Non-boolean @test must be accompanied by ...'
   - the xs prefix is declared for the test runner's expressions, as the old test runner declared it - XSpec 4 needs it
     declared in the XSpec file
-  Each change is reported with xsl:message, as the compiler's output shows, so the tests can be updated.
+  Each x:expect run as XSpec 0.5 ran it is reported when it runs, with xsl:message - in the XSpec output - so the tests
+  can be updated. Not when it's compiled: XSpec compiles the branch for each x:expect of the form, whatever its @test
+  returns, e.g. a boolean @test returns () if it compares an attribute that's missing, with eq.
   The changes are matched by XSpec's own messages, in the test runner it generates - so they're to be checked when the
   XSpec bundled with the extension is updated.
   compiler: the URI of XSpec's compile-xslt-tests.xsl
@@ -48,7 +50,7 @@
 
   <!-- a boolean @test with an expected value: the boolean decides -->
   <xsl:template match="xsl:message[@terminate = 'yes'][contains(., $compat:boolean-with-comparison)]" mode="compat:runner">
-    <xsl:message select="compat:report(., 'has a boolean @test and an expected value (@select, @as, @href or content) - the boolean decides, as in XSpec 0.5')"/>
+    <xsl:sequence select="compat:message(., 'has a boolean @test and an expected value (@select, @as, @href or content) - the boolean decided, as in XSpec 0.5')"/>
     <xsl:element name="xsl:sequence" namespace="http://www.w3.org/1999/XSL/Transform">
       <xsl:attribute name="select" select="'boolean($Q{urn:x-xspec:compile:impl}test-result)'"/>
     </xsl:element>
@@ -56,11 +58,20 @@
 
   <!-- a @test that isn't boolean, without an expected value: compared with the empty sequence -->
   <xsl:template match="xsl:message[@terminate = 'yes'][contains(., $compat:non-boolean-without-comparison)]" mode="compat:runner">
-    <xsl:message select="compat:report(., 'has a @test that isn''t boolean, and no expected value - it passes if the @test returns nothing, as in XSpec 0.5')"/>
+    <xsl:sequence select="compat:message(., 'has a @test that didn''t return a boolean, and no expected value - it passes if the @test returns nothing, as in XSpec 0.5')"/>
     <xsl:element name="xsl:sequence" namespace="http://www.w3.org/1999/XSL/Transform">
       <xsl:attribute name="select" select="'empty($Q{urn:x-xspec:compile:impl}test-result)'"/>
     </xsl:element>
   </xsl:template>
+
+  <!-- an xsl:message for the test runner, reporting the change when it's run -->
+  <xsl:function name="compat:message" as="element()">
+    <xsl:param name="message" as="element()"/>
+    <xsl:param name="change" as="xs:string"/>
+    <xsl:element name="xsl:message" namespace="http://www.w3.org/1999/XSL/Transform">
+      <xsl:value-of select="compat:report($message, $change)"/>
+    </xsl:element>
+  </xsl:function>
 
   <!-- e.g. "XSpec legacy compatibility: x:expect ('a label') has ..." - from XSpec's "ERROR in x:expect ('a label'): ..." -->
   <xsl:function name="compat:report" as="xs:string">

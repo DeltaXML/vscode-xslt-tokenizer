@@ -12,6 +12,7 @@ import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSpecConfiguration, XSLTConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
 import { XSpecLabels } from '../../src/xspecLabels';
+import { XSpecCompat } from '../../src/xspecCompat';
 
 const xspecNs = 'xmlns:x="http://www.jenitennison.com/xslt/xspec"';
 
@@ -56,7 +57,7 @@ suite('XSpec', () => {
 <x:scenario label="named"><x:call template="f:named"/><x:expect label="empty" select="()"/></x:scenario>
 <x:scenario label="rule">
   <x:context><doc><p>text</p></doc></x:context>
-  <x:expect label="same" test="count(doc/p) = 1"><doc><p>text</p></doc></x:expect>
+  <x:expect label="same" test="doc/p"><p>text</p></x:expect>
 </x:scenario>`)), []);
 	});
 
@@ -237,6 +238,39 @@ suite('XSpec', () => {
 		const texts = (offsets: [number, number][]) => offsets.map(([start, end]) => text.substring(start, end));
 		assert.deepEqual(texts(scenarios), ['the total', 'with a discount']);
 		assert.deepEqual(texts(expectations), ['is 2', 'no error']);
+	});
+
+	test('x:expect tests: boolean, or not, from the top level of the expression - or either', () => {
+		const types: [string, string | undefined][] = [
+			['exists(tgroup/row[2][@a])', 'boolean'], ['not(exists(row))', 'boolean'], ['tgroup/@k eq \'One\'', 'boolean'], ['$x:result/p = 1', 'boolean'],
+			['count($x:result) > 2 and $x:result/p', 'boolean'], ['every $p in $x:result/p satisfies $p/@a', 'boolean'], ['$x:result instance of element()', 'boolean'],
+			['$x:result/p/deltaxml:space[@v=\'A=B\']', 'non-boolean'], ['(\'a\', \'b\')[not(. = in-scope-prefixes($x:result))]', 'non-boolean'],
+			['distinct-values(//p/@a)', 'non-boolean'], ['string(//para/@id)', 'non-boolean'],
+			['$x:result', undefined], ['$x:result/exists(p)', undefined], ['if ($x:result) then 1 else 2', undefined], ['$x:result => f:check()', undefined], ['f:valid($x:result)', undefined]
+		];
+		assert.deepEqual(types.map(([xpath]) => [xpath, XSpecCompat.testType(xpath)]), types);
+	});
+
+	test('x:expect tests XSpec 4 stops the run for: warnings, and quick fixes for the form it runs', async () => {
+		const content = xspec(`<x:scenario label="s"><x:context><p/></x:context>
+  <x:expect label="b" select="$x:result" test="exists(p[@a])"/>
+  <x:expect label="n" test="$x:result/p[@a]"/>
+  <x:expect label="fine" test="exists(p)"/>
+  <x:expect label="fine too" test="$x:result/p" select="()"/>
+</x:scenario>`);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file(`compat${count++}.xspec`, content)));
+		const diagnostics = XSpecCompat.problems(document);
+		assert.deepEqual(diagnostics.map((d) => [d.code, document.getText(d.range)]), [
+			[XSpecCompat.booleanWithExpected, 'exists(p[@a])'], [XSpecCompat.nonBooleanWithoutExpected, '$x:result/p[@a]']]);
+		const actions = XSpecCompat.codeActions(document, diagnostics);
+		assert.deepEqual(actions.map((a) => a.title), ['Remove select, as and href - the boolean test decides',
+			'Wrap the test in empty() - as XSpec before 1.0 ran it: it passes if the test returns nothing', 'Wrap the test in exists() - it passes if the test returns something']);
+		assert.isTrue(await vscode.workspace.applyEdit(actions[0].edit!));
+		assert.include(document.getText(), '<x:expect label="b" test="exists(p[@a])"/>');
+		const after = XSpecCompat.problems(document);
+		assert.isTrue(await vscode.workspace.applyEdit(XSpecCompat.codeActions(document, after)[0].edit!));
+		assert.include(document.getText(), '<x:expect label="n" test="empty($x:result/p[@a])"/>');
+		assert.deepEqual(XSpecCompat.problems(document), []);
 	});
 
 	test('pending: faded, other than the reason - x:pending\'s label, or a pending attribute\'s value - and once, within x:pending', () => {

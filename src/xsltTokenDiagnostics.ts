@@ -29,6 +29,7 @@ import { HrefPaths, ImportProblem } from './hrefPaths';
 import * as fs from 'fs';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecGlobalParams } from './xspecGlobalParams';
+import { XSpecCompat } from './xspecCompat';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
 
@@ -3425,6 +3426,8 @@ export class XsltTokenDiagnostics {
 			// the required global parameters of the stylesheet tested that aren't set
 			const xspecPrefix = /<(?:([\w.-]+):)?description\b/.exec(document.getText())?.[1] ?? '';
 			allDiagnostics.push(...XSpecGlobalParams.problems(document, xspecPrefix, importedInstructionData));
+			// x:expect elements XSpec 4 stops the run for, which XSpec before 1.0 ran
+			allDiagnostics.push(...XSpecCompat.problems(document));
 			// with run-as="external", a function of the stylesheet tested called in an XPath expression: why it's not found
 			if (xspecExternalFnNames.length > 0) {
 				allDiagnostics.forEach((d) => {
