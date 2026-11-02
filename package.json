@@ -863,6 +863,12 @@
 					"scope": "resource",
 					"description": "In XSpec files, fade the pending scenarios and expectations - in x:pending, or with a pending attribute - which XSpec doesn't run, other than the reason they're pending."
 				},
+				"XSLT.xspec.legacyCompatibility": {
+					"type": "boolean",
+					"default": false,
+					"scope": "resource",
+					"markdownDescription": "Run XSpec tests written for XSpec before 1.0 (e.g. 0.5) as that ran them, where XSpec 4 stops the run: an `x:expect` with a boolean `test` and an expected value is decided by the boolean; one with a `test` that isn't boolean and no expected value passes if the `test` returns nothing; and the `xs` prefix needn't be declared. Each of these is reported in the XSpec output, so the tests can be updated."
+				},
 				"XSLT.xspec.allowSyntaxExtensions": {
 					"type": "string",
 					"enum": [
@@ -871,13 +877,13 @@
 						"off"
 					],
 					"enumDescriptions": [
-						"On, unless the Saxon jar is Saxon-HE, which fails every transform with them on",
+						"On for tests of a stylesheet that's XSLT 4.0, or uses item types or notes - in it or a module it uses - unless the Saxon jar is Saxon-HE, which fails every transform with them on",
 						"Always on",
 						"Always off"
 					],
 					"default": "auto",
 					"scope": "resource",
-					"markdownDescription": "Run XSpec tests with Saxon's syntax extensions (`--allowSyntaxExtensions:on`), so the stylesheet tested can use XPath 4.0 syntax, or e.g. record types in an XSLT 3.0 stylesheet - as for a task's `allowSyntaxExtensions40`."
+					"markdownDescription": "Run XSpec tests with Saxon's syntax extensions (`--allowSyntaxExtensions:on`), so the stylesheet tested can use XPath 4.0 syntax, or e.g. record types in an XSLT 3.0 stylesheet. By default only for tests that need them: with them on, Saxon 13 runs a stylesheet before XSLT 4.0 with some of 4.0's rules, e.g. the priority of a union pattern."
 				}
 			}
 		},

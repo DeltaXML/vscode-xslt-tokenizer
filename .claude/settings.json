@@ -75,7 +75,15 @@
       "Bash(XSPEC_SAXON_JAR=/Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=.)",
       "Bash(ls common *)",
       "Bash(grep -rln \"deep-equal\" --include=*.xsl .)",
-      "Bash(java -cp /Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform -xsl:vscode-xslt-xpath/xsl/createPages.xsl -s:vscode-xslt-xpath/authoring/layout.xml -o:vscode-xslt-xpath/xslt-out/result1.xml)"
+      "Bash(java -cp /Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform -xsl:vscode-xslt-xpath/xsl/createPages.xsl -s:vscode-xslt-xpath/authoring/layout.xml -o:vscode-xslt-xpath/xslt-out/result1.xml)",
+      "Bash(awk -F'\\\\t' '$2==\"ran\"' summary.tsv)",
+      "Bash(awk '{p+=$4; f+=$6} END {print \"ran: passed\", p, \"failed\", f}')",
+      "Bash(awk -F'\\\\t' '$2==\"ran\" && $3 !~ /failed 0$/' summary.tsv)",
+      "Bash(awk -F'\\\\t' '$2==\"run\" {print $1 \" :: \" $3}' summary.tsv)",
+      "Bash(awk -F'\\\\t' '$2==\"ran\" {split\\($3,a,\" \"\\); p+=a[2]; f+=a[4]} END {print \"ran: passed\", p, \"failed\", f}' summary.tsv)",
+      "Bash(awk -F'\\\\t' '$2==\"ran\" && $3 !~ /failed 0$/ {print $1 \" :: \" $3}' summary.tsv)",
+      "Bash(grep -n \"test-result\\\\|instance of xs:boolean\\\\|impl:successful\\\\|boolean-test\" /usr/local/java/xspec-github-v0.5.0/src/compiler/generate-xspec-tests.xsl | head -30)",
+      "Read(//usr/local/java/xspec-github-v0.5.0/src/compiler/**)"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

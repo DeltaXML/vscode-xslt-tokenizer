@@ -235,7 +235,7 @@ suite('XSpec: running tests', function () {
 		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'invoice-result.html')), 'the HTML report');
 	});
 
-	test('Saxon\'s syntax extensions: a stylesheet before XSLT 4.0 with a record type is run - imported, or with run-as="external"', async () => {
+	test('Saxon\'s syntax extensions: on for a stylesheet before XSLT 4.0 with a record type - imported, or with run-as="external" - and off for one without', async () => {
 		fs.writeFileSync(path.join(dir, 'points.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="urn:f" version="3.0">
   <xsl:item-type name="f:point" as="record(x as xs:double, y as xs:double)"/>
   <xsl:function name="f:sum" as="xs:double" visibility="public"><xsl:param name="p" as="f:point"/><xsl:sequence select="$p?x + $p?y"/></xsl:function>
@@ -255,6 +255,35 @@ suite('XSpec: running tests', function () {
 			xspec.createRun = undefined;
 			assert.strictEqual(outcomes.get('is three'), 'passed', `${runAs}: ${JSON.stringify([...outcomes])} ${JSON.stringify([...messages].map(([k, m]) => [k, m.map((x) => x.message)]))}`);
 		}
+		// a stylesheet before 4.0 without item types: by default, run without them, as with them, Saxon 13 gives a union
+		// pattern 4.0's priority - here the later rule would win, and drop the attribute
+		fs.writeFileSync(path.join(dir, 'union.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:d="urn:d" version="3.0">
+  <xsl:mode on-no-match="shallow-copy"/>
+  <xsl:template match="@d:keep"><xsl:copy/></xsl:template>
+  <xsl:template match="@d:* | @other"/>
+</xsl:stylesheet>`);
+		const unionXspec = path.join(dir, 'union.xspec');
+		fs.writeFileSync(unionXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:d="urn:d" stylesheet="union.xsl">
+  <x:scenario label="union"><x:context><a d:keep="1" d:drop="2"/></x:context><x:expect label="keeps d:keep"><a d:keep="1"/></x:expect></x:scenario>
+</x:description>`);
+		const runUnion = async () => {
+			const xspec = XSpecTestController.instance!;
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(unionXspec));
+			const fileItem = xspec.testController.items.get(document.uri.toString())!;
+			const outcomes = new Map<string, string>();
+			xspec.createRun = () => recordingRun(outcomes, new Map());
+			await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			return outcomes.get('keeps d:keep');
+		};
+		assert.strictEqual(await runUnion(), 'passed');
+		const extensions = vscode.workspace.getConfiguration('XSLT.xspec');
+		await extensions.update('allowSyntaxExtensions', 'on', vscode.ConfigurationTarget.Global);
+		try {
+			assert.strictEqual(await runUnion(), 'failed');
+		} finally {
+			await extensions.update('allowSyntaxExtensions', undefined, vscode.ConfigurationTarget.Global);
+		}
 		// with the XSLT.xspec.allowSyntaxExtensions setting off, the record type is an error
 		const settings = vscode.workspace.getConfiguration('XSLT.xspec');
 		await settings.update('allowSyntaxExtensions', 'off', vscode.ConfigurationTarget.Global);
@@ -268,6 +297,43 @@ suite('XSpec: running tests', function () {
 			assert.strictEqual(outcomes.get('is three'), 'errored', JSON.stringify([...outcomes]));
 		} finally {
 			await settings.update('allowSyntaxExtensions', undefined, vscode.ConfigurationTarget.Global);
+		}
+	});
+
+	test('legacy compatibility: tests written for XSpec 0.5 - a boolean test with select, a test that isn\'t boolean without one, xs undeclared', async () => {
+		fs.writeFileSync(path.join(dir, 'legacy.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:template match="p"><q n="{count(*)}"/></xsl:template>
+</xsl:stylesheet>`);
+		const legacyXspec = path.join(dir, 'legacy.xspec');
+		fs.writeFileSync(legacyXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="legacy.xsl">
+  <x:scenario label="a paragraph">
+    <x:context><p><i/></p></x:context>
+    <x:expect label="boolean decides" select="$x:result" test="exists(q[@n = '1'])"/>
+    <x:expect label="nothing returned" test="q[@n = '2']"/>
+    <x:expect label="xs undeclared" test="xs:integer(q/@n) = 1"/>
+  </x:scenario>
+</x:description>`);
+		const xspec = XSpecTestController.instance!;
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(legacyXspec));
+		const run = async () => {
+			const fileItem = xspec.testController.items.get(document.uri.toString())!;
+			const outcomes = new Map<string, string>();
+			xspec.createRun = () => recordingRun(outcomes, new Map());
+			await xspec.runProfile.runHandler(new vscode.TestRunRequest([fileItem]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			return outcomes;
+		};
+		// as XSpec 4 runs them: it stops
+		assert.strictEqual((await run()).get('boolean decides'), 'errored');
+		const settings = vscode.workspace.getConfiguration('XSLT.xspec');
+		await settings.update('legacyCompatibility', true, vscode.ConfigurationTarget.Global);
+		try {
+			const outcomes = await run();
+			for (const label of ['boolean decides', 'nothing returned', 'xs undeclared']) {
+				assert.strictEqual(outcomes.get(label), 'passed', `${label}: ${JSON.stringify([...outcomes])}`);
+			}
+		} finally {
+			await settings.update('legacyCompatibility', undefined, vscode.ConfigurationTarget.Global);
 		}
 	});
 

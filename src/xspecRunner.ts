@@ -15,6 +15,9 @@ import { unquotedPath } from './settingPaths';
 import { CatalogSetting } from './catalogSetting';
 import { XsltPackages } from './xsltPackages';
 import { SaxonTaskProvider } from './saxonTaskProvider';
+import { ItemTypeSupport } from './itemTypeSupport';
+import { ImportIndex } from './importIndex';
+import { HrefPaths } from './hrefPaths';
 
 // XSpec's steps for an XSpec file that tests a stylesheet, as XSpec's own command line (bin/xspec.sh) runs them, each a
 // Saxon transform: compile the tests to a stylesheet, the test runner - run it, for the result XML - and format the
@@ -138,7 +141,13 @@ export class XSpecRunner {
 	public static compile(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken, forceFocus?: string, source = xspecPath): Promise<XSpecStepOutcome> {
 		fs.mkdirSync(path.dirname(files.compiled), { recursive: true });
 		const uri = vscode.Uri.file(xspecPath);
-		const args = ['-s:' + source, '-xsl:' + path.join(XSpecRunner.home(uri)!, 'src', 'compiler', 'compile-xslt-tests.xsl'), '-o:' + files.compiled];
+		const compiler = path.join(XSpecRunner.home(uri)!, 'src', 'compiler', 'compile-xslt-tests.xsl');
+		// with the XSLT.xspec.legacyCompatibility setting: by the extension's stylesheet, which imports XSpec's compiler and
+		// changes the test runner to run tests written for XSpec before 1.0 as that did - each change is reported
+		const legacy = vscode.workspace.getConfiguration('XSLT.xspec', uri).get<boolean>('legacyCompatibility', false) && XSpecRunner.extensionUri;
+		const args = legacy ?
+			['-s:' + source, '-xsl:' + path.join(XSpecRunner.extensionUri!.fsPath, 'xslt-resources', 'xspec-compat', 'xspec-compat.xsl'), '-o:' + files.compiled, 'compiler=' + vscode.Uri.file(compiler).toString()] :
+			['-s:' + source, '-xsl:' + compiler, '-o:' + files.compiled];
 		return XSpecRunner.saxon('Compiling the tests', uri, forceFocus ? args.concat('force-focus=' + forceFocus) : args, token);
 	}
 
@@ -149,12 +158,65 @@ export class XSpecRunner {
 	}
 
 	// Saxon's syntax extensions - XPath 4.0 syntax, and e.g. record types in an XSLT 3.0 stylesheet - by the
-	// XSLT.xspec.allowSyntaxExtensions setting, as for a task's allowSyntaxExtensions40: by default on, unless Saxon-HE,
-	// which fails every transform with them on. They're needed to compile the stylesheet tested, which the test runner
+	// XSLT.xspec.allowSyntaxExtensions setting. They're needed to compile the stylesheet tested, which the test runner
 	// imports - or, with run-as="external", compiles with fn:transform(), which has the same configuration
 	private static syntaxExtensions(uri: vscode.Uri): string[] {
+		return XSpecRunner.syntaxExtensionsValue(uri) === 'on' ? ['--allowSyntaxExtensions:on'] : [];
+	}
+
+	// 'on' or 'off': as the setting says - or for 'auto', the default, on only for tests that need them, of a stylesheet
+	// that's XSLT 4.0, or uses item types or notes - and never with Saxon-HE, which fails every transform with them on.
+	// Not otherwise, as with them on, Saxon 13 runs a stylesheet before 4.0 with some of 4.0's rules, e.g. the
+	// priority of a union pattern (SXWN9052)
+	public static syntaxExtensionsValue(uri: vscode.Uri): 'on' | 'off' {
 		const setting = vscode.workspace.getConfiguration('XSLT.xspec', uri).get<string>('allowSyntaxExtensions');
-		return SaxonTaskProvider.syntaxExtensions40Value(setting, XSpecRunner.saxonJar(uri)) === 'on' ? ['--allowSyntaxExtensions:on'] : [];
+		if (setting === 'on' || setting === 'off') {
+			return setting;
+		}
+		return !SaxonTaskProvider.isSaxonHE(XSpecRunner.saxonJar(uri)) && XSpecRunner.needsSyntaxExtensions(uri.fsPath) ? 'on' : 'off';
+	}
+
+	// the XSpec file, with xslt-version="4.0" or item types, or a module it tests - the stylesheet, and those it imports,
+	// includes or uses, with its helpers - that's XSLT 4.0, or uses item types or notes
+	private static needsSyntaxExtensions(xspecPath: string): boolean {
+		const read = (file: string) => {
+			try {
+				const open = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'file' && d.fileName === file);
+				return open ? open.getText() : fs.readFileSync(file, 'utf8');
+			} catch {
+				return undefined;
+			}
+		};
+		const xspecText = read(xspecPath) ?? '';
+		if (/<(?:[\w.-]+:)?description\b[^>]*\sxslt-version\s*=\s*["']4/.test(xspecText) || /\sas\s*=\s*(["'])[^"']*(?<![\w.:-])(record|enum)\s*\(/.test(xspecText)) {
+			return true;
+		}
+		// from the stylesheet and the helpers: their hrefs, resolved against the XSpec file
+		const starts = [...xspecText.matchAll(/<(?:[\w.-]+:)?(?:description|helper)\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)]
+			.map((m) => m[2].startsWith('file:') ? vscode.Uri.parse(m[2]).fsPath : path.resolve(path.dirname(xspecPath), m[2]));
+		const visited = new Set<string>();
+		const visit = (file: string): boolean => {
+			if (visited.has(file) || visited.size > 500) {
+				return false;
+			}
+			visited.add(file);
+			const text = read(file);
+			if (text === undefined) {
+				return false;
+			}
+			if (ItemTypeSupport.syntaxExtensionsReason(text, true)) {
+				return true;
+			}
+			return ImportIndex.moduleReferences(text, file).some((reference) => visit(reference.path)) ||
+				XsltPackages.libraryPaths(file).some((pkg) => visit(pkg));
+		};
+		// and the packages of its x:helper elements
+		const helperPackages = [...xspecText.matchAll(/<(?:[\w.-]+:)?helper\b[^>]*?\spackage-name\s*=\s*(["'])(.*?)\1[^>]*>/g)].map((m) => {
+			const version = /\spackage-version\s*=\s*(["'])(.*?)\1/.exec(m[0])?.[2];
+			const found = XsltPackages.find(XsltPackages.all(), m[2], version);
+			return found ? HrefPaths.settingsPath(found.path, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(xspecPath)) : undefined;
+		}).filter((p): p is string => !!p);
+		return starts.concat(helperPackages).some(visit);
 	}
 
 	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
