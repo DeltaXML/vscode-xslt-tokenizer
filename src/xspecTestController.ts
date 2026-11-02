@@ -18,6 +18,15 @@ import { XSpecSourceMap } from './xspecSourceMap';
 // XSpec's tests in the Test Explorer: an item for each XSpec file, with its scenarios and expectations - run, or
 // debugged with the XSLT debugger, by XSpecRunner's steps. One scenario is run with XSpec's force-focus, and the outcomes
 // in XSpec's result XML are matched with the items by their labels (see XSpecTests)
+// the outcome of running an XSpec file's tests: those of its expectations - or why they couldn't be run
+interface XSpecFileOutcome {
+	file: string;
+	passed: number;
+	failed: number;
+	pending: number;
+	stopped?: string;
+}
+
 // the debugger's coverage of each module, by path: the hits of each line, and the lines that can be run
 // - each as the first and last lines of an instruction's start tag, up to a multi-line expression in it
 type CoverageFiles = { [path: string]: { hits: { [line: string]: number }, executable: [number, number][] } };
@@ -160,6 +169,7 @@ export class XSpecTestController {
 				byFile.set(file, [...(byFile.get(file) ?? []), item]);
 			}
 		}
+		const outcomes: XSpecFileOutcome[] = [];
 		for (const [file, items] of byFile) {
 			if (token.isCancellationRequested) {
 				break;
@@ -168,9 +178,28 @@ export class XSpecTestController {
 			await this.updateFile(fileItem.uri!);
 			// one scenario: the scenario of an expectation; otherwise the whole file
 			const scenario = items?.length === 1 ? this.scenarioOf(items[0]) : undefined;
-			await this.runFile(run, fileItem, scenario, token, debug, coverage);
+			outcomes.push(await this.runFile(run, fileItem, scenario, token, debug, coverage));
+		}
+		if (outcomes.length > 1) {
+			run.appendOutput(XSpecTestController.summary(outcomes).replace(/\n/g, '\r\n'));
 		}
 		run.end();
+	}
+
+	// for a run of more than one file: the expectations passed, failed and pending, in all of them, and the files that
+	// stopped, with why - and, for those stopped by XSpec 4 for tests written for XSpec before 1.0, the setting that runs
+	// them as that did
+	public static summary(outcomes: XSpecFileOutcome[]): string {
+		const total = (key: 'passed' | 'failed' | 'pending') => outcomes.reduce((sum, outcome) => sum + outcome[key], 0);
+		const stopped = outcomes.filter((outcome) => outcome.stopped !== undefined);
+		const lines = [`\nXSpec: ${outcomes.length} files - ${total('passed')} passed, ${total('failed')} failed, ${total('pending')} pending` +
+			` - ${outcomes.length - stopped.length} ran to the end${stopped.length > 0 ? `, ${stopped.length} stopped:` : ''}`];
+		stopped.forEach((outcome) => lines.push(`  ${vscode.workspace.asRelativePath(outcome.file)}: ${outcome.stopped}`));
+		const legacy = stopped.filter((outcome) => /(Boolean|Non-boolean) @test must( not)? be accompanied/.test(outcome.stopped!));
+		if (legacy.length > 0 && !vscode.workspace.getConfiguration('XSLT.xspec').get<boolean>('legacyCompatibility', false)) {
+			lines.push(`${legacy.length} of them stopped for tests written for XSpec before 1.0 - the XSLT.xspec.legacyCompatibility setting runs them as that did`);
+		}
+		return lines.join('\n') + '\n';
 	}
 
 	private scenarioOf(item: vscode.TestItem): vscode.TestItem | undefined {
@@ -187,31 +216,37 @@ export class XSpecTestController {
 		return all;
 	}
 
-	private async runFile(run: vscode.TestRun, fileItem: vscode.TestItem, scenario: vscode.TestItem | undefined, token: vscode.CancellationToken, debug: boolean, coverage = false) {
+	private async runFile(run: vscode.TestRun, fileItem: vscode.TestItem, scenario: vscode.TestItem | undefined, token: vscode.CancellationToken, debug: boolean, coverage = false): Promise<XSpecFileOutcome> {
 		const xspecPath = fileItem.uri!.fsPath;
+		const outcome: XSpecFileOutcome = { file: xspecPath, passed: 0, failed: 0, pending: 0 };
 		// only the expectations are tests, as XSpec counts them: a scenario's state comes from those in it, so isn't
 		// counted too - unless the run's of one without any
 		const tests = this.items(scenario ?? fileItem).filter((item) => this.kinds.get(item) === 'expect');
 		const items = tests.length > 0 ? tests : [scenario ?? fileItem];
 		items.forEach((item) => run.started(item));
+		// the file's tests couldn't be run: why - with the first error in Saxon's output, for the summary
 		const errored = (message: string) => {
 			items.forEach((item) => run.errored(item, new vscode.TestMessage(message)));
 			run.appendOutput(message.replace(/\n/g, '\r\n') + '\r\n');
+			const lines = message.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+			// Saxon's error code and message, e.g. 'XTSE0165  I/O error ...', after its 'Error on line ...' - or XSpec's, e.g.
+			// 'ERROR in x:expect (...): ...'
+			outcome.stopped = lines.find((line, index) => index > 0 && /^\w*:?\s*\b(XPST|XPTY|XPDY|XTSE|XTDE|XTTE|XTMM|FO[A-Z]{2}|SXXP|SXXF)\d{4}\b/.test(line) && !/XTMM9000/.test(line)) ??
+				lines.find((line, index) => index > 0 && /ERROR|Error/.test(line)) ?? lines[0] ?? '';
+			return outcome;
 		};
 		const problem = XSpecRunner.problem(fileItem.uri);
 		if (problem) {
-			errored(problem);
 			vscode.window.showErrorMessage(problem);
-			return;
+			return errored(problem);
 		}
 		const channel = XSpecRunner.output();
 		channel.appendLine(`XSpec: ${scenario ? `scenario '${scenario.label}' in ` : ''}${xspecPath}`);
 		const files = XSpecRunner.files(xspecPath);
 		const prepared = await XSpecRunner.prepare(xspecPath, files, token);
 		if (!prepared.ok) {
-			errored(`XSpec: the Schematron couldn't be prepared for testing - see the XSpec output.\n${prepared.output.trim()}`);
 			channel.show(true);
-			return;
+			return errored(`XSpec: the Schematron couldn't be prepared for testing - see the XSpec output.\n${prepared.output.trim()}`);
 		}
 		let compiled = await XSpecRunner.compile(xspecPath, files, token, undefined, prepared.source);
 		// the scenario run on its own, with XSpec's force-focus
@@ -234,9 +269,8 @@ export class XSpecTestController {
 			}
 		}
 		if (!compiled.ok) {
-			errored(`XSpec: the tests couldn't be compiled - see the XSpec output.\n${compiled.output.trim()}`);
 			channel.show(true);
-			return;
+			return errored(`XSpec: the tests couldn't be compiled - see the XSpec output.\n${compiled.output.trim()}`);
 		}
 		const runOnce = async () => {
 			const resultTime = fs.existsSync(files.result) ? fs.statSync(files.result).mtimeMs : 0;
@@ -254,17 +288,22 @@ export class XSpecTestController {
 			({ ran, hasResult } = compiled.ok ? await runOnce() : { ran: compiled, hasResult: false });
 		}
 		if (!ran.ok || !hasResult) {
-			errored(`XSpec: the tests didn't run to the end - see the XSpec output.\n${ran.output.trim()}`);
 			channel.show(true);
-			return;
+			return errored(`XSpec: the tests didn't run to the end - see the XSpec output.\n${ran.output.trim()}`);
 		}
 		const results = XSpecTests.parseResults(fs.readFileSync(files.result, 'utf8'));
 		const report = await XSpecRunner.report(xspecPath, files, token);
 		XSpecTests.useDiffs(results, files.diffs);
 		// for one scenario: only its outcomes - the others are pending, as XSpec's force-focus makes them, but keep theirs
 		this.applyResults(run, fileItem, results, focusedId ? scenario : undefined);
-		run.appendOutput(`XSpec: ${results.filter((r) => r.kind === 'expect' && r.status === 'passed').length} passed, ${results.filter((r) => r.kind === 'expect' && r.status === 'failed').length} failed, ${results.filter((r) => r.kind === 'expect' && r.status === 'pending').length} pending\r\n` +
+		// the expectations applied - of the scenario, for one run on its own
+		const applied = results.filter((r) => r.kind === 'expect' && (!focusedId || !scenario || r.labelPath.join('\u001f').startsWith(this.keyOf(scenario).split('\u001f').slice(1).join('\u001f'))));
+		outcome.passed = applied.filter((r) => r.status === 'passed').length;
+		outcome.failed = applied.filter((r) => r.status === 'failed').length;
+		outcome.pending = applied.filter((r) => r.status === 'pending').length;
+		run.appendOutput(`XSpec: ${vscode.workspace.asRelativePath(xspecPath)}: ${outcome.passed} passed, ${outcome.failed} failed, ${outcome.pending} pending\r\n` +
 			(report.ok ? `Report: ${files.html}\r\n` : ''));
+		return outcome;
 	}
 
 	// the coverage of the modules the tests ran: the stylesheet tested and those it uses - not the test runner, or
