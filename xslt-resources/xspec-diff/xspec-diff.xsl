@@ -19,6 +19,7 @@
   <xsl:import _href="{$reporter}"/>
 
   <xsl:mode name="diff:normalise" on-no-match="fail"/>
+  <xsl:mode name="diff:without-x-attrs" on-no-match="shallow-copy"/>
 
   <xsl:template match="document-node(element(x:report))">
     <xsl:apply-imports/>
@@ -35,7 +36,8 @@
   </xsl:template>
 
   <!-- a value in the report: its nodes, or else the expression XSpec shows for it, e.g. an atomic value's - expected: for
-    the actual value, the expected one, whose maps' order its maps are put in -->
+    the actual value, the expected one, whose maps' order its maps are put in, and whose '...' its nodes are shown with
+    where they match it -->
   <xsl:function name="diff:value" as="xs:string?">
     <xsl:param name="value" as="element()?"/>
     <xsl:param name="expected" as="element()?"/>
@@ -44,8 +46,69 @@
     <xsl:sequence select="if (empty($value)) then () else if (empty($nodes)) then string($value/@select)
       else if (diff:is-pseudo($nodes[1]))
         then string-join(for $i in 1 to count($nodes) return diff:pseudo-item($nodes[$i], $expected-nodes[$i][diff:is-pseudo(.)]), ',&#10;')
-      else string-join($nodes ! diff:serialise(.), '&#10;')"/>
+      else string-join(diff:as-matched($nodes, $expected-nodes) ! diff:without-x-attrs(.) ! diff:serialise(.), '&#10;')"/>
   </xsl:function>
+
+  <!-- the actual nodes, with what the expected ones' '...' match - as deq:deep-equal matches them - as '...', so they don't
+    differ: an attribute's value, a text node, or an element's content, if it's only '...'; and without the attributes
+    an element doesn't need, if the expected one has x:attrs="...". Nodes are matched by their positions, as XSpec matches
+    them, and elements by their names too -->
+  <xsl:function name="diff:as-matched" as="node()*">
+    <xsl:param name="actual" as="node()*"/>
+    <xsl:param name="expected" as="node()*"/>
+    <xsl:for-each select="$actual">
+      <xsl:variable name="position" as="xs:integer" select="position()"/>
+      <xsl:variable name="match" as="node()?" select="$expected[$position]"/>
+      <xsl:choose>
+        <xsl:when test=". instance of text() and $match instance of text() and string($match) eq '...'">
+          <xsl:text>...</xsl:text>
+        </xsl:when>
+        <xsl:when test=". instance of element() and $match instance of element() and node-name(.) eq node-name($match)">
+          <xsl:variable name="any-attributes" as="xs:boolean" select="$match/@x:attrs = '...'"/>
+          <xsl:element name="{name()}" namespace="{namespace-uri()}">
+            <xsl:for-each select="@*">
+              <xsl:variable name="expected-attribute" as="attribute()?" select="$match/@*[node-name(.) eq node-name(current())]"/>
+              <xsl:choose>
+                <xsl:when test="$expected-attribute = '...'">
+                  <xsl:attribute name="{name()}" namespace="{namespace-uri()}" select="'...'"/>
+                </xsl:when>
+                <xsl:when test="$any-attributes and empty($expected-attribute)"/>
+                <xsl:otherwise>
+                  <xsl:sequence select="."/>
+                </xsl:otherwise>
+              </xsl:choose>
+            </xsl:for-each>
+            <xsl:choose>
+              <xsl:when test="count($match/node()) eq 1 and $match/text() = '...'">
+                <xsl:text>...</xsl:text>
+              </xsl:when>
+              <xsl:otherwise>
+                <xsl:sequence select="diff:as-matched(node(), $match/node())"/>
+              </xsl:otherwise>
+            </xsl:choose>
+          </xsl:element>
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:sequence select="."/>
+        </xsl:otherwise>
+      </xsl:choose>
+    </xsl:for-each>
+  </xsl:function>
+
+  <!-- an expected node without the x:attrs="..." that allows other attributes - not a difference from the actual one -->
+  <xsl:function name="diff:without-x-attrs" as="node()">
+    <xsl:param name="node" as="node()"/>
+    <xsl:apply-templates select="$node" mode="diff:without-x-attrs"/>
+  </xsl:function>
+
+  <xsl:template match="@x:attrs[. = '...']" mode="diff:without-x-attrs"/>
+
+  <!-- without the namespace declaration x:attrs needed -->
+  <xsl:template match="*" mode="diff:without-x-attrs">
+    <xsl:element name="{name()}" namespace="{namespace-uri()}">
+      <xsl:apply-templates select="@* | node()" mode="#current"/>
+    </xsl:element>
+  </xsl:template>
 
   <xsl:function name="diff:content" as="node()*">
     <xsl:param name="value" as="element()?"/>

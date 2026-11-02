@@ -164,11 +164,12 @@ suite('XSpec: running tests', function () {
 		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'doc-sch-preprocessed.xsl')), 'the Schematron compiled to XSLT');
 	});
 
-	test('a failed expectation: the diff\'s values as XSpec compares them - XML without namespace declarations, attributes sorted, no indentation whitespace; a map in the expected order', async () => {
+	test('a failed expectation: the diff\'s values as XSpec compares them - XML without namespace declarations, attributes sorted, no indentation whitespace; a map in the expected order; XSpec\'s \'...\'', async () => {
 		fs.writeFileSync(path.join(dir, 'invoice.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
   <xsl:template match="order"><invoice id="{@id}"><line sku="a" qty="2"/><line sku="b" qty="1"/></invoice></xsl:template>
   <xsl:function name="f:summary" xmlns:f="urn:f"><xsl:sequence select="map { 'id': 'A1', 'lines': 2 }"/></xsl:function>
   <xsl:template name="paras"><para>1</para><para>2</para><para>3</para></xsl:template>
+  <xsl:template name="section"><section id="A1" created="07:30" class="order"><h2>Order A1</h2><table><tr/></table><p>at 07:30</p></section></xsl:template>
 </xsl:stylesheet>`);
 		const invoiceXspec = path.join(dir, 'invoice.xspec');
 		fs.writeFileSync(invoiceXspec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" xmlns:xs="http://www.w3.org/2001/XMLSchema" stylesheet="invoice.xsl">
@@ -184,6 +185,16 @@ suite('XSpec: running tests', function () {
   <x:scenario label="a summary">
     <x:call function="f:summary"/>
     <x:expect label="its map" select="map { 'lines': 3, 'id': 'A1' }"/>
+  </x:scenario>
+  <x:scenario label="a section">
+    <x:call template="section"/>
+    <x:expect label="its heading">
+      <section id="A1" created="..." x:attrs="...">
+        <h2>Order A2</h2>
+        <table>...</table>
+        <p>...</p>
+      </section>
+    </x:expect>
   </x:scenario>
   <x:scenario label="some paragraphs">
     <x:call template="paras"/>
@@ -212,6 +223,11 @@ suite('XSpec: running tests', function () {
 		const mapDiff = messages.get('its map')![0];
 		assert.strictEqual(mapDiff.expectedOutput, 'map{\n  "lines": 3,\n  "id": "A1"\n}');
 		assert.strictEqual(mapDiff.actualOutput, 'map{\n  "lines": 2,\n  "id": "A1"\n}');
+		// what XSpec's '...' matches is shown as '...' in the actual result - an attribute's value, an element's content and
+		// a text node - and the attributes x:attrs="..." allows aren't shown: only the heading differs
+		const sectionDiff = messages.get('its heading')![0];
+		assert.strictEqual(sectionDiff.expectedOutput, '<section created="..." id="A1">\n   <h2>Order A2</h2>\n   <table>...</table>\n   <p>...</p>\n</section>');
+		assert.strictEqual(sectionDiff.actualOutput, '<section created="..." id="A1">\n   <h2>Order A1</h2>\n   <table>...</table>\n   <p>...</p>\n</section>');
 		// elements without a wrapper: one on each line, without blank lines between them
 		const parasDiff = messages.get('its paragraphs')![0];
 		assert.strictEqual(parasDiff.expectedOutput, '<para>1</para>\n<para>4</para>\n<para>3</para>');
