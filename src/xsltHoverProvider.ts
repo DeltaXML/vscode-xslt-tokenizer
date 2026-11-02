@@ -18,6 +18,7 @@ import { XsltPackages } from './xsltPackages';
 import { ModulePrefixes } from './modulePrefixes';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecScenario } from './xspecScenario';
+import { XSpecGlobalParams } from './xspecGlobalParams';
 
 enum CharType {
 	none,
@@ -172,6 +173,17 @@ export class XSLTHoverProvider implements HoverProvider {
 	private async xspecCallHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
 		if (!this.definitionProvider) {
 			return undefined;
+		}
+		// an x:param of x:description: the global parameter of the stylesheet under test it sets
+		if (/<(?:[\w.-]+:)?param\s[^<>]*$/.test(document.getText().substring(Math.max(0, document.offsetAt(position) - 300), document.offsetAt(position)))) {
+			const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+			const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+			const param = XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
+			const declaration = param ? XSpecGlobalParams.declaration(param) : undefined;
+			if (param && declaration) {
+				const itemTypes = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType);
+				return this.globalVariableHover(declaration.text, declaration.tagStart, param.href, itemTypes);
+			}
 		}
 		const text = document.getText();
 		const offset = document.offsetAt(position);

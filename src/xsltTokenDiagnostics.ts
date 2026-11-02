@@ -28,6 +28,7 @@ import { FixedNamespaces } from './fixedNamespaces';
 import { HrefPaths, ImportProblem } from './hrefPaths';
 import * as fs from 'fs';
 import { XSpecHrefs } from './xspecHrefs';
+import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
 
@@ -3420,6 +3421,9 @@ export class XsltTokenDiagnostics {
 		if (docType === DocumentTypes.XSPEC) {
 			// the files it refers to that aren't found
 			allDiagnostics.push(...XSpecHrefs.problems(document));
+			// the required global parameters of the stylesheet tested that aren't set
+			const xspecPrefix = /<(?:([\w.-]+):)?description\b/.exec(document.getText())?.[1] ?? '';
+			allDiagnostics.push(...XSpecGlobalParams.problems(document, xspecPrefix, importedInstructionData));
 			// with run-as="external", a function of the stylesheet tested called in an XPath expression: why it's not found
 			if (xspecExternalFnNames.length > 0) {
 				allDiagnostics.forEach((d) => {

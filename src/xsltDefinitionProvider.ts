@@ -22,6 +22,7 @@ import * as url from 'url';
 import { XdocReferences, XdocTarget } from './xdocReferences';
 import { RecordTypes } from './recordTypes';
 import { XPathQuery } from './xpathQuery';
+import { XSpecGlobalParams } from './xspecGlobalParams';
 
 interface ImportedGlobals {
 	href: string;
@@ -83,6 +84,14 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		const fieldLocation = XsltDefinitionProvider.recordFieldLocation(document, position, globalInstructionData.concat(allImportedGlobals));
 		if (fieldLocation) {
 			return fieldLocation;
+		}
+		// XSpec: an x:param of x:description, setting a global parameter of the stylesheet under test
+		if (this.docType === DocumentTypes.XSPEC) {
+			const param = XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
+			const location = param ? XsltTokenDefinitions.createLocationFromInstruction(param, document) : undefined;
+			if (location) {
+				return location;
+			}
 		}
 
 		return new Promise((resolve, reject) => {
@@ -542,6 +551,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				this.docType === DocumentTypes.XSPEC ? XsltTokenCompletions.getXSpecParamElementCompletions(document, position, XsltDefinitionProvider.xspecPrefixOf(document), globalInstructionData, allImportedGlobals) : undefined;
 			if (withParamElements && withParamElements.length > 0) {
 				completions = withParamElements.concat(completions ?? []);
+			}
+			// XSpec: in x:description, an x:param for each global parameter of the stylesheet under test not set yet
+			const globalParamElements = this.docType === DocumentTypes.XSPEC ? XSpecGlobalParams.completions(document, position, XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals) : undefined;
+			if (globalParamElements && globalParamElements.length > 0) {
+				completions = globalParamElements.concat(completions ?? []);
 			}
 			// XSpec: a scenario for each declaration of the module tested that has none yet
 			const scenarioElements = this.docType === DocumentTypes.XSPEC ? XSpecScenario.scenarioCompletions(document, position) : undefined;

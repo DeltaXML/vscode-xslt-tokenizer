@@ -263,6 +263,28 @@ suite('XSpec', () => {
 		assert.include(text, '1 of its 3 functions and templates have a scenario - not: template `f:named`, template rule `p`');
 	});
 
+	test('global parameters: completion of those of the stylesheet not set - required first - their hover and definition, and a warning for a required one not set', async () => {
+		file('params.xsl', `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:f="urn:f" version="3.0">
+  <xsl:param name="f:currency" as="xs:string" select="'GBP'"/>
+  <xsl:param name="rate" as="xs:decimal" required="yes"/>
+</xsl:stylesheet>`);
+		const attributes = ' stylesheet="params.xsl"';
+		const labels = await completions(xspec(`  <|`, attributes));
+		const params = labels.filter((label) => label.startsWith('x:param '));
+		assert.deepEqual(params, ['x:param rate', 'x:param f:currency']);
+		assert.deepEqual((await completions(xspec(`  <x:param name="rate" select="1.2"/>\n  <|`, attributes))).filter((label) => label.startsWith('x:param ')), ['x:param f:currency']);
+		// in a scenario's x:call, not the global parameters
+		assert.notInclude(await completions(xspec(`<x:scenario label="s"><x:call template="t"><|</x:call></x:scenario>`, attributes)), 'x:param rate');
+
+		const warning = 'XSpec: the stylesheet\'s required parameter $rate isn\'t set - add an x:param for it to x:description, or each test fails with XTDE0050';
+		assert.include(await problems(xspec(`<x:scenario label="s"><x:context><p/></x:context><x:expect label="e" select="1"/></x:scenario>`, attributes)), warning);
+		assert.notInclude(await problems(xspec(`<x:param name="rate" select="1.2"/>\n<x:scenario label="s"><x:context><p/></x:context><x:expect label="e" select="1"/></x:scenario>`, attributes)), warning);
+
+		const definitions = await at(xspec(`  <x:param name="ra|te" select="1.2"/>`, attributes), 'vscode.executeDefinitionProvider') as vscode.Location[];
+		assert.deepEqual(definitions.map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line + 1}`), ['params.xsl:3']);
+		assert.include(hoverText(await at(xspec(`  <x:param name="f:curr|ency" select="'EUR'"/>`, attributes), 'vscode.executeHoverProvider')), 'f:currency');
+	});
+
 	test('hover: the function or template x:call calls - its signature and documentation note - and a parameter passed by name', async () => {
 		file('noted.xsl', `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="4.0">
   <xsl:function name="f:half" as="xs:double">
