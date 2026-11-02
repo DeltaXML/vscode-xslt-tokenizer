@@ -74,8 +74,8 @@
     <xsl:sequence select="replace(string($item), '\n\s*\n', '&#10;')"/>
   </xsl:function>
 
-  <!-- a map or array: its value, from the text XSpec gives it, serialised as XSpec serialises it, with its maps' entries in
-    the order of the expected one's - or else, e.g. for a map with a node, which the text isn't an expression for, the
+  <!-- a map or array: its value, from the text XSpec gives it, with each entry or member on a line, and its maps' entries
+    in the order of the expected one's - or else, e.g. for a map with a node, which the text isn't an expression for, the
     text -->
   <xsl:function name="diff:map-or-array" as="xs:string">
     <xsl:param name="item" as="element()"/>
@@ -84,11 +84,37 @@
       <xsl:variable name="value" as="item()" select="diff:evaluate(string($item))"/>
       <xsl:variable name="ordered" as="item()"
         select="if (exists($expected)) then diff:in-order-of($value, diff:evaluate(string($expected))) else $value"/>
-      <xsl:sequence select="replace(serialize($ordered, map { 'method': 'adaptive', 'indent': true() }), '\n\s*\n', '&#10;')"/>
+      <xsl:sequence select="diff:format($ordered, '')"/>
       <xsl:catch>
         <xsl:sequence select="diff:text($item)"/>
       </xsl:catch>
     </xsl:try>
+  </xsl:function>
+
+  <!-- a value with each map entry and array member on a line of its own, indented - as Saxon 12 doesn't indent them,
+    and so they're shown the same with each Saxon version - and other items as the adaptive output method gives them -->
+  <xsl:function name="diff:format" as="xs:string">
+    <xsl:param name="value" as="item()*"/>
+    <xsl:param name="indent" as="xs:string"/>
+    <xsl:variable name="inner" as="xs:string" select="$indent || '  '"/>
+    <xsl:choose>
+      <xsl:when test="count($value) ne 1">
+        <xsl:sequence select="'(' || string-join($value ! diff:format(., $indent), ', ') || ')'"/>
+      </xsl:when>
+      <xsl:when test="$value instance of map(*)">
+        <xsl:sequence select="if (map:size($value) eq 0) then 'map{}' else
+          'map{&#10;' || string-join(map:keys($value) ! ($inner || serialize(., map { 'method': 'adaptive' }) || ': ' || diff:format($value(.), $inner)), ',&#10;')
+          || '&#10;' || $indent || '}'"/>
+      </xsl:when>
+      <xsl:when test="$value instance of array(*)">
+        <xsl:sequence select="if (array:size($value) eq 0) then '[]' else
+          '[&#10;' || string-join((1 to array:size($value)) ! ($inner || diff:format($value(.), $inner)), ',&#10;')
+          || '&#10;' || $indent || ']'"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:sequence select="serialize($value, map { 'method': 'adaptive' })"/>
+      </xsl:otherwise>
+    </xsl:choose>
   </xsl:function>
 
   <xsl:function name="diff:evaluate" as="item()">

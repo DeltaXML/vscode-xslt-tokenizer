@@ -198,11 +198,11 @@ suite('XSpec: running tests', function () {
 		// only the second line differs
 		assert.strictEqual(diff.expectedOutput, '<invoice id="7">\n   <line qty="2" sku="a"/>\n   <line qty="3" sku="b"/>\n</invoice>');
 		assert.strictEqual(diff.actualOutput, '<invoice id="7">\n   <line qty="2" sku="a"/>\n   <line qty="1" sku="b"/>\n</invoice>');
-		// a map: without the pseudo element XSpec reports it in - and, as XSpec ignores the order of its entries, in the
-		// expected map's order
+		// a map: without the pseudo element XSpec reports it in, an entry on each line - and, as XSpec ignores the order of
+		// its entries, in the expected map's order
 		const mapDiff = messages.get('its map')![0];
-		assert.strictEqual(mapDiff.expectedOutput, 'map{"lines":3,\n "id":"A1"}');
-		assert.strictEqual(mapDiff.actualOutput, 'map{"lines":2,\n "id":"A1"}');
+		assert.strictEqual(mapDiff.expectedOutput, 'map{\n  "lines": 3,\n  "id": "A1"\n}');
+		assert.strictEqual(mapDiff.actualOutput, 'map{\n  "lines": 2,\n  "id": "A1"\n}');
 		assert.isTrue(fs.existsSync(path.join(dir, 'xspec', 'invoice-result.html')), 'the HTML report');
 	});
 
