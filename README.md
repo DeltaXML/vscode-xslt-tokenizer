@@ -37,6 +37,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
       <a href="https://www.saxonica.com/html/documentation13/changes/v13/xslt40.html">Saxon 13</a></li>
       <li>SaxonJS interactive extensions (IXSL)</li>
       <li><code>.xpath</code> files, as XPath 3.0/4.0</li>
+      <li>Open <a href="https://deltaxml.github.io/vscode-xslt-xpath/xpath-queries.html">XPath editor</a> for the active XML file</li>
       <li>Fast semantic highlighting</li>
     </ul>
   </td>
@@ -96,7 +97,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
       <li>Go to (or peek) definition, and find references</li>
       <li>Go to the declarations of record fields</li>
       <li>Outline, breadcrumbs and Go to Symbol</li>
-      <li><i>Find nodes</i> in XML with a fully featured XPath editor</li>
+      <li><i>Find nodes</i> in XML with a fully featured <a href="https://deltaxml.github.io/vscode-xslt-xpath/xpath-queries.html">XPath editor</a></li>
       <li>Links for <code>xsl:import</code> and <code>xsl:include</code></li>
       <li>XSLT Imports view, with inferred top-level stylesheets</li>
       <li>Filterable dropdown listing all symbols and modes</li>
@@ -140,15 +141,14 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
     </ul>
   </td>
   <td width="50%" valign="top">
-    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/editing.html">XML editing</a></h4>
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xspec.html">Testing XSLT</a></h4>
     <ul>
-      <li>Well-formedness and namespace checks</li>
-      <li>Formatting and tree-view outline</li>
-      <li>Auto tag-close, tag rename and self-close</li>
-      <li>Comment command (<code>⌘/</code>)</li>
-      <li>XML snippets</li>
-      <li>Breadcrumb Navigation</li>
-      <li>Sticky scroll view</li>
+      <li><a href="https://github.com/xspec/xspec">XSpec 4.1.2</a></h4> test framework built in</li>
+      <li>Run, debug and run with coverage from Test Explorer</li>
+      <li>Advanced language support within XSpec editor</li>
+      <li>Add debug breakpoints direct in XSpec file</li>
+      <li>Generate XSpec tests for functions or templates</li>
+      <li>Navigate between tests and the associated XSLT</li>
     </ul>
   </td>
 </tr>
