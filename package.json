@@ -1830,7 +1830,7 @@
 				"extensions": [
 					".dcp"
 				],
-				"configuration": "./language-configuration.json"
+				"configuration": "./xsl-language-configuration.json"
 			},
 			{
 				"id": "sch",
@@ -1841,7 +1841,7 @@
 				"extensions": [
 					".sch"
 				],
-				"configuration": "./language-configuration.json"
+				"configuration": "./xsl-language-configuration.json"
 			},
 			{
 				"id": "xspec",
@@ -1852,7 +1852,7 @@
 				"extensions": [
 					".xspec"
 				],
-				"configuration": "./language-configuration.json"
+				"configuration": "./xsl-language-configuration.json"
 			},
 			{
 				"id": "bpmn",
