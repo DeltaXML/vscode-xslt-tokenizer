@@ -189,7 +189,9 @@ export class XsltMcpServer {
 			title: 'Find the declaration of an XSLT component',
 			description: 'Where a function, named template, global variable or parameter, mode, attribute set, key, accumulator, item type or ' +
 				'character map is declared, as seen from an XSLT module - in the module, the modules it imports or includes, or the packages it uses - ' +
-				'with its parameters and types. When more than one module declares it, the one used (with the highest import precedence) is first.',
+				'with its parameters and types, and its documentation: its xsl:note, or a comment just before it. When more than one module ' +
+				'declares it, the one used (with the highest import precedence) is first. Use it for a function declared in a stylesheet; ' +
+				'for a built-in function, use xpath_function.',
 			inputSchema: { path: filePath.describe('The XSLT module or XSpec file the name is used in'), name, kind },
 			annotations: readOnly
 		}, async (args) => tools.findDeclaration(args.path, args.name, args.kind));
@@ -204,7 +206,8 @@ export class XsltMcpServer {
 		mcp.registerTool('describe_type', {
 			title: 'Describe an XSLT 4.0 item type',
 			description: 'A named item type (xsl:item-type), as seen from an XSLT module: its declaration, and for a record type its fields - each with ' +
-				'its type, and ? for an optional field - or for an enumeration type its values. A record(...) type written out can be given too.',
+				'its type, ? for an optional field and its @field documentation - or for an enumeration type its values. A record(...) type ' +
+				'written out can be given too.',
 			inputSchema: { path: filePath.describe('The XSLT module or XSpec file the type is used in'), name: z.string().describe('The item type\'s name, e.g. cx:complex, or a record(...) type') },
 			annotations: readOnly
 		}, async (args) => tools.describeType(args.path, args.name));

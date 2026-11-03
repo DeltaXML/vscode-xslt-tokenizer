@@ -66,6 +66,30 @@ suite('MCP server', function () {
   <xsl:variable name="origin" as="cx:point" select="{ 'x': 0 }"/>
   <xsl:template name="xsl:initial-template"><xsl:sequence select="$origin"/></xsl:template>
 </xsl:stylesheet>`);
+	// documentation: a note (XSLT 4.0), a comment just before a declaration, and a comment separated from one
+	const documented = path.join(dir, 'documented.xsl');
+	fs.writeFileSync(documented, `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:d="urn:d" version="4.0">
+  <xsl:function name="d:area" as="xs:double">
+    <xsl:note format="xdoc-md">The area of a rectangle.
+      @param width the width, in metres
+      @param height the height</xsl:note>
+    <xsl:param name="width" as="xs:double"/>
+    <xsl:param name="height" as="xs:double"/>
+    <xsl:sequence select="$width * $height"/>
+  </xsl:function>
+  <!-- the total for a line:
+       its quantity times its price -->
+  <xsl:function name="d:total"><xsl:param name="q"/><xsl:sequence select="$q * 2"/></xsl:function>
+  <!-- Section: helpers -->
+
+  <xsl:function name="d:helper"><xsl:param name="h"/><xsl:sequence select="$h"/></xsl:function>
+  <xsl:item-type name="d:size" as="record(w as xs:double, h? as xs:double)">
+    <xsl:note format="xdoc-md">A size.
+      @field w the width
+      @field h the height, if not square</xsl:note>
+  </xsl:item-type>
+  <xsl:template name="xsl:initial-template"><xsl:sequence select="d:area(1, 2), d:total(1), d:helper(1)"/></xsl:template>
+</xsl:stylesheet>`);
 	const empty = path.join(dir, 'sub', 'empty.xsl');
 	fs.mkdirSync(path.dirname(empty));
 	fs.writeFileSync(empty, '');
@@ -151,7 +175,7 @@ suite('MCP server', function () {
 
 	test('lint_files: the files with problems, after a summary - warnings or worse by default', async () => {
 		const lines = text(await call('lint_files', { folder: dir })).split('\n');
-		assert.match(lines[0], /^Checked 5 files in .*: 3 problems in 3 files \(warnings or worse\)$/, lines.join('\n'));
+		assert.match(lines[0], /^Checked 6 files in .*: 3 problems in 3 files \(warnings or worse\)$/, lines.join('\n'));
 		assert.match(text(await call('lint_files', { folder: dir, pattern: 'sub/*.xsl' })), /^Checked 1 file in .*: 1 problem in 1 file \(warnings or worse\)\n\n.*empty\.xsl - 1 problem:\n {2}1:1 error The file is empty/);
 		assert.isTrue((await call('lint_files', { folder: path.join(dir, 'none') })).message.result.isError);
 	});
@@ -163,6 +187,21 @@ suite('MCP server', function () {
 		assert.match(text(await call('find_declaration', { path: main, name: 'f:twice#2' })), /^No declaration named f:twice#2/);
 		assert.match(text(await call('find_declaration', { path: types, name: '$origin' })), /^xsl:variable \$origin as cx:point - .*types\.xsl:4:\d+$/);
 		assert.match(text(await call('find_declaration', { path: main, name: 'replace' })), /is a built-in function: see the xpath_function tool$/);
+	});
+
+	test('find_declaration: with its documentation - its note, or a comment just before it', async () => {
+		const area = text(await call('find_declaration', { path: documented, name: 'd:area' })).split('\n');
+		assert.match(area[0], /^xsl:function d:area#2\(\$width as xs:double, \$height as xs:double\) as xs:double - .*documented\.xsl:2:\d+$/);
+		assert.strictEqual(area[1], '    The area of a rectangle.', area.join('\n'));
+		assert.match(area.slice(2).join('\n'), /@param\* `\$width` — the width, in metres/);
+		assert.deepEqual(text(await call('find_declaration', { path: documented, name: 'd:total' })).split('\n').slice(1), ['    the total for a line:', '    its quantity times its price']);
+		// not a comment with a blank line after it, e.g. a section heading
+		assert.lengthOf(text(await call('find_declaration', { path: documented, name: 'd:helper' })).split('\n'), 1);
+	});
+
+	test('describe_type: with each field\'s @field text', async () => {
+		const lines = text(await call('describe_type', { path: documented, name: 'd:size' })).split('\n');
+		assert.deepEqual(lines.slice(-2), ['  w as xs:double - the width', '  h? as xs:double - the height, if not square'], lines.join('\n'));
 	});
 
 	test('find_references: as Find All References finds them, with their lines', async () => {

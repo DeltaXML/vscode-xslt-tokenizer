@@ -16,6 +16,7 @@ import { GlobalInstructionData, GlobalInstructionType, XslLexer } from '../xslLe
 import { XsltTokenDefinitions } from '../xsltTokenDefintions';
 import { RecordTypes } from '../recordTypes';
 import { XPathFunctionDetails } from '../xpathFunctionDetails';
+import { XdocNote, XdocNotes } from '../xdocNote';
 
 // what the tools need from the extension: the problems and the declarations of an XSLT module or XSpec file, as the
 // linter finds them - undefined for a document in another language
@@ -211,6 +212,34 @@ export class XsltMcpTools {
 		}
 	}
 
+	// a declaration's documentation: its note (xsl:note format="xdoc-md"), as a hover shows it - or else an XML comment
+	// that ends on the line above its start tag, as is usual before XSLT 4.0, e.g. <!-- the total of a line -->
+	private static documentation(global: GlobalInstructionData, document: vscode.TextDocument): { note?: XdocNote, text?: string } {
+		const declaration = global.href === document.fileName ? { ...global, href: undefined } : global;
+		const note = XdocNotes.forGlobal(declaration, document.getText());
+		if (note) {
+			return { note, text: XdocNotes.toMarkdown(note) };
+		}
+		let text: string;
+		try {
+			text = declaration.href ? fs.readFileSync(declaration.href, 'utf8') : document.getText();
+		} catch {
+			return {};
+		}
+		const lines = text.split(/\r?\n/);
+		const lineStart = lines.slice(0, global.token.line).reduce((offset, line) => offset + line.length + 1, 0);
+		const tagStart = text.lastIndexOf('<', lineStart + global.token.startCharacter);
+		const before = text.substring(0, tagStart);
+		const comment = /<!--((?:(?!-->)[\s\S])*)-->[ \t]*\r?\n[ \t]*$/.exec(before);
+		return comment ? { text: comment[1].trim().split(/\r?\n/).map((line) => line.trim()).join('\n') } : {};
+	}
+
+	// the declaration, with its documentation below it, indented
+	private static describeWithDocumentation(global: GlobalInstructionData, document: vscode.TextDocument) {
+		const { text } = XsltMcpTools.documentation(global, document);
+		return XsltMcpTools.describe(global, document) + (text ? '\n' + text.split('\n').map((line) => '    ' + line).join('\n') : '');
+	}
+
 	public async findDeclaration(filePath: string, name: string, kind?: string): Promise<ToolResult> {
 		const document = await XsltMcpTools.open(filePath, true);
 		if (typeof document === 'string') {
@@ -228,7 +257,7 @@ export class XsltMcpTools {
 		const lines = found.map((global) => {
 			const isUsed = !seen.has(key(global));
 			seen.add(key(global));
-			return XsltMcpTools.describe(global, document) + (isUsed ? '' : ' - not used: overridden by the one above, with a higher import precedence');
+			return isUsed ? XsltMcpTools.describeWithDocumentation(global, document) : XsltMcpTools.describe(global, document) + ' - not used: overridden by the one above, with a higher import precedence';
 		});
 		return XsltMcpTools.text(lines.join('\n'));
 	}
@@ -309,12 +338,17 @@ export class XsltMcpTools {
 		});
 		const typeText = name.trim();
 		const declaration = all.find((global) => global.type === GlobalInstructionType.ItemType && global.name === typeText);
-		const lines = declaration ? [XsltMcpTools.describe(declaration, document)] : [];
+		const lines = declaration ? [XsltMcpTools.describeWithDocumentation(declaration, document)] : [];
+		const note = declaration ? XsltMcpTools.documentation(declaration, document).note : undefined;
 		const record = RecordTypes.resolve(typeText, itemTypes);
 		const values = record ? undefined : RecordTypes.resolveEnum(typeText, itemTypes);
 		if (record) {
 			lines.push(`a record type with ${record.fields.length} field${record.fields.length === 1 ? '' : 's'}:`);
-			record.fields.forEach((field) => lines.push(`  ${field.name}${field.optional ? '?' : ''}${field.type ? ' as ' + field.type : ''}`));
+			// with each field's @field text in the type's note
+			record.fields.forEach((field) => {
+				const fieldText = note ? XdocNotes.fieldText(note, field.name) : undefined;
+				lines.push(`  ${field.name}${field.optional ? '?' : ''}${field.type ? ' as ' + field.type : ''}${fieldText ? ' - ' + fieldText.replace(/\s+/g, ' ') : ''}`);
+			});
 		} else if (values) {
 			lines.push(`an enumeration type, with the values: ${values.map((value) => `'${value}'`).join(', ')}`);
 		} else if (!declaration) {
