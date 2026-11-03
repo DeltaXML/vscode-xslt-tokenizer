@@ -101,7 +101,9 @@
       "Bash(xargs grep -l -i coverage)",
       "Bash(grep -v -E \"\\\\.\\(xsl|xml\\)$\")",
       "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"coverage\")",
-      "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"two XSpec files\")"
+      "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"two XSpec files\")",
+      "Bash(scripts/build-debugger.sh)",
+      "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"XSpec: running tests\")"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

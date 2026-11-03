@@ -261,6 +261,9 @@ final class Values {
             Controller controller = context.getController();
             Set<GlobalVariable> evaluating = evaluatingGlobals.get();
             for (GlobalVariable global : globalVariableList(context)) {
+                if (isXSpecInternal(global.getVariableQName())) {
+                    continue;
+                }
                 String name = "$" + global.getVariableQName().getDisplayName();
                 Sequence value = controller.getBindery(global.getPackageData()).getGlobalVariableValue(global);
                 if (value == null && !canEvaluate(global, evaluating)) {
@@ -276,6 +279,14 @@ final class Values {
             }
             return result;
         };
+    }
+
+    // a global of an XSpec test runner, or of XSpec's own modules, e.g. $x:xspec-uri or $impl:thread-count: in XSpec's
+    // namespaces - not shown with the globals of the stylesheet tested, though they can still be evaluated. The test's own
+    // x:param and x:variable declarations keep their names, so are shown
+    static boolean isXSpecInternal(StructuredQName name) {
+        String uri = name.getURI();
+        return uri.equals("http://www.jenitennison.com/xslt/xspec") || uri.startsWith("urn:x-xspec:");
     }
 
     // the results written so far: which one is being written to (or a temporary tree), and the end of each - each, and

@@ -116,6 +116,7 @@ suite('XSpec: running tests', function () {
 		// the line, and the function and its parameters, of each stop
 		const stops: number[] = [];
 		const inputs: string[] = [];
+		const globals: string[] = [];
 		const tracker = vscode.debug.registerDebugAdapterTrackerFactory('xslt-saxon', {
 			createDebugAdapterTracker: (session) => ({
 				onDidSendMessage: async (message: { type: string, event?: string }) => {
@@ -125,6 +126,9 @@ suite('XSpec: running tests', function () {
 						const scopes = await session.customRequest('scopes', { frameId: trace.stackFrames[0].id });
 						const locals = await session.customRequest('variables', { variablesReference: scopes.scopes[0].variablesReference });
 						inputs.push(`${trace.stackFrames[0].name} ${locals.variables.map((v: { name: string, value: string }) => `${v.name}=${v.value}`).join(' ')}`);
+						const globalsScope = scopes.scopes.find((s: { name: string }) => s.name === 'Globals');
+						const shown = await session.customRequest('variables', { variablesReference: globalsScope.variablesReference });
+						globals.push(...shown.variables.map((v: { name: string }) => v.name));
 						await session.customRequest('continue', { threadId: 1 });
 					}
 				}
@@ -134,6 +138,8 @@ suite('XSpec: running tests', function () {
 			const { outcomes } = await runItems((file) => [child(child(file, 'doubling'), 'two')], true);
 			assert.deepEqual(stops, [2]);
 			assert.deepEqual(inputs, ['f:double#1 $n=2']);
+			// not the test runner's globals, e.g. $x:xspec-uri, nor those of XSpec's own modules
+			assert.deepEqual(globals, []);
 			assert.strictEqual(outcomes.get('is four'), 'passed');
 		} finally {
 			tracker.dispose();
