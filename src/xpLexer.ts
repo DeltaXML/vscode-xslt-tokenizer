@@ -1742,6 +1742,7 @@ export enum ErrorType {
     XMLXMLNS,
     XMLAttributeName,
     XMLAttributeValueUnexpected,
+    XSLTAttributeEmpty,
     XSLTNamesapce,
     XMLAttributeXMLNS,
     XMLAttNameSyntax,

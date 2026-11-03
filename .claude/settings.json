@@ -105,7 +105,10 @@
       "Bash(scripts/build-debugger.sh)",
       "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"XSpec: running tests\")",
       "Bash(grep -n \"^    [a-zA-Z].*;$\" Values.java)",
-      "Bash(XSPEC_SAXON_JAR=__TRACKED_VAR__ SAXON_JAR=__TRACKED_VAR__ node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep 'XSpec'\\\\''s namespaces|breakpoint in the stylesheet under test|stops at a breakpoint, shows variables')"
+      "Bash(XSPEC_SAXON_JAR=__TRACKED_VAR__ SAXON_JAR=__TRACKED_VAR__ node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep 'XSpec'\\\\''s namespaces|breakpoint in the stylesheet under test|stops at a breakpoint, shows variables')",
+      "Bash(awk \"/^            '?[a-z-]+'?: \\\\{|^        '?[a-z-]+'?: \\\\{/{el=\\\\$1} /'\\(xs:anyURI|xs:decimal|xsl:char|xsl:modes|xsl:mode|xs:NCName|xs:NMTOKEN|xs:ID|xsl:zero-digit|xsl:default-mode-type|xsl:EQName-in-namespace|xs:token|xsl:prefix-or-default|xs:string|xsl:uri-list|xsl:prefixes|xsl:prefix-list\\)'/{print NR, el, \\\\$0}\" src/xsltSchema.ts)",
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"probe empty\")",
+      "Bash(node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"Empty attribute values\")"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

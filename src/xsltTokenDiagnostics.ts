@@ -1619,6 +1619,14 @@ export class XsltTokenDiagnostics {
 								}
 								break;
 						}
+						// an empty value, e.g. href="" - for an attribute where Saxon reports it as a static error. Not an AVT's
+						// part, e.g. the "{ of terminate="{$t}"
+						const isEmptyValue = !isContinuation && (fullVariableName === '""' || fullVariableName === '\'\'');
+						if (!valueToken.error && isEmptyValue && tagType === TagType.XSLTstart &&
+							(docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && XsltTokenDiagnostics.emptyValueProblem(tagElementName, currentAttName)) {
+							valueToken['error'] = ErrorType.XSLTAttributeEmpty;
+							valueToken.value = `${tagElementName}!${currentAttName}`;
+						}
 
 						if (valueToken.error) {
 							problemTokens.push(valueToken);
@@ -4891,6 +4899,11 @@ export class XsltTokenDiagnostics {
 					let pParts = tokenValue.split('#');
 					msg = `XSLT: xsl:param '${pParts[1]}' is not declared for template '${pParts[0]}'`;
 					break;
+				case ErrorType.XSLTAttributeEmpty:
+					const [emptyElement, emptyAttribute] = tokenValue.split('!');
+					const emptyProblem = XsltTokenDiagnostics.emptyValueProblem(emptyElement, emptyAttribute)!;
+					msg = `XSLT: The ${emptyAttribute} attribute of ${emptyElement} is empty - ${emptyProblem.reason} (${emptyProblem.code})`;
+					break;
 				case ErrorType.XMLAttributeValueUnexpected:
 					let aParts = tokenValue.split('!');
 					msg = `ATTRIBUTE: value '${aParts[0]}' is invalid for attribute '${aParts[1]}' - expected values: ${aParts[2]}`;
@@ -5879,6 +5892,54 @@ export class XsltTokenDiagnostics {
 	}
 
 	// the attributes whose values are patterns, for each XSLT element
+	// the attributes of XSLT instructions and declarations that can't be empty, as Saxon reports them: why, and the error
+	// code - by element, and '*' for an attribute of any XSLT element, unless the element's has it as null. Many can be,
+	// e.g. xsl:element's namespace, a separator, xsl:result-document's href, or a list such as exclude-result-prefixes; an
+	// XPath attribute or pattern is checked as an expression
+	private static readonly emptyValueProblems: { [element: string]: { [attribute: string]: [reason: string, code: string] | null } } = (() => {
+		const singleCharacter: [string, string] = ['it must be a single character', 'XTSE0020'];
+		const yesOrNo: [string, string] = ['it must be yes, no, true, false, 1 or 0', 'XTSE0020'];
+		const serialization = {
+			'method': ['it must be an output method, e.g. xml', 'XTSE0020'] as [string, string],
+			'html-version': ['it must be a decimal number', 'XTSE0020'] as [string, string],
+			'normalization-form': ['it must be NFC, NFD, NFKC, NFKD, fully-normalized or none', 'XTSE0020'] as [string, string],
+			'standalone': ['it must be yes, no, true, false, 1, 0 or omit', 'XTSE0020'] as [string, string],
+			...Object.fromEntries(['allow-duplicate-names', 'build-tree', 'byte-order-mark', 'escape-uri-attributes', 'include-content-type', 'indent',
+				'omit-xml-declaration', 'undeclare-prefixes'].map((name) => [name, yesOrNo]))
+		};
+		return {
+			'*': {
+				'version': ['it must be a number, e.g. 3.0', 'XTSE0110'],
+				'default-mode': ['it must be a mode name or #unnamed', 'XTSE0020'],
+				'default-collation': ['it must be a list of collation URIs', 'XTSE0125']
+			},
+			'xsl:import': { 'href': ['the module imports itself', 'XTSE0210'] },
+			'xsl:include': { 'href': ['the module includes itself', 'XTSE0180'] },
+			'xsl:use-package': { 'name': ['it must be the name of a package', 'XTSE3000'], 'package-version': ['it must be a version, e.g. 1.0', 'XTSE0020'] },
+			'xsl:package': { 'package-version': ['it must be a version, e.g. 1.0', 'XTSE0020'] },
+			'xsl:template': { 'mode': ['it must be a list of mode names, or #all', 'XTSE0020'], 'priority': ['it must be a number', 'XTSE0530'] },
+			'xsl:apply-templates': { 'mode': ['it must be a mode name, #current, #default or #unnamed', 'XTSE0020'] },
+			'xsl:decimal-format': Object.fromEntries(['decimal-separator', 'grouping-separator', 'minus-sign', 'exponent-separator', 'percent', 'per-mille',
+				'zero-digit', 'digit', 'pattern-separator'].map((name) => [name, singleCharacter])),
+			'xsl:output-character': { 'character': singleCharacter },
+			'xsl:element': { 'name': ['it must be a QName', 'XTDE0820'] },
+			'xsl:attribute': { 'name': ['it must be a QName', 'XTDE0850'] },
+			'xsl:processing-instruction': { 'name': ['it must be an NCName', 'XTDE0890'] },
+			'xsl:message': { 'terminate': yesOrNo },
+			'xsl:sort': { 'order': ['it must be ascending or descending', 'XTSE0020'], 'case-order': ['it must be upper-first or lower-first', 'XTSE0020'], 'stable': yesOrNo },
+			'xsl:number': { 'start-at': ['it must be a list of integers', 'XTSE0020'] },
+			// the serialization version, which Saxon only checks when the output is serialized
+			'xsl:output': { ...serialization, 'version': null },
+			'xsl:result-document': { ...serialization, 'format': ['it must be the name of an xsl:output', 'XTDE1460'] }
+		};
+	})();
+
+	public static emptyValueProblem(element: string, attribute: string): { reason: string, code: string } | undefined {
+		const forElement = XsltTokenDiagnostics.emptyValueProblems[element];
+		const problem = forElement && attribute in forElement ? forElement[attribute] : element.startsWith('xsl:') ? XsltTokenDiagnostics.emptyValueProblems['*'][attribute] : undefined;
+		return problem ? { reason: problem[0], code: problem[1] } : undefined;
+	}
+
 	private static readonly patternAttributes = new Map<string, string[]>([
 		['xsl:template', ['match']], ['xsl:key', ['match']], ['xsl:accumulator-rule', ['match']],
 		['xsl:number', ['count', 'from']], ['xsl:for-each-group', ['group-starting-with', 'group-ending-with']]
