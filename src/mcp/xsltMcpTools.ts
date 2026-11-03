@@ -17,6 +17,7 @@ import { XsltTokenDefinitions } from '../xsltTokenDefintions';
 import { RecordTypes } from '../recordTypes';
 import { XPathFunctionDetails } from '../xpathFunctionDetails';
 import { XdocNote, XdocNotes } from '../xdocNote';
+import { XSpecTestNode, XSpecTests } from '../xspecTests';
 
 // what the tools need from the extension: the problems and the declarations of an XSLT module or XSpec file, as the
 // linter finds them - undefined for a document in another language
@@ -286,16 +287,40 @@ export class XsltMcpTools {
 		const byFile = new Map<string, vscode.Location[]>();
 		unique.slice(0, XsltMcpTools.maxReferences).forEach((reference) => byFile.set(reference.uri.fsPath, [...(byFile.get(reference.uri.fsPath) ?? []), reference]));
 		const sections: string[] = [];
+		const tests: string[] = [];
 		for (const [file, locations] of byFile) {
-			const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
-			sections.push(XsltMcpTools.shown(file) + ':\n' + locations.map((reference) => {
+			const fileText = fs.readFileSync(file, 'utf8');
+			const lines = fileText.split(/\r?\n/);
+			const isXSpec = /\.xspec$/i.test(file);
+			const scenarios = isXSpec ? XSpecTests.testTree(fileText) : [];
+			const section = XsltMcpTools.shown(file) + ':\n' + locations.map((reference) => {
 				const line = reference.range.start.line;
 				const isDeclaration = file === location.uri.fsPath && line === location.range.start.line;
-				return `  ${line + 1}:${reference.range.start.character + 1}${isDeclaration ? ' (declaration)' : ''} ${(lines[line] ?? '').trim()}`;
-			}).join('\n'));
+				const scenario = isXSpec ? XsltMcpTools.scenarioAt(scenarios, XsltMcpTools.offsetOf(fileText, reference.range.start)) : undefined;
+				const inScenario = scenario ? ` (scenario: ${scenario.labelPath.join(' > ')}${scenario.pending ? ' - pending' : ''})` : '';
+				return `  ${line + 1}:${reference.range.start.character + 1}${isDeclaration ? ' (declaration)' : ''}${inScenario} ${(lines[line] ?? '').trim()}`;
+			}).join('\n');
+			(isXSpec ? tests : sections).push(section);
 		}
+		// the uses in XSpec files after the others, as the tests of the declaration
+		const tested = tests.length > 0 ? `\n\nTested in XSpec:\n\n${tests.join('\n\n')}` : '';
 		const more = unique.length > XsltMcpTools.maxReferences ? ` - the first ${XsltMcpTools.maxReferences} are shown` : '';
-		return XsltMcpTools.text(`${unique.length} reference${unique.length === 1 ? '' : 's'} to ${XsltMcpTools.describe(declaration, document)}${more}, including the declaration:\n\n${sections.join('\n\n')}`);
+		return XsltMcpTools.text(`${unique.length} reference${unique.length === 1 ? '' : 's'} to ${XsltMcpTools.describe(declaration, document)}${more}, including the declaration:\n\n${sections.join('\n\n')}${tested}`);
+	}
+
+	// the innermost scenario of an XSpec file that the offset is in
+	private static scenarioAt(nodes: XSpecTestNode[], offset: number): XSpecTestNode | undefined {
+		const node = nodes.find((node) => node.kind === 'scenario' && node.start <= offset && offset < node.end);
+		return node ? XsltMcpTools.scenarioAt(node.children, offset) ?? node : undefined;
+	}
+
+	// the offset of a position in the text - with '\n' or '\r\n' line breaks
+	private static offsetOf(text: string, position: vscode.Position): number {
+		let offset = 0;
+		for (let line = 0; line < position.line && offset >= 0; line++) {
+			offset = text.indexOf('\n', offset) + 1;
+		}
+		return offset + position.character;
 	}
 
 	// the position of a use of the name in the document that Go to Definition finds the declaration at - the first of the

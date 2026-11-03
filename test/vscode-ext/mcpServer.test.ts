@@ -217,6 +217,27 @@ suite('MCP server', function () {
 		assert.match(result, /overrides\.xsl:\n {2}2:\d+ \(declaration\)/, result);
 	});
 
+	test('find_references: the uses in an XSpec file last, as its tests - each with its scenario', async () => {
+		// in a folder of its own, so not one of lint_files' files; open, as it's not in the workspace
+		const specDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xslt-mcp-spec-'));
+		const spec = path.join(specDir, 'main.xspec');
+		fs.writeFileSync(spec, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="${path.relative(specDir, main)}">
+  <x:scenario label="f:local">
+    <x:scenario label="of 1">
+      <x:call function="f:local"><x:param select="1"/></x:call>
+      <x:expect label="is itself" test="f:local(1) = 1"/>
+    </x:scenario>
+  </x:scenario>
+</x:description>`);
+		await vscode.workspace.openTextDocument(spec);
+		const result = text(await call('find_references', { path: main, name: 'f:local' }));
+		const [others, tested] = result.split('\n\nTested in XSpec:\n\n');
+		assert.match(others, /main\.xsl:\n {2}5:\d+ \(declaration\)/, result);
+		assert.notMatch(others, /main\.xspec/, result);
+		assert.match(tested, /main\.xspec:\n {2}4:\d+ \(scenario: f:local > of 1\) <x:call function="f:local">/, result);
+		assert.match(tested, /\n {2}5:\d+ \(scenario: f:local > of 1\) <x:expect/, result);
+	});
+
 	test('describe_type: a record type\'s fields, an enumeration type\'s values', async () => {
 		assert.strictEqual(text(await call('describe_type', { path: types, name: 'cx:point' })).replace(/ - .*types\.xsl/, ' - types.xsl'),
 			'xsl:item-type cx:point as record(x as xs:double, y? as xs:double) - types.xsl:2:24\na record type with 2 fields:\n  x as xs:double\n  y? as xs:double');

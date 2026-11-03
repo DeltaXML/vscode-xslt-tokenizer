@@ -199,7 +199,8 @@ export class XsltMcpServer {
 			title: 'Find the references to an XSLT component',
 			description: 'The references to a function, named template, global variable or parameter, mode, attribute set, key, accumulator or ' +
 				'item type, as Find All References finds them in VS Code: in its module, the modules that import or use it, and the XSpec files ' +
-				'that test it - with each reference\'s line.',
+				'that test it - with each reference\'s line. The XSpec uses (x:call, or a call in a test) come last, under \'Tested in XSpec\', ' +
+				'each with its scenario: use it to find the tests of a function or named template.',
 			inputSchema: { path: filePath.describe('The XSLT module or XSpec file the name is used in'), name, kind },
 			annotations: readOnly
 		}, async (args) => tools.findReferences(args.path, args.name, args.kind));
