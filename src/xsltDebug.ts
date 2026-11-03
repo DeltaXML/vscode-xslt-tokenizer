@@ -986,7 +986,6 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	}
 
 	// for the runner's breakpoints and stack frames: the XSpec file's
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	private xspecResponse(message: any): any {
 		const map = this.xspecMap;
 		if (!map || message.type !== 'response' || !message.body) {
