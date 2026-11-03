@@ -1753,6 +1753,7 @@ export enum ErrorType {
     XPathIfAwaitingThen,
     XPathAwaiting,
     XPathStringLiteral,
+    XPathStringLiteralQuote,
     BracketNesting,
     ExpectedElseAfterThen,
     ExpectedDollarAfterComma,

@@ -95,6 +95,11 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 	private static readonly useSourceFile: UseSource = <UseSource>vscode.workspace.getConfiguration('XSLT.resources').get('useSourceFile');
 	// the declarations imported by each document, by its URI, when it was last checked
 	private importedGlobalsByDocument = new Map<string, GlobalInstructionData[]>();
+	// the problems found by the last check of each document: import and package problems first
+	private lastDiagnostics = new Map<string, { version: number, diagnostics: vscode.Diagnostic[] }>();
+	// and its declarations: its own, then those of the modules it imports or includes and the packages it uses, highest
+	// import precedence first
+	private lastDeclarations = new Map<string, { own: GlobalInstructionData[], imported: GlobalInstructionData[] }>();
 	// false when another extension already reports the same problems, e.g. Red Hat's XML extension for XML files
 	private readonly showDiagnostics: () => boolean;
 
@@ -244,21 +249,24 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			this.importedGlobalsByDocument.set(document.uri.toString(), allImportedGlobals);
 			let diagnostics = XsltSymbolProvider.packageDiagnostics(document, globalInstructionData, prefixBindings, xsltPackages, allImportedGlobals,
 				XsltTokenDiagnostics.calculateDiagnostics(languageConfig, this.docType, document, allTokens, globalInstructionData, allImportedGlobals, symbols));
+			let importDiagnostics: vscode.Diagnostic[] = [];
+			// an XSpec file's references to files are checked as XSpec resolves them, e.g. with an xml:base (see XSpecHrefs)
+			if (this.docType === DocumentTypes.XSPEC) {
+				importErrors = [];
+			}
+			importErrors.forEach((importError) => {
+				importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem, document.getText()));
+			});
+			packageErrors.forEach((data) => importDiagnostics.push(XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data, document.getText())));
+			const allDiagnostics = importDiagnostics.concat(diagnostics);
+			// for a document that isn't open in an editor too, e.g. checked by the MCP server's lint_file tool
+			this.lastDiagnostics.set(document.uri.toString(), { version, diagnostics: allDiagnostics });
+			this.lastDeclarations.set(document.uri.toString(), { own: globalInstructionData, imported: allImportedGlobals });
 			if (!XsltSymbolProvider.isOpenInEditor(document) || document.version !== version) {
 
 			} else {
 				// TODO: don't exclude DocumentTypes.SCH once diagnostics implemented fully
 				if (this.collection && this.docType !== DocumentTypes.SCH) {
-					let importDiagnostics: vscode.Diagnostic[] = [];
-					// an XSpec file's references to files are checked as XSpec resolves them, e.g. with an xml:base (see XSpecHrefs)
-					if (this.docType === DocumentTypes.XSPEC) {
-						importErrors = [];
-					}
-					importErrors.forEach((importError) => {
-						importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem, document.getText()));
-					});
-					packageErrors.forEach((data) => importDiagnostics.push(XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data, document.getText())));
-					let allDiagnostics = importDiagnostics.concat(diagnostics);
 					if (allDiagnostics.length > 0 && this.showDiagnostics()) {
 						this.collection.set(document.uri, allDiagnostics);
 					} else {
@@ -287,6 +295,19 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 		return diagnostics;
 	}
 	
+	// the problems of a document, as it is now - whether or not it's open in an editor: checked again, as a module it
+	// imports may have changed since its last check
+	public async diagnosticsFor(document: vscode.TextDocument): Promise<vscode.Diagnostic[]> {
+		await this.getDocumentSymbols(document, false);
+		return this.lastDiagnostics.get(document.uri.toString())?.diagnostics ?? [];
+	}
+
+	// the declarations of a document and of the modules it imports or includes, as it is now (see diagnosticsFor)
+	public async declarationsFor(document: vscode.TextDocument): Promise<{ own: GlobalInstructionData[], imported: GlobalInstructionData[] }> {
+		await this.getDocumentSymbols(document, false);
+		return this.lastDeclarations.get(document.uri.toString()) ?? { own: [], imported: [] };
+	}
+
 	public get diagnosticsArray() : vscode.Diagnostic[] {
 		return this.internalDiagnostics;
 	}	

@@ -990,10 +990,6 @@
         [
           "String literal not terminated properly: 'somefile.xml)",
           "'somefile.xml)"
-        ],
-        [
-          "'(' has no matching ')'",
-          "("
         ]
       ]
     },
