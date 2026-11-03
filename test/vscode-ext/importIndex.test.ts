@@ -198,8 +198,9 @@ suite('Import index', () => {
 	});
 
 	test('a module opened on its own resolves a declaration in a module its top-level stylesheet imports', async function () {
-		// showing the documents in editors takes a while
-		this.timeout(20000);
+		// showing the documents in editors takes a while - 12s after a restart, nearer 20s with the machine under memory
+		// pressure, e.g. after many test runs
+		this.timeout(40000);
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('lib/b.xsl')));
 		const collection = vscode.languages.createDiagnosticCollection('import-index-test');
 		// the diagnostics are set for the active editor's document

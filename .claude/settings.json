@@ -91,7 +91,8 @@
       "Bash(java -cp /Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform --allowSyntaxExtensions:on -s:in.xml -xsl:u.xsl)",
       "Bash(sed 's/version=\"3.0\"/version=\"4.0\"/' u.xsl)",
       "Bash(java -cp /Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform --allowSyntaxExtensions:on -s:in.xml -xsl:u4.xsl)",
-      "Bash(grep \"\\\\.xsl$\")"
+      "Bash(grep \"\\\\.xsl$\")",
+      "Bash(grep -E \"^\\\\s+[0-9]+ \\(passing|failing\\)|^  [0-9]+\\\\\\) |a module opened on its own|decoded href|\\\\\\([0-9]{4,}ms\\\\\\)\")"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"
