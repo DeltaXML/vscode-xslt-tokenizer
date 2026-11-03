@@ -327,6 +327,12 @@ export class XSpecTestController {
 				focusedId = id;
 			}
 		}
+		// the whole file, with a focused scenario - e.g. focus="debug" - that XSpec can't make a test runner for (see
+		// above): when debugging, the runner is checked first, and its tests run without the focus if it fails
+		const isFocusedFile = !scenario && XSpecTestController.hasFocus(xspecPath);
+		if (compiled.ok && isFocusedFile && debug && !(await XSpecRunner.check(xspecPath, files, token)).ok) {
+			compiled = await this.withoutFocus(run, xspecPath, files, prepared.source, token);
+		}
 		if (!compiled.ok) {
 			channel.show(true);
 			return errored(`XSpec: the tests couldn't be compiled - see the XSpec output.\n${compiled.output.trim()}`);
@@ -344,6 +350,9 @@ export class XSpecTestController {
 			compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token);
 			// all the file's tests run, so all their outcomes are shown
 			focusedId = undefined;
+			({ ran, hasResult } = compiled.ok ? await runOnce() : { ran: compiled, hasResult: false });
+		} else if ((!ran.ok || !hasResult) && isFocusedFile && !debug && !token.isCancellationRequested) {
+			compiled = await this.withoutFocus(run, xspecPath, files, prepared.source, token);
 			({ ran, hasResult } = compiled.ok ? await runOnce() : { ran: compiled, hasResult: false });
 		}
 		if (!ran.ok || !hasResult) {
@@ -423,12 +432,34 @@ export class XSpecTestController {
 		}
 	}
 
-	// the test runner for the whole file, when the scenario's on its own couldn't be compiled or run
+	// the test runner for the whole file, when the scenario's on its own couldn't be compiled or run - without the
+	// focus of any scenario in the file (see withoutFocus), which may be what XSpec couldn't run
 	private wholeFileInstead(run: vscode.TestRun, scenario: vscode.TestItem, xspecPath: string, files: XSpecFiles, source: string, token: vscode.CancellationToken) {
 		const note = `XSpec: the scenario '${scenario.label}' couldn't be run on its own, with XSpec's force-focus - all the file's tests are run instead`;
 		XSpecRunner.output().appendLine(note);
 		run.appendOutput(note + '\r\n');
-		return XSpecRunner.compile(xspecPath, files, token, undefined, source);
+		return XSpecRunner.compile(xspecPath, files, token, XSpecTestController.noFocus, source);
+	}
+
+	// XSpec's force-focus with no scenario's id: the focus attributes of the file's scenarios are removed, so all its tests run
+	private static readonly noFocus = '#none';
+
+	// the test runner for the whole file without its scenarios' focus attributes, when it couldn't be compiled or run with them
+	private withoutFocus(run: vscode.TestRun, xspecPath: string, files: XSpecFiles, source: string, token: vscode.CancellationToken) {
+		const note = 'XSpec: the file\'s focused scenarios couldn\'t be run - e.g. XSpec gives XPST0008 for an outer scenario\'s x:variable that ' +
+			'uses $x:context - so all its tests are run instead, without the focus';
+		XSpecRunner.output().appendLine(note);
+		run.appendOutput(note + '\r\n');
+		return XSpecRunner.compile(xspecPath, files, token, XSpecTestController.noFocus, source);
+	}
+
+	// true if a scenario in the XSpec file has a focus attribute
+	private static hasFocus(xspecPath: string) {
+		try {
+			return /<([\w.-]+:)?scenario\b[^>]*\sfocus\s*=/.test(fs.readFileSync(xspecPath, 'utf8'));
+		} catch {
+			return false;
+		}
 	}
 
 	// the test runner, run by the XSLT debugger - its breakpoints in the stylesheet under test, which the runner

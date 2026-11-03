@@ -147,6 +147,57 @@ suite('XSpec: running tests', function () {
 		}
 	});
 
+	// XSpec's focus bug (4.1.2, reported): an outer scenario's x:variable using $x:context gives XPST0008 in the runner
+	// when an inner scenario is focused - by force-focus, which runs one scenario, or a focus attribute in the file
+	test('XSpec\'s focus bug: each scenario, and the whole file, run without the focus that XSpec can\'t run', async () => {
+		fs.writeFileSync(path.join(dir, 'focus-sut.xsl'), `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:template match="p" mode="m"><q/></xsl:template>
+</xsl:stylesheet>`);
+		const write = (name: string, focus: string) => {
+			const file = path.join(dir, name);
+			fs.writeFileSync(file, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" stylesheet="focus-sut.xsl">
+  <x:scenario label="outer">
+    <x:context><p/></x:context>
+    <x:variable name="v" select="$x:context"/>
+    <x:scenario label="inner"${focus}>
+      <x:context mode="m"/>
+      <x:expect label="has a result" test="exists($x:result)"/>
+      <x:expect label="v is the context" test="exists($v/self::p)"/>
+    </x:scenario>
+  </x:scenario>
+</x:description>`);
+			return vscode.Uri.file(file);
+		};
+		const xspec = XSpecTestController.instance!;
+		const run = async (uri: vscode.Uri, include: (file: vscode.TestItem) => vscode.TestItem, debug = false) => {
+			await vscode.workspace.openTextDocument(uri);
+			const fileItem = xspec.testController.items.get(uri.toString())!;
+			const outcomes = new Map<string, string>();
+			const output: string[] = [];
+			xspec.createRun = () => recordingRun(outcomes, new Map(), [], output);
+			await (debug ? xspec.debugProfile : xspec.runProfile).runHandler(new vscode.TestRunRequest([include(fileItem)]), new vscode.CancellationTokenSource().token);
+			xspec.createRun = undefined;
+			return { outcomes: [...outcomes].filter(([, status]) => status !== 'enqueued' && status !== 'started').map(([label, status]) => `${label}: ${status}`).sort(), output: output.join('') };
+		};
+		const passed = ['has a result: passed', 'v is the context: passed'];
+		const inner = (file: vscode.TestItem) => child(child(file, 'outer'), 'inner');
+		// focused by force-focus only: the scenario's run falls back to the whole file
+		const unfocused = write('focus-bug.xspec', '');
+		const one = await run(unfocused, inner);
+		assert.deepEqual(one.outcomes, passed, one.output);
+		assert.include(one.output, 'the scenario \'inner\' couldn\'t be run on its own');
+		// with focus="debug" in the file: the whole file, each scenario, and debugging the whole file
+		const focused = write('focus-attribute.xspec', ' focus="debug"');
+		const whole = await run(focused, (file) => file);
+		assert.deepEqual(whole.outcomes, passed, whole.output);
+		assert.include(whole.output, 'the file\'s focused scenarios couldn\'t be run');
+		assert.deepEqual((await run(focused, (file) => child(file, 'outer'))).outcomes, passed);
+		assert.deepEqual((await run(focused, inner)).outcomes, passed);
+		const debugged = await run(focused, (file) => file, true);
+		assert.deepEqual(debugged.outcomes, passed, debugged.output);
+		assert.include(debugged.output, 'the file\'s focused scenarios couldn\'t be run');
+	});
+
 	test('a Schematron\'s XSpec: compiled with SchXslt2, and its expectations, labelled as XSpec labels them', async () => {
 		fs.writeFileSync(path.join(dir, 'doc.sch'), `<sch:schema xmlns:sch="http://purl.oclc.org/dsdl/schematron" queryBinding="xslt3">
   <sch:pattern><sch:rule context="doc"><sch:assert id="has-title" test="title">a doc has a title</sch:assert></sch:rule></sch:pattern>
