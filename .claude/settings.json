@@ -103,7 +103,9 @@
       "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"coverage\")",
       "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"two XSpec files\")",
       "Bash(scripts/build-debugger.sh)",
-      "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"XSpec: running tests\")"
+      "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"XSpec: running tests\")",
+      "Bash(grep -n \"^    [a-zA-Z].*;$\" Values.java)",
+      "Bash(XSPEC_SAXON_JAR=__TRACKED_VAR__ SAXON_JAR=__TRACKED_VAR__ node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep 'XSpec'\\\\''s namespaces|breakpoint in the stylesheet under test|stops at a breakpoint, shows variables')"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

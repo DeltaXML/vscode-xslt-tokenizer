@@ -446,6 +446,23 @@ suite('XSLT debugger - debug sessions', function () {
 		assert.isTrue(XsltDebugLog.messages.some((m) => /'debug basic.xsl': Saxon.*, on Java [\d.]+.*\n    Saxon options: .*-xsl:.*-T:com.deltaxml.xslt.debug.DebugTraceListener -opt:0/.test(m)));
 	});
 
+	test('globals in XSpec\'s namespaces: shown when it\'s not an XSpec test run, e.g. debugging XSpec\'s compiler', async () => {
+		stops = [];
+		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+		const xsltUri = vscode.Uri.file(path.join(fixtures, 'xspec-namespace-globals.xsl'));
+		vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(xsltUri, new vscode.Position(7, 0)))]);
+		const name = 'xspec namespace globals';
+		const ended = terminated(name);
+		assert.isTrue(await vscode.debug.startDebugging(undefined, { type: XsltDebug.type, request: 'launch', name, saxonJar, xsltFile: xsltUri.fsPath, initialTemplate: '' }));
+		const stop = await nextStop();
+		const { stackFrames } = await stop.session.customRequest('stackTrace', { threadId: 1 });
+		const { scopes } = await stop.session.customRequest('scopes', { frameId: stackFrames[0].id });
+		const { variables } = await stop.session.customRequest('variables', { variablesReference: scopes.find((s: any) => s.name === 'Globals').variablesReference });
+		assert.deepStrictEqual(variables.map((v: any) => v.name).sort(), ['$impl:count', '$other', '$x:version']);
+		await stop.session.customRequest('continue', { threadId: 1 });
+		await ended;
+	});
+
 	test('fades the step, predicate or lookup after which a path is empty, with why in its hover', async () => {
 		stops = [];
 		vscode.debug.removeBreakpoints(vscode.debug.breakpoints);

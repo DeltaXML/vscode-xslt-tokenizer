@@ -261,7 +261,7 @@ final class Values {
             Controller controller = context.getController();
             Set<GlobalVariable> evaluating = evaluatingGlobals.get();
             for (GlobalVariable global : globalVariableList(context)) {
-                if (isXSpecInternal(global.getVariableQName())) {
+                if (hideXSpecGlobals && isXSpecInternal(global.getVariableQName())) {
                     continue;
                 }
                 String name = "$" + global.getVariableQName().getDisplayName();
@@ -280,6 +280,10 @@ final class Values {
             return result;
         };
     }
+
+    // in an XSpec test run: the globals of the test runner aren't shown (see isXSpecInternal) - in any other run, e.g. of
+    // XSpec's compiler, all are
+    volatile boolean hideXSpecGlobals;
 
     // a global of an XSpec test runner, or of XSpec's own modules, e.g. $x:xspec-uri or $impl:thread-count: in XSpec's
     // namespaces - not shown with the globals of the stylesheet tested, though they can still be evaluated. The test's own

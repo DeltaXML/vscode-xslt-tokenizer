@@ -270,6 +270,8 @@ final class Debugger {
         stopOnEntry = Json.bool(args, "stopOnEntry");
         noDebug = Json.bool(args, "noDebug");
         coverage = Json.bool(args, "coverage") ? new HashMap<String, Map<Integer, Integer>>() : null;
+        // an XSpec test run: the test runner's globals aren't shown with those of the stylesheet tested
+        values.hideXSpecGlobals = Json.string(args, "xspecFile") != null;
         // as for an 'xslt' task: "on" keeps Saxon's own xsl:message output, which escapes characters XML doesn't allow
         messageEscaping = "on".equals(Json.string(args, "messageEscaping"));
     }
