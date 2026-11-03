@@ -28,7 +28,7 @@ export interface EntityReference {
 // <!ENTITY> declaration
 export class EntityReferences {
 	public static readonly predefined: { [name: string]: string } = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
-	private static readonly languages = ['xml', 'xslt', 'sch', 'dcp', 'bpmn'];
+	private static readonly languages = ['xml', 'xslt', 'sch', 'dcp', 'xspec', 'bpmn'];
 	private static readonly xmlStart = XslLexer.getXsltStartTokenNumber();
 	private static cache = new Map<string, { version: number; entities: DeclaredEntity[] }>();
 

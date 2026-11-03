@@ -4,6 +4,7 @@
  *  Contributors:
  *  DeltaXML Ltd. - XSLT debugger
  */
+import { XSpecSourceMap } from './xspecSourceMap';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -871,6 +872,13 @@ export class XsltDebugProblems {
 // Runs the Java debug adapter, relaying Debug Adapter Protocol messages to and from it - rather than VS Code running
 // it (as a DebugAdapterExecutable) - so its stderr and its exit can be logged and reported: e.g. when Java isn't
 // found, or a class isn't on the classpath, the JVM fails before the adapter can say so in the protocol
+interface DebugBreakpoint {
+	line: number;
+	verified?: boolean;
+	message?: string;
+	source?: { path?: string };
+}
+
 export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	private readonly messages = new vscode.EventEmitter<vscode.DebugProtocolMessage>();
 	public readonly onDidSendMessage = this.messages.event;
@@ -888,12 +896,18 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	private disconnected = false;
 	// the requests sent to the adapter that it hasn't answered, by seq
 	private readonly pending = new Map<number, string>();
+	// debugging an XSpec file's test runner: the lines of the XSpec file for the runner's (see XSpecSourceMap) - and
+	// for a breakpoint request for the XSpec file, by seq, its response's breakpoints, from the runner's
+	private readonly xspecMap: XSpecSourceMap | undefined;
+	private readonly xspecResponses = new Map<number, (breakpoints: DebugBreakpoint[]) => DebugBreakpoint[]>();
 
 	constructor(private session: vscode.DebugSession, command: string, args: string[], cwd: string | undefined) {
 		const quote = (arg: string) => /[\s"']/.test(arg) ? JSON.stringify(arg) : arg;
 		XsltDebugLog.info(`Debug session '${session.name}': ${command} ${args.map(quote).join(' ')}${cwd ? `\n    in ${cwd}` : ''}`);
 		XsltDebugProblems.clear();
 		XsltDebugOutputs.get().startSession();
+		const { xspecFile, xsltFile } = session.configuration;
+		this.xspecMap = typeof xspecFile === 'string' && typeof xsltFile === 'string' ? XSpecSourceMap.load(xspecFile, xsltFile) : undefined;
 		this.process = cp.spawn(command, args, { cwd });
 		this.process.stdout?.on('data', (data: Buffer) => this.receive(data));
 		this.process.stderr?.on('data', (data: Buffer) => {
@@ -921,6 +935,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	}
 
 	public handleMessage(message: vscode.DebugProtocolMessage): void {
+		message = this.xspecRequest(message);
 		const request = message as { type?: string; command?: string; seq: number };
 		if (request.type === 'request') {
 			if (this.disconnected || (this.exited && this.endedByVsCode)) {
@@ -943,6 +958,53 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 		if (request.type === 'request' && request.command === 'disconnect') {
 			this.disconnected = true;
 		}
+	}
+
+	// for an XSpec file's breakpoints: the runner's breakpoints for them - a line with no step in the runner, e.g. in
+	// an x:context's content, has none, and isn't verified
+	private xspecRequest(message: vscode.DebugProtocolMessage): vscode.DebugProtocolMessage {
+		const request = message as { type?: string; command?: string; seq: number; arguments?: { source?: { path?: string }, breakpoints?: DebugBreakpoint[], lines?: number[] } };
+		const map = this.xspecMap;
+		const sourcePath = request.arguments?.source?.path;
+		if (!map || request.type !== 'request' || request.command !== 'setBreakpoints' || !sourcePath || !XSpecSourceMap.samePath(sourcePath, map.xspecPath)) {
+			return message;
+		}
+		const requested = request.arguments?.breakpoints ?? [];
+		const mapped = requested.map((breakpoint) => map.runnerLine(breakpoint.line));
+		this.xspecResponses.set(request.seq, (breakpoints) => {
+			let next = 0;
+			return requested.map((breakpoint, i) => {
+				if (mapped[i] === undefined) {
+					return { verified: false, line: breakpoint.line, message: 'XSpec: no step here - set a breakpoint on an x:scenario, x:call, x:context or x:expect' };
+				}
+				const response = breakpoints[next++] ?? { verified: false };
+				return { ...response, line: breakpoint.line, source: { path: map.xspecPath } };
+			});
+		});
+		const breakpoints = requested.filter((_breakpoint, i) => mapped[i] !== undefined).map((breakpoint, i) => ({ ...breakpoint, line: mapped.filter((line) => line !== undefined)[i]! }));
+		return { ...request, arguments: { ...request.arguments, source: { path: map.runnerPath }, breakpoints, lines: breakpoints.map((breakpoint) => breakpoint.line) } } as vscode.DebugProtocolMessage;
+	}
+
+	// for the runner's breakpoints and stack frames: the XSpec file's
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	private xspecResponse(message: any): any {
+		const map = this.xspecMap;
+		if (!map || message.type !== 'response' || !message.body) {
+			return message;
+		}
+		const breakpoints = message.request_seq !== undefined ? this.xspecResponses.get(message.request_seq) : undefined;
+		if (breakpoints) {
+			this.xspecResponses.delete(message.request_seq!);
+			return { ...message, body: { ...message.body, breakpoints: breakpoints(message.body.breakpoints ?? []) } };
+		}
+		if (message.command === 'stackTrace' && message.body.stackFrames) {
+			const stackFrames = message.body.stackFrames.map((frame: { line: number, source?: { path?: string } }) => {
+				const xspecLine = frame.source?.path && XSpecSourceMap.samePath(frame.source.path, map.runnerPath) ? map.xspecLine(frame.line) : undefined;
+				return xspecLine === undefined ? frame : { ...frame, line: xspecLine, column: 1, source: { name: path.basename(map.xspecPath), path: map.xspecPath } };
+			});
+			return { ...message, body: { ...message.body, stackFrames } };
+		}
+		return message;
 	}
 
 	// a response for a request the adapter won't answer: success - with nothing, for requests about the paused state,
@@ -970,7 +1032,7 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 			}
 			const body = this.buffer.subarray(headerEnd + 4, headerEnd + 4 + Number(length)).toString('utf8');
 			this.buffer = this.buffer.subarray(headerEnd + 4 + Number(length));
-			const message = JSON.parse(body);
+			const message = this.xspecResponse(JSON.parse(body));
 			if (message.type === 'response') {
 				this.pending.delete(message.request_seq);
 			}

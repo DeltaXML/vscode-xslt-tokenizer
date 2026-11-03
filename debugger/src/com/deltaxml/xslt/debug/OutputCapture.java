@@ -180,8 +180,9 @@ final class OutputCapture {
     private int itemDepth;
     // a serializer is being created here
     private boolean creating;
-    // the results being copied
+    // the results being copied, and the receiver made for each
     private final Map<Result, Boolean> copied = new java.util.IdentityHashMap<Result, Boolean>();
+    private final Map<Result, ItemDepthReceiver> receivers = new java.util.IdentityHashMap<Result, ItemDepthReceiver>();
 
     void install(final Configuration config) {
         config.setSerializerFactory(new SerializerFactory(config) {
@@ -212,11 +213,24 @@ final class OutputCapture {
                 } finally {
                     building = null;
                 }
+                ItemDepthReceiver principal = receivers.get(result);
+                if (itemDepth == 0 && !isCopy && principal != null && isPrincipalTakeover()) {
+                    // an xsl:result-document with no href writes the principal result instead: the receiver first made
+                    // for it, which has had nothing written, isn't closed - closing it would write an empty document,
+                    // replacing this one's in a file - and this one is copied to the same output
+                    principal.superseded = true;
+                    return copiedTo(result, serializer, principal.output, properties, pipe);
+                }
                 if (itemDepth > 0 || !(result instanceof StreamResult) || isCopy || copied.containsKey(result)) {
                     return serializer;
                 }
                 copied.put(result, Boolean.TRUE);
                 Output output = newOutput(result.getSystemId(), properties.getProperties().getProperty("method"));
+                return copiedTo(result, serializer, output, properties, pipe);
+            }
+
+            // the serializer, with a copy of what it's given to the output
+            private Receiver copiedTo(Result result, Receiver serializer, Output output, SerializationProperties properties, PipelineConfiguration pipe) throws XPathException {
                 // each property by name, including the defaults - where Saxon puts the principal result's xsl:output
                 // properties, e.g. method="json" (putAll would leave the copy with no method, so it couldn't write a map)
                 Properties copyProperties = new Properties();
@@ -235,7 +249,20 @@ final class OutputCapture {
                 } finally {
                     building = null;
                 }
-                return new ItemDepthReceiver(new TeeOutputter(serializer, copy));
+                ItemDepthReceiver receiver = new ItemDepthReceiver(new TeeOutputter(serializer, copy), output);
+                receivers.put(result, receiver);
+                return receiver;
+            }
+
+            // the receiver is asked for by Saxon's gatekeeper of the principal result, for an xsl:result-document that
+            // writes it - not, e.g., by the principal result's own serializer when it decides its output method
+            private boolean isPrincipalTakeover() {
+                for (StackTraceElement frame : new Throwable().getStackTrace()) {
+                    if (frame.getClassName().endsWith(".PrincipalOutputGatekeeper") && frame.getMethodName().equals("makeReceiver")) {
+                        return true;
+                    }
+                }
+                return false;
             }
 
             // the copy of an XML result: an emitter that records where its text comes from
@@ -405,8 +432,20 @@ final class OutputCapture {
 
     /** counts the items being written, so serializers created meanwhile - for nodes within them - aren't copied */
     private final class ItemDepthReceiver extends ProxyReceiver {
-        ItemDepthReceiver(Receiver next) {
+        final Output output;
+        // another receiver writes this result instead (see isPrincipalTakeover): this one is never closed
+        boolean superseded;
+
+        ItemDepthReceiver(Receiver next, Output output) {
             super(next);
+            this.output = output;
+        }
+
+        @Override
+        public void close() throws XPathException {
+            if (!superseded) {
+                super.close();
+            }
         }
 
         @Override

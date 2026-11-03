@@ -376,6 +376,29 @@ final class BreakableLines {
         return result;
     }
 
+    // the instructions Saxon traces - for coverage, the lines that can be run: not, e.g., a function's xsl:param, or an
+    // xsl:note - each as its first and last lines: those of its start tag, but not the later lines of a multi-line
+    // expression, whose parts - e.g. an else branch - aren't traced unless stepped through, so may not have been run
+    List<List<Integer>> executableLines() {
+        java.util.TreeMap<Integer, Integer> lastLines = new java.util.TreeMap<Integer, Integer>();
+        for (Tag tag : tags) {
+            if (tag.untracedReason == null) {
+                int last = tag.endLine;
+                for (XPathAttribute attribute : tag.xpathAttributes) {
+                    if (attribute.lastLine > attribute.line) {
+                        last = Math.min(last, attribute.line);
+                    }
+                }
+                lastLines.merge(tag.startLine, last, Math::max);
+            }
+        }
+        List<List<Integer>> lines = new ArrayList<List<Integer>>();
+        for (java.util.Map.Entry<Integer, Integer> line : lastLines.entrySet()) {
+            lines.add(java.util.Arrays.asList(line.getKey(), line.getValue()));
+        }
+        return lines;
+    }
+
     // An instruction is shown, and its breakpoints set, at the first line of its start tag - where users expect it -
     // though Saxon reports it at the tag's end (see displayLine). A line of a multi-line XPath expression, other than
     // the tag's first, is the expression's: it's stopped at when the expression is stepped through

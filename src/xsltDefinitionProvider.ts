@@ -1,3 +1,4 @@
+import { XSpecScenario } from './xspecScenario';
 import * as vscode from 'vscode';
 import { PackageScope } from './packageScope';
 import { XsltPackages } from './xsltPackages';
@@ -21,6 +22,7 @@ import * as url from 'url';
 import { XdocReferences, XdocTarget } from './xdocReferences';
 import { RecordTypes } from './recordTypes';
 import { XPathQuery } from './xpathQuery';
+import { XSpecGlobalParams } from './xspecGlobalParams';
 
 interface ImportedGlobals {
 	href: string;
@@ -82,6 +84,23 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		const fieldLocation = XsltDefinitionProvider.recordFieldLocation(document, position, globalInstructionData.concat(allImportedGlobals));
 		if (fieldLocation) {
 			return fieldLocation;
+		}
+		// XSpec: an x:param of x:description, setting a global parameter of the stylesheet under test
+		if (this.docType === DocumentTypes.XSPEC) {
+			const param = XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
+			const location = param ? XsltTokenDefinitions.createLocationFromInstruction(param, document) : undefined;
+			if (location) {
+				return location;
+			}
+			// an x:param of an x:call of a template it inherits from an enclosing scenario's x:call: the template's xsl:param
+			const inherited = XSpecScenario.inheritedParamAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document));
+			const template = inherited ? globalInstructionData.concat(allImportedGlobals).find((g) => g.type === GlobalInstructionType.Template && g.name === inherited.template) : undefined;
+			const paramIndex = template?.memberNames?.indexOf(inherited!.param) ?? -1;
+			const paramToken = paramIndex > -1 ? template!.memberTokens?.[paramIndex] : undefined;
+			if (template && paramToken) {
+				const uri = template.href ? vscode.Uri.file(template.href) : document.uri;
+				return new vscode.Location(uri, XsltTokenDefinitions.createRangeFromTokenVals(paramToken.line, paramToken.startCharacter + 1, paramToken.length - 2));
+			}
 		}
 
 		return new Promise((resolve, reject) => {
@@ -307,11 +326,20 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 	}
 
 	public async provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext): Promise<vscode.CompletionItem[] | vscode.CompletionList | undefined> {
+		// an XSpec file with no outermost element yet: x:description
+		const xspecRoot = this.docType === DocumentTypes.XSPEC ? XSpecScenario.rootCompletions(document, position) : undefined;
+		if (xspecRoot) {
+			return xspecRoot;
+		}
 		let result = await this.completionItems(document, position, token, context);
-		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix
-		const prefix = this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
-		if (result && prefix !== 'xsl') {
-			result = Array.isArray(result) ? XsltDefinitionProvider.withXsltPrefix(result, prefix) : new vscode.CompletionList(XsltDefinitionProvider.withXsltPrefix(result.items, prefix), result.isIncomplete);
+		// in a module whose prefix for XSLT is another, e.g. xslt, the items with that prefix - or in an XSpec file, the items
+		// with its prefix for XSpec, e.g. t (see XsltTokenDiagnostics.xsltElementName)
+		const isXSpec = this.docType === DocumentTypes.XSPEC;
+		const fromPrefix = isXSpec ? 'x' : 'xsl';
+		const prefix = isXSpec ? XsltDefinitionProvider.xspecPrefixOf(document) : this.docType !== DocumentTypes.XPath ? XsltTokenDiagnostics.xsltPrefixOf(document) : 'xsl';
+		if (result && prefix !== fromPrefix) {
+			result = Array.isArray(result) ? XsltDefinitionProvider.withXsltPrefix(result, prefix, fromPrefix) :
+				new vscode.CompletionList(XsltDefinitionProvider.withXsltPrefix(result.items, prefix, fromPrefix), result.isIncomplete);
 		}
 		if (result) {
 			XsltDefinitionProvider.fitToPrefixedWord(Array.isArray(result) ? result : result.items, document, position);
@@ -319,10 +347,15 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		return result;
 	}
 
+	// the prefix of an XSpec file's x:description, e.g. t for t:description - x if it has none
+	public static xspecPrefixOf(document: vscode.TextDocument) {
+		return /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>]*>)*<([\w.-]+):description\b/.exec(document.getText())?.[1] ?? 'x';
+	}
+
 	// copies of the items - which may be shared - with each name with the prefix xsl, in the label and the text inserted,
 	// with the prefix (see RecordTypes.withXsltPrefix)
-	private static withXsltPrefix(items: vscode.CompletionItem[], prefix: string): vscode.CompletionItem[] {
-		const text = (value: string) => RecordTypes.withXsltPrefix(value, prefix);
+	private static withXsltPrefix(items: vscode.CompletionItem[], prefix: string, fromPrefix = 'xsl'): vscode.CompletionItem[] {
+		const text = (value: string) => fromPrefix === 'xsl' ? RecordTypes.withXsltPrefix(value, prefix) : value.replace(new RegExp(`(?<![\\w.:-])${fromPrefix}:`, 'g'), prefix + ':');
 		return items.map((item) => {
 			const copy: vscode.CompletionItem = Object.assign(new vscode.CompletionItem(''), item);
 			copy.label = typeof item.label === 'string' ? text(item.label) : { ...item.label, label: text(item.label.label) };
@@ -528,9 +561,20 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 				completions = mapEntryElements.concat(completions ?? []);
 			}
 			// an xsl:with-param for each parameter of the called template not already passed
-			const withParamElements = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getWithParamElementCompletions(document, position, globalInstructionData, allImportedGlobals) : undefined;
+			const withParamElements = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getWithParamElementCompletions(document, position, globalInstructionData, allImportedGlobals) :
+				this.docType === DocumentTypes.XSPEC ? XsltTokenCompletions.getXSpecParamElementCompletions(document, position, XsltDefinitionProvider.xspecPrefixOf(document), globalInstructionData, allImportedGlobals) : undefined;
 			if (withParamElements && withParamElements.length > 0) {
 				completions = withParamElements.concat(completions ?? []);
+			}
+			// XSpec: in x:description, an x:param for each global parameter of the stylesheet under test not set yet
+			const globalParamElements = this.docType === DocumentTypes.XSPEC ? XSpecGlobalParams.completions(document, position, XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals) : undefined;
+			if (globalParamElements && globalParamElements.length > 0) {
+				completions = globalParamElements.concat(completions ?? []);
+			}
+			// XSpec: a scenario for each declaration of the module tested that has none yet
+			const scenarioElements = this.docType === DocumentTypes.XSPEC ? XSpecScenario.scenarioCompletions(document, position) : undefined;
+			if (scenarioElements && scenarioElements.length > 0) {
+				completions = scenarioElements.concat(completions ?? []);
 			}
 			// in an xsl:override, a declaration overriding each component of the package
 			const overrides = this.docType === DocumentTypes.XSLT ? XsltTokenCompletions.getOverrideCompletions(document, position) : undefined;

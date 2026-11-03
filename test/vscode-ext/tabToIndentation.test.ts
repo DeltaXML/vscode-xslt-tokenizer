@@ -69,7 +69,7 @@ suite('Tab: an empty line indented for its context', () => {
 		const contributes = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).contributes;
 		const binding = contributes.keybindings.find((k: { command: string }) => k.command === 'xslt-xpath.tabToIndentation');
 		assert.strictEqual(binding?.key, 'tab');
-		['!suggestWidgetVisible', '!inSnippetMode', '!inlineSuggestionVisible', '!editorHasSelection', '!editorTabMovesFocus', '!editorReadonly', 'editorLangId =~ /^(xslt|xml|bpmn)$/']
+		['!suggestWidgetVisible', '!inSnippetMode', '!inlineSuggestionVisible', '!editorHasSelection', '!editorTabMovesFocus', '!editorReadonly', 'editorLangId =~ /^(xslt|xml|xspec|bpmn)$/']
 			.forEach((condition) => assert.include(binding.when, condition));
 	});
 });

@@ -63,6 +63,10 @@ final class Debugger {
     // --- launch configuration (DAP thread, before start)
     private final List<String> saxonArgs = new ArrayList<String>();
     private boolean stopOnEntry;
+    // a run without debugging, e.g. for coverage: nothing pauses it
+    private boolean noDebug;
+    // with "coverage": the number of times each line of each module is arrived at, by path - sent when the run ends
+    private Map<String, Map<Integer, Integer>> coverage;
     private boolean messageEscaping;
 
     // --- breakpoints: normalised file path -> line -> breakpoint (written by the DAP thread at any time)
@@ -264,6 +268,10 @@ final class Debugger {
             throw new IllegalArgumentException("the launch request has no 'saxonArgs'");
         }
         stopOnEntry = Json.bool(args, "stopOnEntry");
+        noDebug = Json.bool(args, "noDebug");
+        coverage = Json.bool(args, "coverage") ? new HashMap<String, Map<Integer, Integer>>() : null;
+        // an XSpec test run: the test runner's globals aren't shown with those of the stylesheet tested
+        values.hideXSpecGlobals = Json.string(args, "xspecFile") != null;
         // as for an 'xslt' task: "on" keeps Saxon's own xsl:message output, which escapes characters XML doesn't allow
         messageEscaping = "on".equals(Json.string(args, "messageEscaping"));
     }
@@ -451,6 +459,7 @@ final class Debugger {
                 System.out.flush();
                 System.err.flush();
                 sendOutputs(null, false);
+                sendCoverage();
                 dap.event("exited", Json.obj().with("exitCode", exitCode));
                 dap.event("terminated", Json.obj());
             }
@@ -763,6 +772,10 @@ final class Debugger {
         // the first instruction within an xsl:for-each (or other focus instruction) on its own line, e.g.
         // <xsl:for-each select="item"><x/></xsl:for-each>: arrived at for each item, as the body on a line of its own is
         boolean firstInFocus = onSameLine && top.lineStart == null && traceable != top.owner;
+        // the first instruction within a template, named template or function, on the line it was entered at - which
+        // Step Into stops at, but not a breakpoint, as the template or function stopped there just before: a breakpoint
+        // on <xsl:function ...><xsl:sequence select="..."/></xsl:function> stops once for each call
+        boolean firstInDeclaration = firstInFocus && isDeclaration(top.owner);
         boolean arrivingAgain = onSameLine && (traceable == top.lineStart || top.newIteration || firstInFocus);
         boolean onNewLine = !onSameLine || arrivingAgain;
         top.newIteration = false;
@@ -818,7 +831,7 @@ final class Debugger {
             reason = "entry";
         } else if (isCall && functionBreakpointHit(traceable, properties, top)) {
             reason = "function breakpoint";
-        } else if (onNewLine && !lazyArrival && !justStoppedHere && breakpointHit(path, top.line, top)) {
+        } else if (onNewLine && !lazyArrival && !justStoppedHere && !firstInDeclaration && breakpointHit(path, top.line, top)) {
             // checked once each time execution arrives at the line - not for each instruction Saxon reports on it -
             // including again, e.g. for the next iteration of a loop on one line
             reason = "breakpoint";
@@ -828,6 +841,18 @@ final class Debugger {
         if (replayTo < 0) {
             // output after this event that the Debug Console has shown already isn't shown again
             dap.muted = event <= shownTo;
+        }
+        if (coverage != null && onNewLine) {
+            Map<Integer, Integer> lineHits = coverage.get(path);
+            if (lineHits == null) {
+                lineHits = new HashMap<Integer, Integer>();
+                coverage.put(path, lineHits);
+            }
+            Integer hits = lineHits.get(top.line);
+            lineHits.put(top.line, hits == null ? 1 : hits + 1);
+        }
+        if (reason != null && noDebug) {
+            reason = null;
         }
         if (reason != null) {
             pauseRequested = false;
@@ -1215,6 +1240,30 @@ final class Debugger {
         }
     }
 
+    // a template rule, named template or function - not a focus instruction, e.g. xsl:for-each
+    private static boolean isDeclaration(Traceable owner) {
+        String className = owner == null ? "" : owner.getClass().getSimpleName();
+        return className.equals("TemplateRule") || className.equals("NamedTemplate") || className.equals("UserFunction");
+    }
+
+    // the coverage collected: the hits of each line, by path, e.g. {"/a.xsl": {"12": 3}}
+    private void sendCoverage() {
+        if (coverage == null) {
+            return;
+        }
+        Json.Obj files = Json.obj();
+        for (Map.Entry<String, Map<Integer, Integer>> file : coverage.entrySet()) {
+            Json.Obj lines = Json.obj();
+            for (Map.Entry<Integer, Integer> line : file.getValue().entrySet()) {
+                lines.with(String.valueOf(line.getKey()), line.getValue());
+            }
+            // and the lines that can be run, which have no hits if they weren't
+            BreakableLines breakable = sourceLines(file.getKey());
+            files.with(file.getKey(), Json.obj().with("hits", lines).with("executable", breakable == null ? new ArrayList<List<Integer>>() : breakable.executableLines()));
+        }
+        dap.event("xsltCoverage", Json.obj().with("files", files));
+    }
+
     private boolean breakpointHit(String path, int line, Frame frame) {
         Map<Integer, Breakpoint> lines = breakpoints.get(path);
         Breakpoint bp = lines == null ? null : lines.get(line);
@@ -1593,7 +1642,7 @@ final class Debugger {
         }
         if (replayTo >= 0) {
             resumeAsBefore(events, true);
-        } else if (!error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
+        } else if (!noDebug && !error.isWarning() && !compiling && breakOnErrors && Thread.currentThread() == transformThread && !runningTask && !frames.isEmpty()) {
             pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "unhandled", DYNAMIC_ERROR));
         }
     }
@@ -1611,7 +1660,7 @@ final class Debugger {
         }
         if (replayTo >= 0) {
             resumeAsBefore(events, true);
-        } else if (breakOnCaughtErrors && !frames.isEmpty()) {
+        } else if (!noDebug && breakOnCaughtErrors && !frames.isEmpty()) {
             String code = error.getErrorCodeQName() == null ? "" : error.getErrorCodeQName().getLocalPart();
             pause("exception", frames.peek(), callDepth, errorInfo(code, error.getMessage(), "always", CAUGHT_ERROR));
         }

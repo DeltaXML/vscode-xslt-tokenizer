@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as url from 'url';
 import { assert } from 'chai';
 import { ImportIndex } from '../../src/importIndex';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
@@ -86,6 +87,26 @@ suite('Import index', () => {
 		assert.equal(provider.getTreeItem(provider.getChildren()[0]).description, 'chosen top-level stylesheet');
 		ImportIndex.instance.resetChoices();
 		assert.equal(provider.getTreeItem(provider.getChildren()[0]).description, 'inferred top-level stylesheet');
+	});
+
+	test('XSpec\'s test runner, which imports the stylesheet it tests, isn\'t its top-level stylesheet', async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-'));
+		const sut = path.join(dir, 'sut.xsl');
+		const runner = path.join(dir, 'xspec', 'sut-compiled.xsl');
+		fs.mkdirSync(path.dirname(runner));
+		fs.writeFileSync(sut, '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"/>');
+		fs.writeFileSync(runner, `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+   <xsl:import href="${url.pathToFileURL(sut)}"/>
+   <xsl:variable name="Q{http://www.jenitennison.com/xslt/xspec}xspec-uri" as="Q{http://www.w3.org/2001/XMLSchema}anyURI">file:/sut.xspec</xsl:variable>
+</xsl:stylesheet>`);
+		const index = new ImportIndex();
+		try {
+			await index.buildFrom([sut, runner]);
+			assert.deepEqual(index.topLevelCandidates(sut), []);
+			assert.isUndefined(index.masterFor(sut));
+		} finally {
+			index.dispose();
+		}
 	});
 
 	suite('choosing the top-level stylesheet', () => {
@@ -177,8 +198,9 @@ suite('Import index', () => {
 	});
 
 	test('a module opened on its own resolves a declaration in a module its top-level stylesheet imports', async function () {
-		// showing the documents in editors takes a while
-		this.timeout(20000);
+		// showing the documents in editors takes a while - 12s after a restart, nearer 20s with the machine under memory
+		// pressure, e.g. after many test runs
+		this.timeout(40000);
 		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file('lib/b.xsl')));
 		const collection = vscode.languages.createDiagnosticCollection('import-index-test');
 		// the diagnostics are set for the active editor's document

@@ -1,3 +1,4 @@
+import { XSpecScenario } from './xspecScenario';
 import * as vscode from 'vscode';
 import { CodeActionDocument } from './codeActionDocument';
 import { XPathSemanticTokensProvider } from './extension';
@@ -15,6 +16,8 @@ import { ItemTypeSupport } from './itemTypeSupport';
 import { RecordTypes } from './recordTypes';
 import { Console } from 'console';
 import * as path from 'path';
+import * as fs from 'fs';
+import { ImportIndex } from './importIndex';
 import { wrapTarget, wrappersFor } from './xsltWrap';
 import { TraceActions } from './traceActions';
 
@@ -439,6 +442,24 @@ export class XSLTCodeActions implements vscode.CodeActionProvider {
 		if (wrap && wrappersFor(wrapText, wrap, isWrapVersion4).length > 0) {
 			const action = new vscode.CodeAction(XsltCodeActionKind.wrapWith, vscode.CodeActionKind.RefactorRewrite);
 			action.command = { command: 'xslt-xpath.wrapWith', title: XsltCodeActionKind.wrapWith, arguments: [document.uri, document.offsetAt(range.start), document.offsetAt(range.end)] };
+			codeActions.push(action);
+		}
+
+		// an XSpec scenario testing the function, named template or template rule at the cursor (see XSpecScenario)
+		const xspecDeclaration = document.uri.scheme === 'file' ? XSpecScenario.declarationAt(document.getText(), document.offsetAt(range.start)) : undefined;
+		if (document.uri.scheme === 'file' && XSpecScenario.isInRootTag(document.getText(), document.offsetAt(range.start))) {
+			// for a package: one for each way XSpec tests it, unless a test file is there already
+			const xspecExists = fs.existsSync(path.join(path.dirname(document.fileName), path.basename(document.fileName, path.extname(document.fileName)) + '.xspec'));
+			const forms = ImportIndex.packageDeclaration(document.getText()) && !xspecExists ? XSpecScenario.packageForms : [undefined];
+			for (const form of forms) {
+				const action = new vscode.CodeAction(`Create XSpec test file, with a scenario for each function and template${form ? ` - ${form.label}` : ''}`, vscode.CodeActionKind.Refactor);
+				action.command = { command: XSpecScenario.fileCommand, title: action.title, arguments: [document.uri, undefined, form?.form] };
+				codeActions.push(action);
+			}
+		}
+		if (xspecDeclaration) {
+			const action = new vscode.CodeAction(XSpecScenario.title(xspecDeclaration), vscode.CodeActionKind.Refactor);
+			action.command = { command: XSpecScenario.command, title: action.title, arguments: [document.uri, document.offsetAt(range.start)] };
 			codeActions.push(action);
 		}
 

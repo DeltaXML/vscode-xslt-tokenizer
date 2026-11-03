@@ -1,0 +1,51 @@
+/**
+ *  Copyright (c) 2026 DeltaXignia Ltd. and others.
+ *  All rights reserved. This program and the accompanying materials
+ *  are made available under the terms of the MIT license
+ *  which accompanies this distribution.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd.
+ */
+
+/*
+ NOTE: this code was auto-generated using resources/xslt/xsd-to-schemadata.xsl
+ from xspec.rnc from XSpec v4.1.2, converted to XSD with trang
+*/
+
+import { SchemaData, ComplexType, SimpleType } from './xsltSchema';
+import { DocumentTypes } from './xslLexer';
+
+export class XSpecSchema implements SchemaData {
+    docType = DocumentTypes.XSPEC;
+    simpleTypes: { [name: string]: SimpleType } = {
+        'x:boolean.datatype': { base: ['xs:token'], enum: ['yes', 'no', 'true', 'false', '0', '1'] },
+        'x:description.run-as': { base: ['xs:token'], enum: ['import', 'external'] },
+        'x:call.call-as': { base: ['xs:token'], enum: ['module-function', 'variable'] },
+    };
+    complexTypes: { [name: string]: ComplexType } = {};
+    attributeGroups: { [name: string]: any } = {};
+    elements: { [name: string]: ComplexType } = {
+        'x:call': { attrs: { 'expand-text': 'x:boolean.datatype', 'function': 'x:eqname.datatype', 'call-as': 'x:call.call-as', 'step': 'x:eqname.datatype', 'template': 'x:eqname.datatype' }, elementNames: ['x:param', 'x:input', 'x:option'], detail: `A <call> element defines a call to a function, template, or XProc step and the parameters/inputs/options passed to it.` },
+        'x:context': { attrs: { 'expand-text': 'x:boolean.datatype', 'mode': 'x:eqname.datatype', 'as': '', 'href': 'xs:anyURI', 'select': 'x:xpath' }, elementNames: ['x:param', 'xs:any', 'x:text'], detail: `The <context> element defines a context item, the mode in which templates are applied to it, and any parameters included in the apply templates.` },
+        'x:description': { attrs: { 'expand-text': 'x:boolean.datatype', 'stylesheet': 'xs:anyURI', 'query': 'xs:anyURI', 'xproc': 'xs:anyURI', 'xquery-version': '', 'xslt-version': 'xs:decimal', 'query-at': 'xs:anyURI', 'version': 'xs:decimal', 'preserve-space': 'xs:NMTOKENS', 'schematron': 'xs:anyURI', 'run-as': 'x:description.run-as', 'measure-time': 'x:boolean.datatype', 'result-file-threshold': '', 'threads': '' }, elementNames: ['x:helper', 'x:param', 'x:import', 'x:scenario', 'x:pending', 'x:variable'], detail: `A description is a description of an application. It must be associated with a stylesheet, query, schema, or XProc step/library. It may also have a version to aid development over time.` },
+        'x:expect': { attrs: { 'expand-text': 'x:boolean.datatype', 'label': '', 'pending': '', 'test': 'x:xpath', 'result-type': '', 'as': '', 'href': 'xs:anyURI', 'select': 'x:xpath', 'port': '' }, elementNames: ['x:label', 'xs:any', 'x:text'], detail: `An assertion's test XPath can either return a boolean value, in which case the assertion succeeds only if the test is true; or a sequence, in which case the assertion succeeds only if the sequence is equal to the one specified with the href and select attributes or content of the <expect> element.` },
+        'x:expect-assert': { attrs: { 'pending': '', 'label': '', 'id': 'xs:NCName', 'role': '', 'location': 'x:xpath', 'count': 'xs:nonNegativeInteger' }, detail: `In a Schematron test, verify that an <assert> is thrown. Text content and the attributes id, role, and location can be used in combination to identify a specific <assert>.` },
+        'x:expect-not-assert': { attrs: { 'pending': '', 'label': '', 'id': 'xs:NCName', 'role': '', 'location': 'x:xpath' }, detail: `In a Schematron test, verify that an <assert> is not thrown. The attributes id, role, and location can be used in combination to identify a specific <assert>.` },
+        'x:expect-not-report': { attrs: { 'pending': '', 'label': '', 'id': 'xs:NCName', 'role': '', 'location': 'x:xpath' }, detail: `In a Schematron test, verify that a <report> is not thrown. The attributes id, role, and location can be used in combination to identify a specific <report>.` },
+        'x:expect-report': { attrs: { 'pending': '', 'label': '', 'id': 'xs:NCName', 'role': '', 'location': 'x:xpath', 'count': 'xs:nonNegativeInteger' }, detail: `In a Schematron test, verify that a <report> is thrown. Text content and the attributes id, role, and location can be used in combination to identify a specific <report>.` },
+        'x:expect-rule': { attrs: { 'pending': '', 'label': '', 'id': 'xs:NCName', 'context': '', 'count': 'xs:nonNegativeInteger' }, detail: `In a Schematron test, verify that a <rule> is fired.` },
+        'x:expect-valid': { attrs: { 'pending': '' }, detail: `In a Schematron test, verify that the Schematron is executed and the XML that is provided as context passes validation. In the Schematron an <assert> or <report> can have a <role> attribute specifying that it is a warning or informational message and these are considered to be allowed for a passing validation.` },
+        'x:helper': { attrs: { 'stylesheet': 'xs:anyURI', 'package-name': 'xs:anyURI', 'package-version': '', 'query': 'xs:anyURI', 'query-at': 'xs:anyURI', 'xproc': 'xs:anyURI' }, detail: `The test runner will import this stylesheet (XSLT/XProc), query (XQuery), or XProc library (for testing XProc) module after importing the SUT module. Specifying an XSLT package will just insert the equivalent <xsl:use-package> in the test runner. To make the inserted <xsl:use-package> work, the user should set up a Saxon configuration and specify the package information in it. The Saxon configuration is usually set up by SAXON_CUSTOM_OPTIONS (CLI) or saxon.custom.options (Ant). XSLT and XProc ignore query modules. XQuery ignores stylesheets, packages, and XProc libraries.` },
+        'x:import': { attrs: { 'href': 'xs:anyURI' }, detail: `An import brings in all the scenarios from the referenced file (which must itself be an XSpec description). All the unshared scenarios in that imported XSpec will be run on the stylesheet that this XSpec document describes. Importing is recursive and may be circular (although only one copy of a given imported document will actually be imported).` },
+        'x:input': { attrs: { 'expand-text': 'x:boolean.datatype', 'port': 'xs:NCName', 'as': '', 'href': 'xs:anyURI', 'select': 'x:xpath' }, elementNames: ['xs:any', 'x:text', 'p:document'], detail: `Input to pass to an XProc step. Child <p:document> elements are evaluated in XProc (recommended). Alternatively, provide arbitrary content and/or attributes href, select, or as; the current implementation evaluates them in XSLT.` },
+        'x:label': {  },
+        'x:like': { attrs: { 'label': '' }, elementNames: ['x:label'], detail: `The <like> element pulls a shared scenario into this one (which may be shared or unshared). Any environment set within the shared scenario is merged with this one, and any tests in the shared scenario are run in addition to the ones in this scenario. This allows for modular, reusable sets of tests which can be applied in multiple contexts.` },
+        'x:option': { attrs: { 'expand-text': 'x:boolean.datatype', 'name': 'x:eqname.datatype', 'as': '', 'href': 'xs:anyURI', 'select': 'x:xpath' }, elementNames: ['xs:any', 'x:text', 'p:document'], detail: `Option to pass to an XProc step. Child <p:document> elements are evaluated in XProc. Alternatively, provide arbitrary content and/or attributes href, select, or as; the current implementation evaluates them in XSLT.` },
+        'x:param': { attrs: { 'expand-text': 'x:boolean.datatype', 'name': 'x:eqname.datatype', 'static': 'x:boolean.datatype', 'as': '', 'href': 'xs:anyURI', 'select': 'x:xpath', 'tunnel': 'x:boolean.datatype', 'position': 'xs:positiveInteger' }, elementNames: ['xs:any', 'x:text'], detail: `Global parameters as children of x:description apply to entire test suite. Global parameters within a scenario require /x:description/@run-as="external" (EXPERIMENTAL, subject to change). Global parameters within a Schematron scenario take effect only in the compiled XSLT, not while compiling Schematron to XSLT. XQuery tests do not support global parameters.` },
+        'x:pending': { attrs: { 'expand-text': 'x:boolean.datatype', 'label': '' }, elementNames: ['x:label', 'x:scenario', 'x:expect', 'x:expect-valid', 'x:expect-assert', 'x:expect-report', 'x:expect-not-assert', 'x:expect-not-report', 'x:expect-rule'], detail: `Anything that is within a <pending> element will remain untested, but will be reported as (eventual) desired behaviour. This is a good way of commenting out a set of behaviours that haven't been implemented yet, or scenarios whose desired behaviour hasn't been determined, or tests for code that you're not currently working on, to make the testing process faster. An optional label attribute can be used to describe why the scenario or assertion should not be tested.` },
+        'x:scenario': { attrs: { 'expand-text': 'x:boolean.datatype', 'pending': '', 'focus': '', 'threads': '', 'catch': 'x:boolean.datatype', 'shared': 'x:boolean.datatype', 'label': '' }, elementNames: ['x:label', 'x:param', 'x:variable', 'x:context', 'x:like', 'x:pending', 'x:expect', 'x:scenario', 'x:call', 'x:expect-valid', 'x:expect-assert', 'x:expect-report', 'x:expect-not-assert', 'x:expect-not-report', 'x:expect-rule'], detail: `A scenario defines the environment in which a piece of processing takes place. Any parameters defined within a scenario equate to global (stylesheet) parameters. If a scenario has a pending attribute, this has the same semantics as wrapping the scenario in a <pending> element with a label equal to the value of the pending attribute. If any scenario has a focus attribute, any scenarios without a focus attribute will be classed as pending.` },
+        'x:text': { attrs: { 'expand-text': 'x:boolean.datatype' }, detail: `Works like <xsl:text>. Text in this element is not ignored even when it's whitespace-only.` },
+        'x:variable': { attrs: { 'expand-text': 'x:boolean.datatype', 'name': 'x:eqname.datatype', 'as': '', 'href': 'xs:anyURI', 'select': 'x:xpath' }, elementNames: ['xs:any', 'x:text'], detail: `A test file can define global variables. A scenario can define local variables.` },
+    };
+}

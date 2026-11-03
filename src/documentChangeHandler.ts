@@ -361,7 +361,7 @@ export class DocumentChangeHandler {
 
 	private registerXMLDocument = (editor: vscode.TextEditor) => {
 		const document = editor.document;
-		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp' || document.languageId === 'sch';
+		let isXMLDocument = document.languageId === 'xml' || document.languageId === 'xslt' || document.languageId === 'dcp' || document.languageId === 'sch' || document.languageId === 'xspec';
 		let isXPathDocument = document.languageId === 'xpath';
 		let isXSLTDocument = document.languageId === 'xslt';
 
@@ -371,7 +371,7 @@ export class DocumentChangeHandler {
 		}
 		if (isXMLDocument) {
 			DocumentChangeHandler.lastActiveXMLEditor = editor;
-			if (document.languageId !== 'xslt' && document.languageId !== 'dcp') {
+			if (document.languageId !== 'xslt' && document.languageId !== 'dcp' && document.languageId !== 'xspec') {
 				// only a file can be the XML context file - not, e.g., the debugger's view of the output so far
 				// ('[XSLT output] ...'), an untitled document, or another extension's virtual document
 				const isFile = document.uri.scheme === 'file';

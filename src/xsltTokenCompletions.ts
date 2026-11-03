@@ -7,6 +7,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { XSpecScenario } from './xspecScenario';
+import { XslLexerLight } from './xslLexerLight';
 import { XslLexer, XMLCharState, XSLTokenLevelState, GlobalInstructionData, GlobalInstructionType, DocumentTypes, LanguageConfiguration } from './xslLexer';
 import { CharLevelState, TokenLevelState, BaseToken, Data } from './xpLexer';
 import { FunctionData, XSLTnamespaces } from './functionData';
@@ -174,6 +176,8 @@ export class XsltTokenCompletions {
 		let xpathStack: XPathData[] = [];
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
+		// XSpec: the attribute of x:call whose value is a name, 'template' or 'function'
+		let xspecCallAttribute: string | undefined;
 		let tagElementName = '';
 		let startTagToken: XSLTToken | null = null;
 		let preXPathVariable = false;
@@ -249,13 +253,13 @@ export class XsltTokenCompletions {
 								if (prevToken.line === requiredLine && prevToken.startCharacter + prevToken.length > requiredChar) {
 									// we're within the attribute value
 								} else {
-									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
+									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames, document);
 								}
 								break;
 							case XSLTokenLevelState.elementName:
 							case XSLTokenLevelState.xslElementName:
 							case XSLTokenLevelState.attributeName:
-								resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
+								resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames, document);
 								break;
 						}
 					} else {
@@ -398,7 +402,7 @@ export class XsltTokenCompletions {
 									variableData.selectExprStartIndex = pendingSelectExprIndex;
 								}
 								if (isOnRequiredToken) {
-									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames);
+									resultCompletions = XsltTokenCompletions.getXSLTAttributeCompletions(schemaQuery, position, tagElementName, tagAttributeNames, document);
 								}
 								tagAttributeNames = [];
 								if (isXSLT && onRootStartTag) {
@@ -565,6 +569,13 @@ export class XsltTokenCompletions {
 								}
 							} else if (attNameText === XsltTokenCompletions.xslUseAttSet) {
 								attType = AttributeType.UseAttributeSets;
+							} else if (tagType === TagType.XSLTstart && docType === DocumentTypes.XSPEC) {
+								// XSpec: the names of the stylesheet under test's templates, functions and modes, and of a called
+								// template's parameters
+								const isCallName = tagElementName === 'x:call' && (attNameText === 'template' || attNameText === 'function');
+								xspecCallAttribute = isCallName ? attNameText : undefined;
+								attType = isCallName || (tagElementName === 'x:param' && attNameText === 'name') ? AttributeType.InstructionName :
+									tagElementName === 'x:context' && attNameText === 'mode' ? AttributeType.InstructionMode : AttributeType.None;
 							}
 						} else {
 							attType = AttributeType.Xmlns;
@@ -599,9 +610,11 @@ export class XsltTokenCompletions {
 								if (isOnRequiredToken) {
 									if (tagElementName === 'xsl:use-package') {
 										resultCompletions = XsltTokenCompletions.getPackageNameCompletions(document, position);
-									} else if (tagElementName === 'xsl:call-template') {
+									} else if (tagElementName === 'xsl:call-template' || (tagElementName === 'x:call' && xspecCallAttribute === 'template')) {
 										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Template, globalInstructionData, importedInstructionData);
-									} else if (tagElementName === 'xsl:with-param' && elementStack.length > 0) {
+									} else if (tagElementName === 'x:call' && xspecCallAttribute === 'function') {
+										resultCompletions = XsltTokenCompletions.getSpecialCompletions(GlobalInstructionType.Function, globalInstructionData, importedInstructionData);
+									} else if ((tagElementName === 'xsl:with-param' || tagElementName === 'x:param') && elementStack.length > 0) {
 										// get name attribute of parent
 										let parentElemment = elementStack[elementStack.length - 1];
 										if (parentElemment.symbolName === 'xsl:next-iteration' && currentXSLTIterateParams.length > 0) {
@@ -652,7 +665,7 @@ export class XsltTokenCompletions {
 										completionStrings = completionStrings.concat(FunctionData.ixslEventName);
 									}
 									let allCompletions = XsltTokenCompletions.getSimpleInsertCompletions(completionStrings, vscode.CompletionItemKind.Constant);
-									let labels: string[] = tagElementName === 'xsl:apply-templates' ? ['default', 'current'] : ['default', 'current', 'all'];
+									let labels: string[] = tagElementName === 'x:context' ? ['default'] : tagElementName === 'xsl:apply-templates' ? ['default', 'current'] : ['default', 'current', 'all'];
 									XsltTokenCompletions.createNonAlphanumericCompletions(document, position, labels, allCompletions);
 									resultCompletions = allCompletions;
 								}
@@ -2363,6 +2376,59 @@ export class XsltTokenCompletions {
 
 	public static readonly xdmTraceSnippetLabel = 'xdm:trace(…, label) - pretty-printed trace';
 
+	// XSpec: an x:param for each parameter not already passed, for an element name after '<' in an x:call - of the template it
+	// calls, by name, or of the function, in order, with its type - undefined if it's not such a position. With the prefix
+	// x, which is the XSpec file's when they're shown (see XsltDefinitionProvider)
+	public static getXSpecParamElementCompletions(document: vscode.TextDocument, position: vscode.Position, prefix: string, globalInstructionData: GlobalInstructionData[], importedInstructionData: GlobalInstructionData[]): vscode.CompletionItem[] | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const nameStart = /<([\w.:-]*)$/.exec(text.substring(Math.max(0, offset - 100), offset));
+		if (!nameStart) {
+			return undefined;
+		}
+		const tagStart = offset - nameStart[0].length;
+		const markup = RecordTypes.blankMarkup(text);
+		const parent = RecordTypes.openElements(markup, tagStart).pop();
+		if (parent?.name !== `${prefix ? prefix + ':' : ''}call`) {
+			return undefined;
+		}
+		// its own function or template, or one it inherits from an enclosing scenario's x:call
+		const target = XSpecScenario.callTarget(text, parent.offset, prefix);
+		const templateName = target?.kind === 'template' ? target.name : undefined;
+		const functionName = target?.kind === 'function' ? target.name : undefined;
+		const all = globalInstructionData.concat(importedInstructionData);
+		const declaration = templateName ? all.find((data) => data.type === GlobalInstructionType.Template && data.name === templateName) :
+			// the function with the most parameters, of those with the name
+			all.filter((data) => data.type === GlobalInstructionType.Function && data.name === functionName)
+				.sort((a, b) => (b.memberNames?.length ?? 0) - (a.memberNames?.length ?? 0))[0];
+		if (!declaration?.memberNames) {
+			return undefined;
+		}
+		// those passed by it, and those it inherits
+		const passed = (target?.params ?? []).map((childOffset) => RecordTypes.attributeOfElementAt(text, childOffset + 1, 'name')?.trim());
+		const note = XdocNotes.forGlobal(declaration, text);
+		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
+		const items: vscode.CompletionItem[] = [];
+		declaration.memberNames.forEach((name, index) => {
+			// a template's parameters by name - a function's in order, after those passed
+			if (templateName ? passed.includes(name) : index < passed.length) {
+				return;
+			}
+			const type = declaration.memberTypes?.[index];
+			const as = type ? ` as="${type}"` : '';
+			const item = new vscode.CompletionItem(`x:param ${name}`, vscode.CompletionItemKind.Variable);
+			item.insertText = new vscode.SnippetString(templateName ? `x:param name="${name}"${as} select="$1"/>$0` : `x:param${as} select="$1"/><!-- \\$${name} -->$0`);
+			item.range = range;
+			item.detail = type ?? 'item()*';
+			const paramText = note ? XdocNotes.paramText(note, name) : undefined;
+			item.documentation = new vscode.MarkdownString(`Parameter of the ${templateName ? 'template' : 'function'}: ${templateName ?? functionName}` + (paramText ? `\n\n${paramText}` : ''));
+			// before other element completions, in declaration order
+			item.sortText = '!' + String(index).padStart(4, '0');
+			items.push(item);
+		});
+		return items;
+	}
+
 	// an xsl:with-param for each parameter not already passed, for an element name after '<' in an xsl:call-template - the
 	// called template's parameters - or in an xsl:next-iteration - the xsl:iterate's parameters - undefined if it's not such
 	// a position
@@ -3362,7 +3428,7 @@ export class XsltTokenCompletions {
 	}
 
 
-	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery | undefined, pos: vscode.Position, xsltParent: string, existingAttrs: string[]) {
+	private static getXSLTAttributeCompletions(schemaQuery: SchemaQuery | undefined, pos: vscode.Position, xsltParent: string, existingAttrs: string[], document?: vscode.TextDocument) {
 		if (!schemaQuery) {
 			return this.getXSLTSnippetCompletions(XMLSnippets.generalAttributes);
 		}
@@ -3387,6 +3453,8 @@ export class XsltTokenCompletions {
 		let xmlnsCompletions: vscode.CompletionItem[] = [];
 		if (schemaQuery.docType === DocumentTypes.XSLT && (xsltParent === 'xsl:stylesheet' || xsltParent === 'xsl:transforrm' || xsltParent === 'xsl:package')) {
 			xmlnsCompletions = XsltTokenCompletions.getXSLTSnippetCompletions(XSLTSnippets.xsltXMLNS);
+		} else if (schemaQuery.docType === DocumentTypes.XSPEC && xsltParent === 'x:description' && document) {
+			xmlnsCompletions = XsltTokenCompletions.getXSpecXmlnsCompletions(document);
 		}
 
 		let isXSLT = xsltParent.startsWith('xsl:');
@@ -3398,6 +3466,44 @@ export class XsltTokenCompletions {
 		}
 
 		return completionItems.concat(xmlnsCompletions);
+	}
+
+	// in an XSpec file's x:description: a namespace declaration for each prefix of the stylesheet under test's - first -
+	// then XSpec's, if it's not declared, and the common ones offered on a stylesheet's root element - not those declared
+	private static getXSpecXmlnsCompletions(document: vscode.TextDocument): vscode.CompletionItem[] {
+		const text = document.getText();
+		const rootTag = /<(?:[\w.-]+:)?description\b[^>]*>?/.exec(text)?.[0] ?? '';
+		const declared = new Set([...rootTag.matchAll(/\sxmlns:([\w.-]+)\s*=/g)].map((m) => m[1]));
+		const items: vscode.CompletionItem[] = [];
+		const add = (prefix: string, uri: string, description: string, group: string, sortGroup: string) => {
+			if (declared.has(prefix)) {
+				return;
+			}
+			declared.add(prefix);
+			const item = new vscode.CompletionItem({ label: `xmlns:${prefix}`, description: group }, vscode.CompletionItemKind.Struct);
+			item.insertText = new vscode.SnippetString(`xmlns:${prefix}="${uri.replace(/[$}\\]/g, '\\$&').replace(/"/g, '&quot;')}"$0`);
+			item.documentation = new vscode.MarkdownString(description);
+			item.sortText = `${sortGroup}${prefix}`;
+			items.push(item);
+		};
+		// the stylesheet under test's - or for a package tested with x:helper, the package's
+		const tested = document.uri.scheme === 'file' ? XSpecScenario.testedModule(text, document.fileName) : undefined;
+		if (tested && fs.existsSync(tested)) {
+			const testedText = fs.readFileSync(tested, 'utf8');
+			XslLexerLight.prefixBindingsOf(testedText)?.forEach((uri, prefix) => {
+				if (prefix && prefix !== 'xsl' && uri !== 'http://www.w3.org/1999/XSL/Transform') {
+					add(prefix, uri, `\`${uri}\` - declared by the stylesheet under test, ${path.basename(tested)}`, 'stylesheet under test', '0');
+				}
+			});
+		}
+		add('x', 'http://www.jenitennison.com/xslt/xspec', 'The XSpec namespace', 'XSpec', '1');
+		for (const snippet of XSLTSnippets.xsltXMLNS) {
+			const common = /^xmlns:([\w.-]+)="([^"]*)"/.exec(snippet.body);
+			if (common && common[1] !== 'xsl') {
+				add(common[1], common[2], snippet.description, 'common', '2');
+			}
+		}
+		return items;
 	}
 
 	private static getXSLTAttributeValueCompletions(schemaQuery: SchemaQuery | undefined, pos: vscode.Position, xsltParent: string, currentAttribute: string) {

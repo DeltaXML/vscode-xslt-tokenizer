@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n 'successful=\"false\"' *-result.xml)",
+      "Bash(cat order-report-diffs.json)"
+    ]
+  }
+}

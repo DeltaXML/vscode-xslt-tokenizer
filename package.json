@@ -77,6 +77,19 @@
 				"editor.tabSize": 4,
 				"outline.showArrays": false
 			},
+			"[xspec]": {
+				"editor.defaultFormatter": "deltaxml.xslt-xpath",
+				"editor.formatOnSaveMode": "file",
+				"editor.formatOnSave": false,
+				"editor.formatOnPaste": true,
+				"editor.formatOnType": true,
+				"editor.semanticHighlighting.enabled": true,
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.detectIndentation": true,
+				"editor.insertSpaces": true,
+				"editor.tabSize": 2,
+				"outline.showArrays": false
+			},
 			"[xsl]": {
 				"editor.semanticHighlighting.enabled": true
 			},
@@ -107,30 +120,30 @@
 			{
 				"command": "xslt-xpath.addXPathLocationToQueries",
 				"key": "alt+g",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.tabToIndentation",
 				"key": "tab",
-				"when": "editorTextFocus && !editorReadonly && !editorHasSelection && !editorHasMultipleSelections && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible && !inlineEditIsVisible && !hasOtherSuggestions && !editorTabMovesFocus && editorLangId =~ /^(xslt|xml|bpmn)$/"
+				"when": "editorTextFocus && !editorReadonly && !editorHasSelection && !editorHasMultipleSelections && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible && !inlineEditIsVisible && !hasOtherSuggestions && !editorTabMovesFocus && editorLangId =~ /^(xslt|xml|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectCurrentElement",
 				"key": "ctrl+shift+0",
 				"mac": "shift+cmd+0",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectParentElement",
 				"key": "ctrl+shift+9",
 				"mac": "shift+cmd+9",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectFirstChildElement",
 				"key": "ctrl+shift+8",
 				"mac": "shift+cmd+8",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.quickRunXslt",
@@ -148,13 +161,13 @@
 				"command": "xslt-xpath.selectFollowingElement",
 				"key": "ctrl+shift+7",
 				"mac": "shift+cmd+7",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectPrecedingElement",
 				"key": "ctrl+shift+6",
 				"mac": "shift+cmd+6",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.wrapWith",
@@ -166,7 +179,7 @@
 				"command": "xslt-xpath.xmlSelectionPick",
 				"key": "ctrl+shift+2",
 				"mac": "shift+cmd+2",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			}
 		],
 		"commands": [
@@ -360,6 +373,28 @@
 				"command": "xslt-xpath.showDebugOutputFromVariable",
 				"title": "Show Output",
 				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.xspecRunFile",
+				"title": "Run Tests",
+				"category": "XSpec",
+				"icon": "$(beaker)"
+			},
+			{
+				"command": "xslt-xpath.xspecOpenReport",
+				"title": "Open Report",
+				"category": "XSpec",
+				"icon": "$(preview)"
+			},
+			{
+				"command": "xslt-xpath.xspecDeleteGeneratedFiles",
+				"title": "Delete Generated Files",
+				"category": "XSpec"
+			},
+			{
+				"command": "xslt-xpath.createXSpecFile",
+				"title": "Create Test File",
+				"category": "XSpec"
 			}
 		],
 		"views": {
@@ -389,8 +424,13 @@
 				},
 				{
 					"submenu": "xslt-xpath.xmlSelection",
-					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/",
+					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/",
 					"group": "2_xml@1"
+				},
+				{
+					"command": "xslt-xpath.createXSpecFile",
+					"when": "editorLangId == xslt",
+					"group": "xspec"
 				}
 			],
 			"xslt-xpath.xmlSelection": [
@@ -416,12 +456,12 @@
 				},
 				{
 					"command": "xslt-xpath.findNodesWithXPath",
-					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/",
+					"when": "editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/",
 					"group": "3_xpath@1"
 				},
 				{
 					"command": "xslt-xpath.addXPathLocationToQueries",
-					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/",
+					"when": "editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/",
 					"group": "3_xpath@2"
 				}
 			],
@@ -454,6 +494,16 @@
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
 					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.xspecRunFile",
+					"when": "editorLangId == xspec",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.xspecOpenReport",
+					"when": "editorLangId == xspec",
+					"group": "navigation"
 				}
 			],
 			"view/title": [
@@ -461,6 +511,11 @@
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
 					"when": "view == xslt-xpath.imports",
 					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.xspecDeleteGeneratedFiles",
+					"when": "view == testing.explorer && xslt-xpath.hasXSpecFiles",
+					"group": "xspec@1"
 				}
 			],
 			"view/item/context": [
@@ -491,7 +546,7 @@
 				},
 				{
 					"command": "xslt-xpath.addXPathLocationToQueries",
-					"when": "editorLangId =~ /^(xml|dcp|sch|bpmn)$/"
+					"when": "editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/"
 				},
 				{
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
@@ -556,6 +611,10 @@
 				{
 					"command": "xslt-xpath.editDebugTask",
 					"when": "editorLangId == xslt && xslt-xpath.quickRunProcessor != 'xslt'"
+				},
+				{
+					"command": "xslt-xpath.createXSpecFile",
+					"when": "editorLangId == xslt"
 				}
 			],
 			"editor/title/run": [
@@ -795,6 +854,52 @@
 					"default": false,
 					"scope": "window",
 					"description": "When debugging with SaxonJ, open the output written so far - beside the stylesheet - at the first pause where there is some. Otherwise, it's opened with the 'Show Debug Output' button on the debug toolbar, 'Show Output' on an output in the Variables view's Output section, or 'XSLT: Show Debug Output'."
+				},
+				"XSLT.validation.xslt40UnionPriorities": {
+					"type": "boolean",
+					"default": false,
+					"scope": "resource",
+					"markdownDescription": "Warn, in every stylesheet before XSLT 4.0, about a template rule whose union pattern has branches of different default priorities - which XSLT 4.0 gives one priority, the highest, so another rule may be chosen. Without the setting, the warning is only for XSLT 4.0 stylesheets, and those run with Saxon's syntax extensions as they use item types or notes - where 4.0's rule applies already."
+				},
+				"XSLT.xspec.home": {
+					"type": "string",
+					"default": "",
+					"scope": "resource",
+					"markdownDescription": "The folder of an XSpec installation, e.g. a newer release, to compile and run XSpec tests with - by default the XSpec 4.1.2 bundled with the extension is used. Tests are run with the Saxon jar of `#XSLT.tasks.saxonJar#`."
+				},
+				"XSLT.xspec.emphasiseLabels": {
+					"type": "boolean",
+					"default": true,
+					"scope": "resource",
+					"description": "In XSpec files, show scenario labels in bold and expectation labels in italic, so the scenarios read like headings with their expectations under them."
+				},
+				"XSLT.xspec.fadePending": {
+					"type": "boolean",
+					"default": true,
+					"scope": "resource",
+					"description": "In XSpec files, fade the pending scenarios and expectations - in x:pending, or with a pending attribute - which XSpec doesn't run, other than the reason they're pending."
+				},
+				"XSLT.xspec.legacyCompatibility": {
+					"type": "boolean",
+					"default": false,
+					"scope": "resource",
+					"markdownDescription": "Run XSpec tests written for XSpec before 1.0 (e.g. 0.5) as that ran them, where XSpec 4 stops the run: an `x:expect` with a boolean `test` and an expected value is decided by the boolean; one with a `test` that isn't boolean and no expected value passes if the `test` returns nothing; and the `xs` prefix needn't be declared. Each of these is reported in the XSpec output, so the tests can be updated."
+				},
+				"XSLT.xspec.allowSyntaxExtensions": {
+					"type": "string",
+					"enum": [
+						"auto",
+						"on",
+						"off"
+					],
+					"enumDescriptions": [
+						"On for tests of a stylesheet that's XSLT 4.0, or uses item types or notes - in it or a module it uses - unless the Saxon jar is Saxon-HE, which fails every transform with them on",
+						"Always on",
+						"Always off"
+					],
+					"default": "auto",
+					"scope": "resource",
+					"markdownDescription": "Run XSpec tests with Saxon's syntax extensions (`--allowSyntaxExtensions:on`), so the stylesheet tested can use XPath 4.0 syntax, or e.g. record types in an XSLT 3.0 stylesheet. By default only for tests that need them: with them on, Saxon 13 runs a stylesheet before XSLT 4.0 with some of 4.0's rules, e.g. the priority of a union pattern."
 				}
 			}
 		},
@@ -878,7 +983,7 @@
 							"off"
 						],
 						"enumDescriptions": [
-							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
 							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
 							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
 						],
@@ -1202,7 +1307,7 @@
 							"off"
 						],
 						"enumDescriptions": [
-							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
 							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
 							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
 						],
@@ -1713,6 +1818,17 @@
 				"configuration": "./language-configuration.json"
 			},
 			{
+				"id": "xspec",
+				"aliases": [
+					"XSpec",
+					"xspec"
+				],
+				"extensions": [
+					".xspec"
+				],
+				"configuration": "./language-configuration.json"
+			},
+			{
 				"id": "bpmn",
 				"aliases": [
 					"BPMN",
@@ -1900,7 +2016,7 @@
 									"off"
 								],
 								"enumDescriptions": [
-									"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+									"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
 									"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
 									"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
 								],
@@ -2030,6 +2146,9 @@
 		"breakpoints": [
 			{
 				"language": "xslt"
+			},
+			{
+				"language": "xspec"
 			}
 		],
 		"viewsWelcome": [
@@ -2050,6 +2169,7 @@
 		"test": "npm run compile && node scripts/run-vscode-tests.js --extensionDevelopmentPath=.",
 		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts",
 		"w3c-lint": "tsc -p ./ && node scripts/run-vscode-tests.js --config .vscode-test.w3c.js --extensionDevelopmentPath=.",
+		"xspec-lint": "tsc -p ./ && node scripts/run-vscode-tests.js --config .vscode-test.xspec.js --extensionDevelopmentPath=.",
 		"generate-xpath40-functions": "xslt3 -xsl:resources/xslt/saxon-functions-to-typescript.xsl -s:resources/data/saxon-functions.xml -o:src/xpath40FunctionDetails.ts",
 		"update-saxon-functions": "curl -sfL https://www.saxonica.com/documentation13/doc/functions.xml -o resources/data/saxon-functions.xml && npm run generate-xpath40-functions"
 	},

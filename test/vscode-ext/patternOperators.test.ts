@@ -20,7 +20,8 @@ async function problems(body: string, version: string) {
 	const allTokens = xslLexer.analyse(document.getText());
 	const isVersion4 = version === '4.0';
 	return XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4 }, isVersion4 ? DocumentTypes.XSLT40 : DocumentTypes.XSLT, document, allTokens, xslLexer.globalInstructionData, [], [])
-		.filter((d) => d.message !== 'variable is unused')
+		// not the default priorities of union patterns' branches (see unionPatternPriority.test.ts)
+		.filter((d) => d.message !== 'variable is unused' && !d.message.startsWith('XSLT: The branches of this union pattern'))
 		.map((d) => [d.message, document.getText(d.range)]);
 }
 

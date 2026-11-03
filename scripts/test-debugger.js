@@ -2289,6 +2289,53 @@ async function testOutputSoFar(saxonJar) {
 // a principal result with method="json", whose xsl:output properties Saxon gives the serializer as defaults: the copy
 // for the output view is JSON too, so the map is written (before, the copy had no method and the transform failed with
 // SENR0001) - indented, while the result itself is as the stylesheet says
+// a breakpoint on a one-line function or template rule stops once for each call - at its entry, and not again at the
+// XPath expression of the instruction in it, on the same line
+async function testOneLineDeclarations(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    const terminated = dap.event('terminated');
+    const stops = [];
+    // waiting for each stop before continuing to it, so it isn't missed
+    const nextStop = () => dap.stopped().catch(() => undefined);
+    let next = nextStop();
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'one-line-declarations.xsl')}`, '-it'] }, { 'one-line-declarations.xsl': [{ line: 5 }, { line: 6 }] });
+    while (true) {
+        const stop = await Promise.race([next, terminated.then(() => undefined)]);
+        if (!stop) {
+            break;
+        }
+        stops.push(stop.frames[0].line);
+        next = nextStop();
+        await dap.request('continue', { threadId: 1 });
+    }
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    // the template rule for each item, which calls the function - then the function called with 10
+    assert.deepStrictEqual(stops, [6, 5, 6, 5, 5]);
+}
+
+// an xsl:result-document with no href writes the principal result: the file has its content - not, written again when
+// the run ends, the empty principal result - and so does the view of the output
+async function testResultDocumentAsPrincipal(saxonJar) {
+    const dap = new DapClient(saxonJar);
+    const fs = require('fs');
+    const outDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
+    const resultPath = path.join(outDir, 'report.xml');
+    const terminated = dap.event('terminated');
+    await dap.start({ saxonArgs: [`-xsl:${path.join(fixtures, 'result-document-no-href.xsl')}`, '-it', `-o:${resultPath}`] }, {});
+    await terminated;
+    await dap.request('disconnect', {}).catch(() => undefined);
+    await dap.exited;
+    assert.match(fs.readFileSync(resultPath, 'utf8'), /<report>\s*<test id="t1" successful="true"\/>\s*<\/report>/);
+    let text = '';
+    for (const e of dap.events.filter((e) => e.event === 'xsltOutputs')) {
+        for (const o of e.body.outputs.filter((o) => o.name === 'report.xml')) {
+            text = text.substring(0, o.offset) + o.text;
+        }
+    }
+    assert.match(text, /<report>/);
+}
+
 async function testPrincipalJsonOutput(saxonJar) {
     const dap = new DapClient(saxonJar);
     const outDir = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'xslt-debug-out-'));
@@ -2613,7 +2660,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testOutputMap, testOutputMapWithoutXslOutput]) {
+        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;
