@@ -92,7 +92,16 @@
       "Bash(sed 's/version=\"3.0\"/version=\"4.0\"/' u.xsl)",
       "Bash(java -cp /Users/phil.fearon/opt/SaxonPE13-1J/saxon-pe-13.1.jar net.sf.saxon.Transform --allowSyntaxExtensions:on -s:in.xml -xsl:u4.xsl)",
       "Bash(grep \"\\\\.xsl$\")",
-      "Bash(grep -E \"^\\\\s+[0-9]+ \\(passing|failing\\)|^  [0-9]+\\\\\\) |a module opened on its own|decoded href|\\\\\\([0-9]{4,}ms\\\\\\)\")"
+      "Bash(grep -E \"^\\\\s+[0-9]+ \\(passing|failing\\)|^  [0-9]+\\\\\\) |a module opened on its own|decoded href|\\\\\\([0-9]{4,}ms\\\\\\)\")",
+      "Bash(cat order-report.xspec)",
+      "Bash(grep -n \"repeatParasSection\" -r .)",
+      "Bash(cat -n order-report.xsl)",
+      "Bash(grep -rln -i \"coverage\" src)",
+      "Bash(grep -i -E \"\\\\.java$\")",
+      "Bash(xargs grep -l -i coverage)",
+      "Bash(grep -v -E \"\\\\.\\(xsl|xml\\)$\")",
+      "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"coverage\")",
+      "Bash(XSPEC_SAXON_JAR=/usr/local/java/SaxonPE12-8J/saxon-pe-12.8.jar node scripts/run-vscode-tests.js --extensionDevelopmentPath=. --grep \"two XSpec files\")"
     ],
     "additionalDirectories": [
       "/Users/phil.fearon/Documents/github/xdm-viewer/tests"

@@ -43,6 +43,8 @@ export class XSpecTestController {
 	public readonly coverageProfile: vscode.TestRunProfile;
 	// the coverage of each file in the last coverage run, by URI, for its details
 	private readonly coverageDetails = new Map<string, vscode.FileCoverageDetail[]>();
+	// the hits so far of each module in a coverage run, by path
+	private readonly runCoverage = new WeakMap<vscode.TestRun, CoverageFiles>();
 	private readonly controller: vscode.TestController;
 	// the items of each XSpec file, by their key (see XSpecTests.key) - with an occurrence number for repeated labels
 	private readonly itemsByFile = new Map<string, Map<string, vscode.TestItem>>();
@@ -370,10 +372,19 @@ export class XSpecTestController {
 		const xspecHome = XSpecRunner.home(vscode.Uri.file(xspecPath));
 		const isOwn = (file: string) => XSpecSourceMap.samePath(file, files.compiled) || (!!xspecHome && path.normalize(file).startsWith(path.normalize(xspecHome))) ||
 			path.dirname(file) === path.dirname(files.compiled);
-		for (const [file, { hits: lines, executable }] of Object.entries(hits)) {
+		// a module tested by more than one XSpec file in the run: the hits of each are added together, as a file's
+		// coverage replaces what was added for it before
+		const runHits = this.runCoverage.get(run) ?? {};
+		this.runCoverage.set(run, runHits);
+		for (const [file, fileHits] of Object.entries(hits)) {
 			if (isOwn(file) || !fs.existsSync(file) || !/\.xslt?$/i.test(file)) {
 				continue;
 			}
+			const before = runHits[file]?.hits ?? {};
+			const merged = { ...before };
+			Object.entries(fileHits.hits).forEach(([line, count]) => merged[line] = (merged[line] ?? 0) + count);
+			runHits[file] = { hits: merged, executable: fileHits.executable };
+			const { hits: lines, executable } = runHits[file];
 			const text = fs.readFileSync(file, 'utf8');
 			const lineOf = (offset: number) => text.substring(0, offset).split('\n').length;
 			const hitsAt = (line: number) => lines[String(line)] ?? 0;

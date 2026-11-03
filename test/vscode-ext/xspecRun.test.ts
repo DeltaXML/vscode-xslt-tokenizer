@@ -559,5 +559,40 @@ suite('XSpec: running tests', function () {
 		assert.instanceOf(tag.location, vscode.Range);
 		assert.strictEqual((tag.location as vscode.Range).end.line, 17);
 	});
+
+	test('coverage: a stylesheet tested by two XSpec files in one run has the hits of both', async () => {
+		const tested = path.join(dir, 'shared.xsl');
+		fs.writeFileSync(tested, [
+			'<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0">',
+			'  <xsl:function name="f:one">',
+			'    <xsl:sequence select="1"/>',
+			'  </xsl:function>',
+			'  <xsl:function name="f:two">',
+			'    <xsl:sequence select="2"/>',
+			'  </xsl:function>',
+			'</xsl:stylesheet>'].join('\n'));
+		const xspecFor = (name: string, fn: string, value: number) => {
+			const file = path.join(dir, `${name}.xspec`);
+			fs.writeFileSync(file, `<x:description xmlns:x="http://www.jenitennison.com/xslt/xspec" xmlns:f="urn:f" stylesheet="shared.xsl">
+  <x:scenario label="${fn}"><x:call function="${fn}"/><x:expect label="is ${value}" select="${value}"/></x:scenario>
+</x:description>`);
+			return vscode.Uri.file(file);
+		};
+		const uris = [xspecFor('shared-one', 'f:one', 1), xspecFor('shared-two', 'f:two', 2)];
+		const xspec = XSpecTestController.instance!;
+		for (const uri of uris) {
+			await vscode.workspace.openTextDocument(uri);
+		}
+		const coverages: vscode.FileCoverage[] = [];
+		xspec.createRun = () => recordingRun(new Map(), new Map(), coverages);
+		await xspec.coverageProfile.runHandler(new vscode.TestRunRequest(uris.map((uri) => xspec.testController.items.get(uri.toString())!)), new vscode.CancellationTokenSource().token);
+		xspec.createRun = undefined;
+		// the coverage added last for the stylesheet replaces what was added before
+		const coverage = coverages.filter((c) => path.basename(c.uri.fsPath) === 'shared.xsl').pop();
+		assert.isDefined(coverage, coverages.map((c) => c.uri.fsPath).join(', '));
+		const details = await xspec.coverageProfile.loadDetailedCoverage!({} as vscode.TestRun, coverage!, new vscode.CancellationTokenSource().token);
+		const declarations = details.filter((d): d is vscode.DeclarationCoverage => d instanceof vscode.DeclarationCoverage).map((d) => `${d.name} ${d.executed ? 'run' : 'not run'}`);
+		assert.deepEqual(declarations, ['function f:one run', 'function f:two run']);
+	});
 });
 
