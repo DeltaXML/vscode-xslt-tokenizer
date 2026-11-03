@@ -184,6 +184,16 @@
 		],
 		"commands": [
 			{
+				"command": "xslt-xpath.copyMcpSetup",
+				"title": "Copy MCP Setup for Claude Code",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.resetMcpToken",
+				"title": "Reset MCP Server Token",
+				"category": "XSLT"
+			},
+			{
 				"command": "xslt-xpath.addTaskInputs",
 				"title": "Add XSLT Inputs to Tasks File",
 				"category": "XSLT"
@@ -878,6 +888,18 @@
 					"default": true,
 					"scope": "resource",
 					"description": "In XSpec files, fade the pending scenarios and expectations - in x:pending, or with a pending attribute - which XSpec doesn't run, other than the reason they're pending."
+				},
+				"XSLT.mcp.enabled": {
+					"type": "boolean",
+					"default": false,
+					"scope": "application",
+					"markdownDescription": "Run an MCP server for AI assistants, such as GitHub Copilot or Claude Code, with tools that use the extension's linter and its knowledge of XSLT modules: e.g. the problems of a stylesheet that isn't open, or its imports. The server listens on `127.0.0.1` only, at the port of `#XSLT.mcp.port#`, and needs a token that only VS Code and the assistants it's set up for have. GitHub Copilot finds it by itself; for Claude Code, run **XSLT: Copy MCP Setup for Claude Code**."
+				},
+				"XSLT.mcp.port": {
+					"type": "number",
+					"default": 6745,
+					"scope": "application",
+					"markdownDescription": "The port of the MCP server (see `#XSLT.mcp.enabled#`). With more than one VS Code window, the first window opened has the server."
 				},
 				"XSLT.xspec.legacyCompatibility": {
 					"type": "boolean",
@@ -1925,6 +1947,12 @@
 				"path": "./syntaxes/xpath-type.tmLanguage.json"
 			}
 		],
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "xslt-xpath.mcp",
+				"label": "XSLT/XPath"
+			}
+		],
 		"debuggers": [
 			{
 				"type": "xslt-saxon",
@@ -2162,7 +2190,8 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"clean": "rm -rf out",
-		"compile": "npm run clean && tsc -p ./",
+		"compile": "npm run clean && tsc -p ./ && npm run bundle-mcp",
+		"bundle-mcp": "esbuild src/mcp/sdk.ts --bundle --platform=node --format=cjs --minify --outfile=out/src/mcp/sdk.js --log-level=warning",
 		"lint": "eslint src",
 		"lint-fix": "eslint --fix src",
 		"watch": "tsc -watch -p ./",
@@ -2174,6 +2203,7 @@
 		"update-saxon-functions": "curl -sfL https://www.saxonica.com/documentation13/doc/functions.xml -o resources/data/saxon-functions.xml && npm run generate-xpath40-functions"
 	},
 	"devDependencies": {
+		"@modelcontextprotocol/sdk": "^1.32.2",
 		"@types/chai": "^5.2.2",
 		"@types/mocha": "^10.0.1",
 		"@types/node": "^26.6.2",
@@ -2183,6 +2213,7 @@
 		"@vscode/test-cli": "^0.0.15",
 		"@vscode/test-electron": "^3.1.0",
 		"chai": "^5.2.0",
+		"esbuild": "^0.28.2",
 		"eslint": "^10.11.0",
 		"eslint-config-prettier": "^10.1.8",
 		"globals": "^17.12.0",
@@ -2190,7 +2221,8 @@
 		"prettier": "^3.9.8",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.9.3",
-		"xslt3": "^2.0.3"
+		"xslt3": "^2.0.3",
+		"zod": "^4.6.7"
 	},
 	"dependencies": {
 		"jsonc-parser": "^3.0.0"

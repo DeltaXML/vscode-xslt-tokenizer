@@ -59,6 +59,7 @@ import { EntityReferences } from './entityReferences';
 import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, XsltDebugExitCodes, XsltDebugOutputs, XsltDebugProblems, XsltEvaluatableExpressionProvider, XsltInlineValuesProvider } from './xsltDebug';
 import { XsltEmptySteps } from './xsltEmptySteps';
 import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
+import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
 
 
 
@@ -579,6 +580,58 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.quickRunModule', async (node?: { path: string }) => {
 		if (node?.path) {
 			await quickRunDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(node.path)));
+		}
+	}));
+
+	// the MCP server for AI assistants, while XSLT.mcp.enabled is on - its tools check a document as when it's open
+	const mcpSymbolProvider = (document: vscode.TextDocument) => document.languageId === 'xslt' ? xsltSymbolProvider : document.languageId === 'xspec' ? xspecSymbolProvider : undefined;
+	const mcpServer = new XsltMcpServer(context.secrets, {
+		problems: (document) => mcpSymbolProvider(document)?.diagnosticsFor(document),
+		declarations: (document) => mcpSymbolProvider(document)?.declarationsFor(document)
+	});
+	const mcpDefinitions = new XsltMcpDefinitionProvider(mcpServer);
+	context.subscriptions.push(vscode.lm.registerMcpServerDefinitionProvider(XsltMcpServer.providerId, mcpDefinitions));
+	if (XsltMcpServer.isEnabled()) {
+		mcpServer.start();
+	}
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+		if (e.affectsConfiguration('XSLT.mcp')) {
+			mcpServer.stop();
+			if (XsltMcpServer.isEnabled()) {
+				mcpServer.start();
+			}
+			mcpDefinitions.refresh();
+		}
+	}));
+	context.subscriptions.push({ dispose: () => mcpServer.stop() });
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.copyMcpSetup', async () => {
+		if (!XsltMcpServer.isEnabled()) {
+			const enable = 'Enable MCP Server';
+			if (await vscode.window.showInformationMessage('The XSLT/XPath MCP server isn\'t enabled (XSLT.mcp.enabled).', enable) !== enable) {
+				return;
+			}
+			await vscode.workspace.getConfiguration('XSLT.mcp').update('enabled', true, vscode.ConfigurationTarget.Global);
+		}
+		const allProjects = { label: 'All projects', description: '--scope user', scope: ' --scope user' };
+		const thisProject = { label: 'This project only', description: 'for the folder the command is run in', scope: '' };
+		const choice = await vscode.window.showQuickPick([allProjects, thisProject], { title: 'Copy MCP Setup for Claude Code', placeHolder: 'Use the XSLT/XPath MCP server in...' });
+		if (!choice) {
+			return;
+		}
+		const command = `claude mcp add --transport http${choice.scope} xslt-xpath ${XsltMcpServer.url()} --header "Authorization: Bearer ${await mcpServer.getToken()}"`;
+		await vscode.env.clipboard.writeText(command);
+		vscode.window.showInformationMessage(`The 'claude mcp add' command for the XSLT/XPath MCP server is copied - run it in a terminal${choice.scope ? '' : ', in the project\'s folder'}. It includes the server's token: keep it private.`);
+	}));
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.resetMcpToken', async () => {
+		const reset = 'Reset Token';
+		if (await vscode.window.showWarningMessage('Reset the XSLT/XPath MCP server\'s token? Assistants set up with the current token, e.g. Claude Code, will need to be set up again.', { modal: true }, reset) !== reset) {
+			return;
+		}
+		await mcpServer.resetToken();
+		mcpDefinitions.refresh();
+		const copy = 'Copy MCP Setup for Claude Code';
+		if (await vscode.window.showInformationMessage('The MCP server\'s token is reset. GitHub Copilot uses the new one; for Claude Code, run \'claude mcp remove xslt-xpath\', then add the server again.', copy) === copy) {
+			vscode.commands.executeCommand('xslt-xpath.copyMcpSetup');
 		}
 	}));
 
