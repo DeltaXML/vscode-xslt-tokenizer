@@ -3428,6 +3428,7 @@ export class XsltTokenDiagnostics {
 				problemTokens.push(token);
 			}
 		});
+		problemTokens = XsltTokenDiagnostics.withoutQuoteCascades(allTokens, problemTokens);
 		let allDiagnostics = XsltTokenDiagnostics.appendDiagnosticsFromProblemTokens(variableRefDiagnostics, problemTokens);
 		if ((docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40) && !testingAsAttribute) {
 			// template rules whose union patterns' branches have different default priorities: XSLT 4.0 changes the rule chosen
@@ -4824,6 +4825,60 @@ export class XsltTokenDiagnostics {
 		return item;
 	}
 
+	// A missing quote, e.g. 'A1 for 'A1' in map { 'id': 'A1, 'lines': 2 }: the quotes after it are paired the wrong way,
+	// so the literal ends at the next quote and is followed directly by a name - 'A1, 'lines - and each part after it is
+	// a problem, with a bracket that has no match. The literal ends with what was between it and the next literal, e.g.
+	// ', '. For the XPath expression (a run of XPath tokens) the problem is reported once, at the literal, without those
+	// after it in the expression or its brackets' - as for a literal that isn't terminated, whose expression's brackets
+	// have no match
+	private static readonly literalFollowers = new Set([TokenLevelState.string, TokenLevelState.number, TokenLevelState.nodeNameTest,
+		TokenLevelState.attributeNameTest, TokenLevelState.functionNameTest, TokenLevelState.function, TokenLevelState.complexExpression]);
+
+	private static withoutQuoteCascades(allTokens: BaseToken[], problemTokens: BaseToken[]): BaseToken[] {
+		const isXPath = (token: BaseToken | undefined) => !!token && token.tokenType < XsltTokenDiagnostics.xsltStartTokenNumber;
+		const position = (token: BaseToken) => token.line * 1000000 + token.startCharacter;
+		let result = problemTokens;
+		let index = 0;
+		while (index < allTokens.length) {
+			if (!isXPath(allTokens[index])) {
+				index++;
+				continue;
+			}
+			// an expression: its first token, the one after its last, and its literal followed directly by a name, if any
+			const runStart = index;
+			while (index < allTokens.length && isXPath(allTokens[index])) {
+				index++;
+			}
+			const run = allTokens.slice(runStart, index);
+			const from = position(run[0]);
+			const to = position(run[run.length - 1]);
+			const inRun = (token: BaseToken) => position(token) >= from && position(token) <= to;
+			const unterminated = result.some((token) => token.error === ErrorType.XPathStringLiteral && inRun(token));
+			// ending with what's between a literal and the next, e.g. ', ' in 'A1, ' - not e.g. 'book'any, which is reported as it is
+			const literalIndex = run.findIndex((token, i) => {
+				const next = run[i + 1];
+				return token.tokenType === TokenLevelState.string && !!next && next.line === token.line && next.startCharacter === token.startCharacter + token.length &&
+					XsltTokenDiagnostics.literalFollowers.has(next.tokenType) && /[,:(\[{\s]$/.test(token.value.substring(0, token.value.length - 1));
+			});
+			const literal = literalIndex < 0 ? undefined : run[literalIndex];
+			const isCascade = !!literal && result.some((token) => inRun(token) && position(token) > position(literal));
+			if (!unterminated && !isCascade) {
+				continue;
+			}
+			result = result.filter((token) => !inRun(token) || (token.error !== ErrorType.BracketNesting && (!isCascade || position(token) < position(literal!))));
+			if (isCascade) {
+				// the whole literal, from its first part on an earlier line, if it's on more than one
+				let first = literalIndex;
+				while (first > 0 && run[first - 1].tokenType === TokenLevelState.string && run[first - 1].line < run[first].line) {
+					first--;
+				}
+				const text = run.slice(first, literalIndex + 1).map((part) => part.value).join('\n');
+				result.push({ ...run[first], error: ErrorType.XPathStringLiteralQuote, value: text + '\u0001' + run[literalIndex + 1].value });
+			}
+		}
+		return result;
+	}
+
 	private static appendDiagnosticsFromProblemTokens(variableRefDiagnostics: vscode.Diagnostic[], tokens: BaseToken[]): vscode.Diagnostic[] {
 		tokens.forEach(token => {
 			let line = token.line;
@@ -5408,6 +5463,17 @@ export class XsltTokenDiagnostics {
 					break;
 				case ErrorType.DTD:
 					msg = `XML: DTD position error: '${tokenValue}'`;
+					break;
+				case ErrorType.XPathStringLiteralQuote:
+					const [literalText, follower] = tokenValue.split('\u0001');
+					const quote = literalText.charAt(0);
+					const content = literalText.substring(1, literalText.length - 1);
+					// the quote is probably missing before the first separator in the literal, e.g. after 'A1 in 'A1, '
+					const separator = content.search(/[,:\s)\]}]/);
+					const shown = literalText.length > 40 ? literalText.substring(0, 39) + '…' : literalText;
+					msg = `XPath: A quote may be missing - the string literal ${shown.replace(/\n\s*/g, ' ')} is followed directly by '${follower}'` +
+						(separator > 0 ? `: e.g. a closing ${quote} after ${quote}${content.substring(0, separator)}` : '') +
+						'. Other problems in the expression after it are reported once it\'s fixed';
 					break;
 				case ErrorType.XPathStringLiteral:
 					msg = `String literal not terminated properly: ${tokenValue}`;
