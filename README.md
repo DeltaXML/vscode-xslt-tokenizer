@@ -89,6 +89,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
       <li>References across imported modules</li>
       <li>Saxon errors from runs, in the Problems panel</li>
       <li>Quick fixes for common problems</li>
+      <li><a href="https://deltaxml.github.io/vscode-xslt-xpath/ai-assistants.html#mcp">MCP server</a> for AI assistants (experimental)</li>
     </ul>
   </td>
   <td width="50%" valign="top">
@@ -141,7 +142,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
     </ul>
   </td>
   <td width="50%" valign="top">
-    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xspec.html">Testing XSLT</a></h4>
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xspec.html">Testing XSLT</a>
     <ul>
       <li><a href="https://github.com/xspec/xspec">XSpec 4.1.2</a></h4> test framework built in</li>
       <li>Run, debug and run with coverage from Test Explorer</li>
