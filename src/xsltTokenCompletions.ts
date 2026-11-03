@@ -2392,8 +2392,10 @@ export class XsltTokenCompletions {
 		if (parent?.name !== `${prefix ? prefix + ':' : ''}call`) {
 			return undefined;
 		}
-		const templateName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'template')?.trim();
-		const functionName = RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'function')?.trim();
+		// its own function or template, or one it inherits from an enclosing scenario's x:call
+		const target = XSpecScenario.callTarget(text, parent.offset, prefix);
+		const templateName = target?.kind === 'template' ? target.name : undefined;
+		const functionName = target?.kind === 'function' ? target.name : undefined;
 		const all = globalInstructionData.concat(importedInstructionData);
 		const declaration = templateName ? all.find((data) => data.type === GlobalInstructionType.Template && data.name === templateName) :
 			// the function with the most parameters, of those with the name
@@ -2402,8 +2404,8 @@ export class XsltTokenCompletions {
 		if (!declaration?.memberNames) {
 			return undefined;
 		}
-		const passed = RecordTypes.childElements(text, markup, parent.offset, `${prefix ? prefix + ':' : ''}param`)
-			.map((childOffset) => RecordTypes.attributeOfElementAt(text, childOffset + 1, 'name')?.trim());
+		// those passed by it, and those it inherits
+		const passed = (target?.params ?? []).map((childOffset) => RecordTypes.attributeOfElementAt(text, childOffset + 1, 'name')?.trim());
 		const note = XdocNotes.forGlobal(declaration, text);
 		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
 		const items: vscode.CompletionItem[] = [];

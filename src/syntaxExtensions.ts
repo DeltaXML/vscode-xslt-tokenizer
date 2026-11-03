@@ -36,10 +36,11 @@ export class SyntaxExtensions {
 			if (SyntaxExtensions.moduleNeeds(file, text)) {
 				return true;
 			}
-			return ImportIndex.moduleReferences(text, file).some((reference) => visit(reference.path)) ||
-				XsltPackages.libraryPaths(file).some((pkg) => visit(pkg));
+			return ImportIndex.moduleReferences(text, file).some((reference) => visit(reference.path));
 		};
-		return stylesheets.some(visit);
+		// each stylesheet's tree, then those of the packages used in it - which libraryPaths finds in the whole tree, and
+		// the trees of the packages
+		return stylesheets.some((stylesheet) => visit(stylesheet) || XsltPackages.libraryPaths(stylesheet).some(visit));
 	}
 
 	// the module's compile needs them, when it's run as a module of each top-level stylesheet that imports or includes

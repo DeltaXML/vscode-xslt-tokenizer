@@ -377,6 +377,13 @@ suite('XSpec', () => {
 		assert.include(await problems(xspec(`<x:scenario label="s"><x:context><p/></x:context><x:expect label="e" select="1"/></x:scenario>`, attributes)), warning);
 		assert.notInclude(await problems(xspec(`<x:param name="rate" select="1.2"/>\n<x:scenario label="s"><x:context><p/></x:context><x:expect label="e" select="1"/></x:scenario>`, attributes)), warning);
 
+		// with run-as="external": a scenario's x:param sets them too, for its tests
+		const external = ' stylesheet="params.xsl" run-as="external"';
+		assert.include((await completions(xspec(`<x:scenario label="s">\n  <|\n</x:scenario>`, external))).filter((label) => label.startsWith('x:param ')), 'x:param f:currency');
+		assert.notInclude((await completions(xspec(`<x:scenario label="s">\n  <|\n</x:scenario>`, attributes))), 'x:param f:currency');
+		assert.include(hoverText(await at(xspec(`<x:scenario label="s"><x:param name="f:curr|ency" select="'EUR'"/></x:scenario>`, external), 'vscode.executeHoverProvider')), 'f:currency');
+		assert.notInclude(await problems(xspec(`<x:scenario label="s"><x:param name="rate" select="1.2"/><x:context><p/></x:context><x:expect label="e" select="1"/></x:scenario>`, external)), warning);
+
 		const definitions = await at(xspec(`  <x:param name="ra|te" select="1.2"/>`, attributes), 'vscode.executeDefinitionProvider') as vscode.Location[];
 		assert.deepEqual(definitions.map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line + 1}`), ['params.xsl:3']);
 		assert.include(hoverText(await at(xspec(`  <x:param name="f:curr|ency" select="'EUR'"/>`, attributes), 'vscode.executeHoverProvider')), 'f:currency');
@@ -418,6 +425,26 @@ suite('XSpec', () => {
 		assert.include(template, 'template f:box');
 		assert.include(template, 'Draws a box.');
 		assert.include(await hover(`<x:scenario label="s"><x:call template="f:box"><x:param name="si|ze" select="1"/></x:call></x:scenario>`), 'the width and height, in cm');
+	});
+
+	test('an x:call that inherits its template or function from an enclosing scenario\'s x:call: its parameters\' completion, hover and definition, and its hover', async () => {
+		const nested = (inner: string, outerCall = '<x:call template="f:named"><x:param name="size" select="1"/></x:call>') =>
+			xspec(`<x:scenario label="outer">${outerCall}\n<x:scenario label="inner">${inner}<x:expect label="e" select="1"/></x:scenario>\n</x:scenario>`);
+		// completion: the parameters not passed, by it or the x:call it inherits from
+		const params = (await completions(nested('<x:call><|</x:call>'))).filter((label) => label.startsWith('x:param '));
+		assert.deepEqual(params, ['x:param colour']);
+		// the hover of the x:call: what it calls, and where it's from
+		const callHover = hoverText(await at(nested('<x:ca|ll><x:param name="colour" select="2"/></x:call>'), 'vscode.executeHoverProvider'));
+		assert.include(callHover, 'template f:named');
+		assert.include(callHover, 'enclosing scenario \'outer\'');
+		// a parameter's hover and definition
+		assert.include(hoverText(await at(nested('<x:call><x:param name="col|our" select="2"/></x:call>'), 'vscode.executeHoverProvider')), 'Parameter of the template: `f:named`');
+		const locations = await at(nested('<x:call><x:param name="col|our" select="2"/></x:call>'), 'vscode.executeDefinitionProvider') as vscode.Location[];
+		assert.deepEqual(locations.map((l) => `${path.basename(l.uri.fsPath)}:${l.range.start.line + 1}`), ['sut.xsl:4']);
+		// a function
+		assert.include(hoverText(await at(nested('<x:ca|ll><x:param select="2"/></x:call>', '<x:call function="f:double"/>'), 'vscode.executeHoverProvider')), 'f:double(');
+		// not for one with its own
+		assert.notInclude(hoverText(await at(nested('<x:ca|ll template="f:named"/>'), 'vscode.executeHoverProvider')), 'enclosing scenario');
 	});
 
 	test('go to definition: the function or template x:call calls, a parameter it passes, and the mode of x:context', async () => {

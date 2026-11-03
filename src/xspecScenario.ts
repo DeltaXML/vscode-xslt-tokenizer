@@ -390,6 +390,47 @@ export class XSpecScenario {
 		return editor;
 	}
 
+	// what an x:call calls - at the offset of its '<' - its own function or template, or else, as XSpec inherits it, that of
+	// the x:call of the nearest enclosing scenario with one: from - the label of that scenario, when it's inherited - and
+	// the offsets of the x:param elements passed, in it and those it inherits, as XSpec merges them
+	public static callTarget(text: string, callOffset: number, prefix: string): { kind: 'function' | 'template', name: string, from?: string, params: number[] } | undefined {
+		const x = prefix ? prefix + ':' : '';
+		const markup = RecordTypes.blankMarkup(text);
+		const params: number[] = [];
+		const calls = [callOffset].concat(RecordTypes.openElements(markup, callOffset).reverse()
+			.filter((ancestor) => ancestor.name === `${x}scenario`)
+			.map((scenario) => RecordTypes.childElements(text, markup, scenario.offset, `${x}call`).find((call) => call !== callOffset))
+			.filter((call): call is number => call !== undefined));
+		for (const call of calls) {
+			params.push(...RecordTypes.childElements(text, markup, call, `${x}param`));
+			const fn = RecordTypes.attributeOfElementAt(text, call + 1, 'function')?.trim();
+			const template = RecordTypes.attributeOfElementAt(text, call + 1, 'template')?.trim();
+			if (fn || template) {
+				const scenario = call === callOffset ? undefined : RecordTypes.openElements(markup, call).reverse().find((ancestor) => ancestor.name === `${x}scenario`);
+				const from = scenario ? RecordTypes.attributeOfElementAt(text, scenario.offset + 1, 'label') ?? '' : undefined;
+				return { kind: fn ? 'function' : 'template', name: (fn || template)!, from, params };
+			}
+		}
+		return undefined;
+	}
+
+	// the name of an x:param, at the offset, of an x:call of a template it inherits from an enclosing scenario's x:call
+	public static inheritedParamAt(text: string, offset: number, prefix: string): { template: string, param: string } | undefined {
+		const x = prefix ? prefix + ':' : '';
+		const tagStart = text.lastIndexOf('<', offset);
+		if (tagStart < 0 || !text.startsWith(`<${x}param`, tagStart) || !/[\s/>]/.test(text.charAt(tagStart + x.length + 6))) {
+			return undefined;
+		}
+		const nameStart = RecordTypes.attributeValueOffset(text, tagStart + 1, 'name');
+		const name = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name');
+		if (nameStart === undefined || !name || offset < nameStart || offset > nameStart + name.length) {
+			return undefined;
+		}
+		const parent = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart).pop();
+		const target = parent?.name === `${x}call` ? XSpecScenario.callTarget(text, parent.offset, prefix) : undefined;
+		return target?.kind === 'template' && target.from !== undefined ? { template: target.name, param: name.trim() } : undefined;
+	}
+
 	// in an XSpec file with no outermost element yet, after '<': x:description, with the XSpec and XML Schema namespaces,
 	// for a stylesheet - and a package, run as XSpec runs it, externally - or a Schematron: those beside it or, for one in
 	// an xspec folder, in the folder above, the one with the XSpec file's name first - for each stylesheet, with a pending

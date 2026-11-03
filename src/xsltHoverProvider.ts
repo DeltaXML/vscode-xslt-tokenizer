@@ -44,7 +44,9 @@ export class XSLTHoverProvider implements HoverProvider {
 
 	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
 		if (this.languageConfiguration?.docType === DocumentTypes.XSPEC) {
-			const elementHover = this.xspecElementHover(document, position) ?? this.xspecStylesheetHover(document, position) ?? await this.xspecCallHover(document, position, token);
+			// an x:call that inherits what it calls: what, before XSpec's description of x:call
+			const elementHover = (await this.xspecInheritedCallHover(document, position, token)) ?? this.xspecElementHover(document, position) ??
+				this.xspecStylesheetHover(document, position) ?? await this.xspecCallHover(document, position, token);
 			if (elementHover) {
 				return elementHover;
 			}
@@ -168,6 +170,35 @@ export class XSLTHoverProvider implements HoverProvider {
 		return this.createHover(signature, parts.join('\n\n'));
 	}
 
+	// the name of an x:call without a function or template, which it inherits from an enclosing scenario's x:call: the
+	// hover of what it calls, saying where it's from - then XSpec's description of x:call
+	private async xspecInheritedCallHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		const prefix = XsltDefinitionProvider.xspecPrefixOf(document);
+		const x = prefix ? prefix + ':' : '';
+		const range = document.getWordRangeAtPosition(position, /<[\w.-]+:[\w.-]+/);
+		if (!this.definitionProvider || !range || document.getText(range) !== `<${x}call`) {
+			return undefined;
+		}
+		const text = document.getText();
+		const target = XSpecScenario.callTarget(text, document.offsetAt(range.start), prefix);
+		if (target?.from === undefined) {
+			return undefined;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+		const type = target.kind === 'function' ? GlobalInstructionType.Function : GlobalInstructionType.Template;
+		const candidates = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === type && g.name === target.name);
+		const declared = target.kind === 'template' ? candidates[0] : candidates.find((g) => XslLexer.functionArityMatches(g, target.params.length)) ?? candidates[0];
+		const markdown = new MarkdownString();
+		markdown.appendMarkdown(`Calls the ${target.kind} \`${target.name}\`, as the \`${x}call\` of the enclosing scenario '${target.from.replace(/[\\`*_[\]<>]/g, '\\$&')}' does\n\n---\n`);
+		const calledHover = declared ? (target.kind === 'function' ? this.functionHover(document, declared) : this.templateHover(document, declared)) : undefined;
+		const detail = this.languageConfiguration?.schemaData?.elements['x:call']?.detail;
+		return new Hover([markdown, ...(calledHover?.contents ?? []), ...(detail ? [new MarkdownString().appendText(detail)] : [])], range);
+	}
+
 	// in an XSpec file: x:call's function or template, the declaration's signature and documentation note, as for a call
 	// of it in the stylesheet - or the name of an x:param of an x:call of a template, the parameter's documentation
 	private async xspecCallHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
@@ -205,11 +236,11 @@ export class XSLTHoverProvider implements HoverProvider {
 			const template = fn ? undefined : on('template');
 			call = fn ? { kind: 'function', name: fn, offset: tagStart } : template ? { kind: 'template', name: template, offset: tagStart } : undefined;
 		} else {
-			// an x:param of an x:call of a template
+			// an x:param of an x:call of a template - its own, or one it inherits
 			paramName = on('name');
 			const parent = paramName ? RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart).pop() : undefined;
-			const template = parent && parent.name === `${prefix ? prefix + ':' : ''}call` ? RecordTypes.attributeOfElementAt(text, parent.offset + 1, 'template') : undefined;
-			call = template ? { kind: 'template', name: template.trim(), offset: parent!.offset } : undefined;
+			const target = parent && parent.name === `${prefix ? prefix + ':' : ''}call` ? XSpecScenario.callTarget(text, parent.offset, prefix) : undefined;
+			call = target?.kind === 'template' ? { kind: 'template', name: target.name, offset: parent!.offset } : undefined;
 		}
 		if (!call) {
 			return undefined;
@@ -228,10 +259,9 @@ export class XSLTHoverProvider implements HoverProvider {
 		} else if (call.kind === 'template') {
 			return this.templateHover(document, candidates[0]);
 		}
-		// the function with as many parameters as the x:call passes, if there's one - else the one with the most
-		const callEnd = text.indexOf('>', call.offset);
-		const callContent = text[callEnd - 1] === '/' ? '' : text.substring(callEnd, text.indexOf(`</${prefix ? prefix + ':' : ''}call`, callEnd));
-		const passed = (callContent.match(new RegExp(`<${prefix ? prefix + ':' : ''}param[\\s/>]`, 'g')) ?? []).length;
+		// the function with as many parameters as the x:call passes, with those it inherits, if there's one - else the one
+		// with the most
+		const passed = XSpecScenario.callTarget(text, call.offset, prefix)?.params.length ?? 0;
 		const fn = candidates.find((g) => XslLexer.functionArityMatches(g, passed)) ?? candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
 		return this.functionHover(document, fn);
 	}

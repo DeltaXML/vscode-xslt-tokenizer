@@ -92,6 +92,15 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			if (location) {
 				return location;
 			}
+			// an x:param of an x:call of a template it inherits from an enclosing scenario's x:call: the template's xsl:param
+			const inherited = XSpecScenario.inheritedParamAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document));
+			const template = inherited ? globalInstructionData.concat(allImportedGlobals).find((g) => g.type === GlobalInstructionType.Template && g.name === inherited.template) : undefined;
+			const paramIndex = template?.memberNames?.indexOf(inherited!.param) ?? -1;
+			const paramToken = paramIndex > -1 ? template!.memberTokens?.[paramIndex] : undefined;
+			if (template && paramToken) {
+				const uri = template.href ? vscode.Uri.file(template.href) : document.uri;
+				return new vscode.Location(uri, XsltTokenDefinitions.createRangeFromTokenVals(paramToken.line, paramToken.startCharacter + 1, paramToken.length - 2));
+			}
 		}
 
 		return new Promise((resolve, reject) => {

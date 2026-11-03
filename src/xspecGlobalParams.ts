@@ -13,9 +13,10 @@ import { GlobalInstructionData, GlobalInstructionType } from './xslLexer';
 import { RecordTypes } from './recordTypes';
 import { XdocNotes } from './xdocNote';
 
-// An XSpec file's global parameters - the x:param elements of x:description - and the global xsl:param elements of the
-// stylesheet under test they set: completion of those not set yet, the one an x:param's name is of, for its hover and
-// definition, and those with required="yes" that aren't set, which fail every test with XTDE0050
+// An XSpec file's global parameters - the x:param elements of x:description, and with run-as="external", of an
+// x:scenario, for its tests - and the global xsl:param elements of the stylesheet under test they set: completion of
+// those not set yet, the one an x:param's name is of, for its hover and definition, and those with required="yes" that
+// aren't set, which fail every test with XTDE0050
 export class XSpecGlobalParams {
 
 	// the global xsl:param elements of the stylesheet under test and the modules it uses - not an XSpec file's x:param
@@ -43,14 +44,25 @@ export class XSpecGlobalParams {
 		return required === 'yes' || required === 'true' || required === '1';
 	}
 
-	// the names set by the x:param children of x:description
-	private static setNames(text: string, markup: string, prefix: string): string[] {
-		const root = /<([\w.-]+:)?description\b/.exec(markup);
-		if (!root) {
+	// the names set by the x:param children of the element - x:description, or an x:scenario
+	private static setNames(text: string, markup: string, prefix: string, elementOffset?: number): string[] {
+		const offset = elementOffset ?? /<([\w.-]+:)?description\b/.exec(markup)?.index;
+		if (offset === undefined) {
 			return [];
 		}
-		return RecordTypes.childElements(text, markup, root.index, `${prefix ? prefix + ':' : ''}param`)
-			.map((offset) => RecordTypes.attributeOfElementAt(text, offset + 1, 'name')?.trim() ?? '');
+		return RecordTypes.childElements(text, markup, offset, `${prefix ? prefix + ':' : ''}param`)
+			.map((child) => RecordTypes.attributeOfElementAt(text, child + 1, 'name')?.trim() ?? '');
+	}
+
+	// with run-as="external", which runs the stylesheet tested separately - so a scenario's x:param sets its parameters
+	private static isExternal(text: string) {
+		return /<(?:[\w.-]+:)?description\b[^>]*\srun-as\s*=\s*(["'])\s*external\s*\1/.test(text);
+	}
+
+	// x:description - or with run-as="external", an x:scenario - whose x:param children set global parameters
+	private static setsGlobals(text: string, element: { name: string } | undefined, prefix: string) {
+		const x = prefix ? prefix + ':' : '';
+		return element?.name === `${x}description` || (element?.name === `${x}scenario` && XSpecGlobalParams.isExternal(text));
 	}
 
 	// after '<' in x:description: an x:param for each global parameter of the stylesheet under test not set yet - those
@@ -65,10 +77,10 @@ export class XSpecGlobalParams {
 		const tagStart = offset - nameStart[0].length;
 		const markup = RecordTypes.blankMarkup(text);
 		const parent = RecordTypes.openElements(markup, tagStart).pop();
-		if (parent?.name !== `${prefix ? prefix + ':' : ''}description`) {
+		if (!XSpecGlobalParams.setsGlobals(text, parent, prefix)) {
 			return undefined;
 		}
-		const set = XSpecGlobalParams.setNames(text, markup, prefix);
+		const set = XSpecGlobalParams.setNames(text, markup, prefix, parent!.offset);
 		const range = new vscode.Range(document.positionAt(tagStart + 1), position);
 		const x = prefix ? prefix + ':' : '';
 		return XSpecGlobalParams.stylesheetParams(globals).filter((param) => !set.includes(param.name)).map((param) => {
@@ -81,7 +93,7 @@ export class XSpecGlobalParams {
 			item.sortText = `${required ? '0' : '1'}${param.name}`;
 			const declaration = XSpecGlobalParams.declaration(param);
 			const note = declaration ? XdocNotes.forGlobal(param, declaration.text) : undefined;
-			item.documentation = new vscode.MarkdownString(`${required ? 'Required global' : 'Global'} parameter of the stylesheet under test` + (note ? `\n\n${XdocNotes.toMarkdown(note)}` : ''));
+			item.documentation = new vscode.MarkdownString(`${required ? 'Required global' : 'Global'} parameter of the stylesheet under test${parent!.name.endsWith('scenario') ? ', for the scenario\'s tests' : ''}` + (note ? `\n\n${XdocNotes.toMarkdown(note)}` : ''));
 			return item;
 		});
 	}
@@ -100,7 +112,7 @@ export class XSpecGlobalParams {
 			return undefined;
 		}
 		const parent = RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart).pop();
-		return parent?.name === `${x}description` ? XSpecGlobalParams.stylesheetParams(globals).find((param) => param.name === name.trim()) : undefined;
+		return XSpecGlobalParams.setsGlobals(text, parent, prefix) ? XSpecGlobalParams.stylesheetParams(globals).find((param) => param.name === name.trim()) : undefined;
 	}
 
 	// a warning on x:description for each required global parameter of the stylesheet under test that isn't set
@@ -111,7 +123,10 @@ export class XSpecGlobalParams {
 		if (!root) {
 			return [];
 		}
-		const set = XSpecGlobalParams.setNames(text, markup, prefix);
+		// those x:description sets - and with run-as="external", any scenario
+		const x = prefix ? prefix + ':' : '';
+		const scenarios = XSpecGlobalParams.isExternal(text) ? [...markup.matchAll(new RegExp(`<${x.replace(/[.-]/g, '\\$&')}scenario[\\s>]`, 'g'))].map((m) => m.index!) : [];
+		const set = XSpecGlobalParams.setNames(text, markup, prefix).concat(scenarios.flatMap((offset) => XSpecGlobalParams.setNames(text, markup, prefix, offset)));
 		const range = new vscode.Range(document.positionAt(root.index + 1), document.positionAt(root.index + root[0].length));
 		return XSpecGlobalParams.stylesheetParams(globals).filter((param) => !set.includes(param.name) && XSpecGlobalParams.isRequired(param)).map((param) =>
 			new vscode.Diagnostic(range, `XSpec: the stylesheet's required parameter $${param.name} isn't set - add an x:param for it to x:description, or each test fails with XTDE0050`, vscode.DiagnosticSeverity.Warning));
