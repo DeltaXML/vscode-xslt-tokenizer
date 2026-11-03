@@ -35,8 +35,8 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
       <li><a href="https://www.w3.org/TR/xslt-30/">XSLT 3.0</a> and XPath 3.1</li>
       <li><a href="https://qt4cg.org/2026-01-28/xslt-40/Overview.html">XSLT 4.0</a> and XPath 4.0, as in 
       <a href="https://www.saxonica.com/html/documentation13/changes/v13/xslt40.html">Saxon 13</a></li>
+      <li><a href="https://github.com/xspec/xspec">XSpec</a> - first-class language intelligence</li>
       <li>SaxonJS interactive extensions (IXSL)</li>
-      <li><code>.xpath</code> files, as XPath 3.0/4.0</li>
       <li>Open <a href="https://deltaxml.github.io/vscode-xslt-xpath/xpath-queries.html">XPath editor</a> for the active XML file</li>
       <li>Fast semantic highlighting</li>
     </ul>
@@ -144,7 +144,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
   <td width="50%" valign="top">
     <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xspec.html">Testing XSLT</a>
     <ul>
-      <li><a href="https://github.com/xspec/xspec">XSpec 4.1.2</a></h4> test framework built in</li>
+      <li><a href="https://github.com/xspec/xspec">XSpec 4.1.2</a> test framework built in</li>
       <li>Run, debug and run with coverage from Test Explorer</li>
       <li>Advanced language support within XSpec editor</li>
       <li>Add debug breakpoints direct in XSpec file</li>
