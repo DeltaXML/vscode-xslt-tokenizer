@@ -9,6 +9,7 @@ import { assert } from 'chai';
 import * as vscode from 'vscode';
 import { XSpecTestController } from '../../src/xspecTestController';
 import { XSpecTests } from '../../src/xspecTests';
+import { XSpecTimeline } from '../../src/xspecTimeline';
 import { XsltPackages } from '../../src/xsltPackages';
 
 const saxonJar = process.env.XSPEC_SAXON_JAR;
@@ -94,6 +95,22 @@ suite('XSpec: running tests', function () {
 		assert.strictEqual(diff.actualOutput, '6');
 		const html = path.join(dir, 'xspec', 'sut-result.html');
 		assert.isTrue(fs.existsSync(html), 'the HTML report');
+	});
+
+	test('the run\'s history in the Timeline view: recorded with VS Code 1.145\'s Timeline API - and without it, e.g. in 1.138, not registered and the run unaffected', async () => {
+		const hasApi = typeof (vscode.workspace as unknown as { registerWorkspaceTimelineProvider?: unknown }).registerWorkspaceTimelineProvider === 'function';
+		const before = Date.now();
+		const { outcomes } = await runItems((file) => [file]);
+		assert.strictEqual(outcomes.get('is four'), 'passed');
+		const history = XSpecTimeline.history;
+		if (!hasApi) {
+			assert.isUndefined(history, `VS Code ${vscode.version}: no Timeline API, so no timeline`);
+			return;
+		}
+		const run = history![0];
+		assert.isAtLeast(run.start, before);
+		assert.strictEqual(run.kind, 'Run');
+		assert.deepEqual(run.files, [{ file: xspecPath, passed: 2, failed: 1, pending: 1 }]);
 	});
 
 	test('run one scenario, with XSpec\'s force-focus: the others aren\'t run', async () => {

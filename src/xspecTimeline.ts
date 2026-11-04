@@ -107,6 +107,11 @@ export class XSpecTimeline {
 		});
 	}
 
+	// for testing: the runs recorded, newest first - undefined when the Timeline API isn't there
+	public static get history(): XSpecRunRecord[] | undefined {
+		return XSpecTimeline.instance?.runs();
+	}
+
 	// newest first
 	private runs(): XSpecRunRecord[] {
 		return this.state.get<XSpecRunRecord[]>(XSpecTimeline.stateKey, []);

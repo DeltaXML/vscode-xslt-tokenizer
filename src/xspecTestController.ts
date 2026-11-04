@@ -215,7 +215,7 @@ export class XSpecTestController {
 		run.end();
 		// the run's history, in the Timeline view
 		XSpecTimeline.record({ start, end: Date.now(), kind: coverage ? 'Coverage' : debug ? 'Debug' : 'Run', cancelled: token.isCancellationRequested,
-			files: outcomes.map(({ file, passed, failed, pending, stopped }) => ({ file, passed, failed, pending, stopped })) });
+			files: outcomes.map(({ file, passed, failed, pending, stopped }) => ({ file, passed, failed, pending, ...(stopped !== undefined ? { stopped } : {}) })) });
 	}
 
 	// for a run of more than one file: the expectations passed, failed and pending, in all of them, and the files that
