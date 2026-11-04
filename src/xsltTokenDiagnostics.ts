@@ -192,8 +192,9 @@ export class XsltTokenDiagnostics {
 	// operators within a path expression, all other binary operators end the right-hand operand of the simple map operator '!'
 	static pathExprOps = new Set(['/', '//', '!', '?', '::', '()', '[]', '{}', '*:', '..']);
 	// binary operators with lower precedence than the pipeline operator '->', these end the pipeline's right-hand operand
-	static operatorsBeforeContextItem = new Set(['*', '+', '-', '=', '!=', '!', '|', '||', '&lt;', '&gt;', '&lt;=', '&gt;=', '×', '÷']);
-	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '×', '÷', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>', '&lt;', '&lt;=', '&gt;', '&gt;=', '&lt;&lt;', '&gt;&gt;',
+	// the lexer gives '<' and '>' as written with character references, e.g. &lt;= is '<='
+	static operatorsBeforeContextItem = new Set(['*', '+', '-', '=', '!=', '!', '|', '||', '<', '>', '<=', '>=', '×', '÷']);
+	static endPipelineOps = new Set([',', '??', '!!', '+', '-', '*', '×', '÷', '|', '||', '=', '!=', '<', '<=', '>', '>=', '<<', '>>',
 		'and', 'or', 'div', 'idiv', 'mod', 'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'is', 'to', 'union', 'intersect', 'except', 'otherwise', 'cast', 'castable', 'treat', 'instance'].concat(Data.nodeComparisons40));
 	static operators40 = new Set(['×', '÷', '=?>'].concat(Data.nodeComparisons40));
 	static checkStringIsExpected(prevToken: BaseToken | null, token: BaseToken, problemTokens: BaseToken[]) {
@@ -2641,13 +2642,8 @@ export class XsltTokenDiagnostics {
 												}
 												break;
 											default:
-												// (+ or ++ are not ok
-												// < and > may be numeric character references, e.g. 1&#60;=2
-												const ltGt = (v: string) => Data.numericLtGt.includes(v) ? (v.endsWith('60;') || v.toLowerCase().endsWith('3c;') ? '&lt;' : '&gt;') : v;
-												const [pvOp, tvOp] = [ltGt(pv), ltGt(tv)];
-												if ((pvOp === '&gt;' && (tvOp === '&gt;' || tvOp === '=')) || (pvOp === '&lt;' && (tvOp === '&lt;' || tvOp === '&gt;' || tvOp === '='))) {
-													// allow << <> >> <= >=
-												} else if (tv === 'as') {
+												// (+ or ++ are not ok - nor '< =': the lexer gives <= as one token, also as &lt;=
+												if (tv === 'as') {
 													// also permitted after an optional record field, e.g. record(a? as xs:string)
 													isXPathError = pv !== 'castable' && pv !== 'cast' && pv !== 'treat' &&
 														!(pv === '?' && XsltTokenDiagnostics.enclosingTypeName(xpathStack) === 'record');
@@ -2659,7 +2655,7 @@ export class XsltTokenDiagnostics {
 													(pv === '!' && tv === '?') ||
 													(pv === '[' && tv === '?') ||
 													// the context item after an operator, e.g. $d*.
-													(tv === '.' && XsltTokenDiagnostics.operatorsBeforeContextItem.has(pvOp))
+													(tv === '.' && XsltTokenDiagnostics.operatorsBeforeContextItem.has(pv))
 												)) {
 													isXPathError = true;
 												}

@@ -140,7 +140,7 @@ export enum ModifierState {
 }
 
 export class Data {
-    // the operators < and > written as numeric character references, e.g. 1&#60;2
+    // the operators < and > written as numeric character references, e.g. 1&#60;2 - typed text that triggers completion
     public static numericLtGt = ['&#60;', '&#x3C;', '&#x3c;', '&#62;', '&#x3E;', '&#x3e;'];
     // ';' ends an XPath 4.0 namespace declaration, e.g. declare namespace p = 'uri'; - '×' and '÷' are XPath 4.0's
     // multiplication and division operators
@@ -190,7 +190,7 @@ export class Data {
         "else", "eq", "except",
         "function", "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "map", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "treat", "union", "&lt;", "&gt;", ...Data.numericLtGt].concat(Data.nodeComparisons40);
+        "then", "to", "treat", "union"].concat(Data.nodeComparisons40);
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
     // 'key' and 'value' are for XPath 4.0 map bindings: for key $k value $v in map-expression
@@ -327,6 +327,94 @@ export class XPathLexer {
             textmateTypes.push(TokenLevelState[i]);
         }
         return textmateTypes;
+    }
+
+    // '<' or '>' as a character reference: &lt; &gt; &#60; &#62; &#x3C; &#x3E;
+    private static readonly ltGtReference = /&(?:(lt|gt)|#0*(60|62)|#x0*(3[cCeE]));/y;
+    // the operators that contain '<' or '>', longest first
+    private static readonly ltGtOperators = ['=!>', '=?>', '=>', '->', '<=', '>=', '<<', '>>', '<', '>'];
+
+    /**
+     * An operator at the index containing '<' or '>' written as a character reference, e.g. =&gt; &lt;= or &#62;:
+     * the operator and the length of its text - a raw '<' doesn't qualify, as it isn't allowed in an attribute and
+     * ends XPath in text
+     */
+    public static referenceOperatorAt(xpath: string, index: number): { value: string, length: number } | null {
+        let chars = '';
+        let length = 0;
+        let hasReference = false;
+        const lengths: number[] = [];
+        while (chars.length < 3) {
+            const at = index + length;
+            const char = xpath.charAt(at);
+            if (char === '&') {
+                XPathLexer.ltGtReference.lastIndex = at;
+                const match = XPathLexer.ltGtReference.exec(xpath);
+                if (!match) {
+                    break;
+                }
+                const isLt = match[1] === 'lt' || match[2] === '60' || (match[3] !== undefined && match[3].toLowerCase() === '3c');
+                chars += isLt ? '<' : '>';
+                length += match[0].length;
+                hasReference = true;
+            } else if (char === '=' || char === '!' || char === '?' || char === '-' || char === '>') {
+                chars += char;
+                length++;
+            } else {
+                break;
+            }
+            lengths.push(length);
+        }
+        if (!hasReference) {
+            return null;
+        }
+        const operator = XPathLexer.ltGtOperators.find((op) => chars.startsWith(op));
+        if (!operator) {
+            return null;
+        }
+        const operatorLength = lengths[operator.length - 1];
+        // the operator itself must include a reference, e.g. not '=' in =&lt;
+        return xpath.substring(index, index + operatorLength).includes('&') ? { value: operator, length: operatorLength } : null;
+    }
+
+    // whether the char can start an operator, given the state of the char before it: not within a string literal, a
+    // comment, a string template's fixed part, a braced URI or an entity reference, nor the 2nd or 3rd char of a
+    // separator - and '-' in a name is part of it, e.g. $a-&gt; is $a- then &gt;, as with $a->
+    private static canStartReferenceOperator(state: CharLevelState, char: string, inVarUri: boolean): boolean {
+        if (inVarUri) {
+            return false;
+        }
+        switch (state) {
+            case CharLevelState.lC:
+            case CharLevelState.lSq:
+            case CharLevelState.lDq:
+            case CharLevelState.escSq:
+            case CharLevelState.escDq:
+            case CharLevelState.lSqEnt:
+            case CharLevelState.rSqEnt:
+            case CharLevelState.lDqEnt:
+            case CharLevelState.rDqEnt:
+            case CharLevelState.lLiteralSqEnt:
+            case CharLevelState.rLiteralSqEnt:
+            case CharLevelState.lLiteralDqEnt:
+            case CharLevelState.rLiteralDqEnt:
+            case CharLevelState.lBt:
+            case CharLevelState.mBt:
+            case CharLevelState.escBt:
+            case CharLevelState.lUri:
+            case CharLevelState.lEnt:
+            case CharLevelState.dSep:
+            case CharLevelState.tSep:
+            case CharLevelState.tSep2:
+                return false;
+            case CharLevelState.lName:
+            case CharLevelState.lVar:
+            case CharLevelState.lAttr:
+            case CharLevelState.exp:
+                return char !== '-';
+            default:
+                return true;
+        }
     }
 
     private static isPartOperator(firstPart: string, secondPart: string): boolean {
@@ -676,7 +764,7 @@ export class XPathLexer {
                         result[result.length - 1]['error'] = ErrorType.XPathLessThanTagStart;
                     } else if (this.xmlLessThan === XmlLessThan.Error) {
                         for (let t = firstResultIndex; t < result.length; t++) {
-                            if (result[t].value.includes('<')) {
+                            if (result[t].value.includes('<') && !result[t].fromReference) {
                                 result[t]['error'] = ErrorType.XPathLessThanInAttribute;
                             }
                         }
@@ -702,6 +790,25 @@ export class XPathLexer {
                     position.startCharacter = this.tokenCharNumber;
                     position.documentOffset = i;
                     return result;
+                }
+
+                const referenceOperator = this.entityRefOn && (currentChar === '&' || currentChar === '=' || currentChar === '-' || currentChar === '>') &&
+                    XPathLexer.canStartReferenceOperator(currentLabelState, currentChar, this.inVarUri) ? XPathLexer.referenceOperatorAt(xpath, i - 1) : null;
+                if (referenceOperator) {
+                    // one operator token, e.g. '=>' for =&gt; - rather than '=' and a name '&gt;'
+                    this.update(poppedContext, result, tokenChars, currentLabelState, isTypeDeclaration);
+                    const operatorToken = new BasicToken(referenceOperator.value, referenceOperator.value.length === 1 ? CharLevelState.sep : CharLevelState.dSep, isTypeDeclaration);
+                    operatorToken.fromReference = true;
+                    operatorToken.length = referenceOperator.length;
+                    this.updateResult(poppedContext, result, operatorToken, isTypeDeclaration);
+                    currentState = [CharLevelState.sep, 0];
+                    // continue after the operator's text: the loop's next char is the one after that
+                    i = i - 1 + referenceOperator.length;
+                    currentChar = xpath.charAt(i);
+                    if (!currentChar) {
+                        break;
+                    }
+                    continue;
                 }
 
                 this.numberChars = tokenChars;
@@ -1010,7 +1117,9 @@ export class XPathLexer {
 
         if (newTokenValue !== '') {
 
-            newToken.length = newTokenValue.length;
+            // an operator written with a character reference has the length of its text, e.g. 5 for =&gt;
+            const textLength = newToken.fromReference ? newToken.length : newTokenValue.length;
+            newToken.length = textLength;
             newToken.line = this.lineNumber;
             newToken.startCharacter = this.tokenCharNumber;
             if (newToken.tokenType === TokenLevelState.nodeNameTest) {
@@ -1036,12 +1145,12 @@ export class XPathLexer {
                 if (isWhitespace) {
                     this.tokenCharNumber = this.wsCharNumber;
                 } else {
-                    this.tokenCharNumber += newTokenValue.length;
+                    this.tokenCharNumber += textLength;
                 }
 
                 this.wsNewLine = false;
             } else {
-                this.tokenCharNumber += newTokenValue.length;
+                this.tokenCharNumber += textLength;
             }
             if (!isWhitespace) {
                 this.wsCharNumber = 0;
@@ -1438,10 +1547,6 @@ export class XPathLexer {
                                 // e.g. castable as xs:integer
                                 // TODO: check if value equals xs:integer or element?
                                 currentToken.tokenType = TokenLevelState.simpleType;
-                            } else if (prevToken.value === '&gt;' && currentToken.value === '&gt;') {
-                                currentToken.tokenType = TokenLevelState.operator;
-                            } else if (prevToken.value === '&lt;' && (currentToken.value === '&lt;' || currentToken.value === '&gt;')) {
-                                currentToken.tokenType = TokenLevelState.operator;
                             }
                         } else if (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.tokenType === TokenLevelState.functionNameTest || XPathLexer.isTokenTypeAType(prevToken)) {
                             Data.setAsOperatorIfKeyword(currentToken);
@@ -1891,6 +1996,9 @@ export interface BaseToken {
     recordFix?: RecordFix;
     // the local name of an EQName: the Q{...} part before it, e.g. Q{urn:f} for Q{urn:f}double
     eqNameUri?: string;
+    // an operator with '<' or '>' written as a character reference, e.g. =&gt; or &lt;= - the value is the operator
+    // ('=>' or '<='), the length that of the text as written
+    fromReference?: boolean;
 }
 
 // a quick fix's edit: inserting the text at the position, or replacing the text up to the end, or replaceLength characters
@@ -1958,6 +2066,7 @@ class BasicToken implements Token {
     value: string;
     charType: CharLevelState;
     tokenType: TokenLevelState;
+    fromReference?: boolean;
 
     constructor(value: string, type: CharLevelState, isTypeDeclaration = false) {
         this.value = value;

@@ -251,7 +251,7 @@
           "number"
         ],
         [
-          "&lt;",
+          "<",
           "operator"
         ],
         [
@@ -269,11 +269,7 @@
           "number"
         ],
         [
-          "&lt;",
-          "operator"
-        ],
-        [
-          "=",
+          "<=",
           "operator"
         ],
         [
