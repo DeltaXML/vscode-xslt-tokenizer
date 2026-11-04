@@ -119,7 +119,10 @@ export class XsltEmptySteps {
 		const frame = (stackFrames ?? []).find((f: { id: number }) => f.id === item.frameId);
 		const framePath: string | undefined = frame?.source?.path;
 		const editor = framePath ? vscode.window.visibleTextEditors.find((e) => path.normalize(e.document.uri.fsPath) === path.normalize(framePath)) : undefined;
-		if (!editor || generation !== XsltEmptySteps.generation) {
+		// a 'No Template Matched' pause: the built-in rule's frame, shown at the xsl:apply-templates - its focus is the
+		// element no rule matched, not the instruction's, so the line's paths would be evaluated from the wrong node, e.g.
+		// select="element1" from element1 itself, and faded as empty
+		if (!editor || generation !== XsltEmptySteps.generation || /^no template matched\b/.test(frame.name ?? '')) {
 			return;
 		}
 		const document = editor.document;
