@@ -12,6 +12,7 @@ out/xpLexerRun.js
 out/xslLexerRun.js
 src/**
 resources/**
+!resources/icons/**
 sample/**
 test/**
 .gitignore

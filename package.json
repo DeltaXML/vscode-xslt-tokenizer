@@ -1800,7 +1800,11 @@
 				"extensions": [
 					".xpath"
 				],
-				"configuration": "./language-configuration.json"
+				"configuration": "./language-configuration.json",
+				"icon": {
+					"light": "./resources/icons/xpath.svg",
+					"dark": "./resources/icons/xpath.svg"
+				}
 			},
 			{
 				"id": "xslt",
@@ -1812,7 +1816,11 @@
 					".xsl",
 					".xslt"
 				],
-				"configuration": "./xsl-language-configuration.json"
+				"configuration": "./xsl-language-configuration.json",
+				"icon": {
+					"light": "./resources/icons/xslt.svg",
+					"dark": "./resources/icons/xslt.svg"
+				}
 			},
 			{
 				"id": "dcp",
@@ -1834,7 +1842,11 @@
 				"extensions": [
 					".sch"
 				],
-				"configuration": "./xsl-language-configuration.json"
+				"configuration": "./xsl-language-configuration.json",
+				"icon": {
+					"light": "./resources/icons/sch.svg",
+					"dark": "./resources/icons/sch.svg"
+				}
 			},
 			{
 				"id": "xspec",
@@ -1845,7 +1857,11 @@
 				"extensions": [
 					".xspec"
 				],
-				"configuration": "./xsl-language-configuration.json"
+				"configuration": "./xsl-language-configuration.json",
+				"icon": {
+					"light": "./resources/icons/xspec.svg",
+					"dark": "./resources/icons/xspec.svg"
+				}
 			},
 			{
 				"id": "bpmn",
