@@ -142,7 +142,7 @@ The [step-through XSLT debugger](https://deltaxml.github.io/vscode-xslt-xpath/de
     </ul>
   </td>
   <td width="50%" valign="top">
-    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xspec.html">Testing XSLT</a>
+    <h4><a href="https://deltaxml.github.io/vscode-xslt-xpath/xspec.html">Testing XSLT</a></h4>
     <ul>
       <li><a href="https://github.com/xspec/xspec">XSpec 4.1.2</a> test framework built in</li>
       <li>Run, debug and run with coverage from Test Explorer</li>

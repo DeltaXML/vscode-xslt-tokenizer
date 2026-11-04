@@ -17,6 +17,7 @@ import { XsltPackages } from './xsltPackages';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { SyntaxExtensions } from './syntaxExtensions';
 import { HrefPaths } from './hrefPaths';
+import { XSpecTaskSettings, XSpecTaskSettingsFinder } from './xspecTaskSettings';
 
 // XSpec's steps for an XSpec file that tests a stylesheet, as XSpec's own command line (bin/xspec.sh) runs them, each a
 // Saxon transform: compile the tests to a stylesheet, the test runner - run it, for the result XML - and format the
@@ -150,10 +151,10 @@ export class XSpecRunner {
 		return XSpecRunner.saxon('Compiling the tests', uri, forceFocus ? args.concat('force-focus=' + forceFocus) : args, token);
 	}
 
-	// whether the test runner compiles, without running it
-	public static check(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
+	// whether the test runner compiles, without running it - with the Saxon settings of the stylesheet's task, as it's run
+	public static check(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken, taskSettings?: XSpecTaskSettings): Promise<XSpecStepOutcome> {
 		const uri = vscode.Uri.file(xspecPath);
-		return XSpecRunner.saxon('Checking the test runner', uri, [...XSpecRunner.syntaxExtensions(uri), '-xsl:' + files.compiled, '-nogo'], token);
+		return XSpecRunner.saxon('Checking the test runner', uri, [...XSpecRunner.syntaxExtensions(uri), '-xsl:' + files.compiled, '-nogo'], token, taskSettings);
 	}
 
 	// Saxon's syntax extensions - XPath 4.0 syntax, and e.g. record types in an XSLT 3.0 stylesheet - by the
@@ -202,14 +203,17 @@ export class XSpecRunner {
 		return SyntaxExtensions.needed(starts.concat(helperPackages));
 	}
 
-	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
+	// with the Saxon settings of the stylesheet's task, if it has one (see XSpecTaskSettings)
+	public static run(xspecPath: string, files: XSpecFiles, token?: vscode.CancellationToken, taskSettings?: XSpecTaskSettings): Promise<XSpecStepOutcome> {
 		// the packages the runner uses - for an x:helper's package-name, and those the stylesheet under test uses - and
-		// with run-as="external", which doesn't import the stylesheet, those it uses
+		// with run-as="external", which doesn't import the stylesheet, those it uses. Not with a Saxon configuration file,
+		// which may declare the packages itself, as for a task (see SaxonTaskProvider.libOption)
 		const stylesheet = XSpecRunner.stylesheetOf(xspecPath);
-		const libraryPaths = [...new Set(XsltPackages.libraryPaths(files.compiled).concat(stylesheet && fs.existsSync(stylesheet) ? XsltPackages.libraryPaths(stylesheet) : []))];
+		const libraryPaths = taskSettings?.configFilename ? [] :
+			[...new Set(XsltPackages.libraryPaths(files.compiled).concat(stylesheet && fs.existsSync(stylesheet) ? XsltPackages.libraryPaths(stylesheet) : []))];
 		const lib = libraryPaths.length > 0 ? ['-lib:' + libraryPaths.join(path.delimiter)] : [];
 		const uri = vscode.Uri.file(xspecPath);
-		return XSpecRunner.saxon('Running the tests', uri, [...XSpecRunner.syntaxExtensions(uri), ...lib, '-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token);
+		return XSpecRunner.saxon('Running the tests', uri, [...XSpecRunner.syntaxExtensions(uri), ...lib, '-xsl:' + files.compiled, '-it:' + XSpecRunner.mainTemplate, '-o:' + files.result], token, taskSettings);
 	}
 
 	// XSpec's HTML report - and, by the extension's stylesheet that imports XSpec's reporter, the expected and actual
@@ -228,11 +232,18 @@ export class XSpecRunner {
 			['-s:' + files.result, '-xsl:' + reporter, '-o:' + files.html], token);
 	}
 
-	private static saxon(step: string, uri: vscode.Uri, saxonArgs: string[], token?: vscode.CancellationToken): Promise<XSpecStepOutcome> {
-		const catalog = CatalogSetting.taskOption({});
-		const args = ['-cp', XSpecRunner.saxonJar(uri)!, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...saxonArgs];
+	private static saxon(step: string, uri: vscode.Uri, saxonArgs: string[], token?: vscode.CancellationToken, taskSettings?: XSpecTaskSettings): Promise<XSpecStepOutcome> {
+		const folder = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(uri.fsPath);
+		const task = taskSettings ? XSpecTaskSettingsFinder.commandLine(taskSettings, folder) : { classPath: [], args: [] };
+		// the task's catalog, if it has one - as for the task, instead of the XSLT.resources.catalog setting
+		const catalog = CatalogSetting.taskOption(taskSettings ?? {});
+		const classPath = [XSpecRunner.saxonJar(uri)!, ...task.classPath].join(path.delimiter);
+		const args = ['-cp', classPath, 'net.sf.saxon.Transform', ...(catalog ? [catalog] : []), ...task.args, ...saxonArgs];
 		const channel = XSpecRunner.output();
 		channel.appendLine(`${step}:`);
+		if (taskSettings) {
+			channel.appendLine(`(with the Saxon settings of the task '${taskSettings.label}')`);
+		}
 		channel.appendLine('java ' + args.map((arg) => /[\s"]/.test(arg) ? `"${arg}"` : arg).join(' '));
 		return new Promise((resolve) => {
 			let output = '';

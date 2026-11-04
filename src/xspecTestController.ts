@@ -14,6 +14,7 @@ import { XSpecTests, XSpecTestNode, XSpecResult, XSpecTestKind } from './xspecTe
 import { XSpecRunner, XSpecFiles } from './xspecRunner';
 import { parseXml, localName, descendants } from './xspecXml';
 import { XSpecSourceMap } from './xspecSourceMap';
+import { XSpecTaskSettings, XSpecTaskSettingsFinder } from './xspecTaskSettings';
 
 // XSpec's tests in the Test Explorer: an item for each XSpec file, with its scenarios and expectations - run, or
 // debugged with the XSLT debugger, by XSpecRunner's steps. One scenario is run with XSpec's force-focus, and the outcomes
@@ -187,6 +188,7 @@ export class XSpecTestController {
 		}
 		const outcomes: XSpecFileOutcome[] = [];
 		this.problemsShown.clear();
+		this.taskSettings.clear();
 		for (const [file, items] of byFile) {
 			if (token.isCancellationRequested) {
 				break;
@@ -250,6 +252,20 @@ export class XSpecTestController {
 
 	// the problems shown in the run, so each is shown once
 	private readonly problemsShown = new Set<string>();
+	// the Saxon settings of each stylesheet's task in the run (see XSpecTaskSettings), by its path - so the user picks a
+	// task once in a run of many XSpec files for the stylesheet
+	private readonly taskSettings = new Map<string, XSpecTaskSettings | undefined | 'cancelled'>();
+
+	private async taskSettingsFor(xspecPath: string): Promise<XSpecTaskSettings | undefined | 'cancelled'> {
+		const stylesheet = XSpecRunner.schematron(xspecPath) ? undefined : XSpecRunner.stylesheetOf(xspecPath);
+		if (!stylesheet) {
+			return undefined;
+		}
+		if (!this.taskSettings.has(stylesheet)) {
+			this.taskSettings.set(stylesheet, await XSpecTaskSettingsFinder.find(stylesheet));
+		}
+		return this.taskSettings.get(stylesheet);
+	}
 
 	private scenarioOf(item: vscode.TestItem): vscode.TestItem | undefined {
 		return this.kinds.get(item) === 'expect' ? item.parent : item;
@@ -299,6 +315,11 @@ export class XSpecTestController {
 			}
 			return errored(problem);
 		}
+		// the Saxon settings of the stylesheet's task, e.g. its classpath - with several tasks, as the user picks
+		const taskSettings = await this.taskSettingsFor(xspecPath);
+		if (taskSettings === 'cancelled') {
+			return errored(`XSpec: the tests weren't run - no task was picked for the Saxon settings of ${path.basename(XSpecRunner.stylesheetOf(xspecPath) ?? '')}`);
+		}
 		const channel = XSpecRunner.output();
 		channel.appendLine(`XSpec: ${scenario ? `scenario '${scenario.label}' in ` : ''}${xspecPath}`);
 		const files = XSpecRunner.files(xspecPath);
@@ -320,7 +341,7 @@ export class XSpecTestController {
 			// XSpec can't always make a test runner for one scenario on its own - e.g. the variable of a scenario made
 			// pending by the focus, using its $x:context, gives XPST0008 - so the whole file is run instead. When debugging,
 			// the runner is checked first, as the debugger would report its errors
-			const usable = focused?.ok && (!debug || (await XSpecRunner.check(xspecPath, files, token)).ok);
+			const usable = focused?.ok && (!debug || (await XSpecRunner.check(xspecPath, files, token, taskSettings)).ok);
 			if (focused && !usable) {
 				compiled = await this.wholeFileInstead(run, scenario, xspecPath, files, prepared.source, token);
 			} else if (focused) {
@@ -330,7 +351,7 @@ export class XSpecTestController {
 		// the whole file, with a focused scenario - e.g. focus="debug" - that XSpec can't make a test runner for (see
 		// above): when debugging, the runner is checked first, and its tests run without the focus if it fails
 		const isFocusedFile = !scenario && XSpecTestController.hasFocus(xspecPath);
-		if (compiled.ok && isFocusedFile && debug && !(await XSpecRunner.check(xspecPath, files, token)).ok) {
+		if (compiled.ok && isFocusedFile && debug && !(await XSpecRunner.check(xspecPath, files, token, taskSettings)).ok) {
 			compiled = await this.withoutFocus(run, xspecPath, files, prepared.source, token);
 		}
 		if (!compiled.ok) {
@@ -339,8 +360,8 @@ export class XSpecTestController {
 		}
 		const runOnce = async () => {
 			const resultTime = fs.existsSync(files.result) ? fs.statSync(files.result).mtimeMs : 0;
-			const outcome = debug || coverage ? await this.debugRunner(xspecPath, files, scenario?.label, coverage ? (hits) => this.addCoverage(run, xspecPath, files, hits) : undefined) :
-				await XSpecRunner.run(xspecPath, files, token);
+			const outcome = debug || coverage ? await this.debugRunner(xspecPath, files, scenario?.label, taskSettings, coverage ? (hits) => this.addCoverage(run, xspecPath, files, hits) : undefined) :
+				await XSpecRunner.run(xspecPath, files, token, taskSettings);
 			return { ran: outcome, hasResult: fs.existsSync(files.result) && fs.statSync(files.result).mtimeMs > resultTime };
 		};
 		let { ran, hasResult } = await runOnce();
@@ -465,7 +486,7 @@ export class XSpecTestController {
 	// the test runner, run by the XSLT debugger - its breakpoints in the stylesheet under test, which the runner
 	// imports, are where it stops
 	// - for coverage, without debugging: the debugger counts the hits of each line, sent when the run ends
-	private debugRunner(xspecPath: string, files: XSpecFiles, label: string | undefined, onCoverage?: (hits: CoverageFiles) => void): Promise<{ ok: boolean, output: string }> {
+	private debugRunner(xspecPath: string, files: XSpecFiles, label: string | undefined, taskSettings: XSpecTaskSettings | undefined, onCoverage?: (hits: CoverageFiles) => void): Promise<{ ok: boolean, output: string }> {
 		return new Promise((resolve) => {
 			const coverageEvents = onCoverage ? vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
 				if (event.event === 'xsltCoverage' && event.session.name === name) {
@@ -491,6 +512,8 @@ export class XSpecTestController {
 			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, resultPath: files.result, xspecFile: xspecPath,
 				// Saxon's syntax extensions, as for a run (see XSpecRunner)
 				allowSyntaxExtensions40: XSpecRunner.syntaxExtensionsValue(vscode.Uri.file(xspecPath)),
+				// the Saxon settings of the stylesheet's task, e.g. its classpath, as for a run
+				...XSpecTaskSettingsFinder.launchProperties(taskSettings),
 				...(onCoverage ? { coverage: true } : {}) }, onCoverage ? { noDebug: true } : undefined).then((ok) => {
 				if (!ok) {
 					started.dispose();

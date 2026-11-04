@@ -323,7 +323,7 @@ export class SaxonTaskProvider implements vscode.TaskProvider {
 
     // a relative path, e.g. 'xsl/main.xsl', is relative to the workspace folder - the task runs there; another
     // variable, e.g. ${file} or ${command:...}, is left as it is, so it matches no file
-    private static resolveStoredPath(value: string, workspaceFolderFsPath: string) {
+    public static resolveStoredPath(value: string, workspaceFolderFsPath: string) {
         if (value.startsWith('${workspaceFolder}')) {
             return path.normalize(path.join(workspaceFolderFsPath, value.substring('${workspaceFolder}'.length)));
         }

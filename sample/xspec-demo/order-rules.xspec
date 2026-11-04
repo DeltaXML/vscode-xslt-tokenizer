@@ -40,7 +40,7 @@
       <x:expect label="is a section with a row for each line" test="count($x:result/table/tr) = 2"/>
       <x:expect label="has the order's total, after the discount" test="$x:result/p[@class = 'total'] = 'Total: £39.60'"/>
       <x:expect label="is a section with the order's id">
-         <section id="A1">...</section>
+         <section id="A2">...</section>
       </x:expect>
    </x:scenario>
 
