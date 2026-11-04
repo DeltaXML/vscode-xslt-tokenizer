@@ -5,6 +5,10 @@
 	"version": "2.1.0",
 	"publisher": "deltaxml",
 	"icon": "xslt-xpath.png",
+	"galleryBanner": {
+		"color": "#2a3f5f",
+		"theme": "dark"
+	},
 	"bugs": {
 		"url": "https://github.com/DeltaXML/vscode-xslt-tokenizer/issues"
 	},
