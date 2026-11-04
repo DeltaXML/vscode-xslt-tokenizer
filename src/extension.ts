@@ -15,6 +15,7 @@ import { XSpecCompat } from './xspecCompat';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
 import { XSpecTestController } from './xspecTestController';
+import { XSpecBreakpoints } from './xspecBreakpoints';
 import * as vscode from 'vscode';
 import { XdocNotes } from './xdocNote';
 import { XPathLexer, ExitCondition, LexPosition, Token, BaseToken } from './xpLexer';
@@ -1361,6 +1362,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// XSpec's tests in the Test Explorer, run with the bundled XSpec (see XSpecRunner)
 	XSpecRunner.extensionUri = context.extensionUri;
 	new XSpecTestController(context);
+	XSpecBreakpoints.register(context);
 	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.command, (uri: vscode.Uri, offset: number) => XSpecScenario.create(uri, offset)));
 	context.subscriptions.push(vscode.commands.registerCommand(XSpecScenario.fileCommand, (uri?: vscode.Uri, xspecUri?: vscode.Uri, packageForm?: XSpecPackageForm) => {
 		const stylesheetUri = uri ?? vscode.window.activeTextEditor?.document.uri;

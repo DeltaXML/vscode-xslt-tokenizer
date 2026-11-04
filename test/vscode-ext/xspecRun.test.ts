@@ -445,7 +445,7 @@ suite('XSpec: running tests', function () {
 			'  </x:scenario>',
 			'</x:description>'].join('\n'));
 		const uri = vscode.Uri.file(linesXspec);
-		// lines 3 (x:call), 6 (x:expect) and 4 (x:param - not a step)
+		// lines 3 (x:call), 6 (x:expect) and 4 (x:param - not a step, so moved to the x:call)
 		const breakpoints = [3, 6, 4].map((line) => new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(line - 1, 4))));
 		vscode.debug.addBreakpoints(breakpoints);
 		const stops: string[] = [];
@@ -478,7 +478,8 @@ suite('XSpec: running tests', function () {
 			xspec.createRun = undefined;
 			assert.strictEqual(outcomes.get('is four'), 'passed');
 			assert.deepEqual([...new Set(stops)], ['lines.xspec:3', 'lines.xspec:6 $x:result'], JSON.stringify(stops));
-			assert.deepEqual(verified.sort((a, b) => a.line - b.line), [{ line: 3, verified: true }, { line: 4, verified: false }, { line: 6, verified: true }]);
+			// the x:param's breakpoint was moved to its x:call (see XSpecBreakpoints) - which has one already, so it's gone
+			assert.deepEqual(verified.sort((a, b) => a.line - b.line), [{ line: 3, verified: true }, { line: 6, verified: true }]);
 		} finally {
 			tracker.dispose();
 			vscode.debug.removeBreakpoints(breakpoints);
