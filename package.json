@@ -188,8 +188,8 @@
 		],
 		"commands": [
 			{
-				"command": "xslt-xpath.copyMcpSetup",
-				"title": "Copy MCP Setup for Claude Code",
+				"command": "xslt-xpath.setUpClaudeMcp",
+				"title": "Set Up MCP Server for Claude Code",
 				"category": "XSLT"
 			},
 			{
@@ -897,7 +897,7 @@
 					"type": "boolean",
 					"default": false,
 					"scope": "application",
-					"markdownDescription": "Run an MCP server for AI assistants, such as GitHub Copilot or Claude Code, with tools that use the extension's linter and its knowledge of XSLT modules: e.g. the problems of a stylesheet that isn't open, or its imports. The server listens on `127.0.0.1` only, at the port of `#XSLT.mcp.port#`, and needs a token that only VS Code and the assistants it's set up for have. GitHub Copilot finds it by itself; for Claude Code, run **XSLT: Copy MCP Setup for Claude Code**."
+					"markdownDescription": "Run an MCP server for AI assistants, such as GitHub Copilot or Claude Code, with tools that use the extension's linter and its knowledge of XSLT modules: e.g. the problems of a stylesheet that isn't open, or its imports. The server listens on `127.0.0.1` only, at the port of `#XSLT.mcp.port#`, and needs a token that only VS Code and the assistants it's set up for have. GitHub Copilot finds it by itself; for Claude Code, run **XSLT: Set Up MCP Server for Claude Code**."
 				},
 				"XSLT.mcp.port": {
 					"type": "number",

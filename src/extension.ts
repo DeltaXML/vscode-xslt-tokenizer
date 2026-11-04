@@ -60,6 +60,7 @@ import { XsltDebug, XsltDebugAdapterFactory, XsltDebugConfigurationProvider, Xsl
 import { XsltEmptySteps } from './xsltEmptySteps';
 import { XsltCallHierarchyProvider } from './xsltCallHierarchy';
 import { XsltMcpDefinitionProvider, XsltMcpServer } from './mcp/xsltMcpServer';
+import { ClaudeCodeSetup, ClaudeScope } from './mcp/claudeCodeSetup';
 
 
 
@@ -604,7 +605,12 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}));
 	context.subscriptions.push({ dispose: () => mcpServer.stop() });
-	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.copyMcpSetup', async () => {
+	// the 'claude mcp add' command, copied for the user to run - when Claude Code's CLI can't be run from here
+	const copyClaudeCommand = async (scope: ClaudeScope, reason: string) => {
+		await vscode.env.clipboard.writeText(ClaudeCodeSetup.addCommand(XsltMcpServer.url(), await mcpServer.getToken(), scope));
+		vscode.window.showInformationMessage(`${reason} The 'claude mcp add' command is copied instead - run it in a terminal${scope === 'user' ? '' : ', in the project\'s folder'}. It includes the server's token: keep it private.`);
+	};
+	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.setUpClaudeMcp', async () => {
 		if (!XsltMcpServer.isEnabled()) {
 			const enable = 'Enable MCP Server';
 			if (await vscode.window.showInformationMessage('The XSLT/XPath MCP server isn\'t enabled (XSLT.mcp.enabled).', enable) !== enable) {
@@ -612,26 +618,43 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 			await vscode.workspace.getConfiguration('XSLT.mcp').update('enabled', true, vscode.ConfigurationTarget.Global);
 		}
-		const allProjects = { label: 'All projects', description: '--scope user', scope: ' --scope user' };
-		const thisProject = { label: 'This project only', description: 'for the folder the command is run in', scope: '' };
-		const choice = await vscode.window.showQuickPick([allProjects, thisProject], { title: 'Copy MCP Setup for Claude Code', placeHolder: 'Use the XSLT/XPath MCP server in...' });
+		const folders = vscode.workspace.workspaceFolders ?? [];
+		const allProjects = { label: 'All projects', description: '--scope user', scope: 'user' as ClaudeScope };
+		const thisProject = { label: 'This project only', description: folders.length === 1 ? folders[0].uri.fsPath : 'a workspace folder', scope: 'local' as ClaudeScope };
+		const choice = await vscode.window.showQuickPick(folders.length > 0 ? [allProjects, thisProject] : [allProjects], { title: 'Set Up MCP Server for Claude Code', placeHolder: 'Use the XSLT/XPath MCP server in...' });
 		if (!choice) {
 			return;
 		}
-		const command = `claude mcp add --transport http${choice.scope} xslt-xpath ${XsltMcpServer.url()} --header "Authorization: Bearer ${await mcpServer.getToken()}"`;
-		await vscode.env.clipboard.writeText(command);
-		vscode.window.showInformationMessage(`The 'claude mcp add' command for the XSLT/XPath MCP server is copied - run it in a terminal${choice.scope ? '' : ', in the project\'s folder'}. It includes the server's token: keep it private.`);
+		const folder = choice.scope === 'user' ? undefined : folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick({ placeHolder: 'The project folder' });
+		if (choice.scope === 'local' && !folder) {
+			return;
+		}
+		const result = await ClaudeCodeSetup.setUp(XsltMcpServer.url(), await mcpServer.getToken(), choice.scope, folder?.uri.fsPath);
+		if (result.ok) {
+			vscode.window.showInformationMessage(`Claude Code is set up to use the XSLT/XPath MCP server${folder ? ` in ${folder.name}` : ' in all projects'} - in a Claude Code session already running, run /mcp to connect.`);
+		} else {
+			XsltMcpServer.log.error(`claude mcp add failed: ${result.output}`);
+			await copyClaudeCommand(choice.scope, result.notFound ? 'Claude Code\'s \'claude\' command wasn\'t found.' : `Claude Code couldn't set up the server: ${result.output}`);
+		}
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.resetMcpToken', async () => {
 		const reset = 'Reset Token';
-		if (await vscode.window.showWarningMessage('Reset the XSLT/XPath MCP server\'s token? Assistants set up with the current token, e.g. Claude Code, will need to be set up again.', { modal: true }, reset) !== reset) {
+		if (await vscode.window.showWarningMessage('Reset the XSLT/XPath MCP server\'s token? Assistants set up with the current token are set up again where possible.', { modal: true }, reset) !== reset) {
 			return;
 		}
-		await mcpServer.resetToken();
+		const token = await mcpServer.resetToken();
 		mcpDefinitions.refresh();
-		const copy = 'Copy MCP Setup for Claude Code';
-		if (await vscode.window.showInformationMessage('The MCP server\'s token is reset. GitHub Copilot uses the new one; for Claude Code, run \'claude mcp remove xslt-xpath\', then add the server again.', copy) === copy) {
-			vscode.commands.executeCommand('xslt-xpath.copyMcpSetup');
+		// Claude Code set up with the old token: for all projects, or for a workspace folder
+		const { updated, result } = await ClaudeCodeSetup.update(XsltMcpServer.url(), token, (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath));
+		const setUp = 'Set Up MCP Server for Claude Code';
+		const claude = updated.length > 0 ? `Claude Code is set up again with it, for ${updated.join(' and ')}.`
+			: result?.notFound ? `Claude Code's 'claude' command wasn't found: set it up again with '${setUp}' after 'claude mcp remove xslt-xpath'.`
+				: result ? `Claude Code couldn't be set up again: ${result.output}` : 'Claude Code wasn\'t set up with the old one.';
+		if (result && !result.notFound) {
+			XsltMcpServer.log.error(`claude mcp failed: ${result.output}`);
+		}
+		if (await vscode.window.showInformationMessage(`The MCP server's token is reset. GitHub Copilot uses the new one. ${claude}`, setUp) === setUp) {
+			vscode.commands.executeCommand('xslt-xpath.setUpClaudeMcp');
 		}
 	}));
 
