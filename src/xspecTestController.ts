@@ -15,6 +15,7 @@ import { XSpecRunner, XSpecFiles } from './xspecRunner';
 import { parseXml, localName, descendants } from './xspecXml';
 import { XSpecSourceMap } from './xspecSourceMap';
 import { XSpecTaskSettings, XSpecTaskSettingsFinder } from './xspecTaskSettings';
+import { XSpecTimeline } from './xspecTimeline';
 
 // XSpec's tests in the Test Explorer: an item for each XSpec file, with its scenarios and expectations - run, or
 // debugged with the XSLT debugger, by XSpecRunner's steps. One scenario is run with XSpec's force-focus, and the outcomes
@@ -66,6 +67,7 @@ export class XSpecTestController {
 		this.coverageProfile = this.controller.createRunProfile('Coverage', vscode.TestRunProfileKind.Coverage, (request, token) => this.runTests(request, token, false, true), true);
 		this.coverageProfile.loadDetailedCoverage = async (_run, fileCoverage) => this.coverageDetails.get(fileCoverage.uri.toString()) ?? [];
 		XSpecTestController.instance = this;
+		XSpecTimeline.register(context);
 
 		const watcher = vscode.workspace.createFileSystemWatcher('**/*.xspec');
 		context.subscriptions.push(watcher,
@@ -167,7 +169,8 @@ export class XSpecTestController {
 	}
 
 	private async runTests(request: vscode.TestRunRequest, token: vscode.CancellationToken, debug: boolean, coverage = false) {
-		const run = this.createRun?.(request) ?? this.controller.createTestRun(request);
+		const start = Date.now();
+		const run =this.createRun?.(request) ?? this.controller.createTestRun(request);
 		// the items to run, by file: undefined for the whole file
 		const byFile = new Map<string, vscode.TestItem[] | undefined>();
 		const requested: vscode.TestItem[] = [];
@@ -210,6 +213,9 @@ export class XSpecTestController {
 			run.appendOutput(XSpecTestController.summary(outcomes, token.isCancellationRequested ? byFile.size : undefined).replace(/\n/g, '\r\n'));
 		}
 		run.end();
+		// the run's history, in the Timeline view
+		XSpecTimeline.record({ start, end: Date.now(), kind: coverage ? 'Coverage' : debug ? 'Debug' : 'Run', cancelled: token.isCancellationRequested,
+			files: outcomes.map(({ file, passed, failed, pending, stopped }) => ({ file, passed, failed, pending, stopped })) });
 	}
 
 	// for a run of more than one file: the expectations passed, failed and pending, in all of them, and the files that
