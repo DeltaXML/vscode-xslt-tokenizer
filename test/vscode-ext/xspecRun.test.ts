@@ -110,7 +110,7 @@ suite('XSpec: running tests', function () {
 		const run = history![0];
 		assert.isAtLeast(run.start, before);
 		assert.strictEqual(run.kind, 'Run');
-		assert.deepEqual(run.files, [{ file: xspecPath, passed: 2, failed: 1, pending: 1 }]);
+		assert.deepEqual(run.files, [{ file: xspecPath, passed: 2, failed: 1, pending: 1, failedLabels: ['doubling › three › is five'] }]);
 	});
 
 	test('run one scenario, with XSpec\'s force-focus: the others aren\'t run', async () => {

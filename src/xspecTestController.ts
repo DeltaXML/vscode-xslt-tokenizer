@@ -26,6 +26,8 @@ interface XSpecFileOutcome {
 	passed: number;
 	failed: number;
 	pending: number;
+	// the label paths of the expectations that failed - their scenarios' labels, then theirs
+	failedLabels?: string[];
 	// why it stopped - Saxon's error, or XSpec's - and for an I/O error, the file
 	stopped?: string;
 	stoppedDetail?: string;
@@ -215,7 +217,8 @@ export class XSpecTestController {
 		run.end();
 		// the run's history, in the Timeline view
 		XSpecTimeline.record({ start, end: Date.now(), kind: coverage ? 'Coverage' : debug ? 'Debug' : 'Run', cancelled: token.isCancellationRequested,
-			files: outcomes.map(({ file, passed, failed, pending, stopped }) => ({ file, passed, failed, pending, ...(stopped !== undefined ? { stopped } : {}) })) });
+			files: outcomes.map(({ file, passed, failed, pending, stopped, failedLabels }) => ({ file, passed, failed, pending, ...(stopped !== undefined ? { stopped } : {}),
+				...(failedLabels?.length ? { failedLabels: failedLabels.slice(0, XSpecTimeline.maxFailedLabels) } : {}) })) });
 	}
 
 	// for a run of more than one file: the expectations passed, failed and pending, in all of them, and the files that
@@ -394,7 +397,9 @@ export class XSpecTestController {
 		// the expectations applied - of the scenario, for one run on its own
 		const applied = results.filter((r) => r.kind === 'expect' && (!focusedId || !scenario || r.labelPath.join('\u001f').startsWith(this.keyOf(scenario).split('\u001f').slice(1).join('\u001f'))));
 		outcome.passed = applied.filter((r) => r.status === 'passed').length;
-		outcome.failed = applied.filter((r) => r.status === 'failed').length;
+		const failed = applied.filter((r) => r.status === 'failed');
+		outcome.failed = failed.length;
+		outcome.failedLabels = failed.map((r) => r.labelPath.join(' › '));
 		outcome.pending = applied.filter((r) => r.status === 'pending').length;
 		run.appendOutput(`XSpec: ${vscode.workspace.asRelativePath(xspecPath)}: ${outcome.passed} passed, ${outcome.failed} failed, ${outcome.pending} pending\r\n` +
 			(report.ok ? `Report: ${files.html}\r\n` : ''));

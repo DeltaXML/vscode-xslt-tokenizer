@@ -43,6 +43,8 @@ export interface XSpecRunFile {
 	failed: number;
 	pending: number;
 	stopped?: string;
+	// the label paths of the expectations that failed - the first maxFailedLabels
+	failedLabels?: string[];
 }
 
 // a run, as kept in the workspace state
@@ -59,6 +61,7 @@ export class XSpecTimeline {
 	private static readonly label = 'XSpec Runs';
 	private static readonly stateKey = 'xspec.runHistory';
 	private static readonly maxRuns = 100;
+	public static readonly maxFailedLabels = 10;
 	private static instance: XSpecTimeline | undefined;
 	private readonly changed = new vscode.EventEmitter<vscode.Uri | vscode.Uri[] | undefined>();
 	private readonly workspaceChanged = new vscode.EventEmitter<void>();
@@ -151,6 +154,7 @@ export class XSpecTimeline {
 		tooltip.appendMarkdown(`**XSpec ${run.kind}** - ${new Date(run.start).toLocaleString()} - ${XSpecTimeline.seconds(run)}${run.cancelled ? ' - cancelled' : ''}\n\n`);
 		for (const f of run.files) {
 			tooltip.appendMarkdown(`- `).appendText(`${vscode.workspace.asRelativePath(f.file)}: ${f.stopped !== undefined ? `stopped - ${XSpecTimeline.short(f.stopped)}` : XSpecTimeline.counts(f)}`).appendMarkdown('\n');
+			XSpecTimeline.failedLines(f).forEach((line) => tooltip.appendMarkdown('    - ').appendText(line).appendMarkdown('\n'));
 		}
 		item.tooltip = tooltip;
 		return item;
@@ -161,8 +165,16 @@ export class XSpecTimeline {
 		item.id = String(run.start);
 		item.iconPath = XSpecTimeline.icon(file.failed > 0, file.stopped !== undefined);
 		item.description = run.files.length > 1 ? `in a run of ${run.files.length} files` : '';
-		item.tooltip = `XSpec ${run.kind} - ${new Date(run.start).toLocaleString()}${file.stopped !== undefined ? `\nstopped - ${XSpecTimeline.short(file.stopped)}` : ''}`;
+		const failed = XSpecTimeline.failedLines(file);
+		item.tooltip = `XSpec ${run.kind} - ${new Date(run.start).toLocaleString()}${file.stopped !== undefined ? `\nstopped - ${XSpecTimeline.short(file.stopped)}` : ''}` +
+			(failed.length > 0 ? `\n\nFailed:\n${failed.map((line) => `  ${line}`).join('\n')}` : '');
 		return item;
+	}
+
+	// the expectations that failed, as their label paths - and how many more there were
+	private static failedLines(file: XSpecRunFile): string[] {
+		const labels = file.failedLabels ?? [];
+		return [...labels, ...(file.failed > labels.length && labels.length > 0 ? [`and ${file.failed - labels.length} more`] : [])];
 	}
 
 	private static short(message: string) {
