@@ -61,6 +61,16 @@ const cases: [string, string, string[][]][] = [
 	['a built-in function', `<xsl:template match="/"><xsl:sequence select="Q{http://www.w3.org/2005/xpath-functions}count(.)"/></xsl:template>`, []],
 	['the name of xsl:element is still an AVT', `<xsl:template match="/"><xsl:element name="{$undeclared}"/></xsl:template>`,
 		[unresolved('$undeclared')]],
+	// a URI with '/' - the name was cut at the last '/', as a package name is, e.g. to 'xspec}main' (an XSpec compiled stylesheet)
+	['a template and its parameter, with a URI with \'/\'', `<xsl:template name="Q{http://example.com/ns}main">
+	<xsl:param name="Q{http://example.com/ns}p"/>
+	<xsl:sequence select="$Q{http://example.com/ns}p"/>
+</xsl:template>
+<xsl:template match="/"><xsl:call-template name="Q{http://example.com/ns}main"><xsl:with-param name="Q{http://example.com/ns}p" select="1"/></xsl:call-template></xsl:template>`, []],
+	['a template not declared, with a URI with \'/\'', `<xsl:template match="/"><xsl:call-template name="Q{http://example.com/ns}missing"/></xsl:template>`,
+		[[`XSLT: xsl:template with name 'Q{http://example.com/ns}missing' not found`, '"Q{http://example.com/ns}missing"']]],
+	['a function with a URI with \'/\'', `<xsl:function name="Q{http://example.com/f}double"><xsl:param name="n"/><xsl:sequence select="$n * 2"/></xsl:function>
+<xsl:template match="/"><xsl:sequence select="Q{http://example.com/f}double(1)"/></xsl:template>`, []],
 ];
 
 suite('EQNames', () => {
@@ -76,5 +86,18 @@ suite('EQNames', () => {
 <xsl:function name="Q{urn:f}double"><xsl:param name="n"/><xsl:sequence select="$n * 2"/></xsl:function>`;
 		const result = await problems(`<xsl:template match="/"><xsl:sequence select="$Q{}x, $Q{urn:v}y, Q{urn:f}double(1)"/></xsl:template>`, imported);
 		assert.deepEqual(result, []);
+	});
+
+	test('go to definition and find references: a template with a URI with \'/\'', async () => {
+		const xslt = stylesheet(`<xsl:template name="Q{http://example.com/ns}main"/>
+<xsl:template match="/"><xsl:call-template name="Q{http://example.com/ns}main"/></xsl:template>`);
+		const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'xslt' });
+		const call = document.positionAt(xslt.indexOf('call-template name="Q{') + 'call-template name="Q{http://ex'.length);
+		const definitions = await vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>('vscode.executeDefinitionProvider', document.uri, call);
+		const range = (d: vscode.Location | vscode.LocationLink) => 'targetRange' in d ? d.targetRange : d.range;
+		assert.lengthOf(definitions, 1);
+		assert.equal(range(definitions[0]).start.line, 1);
+		const references = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', document.uri, call);
+		assert.deepEqual(references.map((r) => r.range.start.line).sort(), [1, 2]);
 	});
 });

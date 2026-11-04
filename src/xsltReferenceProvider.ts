@@ -870,6 +870,9 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 							attType = AttributeType.UseAttributeSets;
 						} else if (attNameText === 'xsl:default-mode') {
 							attType = AttributeType.DefaultMode;
+						} else {
+							// e.g. a literal result element's xmlns="http://a/b" - not the type of an earlier element's attribute
+							attType = AttributeType.None;
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
@@ -906,9 +909,10 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								}
 								break;
 							case AttributeType.InstructionName:
-								let slashPos = variableName.lastIndexOf('/');
+								// a package name may be a URI, e.g. http://example.com/pkg - not another name, which may be an EQName with a
+								// URI, e.g. Q{http://example.com/ns}main
+								let slashPos = tagElementName === 'xsl:package' || tagElementName === 'xsl:use-package' ? variableName.lastIndexOf('/') : -1;
 								if (slashPos > 0) {
-									// package name may be URI
 									variableName = variableName.substring(slashPos + 1);
 								}
 								tagIdentifierName = variableName;

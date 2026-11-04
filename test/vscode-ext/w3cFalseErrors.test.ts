@@ -204,6 +204,14 @@ suite('False errors found with the W3C XSLT test suites', () => {
 		assert.deepEqual([...reported].filter(([, messages]) => messages.length > 0), []);
 	});
 
+	test('EQNames with a URI with \'/\' as template, parameter and function names; a literal result element\'s xmlns after xsl:element name="{...}" (call-template-0109, call-template-0703, function-0121, namespace-2201)', async () => {
+		const tpl = stylesheet(`<xsl:template name="Q{http://t/}temp"><xsl:param name="Q{http://p/}pvar1"/><xsl:sequence select="$Q{http://p/}pvar1"/></xsl:template>
+<xsl:function name="Q{http://f/}count-elements"><xsl:sequence select="1"/></xsl:function>
+<xsl:template match="/"><xsl:call-template name="Q{http://t/}temp"><xsl:with-param name="Q{http://p/}pvar1" select="Q{http://f/}count-elements()"/></xsl:call-template>
+<xsl:element name="{name()}">x</xsl:element><out xmlns="http://default/"/></xsl:template>`);
+		assert.deepEqual(await problems(tpl), []);
+	});
+
 	test('a function type in parentheses, e.g. as="(function() as xs:string*)*" (higher-order-functions-041)', async () => {
 		const fn = (as: string) => stylesheet(`<xsl:function name="f:f" xmlns:f="urn:f" as="${as}"><xsl:sequence select="()"/></xsl:function>`, 'xsl:stylesheet', ' xmlns:xs="http://www.w3.org/2001/XMLSchema"');
 		const reported = new Map<string, string[]>();
