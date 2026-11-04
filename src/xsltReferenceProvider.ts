@@ -909,12 +909,6 @@ export class XSLTReferenceProvider implements vscode.ReferenceProvider, vscode.R
 								}
 								break;
 							case AttributeType.InstructionName:
-								// a package name may be a URI, e.g. http://example.com/pkg - not another name, which may be an EQName with a
-								// URI, e.g. Q{http://example.com/ns}main
-								let slashPos = tagElementName === 'xsl:package' || tagElementName === 'xsl:use-package' ? variableName.lastIndexOf('/') : -1;
-								if (slashPos > 0) {
-									variableName = variableName.substring(slashPos + 1);
-								}
 								tagIdentifierName = variableName;
 								if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
 									const { symbolName, symbolID } = elementStack[elementStack.length - 1];

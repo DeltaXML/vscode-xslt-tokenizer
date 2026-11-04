@@ -101,3 +101,19 @@ suite('EQNames', () => {
 		assert.deepEqual(references.map((r) => r.range.start.line).sort(), [1, 2]);
 	});
 });
+
+suite('Package names in the outline', () => {
+	test('the whole URI, not the part after its last \'/\'', async () => {
+		const xslt = `<xsl:package name="http://example.com/lib/common" package-version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+  <xsl:use-package name="http://example.com/lib/" package-version="*"/>
+  <xsl:template name="Q{http://example.com/ns}main"/>
+</xsl:package>`;
+		const document = await vscode.workspace.openTextDocument({ content: xslt, language: 'xslt' });
+		const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>('vscode.executeDocumentSymbolProvider', document.uri);
+		const names = (list: vscode.DocumentSymbol[]): string[] => list.flatMap((s) => [s.name, ...names(s.children)]);
+		const all = names(symbols ?? []);
+		assert.include(all.join('\n'), 'http://example.com/lib/common');
+		assert.include(all.join('\n'), 'http://example.com/lib/');
+		assert.include(all.join('\n'), 'Q{http://example.com/ns}main');
+	});
+});
