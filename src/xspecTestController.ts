@@ -509,7 +509,11 @@ export class XSpecTestController {
 				}
 			});
 			const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(xspecPath));
-			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, resultPath: files.result, xspecFile: xspecPath,
+			// a step doesn't stop in the runner, other runner modules in its folder (e.g. of XSpec files it imports), or
+			// XSpec's own modules - as for coverage (see addCoverage) - only in the stylesheet tested
+			const xspecHome = XSpecRunner.home(vscode.Uri.file(xspecPath));
+			const stepSkip = [path.dirname(files.compiled), ...(xspecHome ? [xspecHome] : [])];
+			vscode.debug.startDebugging(folder, { type: 'xslt-saxon', request: 'launch', name, xsltFile: files.compiled, initialTemplate: XSpecRunner.mainTemplate, resultPath: files.result, xspecFile: xspecPath, stepSkip,
 				// Saxon's syntax extensions, as for a run (see XSpecRunner)
 				allowSyntaxExtensions40: XSpecRunner.syntaxExtensionsValue(vscode.Uri.file(xspecPath)),
 				// the Saxon settings of the stylesheet's task, e.g. its classpath, as for a run

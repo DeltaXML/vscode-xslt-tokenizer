@@ -6,6 +6,7 @@
  */
 package com.deltaxml.xslt.debug;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
@@ -86,6 +87,12 @@ final class Debugger {
     private int stepCallDepth;
     private String stepPath;
     private int stepLine;
+    // an XSpec test run: the files and folders a step doesn't stop in (the test runner and XSpec's own modules) - only
+    // the stylesheet tested is stepped through - except at the runner's lines for the XSpec file's steps (its
+    // x:scenario, x:call/x:context and x:expect elements), by path: a step from one goes to the next, or into the code
+    // tested
+    private final List<String> stepSkipped = new ArrayList<String>();
+    private final Map<String, Set<Integer>> stepStops = new HashMap<String, Set<Integer>>();
     private volatile boolean pauseRequested;
     // the exception breakpoint filters: dynamic errors, and errors caught by xsl:try
     private volatile boolean breakOnErrors = true;
@@ -274,6 +281,41 @@ final class Debugger {
         values.hideXSpecGlobals = Json.string(args, "xspecFile") != null;
         // as for an 'xslt' task: "on" keeps Saxon's own xsl:message output, which escapes characters XML doesn't allow
         messageEscaping = "on".equals(Json.string(args, "messageEscaping"));
+        stepSkipped.clear();
+        for (Object skipped : Json.array(args, "stepSkip")) {
+            stepSkipped.add(normalisePath(String.valueOf(skipped)));
+        }
+        stepStops.clear();
+        Map<String, Object> stops = Json.object(args, "stepStops");
+        if (stops != null) {
+            for (Map.Entry<String, Object> file : stops.entrySet()) {
+                Set<Integer> lines = new HashSet<Integer>();
+                if (file.getValue() instanceof List) {
+                    for (Object line : (List<?>) file.getValue()) {
+                        if (line instanceof Number) {
+                            lines.add(((Number) line).intValue());
+                        }
+                    }
+                }
+                stepStops.put(normalisePath(file.getKey()), lines);
+            }
+        }
+    }
+
+    // a step doesn't stop in the file: it's one of those skipped, or in a folder skipped (see stepSkipped)
+    private boolean isStepSkipped(String path) {
+        for (String skipped : stepSkipped) {
+            if (path.equals(skipped) || path.startsWith(skipped.endsWith(File.separator) ? skipped : skipped + File.separator)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // one of the runner's lines for an XSpec file's step (see stepStops)
+    private boolean isStepStop(String path, int line) {
+        Set<Integer> lines = stepStops.get(path);
+        return lines != null && lines.contains(line);
     }
 
     List<Map<String, Object>> setBreakpoints(Map<String, Object> args) {
@@ -835,6 +877,13 @@ final class Debugger {
             // checked once each time execution arrives at the line - not for each instruction Saxon reports on it -
             // including again, e.g. for the next iteration of a loop on one line
             reason = "breakpoint";
+        } else if (step != Step.NONE && isStepSkipped(path)) {
+            // an XSpec test run's runner or XSpec's own modules: a step stops only at the runner's line for the next
+            // step of the XSpec file - whichever step it is, as the code tested has been left, or wasn't entered
+            boolean leftHere = path.equals(stepPath) && top.line == stepLine && depth == stepCallDepth && !arrivingAgain;
+            if (onNewLine && !lazyArrival && !leftHere && isStepStop(path, top.line)) {
+                reason = "step";
+            }
         } else if ((!lazyArrival || step == Step.INTO) && isStepComplete(path, top.line, depth, arrivingAgain)) {
             reason = "step";
         }
@@ -863,13 +912,15 @@ final class Debugger {
             stoppedAt = traceable;
         }
         String branch = branchAttribute(location);
+        // not into the XPath of a file a step doesn't stop in, e.g. an XSpec test runner's
+        boolean steppingIn = step == Step.INTO && !isStepSkipped(path);
         if (branch != null && xpathDepth == 0) {
             // an XSLT 4.0 branch (xsl:when's or xsl:otherwise's select, xsl:if's then or else), now it's taken: only
             // that attribute - its test was stepped through where it was evaluated, maybe on the same line
-            stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO, branch);
+            stepThroughXPath(traceable, context, path, reportedLine, top.line, steppingIn, branch);
         } else if (onNewReportedLine && xpathDepth == 0) {
             // stepping into: from here, or from an instruction before it on the same line
-            stepThroughXPath(traceable, context, path, reportedLine, top.line, step == Step.INTO, null);
+            stepThroughXPath(traceable, context, path, reportedLine, top.line, steppingIn, null);
         }
     }
 

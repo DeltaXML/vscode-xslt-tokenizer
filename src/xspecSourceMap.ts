@@ -81,6 +81,11 @@ export class XSpecSourceMap {
 		return this.runnerLines.get(xspecLine);
 	}
 
+	// the runner's lines for the XSpec file's steps: where a step in the runner stops (the debugger's stepStops)
+	public stepLines(): number[] {
+		return [...new Set(this.runnerLines.values())].sort((a, b) => a - b);
+	}
+
 	// the XSpec file's line for a line of the runner - undefined if it's not in a scenario's or expectation's template
 	public xspecLine(runnerLine: number): number | undefined {
 		const containing = this.ranges.filter((range) => range.first <= runnerLine && runnerLine <= range.last);

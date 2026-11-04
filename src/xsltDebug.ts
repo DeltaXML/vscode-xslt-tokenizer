@@ -965,6 +965,11 @@ export class XsltDebugAdapterProcess implements vscode.DebugAdapter {
 	private xspecRequest(message: vscode.DebugProtocolMessage): vscode.DebugProtocolMessage {
 		const request = message as { type?: string; command?: string; seq: number; arguments?: { source?: { path?: string }, breakpoints?: DebugBreakpoint[], lines?: number[] } };
 		const map = this.xspecMap;
+		if (map && request.type === 'request' && request.command === 'launch') {
+			// a step in the runner stops only at its lines for the XSpec file's steps (with stepSkip, from the launch
+			// configuration, the runner's and XSpec's own files a step doesn't otherwise stop in)
+			return { ...request, arguments: { ...request.arguments, stepStops: { [map.runnerPath]: map.stepLines() } } } as vscode.DebugProtocolMessage;
+		}
 		const sourcePath = request.arguments?.source?.path;
 		if (!map || request.type !== 'request' || request.command !== 'setBreakpoints' || !sourcePath || !XSpecSourceMap.samePath(sourcePath, map.xspecPath)) {
 			return message;
