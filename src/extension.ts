@@ -953,17 +953,25 @@ export function activate(context: vscode.ExtensionContext) {
 	const parentRunChoices = new Map<string, 'parent' | 'module'>();
 
 	// the stylesheet to run for the module: the module, or for a module that depends on declarations in its top-level
-	// stylesheet - so it can't be compiled on its own - that stylesheet, if chosen - undefined if the run is cancelled
-	const stylesheetToRun = async (document: vscode.TextDocument): Promise<vscode.TextDocument | undefined> => {
+	// stylesheet - so it can't be compiled on its own - that stylesheet, if chosen - undefined if the run is cancelled.
+	// The message and its buttons are for the button pressed: Quick Run, Debug, or Edit Debug/Run Task - the choice is
+	// the same for each, as they run (or edit the task for) the same stylesheet
+	const stylesheetToRun = async (document: vscode.TextDocument, action: 'run' | 'debug' | 'edit'): Promise<vscode.TextDocument | undefined> => {
 		const parent = await XsltSymbolProvider.parentDependency(document);
 		if (!parent) {
 			return document;
 		}
 		let choice = parentRunChoices.get(document.fileName);
 		if (!choice) {
-			const runParent = `Run ${path.basename(parent)}`;
-			const runModule = 'Run Anyway';
-			const picked = await vscode.window.showWarningMessage(`Quick Run XSLT: ${path.basename(document.fileName)} uses declarations from ${path.basename(parent)}, which imports it, so it can't be run on its own.`, runParent, runModule);
+			const [moduleName, parentName] = [path.basename(document.fileName), path.basename(parent)];
+			const uses = `${moduleName} uses declarations from ${parentName}, which imports it`;
+			const { message, runParent, runModule } = {
+				run: { message: `Quick Run XSLT: ${uses}, so it can't be run on its own.`, runParent: `Run ${parentName}`, runModule: 'Run Anyway' },
+				debug: { message: `Debug XSLT: ${uses}, so it can't be debugged on its own.`, runParent: `Debug ${parentName}`, runModule: 'Debug Anyway' },
+				edit: { message: `Edit Debug/Run Task: ${uses}, so it can't be run or debugged on its own - edit the task that runs ${parentName}?`,
+					runParent: `Edit Task for ${parentName}`, runModule: `Edit Task for ${moduleName}` }
+			}[action];
+			const picked = await vscode.window.showWarningMessage(message, runParent, runModule);
 			if (!picked) {
 				return undefined;
 			}
@@ -979,7 +987,7 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showErrorMessage('Quick Run XSLT: open an XSLT stylesheet in the active editor first.');
 			return;
 		}
-		const document = await stylesheetToRun(activeEditor.document);
+		const document = await stylesheetToRun(activeEditor.document, 'run');
 		if (document) {
 			await quickRunDocument(document);
 		}
@@ -1052,7 +1060,7 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showErrorMessage('Debug XSLT: set the "XSLT.tasks.saxonJar" setting to your Saxon jar path first.');
 			return undefined;
 		}
-		const xsltDocument = await stylesheetToRun(activeEditor.document);
+		const xsltDocument = await stylesheetToRun(activeEditor.document, 'debug');
 		const debugOnItself = async () => {
 			const configuration = xsltDocument ? await debugConfiguration(xsltDocument, xsltDocument.uri.fsPath) : undefined;
 			if (configuration) {
@@ -1167,7 +1175,7 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showErrorMessage(`${commandName}: Quick Run tasks are saved in the workspace folder's .vscode/tasks.json - open a folder first.`);
 			return;
 		}
-		const xsltDocument = await stylesheetToRun(activeEditor.document);
+		const xsltDocument = await stylesheetToRun(activeEditor.document, 'edit');
 		if (!xsltDocument) {
 			return;
 		}
