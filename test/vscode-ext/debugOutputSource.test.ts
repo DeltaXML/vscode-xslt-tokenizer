@@ -183,6 +183,13 @@ suite('XSLT debugger: from the output to its source', () => {
 			when: 'debugType == \'xslt-saxon\' && debugProtocolVariableMenuContext == \'xsltOutput\'', group: 'navigation' }]);
 		assert.isTrue(contributes.menus['editor/context'].some((m: { command?: string, when?: string }) =>
 			m.command === 'xslt-xpath.goToDebugOutputSource' && m.when === 'resourceScheme == xslt-debug-output'));
+		// Debug and Edit Debug/Run Task are buttons of their own in the editor title bar, after Quick Run - not in VS Code's
+		// Run split button, which shows the item last chosen from its drop-down in place of Debug. The button edits the
+		// SaxonJ task, which Debug uses, and Quick Run with SaxonJ; Quick Run's SaxonJS or SaxonC task is in the '...' menu
+		assert.isUndefined(contributes.menus['editor/title/run']);
+		const groups = new Map((contributes.menus['editor/title'] as { command: string, group?: string }[]).map((m) => [m.command, m.group]));
+		assert.deepEqual(['xslt-xpath.quickRunXsltSaxonJ', 'xslt-xpath.debugXslt', 'xslt-xpath.editDebugTask', 'xslt-xpath.editQuickRunTaskSaxonJS', 'xslt-xpath.editQuickRunTaskSaxonJ'].map((c) => groups.get(c)),
+			['navigation@1', 'navigation@2', 'navigation@3', '1_xslt@1', undefined]);
 	});
 
 	test('the keys for going to the source, for the platform and multi-cursor modifier', () => {

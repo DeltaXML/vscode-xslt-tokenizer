@@ -363,7 +363,7 @@
 			},
 			{
 				"command": "xslt-xpath.editDebugTask",
-				"title": "Edit Debug Task (SaxonJ)",
+				"title": "Edit Debug/Run Task (SaxonJ)",
 				"category": "XSLT",
 				"icon": "$(edit)"
 			},
@@ -495,19 +495,39 @@
 					"command": "xslt-xpath.quickRunXsltSaxonJ",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt'",
-					"group": "navigation"
+					"group": "navigation@1"
 				},
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonJS",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
-					"group": "navigation"
+					"group": "navigation@1"
 				},
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonC",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
-					"group": "navigation"
+					"group": "navigation@1"
+				},
+				{
+					"command": "xslt-xpath.debugXslt",
+					"when": "resourceLangId == xslt",
+					"group": "navigation@2"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonJS",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
+					"group": "1_xslt@1"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonC",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
+					"group": "1_xslt@1"
+				},
+				{
+					"command": "xslt-xpath.editDebugTask",
+					"when": "resourceLangId == xslt",
+					"group": "navigation@3"
 				},
 				{
 					"command": "xslt-xpath.xspecRunFile",
@@ -629,33 +649,6 @@
 				{
 					"command": "xslt-xpath.createXSpecFile",
 					"when": "editorLangId == xslt"
-				}
-			],
-			"editor/title/run": [
-				{
-					"command": "xslt-xpath.debugXslt",
-					"when": "resourceLangId == xslt",
-					"group": "navigation@1"
-				},
-				{
-					"command": "xslt-xpath.editQuickRunTaskSaxonJ",
-					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt'",
-					"group": "navigation@2"
-				},
-				{
-					"command": "xslt-xpath.editQuickRunTaskSaxonJS",
-					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
-					"group": "navigation@2"
-				},
-				{
-					"command": "xslt-xpath.editQuickRunTaskSaxonC",
-					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
-					"group": "navigation@2"
-				},
-				{
-					"command": "xslt-xpath.editDebugTask",
-					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor != 'xslt'",
-					"group": "navigation@3"
 				}
 			],
 			"debug/toolBar": [
