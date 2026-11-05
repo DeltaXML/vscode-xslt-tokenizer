@@ -9,6 +9,7 @@
 		"color": "#2a3f5f",
 		"theme": "dark"
 	},
+	"homepage": "https://deltaxml.github.io/vscode-xslt-xpath/",
 	"bugs": {
 		"url": "https://github.com/DeltaXML/vscode-xslt-tokenizer/issues"
 	},
