@@ -20,5 +20,13 @@ tsconfig.json
 jest.config.js
 tslint.json
 scripts/**
-
 debugger/**
+.claude/**
+.vscode-test.*
+bugtest.xsl
+notes.md
+xml-sample.xml
+*.log
+eslint.config.js
+out/**/xpLexerRun.js
+out/**/xslLexerRun.js
