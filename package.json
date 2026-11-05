@@ -416,6 +416,54 @@
 				"category": "XSpec"
 			}
 		],
+		"walkthroughs": [
+			{
+				"id": "xslt-xpath.saxonjSetup",
+				"title": "Set Up XSLT For SaxonJ",
+				"description": "Configure SaxonJ to run and debug XSLT stylesheets.",
+				"isFeatured": true,
+				"intro": {
+					"description": "Get SaxonJ ready for Quick Run and the step-through XSLT debugger. Editing and linting work without SaxonJ.",
+					"media": {
+						"markdown": "SaxonJ is a Java application. Install a Java runtime supported by your Saxon release, and make sure `java` is available on your PATH when VS Code starts."
+					}
+				},
+				"steps": [
+					{
+						"id": "xslt-xpath.installSaxonJ",
+						"title": "Install Java and SaxonJ",
+						"description": "Install a Java runtime supported by the Saxon version you plan to use, then download SaxonJ. The debugger requires Saxon 12 or later. [SaxonJ downloads](https://www.saxonica.com/download/java.xml)",
+						"media": {
+							"markdown": "Saxon-HE is sufficient for many workflows. Advanced features like XSLT 4.0 require Saxon-PE or Saxon-EE."
+						}
+					},
+					{
+						"id": "xslt-xpath.configureSaxonJ",
+						"title": "Set the Saxon JAR path",
+						"description": "Set `XSLT.tasks.saxonJar` to the path of your Saxon JAR file. [Open the setting](command:workbench.action.openSettings?%5B%22XSLT.tasks.saxonJar%22%5D)",
+						"media": {
+							"markdown": "This setting is used by Quick Run, debugging, and XSpec."
+						}
+					},
+					{
+						"id": "xslt-xpath.openWorkspace",
+						"title": "Open or create a workspace",
+						"description": "For the best experience, open your project folder with [File: Open Folder](command:workbench.action.files.openFolder), or create a folder for your XSLT and XML files. A workspace helps the extension resolve related files and save run tasks. You can try a simple transform without one.",
+						"media": {
+							"markdown": "Workspaces are required for Quick Run and debugging XSLT."
+						}
+					},
+					{
+						"id": "xslt-xpath.runSaxonJ",
+						"title": "Run or debug a stylesheet",
+						"description": "Open an XSLT stylesheet and an XML input for it to process, then focus the stylesheet and press the Quick Run button in the editor toolbar . Quick Run uses the most recently opened XML file; use the status bar to choose a different input.",
+						"media": {
+							"markdown": "To debug instead, press the Debug button adjacent to the Quick Run button in the toolbar."
+						}
+					}
+				]
+			}
+		],
 		"views": {
 			"explorer": [
 				{
