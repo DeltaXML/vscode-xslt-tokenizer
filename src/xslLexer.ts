@@ -12,6 +12,8 @@ import { BaseToken, TokenLevelState, XPathLexer, LexPosition, ExitCondition, Err
 import { SchemaData } from "./xsltSchema";
 import { Snippet} from './xsltSnippets';
 import { HrefPaths } from './hrefPaths';
+import { RecordTypes } from './recordTypes';
+import { ModulePrefixes } from './modulePrefixes';
 
 export enum DocumentTypes {
     XSLT,
@@ -19,7 +21,8 @@ export enum DocumentTypes {
     XPath,
 	DCP,
     SCH,
-	Other
+	Other,
+	XSPEC
 }
 
 export enum XMLCharState {
@@ -101,7 +104,26 @@ export enum XSLTokenLevelState {
     xmlComment,
     xmlPunctuation,
     xslElementName,
-    xmlText
+    xmlText,
+    // within a DOCTYPE: the name an <!ENTITY> declares, and a quoted literal - e.g. an entity's value
+    dtdEntityName,
+    dtdLiteral
+}
+
+enum DtdDeclPhase {
+    None,
+    Keyword,
+    AwaitingEntityName,
+    EntityName
+}
+
+// at a character in a DOCTYPE: an entity name or a literal starts (before it) or ends (before it for a name, after
+// it - its closing quote - for a literal)
+enum DtdEvent {
+    NameStart,
+    NameEnd,
+    LiteralStart,
+    LiteralEnd
 }
 
 export interface XslToken extends BaseToken {
@@ -157,6 +179,15 @@ export interface GlobalInstructionData {
     // the 'as' attribute of an xsl:item-type, or of a global xsl:variable or xsl:param
     declaredType?: string;
     defaultSelect?: string;
+    // for a name that's a QName: the namespace bindings of the module that declares it (see ModulePrefixes)
+    prefixBindings?: Map<string, string>;
+    // a declaration's visibility attribute - or an xsl:expose or xsl:accept's, with its component attribute and, as the
+    // name, its names attribute (found by XslLexerLight only, see PackageScope)
+    visibility?: string;
+    component?: string;
+    // for an xsl:use-package: its xsl:accept elements, and the declarations in its xsl:override elements
+    accepts?: GlobalInstructionData[];
+    overrides?: GlobalInstructionData[];
 }
 
 export class XslLexer {
@@ -207,6 +238,8 @@ export class XslLexer {
     public attributeNameTests: string[]|undefined;
     public elementNameTests: string[]|undefined;
     public isXSLT40 = false;
+    // the namespace bindings for the names of the module's declarations (see ModulePrefixes)
+    public prefixBindings: Map<string, string> | undefined;
     protected globalModeData: GlobalInstructionData[] = [];
     private lineNumber: number = 0;
     private charCount = 0;
@@ -216,26 +249,59 @@ export class XslLexer {
     private commentCharCount = 0;
     private cdataCharCount = 0;
     protected entityContext = EntityPosition.text;
-    private languageConfiguration: LanguageConfiguration;
+    protected languageConfiguration: LanguageConfiguration;
     private skipTokenChar = false;
     private nativeTvtAttributes: string[] = [];
     private genericTvtAttributes: string[] = [];
+    // the prefix of the XSLT instructions: the configuration's, e.g. xsl - unless the module's outermost element is a
+    // stylesheet, transform or package with another, e.g. xslt:stylesheet in some W3C tests (see useRootPrefix)
+    public nativePrefix = '';
     private nativePrefixLength = 0;
     private dtdNesting = 0;
+    // within a <!...>: its last two characters, the quote of a literal it's in, whether it's in a processing
+    // instruction, and whether a comment in a DOCTYPE's internal subset is followed by more of the DOCTYPE
+    private exclamPrevChars = '';
+    private dtdQuote = '';
+    private dtdInPi = false;
+    private dtdResumeAfterComment = false;
+    // within a <!...> declaration: its keyword (e.g. ENTITY) as far as it's read, and whether it's being read, an
+    // ENTITY's name is awaited, or it's being read. And where the last character starts or ends a name or a literal,
+    // for its token
+    private dtdDeclPhase = DtdDeclPhase.None;
+    private dtdDeclKeyword = '';
+    private dtdEvents: DtdEvent[] = [];
     private nonNativeAvts = false;
     private docType: DocumentTypes;
     private static splitModesregexp = /([^\s]+)|(\s+)/g;
+    // the XSLT instructions whose name attribute is an attribute value template
+    private static avtNameElements = ['element', 'attribute', 'processing-instruction', 'namespace'];
 
 
     constructor(languageConfiguration: LanguageConfiguration) {
         this.nonNativeAvts = languageConfiguration.nonNativeAvts;
-        this.nativePrefixLength = languageConfiguration.nativePrefix.length === 0? 0: languageConfiguration.nativePrefix.length + 1;
         this.languageConfiguration = languageConfiguration;
-        this.languageConfiguration.tvtAttributes.forEach(tvtAttribute => {
-            this.nativeTvtAttributes.push(this.languageConfiguration.nativePrefix + ':' + tvtAttribute);
-        });
+        this.setNativePrefix(languageConfiguration.nativePrefix);
         this.genericTvtAttributes = this.languageConfiguration.tvtAttributes;
         this.docType = languageConfiguration.docType;
+    }
+
+    protected setNativePrefix(prefix: string) {
+        this.nativePrefix = prefix;
+        this.nativePrefixLength = prefix.length === 0 ? 0 : prefix.length + 1;
+        this.nativeTvtAttributes = this.languageConfiguration.tvtAttributes.map((tvtAttribute) => prefix + ':' + tvtAttribute);
+    }
+
+    // for XSLT, whose instructions have the prefix xsl: the prefix of the module's outermost element, when it's a
+    // stylesheet, transform or package - as the linter checks, the prefix must be bound to the XSLT namespace
+    protected useRootPrefix(rootName: string) {
+        if (this.languageConfiguration.nativePrefix === 'xsl') {
+            const root = /^([^:]+):(stylesheet|transform|package)$/.exec(rootName);
+            this.setNativePrefix(root ? root[1] : 'xsl');
+        } else if (this.languageConfiguration.docType === DocumentTypes.XSPEC) {
+            // XSpec: the prefix of x:description, e.g. t:description
+            const root = /^([^:]+):description$/.exec(rootName);
+            this.setNativePrefix(root ? root[1] : this.languageConfiguration.nativePrefix);
+        }
     }
 
     public static getTextmateTypeLegend(): string[] {
@@ -265,7 +331,7 @@ export class XslLexer {
             return false;
         } else if (parentElement === 'record') {
             // xsl:record: each no-namespace attribute is a map entry expression
-            return name === 'xsl:duplicates' || name.indexOf(':') === -1;
+            return name === this.nativePrefix + ':duplicates' || name.indexOf(':') === -1;
         } else {
             return this.languageConfiguration.expressionAtts ? this.languageConfiguration.expressionAtts.indexOf(name) > -1 : false;
         }
@@ -348,14 +414,39 @@ export class XslLexer {
                     this.commentCharCount = 4;
                 }
                 break;
-            case XMLCharState.lExclam:
-                // assume  <![CDATA[
-                if (char === '[' && nextChar === 'C') {
+            case XMLCharState.lExclam: {
+                // a <!DOCTYPE ...> - with its internal subset of declarations, each <!...> - a comment or a CDATA section
+                const afterLtExclam = this.exclamPrevChars === '<!';
+                this.exclamPrevChars = (this.exclamPrevChars + char).slice(-2);
+                this.dtdEvents = [];
+                if (!this.dtdQuote && !this.dtdInPi) {
+                    this.nextDtdDeclPhase(isCurrentCharNewLine, char);
+                }
+                if (this.dtdQuote) {
+                    // a literal, e.g. an entity's value: no markup within it
+                    if (char === this.dtdQuote) {
+                        this.dtdQuote = '';
+                        this.dtdEvents.push(DtdEvent.LiteralEnd);
+                    }
+                } else if (this.dtdInPi) {
+                    if (char === '>' && this.exclamPrevChars === '?>') {
+                        this.dtdInPi = false;
+                    }
+                } else if (char === '[' && nextChar === 'C' && afterLtExclam) {
+                    // assume  <![CDATA[
                     this.cdataCharCount = 0;
                     rc = XMLCharState.lCd;
-                } else if (char === '-' && nextChar === '-') {
+                } else if (char === '-' && nextChar === '-' && afterLtExclam) {
                     rc = XMLCharState.lComment;
                     this.commentCharCount = 0;
+                    if (this.dtdNesting > 0) {
+                        // a comment in the internal subset: the DTD goes on after it, and its '<' isn't closed by a '>' here
+                        this.dtdNesting--;
+                        this.dtdResumeAfterComment = true;
+                    }
+                } else if (char === '"' || char === "'") {
+                    this.dtdQuote = char;
+                    this.dtdEvents.push(DtdEvent.LiteralStart);
                 } else if (char === '>') {
                     this.dtdNesting--;
                     if (this.dtdNesting < 0) {
@@ -363,9 +454,26 @@ export class XslLexer {
                         rc = XMLCharState.rDtd;
                     }
                 } else if (char === '<') {
-                    this.dtdNesting++;
+                    if (nextChar === '?') {
+                        this.dtdInPi = true;
+                    } else {
+                        this.dtdNesting++;
+                        // a declaration, e.g. <!ENTITY - its keyword next
+                        this.dtdDeclPhase = DtdDeclPhase.Keyword;
+                        this.dtdDeclKeyword = '';
+                    }
                 }
-                // TODO: Handle internal DTD subset
+                break;
+            }
+            case XMLCharState.rComment:
+                if (this.dtdResumeAfterComment) {
+                    // the rest of the DOCTYPE, after a comment in its internal subset
+                    this.dtdResumeAfterComment = false;
+                    this.exclamPrevChars = '';
+                    rc = this.calcNewState(isCurrentCharNewLine, char, nextChar, XMLCharState.lExclam);
+                } else {
+                    rc = this.testChar(char, nextChar, false);
+                }
                 break;
             case XMLCharState.lCd:
                 switch (this.cdataCharCount) {
@@ -568,6 +676,52 @@ export class XslLexer {
         return rc;
     }
 
+    // a '<!' - not within a DOCTYPE
+    private startExclam(): XMLCharState {
+        this.exclamPrevChars = '<';
+        this.dtdQuote = '';
+        this.dtdInPi = false;
+        this.dtdNesting = 0;
+        this.dtdResumeAfterComment = false;
+        this.dtdDeclPhase = DtdDeclPhase.Keyword;
+        this.dtdDeclKeyword = '';
+        this.dtdEvents = [];
+        return XMLCharState.lExclam;
+    }
+
+    // in a declaration, outside a literal: its keyword, then for an ENTITY, the name it declares - after a '%' for a
+    // parameter entity - ending at whitespace, a quote or '>'
+    private nextDtdDeclPhase(isCurrentCharNewLine: boolean, char: string) {
+        const isWhitespace = this.isWhitespace(isCurrentCharNewLine, char);
+        switch (this.dtdDeclPhase) {
+            case DtdDeclPhase.Keyword:
+                if (char === '!' && this.dtdDeclKeyword === '') {
+                    // the '!' of '<!'
+                } else if (/[A-Za-z]/.test(char)) {
+                    this.dtdDeclKeyword += char;
+                } else {
+                    this.dtdDeclPhase = isWhitespace && this.dtdDeclKeyword === 'ENTITY' ? DtdDeclPhase.AwaitingEntityName : DtdDeclPhase.None;
+                }
+                break;
+            case DtdDeclPhase.AwaitingEntityName:
+                if (isWhitespace || char === '%') {
+                    // before the name
+                } else if (char === '"' || char === "'" || char === '>' || char === '<') {
+                    this.dtdDeclPhase = DtdDeclPhase.None;
+                } else {
+                    this.dtdDeclPhase = DtdDeclPhase.EntityName;
+                    this.dtdEvents.push(DtdEvent.NameStart);
+                }
+                break;
+            case DtdDeclPhase.EntityName:
+                if (isWhitespace || char === '"' || char === "'" || char === '>' || char === '<') {
+                    this.dtdDeclPhase = DtdDeclPhase.None;
+                    this.dtdEvents.push(DtdEvent.NameEnd);
+                }
+                break;
+        }
+    }
+
     private testAttNameChar (char: string, nextChar: string): XMLCharState {
         let rc: XMLCharState;
 
@@ -578,7 +732,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -620,7 +774,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -661,7 +815,7 @@ export class XslLexer {
                         rc = XMLCharState.lPi;
                         break;
                     case '!':
-                        rc = XMLCharState.lExclam;
+                        rc = this.startExclam();
                         break;
                     case '/':
                         rc = XMLCharState.lCt;
@@ -689,13 +843,25 @@ export class XslLexer {
         return rc;
     }
 
-    public analyse(xsl: string, keepNameTests?: boolean): BaseToken[] {
+    // the prefix of the XSLT instructions of a stylesheet module's text (see useRootPrefix): lexed only as far as the name
+    // of its outermost element
+    public static rootPrefix(xsl: string): string {
+        const lexer = new XslLexer({ expressionAtts: [], variableElementNames: [], nativePrefix: 'xsl', tvtAttributes: [], nonNativeAvts: false, docType: DocumentTypes.XSLT });
+        lexer.analyse(xsl, false, true);
+        return lexer.nativePrefix;
+    }
+
+    public analyse(xsl: string, keepNameTests?: boolean, rootOnly = false): BaseToken[] {
         if (this.timerOn) {
             console.time('xslLexer.analyse');
         }
         this.globalInstructionData.length = 0;
         this.globalModeData.length = 0;
         this.isXSLT40 = false;
+        this.setNativePrefix(this.languageConfiguration.nativePrefix);
+        let rootNamed = false;
+        let contextGlobalStart = 0;
+        const rootAttributes = new Map<string, string>();
         this.lineNumber = 0;
         this.lineCharCount = -1;
         this.charCount = -1;
@@ -714,6 +880,7 @@ export class XslLexer {
         let result: BaseToken[] = [];
         let attName: string = '';
         let avtExit = false;
+        let keepTokenStart = false;
 
         let xpLexer: XPathLexer = new XPathLexer();
         xpLexer.elementNameTests = this.elementNameTests;
@@ -768,7 +935,7 @@ export class XslLexer {
             return [];
         }
 
-        while (this.charCount < xslLength) {
+        while (this.charCount < xslLength && !(rootOnly && rootNamed)) {
             this.charCount++;
             this.lineCharCount++;
             let nextState: XMLCharState = XMLCharState.init;
@@ -786,6 +953,9 @@ export class XslLexer {
                     currentState,
                 );
 
+                if (currentState === XMLCharState.lExclam && nextState === XMLCharState.lExclam && this.dtdEvents.length > 0) {
+                    tokenStartChar = this.addDtdEventTokens(tokenStartChar, result);
+                }
                 if (nextState === currentState) {
                     if (isCurrentCharNewLIne || isLastChar) {
                         // we must split multi-line tokens:
@@ -803,7 +973,10 @@ export class XslLexer {
                                 addToken = XSLTokenLevelState.attributeValue;
                                 break;
                             case XMLCharState.lExclam:
-                                addToken = XSLTokenLevelState.dtd;
+                                // the rest of the line - nothing, after a name or literal that ends it
+                                if (tokenStartChar < this.lineCharCount - 1) {
+                                    addToken = this.dtdQuote ? XSLTokenLevelState.dtdLiteral : XSLTokenLevelState.dtd;
+                                }
                                 break;
                         }
                         if (addToken !== null) {
@@ -865,6 +1038,10 @@ export class XslLexer {
                         case XMLCharState.rCt:
                             let isCloseTag = nextState === XMLCharState.rCt;
                             let isRootChildStartTag = !isCloseTag && xmlElementStack.length === 1;
+                            if (!rootNamed && !isCloseTag) {
+                                rootNamed = true;
+                                this.useRootPrefix(tokenChars.join(''));
+                            }
                             let elementProperties = this.getElementProperties(tokenChars, isRootChildStartTag);
                             isNativeElement = elementProperties.isNative;
                             tagGlobalInstructionType = elementProperties.instructionType;
@@ -883,10 +1060,15 @@ export class XslLexer {
                             currentParamNamePushed = false;
                             pendingParamSelect = undefined;
                             topLevelParamNamePushed = false;
-                            if (xmlElementStack.length === 0 && tokenChars.length > 5) {
+                            if (xmlElementStack.length === 0 && this.docType === DocumentTypes.XSPEC) {
+                                // x:description's stylesheet: the stylesheet under test, whose declarations the tests use
+                                tagGlobalInstructionType = isNativeElement && tagElementName === 'description' ? GlobalInstructionType.Import : GlobalInstructionType.Unknown;
+                            } else if (xmlElementStack.length === 0 && tokenChars.length > 5) {
                                 tagGlobalInstructionType = GlobalInstructionType.RootXSLT;
                             } if (xmlElementStack.length === 1) {
                                 contextGlobalInstructionType = tagGlobalInstructionType;
+                                // the declarations recorded for this top-level element come after this
+                                contextGlobalStart = this.globalInstructionData.length;
                             } else if (xmlElementStack.length === 2 
                                 && (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template)
                                 && isNativeElement && elementProperties.nativeName === 'param') {
@@ -911,6 +1093,16 @@ export class XslLexer {
                             if (nextState === XMLCharState.rStNoAtt && this.isXPathTextElement(isNativeElement, tagElementName)) {
                                 xmlElementStack[xmlElementStack.length - 1].xpathText = true;
                                 nextChar = this.analyseXPathText(xpLexer, ExitCondition.LessThan, xsl, result);
+                            }
+                            break;
+                        case XMLCharState.lComment:
+                            if (currentState === XMLCharState.lExclam) {
+                                // the DOCTYPE before a comment in its internal subset, on the comment's line - at the
+                                // comment's first '-', its '<' is two characters back
+                                const commentStart = this.lineCharCount - 3;
+                                if (commentStart > tokenStartChar) {
+                                    this.addCharTokenToResult(tokenStartChar, commentStart - tokenStartChar, XSLTokenLevelState.dtd, result, currentState);
+                                }
                             }
                             break;
                         case XMLCharState.rDtd:
@@ -955,7 +1147,7 @@ export class XslLexer {
                             isGlobalUsePackageVersion = false;
                             isGlobalVersion = false;
                             attName = tokenChars.join('');
-                            isDefaultModeAttribute = isNativeElement ? attName === 'default-mode' : attName === 'xsl:default-mode';
+                            isDefaultModeAttribute = isNativeElement ? attName === 'default-mode' : attName === this.nativePrefix + ':default-mode';
                             let attributeNameToken = XSLTokenLevelState.attributeName;
                             if (isNativeElement) {
                                 if (attName === 'as') {
@@ -974,8 +1166,16 @@ export class XslLexer {
                                 } else if (tagGlobalInstructionType === GlobalInstructionType.RootXSLT && attName === 'version') {
                                     isExpandTextAttribute = false;
                                     isGlobalVersion = true;
+                                } else if (this.docType === DocumentTypes.XSPEC && tagElementName === 'helper' && attName === 'package-name') {
+                                    // XSpec's x:helper for a package: in the test runner, an xsl:use-package - its version
+                                    // in package-version, after this
+                                    isExpandTextAttribute = false;
+                                    tagGlobalInstructionType = GlobalInstructionType.UsePackage;
+                                    contextGlobalInstructionType = GlobalInstructionType.UsePackage;
+                                    isGlobalInstructionName = true;
                                 } else if ((tagGlobalInstructionType === GlobalInstructionType.Include || tagGlobalInstructionType === GlobalInstructionType.Import)
-                                     && (attName === 'href' || (this.languageConfiguration.docType === DocumentTypes.DCP && this.languageConfiguration.linkElementAttrNames && attName === this.languageConfiguration?.linkElementAttrNames[1]))) {
+                                     && (this.docType === DocumentTypes.XSPEC ? attName === (tagElementName === 'import' ? 'href' : 'stylesheet') :
+                                        attName === 'href' || (this.languageConfiguration.docType === DocumentTypes.DCP && this.languageConfiguration.linkElementAttrNames && attName === this.languageConfiguration?.linkElementAttrNames[1]))) {
                                     isExpandTextAttribute = false;
                                     isGlobalInstructionName = true;
                                 } else if (tagGlobalInstructionType !== GlobalInstructionType.Unknown && attName === 'name') {
@@ -1059,6 +1259,9 @@ export class XslLexer {
                                 let attValue = tokenChars.join('');
                                 expandTextValue = attValue === 'yes' || attValue === 'true' || attValue === '1';
                             }
+                            if (xmlElementStack.length === 0 && ModulePrefixes.isBindingAttribute(attName)) {
+                                rootAttributes.set(attName, tokenChars.join(''));
+                            }
                             if (xpathEnded) {
                                 tokenStartChar++;
                                 xpathEnded = false;
@@ -1108,7 +1311,9 @@ export class XslLexer {
                                 }
                             } else if (isGlobalParameterName) {
                                 let attValue = tokenChars.join('');
-                                if (this.globalInstructionData.length > 0) {
+                                // a parameter of the enclosing function or template, if it's recorded - not one with a shadow
+                                // attribute for its name, e.g. _name="{$n}", whose parameters aren't the previous one's
+                                if (this.globalInstructionData.length > contextGlobalStart) {
                                     let gd = this.globalInstructionData[this.globalInstructionData.length - 1];
                                     if (gd.memberNames) {
                                         if (gd.memberNames.indexOf(attValue) > -1) {
@@ -1156,7 +1361,9 @@ export class XslLexer {
                             break;
                         case XMLCharState.lSq:
                         case XMLCharState.lDq:
-                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage || tagGlobalInstructionType === GlobalInstructionType.RootXSLT) {
+                            if (contextGlobalInstructionType === GlobalInstructionType.Function || contextGlobalInstructionType === GlobalInstructionType.Template || contextGlobalInstructionType === GlobalInstructionType.UsePackage || tagGlobalInstructionType === GlobalInstructionType.RootXSLT ||
+                                (xmlElementStack.length === 0 && this.docType === DocumentTypes.XSPEC)) {
+                                // e.g. the namespace declarations of the outermost element (see rootAttributes)
                                 storeToken = true;
                             }
                             if (isExpandTextAttribute || isGlobalInstructionName || isGlobalInstructionMode || isUseAccumulatorsAttribute || isDefaultModeAttribute) {
@@ -1178,8 +1385,8 @@ export class XslLexer {
                                 xpLexer.xmlLessThan = XmlLessThan.Allowed;
                                 this.updateNames(result);
                                 if (isTypeDeclarationAttribute) {
-                                    // 'as' attribute value - captured as raw text (not parsed) purely for display on hover
-                                    const declaredType = xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim();
+                                    // 'as' attribute value - captured as raw text (not parsed) for display, e.g. on hover, on one line
+                                    const declaredType = RecordTypes.joinLines(xsl.substring(typeAttributeStartOffset, p.documentOffset - 1).trim());
                                     if (tagGlobalInstructionType === GlobalInstructionType.Function && this.globalInstructionData.length > 0) {
                                         this.globalInstructionData[this.globalInstructionData.length - 1]['returnType'] = declaredType;
                                     } else if (XslLexer.hasDeclaredType(tagGlobalInstructionType)) {
@@ -1232,13 +1439,20 @@ export class XslLexer {
                                 } else if (exit = attName.startsWith('_')) {
                                     exit = ExitCondition.CurlyBrace;
                                 } else {
-                                    if (tagElementName === 'merge-source') {
+                                    if (tagElementName === 'merge-source' || (attName === 'name' && !XslLexer.avtNameElements.includes(tagElementName))) {
+                                        // e.g. xsl:variable's name isn't an AVT, so '{' is part of a name, e.g. the EQName Q{}x
                                         exit = ExitCondition.None;
                                     } else {
                                         exit = this.isAvtAtt(attName)? ExitCondition.CurlyBrace: ExitCondition.None;
                                     }
                                 }
-                            } else if (this.nonNativeAvts) {
+                            } else if (this.docType === DocumentTypes.XSPEC) {
+                                // XSpec user content, e.g. in x:context: an attribute value template where expand-text applies
+                                const expandText = expandTextValue ?? (xmlElementStack.length > 0 ? xmlElementStack[xmlElementStack.length - 1].expandText : false);
+                                exit = expandText && !attName.startsWith(this.nativePrefix + ':') ? ExitCondition.CurlyBrace : ExitCondition.None;
+                            } else if (this.nonNativeAvts && !attName.startsWith(this.nativePrefix + ':')) {
+                                // not an XSLT attribute of a literal result element, e.g. xsl:use-attribute-sets, whose value may
+                                // have an EQName, e.g. Q{http://example.com/}set1 - an AVT
                                 exit = ExitCondition.CurlyBrace;
                             } else {
                                 exit =ExitCondition.None;
@@ -1264,6 +1478,11 @@ export class XslLexer {
                                 this.lineCharCount = p.startCharacter;
                                 nextChar = xsl.charAt(this.charCount);
                                 avtExit = true;
+                            } else {
+                                keepTokenStart = true;
+                                if (storeToken) {
+                                    tokenChars.push(currentChar);
+                                }
                             }
                             nextState = nextState === XMLCharState.sqAvt? XMLCharState.lSq: XMLCharState.lDq;
                             break;
@@ -1344,7 +1563,12 @@ export class XslLexer {
                             break;
 
                     }
-                    tokenStartChar = this.lineCharCount > 0? this.lineCharCount - 1: 0;
+                    if (keepTokenStart) {
+                        // a '{' in an attribute value that isn't an AVT, e.g. the EQName in name="Q{}x", is part of the value
+                        keepTokenStart = false;
+                    } else {
+                        tokenStartChar = this.lineCharCount > 0? this.lineCharCount - 1: 0;
+                    }
                     if (avtExit) {
                         avtExit = false;
                         tokenStartChar++;
@@ -1372,6 +1596,8 @@ export class XslLexer {
             console.timeEnd('xslLexer.analyse');
         }
         this.globalInstructionData = this.globalInstructionData.concat(this.globalModeData);
+        this.prefixBindings = ModulePrefixes.fromRootAttributes(rootAttributes);
+        ModulePrefixes.resolve(this.globalInstructionData, this.prefixBindings);
         return result;
     }
 
@@ -1412,7 +1638,8 @@ export class XslLexer {
     // xsl:include, or a package name, with its references decoded, e.g. a&amp;b.xsl is a&b.xsl
     public static globalName(type: GlobalInstructionType, attValue: string) {
         const isHref = type === GlobalInstructionType.Import || type === GlobalInstructionType.Include || type === GlobalInstructionType.UsePackage;
-        return isHref ? HrefPaths.fromAttribute(attValue) : attValue;
+        // a name may have whitespace around it, e.g. name=" t ", as Saxon allows
+        return isHref ? HrefPaths.fromAttribute(attValue) : attValue.trim();
     }
 
     public static tokensInsideToken(token: BaseToken, attValue: string) {
@@ -1465,6 +1692,23 @@ export class XslLexer {
         return tkn;
     }
 
+    // in a DOCTYPE, at the current character: the tokens up to where an entity name or a literal starts or ends - and
+    // where the next token starts
+    private addDtdEventTokens(tokenStartChar: number, result: BaseToken[]): number {
+        const at = this.lineCharCount - 1;
+        for (const event of this.dtdEvents) {
+            const end = event === DtdEvent.LiteralEnd ? at + 1 : at;
+            const tokenType = event === DtdEvent.NameEnd ? XSLTokenLevelState.dtdEntityName :
+                event === DtdEvent.LiteralEnd ? XSLTokenLevelState.dtdLiteral : XSLTokenLevelState.dtd;
+            if (end > tokenStartChar) {
+                this.addCharTokenToResult(tokenStartChar, end - tokenStartChar, tokenType, result, XMLCharState.lExclam);
+            }
+            tokenStartChar = end;
+        }
+        this.dtdEvents = [];
+        return tokenStartChar;
+    }
+
     private addCharTokenToResult(tokenStartChar: number, tokenLength: number, newTokenType: XSLTokenLevelState, result: BaseToken[], charLevelState: XMLCharState) {
 
         let tkn: BaseToken = {
@@ -1495,7 +1739,7 @@ export class XslLexer {
 
     protected getElementProperties(tokenChars: string[], isRootChild: boolean): ElementProperties {
         let elementName= tokenChars.join('');
-        let isNative = (this.nativePrefixLength === 0 && elementName.indexOf(':') === -1) || (tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.languageConfiguration.nativePrefix + ':'));
+        let isNative = (this.nativePrefixLength === 0 && elementName.indexOf(':') === -1) || (tokenChars.length > this.nativePrefixLength && elementName.startsWith(this.nativePrefix + ':'));
         let instructionType = GlobalInstructionType.Unknown;
         let nativeName = '';
 
@@ -1505,6 +1749,14 @@ export class XslLexer {
             }
             if (instructionType === GlobalInstructionType.Unknown && this.languageConfiguration.linkElementAttrNames && this.languageConfiguration.linkElementAttrNames[0] === elementName) {
                 instructionType = GlobalInstructionType.Import;
+            }
+        } else if (isNative && this.languageConfiguration.docType === DocumentTypes.XSPEC) {
+            nativeName = elementName.substring(this.nativePrefixLength);
+            if (isRootChild) {
+                // global variables and parameters, helper stylesheets, and other XSpec files - whose global variables and
+                // parameters are in scope (see GlobalsProvider)
+                instructionType = nativeName === 'variable' ? GlobalInstructionType.Variable : nativeName === 'param' ? GlobalInstructionType.Parameter :
+                    nativeName === 'helper' ? GlobalInstructionType.Import : nativeName === 'import' ? GlobalInstructionType.Include : GlobalInstructionType.Unknown;
             }
         } else if (isNative) {
             nativeName = elementName.substring(this.nativePrefixLength);
@@ -1539,6 +1791,9 @@ export class XslLexer {
                         break;
                     case 'attribute-set':
                         instructionType = GlobalInstructionType.AttributeSet;
+                        break;
+                    case 'character-map':
+                        instructionType = GlobalInstructionType.CharacterMap;
                         break;
                     case 'use-package':
                         instructionType = GlobalInstructionType.UsePackage;
@@ -1581,7 +1836,11 @@ export enum GlobalInstructionType {
     Unknown,
     ItemType,
     // not a declaration: an accumulator name listed in a use-accumulators attribute, e.g. on xsl:mode
-    AccumulatorUse
+    AccumulatorUse,
+    CharacterMap,
+    // not declarations: an xsl:expose, in XslLexerLight.exposes, and an xsl:accept, in its xsl:use-package's accepts
+    Expose,
+    Accept
 }
 
 

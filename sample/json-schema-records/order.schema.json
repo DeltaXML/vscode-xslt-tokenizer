@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/order.schema.json",
+  "title": "order",
+  "description": "A customer order, with its line items.",
+  "type": "object",
+  "required": ["id", "placed", "status", "currency", "customer", "lines"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^ORD-[0-9]+$",
+      "description": "The order number, e.g. ORD-1042."
+    },
+    "placed": {
+      "type": "string",
+      "format": "date",
+      "description": "The date the order was placed."
+    },
+    "status": {
+      "enum": ["pending", "paid", "shipped", "cancelled"],
+      "description": "Where the order has got to."
+    },
+    "currency": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 3,
+      "description": "The ISO 4217 code for the currency of the prices."
+    },
+    "customer": {
+      "$ref": "#/$defs/customer"
+    },
+    "lines": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/line" },
+      "minItems": 1,
+      "description": "The items ordered."
+    },
+    "shipping-address": {
+      "$ref": "#/$defs/address",
+      "description": "Where to send the order, when it isn't the customer's own address."
+    },
+    "gift": {
+      "type": "boolean",
+      "description": "Whether to gift-wrap the order and leave out the prices."
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "Delivery notes, if any."
+    }
+  },
+  "$defs": {
+    "customer": {
+      "type": "object",
+      "description": "The person who placed the order.",
+      "required": ["name", "email"],
+      "properties": {
+        "name": { "type": "string", "description": "The customer's full name." },
+        "email": { "type": "string", "format": "email", "description": "Where order updates are sent." },
+        "address": { "$ref": "#/$defs/address" },
+        "loyalty-points": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Points to spend on later orders."
+        }
+      }
+    },
+    "address": {
+      "type": "object",
+      "description": "A postal address.",
+      "required": ["street", "city", "country"],
+      "properties": {
+        "street": { "type": "string", "description": "The house number and street." },
+        "city": { "type": "string", "description": "The town or city." },
+        "post-code": { "type": "string", "description": "The postal code, where the country has them." },
+        "country": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "description": "The ISO 3166 two-letter country code."
+        }
+      }
+    },
+    "line": {
+      "type": "object",
+      "description": "One line of an order: a quantity of a product, at a unit price.",
+      "required": ["sku", "quantity", "unit-price"],
+      "properties": {
+        "sku": {
+          "type": "string",
+          "description": "The stock-keeping unit: the product's code."
+        },
+        "description": { "type": "string", "description": "The product's name, as shown to the customer." },
+        "quantity": { "type": "integer", "minimum": 1, "description": "How many were ordered." },
+        "unit-price": { "type": "number", "minimum": 0, "description": "The price of one, in the order's currency." },
+        "bundle-items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/line" },
+          "description": "For a bundle, the items in it - included in the bundle's price."
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@
 import * as vscode from 'vscode';
 import { SchemaData, XSLTSchema } from './xsltSchema';
 import { XSLTSchema4 } from './xsltSchema4';
+import { RecordTypes } from './recordTypes';
 
 // XSLT 4.0 named item types - xsl:item-type, with record and enumeration types, also in 'as' attributes - and
 // xsl:note are available in an XSLT 4.0 stylesheet, and in one for an earlier version when the setting
@@ -45,16 +46,17 @@ export class ItemTypeSupport {
 		return ItemTypeSupport.isEnabled(ItemTypeSupport.isVersion4Text(text));
 	}
 
-	// why the stylesheet needs Saxon's syntax extensions to run: it's XSLT 4.0 - or, before 4.0 with the setting, it uses
-	// xsl:item-type, record or enumeration types in an 'as' attribute, or xsl:note - undefined if it doesn't need them
-	public static syntaxExtensionsReason(text: string): 'xslt40' | 'itemTypes' | undefined {
+	// why the stylesheet needs Saxon's syntax extensions to run: it's XSLT 4.0 - or, before 4.0 with the setting (or
+	// whatever the setting, with anySetting), it uses xsl:item-type, record or enumeration types in an 'as' attribute, or
+	// xsl:note - undefined if it doesn't need them
+	public static syntaxExtensionsReason(text: string, anySetting = false): 'xslt40' | 'itemTypes' | undefined {
 		const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
 		const rootTag = /<([\w.-]+:)?(stylesheet|transform|package)\b[^>]*>/.exec(withoutComments.substring(0, 8000));
 		if (rootTag && /\sversion\s*=\s*["']4\.0["']/.test(rootTag[0])) {
 			return 'xslt40';
 		}
-		const usesItemTypes = /<xsl:(item-type|note)[\s/>]/.test(withoutComments) || /\sas\s*=\s*(["'])[^"']*(?<![\w.:-])(record|enum)\s*\(/.test(withoutComments);
-		return usesItemTypes && ItemTypeSupport.isEnabledBefore40() ? 'itemTypes' : undefined;
+		const usesItemTypes = RecordTypes.xsltPattern(/<xsl:(item-type|note)[\s/>]/, withoutComments).test(withoutComments) || /\sas\s*=\s*(["'])[^"']*(?<![\w.:-])(record|enum)\s*\(/.test(withoutComments);
+		return usesItemTypes && (anySetting || ItemTypeSupport.isEnabledBefore40()) ? 'itemTypes' : undefined;
 	}
 
 	// the XSLT 3.0 schema, with xsl:item-type as a declaration - for a stylesheet before XSLT 4.0 with the setting

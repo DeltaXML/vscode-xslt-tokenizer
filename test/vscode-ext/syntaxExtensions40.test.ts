@@ -1,11 +1,14 @@
 /**
  * Test suite for the 'allowSyntaxExtensions40' task setting, for Saxon (Java) and SaxonC tasks
  *
- * 'auto' (and no setting) passes '--allowSyntaxExtensions:on' unless the processor is Saxon-HE, which fails every
- * transform when XPath 4.0 syntax is enabled. 'on' and 'off' are passed as they are.
+ * 'auto' (and no setting) passes '--allowSyntaxExtensions:on' for a stylesheet that needs it - XSLT 4.0, or using item
+ * types or notes, in it or a module it imports - or one that isn't known, unless the processor is Saxon-HE, which fails
+ * every transform when XPath 4.0 syntax is enabled. 'on' and 'off' are passed as they are.
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { assert } from 'chai';
 import { SaxonTaskProvider } from '../../src/saxonTaskProvider';
 import { SaxonCTaskProvider } from '../../src/saxonCTaskProvider';
@@ -19,16 +22,16 @@ function syntaxExtensionArgs(execution: vscode.ProcessExecution | vscode.ShellEx
 	return (execution as vscode.ProcessExecution).args.filter((arg) => arg.startsWith('--allowSyntaxExtensions'));
 }
 
-function javaTask(saxonJar: string, allowSyntaxExtensions40?: string) {
-	const definition: vscode.TaskDefinition = { type: 'xslt', label: 'syntax extensions test', saxonJar, xsltFile: 'a.xsl', xmlSource: 'a.xml', messageEscaping: 'on' };
+function javaTask(saxonJar: string, allowSyntaxExtensions40?: string, xsltFile = 'a.xsl') {
+	const definition: vscode.TaskDefinition = { type: 'xslt', label: 'syntax extensions test', saxonJar, xsltFile, xmlSource: 'a.xml', messageEscaping: 'on' };
 	if (allowSyntaxExtensions40) {
 		definition.allowSyntaxExtensions40 = allowSyntaxExtensions40;
 	}
 	return new SaxonTaskProvider('').getTask(definition);
 }
 
-function saxonCTask(saxonCPath: string, allowSyntaxExtensions40?: string) {
-	const definition: vscode.TaskDefinition = { type: 'xslt-c', label: 'syntax extensions test', saxonCPath, xsltFile: 'a.xsl', xmlSource: 'a.xml', unescapeMessages: false };
+function saxonCTask(saxonCPath: string, allowSyntaxExtensions40?: string, xsltFile = 'a.xsl') {
+	const definition: vscode.TaskDefinition = { type: 'xslt-c', label: 'syntax extensions test', saxonCPath, xsltFile, xmlSource: 'a.xml', unescapeMessages: false };
 	if (allowSyntaxExtensions40) {
 		definition.allowSyntaxExtensions40 = allowSyntaxExtensions40;
 	}
@@ -63,6 +66,26 @@ suite('allowSyntaxExtensions40 task setting', () => {
 			saxonPEJars.concat(saxonHEJars).forEach((jar) => assert.deepEqual(syntaxExtensionArgs(javaTask(jar, setting)?.execution), ['--allowSyntaxExtensions:' + setting], jar));
 			saxonCPEPaths.concat(saxonCHEPaths).forEach((p) => assert.deepEqual(syntaxExtensionArgs(saxonCTask(p, setting)?.execution), ['--allowSyntaxExtensions:' + setting], p));
 		});
+	});
+
+	test('auto: off for a stylesheet before XSLT 4.0 that doesn\'t need them - on for one with item types, in a module it imports, or XSLT 4.0', () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'syntax-extensions-'));
+		const write = (name: string, content: string) => {
+			fs.writeFileSync(path.join(dir, name), content);
+			return path.join(dir, name);
+		};
+		const plain = write('plain.xsl', '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"><xsl:template match="@a | b"/></xsl:stylesheet>');
+		write('types.xsl', '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:f="urn:f" version="3.0"><xsl:item-type name="f:point" as="record(x, y)"/></xsl:stylesheet>');
+		const importing = write('importing.xsl', '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0"><xsl:import href="types.xsl"/></xsl:stylesheet>');
+		const xslt40 = write('four.xsl', '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="4.0"/>');
+		const jar = saxonPEJars[0];
+		assert.deepEqual(syntaxExtensionArgs(javaTask(jar, 'auto', plain)?.execution), ['--allowSyntaxExtensions:off']);
+		assert.deepEqual(syntaxExtensionArgs(javaTask(jar, undefined, plain)?.execution), []);
+		assert.deepEqual(syntaxExtensionArgs(saxonCTask(saxonCPEPaths[0], 'auto', plain)?.execution), ['--allowSyntaxExtensions:off']);
+		for (const needs of [importing, xslt40]) {
+			assert.deepEqual(syntaxExtensionArgs(javaTask(jar, 'auto', needs)?.execution), ['--allowSyntaxExtensions:on'], needs);
+			assert.deepEqual(syntaxExtensionArgs(saxonCTask(saxonCPEPaths[0], undefined, needs)?.execution), ['--allowSyntaxExtensions:on'], needs);
+		}
 	});
 
 	test('new quick run task definitions use auto', () => {

@@ -2,9 +2,14 @@
 	"name": "xslt-xpath",
 	"displayName": "XSLT/XPath for Visual Studio Code",
 	"description": "XSLT 3.0/4.0 and XPath 3.1/4.0 language support - linting, auto-completion, code documentation and Quick Run with Saxon",
-	"version": "2.0.0",
+	"version": "2.1.0",
 	"publisher": "deltaxml",
 	"icon": "xslt-xpath.png",
+	"galleryBanner": {
+		"color": "#2a3f5f",
+		"theme": "dark"
+	},
+	"homepage": "https://deltaxml.github.io/vscode-xslt-xpath/",
 	"bugs": {
 		"url": "https://github.com/DeltaXML/vscode-xslt-tokenizer/issues"
 	},
@@ -17,6 +22,8 @@
 		"xslt",
 		"xsl",
 		"xpath",
+		"json",
+		"debugger",
 		"highlighter",
 		"formatter",
 		"saxon",
@@ -26,21 +33,29 @@
 		"xpath 3.1",
 		"xpath 4.0",
 		"linter",
-		"xml catalog"
+		"xml catalog",
+		"xspec",
+		"mcp",
+		"mcp server"
 	],
 	"engines": {
 		"vscode": "^1.138.0"
 	},
 	"categories": [
 		"Programming Languages",
+		"Debuggers",
 		"Linters",
 		"Formatters",
-		"Snippets"
+		"Snippets",
+		"Testing"
 	],
 	"activationEvents": [
 		"onLanguage:xml",
 		"onLanguage:bpmn",
-		"onCommand:workbench.action.tasks.runTask"
+		"onCommand:workbench.action.tasks.runTask",
+		"onDebugResolve:xslt-saxon",
+		"onDebugDynamicConfigurations:xslt-saxon",
+		"onDebugInitialConfigurations"
 	],
 	"license": "MIT",
 	"main": "./out/src/extension.js",
@@ -71,6 +86,19 @@
 				"editor.tabSize": 4,
 				"outline.showArrays": false
 			},
+			"[xspec]": {
+				"editor.defaultFormatter": "deltaxml.xslt-xpath",
+				"editor.formatOnSaveMode": "file",
+				"editor.formatOnSave": false,
+				"editor.formatOnPaste": true,
+				"editor.formatOnType": true,
+				"editor.semanticHighlighting.enabled": true,
+				"editor.wordSeparators": "`~!@#%^&*()=+[{]}\\|;'\",:<>/?$",
+				"editor.detectIndentation": true,
+				"editor.insertSpaces": true,
+				"editor.tabSize": 2,
+				"outline.showArrays": false
+			},
 			"[xsl]": {
 				"editor.semanticHighlighting.enabled": true
 			},
@@ -93,22 +121,38 @@
 		},
 		"keybindings": [
 			{
+				"command": "xslt-xpath.runXPathQuery",
+				"key": "ctrl+enter",
+				"mac": "cmd+enter",
+				"when": "editorTextFocus && editorLangId == xpath && resourceFilename == queries.xpath"
+			},
+			{
+				"command": "xslt-xpath.addXPathLocationToQueries",
+				"key": "alt+g",
+				"when": "editorTextFocus && editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/"
+			},
+			{
+				"command": "xslt-xpath.tabToIndentation",
+				"key": "tab",
+				"when": "editorTextFocus && !editorReadonly && !editorHasSelection && !editorHasMultipleSelections && !suggestWidgetVisible && !inSnippetMode && !inlineSuggestionVisible && !inlineEditIsVisible && !hasOtherSuggestions && !editorTabMovesFocus && editorLangId =~ /^(xslt|xml|xspec|bpmn)$/"
+			},
+			{
 				"command": "xslt-xpath.selectCurrentElement",
 				"key": "ctrl+shift+0",
 				"mac": "shift+cmd+0",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectParentElement",
 				"key": "ctrl+shift+9",
 				"mac": "shift+cmd+9",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectFirstChildElement",
 				"key": "ctrl+shift+8",
 				"mac": "shift+cmd+8",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.quickRunXslt",
@@ -126,13 +170,13 @@
 				"command": "xslt-xpath.selectFollowingElement",
 				"key": "ctrl+shift+7",
 				"mac": "shift+cmd+7",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.selectPrecedingElement",
 				"key": "ctrl+shift+6",
 				"mac": "shift+cmd+6",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			},
 			{
 				"command": "xslt-xpath.wrapWith",
@@ -144,10 +188,20 @@
 				"command": "xslt-xpath.xmlSelectionPick",
 				"key": "ctrl+shift+2",
 				"mac": "shift+cmd+2",
-				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/"
+				"when": "editorTextFocus && editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/"
 			}
 		],
 		"commands": [
+			{
+				"command": "xslt-xpath.setUpClaudeMcp",
+				"title": "Set Up MCP Server for Claude Code",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.resetMcpToken",
+				"title": "Reset MCP Server Token",
+				"category": "XSLT"
+			},
 			{
 				"command": "xslt-xpath.addTaskInputs",
 				"title": "Add XSLT Inputs to Tasks File",
@@ -159,8 +213,22 @@
 				"category": "XML"
 			},
 			{
-				"command": "xslt-xpath.gotoXPath",
-				"title": "Goto XPath",
+				"command": "xslt-xpath.findNodesWithXPath",
+				"title": "Find Nodes with XPath...",
+				"category": "XML",
+				"icon": {
+					"light": "xslt-resources/icons/xpath-find-light.svg",
+					"dark": "xslt-resources/icons/xpath-find-dark.svg"
+				}
+			},
+			{
+				"command": "xslt-xpath.addXPathLocationToQueries",
+				"title": "Add XPath Location to Queries",
+				"category": "XML"
+			},
+			{
+				"command": "xslt-xpath.runXPathQuery",
+				"title": "Run XPath Query at Cursor",
 				"category": "XML"
 			},
 			{
@@ -255,6 +323,152 @@
 				"title": "Quick Run: Switch Processor",
 				"category": "XSLT",
 				"icon": "$(arrow-swap)"
+			},
+			{
+				"command": "xslt-xpath.debugXslt",
+				"title": "Debug Stylesheet with SaxonJ",
+				"category": "XSLT",
+				"icon": "$(debug-alt)"
+			},
+			{
+				"command": "xslt-xpath.analyseAsPackage",
+				"title": "Analyse as Package...",
+				"category": "XSLT",
+				"icon": "$(package)"
+			},
+			{
+				"command": "xslt-xpath.convertToPackage",
+				"title": "Convert to Package...",
+				"category": "XSLT",
+				"icon": "$(package)"
+			},
+			{
+				"command": "xslt-xpath.editQuickRunTask",
+				"title": "Edit Quick Run Task",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.editQuickRunTaskSaxonJ",
+				"title": "Edit Quick Run and Debug Task (SaxonJ)",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.editQuickRunTaskSaxonJS",
+				"title": "Edit Quick Run Task (SaxonJS)",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.editQuickRunTaskSaxonC",
+				"title": "Edit Quick Run Task (SaxonC)",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.editDebugTask",
+				"title": "Edit Debug/Run Task (SaxonJ)",
+				"category": "XSLT",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "xslt-xpath.showDebugOutput",
+				"title": "Show Debug Output",
+				"category": "XSLT",
+				"icon": "$(output)"
+			},
+			{
+				"command": "xslt-xpath.goToDebugOutputSource",
+				"title": "Go to XSLT Source",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.tabToIndentation",
+				"title": "Tab: Indent an Empty Line for Its Context",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.showDebugOutputFromVariable",
+				"title": "Show Output",
+				"category": "XSLT"
+			},
+			{
+				"command": "xslt-xpath.xspecRunFile",
+				"title": "Run Tests",
+				"category": "XSpec",
+				"icon": "$(beaker)"
+			},
+			{
+				"command": "xslt-xpath.xspecOpenReport",
+				"title": "Open Report",
+				"category": "XSpec",
+				"icon": "$(preview)"
+			},
+			{
+				"command": "xslt-xpath.xspecDeleteGeneratedFiles",
+				"title": "Delete Generated Files",
+				"category": "XSpec"
+			},
+			{
+				"command": "xslt-xpath.createXSpecFile",
+				"title": "Create Test File",
+				"category": "XSpec"
+			}
+		],
+		"walkthroughs": [
+			{
+				"id": "xslt-xpath.saxonjSetup",
+				"title": "Set Up XSLT For SaxonJ",
+				"description": "Get SaxonJ ready for Quick Run and the step-through XSLT debugger. Editing and linting work without SaxonJ.",
+				"featuredFor": [
+					"**/*.xsl",
+					"**/*.xslt"
+				],
+				"steps": [
+					{
+						"id": "xslt-xpath.installSaxonJ",
+						"title": "Install Java and SaxonJ",
+						"description": "Install a Java runtime supported by the Saxon version you plan to use, then download SaxonJ. The debugger requires Saxon 12 or later.\n[SaxonJ downloads](https://www.saxonica.com/download/java.xml)",
+						"media": {
+							"markdown": "walkthrough/install-saxonj.md"
+						}
+					},
+					{
+						"id": "xslt-xpath.configureSaxonJ",
+						"title": "Set the Saxon JAR path",
+						"description": "Set ``XSLT.tasks.saxonJar`` to the path of your Saxon JAR file.\n[Open the setting](command:workbench.action.openSettings?%5B%22XSLT.tasks.saxonJar%22%5D)",
+						"media": {
+							"markdown": "walkthrough/saxon-jar-setting.md"
+						},
+						"completionEvents": [
+							"onSettingChanged:XSLT.tasks.saxonJar"
+						]
+					},
+					{
+						"id": "xslt-xpath.openWorkspace",
+						"title": "Open a folder",
+						"description": "Open your project folder, or create a folder for your XSLT and XML files. A folder lets the extension resolve related files and save your Quick Run and debug tasks.\n[Open Folder](command:workbench.action.files.openFolder)",
+						"media": {
+							"markdown": "walkthrough/workspace.md"
+						},
+						"completionEvents": [
+							"onContext:workspaceFolderCount > 0"
+						]
+					},
+					{
+						"id": "xslt-xpath.runSaxonJ",
+						"title": "Run or debug a stylesheet",
+						"description": "Open an XSLT stylesheet and an XML input for it to process, then focus the stylesheet and press the Quick Run button in the editor toolbar. Quick Run uses the most recently opened XML file; use the status bar to choose a different input.",
+						"media": {
+							"markdown": "walkthrough/run-debug.md"
+						},
+						"completionEvents": [
+							"onCommand:xslt-xpath.quickRunXsltSaxonJ",
+							"onCommand:xslt-xpath.debugXslt"
+						]
+					}
+				]
 			}
 		],
 		"views": {
@@ -262,8 +476,10 @@
 				{
 					"id": "xslt-xpath.imports",
 					"name": "XSLT Imports",
+					"contextualTitle": "XSLT Imports",
 					"when": "resourceLangId == xslt",
-					"visibility": "collapsed"
+					"visibility": "collapsed",
+					"icon": "$(type-hierarchy)"
 				}
 			]
 		},
@@ -276,9 +492,19 @@
 		"menus": {
 			"editor/context": [
 				{
+					"command": "xslt-xpath.goToDebugOutputSource",
+					"when": "resourceScheme == xslt-debug-output",
+					"group": "navigation@1"
+				},
+				{
 					"submenu": "xslt-xpath.xmlSelection",
-					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|bpmn)$/",
+					"when": "editorLangId =~ /^(xml|xslt|dcp|sch|xspec|bpmn)$/",
 					"group": "2_xml@1"
+				},
+				{
+					"command": "xslt-xpath.createXSpecFile",
+					"when": "editorLangId == xslt",
+					"group": "xspec"
 				}
 			],
 			"xslt-xpath.xmlSelection": [
@@ -303,8 +529,14 @@
 					"group": "1_select@5"
 				},
 				{
-					"command": "xslt-xpath.gotoXPath",
-					"group": "2_goto@1"
+					"command": "xslt-xpath.findNodesWithXPath",
+					"when": "editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/",
+					"group": "3_xpath@1"
+				},
+				{
+					"command": "xslt-xpath.addXPathLocationToQueries",
+					"when": "editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/",
+					"group": "3_xpath@2"
 				}
 			],
 			"editor/title": [
@@ -315,21 +547,56 @@
 					"group": "navigation"
 				},
 				{
+					"command": "xslt-xpath.findNodesWithXPath",
+					"when": "resourceLangId == xml",
+					"group": "navigation"
+				},
+				{
 					"command": "xslt-xpath.quickRunXsltSaxonJ",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt'",
-					"group": "navigation"
+					"group": "navigation@1"
 				},
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonJS",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
-					"group": "navigation"
+					"group": "navigation@1"
 				},
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonC",
 					"alt": "xslt-xpath.quickRunSwitchProcessor",
 					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
+					"group": "navigation@1"
+				},
+				{
+					"command": "xslt-xpath.debugXslt",
+					"when": "resourceLangId == xslt",
+					"group": "navigation@2"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonJS",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-js'",
+					"group": "1_xslt@1"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonC",
+					"when": "resourceLangId == xslt && xslt-xpath.quickRunProcessor == 'xslt-c'",
+					"group": "1_xslt@1"
+				},
+				{
+					"command": "xslt-xpath.editDebugTask",
+					"when": "resourceLangId == xslt",
+					"group": "navigation@3"
+				},
+				{
+					"command": "xslt-xpath.xspecRunFile",
+					"when": "editorLangId == xspec",
+					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.xspecOpenReport",
+					"when": "editorLangId == xspec",
 					"group": "navigation"
 				}
 			],
@@ -338,6 +605,11 @@
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
 					"when": "view == xslt-xpath.imports",
 					"group": "navigation"
+				},
+				{
+					"command": "xslt-xpath.xspecDeleteGeneratedFiles",
+					"when": "view == testing.explorer && xslt-xpath.hasXSpecFiles",
+					"group": "xspec@1"
 				}
 			],
 			"view/item/context": [
@@ -345,12 +617,30 @@
 					"command": "xslt-xpath.quickRunModule",
 					"when": "view == xslt-xpath.imports && viewItem == topLevel",
 					"group": "inline"
+				},
+				{
+					"command": "xslt-xpath.analyseAsPackage",
+					"when": "view == xslt-xpath.imports && viewItem == module",
+					"group": "packages"
+				},
+				{
+					"command": "xslt-xpath.convertToPackage",
+					"when": "view == xslt-xpath.imports && viewItem == module",
+					"group": "packages"
 				}
 			],
 			"commandPalette": [
 				{
 					"command": "xslt-xpath.quickRunModule",
 					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.runXPathQuery",
+					"when": "editorLangId == xpath && resourceFilename == queries.xpath"
+				},
+				{
+					"command": "xslt-xpath.addXPathLocationToQueries",
+					"when": "editorLangId =~ /^(xml|dcp|sch|xspec|bpmn)$/"
 				},
 				{
 					"command": "xslt-xpath.chooseTopLevelStylesheet",
@@ -361,6 +651,18 @@
 					"when": "editorLangId == xslt"
 				},
 				{
+					"command": "xslt-xpath.goToDebugOutputSource",
+					"when": "resourceScheme == xslt-debug-output"
+				},
+				{
+					"command": "xslt-xpath.showDebugOutputFromVariable",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.tabToIndentation",
+					"when": "false"
+				},
+				{
 					"command": "xslt-xpath.quickRunXsltSaxonJ",
 					"when": "false"
 				},
@@ -371,6 +673,55 @@
 				{
 					"command": "xslt-xpath.quickRunXsltSaxonC",
 					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.debugXslt",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTask",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.analyseAsPackage",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.convertToPackage",
+					"when": "editorLangId == xslt"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonJ",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonJS",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.editQuickRunTaskSaxonC",
+					"when": "false"
+				},
+				{
+					"command": "xslt-xpath.editDebugTask",
+					"when": "editorLangId == xslt && xslt-xpath.quickRunProcessor != 'xslt'"
+				},
+				{
+					"command": "xslt-xpath.createXSpecFile",
+					"when": "editorLangId == xslt"
+				}
+			],
+			"debug/toolBar": [
+				{
+					"command": "xslt-xpath.showDebugOutput",
+					"when": "debugType == 'xslt-saxon'"
+				}
+			],
+			"debug/variables/context": [
+				{
+					"command": "xslt-xpath.showDebugOutputFromVariable",
+					"when": "debugType == 'xslt-saxon' && debugProtocolVariableMenuContext == 'xsltOutput'",
+					"group": "navigation"
 				}
 			]
 		},
@@ -533,29 +884,101 @@
 					"default": "latest"
 				},
 				"XSLT.resources.xsltPackages": {
-					"description": "Associate file paths with xsl:package names",
+					"description": "XSLT packages for xsl:use-package, outside the workspace - packages in the workspace are found without this. Each package's name and version are read from its xsl:package element unless given here. The packages a stylesheet uses are passed to Saxon with its -lib option",
 					"type": "array",
 					"items": {
 						"type": "object",
 						"properties": {
 							"name": {
 								"type": "string",
-								"description": "XSLT Package Name"
+								"description": "XSLT Package Name - by default, the name in the package's xsl:package element"
 							},
 							"version": {
 								"type": "string",
-								"description": "XSLT Package Version"
+								"description": "XSLT Package Version - by default, the package-version in the package's xsl:package element"
 							},
 							"path": {
 								"type": "string",
-								"description": "Path to named XSLT Package"
+								"description": "Path to the XSLT Package, relative to the workspace folder, or a file: URI"
 							}
 						},
 						"required": [
-							"name",
 							"path"
 						]
 					}
+				},
+				"XSLT.validation.externalFunctionPrefixes": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"scope": "resource",
+					"markdownDescription": "Prefixes of functions that the stylesheet's processing system provides, e.g. Java extension functions, such as `ext` for `ext:lookup()`. Calls of functions with these prefixes aren't checked. The quick fix for a function that isn't found adds its prefix here, in the workspace's settings."
+				},
+				"XSLT.debug.openOutput": {
+					"type": "boolean",
+					"default": false,
+					"scope": "window",
+					"description": "When debugging with SaxonJ, open the output written so far - beside the stylesheet - at the first pause where there is some. Otherwise, it's opened with the 'Show Debug Output' button on the debug toolbar, 'Show Output' on an output in the Variables view's Output section, or 'XSLT: Show Debug Output'."
+				},
+				"XSLT.validation.xslt40UnionPriorities": {
+					"type": "boolean",
+					"default": false,
+					"scope": "resource",
+					"markdownDescription": "Warn, in every stylesheet before XSLT 4.0, about a template rule whose union pattern has branches of different default priorities - which XSLT 4.0 gives one priority, the highest, so another rule may be chosen. Without the setting, the warning is only for XSLT 4.0 stylesheets, and those run with Saxon's syntax extensions as they use item types or notes - where 4.0's rule applies already."
+				},
+				"XSLT.xspec.home": {
+					"type": "string",
+					"default": "",
+					"scope": "resource",
+					"markdownDescription": "The folder of an XSpec installation, e.g. a newer release, to compile and run XSpec tests with - by default the XSpec 4.1.2 bundled with the extension is used. Tests are run with the Saxon jar of `#XSLT.tasks.saxonJar#`."
+				},
+				"XSLT.xspec.emphasiseLabels": {
+					"type": "boolean",
+					"default": true,
+					"scope": "resource",
+					"description": "In XSpec files, show scenario labels in bold and expectation labels in italic, so the scenarios read like headings with their expectations under them."
+				},
+				"XSLT.xspec.fadePending": {
+					"type": "boolean",
+					"default": true,
+					"scope": "resource",
+					"description": "In XSpec files, fade the pending scenarios and expectations - in x:pending, or with a pending attribute - which XSpec doesn't run, other than the reason they're pending."
+				},
+				"XSLT.mcp.enabled": {
+					"type": "boolean",
+					"default": false,
+					"scope": "application",
+					"markdownDescription": "Run an MCP server for AI assistants, such as GitHub Copilot or Claude Code, with tools that use the extension's linter and its knowledge of XSLT modules: e.g. the problems of a stylesheet that isn't open, or its imports. The server listens on `127.0.0.1` only, at the port of `#XSLT.mcp.port#`, and needs a token that only VS Code and the assistants it's set up for have. GitHub Copilot finds it by itself; for Claude Code, run **XSLT: Set Up MCP Server for Claude Code**."
+				},
+				"XSLT.mcp.port": {
+					"type": "number",
+					"default": 6745,
+					"scope": "application",
+					"markdownDescription": "The port of the MCP server (see `#XSLT.mcp.enabled#`). With more than one VS Code window, the first window opened has the server."
+				},
+				"XSLT.xspec.legacyCompatibility": {
+					"type": "boolean",
+					"default": false,
+					"scope": "resource",
+					"markdownDescription": "Run XSpec tests written for XSpec before 1.0 (e.g. 0.5) as that ran them, where XSpec 4 stops the run: an `x:expect` with a boolean `test` and an expected value is decided by the boolean; one with a `test` that isn't boolean and no expected value passes if the `test` returns nothing; and the `xs` prefix needn't be declared. Each of these is reported in the XSpec output, so the tests can be updated."
+				},
+				"XSLT.xspec.allowSyntaxExtensions": {
+					"type": "string",
+					"enum": [
+						"auto",
+						"on",
+						"off"
+					],
+					"enumDescriptions": [
+						"On for tests of a stylesheet that's XSLT 4.0, or uses item types or notes - in it or a module it uses - unless the Saxon jar is Saxon-HE, which fails every transform with them on",
+						"Always on",
+						"Always off"
+					],
+					"default": "auto",
+					"scope": "resource",
+					"markdownDescription": "Run XSpec tests with Saxon's syntax extensions (`--allowSyntaxExtensions:on`), so the stylesheet tested can use XPath 4.0 syntax, or e.g. record types in an XSLT 3.0 stylesheet. By default only for tests that need them: with them on, Saxon 13 runs a stylesheet before XSLT 4.0 with some of 4.0's rules, e.g. the priority of a union pattern."
 				}
 			}
 		},
@@ -639,7 +1062,7 @@
 							"off"
 						],
 						"enumDescriptions": [
-							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
 							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
 							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
 						],
@@ -963,7 +1386,7 @@
 							"off"
 						],
 						"enumDescriptions": [
-							"Enables XPath 4.0 syntax unless the Saxon processor is Saxon-HE (the default)",
+							"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
 							"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
 							"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
 						],
@@ -1407,6 +1830,16 @@
 				"description": "End of XML DTD Declaration"
 			},
 			{
+				"id": "dtdEntityName",
+				"superType": "function",
+				"description": "XML DTD: the name an <!ENTITY> declaration declares - colored as entity references are"
+			},
+			{
+				"id": "dtdLiteral",
+				"superType": "string",
+				"description": "XML DTD: a quoted literal - e.g. an entity's value, or a system or public identifier"
+			},
+			{
 				"id": "mapKey",
 				"superType": "keyword",
 				"description": "The key of a map-entry"
@@ -1427,7 +1860,11 @@
 				"extensions": [
 					".xpath"
 				],
-				"configuration": "./language-configuration.json"
+				"configuration": "./language-configuration.json",
+				"icon": {
+					"light": "./resources/icons/xpath.svg",
+					"dark": "./resources/icons/xpath.svg"
+				}
 			},
 			{
 				"id": "xslt",
@@ -1439,7 +1876,11 @@
 					".xsl",
 					".xslt"
 				],
-				"configuration": "./xsl-language-configuration.json"
+				"configuration": "./xsl-language-configuration.json",
+				"icon": {
+					"light": "./resources/icons/xslt.svg",
+					"dark": "./resources/icons/xslt.svg"
+				}
 			},
 			{
 				"id": "dcp",
@@ -1450,7 +1891,7 @@
 				"extensions": [
 					".dcp"
 				],
-				"configuration": "./language-configuration.json"
+				"configuration": "./xsl-language-configuration.json"
 			},
 			{
 				"id": "sch",
@@ -1461,7 +1902,26 @@
 				"extensions": [
 					".sch"
 				],
-				"configuration": "./language-configuration.json"
+				"configuration": "./xsl-language-configuration.json",
+				"icon": {
+					"light": "./resources/icons/sch.svg",
+					"dark": "./resources/icons/sch.svg"
+				}
+			},
+			{
+				"id": "xspec",
+				"aliases": [
+					"XSpec",
+					"xspec"
+				],
+				"extensions": [
+					".xspec"
+				],
+				"configuration": "./xsl-language-configuration.json",
+				"icon": {
+					"light": "./resources/icons/xspec.svg",
+					"dark": "./resources/icons/xspec.svg"
+				}
 			},
 			{
 				"id": "bpmn",
@@ -1559,21 +2019,264 @@
 				"scopeName": "source.xpath-type",
 				"path": "./syntaxes/xpath-type.tmLanguage.json"
 			}
+		],
+		"mcpServerDefinitionProviders": [
+			{
+				"id": "xslt-xpath.mcp",
+				"label": "XSLT/XPath"
+			}
+		],
+		"debuggers": [
+			{
+				"type": "xslt-saxon",
+				"label": "XSLT (Saxon)",
+				"languages": [
+					"xslt"
+				],
+				"configurationAttributes": {
+					"launch": {
+						"properties": {
+							"quickRun": {
+								"type": "boolean",
+								"default": true,
+								"description": "Debug the stylesheet in the active editor as Quick Run runs it - with the XML context file (or from xsl:initial-template) and the Quick Run task's settings"
+							},
+							"task": {
+								"type": "string",
+								"description": "The label of an 'xslt' task in tasks.json whose settings (xsltFile, xmlSource, parameters etc.) are used - properties set here override them"
+							},
+							"stopOnEntry": {
+								"type": "boolean",
+								"default": false,
+								"description": "Pause at the first instruction executed"
+							},
+							"saxonJar": {
+								"type": "string",
+								"description": "Path of the installed Saxon jar file (Saxon 12 or later) - default: the XSLT.tasks.saxonJar setting",
+								"default": "${config:XSLT.tasks.saxonJar}"
+							},
+							"xsltFile": {
+								"type": "string",
+								"description": "The path to the XSLT stylesheet"
+							},
+							"xmlSource": {
+								"type": "string",
+								"description": "The path to the XML/JSON source file (a '.json' file is passed as JSON - otherwise set 'useJsonSource')"
+							},
+							"useJsonSource": {
+								"type": "boolean",
+								"default": true,
+								"description": "Pass the 'xmlSource' file as JSON (-json:) rather than XML (-s:). When not set, files with a '.json' extension are passed as JSON"
+							},
+							"initialTemplate": {
+								"type": "string",
+								"description": "The named template to be executed. Namespaced templates can be written as {uri}localname. Default is xsl:initial-template"
+							},
+							"initialMode": {
+								"type": "string",
+								"description": "The initial mode for the transformation. Namespaced modes can be written as {uri}localname"
+							},
+							"resultPath": {
+								"type": "string",
+								"description": "The destination path for the XSLT result"
+							},
+							"catalogFilenames": {
+								"type": "string",
+								"description": "Either a file name or a list of file names separated by semicolons; the files are OASIS XML catalogs defining how public identifiers and system identifiers (URIs) are to be redirected"
+							},
+							"configFilename": {
+								"type": "string",
+								"description": "If set, configuration properties (unless overridden by other properties here) are taken from the supplied configuration file."
+							},
+							"dtd": {
+								"type": "string",
+								"enum": [
+									"on",
+									"off"
+								],
+								"description": "Requests DTD-based validation of the source file and of any files read using the document() function"
+							},
+							"enableAssertions": {
+								"type": [
+									"string"
+								],
+								"enum": [
+									"on",
+									"off",
+									"recover"
+								],
+								"description": "Enables assertions both at compile time and at run time"
+							},
+							"allowSyntaxExtensions40": {
+								"type": [
+									"string"
+								],
+								"enum": [
+									"auto",
+									"on",
+									"off"
+								],
+								"enumDescriptions": [
+									"Enables XPath 4.0 syntax for a stylesheet that needs it - XSLT 4.0, or using item types or notes, in it or a module it uses - unless the Saxon processor is Saxon-HE (the default)",
+									"Enables XPath 4.0 syntax - requires Saxon-PE or Saxon-EE",
+									"Disables XPath 4.0 syntax - Saxon reports XPath 4.0 syntax in XSLT 4.0 stylesheets as errors"
+								],
+								"default": "auto",
+								"description": "Enables XPath 4.0 syntax (the Saxon '--allowSyntaxExtensions' option). See: https://www.saxonica.com/html/documentation13/expressions/xpath40new.html"
+							},
+							"expandValues": {
+								"type": "string",
+								"enum": [
+									"on",
+									"off"
+								],
+								"description": "Specifying 'off' suppresses expansion of DTD/Schema fixed or default values"
+							},
+							"explainFilename": {
+								"type": [
+									"string"
+								],
+								"description": "Writes an execution plan and other diagnostic information for the stylesheet to the specified filename"
+							},
+							"exportFilename": {
+								"type": "string",
+								"description": "Export filename: If set, exports the compiled stylesheet, in a form suitable for subsequent execution"
+							},
+							"parameters": {
+								"description": "The xsl:param values for the XSLT",
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"name": {
+											"type": "string",
+											"description": "The xsl:param name.\nNamespaced params are written as {uri}localname.\nSpecial prefix characters are:\n'?' (XPath)\n'!' (xsl:output)\n'+' (filename):\nSee: http://www.saxonica.com/documentation/index.html#!using-xsl/commandline"
+										},
+										"value": {
+											"type": "string",
+											"description": "The xsl:param value. "
+										}
+									},
+									"required": [
+										"name",
+										"value"
+									]
+								},
+								"minItems": 1
+							},
+							"features": {
+								"description": "Set a feature defined in the Saxon Configuration interface. See https://www.saxonica.com/documentation11/index.html#!configuration/config-features",
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"name": {
+											"type": "string",
+											"description": "The feature name - the last part of the Configuration name after the '/' char (name may have a uri suffix). E.g. for 'http://saxon.sf.net/feature/parserFeature?uri=' enter  'parserFeature?uri='"
+										},
+										"value": {
+											"type": "string",
+											"description": "The value for the given feature"
+										}
+									},
+									"required": [
+										"name",
+										"value"
+									]
+								},
+								"minItems": 1
+							},
+							"classPathEntries": {
+								"description": "Add Java extension libraries to the classpath",
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"minItems": 1
+							}
+						}
+					}
+				},
+				"configurationSnippets": [
+					{
+						"label": "XSLT (Saxon): Debug Active Stylesheet",
+						"description": "Debug the stylesheet in the active editor, as Quick Run runs it",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug Active Stylesheet",
+							"quickRun": true
+						}
+					},
+					{
+						"label": "XSLT (Saxon): Debug a Task",
+						"description": "Debug an 'xslt' task from tasks.json",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug ${1:task label}",
+							"task": "${1:task label}"
+						}
+					},
+					{
+						"label": "XSLT (Saxon): Debug Stylesheet",
+						"description": "Debug a stylesheet with a source file",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug XSLT",
+							"xsltFile": "^\"\\${file}\"",
+							"xmlSource": "^\"\\${command:xslt-xpath.pickXmlSourceFile}\"",
+							"resultPath": "^\"\\${workspaceFolder}/xsl-out/result1.xml\""
+						}
+					},
+					{
+						"label": "XSLT (Saxon): Debug from Initial Template",
+						"description": "Debug a stylesheet starting from xsl:initial-template",
+						"body": {
+							"type": "xslt-saxon",
+							"request": "launch",
+							"name": "Debug XSLT (initial template)",
+							"xsltFile": "^\"\\${file}\"",
+							"initialTemplate": ""
+						}
+					}
+				]
+			}
+		],
+		"breakpoints": [
+			{
+				"language": "xslt"
+			},
+			{
+				"language": "xspec"
+			}
+		],
+		"viewsWelcome": [
+			{
+				"view": "debug",
+				"contents": "Debug the XSLT stylesheet in the active editor with SaxonJ, as Quick Run runs it.\n[Debug Stylesheet](command:xslt-xpath.debugXslt)",
+				"when": "debugStartLanguage == xslt"
+			}
 		]
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"clean": "rm -rf out",
-		"compile": "npm run clean && tsc -p ./",
+		"compile": "npm run clean && tsc -p ./ && npm run bundle-mcp",
+		"bundle-mcp": "esbuild src/mcp/sdk.ts --bundle --platform=node --format=cjs --minify --outfile=out/src/mcp/sdk.js --log-level=warning",
 		"lint": "eslint src",
 		"lint-fix": "eslint --fix src",
 		"watch": "tsc -watch -p ./",
 		"test": "npm run compile && node scripts/run-vscode-tests.js --extensionDevelopmentPath=.",
 		"unit-test": "mocha --require ts-node/register test/**/*.spec.ts",
+		"w3c-lint": "tsc -p ./ && node scripts/run-vscode-tests.js --config .vscode-test.w3c.js --extensionDevelopmentPath=.",
+		"xspec-lint": "tsc -p ./ && node scripts/run-vscode-tests.js --config .vscode-test.xspec.js --extensionDevelopmentPath=.",
 		"generate-xpath40-functions": "xslt3 -xsl:resources/xslt/saxon-functions-to-typescript.xsl -s:resources/data/saxon-functions.xml -o:src/xpath40FunctionDetails.ts",
 		"update-saxon-functions": "curl -sfL https://www.saxonica.com/documentation13/doc/functions.xml -o resources/data/saxon-functions.xml && npm run generate-xpath40-functions"
 	},
 	"devDependencies": {
+		"@modelcontextprotocol/sdk": "^1.32.2",
 		"@types/chai": "^5.2.2",
 		"@types/mocha": "^10.0.1",
 		"@types/node": "^26.6.2",
@@ -1583,6 +2286,7 @@
 		"@vscode/test-cli": "^0.0.15",
 		"@vscode/test-electron": "^3.1.0",
 		"chai": "^5.2.0",
+		"esbuild": "^0.28.2",
 		"eslint": "^10.11.0",
 		"eslint-config-prettier": "^10.1.8",
 		"globals": "^17.12.0",
@@ -1590,7 +2294,8 @@
 		"prettier": "^3.9.8",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.9.3",
-		"xslt3": "^2.0.3"
+		"xslt3": "^2.0.3",
+		"zod": "^4.6.7"
 	},
 	"dependencies": {
 		"jsonc-parser": "^3.0.0"

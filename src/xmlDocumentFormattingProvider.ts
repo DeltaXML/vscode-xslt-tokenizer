@@ -27,6 +27,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	private onTypeLineEmpty = false;
 	// for on-type formatting, the line to indent - the new line after Enter, which may be empty
 	private onTypeLine = -1;
+	private isWholeDocument = false;
 	private static xsltStartTokenNumber = XslLexer.getXsltStartTokenNumber();
 	// the parts of a string template, or of a string delimited by entities, that can't start a string
 	private static readonly stringContinuationCharTypes = [CharLevelState.mBt, CharLevelState.rBt, CharLevelState.rDqEnt, CharLevelState.rSqEnt,
@@ -58,10 +59,12 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			return [];
 		}
 		if (ch.indexOf('\n') > -1 || this.isCloseTag) {
-			//const prevLine = document.lineAt(pos.line - 1);
 			const newLine = document.lineAt(pos.line);
 			this.onTypeLineEmpty = newLine.text.trim().length === 0;
-			const documentRange = new vscode.Range(newLine.range.start, newLine.range.end);
+			// after Enter, the line just finished is indented again too: its indentation was set before its text was
+			// typed, e.g. for an 'else' typed on the line after a 'then' clause
+			const firstLine = !this.isCloseTag && pos.line > 0 ? document.lineAt(pos.line - 1) : newLine;
+			const documentRange = new vscode.Range(firstLine.range.start, newLine.range.end);
 			this.onType = true;
 			this.onTypeLine = pos.line;
 			try {
@@ -77,10 +80,55 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		}
 	};
 
+	// whether the text before a position ends within a CDATA section or a comment
+	private static isInCDataOrComment(textBefore: string) {
+		return textBefore.lastIndexOf('<![CDATA[') > textBefore.lastIndexOf(']]>') || textBefore.lastIndexOf('<!--') > textBefore.lastIndexOf('-->');
+	}
+
+	// the indentation for an empty or whitespace-only line, as after Enter - undefined if it has that already, or where
+	// whitespace is kept as it is: within xsl:text, a CDATA section or a comment
+	public emptyLineIndentation(document: vscode.TextDocument, line: number, options: vscode.FormattingOptions): string | undefined {
+		const lineStart = new vscode.Position(line, 0);
+		if (XMLDocumentFormattingProvider.isInCDataOrComment(document.getText(new vscode.Range(new vscode.Position(0, 0), lineStart)))) {
+			return undefined;
+		}
+		const edit = this.provideOnTypeFormattingEdits(document, lineStart, '\n', options, new vscode.CancellationTokenSource().token)
+			.find((e) => e.range.start.line === line && e.range.start.character === 0);
+		return edit && edit.newText.trim() === '' ? edit.newText : undefined;
+	}
+
+	// Tab, in an XSLT or XML editor: on an empty or whitespace-only line - e.g. one clicked on, with the cursor at its
+	// start - the line is indented for its context, as after Enter, with the cursor at its end; otherwise, or where the
+	// line is indented that far already, it's VS Code's Tab
+	public static async tabToIndentation(editor: vscode.TextEditor | undefined, formatter: XMLDocumentFormattingProvider) {
+		const tab = () => vscode.commands.executeCommand('tab');
+		if (!editor || editor.selections.length !== 1 || !editor.selection.isEmpty) {
+			return tab();
+		}
+		const cursor = editor.selection.active;
+		const line = editor.document.lineAt(cursor.line);
+		if (!line.isEmptyOrWhitespace) {
+			return tab();
+		}
+		const options = { tabSize: Number(editor.options.tabSize) || 4, insertSpaces: editor.options.insertSpaces !== false };
+		const indentation = formatter.emptyLineIndentation(editor.document, cursor.line, options);
+		if (indentation === undefined || indentation.length <= line.text.length) {
+			return tab();
+		}
+		await editor.edit((builder) => builder.replace(line.range, indentation));
+		const end = new vscode.Position(cursor.line, indentation.length);
+		editor.selection = new vscode.Selection(end, end);
+	}
+
 	public provideDocumentFormattingEdits = (document: vscode.TextDocument, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
 		const lastLine = document.lineAt(document.lineCount - 1);
 		const documentRange = new vscode.Range(document.positionAt(0), lastLine.range.end);
-		return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+		this.isWholeDocument = true;
+		try {
+			return this.provideDocumentRangeFormattingEdits(document, documentRange, options, token);
+		} finally {
+			this.isWholeDocument = false;
+		}
 	};
 
 	public provideDocumentRangeFormattingEdits = (document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions, token: vscode.CancellationToken): vscode.TextEdit[] => {
@@ -97,7 +145,14 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 	};
 
 	private formatRange(document: vscode.TextDocument, range: vscode.Range, options: vscode.FormattingOptions): vscode.TextEdit[] {
+		// the end tag of an xsl:note, with the document's prefix for XSLT, e.g. </xslt:note
+		const noteEndTag = `</${XsltTokenDiagnostics.xsltPrefixOf(document)}:note`;
 		let result: vscode.TextEdit[] = [];
+		// on-type formatting stops once the new line is formatted - the line before it may be formatted first. After Enter,
+		// that's after the new line's first token, even when its indentation is right already, e.g. from VS Code's own
+		// indentation of the new line: the tokens after it may be out of line order, e.g. those of an attribute's lines
+		let isOnTypeLineReached = false;
+		const isOnTypeLineDone = () => this.onType && (isOnTypeLineReached || result.some((edit) => edit.range.start.line >= this.onTypeLine));
 		let indentString = '';
 		let useTabs = !(options.insertSpaces);
 		let newLineString = (document.eol === vscode.EndOfLine.CRLF) ? "\r\n" : "\n";
@@ -142,6 +197,11 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 
 		let xmlSpacePreserveStack: boolean[] = [];
 		let xmlelementStack: string[] = [];
+		// the names of the open elements, and the number of them closed by the current close tag: as in the linter, a
+		// close tag closes the nearest open element with its name, and any elements still open within it - and none
+		// when no element with its name is open, so a missing or stray close tag doesn't shift the indentation after it
+		let openElementNames: string[] = [];
+		let closedElementCount = 1;
 		let xmlSpaceAttributeValue: boolean | null = null;
 		let awaitingXmlSpaceAttributeValue = false;
 		let attributeNameOffset = 0;
@@ -154,8 +214,10 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 		let isXSLTStartTag = false;
 		let nameIndentRequired = false;
 		let preThen = false;
-		let documenthasNewLines: HasCharacteristic = HasCharacteristic.unknown;
-		let awaitingSecondTag: HasCharacteristic = HasCharacteristic.unknown;
+		// a document with its first tags on one line, e.g. generated XML, is split into lines - only when the whole
+		// document is formatted: not for on-type or range formatting, e.g. after Enter in a line split from it
+		let documenthasNewLines: HasCharacteristic = this.isWholeDocument ? HasCharacteristic.unknown : HasCharacteristic.yes;
+		let awaitingSecondTag: HasCharacteristic = this.isWholeDocument ? HasCharacteristic.unknown : HasCharacteristic.no;
 		let firstStartTagLineNumber = -1;
 		let prevToken: BaseToken | null = null;
 		let elementName = '';
@@ -173,7 +235,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			noteBaseIndent = Number.MAX_SAFE_INTEGER;
 			for (let l = startTagLine + 1; l < document.lineCount; l++) {
 				const line = document.lineAt(l);
-				if (line.text.trimStart().startsWith('</xsl:note')) {
+				if (line.text.trimStart().startsWith(noteEndTag)) {
 					break;
 				}
 				if (!line.isEmptyOrWhitespace) {
@@ -182,6 +244,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			}
 			noteBaseIndent = noteBaseIndent === Number.MAX_SAFE_INTEGER ? 0 : noteBaseIndent;
 		};
+
+		// for each open string template, the depth of braces within its current enclosed expression: 0 within its text
+		let templateBraceDepths: number[] = [];
 
 		if (this.docType === DocumentTypes.XPath) {
 			complexStateStack = [[0, [], false]];
@@ -196,9 +261,14 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			// or a string delimited by entities, or it follows the string's previous part - the lines since the previous
 			// token are within the string, so their indentation is part of its value (in an attribute, the XML parser
 			// replaces each whitespace character with a space, but doesn't collapse them)
-			const isStringContinuation = token.tokenType === TokenLevelState.string && token.startCharacter === 0 &&
+			// A line within a template's text may also start with an enclosed expression, e.g. '{$b}' in `a{$a}⏎{$b}`:
+			// there's no string token for the line break, so the line starts with the '{'
+			const withinTemplateText = templateBraceDepths.length > 0 && templateBraceDepths[templateBraceDepths.length - 1] === 0;
+			const isStringContinuation = token.startCharacter === 0 && ((token.tokenType === TokenLevelState.string &&
 				(XMLDocumentFormattingProvider.stringContinuationCharTypes.includes(<CharLevelState>token.charType) ||
-					(!!prevToken && prevToken.tokenType === TokenLevelState.string && prevToken.line < token.line));
+					(!!prevToken && prevToken.tokenType === TokenLevelState.string && prevToken.line < token.line))) ||
+				(withinTemplateText && !!prevToken && prevToken.line < token.line));
+			XMLDocumentFormattingProvider.trackTemplateBraces(token, templateBraceDepths, withinTemplateText);
 			let stackLength = xmlSpacePreserveStack.length;
 			let addNewLine = false;
 
@@ -209,7 +279,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			let isXMLToken = token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber;
 			let indent = 0;
 
-			if (this.onType && result.length > 0) {
+			if (isOnTypeLineDone()) {
 				// do nothing
 			} else if (isXMLToken) {
 				xpathNestingLevel = 0;
@@ -220,7 +290,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 						complexStateStack = [[0, [], false]];
 						emptyStackIsElseBlock = false;
 						isXSLTStartTag = true;
-						elementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						elementName = XsltTokenDiagnostics.xsltElementName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						isPreserveSpaceElement = elementName === 'xsl:text';
 						break;
 					case XSLTokenLevelState.elementName:
@@ -259,6 +329,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 							case XMLCharState.rStNoAtt:
 								let preserveSpace = stackLength > 0 ? xmlSpacePreserveStack[stackLength - 1] : false;
 								xmlSpacePreserveStack.push(preserveSpace);
+								openElementNames.push(elementName);
 								if (!withinNote && isXSLTStartTag && elementName === 'xsl:note') {
 									startNote(lineNumber);
 								}
@@ -279,15 +350,23 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 									xmlSpacePreserveStack.push(xmlSpaceAttributeValue);
 									xmlSpaceAttributeValue = null;
 								}
+								openElementNames.push(elementName);
 								if (this.isCloseTag) {
 									xmlelementStack.push(elementName);
 								}
 								break;
 							case XMLCharState.lCt:
-								isNoteEndTag = withinNote && document.lineAt(lineNumber).text.startsWith('</xsl:note', token.startCharacter);
-								// outdent:
-								indent = -1;
-								newNestingLevel--;
+								isNoteEndTag = withinNote && document.lineAt(lineNumber).text.startsWith(noteEndTag, token.startCharacter);
+								// outdent, by the number of elements the close tag closes - one, unless its name is still
+								// being typed:
+								closedElementCount = 1;
+								const endTagName = /^[^\s/>]+/.exec(document.lineAt(lineNumber).text.substring(token.startCharacter + 2))?.[0];
+								if (endTagName && openElementNames.length > 0) {
+									const matchIndex = openElementNames.lastIndexOf(endTagName);
+									closedElementCount = matchIndex > -1 ? openElementNames.length - matchIndex : 0;
+								}
+								indent = -closedElementCount;
+								newNestingLevel -= closedElementCount;
 								addNewLine = this.shouldAddNewLine(documenthasNewLines, prevToken, token);
 								if (this.isCloseTag) {
 									closeTagWithinText = this.closeTagPos?.line === token.line &&
@@ -309,9 +388,8 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 								attributeNameOffset = 0;
 								attributeValueOffset = 0;
 								isPreserveSpaceElement = false;
-								if (stackLength > 0) {
-									xmlSpacePreserveStack.pop();
-								}
+								xmlSpacePreserveStack.splice(Math.max(0, stackLength - closedElementCount));
+								openElementNames.splice(Math.max(0, openElementNames.length - closedElementCount));
 								if (this.isCloseTag && xmlelementStack.length > 0) {
 									xmlelementStack.pop();
 								}
@@ -495,7 +573,7 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			if (addNewLine && lineNumberDiff === 0) {
 				lineNumberDiff = 1;
 			}
-			if (this.onType && result.length > 0) {
+			if (isOnTypeLineDone()) {
 			} else if (this.isCloseTag) {
 				if (nestingLevel > 0 && closeTagName !== null && this.closeTagPos !== null) {
 					let nonWsStart = this.closeTagLine ? this.closeTagLine.firstNonWhitespaceCharacterIndex : 0;
@@ -598,6 +676,9 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			nestingLevel = newNestingLevel;
 			multiLineState = newMultiLineState;
 			prevToken = token;
+			if (this.onType && !this.isCloseTag && token.line >= this.onTypeLine) {
+				isOnTypeLineReached = true;
+			}
 		});
 		return result;
 	}
@@ -620,6 +701,26 @@ export class XMLDocumentFormattingProvider implements vscode.DocumentFormattingE
 			addNewLine = prevToken?.line === token.line;
 		}
 		return addNewLine;
+	}
+
+	// updates the brace depths for the open string templates with a token: a template starts with its opening part,
+	// or ends with its closing part ('sBt' when it has no enclosed expressions, after a line break), and the braces of
+	// enclosed expressions - which may have map constructors or other templates within them - are counted
+	private static trackTemplateBraces(token: BaseToken, depths: number[], withinTemplateText: boolean) {
+		if (token.tokenType >= XMLDocumentFormattingProvider.xsltStartTokenNumber) {
+			depths.length = 0;
+		} else if (token.tokenType === TokenLevelState.string) {
+			const charType = <CharLevelState>token.charType;
+			if (charType === CharLevelState.lBt) {
+				depths.push(0);
+			} else if (charType === CharLevelState.rBt || (charType === CharLevelState.sBt && withinTemplateText)) {
+				depths.pop();
+			}
+		} else if (depths.length > 0 && token.charType === CharLevelState.lBr) {
+			depths[depths.length - 1]++;
+		} else if (depths.length > 0 && token.charType === CharLevelState.rBr && depths[depths.length - 1] > 0) {
+			depths[depths.length - 1]--;
+		}
 	}
 
 	private getReplaceLineIndentTextEdit = (currentLine: vscode.TextLine, indentString: string): vscode.TextEdit => {

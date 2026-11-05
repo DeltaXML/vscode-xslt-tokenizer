@@ -6,3 +6,7 @@ node_modules
 npm-debug.log
 debug.log
 .DS_Store
+
+# XSLT debug adapter build output and the jars it is compiled/tested against
+debugger/build/
+debugger/lib/

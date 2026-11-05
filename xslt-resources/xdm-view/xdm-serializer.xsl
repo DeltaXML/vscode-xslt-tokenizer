@@ -36,7 +36,7 @@
        (item()*) - all three are "an arbitrary XDM sequence" in the same sense. -->
   <xsl:function name="zxd:build-item-seq" as="element(xdm:item)*">
     <xsl:param name="items" as="item()*"/>
-    <xsl:for-each select="$items">
+    <xsl:for-each select="zxd:jnode-values($items)">
       <xdm:item>
         <xsl:sequence select="zxd:build-payload(.)"/>
       </xdm:item>

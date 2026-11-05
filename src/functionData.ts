@@ -18,7 +18,9 @@ export enum XSLTnamespaces {
 	XMLSchema,
 	XPath,
 	XSLT,
-	IXSL
+	IXSL,
+	// a 'java:' URI, e.g. java:java.lang.Math - Saxon-PE and EE call the class's methods (reflexive extension functions)
+	Java
 }
 
 interface NamespaceData {
@@ -296,8 +298,16 @@ export class FunctionData {
 		"unparsed-entity-uri#2"
 	];
 
+	// XSLT 4.0 functions, not in the Saxon function library documentation - Saxon 13 has them only with syntax extensions
+	public static readonly xslt40 = [
+		"apply-templates#1",
+		"apply-templates#2",
+		"character-map#1",
+		"current-merge-key-array#0"
+	];
+
 	// XPath 4.0: generated from the Saxon function library documentation (see xpath40FunctionDetails.ts)
-	public static readonly xpath40 = FunctionData.replaceByName(xpath40Arities.fn, FunctionData.xpath);
+	public static readonly xpath40 = FunctionData.replaceByName(xpath40Arities.fn, FunctionData.xpath).concat(FunctionData.xslt40);
 
 	public static readonly array = [
 		"append#2",
@@ -466,6 +476,11 @@ export class FunctionData {
 		["http://exslt.org/sets", XSLTnamespaces.ExsltSets],
 		["http://exslt.org/strings", XSLTnamespaces.ExsltStrings],
 	]);
+
+	// the kind of namespace a URI is, for its functions: a known one, or any 'java:' URI
+	public static namespaceType(uri: string): XSLTnamespaces | undefined {
+		return uri.startsWith('java:') ? XSLTnamespaces.Java : FunctionData.namespaces.get(uri);
+	}
 
 	public static readonly contextFunctions = ['base-uri', 'copy-of', 'current', 'document-uri', 'generate-id', 'last', 'local-name', 'has-children', 'name', 'namespace-uri', 'node-name', 'normalize-space', 'path', 'position', 'root', 'snapshot'];
 	public static readonly contextGroupingFunctions = ['current-group', 'current-grouping-key'];

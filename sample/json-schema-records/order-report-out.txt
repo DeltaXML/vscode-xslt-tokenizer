@@ -1,0 +1,17 @@
+
+Order ORD-1042, placed 2026-10-14 - paid
+Customer: Sam Taylor (sam.taylor@example.com)
+
+
+1. 2 x BK-0042 Notes on the Analytical Engine @ GBP 18.50 = GBP 37.00
+
+      
+2. 1 x KIT-7 Electronics starter kit @ GBP 64.00 = GBP 64.00
+       includes 1 x TL-1 Soldering iron
+       includes 1 x TL-2 Multimeter
+
+      
+Total: GBP 101.00
+Ship to: 4 Mill Lane, Cambridge, CB2 1RX, GB
+Notes: 
+      

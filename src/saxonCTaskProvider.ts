@@ -10,6 +10,7 @@ import * as path from 'path';
 import { SaxonJsTaskProvider } from './saxonJsTaskProvider';
 import { SaxonTaskProvider } from './saxonTaskProvider';
 import { CatalogSetting } from './catalogSetting';
+import { unquotedPath, unquotedPaths } from './settingPaths';
 
 interface XSLTCTask extends vscode.TaskDefinition {
     label: string;
@@ -152,9 +153,9 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
     public getTask(genericTask: vscode.TaskDefinition): vscode.Task | undefined {
 
         let source = 'xslt-c';
-        const saxonCPathConfig: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonCPath');
-        const saxonCLibraryPathsConfig: string[] | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonCLibraryPaths');
-        const saxonCLicenseFileLocationConfig: string | undefined = vscode.workspace.getConfiguration('XSLT.tasks').get('saxonCLicenseFileLocation');
+        const saxonCPathConfig = unquotedPath(vscode.workspace.getConfiguration('XSLT.tasks').get<string>('saxonCPath'));
+        const saxonCLibraryPathsConfig = unquotedPaths(vscode.workspace.getConfiguration('XSLT.tasks').get<string[]>('saxonCLibraryPaths'));
+        const saxonCLicenseFileLocationConfig = unquotedPath(vscode.workspace.getConfiguration('XSLT.tasks').get<string>('saxonCLicenseFileLocation'));
 
         if (genericTask.type === 'xslt-c') {
             let xsltTask: XSLTCTask = <XSLTCTask>genericTask;
@@ -245,11 +246,11 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
                         commandLineArgs.push('-TPxsl:' + propValue);
                         break;
                     case 'allowSyntaxExtensions40':
-                        commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonCPath));
+                        commandLineArgs.push('--allowSyntaxExtensions:' + SaxonTaskProvider.syntaxExtensions40Value(propValue, taskSaxonCPath, SaxonTaskProvider.taskXsltPath(xsltTask)));
                         break;
                 }
             }
-            if (xsltTask.allowSyntaxExtensions40 === undefined && SaxonTaskProvider.syntaxExtensions40Value(undefined, taskSaxonCPath) === 'on') {
+            if (xsltTask.allowSyntaxExtensions40 === undefined && SaxonTaskProvider.syntaxExtensions40Value(undefined, taskSaxonCPath, SaxonTaskProvider.taskXsltPath(xsltTask)) === 'on') {
                 // no setting: as for 'auto'
                 commandLineArgs.push('--allowSyntaxExtensions:on');
             }
@@ -258,6 +259,10 @@ export class SaxonCTaskProvider implements vscode.TaskProvider {
             if (catalogOption) {
                 // the XSLT.resources.catalog setting, as used for the task's hrefs in the editor
                 commandLineArgs.push(catalogOption);
+            }
+            const libOption = SaxonTaskProvider.libOption(xsltTask);
+            if (libOption) {
+                commandLineArgs.push(libOption);
             }
             if (nogo) {
                 commandLineArgs.push('-nogo');

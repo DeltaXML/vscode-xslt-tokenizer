@@ -20,6 +20,7 @@ function stylesheet(body: string) {
 
 const duplicate = (name: string) => `XSLT: Duplicate xsl:item-type name '${name}' - not allowed for declarations with the same import precedence (XTSE4030). Saxon 13 uses the last declaration`;
 const reserved = (name: string) => `XSLT: The xsl:item-type name '${name}' is in a reserved namespace`;
+const extensible = 'XPath: Extensible record types, e.g. record(*), are not supported by Saxon 13 - use map(*) instead';
 const circular = (name: string) => `XSLT: The item type '${name}' refers to itself, directly or through other named item types (XTSE4035)`;
 
 // declarations in a module, as found for an included or imported module - its href is resolved against the document folder
@@ -50,6 +51,10 @@ const cases: [string, string, [string, string][], GlobalInstructionData[]?][] = 
 	['indirect circular reference', `<xsl:item-type name="a" as="record(b as b)"/><xsl:item-type name="b" as="(a | xs:string)"/>`, [[circular('a'), '"a"'], [circular('b'), '"b"']]],
 	['field name the same as a type name', `<xsl:item-type name="point" as="record(point as xs:string)"/>`, []],
 	['reference to another item type', `<xsl:item-type name="text" as="xs:string"/><xsl:item-type name="label" as="record(value as text)"/>`, []],
+	// '*' as an occurrence indicator in a record type - after a prefixed type name, or a kind test - not an extensible record
+	['occurrence indicators in a record', `<xsl:item-type name="cx:id" as="xs:string"/><xsl:item-type name="cx:content" as="record(spansSeen as cx:id*, nodeList as node()*, names as xs:string*)"/>`, []],
+	['extensible record', `<xsl:item-type name="open" as="record(*)"/>`, [[extensible, '*']]],
+	['extensible record with fields', `<xsl:item-type name="open" as="record(a, *)"/>`, [[extensible, '*']]],
 ];
 
 suite('xsl:item-type declarations', () => {

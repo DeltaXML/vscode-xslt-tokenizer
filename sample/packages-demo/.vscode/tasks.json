@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "xslt",
+			"label": "invoice-report with invoices.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/invoice-report.xsl",
+			"xmlSource": "${workspaceFolder}/invoices.xml",
+			"resultPath": "${workspaceFolder}/out/invoices.html",
+			"group": {
+				"kind": "build"
+			}
+		}
+	]
+}

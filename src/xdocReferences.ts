@@ -38,6 +38,8 @@ export interface XdocReference {
 	isSee: boolean;
 	// the start tag offset of the xsl:function or xsl:template the note documents, for its parameters
 	declarationOffset?: number;
+	// in the note of a declaration in xsl:override
+	inOverride?: boolean;
 }
 
 // what a reference refers to: a global declaration, or a parameter of the function or template the note documents -
@@ -63,12 +65,13 @@ export class XdocReferences {
 			}
 			const parent = openElements[index][openElements[index].length - 1];
 			const declarationOffset = parent && (parent.name === 'xsl:function' || parent.name === 'xsl:template') ? parent.offset : undefined;
+			const inOverride = openElements[index].some((element) => element.name === 'xsl:override');
 			const { text: content, offsets } = XdocNotes.decode(text.substring(note.contentStart, note.contentEnd));
 			const documentOffset = (index: number) => note.contentStart + offsets[index];
 			const add = (word: string, index: number, isSee: boolean) => {
 				const parsed = XdocReferences.parse(word, !isSee);
 				if (parsed) {
-					references.push({ ...parsed, offset: documentOffset(index + parsed.nameIndex), start: documentOffset(index), end: documentOffset(index + word.length - 1) + 1, isSee, declarationOffset });
+					references.push({ ...parsed, offset: documentOffset(index + parsed.nameIndex), start: documentOffset(index), end: documentOffset(index + word.length - 1) + 1, isSee, declarationOffset, inOverride });
 				}
 			};
 			let lineStart = 0;
@@ -116,8 +119,14 @@ export class XdocReferences {
 	}
 
 	// what the reference refers to, using the global declarations of the document and the modules it includes or
-	// imports - the most likely first
-	public static resolve(reference: XdocReference, globals: GlobalInstructionData[], text: string, markup = RecordTypes.blankMarkup(text)): XdocTarget[] {
+	// imports - the most likely first. In the note of a declaration in xsl:override, a component it overrides (one of
+	// overridden, see PackageScope.overriddenBy) is the package's, e.g. @see a:shape#1 in the note of a:shape
+	public static resolve(reference: XdocReference, globals: GlobalInstructionData[], text: string, markup = RecordTypes.blankMarkup(text), overridden: GlobalInstructionData[] = []): XdocTarget[] {
+		if (reference.inOverride && overridden.length > 0) {
+			const targets = XdocReferences.resolve({ ...reference, inOverride: false }, globals, text, markup);
+			const original = targets[0]?.paramOffset === undefined ? XdocReferences.resolve({ ...reference, inOverride: false, declarationOffset: undefined }, overridden, text, markup) : [];
+			return original.length > 0 ? original : targets;
+		}
 		const named = (...types: GlobalInstructionType[]) => globals.filter((g) => types.includes(g.type) && g.name === reference.name);
 		const functions = () => named(GlobalInstructionType.Function).filter((g) => reference.arity === undefined || XslLexer.functionArityMatches(g, reference.arity));
 		let targets: GlobalInstructionData[];

@@ -7,6 +7,7 @@
  * - a map may have entries that are not fields of the record
  */
 import { BaseToken, CharLevelState, ErrorType, TokenLevelState } from './xpLexer';
+import { XslLexer } from './xslLexer';
 
 export interface RecordField {
 	name: string;
@@ -32,6 +33,27 @@ export interface ArgumentTypes {
 	returnType: (name: string, arity: number) => string | undefined;
 }
 
+// a string literal that is a value of an enumeration type, e.g. 'red' in select="'red'" for as="enum('red', 'green')" -
+// with the declared type it was checked against - for find references and rename
+export interface EnumValueReference {
+	token: BaseToken;
+	value: string;
+	type: string;
+}
+
+// the values of an enumeration type, e.g. enum('red', 'green'), with their string literal tokens
+export interface EnumLiterals {
+	values: string[];
+	literals: { token: BaseToken, value: string }[];
+}
+
+// the 'as' attribute of an xsl:item-type: from the start of its first token to the end of its last token
+export interface ItemTypeAsRange {
+	name: string;
+	start: { line: number, character: number };
+	end: { line: number, character: number };
+}
+
 // a token that refers to a field of a record type, e.g. 'r' in $c?r - for hover and go to definition
 export interface FieldReference {
 	token: BaseToken;
@@ -46,6 +68,21 @@ export interface MapEntry {
 	key: string;
 	valueStart: number;
 	valueEnd: number;
+}
+
+// an attribute of an element: the offsets of its name and of its value, after the quote - the value is as written
+export interface RecordAttribute {
+	name: string;
+	nameOffset: number;
+	valueOffset: number;
+	value: string;
+}
+
+// XSLT 4.0: an xsl:record instruction - the offset of its start tag, and whether it's an empty element
+export interface RecordInstruction {
+	offset: number;
+	isEmpty: boolean;
+	attributes: RecordAttribute[];
 }
 
 export class RecordTypes {
@@ -120,6 +157,10 @@ export class RecordTypes {
 	public static itemTypeOffsets = new Map<string, number>();
 	// the tokens matched to record fields in the document being processed: lookups, child steps and map keys
 	public static fieldReferences: FieldReference[] = [];
+	// the string literals matched to enumeration values in the document being processed
+	public static enumValueReferences: EnumValueReference[] = [];
+	// the 'as' attributes of the xsl:item-type declarations in the document being processed
+	public static itemTypeAsRanges: ItemTypeAsRange[] = [];
 
 	// the type that a named item type is declared as, following named item types, e.g. 'xs:boolean' for 'flag'
 	public static resolveNamedType(typeText: string, itemTypes: Map<string, string>, depth = 0): string | undefined {
@@ -180,8 +221,68 @@ export class RecordTypes {
 			const value = literal.substring(1, literal.length - 1).split(quote + quote).join(quote);
 			if (!enumValues.includes(value)) {
 				problemTokens.push(RecordTypes.problemToken(token, ErrorType.EnumValueUnknown, value, typeText.trim()));
+			} else {
+				RecordTypes.enumValueReferences.push({ token, value, type: typeText });
 			}
 		}
+	}
+
+	// for a value of an enumeration type, the enum(...) type with the value: its values, and the name of the item type
+	// declared as it, or as a choice including it - e.g. 'color' for 'red' with <xsl:item-type name="color"
+	// as="enum('red', 'green')"/>, also when the type is an item type declared as 'color' - with no name for an inline
+	// enum(...), e.g. in an 'as' attribute - undefined if the type has no enum(...) with the value
+	public static enumSource(typeText: string, value: string, itemTypes: Map<string, string>, typeName?: string, depth = 0): { values: string[], typeName?: string } | undefined {
+		let text = typeText.trim();
+		if (depth > 10 || text.length === 0) {
+			return undefined;
+		}
+		if ('?*+'.includes(text.charAt(text.length - 1))) {
+			text = text.substring(0, text.length - 1).trim();
+		}
+		if (text.startsWith('(') && RecordTypes.closingIndex(text, 0) === text.length - 1) {
+			for (const choice of RecordTypes.splitTopLevel(text.substring(1, text.length - 1), '|')) {
+				const source = RecordTypes.enumSource(choice, value, itemTypes, typeName, depth + 1);
+				if (source) {
+					return source;
+				}
+			}
+			return undefined;
+		}
+		if (/^enum\s*\(/.test(text)) {
+			const values = RecordTypes.resolveEnum(text, itemTypes);
+			return values?.includes(value) ? { values, typeName } : undefined;
+		}
+		if (/^[\w.-]+(:[\w.-]+)?$/.test(text)) {
+			const declared = itemTypes.get(text);
+			return declared ? RecordTypes.enumSource(declared, value, itemTypes, text, depth + 1) : undefined;
+		}
+		return undefined;
+	}
+
+	// the enumeration types in the tokens, e.g. enum('red', 'green') in an 'as' attribute, with the tokens of their values
+	public static enumLiterals(tokens: BaseToken[]): EnumLiterals[] {
+		const result: EnumLiterals[] = [];
+		tokens.forEach((token, index) => {
+			if (token.tokenType !== TokenLevelState.simpleType || token.value !== 'enum') {
+				return;
+			}
+			const openIndex = RecordTypes.nextNonComment(tokens, index);
+			const closeIndex = openIndex > -1 && tokens[openIndex].charType === CharLevelState.lB ? RecordTypes.closingTokenIndex(tokens, openIndex) : -1;
+			if (closeIndex < 0) {
+				return;
+			}
+			const literals: { token: BaseToken, value: string }[] = [];
+			for (let i = openIndex + 1; i < closeIndex; i++) {
+				const t = tokens[i];
+				// the quotes may be references, e.g. &quot;x&quot; or &#39;x&#39; in an attribute
+				const quoted = t.tokenType === TokenLevelState.string ? /^(['"])(.*)\1$/.exec(RecordTypes.decodeReferences(t.value).text) : null;
+				if (quoted) {
+					literals.push({ token: t, value: quoted[2].split(quoted[1] + quoted[1]).join(quoted[1]) });
+				}
+			}
+			result.push({ values: literals.map((l) => l.value), literals });
+		});
+		return result;
 	}
 
 	// the record type of a field's value, e.g. for record(a as record(b as xs:integer))
@@ -714,11 +815,13 @@ export class RecordTypes {
 	}
 
 	// the xsl:map-entry children of each xsl:map with a literal key that's the same as that of an earlier one - as in
-	// Saxon, a dynamic error XTDE3365 - excluding xsl:map-entry elements within xsl:if etc. and those with use-when
-	public static duplicateMapEntryKeys(text: string, markup: string): { key: string, offset: number }[] {
-		const duplicates: { key: string, offset: number }[] = [];
-		[...markup.matchAll(/<xsl:map[\s>]/g)].forEach((mapMatch) => {
+	// Saxon, a dynamic error XTDE3365 - excluding xsl:map-entry elements within xsl:if etc. and those with use-when - and
+	// whether it's handled: XSLT 4.0, the xsl:map has a duplicates attribute, e.g. duplicates="fn($a, $b) { $a + $b }"
+	public static duplicateMapEntryKeys(text: string, markup: string): { key: string, offset: number, handled: boolean }[] {
+		const duplicates: { key: string, offset: number, handled: boolean }[] = [];
+		[...markup.matchAll(RecordTypes.xsltPattern(/<xsl:map[\s>]/g, markup))].forEach((mapMatch) => {
 			const keys = new Set<string>();
+			const handled = RecordTypes.attributeOfElementAt(text, mapMatch.index! + 1, 'duplicates') !== undefined;
 			RecordTypes.childElements(text, markup, mapMatch.index!, 'xsl:map-entry').forEach((entryOffset) => {
 				const valueOffset = RecordTypes.attributeValueOffset(text, entryOffset + 1, 'key');
 				const key = RecordTypes.attributeOfElementAt(text, entryOffset + 1, 'key')?.trim();
@@ -727,7 +830,7 @@ export class RecordTypes {
 					return;
 				}
 				if (keys.has(identity)) {
-					duplicates.push({ key: key!, offset: valueOffset + text.substring(valueOffset).search(/\S/) });
+					duplicates.push({ key: key!, offset: valueOffset + text.substring(valueOffset).search(/\S/), handled });
 				}
 				keys.add(identity);
 			});
@@ -749,16 +852,61 @@ export class RecordTypes {
 		return text.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g, (m) => ' '.repeat(m.length));
 	}
 
-	// the elements whose start tags are before the offset and are not yet closed there, outermost first
+	private static lastPrefixText: string | undefined;
+	private static lastPrefix = 'xsl';
+
+	// the prefix of the XSLT instructions of a stylesheet module's text, or its markup: that of its outermost element,
+	// when it's a stylesheet, transform or package - usually xsl, but e.g. xslt in some W3C tests - as the lexer finds it
+	// (see XslLexer.rootPrefix)
+	public static xsltPrefix(text: string): string {
+		if (text !== RecordTypes.lastPrefixText) {
+			RecordTypes.lastPrefixText = text;
+			RecordTypes.lastPrefix = XslLexer.rootPrefix(text);
+		}
+		return RecordTypes.lastPrefix;
+	}
+
+	// the name of an element or attribute, as it's compared: an XSLT name with the prefix xsl, for a module whose
+	// prefix for XSLT is another, e.g. xsl:template for xslt:template
+	public static xsltName(name: string, prefix: string): string {
+		return prefix !== 'xsl' && name.startsWith(prefix + ':') ? 'xsl' + name.substring(prefix.length) : name;
+	}
+
+	// text to insert in a module whose prefix for XSLT is another, e.g. a snippet with xsl:when elements: with that prefix
+	// - in such a module, xsl isn't usually bound, so a QName with the prefix xsl is an XSLT name
+	public static withXsltPrefix(inserted: string, prefix: string): string {
+		return prefix === 'xsl' ? inserted : inserted.replace(/(?<![\w.:-])xsl:/g, prefix + ':');
+	}
+
+	// a name found in the module's text, e.g. by an xsltPattern, as it's compared (see xsltName)
+	public static xsltNameIn(text: string, name: string | undefined): string | undefined {
+		return name === undefined ? undefined : RecordTypes.xsltName(name, RecordTypes.xsltPrefix(text));
+	}
+
+	// a pattern with XSLT names with the prefix xsl, e.g. /<xsl:iterate[\s>]/, for the module's text, or its markup: with
+	// the module's prefix for XSLT instead (see xsltPrefix)
+	public static xsltPattern(pattern: RegExp, text: string): RegExp {
+		const prefix = RecordTypes.xsltPrefix(text);
+		return prefix === 'xsl' ? pattern : new RegExp(pattern.source.replace(/(?<![\w.-])xsl:/g, prefix.replace(/[.-]/g, '\\$&') + ':'), pattern.flags);
+	}
+
+	// the start of the start tag of an XSLT instruction, as it's written in the module's text, e.g. '<xsl:iterate'
+	public static xsltTag(text: string, localName: string): string {
+		return `<${RecordTypes.xsltPrefix(text)}:${localName}`;
+	}
+
+	// the elements whose start tags are before the offset and are not yet closed there, outermost first - with XSLT
+	// names with the prefix xsl (see xsltName)
 	public static openElements(markup: string, end: number): { name: string, offset: number }[] {
 		const ancestors: { name: string, offset: number }[] = [];
+		const prefix = RecordTypes.xsltPrefix(markup);
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		let match: RegExpExecArray | null;
 		while ((match = tagRgx.exec(markup)) !== null && match.index < end) {
 			if (match[1]) {
 				ancestors.pop();
 			} else if (!match[3]) {
-				ancestors.push({ name: match[2], offset: match.index });
+				ancestors.push({ name: RecordTypes.xsltName(match[2], prefix), offset: match.index });
 			}
 		}
 		return ancestors;
@@ -768,6 +916,7 @@ export class RecordTypes {
 	public static openElementsAt(markup: string, offsets: number[]): { name: string, offset: number }[][] {
 		const result: { name: string, offset: number }[][] = [];
 		const ancestors: { name: string, offset: number }[] = [];
+		const prefix = RecordTypes.xsltPrefix(markup);
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		let match: RegExpExecArray | null = tagRgx.exec(markup);
 		for (const offset of offsets) {
@@ -775,7 +924,7 @@ export class RecordTypes {
 				if (match[1]) {
 					ancestors.pop();
 				} else if (!match[3]) {
-					ancestors.push({ name: match[2], offset: match.index });
+					ancestors.push({ name: RecordTypes.xsltName(match[2], prefix), offset: match.index });
 				}
 				match = tagRgx.exec(markup);
 			}
@@ -788,6 +937,7 @@ export class RecordTypes {
 	// for key="'a'", with the offsets of their start tags
 	public static mapEntryKeys(text: string, markup: string, mapOffset: number): { key: string, offset: number }[] {
 		const keys: { key: string, offset: number }[] = [];
+		const prefix = RecordTypes.xsltPrefix(markup);
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		tagRgx.lastIndex = mapOffset;
 		let depth = 0;
@@ -798,8 +948,8 @@ export class RecordTypes {
 					break;
 				}
 			} else {
-				if (depth === 1 && match[2] === 'xsl:map-entry') {
-					const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, match.index + 1, 'key') ?? '');
+				if (depth === 1 && RecordTypes.xsltName(match[2], prefix) === 'xsl:map-entry') {
+					const key = /^\s*(['"])((?:(?!\1).)*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, match.index + 1, 'key') ?? '');
 					if (key) {
 						keys.push({ key: key[2], offset: match.index });
 					}
@@ -818,14 +968,28 @@ export class RecordTypes {
 	// xsl:with-param or xsl:function containing it (within any xsl:if or xsl:choose etc.), or for an xsl:map within
 	// an xsl:map-entry of another xsl:map with a record type, the record type of that field
 	// - templateParamType gives the type of a named template's parameter, for an xsl:with-param without an 'as'
+	// - or of the xsl:record at ancestors[index] (XSLT 4.0): its xsl:as, or as for an xsl:map
 	public static xslMapRecord(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType): RecordType | undefined {
-		const declaredType = RecordTypes.contentType(text, ancestors, index, itemTypes, templateParamType);
+		const declaredType = RecordTypes.mapInstructionType(text, ancestors, index, itemTypes, templateParamType);
 		return declaredType ? RecordTypes.resolve(declaredType, itemTypes) : undefined;
+	}
+
+	// the declared type of the xsl:map or xsl:record at ancestors[index]: an xsl:record's own xsl:as, or the type from the
+	// element containing it
+	private static mapInstructionType(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType, depth = 0): string | undefined {
+		const { name, offset } = ancestors[index];
+		const ownType = name === 'xsl:record' && offset > -1 ? RecordTypes.attributeOfElementAt(text, offset + 1, RecordTypes.xsltPrefix(text) + ':as') : undefined;
+		return ownType ?? RecordTypes.contentType(text, ancestors, index, itemTypes, templateParamType, depth);
+	}
+
+	// an xsl:map, or an XSLT 4.0 xsl:record, whose content may have xsl:map-entry elements for record fields
+	public static isMapInstruction(name: string | undefined) {
+		return name === 'xsl:map' || name === 'xsl:record';
 	}
 
 	// the declared type of the value of the instruction at ancestors[index], e.g. an xsl:sequence, xsl:select or xsl:map,
 	// from the element containing it (within any xsl:if or xsl:choose etc.): the 'as' of an xsl:variable, xsl:param or
-	// xsl:function, the type of the parameter an xsl:with-param sets, or for an xsl:map-entry of an xsl:map with a record
+	// xsl:function, the type of the parameter an xsl:with-param sets, or for an xsl:map-entry of an xsl:map or xsl:record with a record
 	// type, the type of its field
 	// - an xsl:sequence or xsl:select with its own 'as' has that type: see instructionType
 	public static contentType(text: string, ancestors: { name: string, offset: number }[], index: number, itemTypes: Map<string, string>, templateParamType?: TemplateParamType, depth = 0): string | undefined {
@@ -843,12 +1007,12 @@ export class RecordTypes {
 					return ownType;
 				}
 			} else if (name === 'xsl:map-entry') {
-				const key = /^\s*(['"])(.*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, offset + 1, 'key') ?? '');
+				const key = /^\s*(['"])((?:(?!\1).)*)\1\s*$/.exec(RecordTypes.attributeOfElementAt(text, offset + 1, 'key') ?? '');
 				const parentMap = i - 1;
-				if (!key || parentMap < 0 || ancestors[parentMap].name !== 'xsl:map') {
+				if (!key || parentMap < 0 || !RecordTypes.isMapInstruction(ancestors[parentMap].name)) {
 					return undefined;
 				}
-				const mapType = RecordTypes.contentType(text, ancestors, parentMap, itemTypes, templateParamType, depth + 1);
+				const mapType = RecordTypes.mapInstructionType(text, ancestors, parentMap, itemTypes, templateParamType, depth + 1);
 				const record = mapType ? RecordTypes.resolve(mapType, itemTypes) : undefined;
 				return record?.fields.find((f) => f.name === key[2])?.type;
 			} else if (!RecordTypes.conditionalInstructions.includes(name)) {
@@ -889,6 +1053,7 @@ export class RecordTypes {
 	// the offsets of the start tags of the child elements with the name, of the element whose start tag is at offset
 	public static childElements(text: string, markup: string, offset: number, name: string): number[] {
 		const children: number[] = [];
+		const prefix = RecordTypes.xsltPrefix(markup);
 		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
 		tagRgx.lastIndex = offset;
 		let depth = 0;
@@ -899,7 +1064,7 @@ export class RecordTypes {
 					break;
 				}
 			} else {
-				if (depth === 1 && match[2] === name) {
+				if (depth === 1 && RecordTypes.xsltName(match[2], prefix) === name) {
 					children.push(match.index);
 				}
 				if (!match[3]) {
@@ -936,20 +1101,129 @@ export class RecordTypes {
 		map.entries.forEach((entry) => {
 			const field = record.fields.find((f) => f.name === entry.key);
 			if (!field) {
-				problemTokens.push(RecordTypes.problemToken(entry.keyToken, ErrorType.RecordFieldUnknown, entry.key, record.name));
+				// the fix replaces the name within the quotes with the name of a field not yet used
+				const alternatives = RecordTypes.closestNames(entry.key, record.fields.map((f) => f.name).filter((name) => !keys.includes(name)));
+				const { keyToken } = entry;
+				const recordFix = alternatives.length > 0 ? { line: keyToken.line, character: keyToken.startCharacter + 1, text: '', end: { line: keyToken.line, character: keyToken.startCharacter + keyToken.length - 1 }, alternatives } : undefined;
+				problemTokens.push({ ...RecordTypes.problemToken(keyToken, ErrorType.RecordFieldUnknown, entry.key, record.name), recordFix });
 				return;
 			}
 			RecordTypes.fieldReferences.push({ token: entry.keyToken, field, record });
-			const nestedRecord = RecordTypes.fieldRecord(field, itemTypes);
-			const enumValues = field.type ? RecordTypes.resolveEnum(field.type, itemTypes) : undefined;
-			if (nestedRecord) {
-				RecordTypes.checkMapTokens(tokens, entry.valueStart, entry.valueEnd, nestedRecord, itemTypes, problemTokens);
-			} else if (enumValues && entry.valueStart === entry.valueEnd && tokens[entry.valueStart].tokenType === TokenLevelState.string) {
-				RecordTypes.checkEnumValue([tokens[entry.valueStart]], enumValues, field.type!, problemTokens);
-			} else if (entry.valueStart === entry.valueEnd && field.type && !RecordTypes.isLiteralAllowed(tokens[entry.valueStart], field.type)) {
-				problemTokens.push(RecordTypes.problemToken(tokens[entry.valueStart], ErrorType.RecordFieldValueType, field.name, field.type.trim()));
-			}
+			RecordTypes.checkFieldValue(tokens, entry.valueStart, entry.valueEnd, field, itemTypes, problemTokens);
 		});
+	}
+
+	// checks the value of a record field spanning tokens[valueStart..valueEnd]: a map constructor for a field with a record
+	// type, a string literal for one with an enumeration type, or a literal of the field's atomic type
+	public static checkFieldValue(tokens: BaseToken[], valueStart: number, valueEnd: number, field: RecordField, itemTypes: Map<string, string>, problemTokens: BaseToken[]) {
+		const nestedRecord = RecordTypes.fieldRecord(field, itemTypes);
+		const enumValues = field.type ? RecordTypes.resolveEnum(field.type, itemTypes) : undefined;
+		if (nestedRecord) {
+			RecordTypes.checkMapTokens(tokens, valueStart, valueEnd, nestedRecord, itemTypes, problemTokens);
+		} else if (enumValues && valueStart === valueEnd && tokens[valueStart].tokenType === TokenLevelState.string) {
+			RecordTypes.checkEnumValue([tokens[valueStart]], enumValues, field.type!, problemTokens);
+		} else if (valueStart === valueEnd && field.type && !RecordTypes.isLiteralAllowed(tokens[valueStart], field.type)) {
+			problemTokens.push(RecordTypes.problemToken(tokens[valueStart], ErrorType.RecordFieldValueType, field.name, field.type.trim()));
+		}
+	}
+
+	// the names, for a fix of the name, closest first - by edit distance, then in their order - at most five
+	public static closestNames(name: string, names: string[]): string[] {
+		const distance = (a: string, b: string) => {
+			let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+			for (let i = 1; i <= a.length; i++) {
+				const current = [i];
+				for (let j = 1; j <= b.length; j++) {
+					current.push(Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1)));
+				}
+				previous = current;
+			}
+			return previous[b.length];
+		};
+		return names.map((n, index) => ({ n, index, d: distance(name.toLowerCase(), n.toLowerCase()) }))
+			.sort((a, b) => a.d - b.d || a.index - b.index).slice(0, 5).map((c) => c.n);
+	}
+
+	public static isNCName(name: string) {
+		return /^[A-Za-z_][\w.-]*$/.test(name);
+	}
+
+	// XSLT 4.0 xsl:record: an attribute in no namespace is a field of the record - not a standard attribute, e.g. xsl:as, or
+	// a namespace declaration
+	public static isFieldAttribute(name: string) {
+		return !name.includes(':') && name !== 'xmlns';
+	}
+
+	// the attributes of the element whose start tag is at the offset, with the offsets of their names and values (after the
+	// quote) - the values are as written, with any references
+	public static attributesOfElementAt(text: string, tagStart: number): RecordAttribute[] {
+		const attributes: RecordAttribute[] = [];
+		const nameRgx = /<[\w.:-]+/y;
+		nameRgx.lastIndex = tagStart;
+		if (!nameRgx.exec(text)) {
+			return attributes;
+		}
+		const attributeRgx = /(\s+)([\w.:-]+)(\s*=\s*)("[^"]*"|'[^']*')/y;
+		attributeRgx.lastIndex = nameRgx.lastIndex;
+		let match: RegExpExecArray | null;
+		while ((match = attributeRgx.exec(text)) !== null) {
+			const nameOffset = match.index + match[1].length;
+			attributes.push({ name: match[2], nameOffset, valueOffset: nameOffset + match[2].length + match[3].length + 1, value: match[4].substring(1, match[4].length - 1) });
+		}
+		return attributes;
+	}
+
+	// XSLT 4.0: the xsl:record instructions, with their attributes
+	public static recordInstructions(text: string, markup: string): RecordInstruction[] {
+		const instructions: RecordInstruction[] = [];
+		for (const match of markup.matchAll(new RegExp(RecordTypes.tagPattern, 'g'))) {
+			if (!match[1] && match[2] === 'xsl:record') {
+				instructions.push({ offset: match.index!, isEmpty: match[3] === '/', attributes: RecordTypes.attributesOfElementAt(text, match.index!) });
+			}
+		}
+		return instructions;
+	}
+
+	// the names of the child elements of the element whose start tag is at the offset
+	public static childElementNames(markup: string, offset: number): string[] {
+		const names: string[] = [];
+		const tagRgx = new RegExp(RecordTypes.tagPattern, 'g');
+		tagRgx.lastIndex = offset;
+		let depth = 0;
+		let match: RegExpExecArray | null;
+		while ((match = tagRgx.exec(markup)) !== null) {
+			if (match[1]) {
+				if (--depth === 0) {
+					break;
+				}
+			} else {
+				if (depth === 1) {
+					names.push(match[2]);
+				}
+				if (!match[3]) {
+					depth++;
+				} else if (depth === 0) {
+					break;
+				}
+			}
+		}
+		return names;
+	}
+
+	// the value of a field for a quick fix or snippet, e.g. __TODO.r - or a map constructor with the required fields, for a
+	// field with a record type
+	public static fieldValueText(field: RecordField, itemTypes: Map<string, string>): string {
+		const fieldRecord = RecordTypes.fieldRecord(field, itemTypes);
+		if (fieldRecord) {
+			const requiredFields = fieldRecord.fields.filter((f) => !f.optional);
+			return requiredFields.length > 0 ? `{ ${RecordTypes.fieldEntriesText(requiredFields, itemTypes, 1)} }` : '{}';
+		}
+		return RecordTypes.placeholderPrefix + field.name.replace(/[^\w.]/g, '_');
+	}
+
+	// the attributes of an xsl:record for the fields, e.g. ' r="__TODO.r" i="__TODO.i"' - the fields' names are NCNames
+	public static fieldAttributesText(fields: RecordField[], itemTypes: Map<string, string>): string {
+		return fields.map((field) => ` ${field.name}="${RecordTypes.fieldValueText(field, itemTypes).replace(/"/g, '&quot;')}"`).join('');
 	}
 
 	// a placeholder for a value, e.g. __TODO.city
@@ -1071,7 +1345,7 @@ export class RecordTypes {
 		return t.charType === CharLevelState.rB || t.charType === CharLevelState.rBr || t.charType === CharLevelState.rPr;
 	}
 
-	private static closingTokenIndex(tokens: BaseToken[], openIndex: number) {
+	public static closingTokenIndex(tokens: BaseToken[], openIndex: number) {
 		let depth = 0;
 		for (let i = openIndex; i < tokens.length; i++) {
 			if (RecordTypes.isOpenBracket(tokens[i])) {
@@ -1153,6 +1427,13 @@ export class RecordTypes {
 		}
 		const reference = RecordTypes.referenceAt(text, index);
 		return reference && (reference.char === '\'' || reference.char === '"') ? reference : undefined;
+	}
+
+	// a type written on more than one line, e.g. a record type with a field on each line, as shown in a hover, signature
+	// or completion: on one line, without the source's indentation - a line break and the whitespace around it are a
+	// space, or nothing after '(' or before ')'. Whitespace without a line break is unchanged
+	public static joinLines(text: string) {
+		return text.replace(/\(\s*\n\s*/g, '(').replace(/\s*\n\s*\)/g, ')').replace(/\s*\n\s*/g, ' ');
 	}
 
 	// the text of an attribute value, e.g. a SequenceType, with its character and entity references replaced - and the

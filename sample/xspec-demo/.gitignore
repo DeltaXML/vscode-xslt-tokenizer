@@ -1,0 +1,2 @@
+# the files XSpec generates when the tests are run: the test runner, its result and the HTML report
+xspec/

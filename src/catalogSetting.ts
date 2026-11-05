@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { HrefPaths } from './hrefPaths';
 import { XmlCatalog } from './xmlCatalog';
+import { unquotedPath } from './settingPaths';
 
 // The XSLT.resources.catalog setting: an OASIS XML catalog for resolving the hrefs of xsl:import, xsl:include and
 // fixed-namespaces URIs - and passed to Saxon by the XSLT tasks that don't have their own catalogFilenames
@@ -22,7 +23,7 @@ export class CatalogSetting {
 	// the catalog file's path, from the setting's value: relative to the first workspace folder, or with
 	// ${workspaceFolder} - undefined when there's no setting, or it's relative and there's no workspace folder
 	public static catalogPath(value = vscode.workspace.getConfiguration(CatalogSetting.section).get<string>(CatalogSetting.setting), workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath): string | undefined {
-		const trimmed = value?.trim();
+		const trimmed = unquotedPath(value)?.trim();
 		if (!trimmed) {
 			return undefined;
 		}

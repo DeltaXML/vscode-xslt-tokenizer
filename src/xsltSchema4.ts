@@ -327,15 +327,13 @@ export class XSLTSchema4 implements SchemaData {
                         'namespace-context': 'xsl:expression',
                         'schema-aware': 'xsl:avt',
                         'with-params': 'xsl:expression',
-                        'trusted': 'xsl:avt',
                         '_xpath': 'xs:string',
                         '_as': 'xs:string',
                         '_base-uri': 'xs:string',
                         '_context-item': 'xs:string',
                         '_namespace-context': 'xs:string',
                         '_schema-aware': 'xs:string',
-                        '_with-params': 'xs:string',
-                        '_trusted': 'xs:string'
+                        '_with-params': 'xs:string'
                     },
                     elementNames: ['xsl:with-param', 'xsl:fallback']
                 },
@@ -1139,12 +1137,10 @@ export class XSLTSchema4 implements SchemaData {
                 'id': 'xs:ID',
                 'input-type-annotations': 'xsl:input-type-annotations-type',
                 'fixed-namespaces': 'xs:string',
-                'main-module': 'xs:anyURI',
                 'schema-role': 'xs:NCName',
                 '_id': 'xs:string',
                 '_input-type-annotations': 'xs:string',
                 '_fixed-namespaces': 'xs:string',
-                '_main-module': 'xs:string',
                 '_schema-role': 'xs:string'
             },
             elementNames: ['xsl:declaration']

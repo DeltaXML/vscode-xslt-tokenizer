@@ -14,5 +14,6 @@
      
      <xsl:import href="xdm-view-text.xsl"/>
      <xsl:import href="xdm-view-html.xsl"/>
+     <xsl:import href="xdm-view-tokens.xsl"/>
      
 </xsl:stylesheet>

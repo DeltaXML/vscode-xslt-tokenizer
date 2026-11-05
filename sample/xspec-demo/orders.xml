@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<orders>
+  <order id="A1">
+    <line product="Pens" quantity="3" price="1.20"/>
+    <line product="Paper" quantity="10" price="4.00"/>
+  </order>
+  <order id="B2">
+    <line product="Stapler" quantity="1" price="8.50"/>
+  </order>
+</orders>

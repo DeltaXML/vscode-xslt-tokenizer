@@ -1,0 +1,86 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "xslt",
+			"label": "debug-xpath with orders.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/debug-xpath.xsl",
+			"xmlSource": "${workspaceFolder}/orders.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			},
+			"parameters": [
+				{
+					"name": "?discount-threshold",
+					"value": "20"
+				},
+				{
+					"name": "?discount-rate",
+					"value": "0.1"
+				}
+			]
+		},
+		{
+			"type": "xslt",
+			"label": "range-variables with orders.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/range-variables.xsl",
+			"xmlSource": "${workspaceFolder}/orders.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			},
+			"parameters": [
+				{
+					"name": "?discount",
+					"value": "0.1"
+				}
+			]
+		},
+		{
+			"type": "xslt",
+			"label": "empty-steps with shipments.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/empty-steps.xsl",
+			"xmlSource": "${workspaceFolder}/shipments.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			}
+		},
+		{
+			"type": "xslt",
+			"label": "empty-steps with orders.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/empty-steps.xsl",
+			"xmlSource": "${workspaceFolder}/orders.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			}
+		},
+		{
+			"type": "xslt",
+			"label": "range-variables with wf.xml",
+			"saxonJar": "${config:XSLT.tasks.saxonJar}",
+			"xsltFile": "${workspaceFolder}/range-variables.xsl",
+			"xmlSource": "${workspaceFolder}/wf.xml",
+			"resultPath": "${command:xslt-xpath.pickResultFile}",
+			"messageEscaping": "adaptive",
+			"allowSyntaxExtensions40": "auto",
+			"group": {
+				"kind": "build"
+			}
+		}
+	]
+}

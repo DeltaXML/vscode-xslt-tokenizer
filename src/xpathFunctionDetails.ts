@@ -26,6 +26,12 @@ export class XPathFunctionDetails {
 		{name: "unparsed-entity-public-id",  signature: "fn:unparsed-entity-public-id( $entity-name as xs:string, $doc as node() ) as xs:string", description: "Returns the public identifier of an unparsed entity.\n\nOptional argument: doc"},
 		{name: "unparsed-entity-uri",  signature: "fn:unparsed-entity-uri( $entity-name as xs:string, $doc as node() ) as xs:anyURI", description: "Returns the URI (system identifier) of an unparsed entity.\n\nOptional argument: doc"},
 	];
+	// XSLT 4.0 functions
+	public static xslt40Data: FunctionCompletionData[] = [
+		{name: "apply-templates",  signature: "apply-templates($select as item()*, $options as map(*)? := {}) as item()*", description: "Applies template rules to selected items."},
+		{name: "character-map",  signature: "character-map($name as xs:QName) as map(xs:string, xs:string)?", description: "Delivers the content of a character map declared using xsl:character-map."},
+		{name: "current-merge-key-array",  signature: "current-merge-key-array() as array(xs:anyAtomicType*)", description: "Returns the merge key of the merge group currently being processed using the xsl:merge instruction."},
+	];
 	public static ixslData: FunctionCompletionData[] = [
 		{
 			name: "ixsl:apply",
@@ -1358,7 +1364,7 @@ export class XPathFunctionDetails {
 	// XPath 4.0: the generated xpath40Data (see xpath40FunctionDetails.ts) replaces any entry with the same name,
 	// other entries (XSLT functions, xs: constructors, extension functions) are kept
 	private static xpath40Names = new Set(xpath40Data.map((item) => item.name));
-	public static dataPlus40: FunctionCompletionData[] = xpath40Data.concat(XPathFunctionDetails.data.filter((item) => !XPathFunctionDetails.xpath40Names.has(item.name)));
+	public static dataPlus40: FunctionCompletionData[] = xpath40Data.concat(XPathFunctionDetails.data.filter((item) => !XPathFunctionDetails.xpath40Names.has(item.name)), XPathFunctionDetails.xslt40Data);
 	public static dataPlusIxslPlus40: FunctionCompletionData[] = XPathFunctionDetails.dataPlus40.concat(XPathFunctionDetails.ixslData);
 	// for XPath documents (no XSLT functions): XPath 4.0 functions, with the xs: constructor and sql: extension functions
 	public static xpathDataPlus40: FunctionCompletionData[] = xpath40Data.concat(XPathFunctionDetails.xpathData.filter((item) => !XPathFunctionDetails.xpath40Names.has(item.name)));

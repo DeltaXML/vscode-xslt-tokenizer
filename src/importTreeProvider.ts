@@ -10,7 +10,9 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ImportIndex } from './importIndex';
+import { ImportIndex, ModuleReference, UsedPackage } from './importIndex';
+import { XsltPackages } from './xsltPackages';
+import { HrefPaths } from './hrefPaths';
 
 // a module in the import tree: the top-level stylesheet, or a module it imports or includes, directly or indirectly -
 // with the modules above it, to stop a cycle of imports
@@ -18,6 +20,9 @@ export interface ImportNode {
 	path: string;
 	isInclude?: boolean;
 	ancestors: string[];
+	// for a package an xsl:use-package uses: its name, the package-version asked for, and the version found - a package
+	// that isn't found has the path 'package:' and its name
+	package?: { name: string; versionRange?: string; version?: string; fromSetting?: boolean };
 }
 
 // The 'XSLT Imports' view: for the XSLT module in the active editor, the top-level stylesheet that imports or includes
@@ -35,8 +40,9 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 	}) {
 	}
 
-	// the references of modules that aren't in the index, e.g. outside the workspace - until the next refresh
-	private scanned = new Map<string, ReturnType<typeof ImportIndex.moduleReferences>>();
+	// the references and used packages of modules that aren't in the index, e.g. outside the workspace - until the next
+	// refresh
+	private scanned = new Map<string, { references: ModuleReference[]; usedPackages: UsedPackage[] }>();
 
 	public refresh() {
 		this.scanned.clear();
@@ -62,7 +68,21 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 		if (node.ancestors.includes(node.path)) {
 			return [];
 		}
-		return this.referencesOf(node.path, current).map((reference) => ({ path: reference.path, isInclude: reference.isInclude, ancestors: node.ancestors.concat(node.path) }));
+		const ancestors = node.ancestors.concat(node.path);
+		const { references, usedPackages } = this.moduleInfo(node.path, current);
+		return references.map((reference): ImportNode => ({ path: reference.path, isInclude: reference.isInclude, ancestors }))
+			.concat(usedPackages.map((used) => this.packageNode(used, ancestors)));
+	}
+
+	// the package an xsl:use-package uses - the version XsltPackages.find chooses
+	private packageNode(used: UsedPackage, ancestors: string[]): ImportNode {
+		const found = XsltPackages.find(XsltPackages.all(), used.name, used.versionRange);
+		const workspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(ancestors[0]);
+		const packagePath = found ? HrefPaths.settingsPath(found.path, workspace) : undefined;
+		return {
+			path: packagePath ?? 'package:' + used.name, ancestors,
+			package: { name: used.name, versionRange: used.versionRange, version: found ? found.version ?? '1' : undefined, fromSetting: found?.fromSetting }
+		};
 	}
 
 	public getTreeItem(node: ImportNode): vscode.TreeItem {
@@ -72,15 +92,20 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 		const isCurrent = node.path === current?.fileName;
 		const isCycle = node.ancestors.includes(node.path);
 		const exists = fs.existsSync(node.path);
-		const hasChildren = !isCycle && exists && this.referencesOf(node.path, current).length > 0;
+		const info = exists ? this.moduleInfo(node.path, current) : undefined;
+		const hasChildren = !isCycle && !!info && info.references.length + info.usedPackages.length > 0;
 		// the modules from the top-level stylesheet down to the active module are expanded, to show it
 		const isOnChain = chain.indexOf(node.path) > -1 && chain.indexOf(node.path) < chain.length - 1 && node.ancestors.every((ancestor, i) => chain[i] === ancestor);
-		const item = new vscode.TreeItem(path.basename(node.path),
+		const pkg = node.package;
+		const item = new vscode.TreeItem(pkg && !exists ? pkg.name : path.basename(node.path),
 			!hasChildren ? vscode.TreeItemCollapsibleState.None : isOnChain ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
 		// the module's folder, relative to that of the top-level stylesheet, e.g. 'lib'
 		const rootPath = node.ancestors[0] ?? node.path;
 		const folder = path.relative(path.dirname(rootPath), path.dirname(node.path)).split(path.sep).join('/');
 		const notes: string[] = [];
+		if (pkg && exists) {
+			notes.push(`package ${pkg.name.split(/[/:#]/).filter((part) => part !== '').pop() ?? pkg.name} ${pkg.version}`);
+		}
 		if (isCurrent) {
 			notes.push('current');
 		}
@@ -93,37 +118,41 @@ export class ImportTreeProvider implements vscode.TreeDataProvider<ImportNode> {
 		if (!exists) {
 			notes.push('not found');
 		}
-		item.description = [folder].concat(notes).filter((part) => part !== '').join(' · ');
-		const kind = node.ancestors.length === 0 ? 'top-level stylesheet' : node.isInclude ? 'xsl:include' : 'xsl:import';
+		item.description = [pkg && !exists ? '' : folder].concat(notes).filter((part) => part !== '').join(' · ');
+		const range = pkg?.versionRange && pkg.versionRange !== '*' ? ` package-version="${pkg.versionRange}"` : '';
+		const kind = pkg ? `xsl:use-package name="${pkg.name}"${range}` + (exists ? `\nversion ${pkg.version}, from ${pkg.fromSetting ? 'the XSLT.resources.xsltPackages setting' : 'the workspace'}` : '\npackage not found - in the workspace, or the XSLT.resources.xsltPackages setting') :
+			node.ancestors.length === 0 ? 'top-level stylesheet' : node.isInclude ? 'xsl:include' : 'xsl:import';
 		const otherImporters = index.importersOf(node.path).filter((importer) => importer !== node.ancestors[node.ancestors.length - 1]);
-		item.tooltip = `${node.path}\n${kind}` + (otherImporters.length > 0 ? `\nalso imported or included by: ${otherImporters.map((p) => vscode.workspace.asRelativePath(p)).join(', ')}` : '');
-		item.iconPath = new vscode.ThemeIcon(isCurrent ? 'arrow-right' : node.ancestors.length === 0 ? 'root-folder' : node.isInclude ? 'file-symlink-file' : 'file-code');
+		item.tooltip = (pkg && !exists ? kind : `${node.path}\n${kind}`) + (otherImporters.length > 0 ? `\nalso imported or included by: ${otherImporters.map((p) => vscode.workspace.asRelativePath(p)).join(', ')}` : '');
+		item.iconPath = new vscode.ThemeIcon(isCurrent ? 'arrow-right' : node.ancestors.length === 0 ? 'root-folder' : pkg ? 'package' : node.isInclude ? 'file-symlink-file' : 'file-code');
 		if (exists) {
 			item.command = { command: 'vscode.open', title: 'Open', arguments: [vscode.Uri.file(node.path)] };
 		}
 		item.id = node.ancestors.concat(node.path).join('\n');
-		// the top-level stylesheet has a Quick Run action
-		item.contextValue = node.ancestors.length === 0 && exists ? 'topLevel' : 'module';
+		// the top-level stylesheet has a Quick Run action - an imported or included module, Analyse as Package
+		item.contextValue = node.ancestors.length === 0 && exists ? 'topLevel' : pkg ? 'package' : 'module';
 		return item;
 	}
 
-	// the references of the module - for the active document, from its text, which may not be saved yet, and for a
-	// module that isn't in the index, from the file
-	private referencesOf(modulePath: string, current: vscode.TextDocument | undefined) {
+	// the references and used packages of the module - for the active document, from its text, which may not be saved
+	// yet, and for a module that isn't in the index, from the file
+	private moduleInfo(modulePath: string, current: vscode.TextDocument | undefined): { references: ModuleReference[]; usedPackages: UsedPackage[] } {
 		if (current && modulePath === current.fileName) {
-			return ImportIndex.moduleReferences(current.getText(), modulePath);
+			const text = current.getText();
+			return { references: ImportIndex.moduleReferences(text, modulePath), usedPackages: ImportIndex.usedPackages(text) };
 		}
 		if (ImportIndex.instance.has(modulePath)) {
-			return ImportIndex.instance.referencesOf(modulePath);
+			return { references: ImportIndex.instance.referencesOf(modulePath), usedPackages: ImportIndex.instance.usedPackagesOf(modulePath) };
 		}
 		if (!this.scanned.has(modulePath)) {
-			let references: ReturnType<typeof ImportIndex.moduleReferences> = [];
+			let info = { references: [] as ModuleReference[], usedPackages: [] as UsedPackage[] };
 			try {
-				references = ImportIndex.moduleReferences(fs.readFileSync(modulePath, 'utf8'), modulePath);
+				const text = fs.readFileSync(modulePath, 'utf8');
+				info = { references: ImportIndex.moduleReferences(text, modulePath), usedPackages: ImportIndex.usedPackages(text) };
 			} catch {
 				// not found: no references
 			}
-			this.scanned.set(modulePath, references);
+			this.scanned.set(modulePath, info);
 		}
 		return this.scanned.get(modulePath)!;
 	}

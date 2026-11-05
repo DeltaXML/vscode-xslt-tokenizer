@@ -3,7 +3,7 @@ import * as fs from "fs";
 import { CancellationToken, Hover, HoverProvider, MarkdownString, Position, ProviderResult, TextDocument, Uri, workspace } from "vscode";
 import { XPathFunctionDetails } from "./xpathFunctionDetails";
 import { XsltDefinitionProvider } from "./xsltDefinitionProvider";
-import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration } from "./xslLexer";
+import { DocumentTypes, GlobalInstructionData, GlobalInstructionType, LanguageConfiguration, XslLexer } from "./xslLexer";
 import { LexPosition } from "./xpLexer";
 import { XsltTokenDiagnostics } from "./xsltTokenDiagnostics";
 import { XdocNotes } from "./xdocNote";
@@ -12,6 +12,13 @@ import { declarationParamLabels } from "./declarationParams";
 import { XsltTokenDefinitions } from "./xsltTokenDefintions";
 import { HrefPaths } from './hrefPaths';
 import { XdocReferences } from './xdocReferences';
+import { ModeHover } from './xsltModeHover';
+import { PackageScope, PackageComponent, OverridingDeclaration } from './packageScope';
+import { XsltPackages } from './xsltPackages';
+import { ModulePrefixes } from './modulePrefixes';
+import { XSpecHrefs } from './xspecHrefs';
+import { XSpecScenario } from './xspecScenario';
+import { XSpecGlobalParams } from './xspecGlobalParams';
 
 enum CharType {
 	none,
@@ -36,6 +43,14 @@ export class XSLTHoverProvider implements HoverProvider {
 	}
 
 	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		if (this.languageConfiguration?.docType === DocumentTypes.XSPEC) {
+			// an x:call that inherits what it calls: what, before XSpec's description of x:call
+			const elementHover = (await this.xspecInheritedCallHover(document, position, token)) ?? this.xspecElementHover(document, position) ??
+				this.xspecStylesheetHover(document, position) ?? await this.xspecCallHover(document, position, token);
+			if (elementHover) {
+				return elementHover;
+			}
+		}
 		// XPath 4.0: a record field, e.g. 'r' in $c?r
 		const fieldReference = XsltTokenDiagnostics.recordFieldAt(document, position);
 		if (fieldReference) {
@@ -44,7 +59,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			// the type as written in an attribute value, with its references replaced, e.g. &quot;
 			const declaration = `${quotedName}${field.optional ? '?' : ''}${field.type ? ' as ' + RecordTypes.decodeReferences(field.type).text : ''}`;
 			const markdown = new MarkdownString();
-			markdown.appendCodeblock(declaration, XSLTHoverProvider.signatureLanguage);
+			markdown.appendCodeblock(RecordTypes.joinLines(declaration), XSLTHoverProvider.signatureLanguage);
 			const itemTypes = await this.itemTypeGlobals(document, token);
 			const fieldText = /^record\s*\(/.test(record.name) ? undefined : XdocNotes.recordFieldTexts(record.name, itemTypes, document.getText())(field.name);
 			// the values of a field with an enumeration type
@@ -67,9 +82,9 @@ export class XSLTHoverProvider implements HoverProvider {
 			if (!this.definitionProvider) {
 				return undefined;
 			}
-			return this.findModuleNoteHover(document, position) ?? await this.findVariableHover(document, position, token) ?? await this.findModuleHover(document, position) ??
+			return this.findModuleNoteHover(document, position) ?? await this.findVariableHover(document, position, token) ?? await this.findModuleHover(document, position) ?? this.findPackageHover(document, position) ??
 				await this.findDeclarationHover(document, position, token) ?? await this.findTemplateHover(document, position, token) ??
-				await this.findItemTypeHover(document, position, token);
+				await ModeHover.hover(document, position, token) ?? await this.findItemTypeHover(document, position, token);
 		}
 
 		const trimmedFnName = rawFnName.trimRight();
@@ -94,6 +109,161 @@ export class XSLTHoverProvider implements HoverProvider {
 		}
 
 		return undefined;
+	}
+
+	// an XSpec element's name, e.g. x:expect: its description in the XSpec schema
+	private xspecElementHover(document: TextDocument, position: Position): Hover | undefined {
+		const range = document.getWordRangeAtPosition(position, /<\/?[\w.-]+:[\w.-]+/);
+		const prefix = XsltDefinitionProvider.xspecPrefixOf(document);
+		const name = range ? document.getText(range).replace(/^<\/?/, '') : undefined;
+		if (!name?.startsWith(prefix + ':')) {
+			return undefined;
+		}
+		const detail = this.languageConfiguration?.schemaData?.elements['x:' + name.substring(prefix.length + 1)]?.detail;
+		if (!detail) {
+			return undefined;
+		}
+		const markdown = new MarkdownString();
+		markdown.appendCodeblock(`<${name}>`, 'xml');
+		markdown.appendText(detail);
+		return new Hover(markdown, range);
+	}
+
+	// in an XSpec file: x:description's stylesheet - the stylesheet or package tested - or an x:helper's: its module note,
+	// where it is and, for the one tested, the functions and templates that have no scenario yet
+	private xspecStylesheetHover(document: TextDocument, position: Position): Hover | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const href = document.uri.scheme === 'file' ? XSpecHrefs.find(text, document.fileName).find((h) => h.attribute === 'stylesheet' && offset >= h.start && offset <= h.end) : undefined;
+		const modulePath = href ? HrefPaths.toPath(href.value, href.basePath) : undefined;
+		if (!href || modulePath === undefined) {
+			return undefined;
+		}
+		const open = workspace.textDocuments.find((d) => d.fileName === modulePath);
+		let moduleText: string;
+		try {
+			moduleText = open ? open.getText() : fs.readFileSync(modulePath, 'utf8');
+		} catch {
+			return this.createHover(`module ${path.basename(modulePath)}`, `Stylesheet: ${modulePath} (not found)`);
+		}
+		const tested = href.element === 'description';
+		const packageTag = /<(?:[\w.-]+:)?package\b[^>]*>/.exec(moduleText)?.[0];
+		const packageName = packageTag ? /\sname\s*=\s*(["'])(.*?)\1/.exec(packageTag)?.[2] : undefined;
+		const packageVersion = packageTag ? /\spackage-version\s*=\s*(["'])(.*?)\1/.exec(packageTag)?.[2] : undefined;
+		const signature = packageName ? `package ${packageName}${packageVersion ? ' ' + packageVersion : ''}` : `module ${path.basename(modulePath)}`;
+		const parts: string[] = [];
+		const note = XdocNotes.moduleNote(moduleText);
+		if (note) {
+			parts.push(XdocNotes.toMarkdown(note), '---');
+		}
+		parts.push(`${tested ? (packageName ? 'Package' : 'Stylesheet') + ' under test' : 'Helper stylesheet'}: ${modulePath}`);
+		if (tested) {
+			// for a package, its public and final components, which are all its tests can use
+			const declarations = XSpecScenario.declarationsOf(moduleText, modulePath);
+			const untested = XSpecScenario.untested(text, document.fileName)?.declarations ?? [];
+			const name = (d: { kind: string, name: string }) => d.kind === 'function' ? `\`${d.name}\`` : d.kind === 'template' ? `template \`${d.name}\`` : `template rule \`${d.name}\``;
+			if (declarations.length > 0) {
+				parts.push(`${declarations.length - untested.length} of its ${declarations.length} functions and templates have a scenario` +
+					(untested.length > 0 ? ` - not: ${untested.slice(0, 10).map(name).join(', ')}${untested.length > 10 ? `, and ${untested.length - 10} more` : ''}` : ''));
+			}
+		}
+		return this.createHover(signature, parts.join('\n\n'));
+	}
+
+	// the name of an x:call without a function or template, which it inherits from an enclosing scenario's x:call: the
+	// hover of what it calls, saying where it's from - then XSpec's description of x:call
+	private async xspecInheritedCallHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		const prefix = XsltDefinitionProvider.xspecPrefixOf(document);
+		const x = prefix ? prefix + ':' : '';
+		const range = document.getWordRangeAtPosition(position, /<[\w.-]+:[\w.-]+/);
+		if (!this.definitionProvider || !range || document.getText(range) !== `<${x}call`) {
+			return undefined;
+		}
+		const text = document.getText();
+		const target = XSpecScenario.callTarget(text, document.offsetAt(range.start), prefix);
+		if (target?.from === undefined) {
+			return undefined;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+		const type = target.kind === 'function' ? GlobalInstructionType.Function : GlobalInstructionType.Template;
+		const candidates = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === type && g.name === target.name);
+		const declared = target.kind === 'template' ? candidates[0] : candidates.find((g) => XslLexer.functionArityMatches(g, target.params.length)) ?? candidates[0];
+		const markdown = new MarkdownString();
+		markdown.appendMarkdown(`Calls the ${target.kind} \`${target.name}\`, as the \`${x}call\` of the enclosing scenario '${target.from.replace(/[\\`*_[\]<>]/g, '\\$&')}' does\n\n---\n`);
+		const calledHover = declared ? (target.kind === 'function' ? this.functionHover(document, declared) : this.templateHover(document, declared)) : undefined;
+		const detail = this.languageConfiguration?.schemaData?.elements['x:call']?.detail;
+		return new Hover([markdown, ...(calledHover?.contents ?? []), ...(detail ? [new MarkdownString().appendText(detail)] : [])], range);
+	}
+
+	// in an XSpec file: x:call's function or template, the declaration's signature and documentation note, as for a call
+	// of it in the stylesheet - or the name of an x:param of an x:call of a template, the parameter's documentation
+	private async xspecCallHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		if (!this.definitionProvider) {
+			return undefined;
+		}
+		// an x:param of x:description: the global parameter of the stylesheet under test it sets
+		if (/<(?:[\w.-]+:)?param\s[^<>]*$/.test(document.getText().substring(Math.max(0, document.offsetAt(position) - 300), document.offsetAt(position)))) {
+			const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+			const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+			const param = XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
+			const declaration = param ? XSpecGlobalParams.declaration(param) : undefined;
+			if (param && declaration) {
+				const itemTypes = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === GlobalInstructionType.ItemType);
+				return this.globalVariableHover(declaration.text, declaration.tagStart, param.href, itemTypes);
+			}
+		}
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const prefix = XsltDefinitionProvider.xspecPrefixOf(document);
+		const tagStart = text.lastIndexOf('<', offset);
+		const tagName = /^<([\w.-]+:)?([\w.-]+)\s/.exec(text.substring(tagStart, tagStart + 60));
+		if (!tagName || (tagName[1] ?? '') !== (prefix ? prefix + ':' : '') || (tagName[2] !== 'call' && tagName[2] !== 'param')) {
+			return undefined;
+		}
+		const on = (attribute: string) => {
+			const valueStart = RecordTypes.attributeValueOffset(text, tagStart + 1, attribute);
+			const value = RecordTypes.attributeOfElementAt(text, tagStart + 1, attribute);
+			return valueStart !== undefined && value && offset >= valueStart && offset <= valueStart + value.length ? value.trim() : undefined;
+		};
+		let call: { kind: 'function' | 'template', name: string, offset: number } | undefined;
+		let paramName: string | undefined;
+		if (tagName[2] === 'call') {
+			const fn = on('function');
+			const template = fn ? undefined : on('template');
+			call = fn ? { kind: 'function', name: fn, offset: tagStart } : template ? { kind: 'template', name: template, offset: tagStart } : undefined;
+		} else {
+			// an x:param of an x:call of a template - its own, or one it inherits
+			paramName = on('name');
+			const parent = paramName ? RecordTypes.openElements(RecordTypes.blankMarkup(text.substring(0, tagStart)), tagStart).pop() : undefined;
+			const target = parent && parent.name === `${prefix ? prefix + ':' : ''}call` ? XSpecScenario.callTarget(text, parent.offset, prefix) : undefined;
+			call = target?.kind === 'template' ? { kind: 'template', name: target.name, offset: parent!.offset } : undefined;
+		}
+		if (!call) {
+			return undefined;
+		}
+		const lexPosition: LexPosition = { line: 0, startCharacter: 0, documentOffset: 0 };
+		const { globalInstructionData, allImportedGlobals } = await this.definitionProvider.getImportedGlobals(document, lexPosition);
+		if (token.isCancellationRequested) {
+			return undefined;
+		}
+		const type = call.kind === 'function' ? GlobalInstructionType.Function : GlobalInstructionType.Template;
+		const candidates = globalInstructionData.concat(allImportedGlobals).filter((g) => g.type === type && g.name === call!.name);
+		if (candidates.length === 0) {
+			return undefined;
+		} else if (paramName) {
+			return this.paramHover(document, candidates[0], paramName);
+		} else if (call.kind === 'template') {
+			return this.templateHover(document, candidates[0]);
+		}
+		// the function with as many parameters as the x:call passes, with those it inherits, if there's one - else the one
+		// with the most
+		const passed = XSpecScenario.callTarget(text, call.offset, prefix)?.params.length ?? 0;
+		const fn = candidates.find((g) => XslLexer.functionArityMatches(g, passed)) ?? candidates.reduce((best, current) => current.idNumber > best.idNumber ? current : best);
+		return this.functionHover(document, fn);
 	}
 
 	private async findUserFunctionHover(document: TextDocument, fnName: string, token: CancellationToken): Promise<Hover | undefined> {
@@ -135,7 +305,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const globals = globalInstructionData.concat(allImportedGlobals);
 		const itemTypes = globals.filter((g) => g.type === GlobalInstructionType.ItemType);
 		const markup = RecordTypes.blankMarkup(text);
-		const target = XdocReferences.resolve(reference, globals, text, markup)[0];
+		const target = XdocReferences.resolve(reference, globals, text, markup, reference.inOverride ? PackageScope.overriddenBy(text, globals) : [])[0];
 		if (target?.paramOffset !== undefined) {
 			return this.localParamHover(text, markup, target.paramOffset, itemTypes) ?? null;
 		} else if (!target) {
@@ -172,16 +342,18 @@ export class XSLTHoverProvider implements HoverProvider {
 		const paramList = declarationParamLabels(fn, document.getText()).join(', ');
 		const returnType = fn.returnType ? ` as ${fn.returnType}` : '';
 		const signature = `${fn.name}(${paramList})${returnType}`;
-		const description = fn.href ? `User-defined function, declared in ${path.basename(fn.href)}` : 'User-defined function, declared in this stylesheet';
-		const note = XSLTHoverProvider.declarationNote(document, fn);
+		const overriding = XSLTHoverProvider.overridingNote(document, fn, 'function');
+		const description = overriding?.description ?? XSLTHoverProvider.packageDescription(fn, 'function') ?? (fn.href ? `User-defined function, declared in ${path.basename(fn.href)}` : 'User-defined function, declared in this stylesheet');
+		const note = overriding ? overriding.note : XSLTHoverProvider.declarationNote(document, fn);
 		return this.createHover(signature, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
 	// a named template's signature and documentation note
 	private templateHover(document: TextDocument, template: GlobalInstructionData) {
-		const note = XSLTHoverProvider.declarationNote(document, template);
+		const overriding = XSLTHoverProvider.overridingNote(document, template, 'template');
+		const note = overriding ? overriding.note : XSLTHoverProvider.declarationNote(document, template);
 		const params = declarationParamLabels(template, document.getText()).join(', ');
-		const description = template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet';
+		const description = overriding?.description ?? XSLTHoverProvider.packageDescription(template, 'template') ?? (template.href ? `Named template, declared in ${path.basename(template.href)}` : 'Named template, declared in this stylesheet');
 		return this.createHover(`template ${template.name}(${params})`, note ? `${XdocNotes.toMarkdown(note)}\n\n---\n${description}` : description);
 	}
 
@@ -224,7 +396,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const text = declarationDocument.getText();
 		const nameOffset = declarationDocument.offsetAt(location.range.start);
 		const tagStart = text.lastIndexOf('<', nameOffset);
-		const element = /^<(xsl:param|xsl:variable)\s/.exec(text.substring(tagStart, tagStart + 14))?.[1];
+		const element = RecordTypes.xsltNameIn(text, RecordTypes.xsltPattern(/^<(xsl:param|xsl:variable)\s/, text).exec(text.substring(tagStart, tagStart + 40))?.[1]);
 		const nameStart = element ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'name') : undefined;
 		// the declaration's name attribute, not e.g. a variable declared in an XPath expression within it
 		if (!element || nameStart === undefined || nameOffset < nameStart || nameOffset > nameStart + (RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name')?.length ?? 0)) {
@@ -260,7 +432,7 @@ export class XSLTHoverProvider implements HoverProvider {
 	// a global xsl:param or xsl:variable: its declared type, its documentation - its own note, or its @param or @variable
 	// in the module note - and for an enumeration type, its values - with the module declaring it (href), if it's another
 	private globalVariableHover(text: string, tagStart: number, href: string | undefined, itemTypes: GlobalInstructionData[]) {
-		const isParam = text.startsWith('<xsl:param', tagStart);
+		const isParam = text.startsWith(RecordTypes.xsltTag(text, 'param'), tagStart);
 		const name = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') ?? '';
 		const asText = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'as');
 		const documentation = XdocNotes.globalDocumentation(text, tagStart);
@@ -276,7 +448,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset);
-		if (tagStart < 0 || !/^<xsl:(import|include)\s/.test(text.substring(tagStart, tagStart + 13))) {
+		if (tagStart < 0 || !RecordTypes.xsltPattern(/^<xsl:(import|include)\s/, text).test(text.substring(tagStart, tagStart + 40))) {
 			return undefined;
 		}
 		const hrefStart = RecordTypes.attributeValueOffset(text, tagStart + 1, 'href');
@@ -301,6 +473,75 @@ export class XSLTHoverProvider implements HoverProvider {
 		return this.createHover(`module ${path.basename(modulePath)}`, `${note ? XdocNotes.toMarkdown(note) + '\n\n---\n' : ''}Stylesheet module: ${modulePath}${catalogText ? '\n\n' + catalogText : ''}`);
 	}
 
+	// for a component of a used package, e.g. 'Public function of package urn:shapes 1.2, declared in shapes.xsl'
+	private static packageDescription(global: GlobalInstructionData, kind: string) {
+		const component = global as Partial<PackageComponent>;
+		if (!component.packageName) {
+			return undefined;
+		}
+		const visibility = component.visibility ?? 'public';
+		const version = component.packageVersion ? ` ${component.packageVersion}` : '';
+		const declaredIn = global.href ? `, declared in ${path.basename(global.href)}` : '';
+		return `${visibility.charAt(0).toUpperCase()}${visibility.substring(1)} ${kind} of package \`${component.packageName}\`${version}${declaredIn}`;
+	}
+
+	// for the name of an xsl:use-package: the package's note, where it's found, and the components it gives the
+	// stylesheet - after the xsl:accept elements, and without those the xsl:override replaces
+	private findPackageHover(document: TextDocument, position: Position): Hover | undefined {
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const tagStart = text.lastIndexOf('<', offset);
+		if (tagStart < 0 || !RecordTypes.xsltPattern(/^<xsl:use-package\s/, text).test(text.substring(tagStart, tagStart + 40))) {
+			return undefined;
+		}
+		const nameStart = RecordTypes.attributeValueOffset(text, tagStart + 1, 'name');
+		const name = RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name');
+		if (nameStart === undefined || !name || offset < nameStart || offset > nameStart + name.length) {
+			return undefined;
+		}
+		const { documentUsePackages, documentBindings } = PackageScope.usePackagesOf(text, [{ type: GlobalInstructionType.UsePackage, name, token: { line: 0, startCharacter: 0, length: 0, value: '', tokenType: 0 }, idNumber: 0 }], []);
+		const nameLine = document.positionAt(nameStart).line;
+		const usePackage = documentUsePackages.find((u) => u.name === name.trim() && u.token.line === nameLine) ?? documentUsePackages.find((u) => u.name === name.trim());
+		const used = usePackage ? PackageScope.usedBy(usePackage, XsltPackages.all(), PackageScope.workspaceFolder()) : undefined;
+		if (!used || !used.path) {
+			return undefined;
+		}
+		let packageText = '';
+		try {
+			packageText = workspace.textDocuments.find((d) => d.fileName === used.path)?.getText() ?? fs.readFileSync(used.path, 'utf8');
+		} catch {
+			packageText = '';
+		}
+		const note = packageText ? XdocNotes.moduleNote(packageText) : undefined;
+		const from = used.pkg.fromSetting ? 'the XSLT.resources.xsltPackages setting' : 'the workspace';
+		const version = used.pkg.version ?? '1';
+		const location = `Package \`${used.pkg.name}\` version ${version}, from ${from}: [${workspace.asRelativePath(used.path)}](${Uri.file(used.path).toString()})`;
+		const components = XSLTHoverProvider.componentsMarkdown(ModulePrefixes.inModule(used.available, documentBindings));
+		return this.createHover(`package ${used.pkg.name} ${version}`, `${note ? XdocNotes.toMarkdown(note) + '\n\n---\n' : ''}${location}\n\n${components}`);
+	}
+
+	// the components available from a package, by kind - at most a few of each, in name order
+	private static componentsMarkdown(components: GlobalInstructionData[]) {
+		const maxShown = 12;
+		const kinds: [GlobalInstructionType[], string, (g: GlobalInstructionData) => string][] = [
+			[[GlobalInstructionType.Function], 'Functions', (g) => `${g.name}#${g.idNumber}`],
+			[[GlobalInstructionType.Template], 'Named templates', (g) => g.name],
+			[[GlobalInstructionType.Variable, GlobalInstructionType.Parameter], 'Variables and parameters', (g) => '$' + g.name],
+			[[GlobalInstructionType.ModeInstruction], 'Modes', (g) => g.name],
+			[[GlobalInstructionType.AttributeSet], 'Attribute sets', (g) => g.name],
+			[[GlobalInstructionType.ItemType], 'Item types', (g) => g.name]
+		];
+		const lines: string[] = [];
+		for (const [types, label, display] of kinds) {
+			const names = [...new Set(components.filter((c) => types.includes(c.type)).map(display))].sort();
+			if (names.length > 0) {
+				const shown = names.slice(0, maxShown).map((n) => `\`${n}\``).join(', ');
+				lines.push(`**${label}** (${names.length}): ${shown}${names.length > maxShown ? ', …' : ''}`);
+			}
+		}
+		return lines.length > 0 ? lines.join('\n\n') : 'No public components';
+	}
+
 	// how the XML catalog resolved an href, e.g. 'Resolved by the uri entry in catalogs/libraries.xml, via catalog.xml'
 	// with links to the catalog files - undefined if the catalog didn't resolve it
 	public static catalogResolutionMarkdown(href: string, documentPath: string) {
@@ -322,7 +563,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset);
-		if (tagStart < 0 || !/^<xsl:note[\s>]/.test(text.substring(tagStart, tagStart + 10))) {
+		if (tagStart < 0 || !RecordTypes.xsltPattern(/^<xsl:note[\s>]/, text).test(text.substring(tagStart, tagStart + 40))) {
 			return undefined;
 		}
 		const markup = RecordTypes.blankMarkup(text);
@@ -394,7 +635,7 @@ export class XSLTHoverProvider implements HoverProvider {
 			return nameStart !== undefined && name ? { nameStart, name } : undefined;
 		};
 		const tagStart = text.lastIndexOf('<', offset);
-		const element = /^<(xsl:function|xsl:template|xsl:item-type|xsl:param|xsl:variable)\s/.exec(text.substring(tagStart, tagStart + 16))?.[1];
+		const element = RecordTypes.xsltNameIn(text, RecordTypes.xsltPattern(/^<(xsl:function|xsl:template|xsl:item-type|xsl:param|xsl:variable)\s/, text).exec(text.substring(tagStart, tagStart + 40))?.[1]);
 		const own = element ? nameAt(tagStart) : undefined;
 		if (!own || offset < own.nameStart || offset > own.nameStart + own.name.length) {
 			return undefined;
@@ -421,9 +662,10 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (token.isCancellationRequested) {
 			return undefined;
 		}
-		// the declaration in this document whose name is at that position
+		// the declaration in this document whose name is at that position - or in its xsl:override, which is added to
+		// those imported (see XsltSymbolProvider.withPackageComponents)
 		const namePosition = document.positionAt(declarationName.nameStart);
-		const declaration = globalInstructionData.find((g) => (g.type === GlobalInstructionType.Function || g.type === GlobalInstructionType.Template || g.type === GlobalInstructionType.ItemType) &&
+		const declaration = globalInstructionData.concat(allImportedGlobals.filter((g) => g.href === document.fileName)).find((g) => (g.type === GlobalInstructionType.Function || g.type === GlobalInstructionType.Template || g.type === GlobalInstructionType.ItemType) &&
 			g.name === declarationName.name && g.token.line === namePosition.line && namePosition.character >= g.token.startCharacter && namePosition.character <= g.token.startCharacter + g.token.length);
 		if (!declaration) {
 			return undefined;
@@ -437,8 +679,23 @@ export class XSLTHoverProvider implements HoverProvider {
 
 	// the documentation note - an xsl:note with format="xdoc-md" - of a function, template or item type declaration, in
 	// this document or the module declaring it
+	// a declaration's note - for one in the document, from its text, which may have unsaved changes
 	public static declarationNote(document: TextDocument, declaration: GlobalInstructionData) {
-		return XdocNotes.forGlobal(declaration, document.getText());
+		return XdocNotes.forGlobal(declaration.href === document.fileName ? { ...declaration, href: undefined } : declaration, document.getText());
+	}
+
+	// for a declaration in xsl:override, its note - or if it has none, that of the component it overrides, as Java's
+	// overriding methods inherit their documentation - and what it overrides
+	private static overridingNote(document: TextDocument, declaration: GlobalInstructionData, kind: string) {
+		const overridden = (declaration as OverridingDeclaration).overridden;
+		if (!overridden) {
+			return undefined;
+		}
+		const visibility = overridden.packageVisibility;
+		return {
+			note: XSLTHoverProvider.declarationNote(document, declaration) ?? XSLTHoverProvider.declarationNote(document, overridden),
+			description: `Overrides the ${visibility} ${kind} of package \`${overridden.packageName}\`${overridden.packageVersion ? ' ' + overridden.packageVersion : ''}, declared in ${path.basename(overridden.href ?? '')}`
+		};
 	}
 
 	// for the name of an xsl:call-template, the template's signature and documentation note - or for the name of an
@@ -447,7 +704,7 @@ export class XSLTHoverProvider implements HoverProvider {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tagStart = text.lastIndexOf('<', offset);
-		const element = /^<(xsl:call-template|xsl:with-param)\s/.exec(text.substring(tagStart, tagStart + 20))?.[1];
+		const element = RecordTypes.xsltNameIn(text, RecordTypes.xsltPattern(/^<(xsl:call-template|xsl:with-param)\s/, text).exec(text.substring(tagStart, tagStart + 40))?.[1]);
 		const nameStart = element ? RecordTypes.attributeValueOffset(text, tagStart + 1, 'name') : undefined;
 		const name = element ? RecordTypes.attributeOfElementAt(text, tagStart + 1, 'name') : undefined;
 		if (nameStart === undefined || !name || offset < nameStart || offset > nameStart + name.length) {
@@ -507,7 +764,8 @@ export class XSLTHoverProvider implements HoverProvider {
 		if (!parts || (isVersion4 && XSLTHoverProvider.unspecified40.includes(name))) {
 			return undefined;
 		}
-		const isXSLT = XPathFunctionDetails.xsltData.some((item) => item.name === name) && !(isVersion4 && XSLTHoverProvider.functions40.includes(name));
+		const isXSLT = (XPathFunctionDetails.xsltData.some((item) => item.name === name) && !(isVersion4 && XSLTHoverProvider.functions40.includes(name))) ||
+			(isVersion4 && XPathFunctionDetails.xslt40Data.some((item) => item.name === name));
 		const [title, url] = isXSLT ?
 			(isVersion4 ? ['XSLT 4.0', 'https://qt4cg.org/specifications/xslt-40/Overview.html'] : ['XSLT 3.0', 'https://www.w3.org/TR/xslt-30/']) :
 			(isVersion4 ? ['XPath Functions 4.0', 'https://qt4cg.org/specifications/xpath-functions-40/Overview.html'] : ['XPath Functions 3.1', 'https://www.w3.org/TR/xpath-functions-31/']);
@@ -519,8 +777,9 @@ export class XSLTHoverProvider implements HoverProvider {
 	public static readonly signatureLanguage = 'xpath-signature';
 
 	private createHover(signature: string, description: string) {
-		return new Hover(new MarkdownString().appendCodeblock(signature, XSLTHoverProvider.signatureLanguage).appendMarkdown('\n' + description));
+		return new Hover(new MarkdownString().appendCodeblock(RecordTypes.joinLines(signature), XSLTHoverProvider.signatureLanguage).appendMarkdown('\n' + description));
 	}
+
 
 	private getFunctionName(line: string, char: number) {
 		// track forwards to get end of potential function name

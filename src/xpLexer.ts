@@ -140,6 +140,8 @@ export enum ModifierState {
 }
 
 export class Data {
+    // the operators < and > written as numeric character references, e.g. 1&#60;2 - typed text that triggers completion
+    public static numericLtGt = ['&#60;', '&#x3C;', '&#x3c;', '&#62;', '&#x3E;', '&#x3e;'];
     // ';' ends an XPath 4.0 namespace declaration, e.g. declare namespace p = 'uri'; - '×' and '÷' are XPath 4.0's
     // multiplication and division operators
     public static separators = ['!', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '|', '%', ';', '×', '÷'];
@@ -158,7 +160,7 @@ export class Data {
         "else", "eq", "except",
         "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "union", "&lt;", "&gt;"].concat(Data.nodeComparisons40);
+        "then", "to", "union", "&lt;", "&gt;", ...Data.numericLtGt].concat(Data.nodeComparisons40);
 
 
     // axes added in XPath 4.0:
@@ -188,7 +190,7 @@ export class Data {
         "else", "eq", "except",
         "function", "ge", "gt", "idiv", "if", "in", "intersect", "is", "le",
         "lt", "map", "mod", "ne", "of", "or", "orElse", "otherwise", "return", "satisfies",
-        "then", "to", "treat", "union", "&lt;", "&gt;"].concat(Data.nodeComparisons40);
+        "then", "to", "treat", "union"].concat(Data.nodeComparisons40);
 
     // note: 'member' is a proposed Saxon extension: for member $a in array-expression:
     // 'key' and 'value' are for XPath 4.0 map bindings: for key $k value $v in map-expression
@@ -259,6 +261,14 @@ export class XPathLexer {
         return code === 34 ? '"' : code === 39 ? '\'' : undefined;
     }
 
+    // a character reference to whitespace - a space, tab, newline or carriage return, e.g. &#xA; or &#10; - which, as the
+    // XML parser replaces it, is whitespace in the XPath expression
+    public static isWhitespaceReference(reference: string): boolean {
+        const numeric = /^&#(?:x([0-9a-fA-F]+)|([0-9]+));$/.exec(reference);
+        const code = numeric ? (numeric[1] !== undefined ? parseInt(numeric[1], 16) : parseInt(numeric[2], 10)) : undefined;
+        return code === 9 || code === 10 || code === 13 || code === 32;
+    }
+
     // the text so far of a reference may be the start of one to the quote
     private static isQuoteReferencePrefix(text: string, quote: string): boolean {
         if ((quote === '"' ? '&quot;' : '&apos;').startsWith(text)) {
@@ -319,6 +329,94 @@ export class XPathLexer {
         return textmateTypes;
     }
 
+    // '<' or '>' as a character reference: &lt; &gt; &#60; &#62; &#x3C; &#x3E;
+    private static readonly ltGtReference = /&(?:(lt|gt)|#0*(60|62)|#x0*(3[cCeE]));/y;
+    // the operators that contain '<' or '>', longest first
+    private static readonly ltGtOperators = ['=!>', '=?>', '=>', '->', '<=', '>=', '<<', '>>', '<', '>'];
+
+    /**
+     * An operator at the index containing '<' or '>' written as a character reference, e.g. =&gt; &lt;= or &#62;:
+     * the operator and the length of its text - a raw '<' doesn't qualify, as it isn't allowed in an attribute and
+     * ends XPath in text
+     */
+    public static referenceOperatorAt(xpath: string, index: number): { value: string, length: number } | null {
+        let chars = '';
+        let length = 0;
+        let hasReference = false;
+        const lengths: number[] = [];
+        while (chars.length < 3) {
+            const at = index + length;
+            const char = xpath.charAt(at);
+            if (char === '&') {
+                XPathLexer.ltGtReference.lastIndex = at;
+                const match = XPathLexer.ltGtReference.exec(xpath);
+                if (!match) {
+                    break;
+                }
+                const isLt = match[1] === 'lt' || match[2] === '60' || (match[3] !== undefined && match[3].toLowerCase() === '3c');
+                chars += isLt ? '<' : '>';
+                length += match[0].length;
+                hasReference = true;
+            } else if (char === '=' || char === '!' || char === '?' || char === '-' || char === '>') {
+                chars += char;
+                length++;
+            } else {
+                break;
+            }
+            lengths.push(length);
+        }
+        if (!hasReference) {
+            return null;
+        }
+        const operator = XPathLexer.ltGtOperators.find((op) => chars.startsWith(op));
+        if (!operator) {
+            return null;
+        }
+        const operatorLength = lengths[operator.length - 1];
+        // the operator itself must include a reference, e.g. not '=' in =&lt;
+        return xpath.substring(index, index + operatorLength).includes('&') ? { value: operator, length: operatorLength } : null;
+    }
+
+    // whether the char can start an operator, given the state of the char before it: not within a string literal, a
+    // comment, a string template's fixed part, a braced URI or an entity reference, nor the 2nd or 3rd char of a
+    // separator - and '-' in a name is part of it, e.g. $a-&gt; is $a- then &gt;, as with $a->
+    private static canStartReferenceOperator(state: CharLevelState, char: string, inVarUri: boolean): boolean {
+        if (inVarUri) {
+            return false;
+        }
+        switch (state) {
+            case CharLevelState.lC:
+            case CharLevelState.lSq:
+            case CharLevelState.lDq:
+            case CharLevelState.escSq:
+            case CharLevelState.escDq:
+            case CharLevelState.lSqEnt:
+            case CharLevelState.rSqEnt:
+            case CharLevelState.lDqEnt:
+            case CharLevelState.rDqEnt:
+            case CharLevelState.lLiteralSqEnt:
+            case CharLevelState.rLiteralSqEnt:
+            case CharLevelState.lLiteralDqEnt:
+            case CharLevelState.rLiteralDqEnt:
+            case CharLevelState.lBt:
+            case CharLevelState.mBt:
+            case CharLevelState.escBt:
+            case CharLevelState.lUri:
+            case CharLevelState.lEnt:
+            case CharLevelState.dSep:
+            case CharLevelState.tSep:
+            case CharLevelState.tSep2:
+                return false;
+            case CharLevelState.lName:
+            case CharLevelState.lVar:
+            case CharLevelState.lAttr:
+            case CharLevelState.exp:
+                return char !== '-';
+            default:
+                return true;
+        }
+    }
+
     private static isPartOperator(firstPart: string, secondPart: string): boolean {
         let result = false;
         switch (firstPart) {
@@ -334,8 +432,10 @@ export class XPathLexer {
         return result;
     }
 
-    // the characters of the current token, for XPath 4.0 numeric literals
+    // the characters of the current token, for XPath 4.0 numeric literals and EQName variables
     private numberChars: string[] = [];
+    // within the Q{...} of a variable's EQName
+    private inVarUri = false;
 
     private calcNewState(isFirstChar: boolean, nesting: number, char: string, nextChar: string, existing: CharLevelState): [CharLevelState, number] {
         let rv: CharLevelState;
@@ -410,6 +510,9 @@ export class XPathLexer {
                 } else if (nesting < 0 && char === '*') {
                     nesting = 0;
                     resolvedEarly = true;
+                } else if (char === '*' && this.numberChars[this.numberChars.length - 1] === '}') {
+                    // the wildcard of an EQName, e.g. @Q{urn:a}*
+                    resolvedEarly = true;
                 }
             // no-break intentional
             case CharLevelState.lName:
@@ -422,7 +525,16 @@ export class XPathLexer {
                 }
             // no-break intentional
             case CharLevelState.lVar:
-                if (resolvedEarly) {
+                if (this.inVarUri) {
+                    // the URI of an EQName variable, e.g. $Q{urn:a}name
+                    rv = existing;
+                    this.inVarUri = char !== '}';
+                } else if (char === 'Q' && nextChar === '{' && this.numberChars.length === 1 &&
+                    (existing === CharLevelState.lVar || existing === CharLevelState.lAttr || (existing === CharLevelState.lName && this.numberChars[0] === '#'))) {
+                    // an EQName after $, @ or # (an XPath 4.0 QName literal), e.g. $Q{urn:a}name, @Q{urn:a}name or #Q{urn:a}name
+                    rv = existing;
+                    this.inVarUri = true;
+                } else if (resolvedEarly) {
                     rv = existing;
                 } else if (char === '-' || char === '.' ||
                     (char === ':' && !(nextChar === ':' || nextChar === '=' || nextChar === '*' || nextChar === ' ' || nextChar === '\n' || nextChar === '\r' || nextChar === '\t'))) {
@@ -563,6 +675,7 @@ export class XPathLexer {
             console.time('xplexer.analyse');
         }
         this.latestRealToken = null;
+        this.inVarUri = false;
         this.prologState = PrologState.Start;
         this.lineNumber = position.line;
         this.wsCharNumber = 0;
@@ -614,6 +727,8 @@ export class XPathLexer {
                             currentLabelState !== CharLevelState.lBt &&
                             currentLabelState !== CharLevelState.mBt &&
                             currentLabelState !== CharLevelState.escBt &&
+                            // the end of a braced URI literal, e.g. Q{urn:a}b, $Q{urn:a}v or @Q{urn:a}b
+                            currentLabelState !== CharLevelState.lUri && !this.inVarUri &&
                             currentChar === "}") {
                             let isNestedOk = false;
                             for (var x = 0; x < nestedTokenStack.length; x++) {
@@ -649,7 +764,7 @@ export class XPathLexer {
                         result[result.length - 1]['error'] = ErrorType.XPathLessThanTagStart;
                     } else if (this.xmlLessThan === XmlLessThan.Error) {
                         for (let t = firstResultIndex; t < result.length; t++) {
-                            if (result[t].value.includes('<')) {
+                            if (result[t].value.includes('<') && !result[t].fromReference) {
                                 result[t]['error'] = ErrorType.XPathLessThanInAttribute;
                             }
                         }
@@ -675,6 +790,25 @@ export class XPathLexer {
                     position.startCharacter = this.tokenCharNumber;
                     position.documentOffset = i;
                     return result;
+                }
+
+                const referenceOperator = this.entityRefOn && (currentChar === '&' || currentChar === '=' || currentChar === '-' || currentChar === '>') &&
+                    XPathLexer.canStartReferenceOperator(currentLabelState, currentChar, this.inVarUri) ? XPathLexer.referenceOperatorAt(xpath, i - 1) : null;
+                if (referenceOperator) {
+                    // one operator token, e.g. '=>' for =&gt; - rather than '=' and a name '&gt;'
+                    this.update(poppedContext, result, tokenChars, currentLabelState, isTypeDeclaration);
+                    const operatorToken = new BasicToken(referenceOperator.value, referenceOperator.value.length === 1 ? CharLevelState.sep : CharLevelState.dSep, isTypeDeclaration);
+                    operatorToken.fromReference = true;
+                    operatorToken.length = referenceOperator.length;
+                    this.updateResult(poppedContext, result, operatorToken, isTypeDeclaration);
+                    currentState = [CharLevelState.sep, 0];
+                    // continue after the operator's text: the loop's next char is the one after that
+                    i = i - 1 + referenceOperator.length;
+                    currentChar = xpath.charAt(i);
+                    if (!currentChar) {
+                        break;
+                    }
+                    continue;
                 }
 
                 this.numberChars = tokenChars;
@@ -802,6 +936,9 @@ export class XPathLexer {
                                 nextState = [CharLevelState.lDqEnt, 0];
                             } else if (entQuote === '\'') {
                                 nextState = [CharLevelState.lSqEnt, 0];
+                            } else if (XPathLexer.isWhitespaceReference(ent)) {
+                                // e.g. 'a,&#xA;b' - whitespace, which isn't a token, but takes up its characters on the line
+                                this.update(poppedContext, result, tokenChars, CharLevelState.lWs, isTypeDeclaration);
                             } else {
                                 let entToken: Token = new BasicToken(ent, CharLevelState.lName);
                                 this.updateResult(poppedContext, result, entToken, isTypeDeclaration);
@@ -828,7 +965,10 @@ export class XPathLexer {
                         case CharLevelState.lWs:
                         case CharLevelState.lUri:
                             if (currentLabelState !== CharLevelState.escSq && currentLabelState !== CharLevelState.escDq && currentLabelState !== CharLevelState.escBt) {
-                                this.update(poppedContext, result, tokenChars, currentLabelState);
+                                // in a type declaration, a name ended by whitespace and then an occurrence indicator is a type, e.g.
+                                // xs:integer in 'xs:integer *'
+                                const isTypeWithIndicator = isTypeDeclaration && nextLabelState === CharLevelState.lWs && XPathLexer.isOccurrenceIndicatorAfter(xpath, i - 1);
+                                this.update(poppedContext, result, tokenChars, currentLabelState, isTypeWithIndicator);
                             }
                             tokenChars.push(currentChar);
                             break;
@@ -939,6 +1079,13 @@ export class XPathLexer {
         return result;
     }
 
+    // whether the first character from the offset that isn't whitespace is an occurrence indicator: '*', '+' or '?'
+    private static isOccurrenceIndicatorAfter(xpath: string, offset: number) {
+        const following = /\s*([*+?])/y;
+        following.lastIndex = offset;
+        return following.test(xpath);
+    }
+
     private update(poppedContext: Token | null | undefined, result: Token[], tokenChars: string[], charState: CharLevelState, isTypeDeclaration = false) {
         if (tokenChars.length > 0) {
             this.updateResult(poppedContext, result, new BasicToken(tokenChars.join(''), charState, isTypeDeclaration));
@@ -970,7 +1117,9 @@ export class XPathLexer {
 
         if (newTokenValue !== '') {
 
-            newToken.length = newTokenValue.length;
+            // an operator written with a character reference has the length of its text, e.g. 5 for =&gt;
+            const textLength = newToken.fromReference ? newToken.length : newTokenValue.length;
+            newToken.length = textLength;
             newToken.line = this.lineNumber;
             newToken.startCharacter = this.tokenCharNumber;
             if (newToken.tokenType === TokenLevelState.nodeNameTest) {
@@ -996,12 +1145,12 @@ export class XPathLexer {
                 if (isWhitespace) {
                     this.tokenCharNumber = this.wsCharNumber;
                 } else {
-                    this.tokenCharNumber += newTokenValue.length;
+                    this.tokenCharNumber += textLength;
                 }
 
                 this.wsNewLine = false;
             } else {
-                this.tokenCharNumber += newTokenValue.length;
+                this.tokenCharNumber += textLength;
             }
             if (!isWhitespace) {
                 this.wsCharNumber = 0;
@@ -1027,8 +1176,12 @@ export class XPathLexer {
                     isTypeDeclaration = lastToken2.tokenType === TokenLevelState.simpleType || lastToken2.tokenType === TokenLevelState.nodeType;
                 }
             }
+            if (prevToken?.tokenType === TokenLevelState.uriLiteral && newToken.charType === CharLevelState.lName) {
+                // the local name of an EQName, e.g. attribute in Q{f}attribute('x')
+                newToken.eqNameUri = prevToken.value;
+            }
             this.setLabelForLastTokenOnly(prevToken, newToken, isTypeDeclaration);
-            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration);
+            this.setLabelsUsingCurrentToken(poppedContext, prevToken, newToken, isTypeDeclaration, result);
             if (prevToken && newToken.charType === CharLevelState.sep && newToken.value === '|' && XPathLexer.isChoiceSeparator(result, prevToken, poppedContext, isTypeDeclaration)) {
                 // XPath 4.0 choice item type, e.g. (xs:date | xs:time) - the item type before '|' may have been labelled as a name test
                 newToken.choiceSeparator = true;
@@ -1199,6 +1352,26 @@ export class XPathLexer {
         return !!ctx && ctx.tokenType === TokenLevelState.operator && (ctx.value === 'as' || ctx.value === 'of');
     }
 
+    private static isKindTestInType(result: Token[], isTypeDeclaration: boolean) {
+        // the kind test before the '*', '+' or '?' at the end of result, e.g. node() - in a sequence type: in an 'as'
+        // attribute, after 'as' or 'of' (e.g. instance of, or an inline function's parameter or return type), in a
+        // choice item type, or within the brackets of a map, array or function type
+        if (isTypeDeclaration) {
+            return true;
+        }
+        const beforeKindTest = result[result.length - 4];
+        if (beforeKindTest && ((beforeKindTest.tokenType === TokenLevelState.operator && (beforeKindTest.value === 'as' || beforeKindTest.value === 'of')) || beforeKindTest.choiceSeparator)) {
+            return true;
+        }
+        const index = XPathLexer.enclosingParenIndex(result);
+        if (index < 0) {
+            return false;
+        }
+        const typeToken = result[index].context;
+        return XPathLexer.isTypeParen(result[index]) || !!result[index - 1]?.choiceSeparator ||
+            (!!typeToken && (typeToken.tokenType === TokenLevelState.simpleType || typeToken.tokenType === TokenLevelState.nodeType));
+    }
+
     private static isInTypeParen(result: Token[]) {
         // the unclosed '(' before the '|' at the end of result
         const index = XPathLexer.enclosingParenIndex(result);
@@ -1274,7 +1447,10 @@ export class XPathLexer {
     }
 
     private updateTokenBeforeBrackets(prevToken: Token, isTypeDeclaration = false) {
-        if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
+        if (prevToken.eqNameUri !== undefined && (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.nodeType)) {
+            // a function whose name is an EQName, even with the local name of a kind test, e.g. Q{f}attribute('x')
+            prevToken.tokenType = TokenLevelState.function;
+        } else if (prevToken.tokenType === TokenLevelState.nodeNameTest) {
             if (Data.nodeTypes.indexOf(prevToken.value) > -1) {
                 prevToken.tokenType = TokenLevelState.nodeType;
             } else if (Data.nonFunctionConditional.indexOf(prevToken.value) > -1) {
@@ -1346,7 +1522,7 @@ export class XPathLexer {
         }
     }
 
-    private setLabelsUsingCurrentToken(poppedContext: Token | null | undefined, prevToken: Token | null, currentToken: Token, isTypeDeclaration: boolean) {
+    private setLabelsUsingCurrentToken(poppedContext: Token | null | undefined, prevToken: Token | null, currentToken: Token, isTypeDeclaration: boolean, result: Token[]) {
         if (!(prevToken)) {
             prevToken = new BasicToken(',', CharLevelState.sep);
             prevToken.tokenType = TokenLevelState.operator;
@@ -1371,10 +1547,6 @@ export class XPathLexer {
                                 // e.g. castable as xs:integer
                                 // TODO: check if value equals xs:integer or element?
                                 currentToken.tokenType = TokenLevelState.simpleType;
-                            } else if (prevToken.value === '&gt;' && currentToken.value === '&gt;') {
-                                currentToken.tokenType = TokenLevelState.operator;
-                            } else if (prevToken.value === '&lt;' && (currentToken.value === '&lt;' || currentToken.value === '&gt;')) {
-                                currentToken.tokenType = TokenLevelState.operator;
                             }
                         } else if (prevToken.tokenType === TokenLevelState.nodeNameTest || prevToken.tokenType === TokenLevelState.mapNameLookup || prevToken.tokenType === TokenLevelState.functionNameTest || XPathLexer.isTokenTypeAType(prevToken)) {
                             Data.setAsOperatorIfKeyword(currentToken);
@@ -1425,12 +1597,19 @@ export class XPathLexer {
             case CharLevelState.sep:
                 let prevTokenT = prevToken.tokenType;
                 let isStar = currentToken.value === '*';
-                if (isStar && (
-                    prevTokenT === TokenLevelState.attributeNameTest ||
-                    prevTokenT === TokenLevelState.uriLiteral ||
-                    prevTokenT === TokenLevelState.nodeType && prevToken.value === '()')
+                // after a kind test, e.g. node(): an occurrence indicator in a type, e.g. instance of node()*, otherwise
+                // an operator, e.g. text() * 2
+                const afterKindTest = prevTokenT === TokenLevelState.nodeType && prevToken.value === '()';
+                if (afterKindTest && (isStar || currentToken.value === '?' || currentToken.value === '+')) {
+                    if (XPathLexer.isKindTestInType(result, isTypeDeclaration)) {
+                        currentToken.charType = CharLevelState.lName;
+                        currentToken.tokenType = TokenLevelState.nodeType;
+                    }
+                } else if (isStar && (
+                    (prevTokenT === TokenLevelState.attributeNameTest && (prevToken.value === '@' || prevToken.value.endsWith('*'))) ||
+                    prevTokenT === TokenLevelState.uriLiteral)
                 ) {
-                    // @* or {example.com}*
+                    // @* (or @ *) or {example.com}* - not after an attribute's name, e.g. @price * @qty, a multiplication
                     currentToken.charType = CharLevelState.lName;
                     currentToken.tokenType = TokenLevelState.nodeType;
                 } else if (isStar && prevTokenT === TokenLevelState.operator && prevToken.value === '?') {
@@ -1445,7 +1624,8 @@ export class XPathLexer {
                         } else if (prevTokenT === TokenLevelState.operator && (prevToken.value === ')') || prevToken.value === ']') {
                             // ($a) * 9 or count($a) * 8 or abc as map(*)* or $item as node()+
                             if (isTypeDeclaration && prevToken.value === ')' || (
-                                poppedContext && (poppedContext.tokenType === TokenLevelState.simpleType || poppedContext.tokenType === TokenLevelState.nodeType ||
+                                // not after a constructor function call, e.g. (xs:dayTimeDuration('P1D')*.)
+                                poppedContext && ((poppedContext.tokenType === TokenLevelState.simpleType && !poppedContext.value.includes(':')) || poppedContext.tokenType === TokenLevelState.nodeType ||
                                     (poppedContext.tokenType === TokenLevelState.operator && (poppedContext.value === 'as' || poppedContext.value === 'of'))))) {
                                 currentToken.charType = CharLevelState.lName;
                                 currentToken.tokenType = TokenLevelState.nodeType;
@@ -1641,6 +1821,8 @@ export enum ErrorType {
     MissingPrefixInList,
     AnonymousFunctionSyntax,
     TemplateNameUnresolved,
+    XSpecFunctionUnresolved,
+    XSpecNotPublic,
     TemplateModeUnresolved,
     AttributeSetUnresolved,
     AccumulatorNameUnresolved,
@@ -1665,6 +1847,7 @@ export enum ErrorType {
     XMLXMLNS,
     XMLAttributeName,
     XMLAttributeValueUnexpected,
+    XSLTAttributeEmpty,
     XSLTNamesapce,
     XMLAttributeXMLNS,
     XMLAttNameSyntax,
@@ -1675,6 +1858,7 @@ export enum ErrorType {
     XPathIfAwaitingThen,
     XPathAwaiting,
     XPathStringLiteral,
+    XPathStringLiteralQuote,
     BracketNesting,
     ExpectedElseAfterThen,
     ExpectedDollarAfterComma,
@@ -1729,6 +1913,13 @@ export enum ErrorType {
     IterateParamOrder,
     IterateOnCompletionOrder,
     IterateTailPosition,
+    ChooseWithoutWhen,
+    OtherwiseNotLast,
+    SortNotFirst,
+    WithParamDuplicate,
+    SelectAndContent,
+    TemplateWithoutNameOrMatch,
+    TemplateAttributeWithoutMatch,
     NoteParamUnknown,
     NoteParamsMissing,
     NoteParamDuplicate,
@@ -1749,6 +1940,8 @@ export enum ErrorType {
     FixedNamespacesToken,
     RecordFieldUnknown,
     RecordFieldValueType,
+    RecordInstructionFieldMissing,
+    RecordInstructionFieldUnknown,
     RecordLookupUnknown,
     AccumulatorNotApplicable,
     ItemTypeDuplicate,
@@ -1772,6 +1965,17 @@ export enum ErrorType {
     MissingContextItemForGrouping,
     MissingContextItemForMerge,
     MissingContextItemForRegex,
+    // a duplicate xsl:map-entry key in an xsl:map with a duplicates attribute
+    MapEntryKeyDuplicateHandled,
+    // an entity reference to an entity that isn't declared: with no DOCTYPE, or not in its internal subset
+    EntityNotDeclared,
+    EntityNotDeclaredNoDoctype,
+    // a name in use-character-maps that no xsl:character-map declares, and an xsl:character-map name declared twice
+    CharacterMapNameUnresolved,
+    DuplicateCharacterMapName,
+    // an xsl:apply-templates without a mode, in a template rule whose modes don't include the default mode
+    ApplyTemplatesDefaultMode,
+	MissingXsltAttribute,
 }
 
 export interface BaseToken {
@@ -1789,7 +1993,26 @@ export interface BaseToken {
     // XPath 4.0: the '|' separating the item types of a choice item type, e.g. (xs:date | xs:time)
     choiceSeparator?: boolean;
     // XPath 4.0 record types: for a quick fix, the text that adds the missing fields to a map constructor
-    recordFix?: { line: number, character: number, text: string, replaceLength?: number, altText?: string, end?: { line: number, character: number } };
+    recordFix?: RecordFix;
+    // the local name of an EQName: the Q{...} part before it, e.g. Q{urn:f} for Q{urn:f}double
+    eqNameUri?: string;
+    // an operator with '<' or '>' written as a character reference, e.g. =&gt; or &lt;= - the value is the operator
+    // ('=>' or '<='), the length that of the text as written
+    fromReference?: boolean;
+}
+
+// a quick fix's edit: inserting the text at the position, or replacing the text up to the end, or replaceLength characters
+// - altText is the text for an alternative fix, and alternatives the texts for a fix each, e.g. a field name for an unknown
+// one - isMarkup is true for XSLT markup, e.g. attributes, whose quotes are not adjusted for an enclosing attribute value
+export interface RecordFix {
+    line: number;
+    character: number;
+    text: string;
+    replaceLength?: number;
+    altText?: string;
+    end?: { line: number, character: number };
+    alternatives?: string[];
+    isMarkup?: boolean;
 }
 
 export interface Token extends BaseToken {
@@ -1843,6 +2066,7 @@ class BasicToken implements Token {
     value: string;
     charType: CharLevelState;
     tokenType: TokenLevelState;
+    fromReference?: boolean;
 
     constructor(value: string, type: CharLevelState, isTypeDeclaration = false) {
         this.value = value;

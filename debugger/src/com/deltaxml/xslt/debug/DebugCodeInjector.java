@@ -1,0 +1,309 @@
+/**
+ *  Copyright (c) 2026 DeltaXignia Ltd. and others.
+ *
+ *  Contributors:
+ *  DeltaXML Ltd. - XSLT debug adapter
+ */
+package com.deltaxml.xslt.debug;
+
+import net.sf.saxon.expr.Expression;
+import net.sf.saxon.expr.Literal;
+import net.sf.saxon.expr.instruct.TraceExpression;
+import net.sf.saxon.expr.Operand;
+import net.sf.saxon.expr.parser.Loc;
+import net.sf.saxon.expr.sort.SortKeyDefinition;
+import net.sf.saxon.trace.TraceableComponent;
+import net.sf.saxon.expr.parser.XPathParser;
+import net.sf.saxon.om.NodeInfo;
+import net.sf.saxon.s9api.Location;
+import net.sf.saxon.trace.XSLTTraceCodeInjector;
+import net.sf.saxon.tree.AttributeLocation;
+
+/**
+ * Saxon's XSLT trace code injector, which also traces each xsl:sequence instruction.
+ *
+ * An xsl:sequence compiles to just its select expression, with no instruction of its own, and Saxon's injector
+ * decides whether an expression is an instruction from where it is - so it only traces an xsl:sequence in some
+ * places (e.g. as a function body, or a template's only instruction), not, for example, as one of several. Here, an
+ * xsl:sequence's top-level select expression is traced too - so it can be stopped at, and a multi-line select
+ * stepped through. (Other instructions are traced by Saxon - except those it evaluates when compiling, e.g. an
+ * xsl:if with a constant test.)
+ */
+class DebugCodeInjector extends XSLTTraceCodeInjector {
+
+    @Override
+    public Expression inject(Expression expression) {
+        if (expression instanceof net.sf.saxon.functions.hof.UserFunctionReference) {
+            traceInlineFunction((net.sf.saxon.functions.hof.UserFunctionReference) expression);
+        }
+        Location location = expression.getLocation();
+        Expression parent = expression.getParentExpression();
+        Location parentLocation = parent == null ? null : parent.getLocation();
+        NodeInfo selectElement = xslSelect(location);
+        if (selectElement != null) {
+            // an XSLT 4.0 xsl:select's content: its top-level expression is traced at the xsl:select element - Saxon
+            // traces only some kinds of expression, at their own location within the content. Its parts aren't
+            // traced: they're stopped at when the expression is stepped through, as for a multi-line attribute
+            if (xslSelect(parentLocation) == selectElement) {
+                return expression;
+            }
+            // the TraceListener is given the wrapped expression, so that has the element's location (its parts keep
+            // their own)
+            Loc elementLocation = new Loc(selectElement.getSystemId(), selectElement.getLineNumber(), selectElement.getColumnNumber());
+            expression.setLocation(elementLocation);
+            TraceExpression trace = new TraceExpression(stepped(expression, selectElement.getSystemId(), selectElement.getLineNumber(),
+                    selectElement.getColumnNumber(), "select", null));
+            trace.setRetainedStaticContext(expression.getRetainedStaticContext());
+            trace.setLocation(elementLocation);
+            return trace;
+        }
+        Expression injected = super.inject(expression);
+        AttributeLocation attribute = xsltAttribute(location);
+        boolean stepped = attribute != null && isAttributeExpression(expression, attribute);
+        if (injected instanceof TraceExpression) {
+            if (stepped && ((TraceExpression) injected).getChild() == expression) {
+                for (Operand operand : injected.operands()) {
+                    if (operand.getChildExpression() == expression) {
+                        operand.setChildExpression(stepped(expression, attribute));
+                    }
+                }
+            }
+            return injected;
+        }
+        if (Literal.isEmptySequence(expression)) {
+            return injected;
+        }
+        AttributeLocation select = tracedAttribute(location);
+        if (select != null) {
+            // e.g. an xsl:sequence's select: its top-level expression, whose parent isn't part of the same attribute -
+            // or an xsl:when's test, a condition of its xsl:choose (which Saxon 13 gives its first test's location)
+            AttributeLocation parentSelect = tracedAttribute(parentLocation);
+            boolean isTopLevel = parentSelect == null || !sameLocation(parentSelect, select) || parent.getClass().getSimpleName().equals("Choose");
+            return isTopLevel ? new TraceExpression(stepped ? stepped(expression, attribute) : expression) : injected;
+        }
+        return stepped && injected == expression ? stepped(expression, attribute) : injected;
+    }
+
+    // An inline function in a multi-line XPath expression: its body - which isn't an operand, so isn't given to inject() -
+    // is traced, so that each call can be stepped through, wherever it's made. A function item can be called after the
+    // expression that made it has been evaluated - e.g. a function a stylesheet function returns - when only the
+    // compiled body runs: not the one the debugger instruments when it steps through the expression. When it's called,
+    // the debugger steps through the body's text (see Debugger.enterInlineFunction), then the body itself runs quietly
+    private static void traceInlineFunction(net.sf.saxon.functions.hof.UserFunctionReference reference) {
+        net.sf.saxon.expr.instruct.UserFunction function = reference.getNominalTarget();
+        AttributeLocation attribute = xsltAttribute(reference.getLocation());
+        if (function == null || function.getBody() == null || function.getBody() instanceof TraceExpression || attribute == null) {
+            return;
+        }
+        String element = attribute.getElementName().getLocalPart();
+        String name = attribute.getAttributeName().getLocalPart();
+        if (!Debugger.isSteppable(attribute.getSystemId(), attribute.getLineNumber(), attribute.getColumnNumber(), element, name)) {
+            return;
+        }
+        // its parameters - those of an inline function, then any variables from outside it that it uses, which Saxon
+        // passes to it - identify it within the expression's text
+        java.util.List<String> parameters = new java.util.ArrayList<String>();
+        for (net.sf.saxon.expr.instruct.UserFunctionParameter parameter : function.getParameterDefinitions()) {
+            parameters.add(parameter.getVariableQName().getDisplayName());
+        }
+        SteppedResult.InlineFunction inline = new SteppedResult.InlineFunction(attribute.getSystemId(), attribute.getLineNumber(),
+                attribute.getColumnNumber(), element, name, parameters);
+        Expression body = function.getBody();
+        SteppedResult stepped = new SteppedResult(body, inline.key(), inline);
+        TraceExpression trace = new TraceExpression(stepped);
+        trace.setRetainedStaticContext(body.getRetainedStaticContext());
+        trace.setLocation(body.getLocation());
+        function.setBody(trace);
+    }
+
+    // An attribute's expression, as the instruction evaluates it (with any conversions Saxon adds): its topmost
+    // expression that's all part of the attribute - not (like the LetExpression of an xsl:variable) partly elsewhere -
+    // and isn't an instruction, except those an XPath expression compiles to: a simple map (!), a ForEach; an if, a
+    // Choose; a sequence (,), a Block. (Not, e.g., an xsl:evaluate, which Saxon gives the location of its xpath
+    // attribute's expression.) Its parent isn't part of the same attribute, or is an instruction
+    private static boolean isAttributeExpression(Expression expression, AttributeLocation attribute) {
+        if (expression instanceof Literal) {
+            return false;
+        }
+        if (expression instanceof net.sf.saxon.expr.instruct.Instruction && !XPATH_INSTRUCTIONS.contains(expression.getClass().getSimpleName())) {
+            return false;
+        }
+        for (Operand operand : expression.operands()) {
+            Expression child = operand.getChildExpression();
+            if (child != null && !(child instanceof Literal)) {
+                AttributeLocation childAttribute = xsltAttribute(child.getLocation());
+                if (childAttribute == null || !sameLocation(childAttribute, attribute)) {
+                    return false;
+                }
+            }
+        }
+        Expression parent = expression.getParentExpression();
+        if (parent == null) {
+            return true;
+        }
+        AttributeLocation parentAttribute = xsltAttribute(parent.getLocation());
+        if (parentAttribute == null || !sameLocation(parentAttribute, attribute)) {
+            return true;
+        }
+        // within the attribute's expression: only if its parent is an instruction that isn't - e.g. an xsl:evaluate
+        return parent instanceof net.sf.saxon.expr.instruct.Instruction && !(XPATH_INSTRUCTIONS.contains(parent.getClass().getSimpleName()) &&
+                isAllInAttribute(parent, attribute));
+    }
+
+    private static boolean isAllInAttribute(Expression expression, AttributeLocation attribute) {
+        for (Operand operand : expression.operands()) {
+            Expression child = operand.getChildExpression();
+            if (child != null && !(child instanceof Literal)) {
+                AttributeLocation childAttribute = xsltAttribute(child.getLocation());
+                if (childAttribute == null || !sameLocation(childAttribute, attribute)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static final java.util.Set<String> XPATH_INSTRUCTIONS = new java.util.HashSet<String>(java.util.Arrays.asList("ForEach", "Choose", "Block"));
+
+    // a multi-line expression that can be stepped through: one that uses the result of stepping through it, rather
+    // than evaluating the expression again (see SteppedResult)
+    private static Expression stepped(Expression expression, AttributeLocation attribute) {
+        return stepped(expression, attribute.getSystemId(), attribute.getLineNumber(), attribute.getColumnNumber(),
+                attribute.getElementName().getLocalPart(), attribute.getAttributeName().getLocalPart());
+    }
+
+    private static Expression stepped(Expression expression, String systemId, int line, int column, String element, String attribute) {
+        if (!Debugger.isSteppable(systemId, line, column, element, attribute)) {
+            return expression;
+        }
+        return new SteppedResult(expression, SteppedResult.key(systemId, line, column, element, attribute));
+    }
+
+    // the XSLT attribute - one whose value is an expression - that an expression is part of, if it is
+    private static AttributeLocation xsltAttribute(Location location) {
+        Location containing = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
+        if (containing instanceof AttributeLocation) {
+            AttributeLocation attribute = (AttributeLocation) containing;
+            if (attribute.getElementName() != null && attribute.getAttributeName() != null &&
+                    "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString())) {
+                return attribute;
+            }
+        }
+        return null;
+    }
+
+    private static boolean sameLocation(Location a, Location b) {
+        return a == b || (a.getLineNumber() == b.getLineNumber() && a.getColumnNumber() == b.getColumnNumber() &&
+                java.util.Objects.equals(a.getSystemId(), b.getSystemId()));
+    }
+
+    // a compiled template, function or global variable: its sort keys - which aren't passed to inject() - are traced
+    // at their xsl:sort, so they can be stopped at for each item sorted, and a multi-line select stepped through
+    @Override
+    public void process(TraceableComponent component) {
+        if (component.getBody() != null) {
+            traceSortKeys(component.getBody());
+        }
+        super.process(component);
+    }
+
+    private static void traceSortKeys(Expression expression) {
+        for (Operand operand : expression.operands()) {
+            if (operand.getChildExpression() != null) {
+                traceSortKeys(operand.getChildExpression());
+            }
+        }
+        if (expression instanceof SortKeyDefinition) {
+            SortKeyDefinition sortKey = (SortKeyDefinition) expression;
+            Expression key = sortKey.getSortKey();
+            Location location = key == null ? null : key.getLocation();
+            Location attribute = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
+            if (key != null && !(key instanceof TraceExpression) && attribute instanceof AttributeLocation && isSortSelect((AttributeLocation) attribute)) {
+                // the TraceListener is given the wrapped expression: so that's at the xsl:sort's start tag
+                key.setLocation(attribute);
+                TraceExpression trace = new TraceExpression(key);
+                trace.setRetainedStaticContext(key.getRetainedStaticContext());
+                trace.setLocation(attribute);
+                sortKey.setSortKey(trace, sortKey.isSetContextForSortKey());
+            }
+        }
+    }
+
+    // a compiled stylesheet's keys: their use expressions - which no CodeInjector method is given - are traced at their
+    // xsl:key, so they can be stopped at for each node indexed, when the index is built (on the first call of key())
+    static void traceKeys(net.sf.saxon.expr.PackageData pkg) {
+        if (pkg == null || pkg.getKeyManager() == null) {
+            return;
+        }
+        for (net.sf.saxon.trans.KeyDefinitionSet set : pkg.getKeyManager().getAllKeyDefinitionSets()) {
+            for (net.sf.saxon.trans.KeyDefinition key : set.getKeyDefinitions()) {
+                Expression use = key.getBody();
+                Location location = use == null ? null : use.getLocation();
+                Location attribute = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
+                if (use != null && !(use instanceof TraceExpression) && attribute instanceof AttributeLocation && isXsltAttribute((AttributeLocation) attribute, "key", "use")) {
+                    use.setLocation(attribute);
+                    TraceExpression trace = new TraceExpression(use);
+                    trace.setRetainedStaticContext(use.getRetainedStaticContext());
+                    trace.setLocation(attribute);
+                    key.setBody(trace);
+                }
+            }
+        }
+    }
+
+    private static boolean isXsltAttribute(AttributeLocation attribute, String element, String name) {
+        return attribute.getElementName() != null && attribute.getAttributeName() != null &&
+                element.equals(attribute.getElementName().getLocalPart()) &&
+                "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString()) &&
+                name.equals(attribute.getAttributeName().getLocalPart());
+    }
+
+    private static boolean isSortSelect(AttributeLocation attribute) {
+        return attribute.getElementName() != null && attribute.getAttributeName() != null &&
+                "sort".equals(attribute.getElementName().getLocalPart()) &&
+                "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString()) &&
+                "select".equals(attribute.getAttributeName().getLocalPart());
+    }
+
+    // the xsl:select element (XSLT 4.0) whose content an expression is part of, if it is
+    private static NodeInfo xslSelect(Location location) {
+        Location containing = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : null;
+        if (containing instanceof NodeInfo) {
+            NodeInfo element = (NodeInfo) containing;
+            if ("select".equals(element.getLocalPart()) && "http://www.w3.org/1999/XSL/Transform".equals(element.getNamespaceUri().toString())) {
+                return element;
+            }
+        }
+        return null;
+    }
+
+    // the attributes whose expressions Saxon's injector doesn't trace, as element/attribute: they're traced where
+    // they're evaluated - an xsl:when's test only if it's reached. (Not xsl:with-param's select: it's often evaluated
+    // lazily, within the template it's passed to - so it's stepped through with the instruction it's in, see
+    // BreakableLines)
+    private static final java.util.Set<String> TRACED_ATTRIBUTES = new java.util.HashSet<String>(java.util.Arrays.asList(
+            "sequence/select", "on-completion/select", "when/test", "map-entry/key", "map-entry/select", "catch/select",
+            "assert/test",
+            // XSLT 4.0 branches: traced where they're evaluated - only when the branch is taken
+            "when/select", "otherwise/select", "if/then", "if/else"));
+
+    // an XSLT 4.0 xsl:record's attribute - not a namespaced one, e.g. xsl:as - whose value is a field's expression
+    private static boolean isRecordField(AttributeLocation attribute) {
+        return "record".equals(attribute.getElementName().getLocalPart()) && attribute.getAttributeName().getNamespaceUri().isEmpty();
+    }
+
+    // the attribute (one of TRACED_ATTRIBUTES, or an xsl:record's field) that an expression is part of, if it is
+    private static AttributeLocation tracedAttribute(Location location) {
+        Location containing = location instanceof XPathParser.NestedLocation ? ((XPathParser.NestedLocation) location).getContainingLocation() : location;
+        if (containing instanceof AttributeLocation) {
+            AttributeLocation attribute = (AttributeLocation) containing;
+            if (attribute.getElementName() != null && attribute.getAttributeName() != null &&
+                    (TRACED_ATTRIBUTES.contains(attribute.getElementName().getLocalPart() + "/" + attribute.getAttributeName().getLocalPart()) ||
+                            isRecordField(attribute)) &&
+                    "http://www.w3.org/1999/XSL/Transform".equals(attribute.getElementName().getNamespaceUri().toString())) {
+                return attribute;
+            }
+        }
+        return null;
+    }
+}

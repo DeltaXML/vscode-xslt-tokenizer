@@ -17,6 +17,47 @@
        imported alongside it, same as xdm-serializer.xsl/xdm-parser.xsl.
   -->
 
+  <!-- XPath 4.0 JNodes (e.g. from jtree(), or a path step over a map):
+       a JNode isn't a node(), function (maps and arrays are functions)
+       or atomic value, so without this it would reach zxd:build-atomic
+       and fail with FOTY0013 when atomized. The 4.0 functions are
+       looked up dynamically, so these modules still compile with an
+       XSLT 3.0 processor: there are no JNodes there, and the lookups
+       are empty. -->
+  <xsl:variable name="zxd:JVALUE" as="function(*)?"
+                select="function-lookup(QName('http://www.w3.org/2005/xpath-functions', 'jvalue'), 1)"/>
+  <!-- fn:path: for a JNode with XPath 4.0, e.g. /lines/*[2]/sku -->
+  <xsl:variable name="zxd:PATH" as="function(*)?"
+                select="function-lookup(QName('http://www.w3.org/2005/xpath-functions', 'path'), 1)"/>
+
+  <xsl:function name="zxd:is-jnode" as="xs:boolean">
+    <xsl:param name="item" as="item()"/>
+    <xsl:sequence select="exists($zxd:JVALUE) and not($item instance of node() or $item instance of function(*) or $item instance of xs:anyAtomicType)"/>
+  </xsl:function>
+
+  <!-- The value a JNode wraps: a map, an array, an atomic value, or
+       empty for a JSON null. -->
+  <xsl:function name="zxd:jnode-value" as="item()*">
+    <xsl:param name="jnode" as="item()"/>
+    <xsl:sequence select="$zxd:JVALUE($jnode)"/>
+  </xsl:function>
+
+  <!-- A JNode's location within its tree, as an XPath 4.0 path from the
+       tree's root, e.g. '/customer/get("first name")' - '/' for the root. -->
+  <xsl:function name="zxd:jnode-path" as="xs:string">
+    <xsl:param name="jnode" as="item()"/>
+    <xsl:sequence select="string($zxd:PATH($jnode))"/>
+  </xsl:function>
+
+  <!-- $items with each JNode replaced by its value, so a JNode
+       serializes as the map, array or atomic value it wraps - its
+       location is shown by xdm-viewer's xdm:debug only (see its
+       zxd:husk-value). -->
+  <xsl:function name="zxd:jnode-values" as="item()*">
+    <xsl:param name="items" as="item()*"/>
+    <xsl:sequence select="for $item in $items return if (zxd:is-jnode($item)) then zxd:jnode-value($item) else $item"/>
+  </xsl:function>
+
   <xsl:function name="zxd:node-kind" as="xs:string?">
     <xsl:param name="item" as="item()"/>
     <xsl:choose>

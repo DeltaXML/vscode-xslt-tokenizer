@@ -1,0 +1,37 @@
+{
+  "id": "ORD-1042",
+  "placed": "2026-10-14",
+  "status": "paid",
+  "currency": "GBP",
+  "customer": {
+    "name": "Sam Taylor",
+    "email": "sam.taylor@example.com",
+    "address": {
+      "street": "4 Mill Lane",
+      "city": "Cambridge",
+      "post-code": "CB2 1RX",
+      "country": "GB"
+    },
+    "loyalty-points": 120
+  },
+  "lines": [
+    {
+      "sku": "BK-0042",
+      "description": "Notes on the Analytical Engine",
+      "quantity": 2,
+      "unit-price": 18.5
+    },
+    {
+      "sku": "KIT-7",
+      "description": "Electronics starter kit",
+      "quantity": 1,
+      "unit-price": 64.0,
+      "bundle-items": [
+        { "sku": "TL-1", "description": "Soldering iron", "quantity": 1, "unit-price": 0 },
+        { "sku": "TL-2", "description": "Multimeter", "quantity": 1, "unit-price": 0 }
+      ]
+    }
+  ],
+  "gift": false,
+  "notes": null
+}

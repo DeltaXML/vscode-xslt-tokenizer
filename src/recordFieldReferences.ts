@@ -36,7 +36,7 @@ export interface FieldLocations {
 }
 
 // a document with the item type declarations in scope for it
-interface DocumentContext {
+export interface DocumentContext {
 	document: vscode.TextDocument;
 	itemTypes: GlobalInstructionData[];
 }
@@ -112,7 +112,7 @@ export class RecordFieldReferences {
 
 	// the other modules to search: those the document includes or imports (hrefs) - and from the index of the workspace's
 	// modules, each top-level stylesheet that imports or includes the document, with all the modules of its tree
-	private static async scopeModules(document: vscode.TextDocument, hrefs: string[]): Promise<string[]> {
+	public static async scopeModules(document: vscode.TextDocument, hrefs: string[]): Promise<string[]> {
 		const modules = new Set<string>(hrefs.concat((await ImportIndex.moduleTrees(document)).flat()));
 		modules.delete(document.fileName);
 		return [...modules].filter((file) => fs.existsSync(file));
@@ -211,17 +211,17 @@ export class RecordFieldReferences {
 		return !!a && a.uri === b.uri && a.offset === b.offset;
 	}
 
-	private static isDeclaredIn(itemType: GlobalInstructionData, document: vscode.TextDocument) {
+	public static isDeclaredIn(itemType: GlobalInstructionData, document: vscode.TextDocument) {
 		return itemType.href ? itemType.href === document.fileName : true;
 	}
 
-	private static startPosition(): LexPosition {
+	public static startPosition(): LexPosition {
 		return { line: 0, startCharacter: 0, documentOffset: 0 };
 	}
 
 	// the document, with the item types declared in it and in the modules it includes or imports - undefined if it's not
 	// a stylesheet module with item types: XSLT 4.0, or an earlier version with the setting (see ItemTypeSupport)
-	private static async documentContext(definitionProvider: XsltDefinitionProvider, document: vscode.TextDocument): Promise<DocumentContext | undefined> {
+	public static async documentContext(definitionProvider: XsltDefinitionProvider, document: vscode.TextDocument): Promise<DocumentContext | undefined> {
 		if (!ItemTypeSupport.isEnabledForText(document.getText(new vscode.Range(0, 0, 50, 0)))) {
 			return undefined;
 		}
@@ -232,9 +232,14 @@ export class RecordFieldReferences {
 
 	// the record field references in a document, found by the linter
 	private static async fieldReferences(definitionProvider: XsltDefinitionProvider, context: DocumentContext): Promise<FieldReference[]> {
+		await RecordFieldReferences.lint(definitionProvider, context);
+		return XsltTokenDiagnostics.recordFieldReferences.get(context.document.uri.toString()) ?? [];
+	}
+
+	// runs the linter on the document, for the record field and enumeration value references it finds
+	public static async lint(definitionProvider: XsltDefinitionProvider, context: DocumentContext) {
 		const { allTokens, globalInstructionData, allImportedGlobals } = await definitionProvider.getImportedGlobals(context.document, RecordFieldReferences.startPosition());
 		const isVersion4 = ItemTypeSupport.isVersion4Text(context.document.getText());
 		XsltTokenDiagnostics.calculateDiagnostics({ ...XSLTConfiguration.configuration, isVersion4 }, isVersion4 ? DocumentTypes.XSLT40 : DocumentTypes.XSLT, context.document, allTokens, globalInstructionData, allImportedGlobals, []);
-		return XsltTokenDiagnostics.recordFieldReferences.get(context.document.uri.toString()) ?? [];
 	}
 }

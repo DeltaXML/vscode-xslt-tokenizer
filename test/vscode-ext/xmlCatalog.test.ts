@@ -43,6 +43,8 @@ suite('XML catalog setting: the catalog\'s path', () => {
 		['${workspaceFolder}/xml/catalog.xml', '/ws', path.resolve('/ws/xml/catalog.xml')],
 		[path.resolve('/abs/catalog.xml'), '/ws', path.resolve('/abs/catalog.xml')],
 		[path.resolve('/abs/catalog.xml'), undefined, path.resolve('/abs/catalog.xml')],
+		// with quotes around it, as Windows Explorer's 'Copy as path' gives
+		[`"${path.resolve('/abs/catalog.xml')}"`, '/ws', path.resolve('/abs/catalog.xml')],
 		// no workspace folder to resolve it against
 		['catalog.xml', undefined, undefined],
 		['${workspaceFolder}/catalog.xml', undefined, undefined],

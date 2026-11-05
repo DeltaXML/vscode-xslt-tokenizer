@@ -29,7 +29,8 @@ enum AttributeType {
 	InstructionMode,
 	UseAttributeSets,
 	UseAccumulators,
-	ExcludeResultPrefixes
+	ExcludeResultPrefixes,
+	UseCharacterMaps
 }
 
 interface XSLTToken extends BaseToken {
@@ -108,6 +109,9 @@ export class XsltTokenDefinitions {
 		let xpathStack: XPathData[] = [];
 		let tagType = TagType.NonStart;
 		let attType = AttributeType.None;
+		// XSpec: the attribute of x:call whose value is a name, 'template' or 'function' (see XSpecTestController)
+		let xspecCallAttribute: string | undefined;
+		const isXSpec = document.languageId === 'xspec';
 		let tagElementName = '';
 		let startTagToken: XSLTToken | null = null;
 		let preXPathVariable = false;
@@ -177,7 +181,7 @@ export class XsltTokenDefinitions {
 				let xmlTokenType = <XSLTokenLevelState>(token.tokenType - XsltTokenDefinitions.xsltStartTokenNumber);
 				switch (xmlTokenType) {
 					case XSLTokenLevelState.xslElementName:
-						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						tagElementName = XsltTokenDiagnostics.xsltElementName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						if (tagType === TagType.Start) {
 							if (tagElementName === 'xsl:iterate') {
 								currentXSLTIterateParams.push([]);
@@ -320,7 +324,7 @@ export class XsltTokenDefinitions {
 					case XSLTokenLevelState.attributeName:
 					case XSLTokenLevelState.xmlnsName:
 						rootXmlnsName = null;
-						let attNameText = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document);
+						let attNameText = XsltTokenDiagnostics.xsltAttributeName(XsltTokenDiagnostics.getTextForToken(lineNumber, token, document), document);
 						let problemReported = false;
 
 						if (!problemReported) {
@@ -340,7 +344,8 @@ export class XsltTokenDefinitions {
 						if (tagType === TagType.XSLTvar) {
 							attType = attNameText === XsltTokenDefinitions.xslNameAtt ? AttributeType.Variable : AttributeType.None;
 						} else if (tagType === TagType.XSLTstart) {
-							if (attNameText === XsltTokenDefinitions.xslNameAtt) {
+							xspecCallAttribute = isXSpec && tagElementName === 'x:call' && (attNameText === 'template' || attNameText === 'function') ? attNameText : undefined;
+							if (attNameText === XsltTokenDefinitions.xslNameAtt || xspecCallAttribute) {
 								attType = AttributeType.InstructionName;
 							} else if (attNameText === XsltTokenDefinitions.xslModeAtt) {
 								attType = AttributeType.InstructionMode;
@@ -348,6 +353,8 @@ export class XsltTokenDefinitions {
 								attType = AttributeType.UseAttributeSets;
 							} else if (attNameText === 'use-accumulators') {
 								attType = AttributeType.UseAccumulators;
+							} else if (attNameText === 'use-character-maps') {
+								attType = AttributeType.UseCharacterMaps;
 							} else if (attNameText === XsltTokenDefinitions.excludePrefixes || attNameText === XsltTokenDefinitions.xslExcludePrefixes) {
 								attType = AttributeType.ExcludeResultPrefixes;
 							} else {
@@ -355,6 +362,9 @@ export class XsltTokenDefinitions {
 							}
 						} else if (attNameText === XsltTokenDefinitions.xslUseAttSet) {
 							attType = AttributeType.UseAttributeSets;
+						} else {
+							// e.g. a literal result element's xmlns="http://a/b" - not the type of an earlier element's attribute
+							attType = AttributeType.None;
 						}
 						break;
 					case XSLTokenLevelState.attributeValue:
@@ -379,25 +389,29 @@ export class XsltTokenDefinitions {
 								}
 								break;
 							case AttributeType.InstructionName:
-								let slashPos = variableName.lastIndexOf('/');
-								if (slashPos > 0) {
-									// package name may be URI
-									variableName = variableName.substring(slashPos + 1);
-								}
 								tagIdentifierName = variableName;
 
 								if (isOnRequiredToken) {
 									let instruction: GlobalInstructionData | undefined = undefined;
-									if (tagElementName === 'xsl:call-template') {
+									if (xspecCallAttribute === 'function') {
+										// the function an XSpec scenario calls, in the stylesheet under test
+										instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Function);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
+										if (resultLocation) {
+											resultLocation.instruction = instruction;
+										}
+										resultInputToken = { token: token, type: GlobalInstructionType.Function };
+									} else if (tagElementName === 'xsl:call-template' || xspecCallAttribute === 'template') {
 										instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, variableName, GlobalInstructionType.Template);
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 										if (resultLocation) {
 											resultLocation.instruction = instruction;
 										}
 										resultInputToken = { token: token, type: GlobalInstructionType.Template };
-									} else if (elementStack.length > 0 && tagElementName === 'xsl:with-param') {
+									} else if (elementStack.length > 0 && (tagElementName === 'xsl:with-param' || (isXSpec && tagElementName === 'x:param'))) {
 										const {symbolName, symbolID} = elementStack[elementStack.length - 1];
-										if (symbolName === 'xsl:call-template') {
+										// or an XSpec x:param in an x:call of a template
+										if (symbolName === 'xsl:call-template' || (isXSpec && symbolName === 'x:call')) {
 										  const callTempDefn = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, symbolID, GlobalInstructionType.Template);
 											if (callTempDefn && callTempDefn.memberNames) {
 												const paramIndex = callTempDefn.memberNames.indexOf(variableName);
@@ -431,6 +445,17 @@ export class XsltTokenDefinitions {
 										const instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, nameToken.value, GlobalInstructionType.Accumulator);
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 										resultInputToken = { token: nameToken, type: GlobalInstructionType.Accumulator };
+									}
+								}
+								break;
+							case AttributeType.UseCharacterMaps:
+								if (isOnRequiredToken) {
+									const nameToken = XslLexer.tokensInsideToken(token, variableName).find((innerToken) =>
+										position.character >= innerToken.startCharacter && position.character <= (innerToken.startCharacter + innerToken.length));
+									if (nameToken) {
+										const instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, nameToken.value, GlobalInstructionType.CharacterMap);
+										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
+										resultInputToken = { token: nameToken, type: GlobalInstructionType.CharacterMap };
 									}
 								}
 								break;
@@ -638,7 +663,7 @@ export class XsltTokenDefinitions {
 											if (poppedData.awaitingArity && prevToken) {
 												keepProcessing = false;
 												const fnArity = poppedData.functionArity;
-												const fnName = poppedData.function.value;
+												const fnName = (poppedData.function.eqNameUri ?? '') + poppedData.function.value;
 												let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 												resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 												resultInputToken = { token: poppedData.function, type: GlobalInstructionType.Function };
@@ -669,7 +694,7 @@ export class XsltTokenDefinitions {
 								if (token.value === '()' && prevToken?.tokenType === TokenLevelState.function) {
 									if (awaitingRequiredArity) {
 										const fnArity = incrementFunctionArity ? 1 : 0;
-										const fnName = prevToken.value;
+										const fnName = (prevToken.eqNameUri ?? '') + prevToken.value;
 										let instruction = XsltTokenDefinitions.findMatchingDefintion(globalInstructionData, importedInstructionData, fnName, GlobalInstructionType.Function, fnArity);
 										resultLocation = XsltTokenDefinitions.createLocationFromInstruction(instruction, document);
 										resultInputToken = { token: prevToken, type: GlobalInstructionType.Function };
@@ -702,6 +727,10 @@ export class XsltTokenDefinitions {
 						}
 						break;
 				}
+			}
+			if (token.tokenType === TokenLevelState.function && prevToken?.tokenType === TokenLevelState.uriLiteral) {
+				// the local name of an EQName, e.g. double in Q{urn:f}double(1)
+				token.eqNameUri = prevToken.value;
 			}
 			if (incrementFunctionArity && prevToken?.charType === CharLevelState.dSep && (prevToken.value === '=>' || prevToken.value === '=!>') && token.tokenType !== TokenLevelState.function) {
 				// the implicit first argument only applies to a static function call, not to a dynamic call
