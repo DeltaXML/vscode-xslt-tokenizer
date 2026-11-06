@@ -15,6 +15,7 @@ import { XSpecCompat } from './xspecCompat';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
+import { HrefCompletion } from './hrefCompletion';
 import { XSpecTestController } from './xspecTestController';
 import { XSpecBreakpoints } from './xspecBreakpoints';
 import * as vscode from 'vscode';
@@ -506,7 +507,11 @@ export function activate(context: vscode.ExtensionContext) {
 		},
 		provideRenameEdits: (document, position, newName) => XSpecLike.renameEdits(document, position, newName)
 	}));
-	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecLike.hover(document, position) }));
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecLike.hover(document, position) ?? XSpecLike.importHover(document, position) }));
+	// the path in an href: xsl:import and xsl:include, and the files an XSpec file refers to
+	for (const language of ['xslt', 'xspec']) {
+		context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language }, { provideCompletionItems: (document, position) => HrefCompletion.completions(document, position) }, '"', '\'', '/'));
+	}
 	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.languages.registerCallHierarchyProvider({ language: 'xslt' }, new XsltCallHierarchyProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));

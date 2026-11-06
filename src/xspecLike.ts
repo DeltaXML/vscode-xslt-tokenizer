@@ -192,6 +192,24 @@ export class XSpecLike {
 		return name;
 	}
 
+	// at an x:import's href: the file - its scenarios, the shared ones x:like can use, and the files it imports
+	public static importHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+		const at = XSpecHrefs.hrefAt(document, document.offsetAt(position));
+		if (!at || at.href.element !== 'import') {
+			return undefined;
+		}
+		const imported = XSpecLike.parseFile(at.filePath, XSpecLike.openDocuments());
+		const shared = imported.scenarios.filter((s) => s.shared);
+		const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+		const lines = [`**XSpec file** ${path.relative(path.dirname(document.fileName), at.filePath).replace(/\\/g, '/')}`, '',
+			`${plural(imported.scenarios.length - shared.length, 'scenario')}, run with this file's - and ${plural(shared.length, 'shared scenario')}${shared.length > 0 ? ' for x:like: ' + shared.slice(0, 10).map((s) => `_${XSpecLike.normalize(s.label).replace(/[\\`*_{}[\]<>]/g, '\\$&')}_`).join(', ') + (shared.length > 10 ? ', …' : '') : ''}`];
+		if (imported.imports.length > 0) {
+			lines.push('', `Imports ${imported.imports.map((i) => path.basename(i)).join(', ')}`);
+		}
+		const start = document.positionAt(at.href.start);
+		return new vscode.Hover(new vscode.MarkdownString(lines.join('\n')), new vscode.Range(start, document.positionAt(at.href.end)));
+	}
+
 	// at x:like's label: the scenario it uses - where it is, and what it brings into the scenario using it
 	public static hover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
 		if (document.uri.scheme !== 'file') {

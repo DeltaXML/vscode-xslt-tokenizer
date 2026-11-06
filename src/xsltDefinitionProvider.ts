@@ -1,5 +1,6 @@
 import { XSpecScenario } from './xspecScenario';
 import { XSpecLike } from './xspecLike';
+import { XSpecHrefs } from './xspecHrefs';
 import * as vscode from 'vscode';
 import { PackageScope } from './packageScope';
 import { XsltPackages } from './xsltPackages';
@@ -92,6 +93,11 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 			const scenarios = XSpecLike.definition(document, position);
 			if (scenarios) {
 				return scenarios[0];
+			}
+			// a file it refers to, e.g. x:import's
+			const href = XSpecHrefs.hrefAt(document, document.offsetAt(position));
+			if (href) {
+				return new vscode.Location(vscode.Uri.file(href.filePath), new vscode.Position(0, 0));
 			}
 			const param =XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
 			const location = param ? XsltTokenDefinitions.createLocationFromInstruction(param, document) : undefined;
