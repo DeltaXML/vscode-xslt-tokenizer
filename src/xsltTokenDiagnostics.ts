@@ -31,6 +31,7 @@ import { XSpecHrefs } from './xspecHrefs';
 import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XSpecCompat } from './xspecCompat';
 import { XSpecLike } from './xspecLike';
+import { XmlElement, parseXml } from './xspecXml';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
@@ -298,7 +299,9 @@ export class XsltTokenDiagnostics {
 		}
 		return invalidNames;
 	}
-	private static validateName(origNname: string, origType: ValidationType, docType: DocumentTypes, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[]): NameValidationError {
+	// isNative: for an XSpec element name, whether it's XSpec's - not user content with a name that's written, or compared,
+	// with the prefix x, e.g. x:doc with t:description, or x:doc where an xmlns binds x to another namespace
+	private static validateName(origNname: string, origType: ValidationType, docType: DocumentTypes, xmlnsPrefixes: string[], elementStack?: ElementData[], expectedAttributes?: string[], isNative = true): NameValidationError {
 		const type = origType === ValidationType.AttributeNameTest ? ValidationType.PrefixedName : origType;
 		const name = origType === ValidationType.AttributeNameTest && origNname.startsWith('@') ? origNname.substring(1) : origNname;
 		const isSchematron = docType === DocumentTypes.SCH;
@@ -347,7 +350,7 @@ export class XsltTokenDiagnostics {
 							}
 						}
 						return valid;
-					} else if (isXSpec && prefix === 'x') {
+					} else if (isXSpec && prefix === 'x' && isNative) {
 						// an XSpec element - its name as the linter compares it, with the prefix x (see xsltElementName)
 						valid = (elementStack?.length === 0 ? ['x:description'] : expectedNames).includes(name) ? NameValidationError.None : NameValidationError.XSLTElementNameError;
 						return valid;
@@ -484,6 +487,8 @@ export class XsltTokenDiagnostics {
 		let pendingNameText = '';
 		let pendingNameToken: BaseToken | undefined;
 		let tagElementName = '';
+		// XSpec: the element has the XSpec prefix but, in user content, an xmlns binds it to another namespace
+		let tagIsForeignXSpec = false;
 		let tagElementId: number = -1;
 		let tagElementAttributes: string[] | undefined = [];
 		let tagElementChildren: string[] = [];
@@ -523,6 +528,7 @@ export class XsltTokenDiagnostics {
 		let rootXsltPrefix = 'xsl';
 		// XSpec: the prefixes bound to the XSpec namespace on the outermost element, e.g. x - for its variables, e.g. $x:result
 		const xspecPrefixes: string[] = [];
+		const xspecForeign = docType === DocumentTypes.XSPEC ? XsltTokenDiagnostics.xspecForeignElements(document.getText()) : undefined;
 		const xspecScope = docType === DocumentTypes.XSPEC ? XsltTokenDiagnostics.xspecScope(document.getText(), document.uri.scheme === 'file' ? document.fileName : undefined) : undefined;
 		// XSpec: prefixes for XSpec's own namespaces, e.g. for functions of its library that its tests use, which aren't checked
 		const xspecLibraryPrefixes: string[] = [];
@@ -935,6 +941,7 @@ export class XsltTokenDiagnostics {
 						// a close tag's name token includes any whitespace before its '>', e.g. </xsl:stylesheet >
 						const writtenElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document).trimEnd();
 						tagElementName = XsltTokenDiagnostics.xsltElementName(writtenElementName, document);
+						tagIsForeignXSpec = !!xspecForeign?.has(document.offsetAt(new vscode.Position(token.line, token.startCharacter)));
 						if (onRootStartTag && elementStack.length === 0 && writtenElementName.includes(':')) {
 							rootXsltPrefix = writtenElementName.substring(0, writtenElementName.indexOf(':'));
 						}
@@ -972,6 +979,7 @@ export class XsltTokenDiagnostics {
 						break;
 					case XSLTokenLevelState.elementName:
 						tagElementName = XsltTokenDiagnostics.getTextForToken(lineNumber, token, document).trimEnd();
+						tagIsForeignXSpec = false;
 						tagElementId++;
 						inheritedPrefixesCopy = inheritedPrefixes.slice();
 						if (isSchematron || tagElementName.startsWith('ixsl:')) {
@@ -1086,7 +1094,7 @@ export class XsltTokenDiagnostics {
 								let attsWithNameErrors: string[] = [];
 								let xsltAttsWithNameErrors: string[] = [];
 								// in XSpec, an XSLT element, e.g. in x:context, is user content
-								const attrValType = docType === DocumentTypes.XSPEC ? (tagType !== TagType.XMLstart && tagElementName.startsWith('x:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute) :
+								const attrValType = docType === DocumentTypes.XSPEC ? (tagType !== TagType.XMLstart && !tagIsForeignXSpec && tagElementName.startsWith('x:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute) :
 									tagElementName.startsWith('xsl:') ? ValidationType.XSLTAttribute : ValidationType.XMLAttribute;
 
 								let tunnelAttributeFound = false;
@@ -1116,7 +1124,7 @@ export class XsltTokenDiagnostics {
 								// within an element that forwards compatible mode accepts and ignores, nothing is checked
 								let isIgnored = elementStack.length > 0 && !!elementStack[elementStack.length - 1].isIgnored;
 								if (startTagToken && !problem && !startTagToken.error) {
-									let validationError = isIgnored ? NameValidationError.None : XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, docType, inheritedPrefixes, elementStack);
+									let validationError = isIgnored ? NameValidationError.None : XsltTokenDiagnostics.validateName(tagElementName, ValidationType.XMLElement, docType, inheritedPrefixes, elementStack, undefined, tagType !== TagType.XMLstart && !tagIsForeignXSpec);
 									if (forwardsCompatible && validationError === NameValidationError.XSLTElementNameError) {
 										// an XSLT element that isn't known, or not allowed where it is: ignored at the top level, or else
 										// replaced by its xsl:fallback children - without them, it's still an error (XTSE0010)
@@ -4521,6 +4529,29 @@ export class XsltTokenDiagnostics {
 		const isBuiltIn = prefix ? prefixesToURIs.has(prefix) : FunctionData.xpath40.some((nameWithArity) => nameWithArity.startsWith(name + '#'));
 		return isBuiltIn || (!!prefix && uncheckedPrefixes.includes(prefix)) || name.startsWith('Q{') ||
 			functionNames.some((nameWithArity) => nameWithArity.substring(0, nameWithArity.lastIndexOf('#')) === name);
+	}
+
+	// XSpec: the offsets of the names of the elements written with the XSpec prefix - the outermost element's - where an
+	// xmlns binds it to another namespace, e.g. <doc xmlns:x="urn:other"><x:document/></doc> in x:context: user content
+	public static xspecForeignElements(text: string): Set<number> {
+		const foreign = new Set<number>();
+		const root = parseXml(text);
+		if (!root) {
+			return foreign;
+		}
+		const colon = root.name.indexOf(':');
+		const prefix = colon > 0 ? root.name.substring(0, colon) : '';
+		const attribute = prefix ? `xmlns:${prefix}` : 'xmlns';
+		const visit = (element: XmlElement, uri: string | undefined) => {
+			const bound = element.attributes.get(attribute) ?? uri;
+			const elementPrefix = element.name.includes(':') ? element.name.substring(0, element.name.indexOf(':')) : '';
+			if (elementPrefix === prefix && bound !== XsltTokenDiagnostics.xspecNamespace) {
+				foreign.add(element.start + 1);
+			}
+			element.children.forEach((child) => visit(child, bound));
+		};
+		root.children.forEach((child) => visit(child, root.attributes.get(attribute)));
+		return foreign;
 	}
 
 	public static xsltElementName(name: string, document: vscode.TextDocument) {

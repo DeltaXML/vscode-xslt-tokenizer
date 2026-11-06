@@ -609,6 +609,15 @@ suite('XSpec', () => {
 		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" test="x:UQName('urn:a', 'b') ne $x:apos"/></x:scenario>`)), []);
 	});
 
+	test('user content: an element with the XSpec prefix, or named x:..., in another namespace isn\'t XSpec\'s', async () => {
+		// x bound to another namespace in user content, e.g. SpreadsheetML's
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:context><doc xmlns:x="urn:schemas-microsoft-com:office:excel"><x:document/></doc></x:context><x:expect label="e" select="()"/></x:scenario>`)), []);
+		// with t:description, x is another namespace's prefix
+		assert.deepEqual(await problems(xspec(`<t:scenario label="s"><t:context><x:doc/></t:context><t:expect label="e" select="()"/></t:scenario>`, ' stylesheet="sut.xsl" xmlns:x="urn:other"', 't')), []);
+		// still reported: an XSpec element in user content
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:context><doc><x:expect label="e" select="()"/></doc></x:context><x:expect label="e" select="()"/></x:scenario>`)), ['XSpec: element x:expect is not allowed here']);
+	});
+
 	suite('x:helper package-name: a package in the workspace', () => {
 		const pkg = path.join(dir, 'helper-pkg.xsl');
 		suiteSetup(async () => {
