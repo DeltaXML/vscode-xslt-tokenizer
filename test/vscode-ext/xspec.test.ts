@@ -542,4 +542,51 @@ suite('XSpec', () => {
 		assert.strictEqual(await where(using, 'vscode.executeDefinitionProvider'), '2:19-22');
 		assert.strictEqual(await where(using.replace('r|ow', 'row').replace('label="row" shared', 'label="r|ow" shared'), 'vscode.executeReferenceProvider'), '2:19-22,3:64-67,4:64-67');
 	});
+
+	test('variables: in scope as XSpec scopes them - after the declaration, in its scenario and those within it, and through x:like', async () => {
+		const unresolved = (name: string) => `XPath: The variable/parameter $${name} cannot be resolved`;
+		// before its declaration, or in another scenario
+		assert.deepEqual(await problems(xspec(`<x:scenario label="a"><x:context><p/></x:context><x:expect label="e" test="$v = 1"/><x:variable name="v" select="1"/></x:scenario>
+<x:scenario label="b"><x:context><p/></x:context><x:expect label="e" test="$v = 1"/></x:scenario>`)), [unresolved('v'), unresolved('v')]);
+		// in a scenario within its scenario, and a global one anywhere
+		assert.deepEqual(await problems(xspec(`<x:scenario label="a"><x:variable name="v" select="$g"/>
+  <x:scenario label="inner"><x:context><p/></x:context><x:expect label="e" test="$v = 1"/></x:scenario>
+</x:scenario>
+<x:variable name="g" select="1"/>`)), []);
+		// after x:like, the shared scenario's - and in the shared scenario, the using scenario's before the x:like
+		const shared = `<x:scenario label="row" shared="yes"><x:variable name="from-shared" select="$from-user"/><x:expect label="e" test="$from-shared"/></x:scenario>`;
+		assert.deepEqual(await problems(xspec(`${shared}
+<x:scenario label="s"><x:context><p/></x:context><x:variable name="from-user" select="1"/><x:like label="row"/><x:expect label="e" test="$from-shared = 1"/></x:scenario>`)), []);
+		assert.deepEqual(await problems(xspec(`${shared}
+<x:scenario label="s"><x:context><p/></x:context><x:like label="row"/><x:variable name="from-user" select="1"/></x:scenario>`)), [unresolved('from-user')]);
+		// a shared scenario no x:like uses here may be used elsewhere, so any is in scope
+		assert.deepEqual(await problems(xspec(shared)), []);
+		// names compared by namespace: a prefix, another prefix for it, or an EQName
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s" xmlns:g="urn:f"><x:variable name="Q{urn:f}v" select="1"/><x:variable name="g:w" select="$f:v"/><x:context><p/></x:context><x:expect label="e" test="$f:w"/></x:scenario>`)), []);
+	});
+
+	test('x:like: hover - the scenario it uses, where it is and what it brings in', async () => {
+		const text = hoverText(await at(xspec(`<x:scenario label="row" shared="yes"><x:variable name="v" select="1"/><x:expect label="has a cell" test="$v"/></x:scenario>
+<x:scenario label="s"><x:context><p/></x:context><x:like label="r|ow"/></x:scenario>`), 'vscode.executeHoverProvider'));
+		assert.include(text, '**Shared scenario** row — line 2');
+		assert.include(text, 'Variables: `$v`');
+		assert.include(text, 'Expectations: _has a cell_');
+	});
+
+	test('x:like: renaming a scenario\'s label renames the x:like elements using it - escaped for each - unless a scenario has the new label', async () => {
+		const content = xspec(`<x:scenario label="row" shared="yes"><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="taken"><x:context><p/></x:context><x:like label="r|ow"/></x:scenario>
+<x:scenario label="t"><x:context><p/></x:context><x:like><x:label>row</x:label></x:like></x:scenario>`);
+		const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file(`rename${count++}.xspec`, content.replace('|', ''))));
+		const position = document.positionAt(content.indexOf('|'));
+		const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', document.uri, position, 'a "row" & more');
+		assert.deepEqual(edit.get(document.uri).map((e) => `${e.range.start.line + 1}:${e.newText}`), ['2:a &quot;row&quot; &amp; more', '3:a &quot;row&quot; &amp; more', '4:a "row" &amp; more']);
+		let refused = '';
+		try {
+			await vscode.commands.executeCommand<vscode.WorkspaceEdit>('vscode.executeDocumentRenameProvider', document.uri, position, 'taken');
+		} catch (e) {
+			refused = String(e);
+		}
+		assert.include(refused, 'has the label \'taken\' already');
+	});
 });

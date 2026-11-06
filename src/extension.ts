@@ -495,6 +495,18 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	// a scenario's label, or an x:like's: the x:like elements using the scenario
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'xspec' }, { provideReferences: (document, position, referenceContext) => XSpecLike.references(document, position, referenceContext.includeDeclaration) }));
+	// and renamed there, and x:like's hover: the scenario it uses
+	context.subscriptions.push(vscode.languages.registerRenameProvider({ language: 'xspec' }, {
+		prepareRename: (document, position) => {
+			const label = XSpecLike.prepareRename(document, position);
+			if (!label) {
+				throw new Error('Only a scenario\'s label, or an x:like\'s, can be renamed');
+			}
+			return label;
+		},
+		provideRenameEdits: (document, position, newName) => XSpecLike.renameEdits(document, position, newName)
+	}));
+	context.subscriptions.push(vscode.languages.registerHoverProvider({ language: 'xspec' }, { provideHover: (document, position) => XSpecLike.hover(document, position) }));
 	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.languages.registerCallHierarchyProvider({ language: 'xslt' }, new XsltCallHierarchyProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));

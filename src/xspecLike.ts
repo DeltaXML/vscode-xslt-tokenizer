@@ -31,6 +31,8 @@ export interface XSpecLabelled {
 	elementStart: number;
 	elementEnd: number;
 	shared: boolean;
+	// for a label attribute, its quote - none for x:label
+	quote?: string;
 }
 
 interface XSpecFile {
@@ -42,6 +44,10 @@ interface XSpecFile {
 	imports: string[];
 	// whether an x:import isn't found, e.g. a URI an XML catalog maps - so its scenarios aren't known
 	importMissing: boolean;
+	// the names of x:description's x:variable and x:param elements
+	globals: string[];
+	root?: XmlElement;
+	prefix: string;
 }
 
 export class XSpecLike {
@@ -74,6 +80,187 @@ export class XSpecLike {
 	// scenario using it are in scope, and the other way round
 	public static gatheredVariables(text: string, filePath: string | undefined): string[] {
 		return filePath ? XSpecLike.all(text, filePath).filter((f) => !XSpecSourceMap.samePath(f.file, filePath)).flatMap((f) => f.variables) : [];
+	}
+
+	// whether a variable is in scope at an offset, as XSpec's compiler scopes them (stacked-vardecls in
+	// src/compiler/base/main.xsl) once x:like has brought in the scenarios it uses: an x:variable or x:param of
+	// x:description, in any file of the run, or one of a scenario that comes before the element the offset is in, or
+	// before an ancestor of it. After an x:like, those of the scenario it uses; and in a scenario that x:like uses, those
+	// in scope at each x:like. Any is in scope in a scenario whose uses aren't known: a shared one that no x:like uses
+	// here - it may be used from a file outside the workspace - or with an x:import that isn't found
+	public static scopeChecker(text: string, filePath: string): (name: string, offset: number) => boolean {
+		const { own, importers } = XSpecLike.contexts(text, filePath);
+		const files = XSpecLike.union([own, ...importers]);
+		const globals = new Set(files.flatMap((f) => f.globals));
+		const incomplete = files.some((f) => f.importMissing);
+		const isXSpec = (f: XSpecFile, element: XmlElement, ...names: string[]) => names.some((name) => element.name === f.prefix + name);
+		const variableName = (element: XmlElement) => XSpecLike.expandedName(element.attributes.get('name')?.trim() ?? '', element);
+		const elements = new Map<XSpecFile, Map<number, XmlElement>>();
+		const elementAt = (f: XSpecFile, start: number) => {
+			if (!elements.has(f)) {
+				elements.set(f, new Map(f.root ? descendants(f.root).map((e) => [e.start, e]) : []));
+			}
+			return elements.get(f)!.get(start);
+		};
+		// the variables the scenarios with the label declare, for the scenario using one with x:like
+		const declaredBy = (label: string, seen: Set<string>): string[] => {
+			if (seen.has(label)) {
+				return [];
+			}
+			seen.add(label);
+			return files.flatMap((f) => f.scenarios.filter((scenario) => scenario.label === label).flatMap((scenario) => {
+				const element = elementAt(f, scenario.elementStart);
+				return (element?.children ?? []).flatMap((child) => isXSpec(f, child, 'variable', 'param') ? [variableName(child) ?? ''] :
+					isXSpec(f, child, 'like') ? declaredBy(f.likes.find((like) => like.elementStart === child.start)?.label ?? '', seen) : []);
+			}));
+		};
+		const visible = (f: XSpecFile, offset: number, seen: Set<string>): { names: Set<string>, any: boolean } => {
+			const result = { names: new Set<string>(), any: false };
+			const key = `${f.file}#${offset}`;
+			if (seen.has(key) || !f.root) {
+				return result;
+			}
+			seen.add(key);
+			// the elements the offset is in, outermost first
+			const ancestors: XmlElement[] = [];
+			for (let e: XmlElement | undefined = f.root; e; e = e.children.find((c) => c.start <= offset && offset < c.end)) {
+				ancestors.push(e);
+			}
+			for (let i = 1; i < ancestors.length; i++) {
+				const [parent, child] = [ancestors[i - 1], ancestors[i]];
+				if (!isXSpec(f, parent, 'scenario')) {
+					continue;
+				}
+				parent.children.filter((sibling) => sibling.end <= child.start).forEach((sibling) => {
+					if (isXSpec(f, sibling, 'variable', 'param')) {
+						result.names.add(variableName(sibling) ?? '');
+					} else if (isXSpec(f, sibling, 'like')) {
+						declaredBy(f.likes.find((like) => like.elementStart === sibling.start)?.label ?? '', new Set()).forEach((name) => result.names.add(name));
+					}
+				});
+			}
+			// in a scenario that x:like uses: those in scope at the x:like
+			ancestors.filter((e) => isXSpec(f, e, 'scenario')).forEach((element) => {
+				const scenario = f.scenarios.find((s) => s.elementStart === element.start);
+				if (!scenario) {
+					return;
+				}
+				const uses = files.flatMap((other) => other.likes.filter((like) => like.label === scenario.label && !XSpecLike.encloses(scenario, like)).map((like) => ({ other, like })));
+				if (uses.length === 0 && (scenario.shared || incomplete)) {
+					result.any = true;
+				}
+				uses.forEach(({ other, like }) => {
+					const atUse = visible(other, like.elementStart, seen);
+					atUse.names.forEach((name) => result.names.add(name));
+					result.any = result.any || atUse.any;
+				});
+			});
+			return result;
+		};
+		return (name: string, offset: number) => {
+			// the name, with the namespace of its prefix where it is
+			let element = own[0].root;
+			for (let child = element; child; child = child.children.find((c) => c.start <= offset && offset < c.end)) {
+				element = child;
+			}
+			const expanded = element ? XSpecLike.expandedName(name, element) : name;
+			if (globals.has(expanded)) {
+				return true;
+			}
+			const inScope = visible(own[0], offset, new Set());
+			return inScope.any || inScope.names.has(expanded);
+		};
+	}
+
+	// a variable's name as Q{uri}local, with the namespace its prefix is bound to on the element or an ancestor - a name
+	// with a prefix that isn't bound is kept as it is
+	private static expandedName(name: string, element: XmlElement): string {
+		if (name.startsWith('Q{')) {
+			return name;
+		}
+		const colon = name.indexOf(':');
+		const attribute = colon > 0 ? `xmlns:${name.substring(0, colon)}` : undefined;
+		if (!attribute) {
+			return `Q{}${name}`;
+		}
+		for (let e: XmlElement | undefined = element; e; e = e.parent) {
+			const uri = e.attributes.get(attribute);
+			if (uri !== undefined) {
+				return `Q{${uri}}${name.substring(colon + 1)}`;
+			}
+		}
+		return name;
+	}
+
+	// at x:like's label: the scenario it uses - where it is, and what it brings into the scenario using it
+	public static hover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+		if (document.uri.scheme !== 'file') {
+			return undefined;
+		}
+		const text = document.getText();
+		const filePath = document.fileName;
+		const like = XSpecLike.likeAt(text, filePath, document.offsetAt(position));
+		if (!like) {
+			return undefined;
+		}
+		const range = new vscode.Range(document.positionAt(like.start), document.positionAt(like.end));
+		const found = XSpecLike.all(text, filePath).flatMap((f) => f.scenarios.filter((s) => s.label === like.label).map((scenario) => ({ f, scenario })));
+		if (found.length !== 1) {
+			// the problem is reported
+			return undefined;
+		}
+		const { f, scenario } = found[0];
+		const element = f.root ? descendants(f.root).find((e) => e.start === scenario.elementStart) : undefined;
+		const children = element?.children ?? [];
+		const named = (name: string) => children.filter((child) => child.name === f.prefix + name);
+		const labelOf = (child: XmlElement) => {
+			const labelElement = child.children.find((c) => c.name === f.prefix + 'label');
+			return XSpecLike.normalize(labelElement ? descendants(labelElement).reduce((t, e) => t + e.text, labelElement.text) : child.attributes.get('label') ?? '');
+		};
+		const escape = (value: string) => value.replace(/[\\`*_{}[\]<>()#+\-.!|]/g, '\\$&');
+		const lines = [`**${scenario.shared ? 'Shared scenario' : 'Scenario'}** ${escape(XSpecLike.normalize(scenario.label))} — ${escape(XSpecLike.where(scenario, filePath))}`, ''];
+		const list = (title: string, items: string[]) => items.length > 0 && lines.push(`${title}: ${items.join(', ')}`, '');
+		list('Variables', [...named('variable'), ...named('param')].map((v) => `\`$${v.attributes.get('name')?.trim() ?? ''}\``));
+		list('Sets', [...named('context'), ...named('call')].map((c) => `\`${c.name}\``));
+		list('Uses', named('like').map((l) => `_${escape(labelOf(l))}_`));
+		list('Expectations', children.filter((c) => c.name.startsWith(f.prefix + 'expect')).map((e) => `_${escape(labelOf(e))}_`));
+		list('Scenarios', named('scenario').map((s) => `**${escape(labelOf(s))}**`));
+		return new vscode.Hover(new vscode.MarkdownString(lines.join('\n').trim()), range);
+	}
+
+	// a scenario's label, or an x:like's: the label - renamed in the scenarios with it and the x:like elements using them
+	public static prepareRename(document: vscode.TextDocument, position: vscode.Position): { range: vscode.Range, placeholder: string } | undefined {
+		if (document.uri.scheme !== 'file') {
+			return undefined;
+		}
+		const text = document.getText();
+		const offset = document.offsetAt(position);
+		const at = XSpecLike.scenarioAt(text, document.fileName, offset) ?? XSpecLike.likeAt(text, document.fileName, offset);
+		return at && (at.quote || !/[<&]/.test(text.substring(at.start, at.end))) ? { range: new vscode.Range(document.positionAt(at.start), document.positionAt(at.end)), placeholder: at.label } : undefined;
+	}
+
+	public static renameEdits(document: vscode.TextDocument, position: vscode.Position, newName: string): vscode.WorkspaceEdit | undefined {
+		if (!XSpecLike.prepareRename(document, position)) {
+			return undefined;
+		}
+		const text = document.getText();
+		const filePath = document.fileName;
+		const offset = document.offsetAt(position);
+		const at = (XSpecLike.scenarioAt(text, filePath, offset) ?? XSpecLike.likeAt(text, filePath, offset))!;
+		if (newName !== at.label && XSpecLike.scenariosLabelled(text, filePath, newName).length > 0) {
+			throw new Error(`A scenario has the label '${newName}' already`);
+		}
+		const edit = new vscode.WorkspaceEdit();
+		for (const labelled of [...XSpecLike.scenariosLabelled(text, filePath, at.label), ...XSpecLike.likesOf(text, filePath, at.label)]) {
+			const escaped = newName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(labelled.quote === '"' ? /"/g : labelled.quote === '\'' ? /'/g : /(?!)/g, labelled.quote === '"' ? '&quot;' : '&apos;');
+			const location = XSpecLike.location(labelled, document);
+			edit.replace(location.uri, location.range, escaped);
+		}
+		return edit;
+	}
+
+	private static normalize(text: string) {
+		return text.replace(/\s+/g, ' ').trim();
 	}
 
 	public static completions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] | undefined {
@@ -236,8 +423,12 @@ export class XSpecLike {
 	// the files of all the runs the file may be in, its own first
 	private static all(text: string, filePath: string): XSpecFile[] {
 		const { own, importers } = XSpecLike.contexts(text, filePath);
+		return XSpecLike.union([own, ...importers]);
+	}
+
+	private static union(runs: XSpecFile[][]): XSpecFile[] {
 		const files = new Map<string, XSpecFile>();
-		[own, ...importers].flat().forEach((f) => files.set(path.normalize(f.file), files.get(path.normalize(f.file)) ?? f));
+		runs.flat().forEach((f) => files.set(path.normalize(f.file), files.get(path.normalize(f.file)) ?? f));
 		return [...files.values()];
 	}
 
@@ -304,12 +495,14 @@ export class XSpecLike {
 	}
 
 	private static parse(text: string, filePath: string): XSpecFile {
-		const result: XSpecFile = { file: filePath, scenarios: [], likes: [], variables: [], imports: [], importMissing: false };
+		const result: XSpecFile = { file: filePath, scenarios: [], likes: [], variables: [], imports: [], importMissing: false, globals: [], prefix: '' };
 		const root = parseXml(text);
 		if (!root || localName(root.name) !== 'description') {
 			return result;
 		}
 		const prefix = root.name.includes(':') ? root.name.substring(0, root.name.indexOf(':') + 1) : '';
+		result.root = root;
+		result.prefix = prefix;
 		const isXSpec = (element: XmlElement, name: string) => element.name === prefix + name;
 		// resolved against the base URI, which xml:base may change
 		XSpecHrefs.find(text, filePath).filter((href) => href.element === 'import' && href.attribute === 'href').forEach((href) => {
@@ -325,6 +518,9 @@ export class XSpecLike {
 				const name = element.attributes.get('name')?.trim();
 				if (name) {
 					result.variables.push(name);
+					if (element.parent === root) {
+						result.globals.push(XSpecLike.expandedName(name, element));
+					}
 				}
 			} else if (isXSpec(element, 'scenario') || isXSpec(element, 'like')) {
 				const labelled = XSpecLike.labelOf(text, element, prefix);
@@ -339,7 +535,7 @@ export class XSpecLike {
 
 	// as XSpec's x:label(): x:label's string value, or else the label attribute's value - the attribute's after XML's
 	// normalization of its whitespace characters to spaces
-	private static labelOf(text: string, element: XmlElement, prefix: string): { label: string, start: number, end: number } | undefined {
+	private static labelOf(text: string, element: XmlElement, prefix: string): { label: string, start: number, end: number, quote?: string } | undefined {
 		const labelElement = element.children.find((child) => child.name === prefix + 'label');
 		if (labelElement) {
 			// XML's line ends are newlines, and references are replaced - after
@@ -356,6 +552,6 @@ export class XSpecLike {
 		const end = text.indexOf(match[1], start);
 		const raw = end < 0 ? '' : text.substring(start, end);
 		// a whitespace character is a space - not one from a character reference, e.g. &#x0A;
-		return { label: decodeReferences(raw.replace(/\r\n|[\t\n\r]/g, ' ')), start, end: end < 0 ? start : end };
+		return { label: decodeReferences(raw.replace(/\r\n|[\t\n\r]/g, ' ')), start, end: end < 0 ? start : end, quote: match[1] };
 	}
 }

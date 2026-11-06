@@ -2161,7 +2161,7 @@ export class XsltTokenDiagnostics {
 							}
 							let unResolvedToken = XsltTokenDiagnostics.resolveXPathVariableReference(globalVarName, document, importedGlobalVarNames, token, xpathVariableCurrentlyBeingDefined, inScopeXPathVariablesList,
 								xpathStack, inScopeVariablesList, elementStack);
-							if (unResolvedToken !== null && !(xspecScope && XsltTokenDiagnostics.isXSpecVariable(token.value, xspecPrefixes, xspecScope))) {
+							if (unResolvedToken !== null && !(xspecScope && XsltTokenDiagnostics.isXSpecVariable(token.value, xspecPrefixes, xspecScope, document.offsetAt(new vscode.Position(token.line, token.startCharacter))))) {
 								unresolvedXsltVariableReferences.push(unResolvedToken);
 							}
 							XsltTokenDiagnostics.checkTokenIsExpected(prevToken, token, problemTokens);
@@ -4425,10 +4425,12 @@ export class XsltTokenDiagnostics {
 		// and those of the XSpec files gathered with it - imported, or importing it - as x:like brings a shared scenario's
 		// into the scenario using it, where the using scenario's are in scope
 		XSpecLike.gatheredVariables(documentText, documentPath).forEach((name) => declared.add(name));
+		// for a variable reference: whether one of them is in scope where it is, as XSpec scopes them
+		const inScope = documentPath ? XSpecLike.scopeChecker(documentText, documentPath) : undefined;
 		const testsStylesheet = !!stylesheetPath && fs.existsSync(stylesheetPath);
 		const helperPaths = [...documentText.matchAll(/<(?:[\w.-]+:)?helper\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)].map((match) => HrefPaths.toPath(match[2], documentPath)).filter((p): p is string => !!p);
 		const externalModules = testsStylesheet && XsltTokenDiagnostics.isRunAsExternal(root) ? XsltTokenDiagnostics.xspecExternalModules(stylesheetPath!, helperPaths) : undefined;
-		return { testsStylesheet, declared, externalModules, ...XsltTokenDiagnostics.xspecPackage(root, testsStylesheet ? stylesheetPath : undefined) };
+		return { testsStylesheet, declared, inScope, externalModules, ...XsltTokenDiagnostics.xspecPackage(root, testsStylesheet ? stylesheetPath : undefined) };
 	}
 
 	// an XSpec file whose stylesheet is an xsl:package: its name, whether it's run externally - as it must be, as XSpec
@@ -4481,9 +4483,9 @@ export class XsltTokenDiagnostics {
 	// a variable reference that isn't resolved, which XSpec allows: one XSpec declares, e.g. $x:result - or for a module
 	// that isn't a stylesheet, any - or one declared elsewhere in the file, e.g. in a shared scenario that x:like uses,
 	// whose variables are those of the scenario using it
-	private static isXSpecVariable(reference: string, xspecPrefixes: string[], xspecScope: { testsStylesheet: boolean, declared: Set<string> }) {
+	private static isXSpecVariable(reference: string, xspecPrefixes: string[], xspecScope: { testsStylesheet: boolean, declared: Set<string>, inScope?: (name: string, offset: number) => boolean }, offset: number) {
 		const name = reference.startsWith('$') ? reference.substring(1) : reference;
-		if (!xspecScope.testsStylesheet || xspecScope.declared.has(name)) {
+		if (!xspecScope.testsStylesheet || (xspecScope.inScope ? xspecScope.inScope(name, offset) : xspecScope.declared.has(name))) {
 			return true;
 		}
 		const eqName = `Q{${XsltTokenDiagnostics.xspecNamespace}}`;
