@@ -544,6 +544,43 @@ function testXPathQuery(saxonJar) {
     assert.deepStrictEqual([error.line, error.column], [1, 8]);
 }
 
+// XPathQuery --server, as the extension runs it (out/src/xpathQueryServer.js - compile first): queries in one Java process,
+// each result as a one-shot run gives it; a query while one is running (here, one that never ends) stops the process,
+// the earlier query fails with 'superseded' and the newer one runs in a new process; a changed command restarts it,
+// and one that can't run fails with Java's reason
+async function testXPathQueryServer(saxonJar) {
+    const { XPathQueryServer } = require(path.join(root, 'out', 'src', 'xpathQueryServer.js'));
+    const server = new XPathQueryServer();
+    // absolute, as it's run in another folder too
+    const classPath = [adapterJar, ...saxonJar.split(path.delimiter).map((jar) => path.resolve(jar))].join(path.delimiter);
+    const args = ['-cp', classPath, 'com.deltaxml.xslt.debug.XPathQuery'];
+    const xml = '<orders><order id="A1"/><order id="B2"/></orders>';
+    try {
+        const first = await server.request('java', args, undefined, { xpath: '//order/@id', xml });
+        assert.deepStrictEqual(first.items.map((item) => item.value), ['A1', 'B2']);
+        const started = Date.now();
+        const second = await server.request('java', args, undefined, { xpath: "map{'a':[1,2]}, 'x\ny'", xml });
+        assert.deepStrictEqual(second.items.map((item) => item.text ?? item.value), ["{\n  'a': [1, 2]\n}", 'x\ny']);
+        const third = await server.request('java', args, undefined, { xpath: '//order[', xml });
+        assert.strictEqual(third.error.code, 'XPST0003');
+        // warm: well under a new JVM's start
+        assert.ok(Date.now() - started < 2000, `${Date.now() - started}ms`);
+
+        const endless = server.request('java', args, undefined, { xpath: 'sum((1 to 2000000000) ! (. mod 7))', xml });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const after = server.request('java', args, undefined, { xpath: 'count(//order)', xml });
+        after.catch(() => undefined);
+        await assert.rejects(endless, /superseded/);
+        assert.deepStrictEqual((await after).items.map((item) => item.value), ['2']);
+
+        const changed = await server.request('java', [...args.slice(0, 2), 'com.deltaxml.xslt.debug.XPathQuery'], require('os').tmpdir(), { xpath: '1 + 1', xml });
+        assert.deepStrictEqual(changed.items.map((item) => item.value), ['2']);
+        await assert.rejects(server.request('java', ['-cp', adapterJar, 'com.deltaxml.xslt.debug.NoSuchClass'], undefined, { xpath: '1', xml }), /NoSuchClass/);
+    } finally {
+        server.dispose();
+    }
+}
+
 // an inline function that a stylesheet function returns, called later elsewhere - its compiled body, traced (not
 // the debugger's instrumented copy, used while stepping through the expression that makes it): a breakpoint in its
 // body stops for each call, in a frame of its own, with its captured variables as locals; Step Into from where it's
@@ -2706,7 +2743,7 @@ async function main() {
     }
     let failures = 0;
     for (const jar of jars) {
-        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
+        for (const test of [testDeepRecursion, testNoTemplateMatched, testStepBack, testStepBackReplaysSteps, testBreakpointsAndInspection, testStepOverAndLogpoint, testInitialTemplateAndError, testBreakpointVerification, testMovedBreakpointsStop, testStepThroughXPath, testBreakpointInXPath, testInlineFunctions, testLazyLet, testReturnedFunction, testXPathQuery, testXPathQueryServer, testCachedFunction, testJavaExtensionFunctions, testGroupsInContext, testPositionalVariable, testGlobalsWhileEvaluatingGlobal, testStepIntoOnlyUsefulXPath, testSteppedExpressionsRunOnce, testSeparateEvaluationStaticContext, testXPathLoops, testArrowCalls, testForSomeEvery, testTestsEvaluatedAsNeeded, testLookupsAndMethodCalls, testPartialApplication, testFixedNamespaces, testXslt40Instructions, testOneLineLoop, testStepOverLoops, testFunctionBreakpoints, testXPathFrameScopes, testMessageOutput, testXslt40Structures, testAccumulators, testIterateAndEvaluate, testSort, testWhenAndMapEntry, testInstructions, testKeys, testAnalyzeString, testLogpointLocals, testLogpointValues, testXPathForms, testXPath40, testStepThroughXPathWithExtensions, testHitCounts, testMultiLineTextValueTemplate, testConditionErrorsAndXPathConditions, testXPathLoopArrivals, testPauseOnError, testPauseOnCaughtError, testMessageTerminateAndStaticError, testVariableScopes, testEveryXslSequence, testOutputSoFar, testPrincipalJsonOutput, testResultDocumentAsPrincipal, testOneLineDeclarations, testOutputMap, testOutputMapWithoutXslOutput, testXSpecStepping]) {
             // e.g. DEBUGGER_TEST=testStepBack, to run only that test
             if (process.env.DEBUGGER_TEST && test.name !== process.env.DEBUGGER_TEST) {
                 continue;

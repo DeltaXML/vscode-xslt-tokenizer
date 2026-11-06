@@ -54,32 +54,72 @@ final class XPathQuery {
 
     private XPathQuery() { }
 
+    /**
+     * With no arguments, one request: all of stdin, and its result on stdout. With --server, a request on each line of
+     * stdin, and each result on a line of stdout - in a JVM that stays running, so a query needn't wait for Java and
+     * Saxon to start, or for xdm-view to compile, again. It ends when stdin is closed
+     */
     public static void main(String[] args) throws Exception {
-        Object result;
-        try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> request = (Map<String, Object>) Json.parse(new String(readAll(System.in), StandardCharsets.UTF_8));
-            result = evaluate(request);
-        } catch (SaxonApiException e) {
-            result = Json.obj().with("error", error(e));
-        } catch (Exception | LinkageError e) {
-            result = Json.obj().with("error", Json.obj().with("message", Debugger.message(e)));
+        java.io.Writer out = new java.io.OutputStreamWriter(System.out, StandardCharsets.UTF_8);
+        Session session = null;
+        if (args.length > 0 && "--server".equals(args[0])) {
+            java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(System.in, StandardCharsets.UTF_8));
+            for (String line = in.readLine(); line != null; line = in.readLine()) {
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                if (session == null) {
+                    session = new Session();
+                }
+                out.write(Json.stringify(respond(session, line)) + "\n");
+                out.flush();
+            }
+            return;
         }
-        System.out.print(Json.stringify(result));
-        System.out.flush();
+        out.write(Json.stringify(respond(null, new String(readAll(System.in), StandardCharsets.UTF_8))));
+        out.flush();
     }
 
-    static Object evaluate(Map<String, Object> request) throws SaxonApiException {
-        Configuration config = Configuration.newLicensedConfiguration();
-        boolean xpath40 = !"HE".equals(config.getEditionCode());
-        if (xpath40) {
-            try {
-                config.setConfigurationProperty("http://saxon.sf.net/feature/allowSyntaxExtensions", Boolean.TRUE);
-            } catch (RuntimeException e) {
-                xpath40 = false;
-            }
+    // the result for a request, or the error - a new session if there's none
+    private static Object respond(Session session, String json) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> request = (Map<String, Object>) Json.parse(json);
+            return evaluate(session == null ? new Session() : session, request);
+        } catch (SaxonApiException e) {
+            return Json.obj().with("error", error(e));
+        } catch (Exception | LinkageError | StackOverflowError e) {
+            return Json.obj().with("error", Json.obj().with("message", Debugger.message(e)));
         }
-        Processor processor = new Processor(config);
+    }
+
+    // what's kept between a server's requests: Saxon's configuration - XPath 4.0 with Saxon-PE or EE - and xdm-view,
+    // once compiled
+    static final class Session {
+        final Configuration config = Configuration.newLicensedConfiguration();
+        final Processor processor;
+        final boolean xpath40;
+        final XdmView view;
+
+        Session() {
+            boolean is40 = !"HE".equals(config.getEditionCode());
+            if (is40) {
+                try {
+                    config.setConfigurationProperty("http://saxon.sf.net/feature/allowSyntaxExtensions", Boolean.TRUE);
+                } catch (RuntimeException e) {
+                    is40 = false;
+                }
+            }
+            xpath40 = is40;
+            processor = new Processor(config);
+            // compiled only if a map or array is found
+            view = new XdmView(config);
+        }
+    }
+
+    static Object evaluate(Session session, Map<String, Object> request) throws SaxonApiException {
+        boolean xpath40 = session.xpath40;
+        Processor processor = session.processor;
         DocumentBuilder builder = processor.newDocumentBuilder();
         String systemId = Json.string(request, "systemId");
         XdmNode document = builder.build(new StreamSource(new StringReader(Json.string(request, "xml")), systemId));
@@ -115,8 +155,7 @@ final class XPathQuery {
         XdmValue value = selector.evaluate();
 
         List<Object> items = new ArrayList<Object>();
-        // compiled only if a map or array is found
-        XdmView view = new XdmView(config);
+        XdmView view = session.view;
         int n = 0;
         for (XdmItem item : value) {
             if (++n > MAX_ITEMS) {

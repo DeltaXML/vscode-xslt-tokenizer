@@ -13,6 +13,7 @@ import { XsltDefinitionProvider } from './xsltDefinitionProvider';
 import { XsltDebug } from './xsltDebug';
 import { unquotedPath } from './settingPaths';
 import { XPathQueryResults, XPathQueryFound } from './xpathQueryResults';
+import { XPathQueryServer } from './xpathQueryServer';
 
 // an item of a query's result, from XPathQuery (in the debug adapter's jar): a node - where it is among the document's
 // elements, and for an attribute its name - or an atomic value, or another item (a map, array or function)
@@ -326,6 +327,8 @@ export class XPathQuery {
 
 	private diagnostics = vscode.languages.createDiagnosticCollection('xpath-query');
 	private output = vscode.window.createOutputChannel('XPath Query');
+	// a Java process kept running between queries
+	private server = new XPathQueryServer();
 	// each query file's latest results, by the expression's text - so they stay with it as lines are added before it -
 	// and the XML file it ran on
 	private results = new Map<string, { expression: string; target: string; summary: string }[]>();
@@ -352,7 +355,7 @@ export class XPathQuery {
 	}
 
 	constructor(private context: vscode.ExtensionContext) {
-		context.subscriptions.push(this.diagnostics, this.output);
+		context.subscriptions.push(this.diagnostics, this.output, this.server);
 		const saved = context.workspaceState.get<string>(XPathQuery.targetKey);
 		XPathQuery.target = saved ? vscode.Uri.parse(saved) : undefined;
 		const xmlEditor = [vscode.window.activeTextEditor, ...vscode.window.visibleTextEditors].find((e) => e && XPathQuery.isXMLFile(e.document));
@@ -630,7 +633,10 @@ export class XPathQuery {
 			result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'Evaluating XPath' }, () =>
 				this.evaluate(saxonJar, { xpath, xml: xmlDocument.getText(), systemId: target.toString(), namespaces }));
 		} catch (e: any) {
-			vscode.window.showErrorMessage(`XPath query: Saxon couldn't be run - ${e?.message ?? e}`);
+			// a newer query stopped this one - e.g. one that didn't end: its result is shown instead
+			if (e?.message !== XPathQueryServer.superseded) {
+				vscode.window.showErrorMessage(`XPath query: Saxon couldn't be run - ${e?.message ?? e}`);
+			}
 			return;
 		}
 		if (result.error) {
@@ -675,8 +681,16 @@ export class XPathQuery {
 		const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		// a relative path is relative to the workspace folder, as for tasks
 		const jar = folder && !path.isAbsolute(saxonJar) ? path.join(folder, saxonJar) : saxonJar;
+		const args = ['-cp', [adapterJar, jar].join(path.delimiter), XPathQuery.mainClass];
+		// in the Java process kept running - or, if that fails (other than for a newer query), in one of its own
+		return this.server.request(XsltDebug.javaCommand, args, folder, request).catch((e: Error) =>
+			e.message === XPathQueryServer.superseded ? Promise.reject(e) : this.evaluateOnce(args, folder, request));
+	}
+
+	// in a Java process of its own: the request on stdin, the result on stdout
+	private evaluateOnce(args: string[], folder: string | undefined, request: object): Promise<XPathQueryResult> {
 		return new Promise((resolve, reject) => {
-			const child = cp.spawn(XsltDebug.javaCommand, ['-cp', [adapterJar, jar].join(path.delimiter), XPathQuery.mainClass], { cwd: folder });
+			const child = cp.spawn(XsltDebug.javaCommand, args, { cwd: folder });
 			let stdout = '';
 			let stderr = '';
 			child.stdout.on('data', (data: Buffer) => stdout += data.toString('utf8'));
