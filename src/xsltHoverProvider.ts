@@ -521,7 +521,7 @@ export class XSLTHoverProvider implements HoverProvider {
 	}
 
 	// the components available from a package, by kind - at most a few of each, in name order
-	private static componentsMarkdown(components: GlobalInstructionData[]) {
+	public static componentsMarkdown(components: GlobalInstructionData[]) {
 		const maxShown = 12;
 		const kinds: [GlobalInstructionType[], string, (g: GlobalInstructionData) => string][] = [
 			[[GlobalInstructionType.Function], 'Functions', (g) => `${g.name}#${g.idNumber}`],

@@ -167,6 +167,7 @@ export class XsltTokenCompletions {
 		let lineNumber = -1;
 		let docType = languageConfig.isVersion4 ? DocumentTypes.XSLT40 : languageConfig.docType;
 		let isXSLT = docType === DocumentTypes.XSLT || docType === DocumentTypes.XSLT40;
+		XsltTokenCompletions.xspecXPath40 = docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.isXSpecXPath40(document.getText());
 		let resultCompletions: vscode.CompletionItem[] | undefined;
 		let inScopeVariablesList: VariableData[] = [];
 		let xpathVariableCurrentlyBeingDefined = false;
@@ -2688,8 +2689,11 @@ export class XsltTokenCompletions {
 		return undefined;
 	}
 
+	// an XSpec file whose test runner is XSLT 4.0 (see XsltTokenDiagnostics.isXSpecXPath40)
+	private static xspecXPath40 = false;
+
 	private static isXPath40(docType: DocumentTypes) {
-		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
+		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath || (docType === DocumentTypes.XSPEC && XsltTokenCompletions.xspecXPath40);
 	}
 
 	// XSLT 4.0: the documentation of each field of a record type, for its completion - with the text of its @field tag in
@@ -3040,7 +3044,8 @@ export class XsltTokenCompletions {
 		const text = document.getText();
 		const offset = document.offsetAt(position);
 		const tag = text.substring(text.lastIndexOf('<', offset), text.indexOf('>', offset) + 1);
-		const name = tag.match(/(?<![\w.:-])name\s*=\s*(["'])([^"']*)\1/)?.[2].trim();
+		// xsl:use-package's name, or XSpec's x:helper package-name
+		const name = tag.match(/(?<![\w.:-])(?:package-)?name\s*=\s*(["'])([^"']*)\1/)?.[2].trim();
 		const versions = [...new Set(XsltPackages.all().filter((pkg) => pkg.name === name).map((pkg) => pkg.version ?? '1'))]
 			.sort((a, b) => XsltPackages.compareVersions(b, a));
 		const range = XsltTokenCompletions.attributeValueRange(document, position);

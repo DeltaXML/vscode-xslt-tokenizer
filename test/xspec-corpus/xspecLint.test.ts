@@ -7,6 +7,8 @@
  * - XSPEC_OUT: the folder for the results - default xspec-lint-results in the OS temp folder
  * - XSPEC_FILTER: a regular expression for the paths of the files to lint, relative to the folder - default all
  *
+ * The folder's XSLT modules are indexed first, as a workspace's are - so the packages that x:helper uses are found.
+ *
  * The results are results.jsonl (a line for each file) and summary.md: the problems reported, grouped by message
  */
 import * as vscode from 'vscode';
@@ -16,6 +18,7 @@ import * as path from 'path';
 import { XsltSymbolProvider } from '../../src/xsltSymbolProvider';
 import { XSpecConfiguration } from '../../src/languageConfigurations';
 import { LanguageConfiguration } from '../../src/xslLexer';
+import { ImportIndex } from '../../src/importIndex';
 
 interface Problem { line: number, severity: string, message: string }
 
@@ -23,12 +26,14 @@ const severityName = (severity: vscode.DiagnosticSeverity) => ['error', 'warning
 // a message's kind, for grouping: without the names and values quoted in it
 const kind = (message: string) => message.replace(/'[^']*'/g, "'…'").replace(/"[^"]*"/g, '"…"').replace(/\d+/g, 'N');
 
-function xspecFiles(folder: string): string[] {
+function filesWith(folder: string, extensions: string[]): string[] {
 	return fs.readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
 		const entryPath = path.join(folder, entry.name);
-		return entry.isDirectory() ? xspecFiles(entryPath) : entry.name.endsWith('.xspec') ? [entryPath] : [];
+		return entry.isDirectory() ? (entry.name.startsWith('.') || entry.name === 'node_modules' ? [] : filesWith(entryPath, extensions)) :
+			extensions.includes(path.extname(entry.name)) ? [entryPath] : [];
 	});
 }
+const xspecFiles = (folder: string) => filesWith(folder, ['.xspec']);
 
 suite('XSpec files: lint', function () {
 	this.timeout(0);
@@ -41,6 +46,8 @@ suite('XSpec files: lint', function () {
 		fs.mkdirSync(outDir, { recursive: true });
 		const moduleDiagnostics = (XsltSymbolProvider as unknown as { moduleDiagnostics(d: vscode.TextDocument, parent: boolean, config: LanguageConfiguration): Promise<vscode.Diagnostic[]> }).moduleDiagnostics;
 		const results: { file: string, problems: Problem[], exception?: string }[] = [];
+		// as the workspace's: e.g. the packages that x:helper package-name uses
+		await ImportIndex.instance.buildFrom(filesWith(corpus, ['.xsl', '.xslt']));
 		const filter = process.env.XSPEC_FILTER ? new RegExp(process.env.XSPEC_FILTER) : undefined;
 		for (const file of xspecFiles(corpus).sort().filter((f) => !filter || filter.test(path.relative(corpus, f)))) {
 			let problems: Problem[] = [];

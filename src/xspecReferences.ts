@@ -16,6 +16,7 @@ import { XSpecConfiguration } from './languageConfigurations';
 import { ModulePrefixes } from './modulePrefixes';
 import { HrefPaths } from './hrefPaths';
 import { XSpecSourceMap } from './xspecSourceMap';
+import { XSpecPackages } from './xspecPackages';
 
 // The uses of a stylesheet's function or named template in the XSpec files that test it - for Find All References and
 // Rename (see XSLTReferenceProvider): x:call's function or template, and function calls in XPath expressions, e.g. a
@@ -62,13 +63,13 @@ export class XSpecReferences {
 		});
 	}
 
-	// whether the XSpec file's stylesheet, or a helper's, is one of the modules
+	// whether the XSpec file's stylesheet, or a helper's - a stylesheet, or a package, by its package-name - is one of the
+	// modules
 	private static testsAny(text: string, xspecPath: string, modules: string[]) {
 		const hrefs = [...text.matchAll(/<(?:[\w.-]+:)?(?:description|helper)\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)].map((match) => match[2]);
-		return hrefs.some((href) => {
-			const stylesheet = HrefPaths.toPath(href, xspecPath);
-			return stylesheet !== undefined && modules.some((module) => XSpecSourceMap.samePath(module, stylesheet));
-		});
+		const stylesheets = hrefs.map((href) => HrefPaths.toPath(href, xspecPath)).filter((p): p is string => p !== undefined);
+		const packages = /<(?:[\w.-]+:)?helper\b[^>]*\spackage-name\s*=/.test(text) ? XSpecPackages.helperPackagePaths(text) : [];
+		return [...stylesheets, ...packages].some((file) => modules.some((module) => XSpecSourceMap.samePath(module, file)));
 	}
 
 	private static inXSpec(text: string, uri: vscode.Uri, kind: 'function' | 'template', expandedName: string): vscode.Location[] {

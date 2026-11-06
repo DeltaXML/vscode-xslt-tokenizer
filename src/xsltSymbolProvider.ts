@@ -17,6 +17,7 @@ import { ImportIndex } from './importIndex';
 import { XSLTConfiguration } from './languageConfigurations';
 import * as fs from 'fs';
 import { HrefPaths, ImportProblem } from './hrefPaths';
+import { SaxonTaskProvider } from './saxonTaskProvider';
 
 interface ImportedGlobals {
 	href: string;
@@ -257,7 +258,14 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			importErrors.forEach((importError) => {
 				importDiagnostics.push(XsltTokenDiagnostics.createImportDiagnostic(importError.data, importError.problem, document.getText()));
 			});
-			packageErrors.forEach((data) => importDiagnostics.push(XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data, document.getText())));
+			packageErrors.forEach((data) => {
+				const diagnostic = XsltTokenDiagnostics.createPackageNotFoundDiagnostic(data, document.getText());
+				if (this.docType === DocumentTypes.XSPEC) {
+					// x:helper's package-name
+					diagnostic.message = diagnostic.message.replace(/^XTSE3000: Package/, 'XSpec: the helper package');
+				}
+				importDiagnostics.push(diagnostic);
+			});
 			const allDiagnostics = importDiagnostics.concat(diagnostics);
 			// for a document that isn't open in an editor too, e.g. checked by the MCP server's lint_file tool
 			this.lastDiagnostics.set(document.uri.toString(), { version, diagnostics: allDiagnostics });
@@ -314,6 +322,22 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 
 	// the parent imported with the module: true for the top-level stylesheet importing or including it, directly or
 	// indirectly - one opened recently, or from the index of the workspace's modules - false for none, or a path
+	// for an XSpec file whose tests run in an XSLT test runner - for a stylesheet, a Schematron or an XProc step, not an
+	// XQuery module - the file URI of XSpec's src/common/runtime-utils.xsl, bundled with the extension, which XSpec's
+	// compiler includes in every runner (src/compiler/xslt/main.xsl): common-utils, deep-equal, namespace-vars,
+	// report-sequence, uqname-utils and wrap
+	public static xspecRuntimeUtils(document: vscode.TextDocument): string | undefined {
+		if (document.languageId !== 'xspec' || !SaxonTaskProvider.extensionURI) {
+			return undefined;
+		}
+		const root = /<(?:[\w.-]+:)?description\b[^>]*>/.exec(document.getText())?.[0];
+		if (!root || !/\s(stylesheet|schematron|xproc)\s*=/.test(root)) {
+			return undefined;
+		}
+		const utils = vscode.Uri.joinPath(SaxonTaskProvider.extensionURI, 'xslt-resources', 'xspec', 'src', 'common', 'runtime-utils.xsl').fsPath;
+		return fs.existsSync(utils) ? HrefPaths.fileUri(utils) : undefined;
+	}
+
 	public static async processTopLevelImports(update: boolean, xslLexer: XslLexer, localImportedHrefs: Map<string, string[]>, document: vscode.TextDocument, globalInstructionData: GlobalInstructionData[], xsltPackages: XsltPackage[], parent: boolean | string = true) {
 		const inferParent = parent === true;
 		let matchingParent = typeof parent === 'string' ? parent : inferParent ? this.findMatchingParent(localImportedHrefs, document.fileName) : undefined;
@@ -345,6 +369,12 @@ export class XsltSymbolProvider implements vscode.DocumentSymbolProvider {
 			};
 
 			globalInstructionData.push(importInstruction);
+		}
+		// XSpec: the utilities XSpec includes in every XSLT test runner - their functions and variables, e.g. x:UQName()
+		// and $x:apos, can be used in its XPath expressions (see XsltSymbolProvider.xspecRuntimeUtils)
+		const runtimeUtils = XsltSymbolProvider.xspecRuntimeUtils(document);
+		if (runtimeUtils && !globalInstructionData.some((g) => g.type === GlobalInstructionType.Import && g.name === runtimeUtils)) {
+			globalInstructionData.push({ type: GlobalInstructionType.Import, name: runtimeUtils, token: { line: 0, startCharacter: 0, length: 0, value: '', tokenType: 0 }, idNumber: 0 });
 		}
 
 		const importedG = { data: globalInstructionData, href: document.fileName, error: false };

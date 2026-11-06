@@ -265,6 +265,8 @@ export class XsltTokenDiagnostics {
 	public static readonly xslExcludePrefixes = 'xsl:exclude-result-prefixes';
 	public static readonly brackets = [CharLevelState.lB, CharLevelState.lBr, CharLevelState.lPr, CharLevelState.rB, CharLevelState.rBr, CharLevelState.rPr];
 	private static isHtmlParserJarSet = false;
+	// an XSpec file whose test runner is XSLT 4.0, so its XPath expressions are XPath 4.0 (see xspecXPath40)
+	private static xspecXPath40 = false;
 	// the prefixes of functions that the stylesheet's processing system provides, e.g. Java extension functions: calls
 	// of functions with these prefixes aren't checked (the XSLT.validation.externalFunctionPrefixes setting)
 	private static externalFunctionPrefixes: string[] = [];
@@ -599,6 +601,7 @@ export class XsltTokenDiagnostics {
 		const htmlParserString = <string | undefined>vscode.workspace.getConfiguration('XSLT.tasks').get('htmlParserJar');
 		XsltTokenDiagnostics.isHtmlParserJarSet = !!htmlParserString && htmlParserString.trim().length > 0;
 		XsltTokenDiagnostics.externalFunctionPrefixes = XsltTokenDiagnostics.externalFunctionPrefixesFor(document.uri);
+		XsltTokenDiagnostics.xspecXPath40 = docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.isXSpecXPath40(document.getText());
 
 		if (languageConfig.isVersion4) {
 			schemaQuery = new SchemaQuery(XSLTConfiguration.schemaData4);
@@ -3162,7 +3165,15 @@ export class XsltTokenDiagnostics {
 						// *:para, or a union of them - or its type annotation, after a comma, e.g. xs:untyped in element(*, xs:untyped)
 						const kindTestPart = withinTypeDeclarationAttr ? XsltTokenDiagnostics.kindTestPart(allTokens, index) : undefined;
 						const isNodeName = kindTestPart === 'name';
-						if (isNodeName) {
+						// the target of processing-instruction(...), e.g. processing-instruction(pi) - an NCName, not a type
+						const kindTest = prevToken?.charType === CharLevelState.lB ? allTokens[index - 2] : undefined;
+						if (kindTest?.tokenType === TokenLevelState.nodeType && kindTest.value === 'processing-instruction') {
+							isValidType = /^[\p{L}_][\p{L}\p{N}._\-·̀-ͯ‿⁀]*$/u.test(tValue);
+							if (!isValidType) {
+								token['error'] = ErrorType.XMLName;
+								problemTokens.push(token);
+							}
+						} else if (isNodeName) {
 							isValidType = true;
 							// the prefix of a wildcard, e.g. my:*, must be declared - there's none for *:para, or a local name after Q{...}
 							const wildcardPrefix = /^([\w.-]+):\*$/.exec(tValue);
@@ -3820,7 +3831,15 @@ export class XsltTokenDiagnostics {
 	}
 
 	private static isXPath40(docType: DocumentTypes) {
-		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath;
+		return docType === DocumentTypes.XSLT40 || docType === DocumentTypes.XPath || (docType === DocumentTypes.XSPEC && XsltTokenDiagnostics.xspecXPath40);
+	}
+
+	// whether an XSpec file's test runner is XSLT 4.0, as XSpec compiles it (x:xslt-version() in
+	// src/compiler/base/util/compiler-misc-utils.xsl): x:description's xslt-version - 3.0 without it, whatever the version
+	// of the stylesheet tested
+	public static isXSpecXPath40(text: string) {
+		const version = /<(?:[\w.-]+:)?description\b[^>]*?\sxslt-version\s*=\s*(["'])\s*([\d.]+)\s*\1/.exec(text)?.[2];
+		return version !== undefined && parseFloat(version) >= 4;
 	}
 
 	private static isOperandExpected(prevToken: BaseToken | null) {

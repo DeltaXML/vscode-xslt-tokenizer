@@ -15,6 +15,8 @@ import { XSpecLabels } from '../../src/xspecLabels';
 import { XSpecCompat } from '../../src/xspecCompat';
 import { XSpecTestController } from '../../src/xspecTestController';
 import { XSpecCleanup } from '../../src/xspecCleanup';
+import { XsltPackages } from '../../src/xsltPackages';
+import { ImportIndex } from '../../src/importIndex';
 
 const xspecNs = 'xmlns:x="http://www.jenitennison.com/xslt/xspec"';
 
@@ -588,5 +590,69 @@ suite('XSpec', () => {
 			refused = String(e);
 		}
 		assert.include(refused, 'has the label \'taken\' already');
+	});
+
+	test('XPath 4.0: with x:description\'s xslt-version 4.0, as XSpec compiles the test runner - not the stylesheet\'s version', async () => {
+		const body = `<x:scenario label="s"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" select="'A'" as="enum('A', 'B')"/></x:scenario>`;
+		assert.deepEqual(await problems(xspec(body, ' stylesheet="sut.xsl" xslt-version="4.0"')), []);
+		assert.deepEqual(await problems(xspec(body)), ['XPath: The \'enum(...)\' item type requires XPath 4.0']);
+	});
+
+	test('processing-instruction(name): the name is a processing instruction\'s target, not a type - in XSpec and XSLT', async () => {
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call function="f:double"><x:param as="processing-instruction(pi)"><?pi data?></x:param></x:call><x:expect label="e" select="()"/></x:scenario>`)), []);
+		const xslt = await vscode.workspace.openTextDocument({ language: 'xslt', content: `<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+<xsl:template match="/"><xsl:variable name="v" as="processing-instruction(pi)?" select="()"/><xsl:sequence select="$v"/></xsl:template></xsl:stylesheet>` });
+		assert.deepEqual((await moduleDiagnostics.call(XsltSymbolProvider, xslt, false, XSLTConfiguration.configuration)).map((d) => d.message), []);
+	});
+
+	test('XSpec\'s runtime utilities, in every XSLT test runner: e.g. x:UQName() and $x:apos', async () => {
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:call function="f:double"><x:param select="1"/></x:call><x:expect label="e" test="x:UQName('urn:a', 'b') ne $x:apos"/></x:scenario>`)), []);
+	});
+
+	suite('x:helper package-name: a package in the workspace', () => {
+		const pkg = path.join(dir, 'helper-pkg.xsl');
+		suiteSetup(async () => {
+			fs.writeFileSync(pkg, `<xsl:package xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:h="urn:helper" name="urn:helper-pkg" package-version="2.0" version="3.0">
+  <xsl:function name="h:triple" visibility="public"><xsl:param name="n"/><xsl:sequence select="$n * 3"/></xsl:function>
+  <xsl:function name="h:hidden" visibility="private"><xsl:sequence select="1"/></xsl:function>
+</xsl:package>`);
+			await ImportIndex.instance.buildFrom([pkg, path.join(dir, 'sut.xsl')]);
+		});
+		const helper = (version = '') => xspec(`<x:helper package-name="urn:helper-pkg"${version}/>
+<x:scenario label="s"><x:call function="f:double"><x:param select="h:triple(1)"/></x:call><x:expect label="e" select="6"/></x:scenario>`, ' stylesheet="sut.xsl" xmlns:h="urn:helper"');
+
+		test('its public functions can be used, not its private ones', async () => {
+			assert.deepEqual(await problems(helper()), []);
+			assert.deepEqual(await problems(helper().replace('h:triple(1)', 'h:hidden()')), ['XPath: Function: \'h:hidden\' with 0 arguments not found']);
+		});
+
+		test('completion of the package names and versions, its hover, and Go to Definition', async () => {
+			assert.include(await completions(xspec('<x:helper package-name="|"/>')), 'urn:helper-pkg');
+			assert.includeMembers(await completions(xspec('<x:helper package-name="urn:helper-pkg" package-version="|"/>')), ['*', '2.0']);
+			const content = helper().replace('package-name="urn:helper-pkg"', 'package-name="urn:hel|per-pkg"');
+			assert.include(hoverText(await at(content, 'vscode.executeHoverProvider')), 'Package `urn:helper-pkg` version 2.0');
+			const locations = await at(content, 'vscode.executeDefinitionProvider') as (vscode.Location | vscode.LocationLink)[];
+			assert.deepEqual(locations.map((l) => path.basename('uri' in l ? l.uri.fsPath : l.targetUri.fsPath)), ['helper-pkg.xsl']);
+		});
+
+		test('a package that isn\'t found, or not in the version: a problem in the Problems view', async () => {
+			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file(`helper${count++}.xspec`, helper(' package-version="9.9"'))));
+			await vscode.window.showTextDocument(document);
+			let messages: string[] = [];
+			for (let i = 0; i < 50 && !messages.some((m) => m.includes('helper package')); i++) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				messages = vscode.languages.getDiagnostics(document.uri).map((d) => d.message);
+			}
+			assert.include(messages, 'XSpec: the helper package \'urn:helper-pkg\' with package-version \'9.9\' not found - in the workspace, or the XSLT.resources.xsltPackages setting');
+		});
+
+		test('find all references to a package\'s function: its uses in the XSpec files with the package as a helper', async () => {
+			const tests = file(`helper-refs${count++}.xspec`, helper());
+			await vscode.workspace.openTextDocument(vscode.Uri.file(tests));
+			const packageDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(pkg));
+			const offset = packageDocument.getText().indexOf('name="h:triple"') + 8;
+			const locations = await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', packageDocument.uri, packageDocument.positionAt(offset));
+			assert.deepEqual(locations.filter((l) => l.uri.fsPath === tests).map((l) => l.range.start.line + 1), [3]);
+		});
 	});
 });
