@@ -25,6 +25,8 @@ export interface XPathQueryItem {
 	textIndex?: number;
 	value?: string;
 	type?: string;
+	// a map or array as xdm:debug() writes it, over several lines - for the Output panel, when xdm-view can be used
+	text?: string;
 }
 
 // as VS Code's vscode.getEditorLayout gives it: groups in rows or columns, nested, each with its size
@@ -714,7 +716,7 @@ export class XPathQuery {
 		this.output.appendLine(summary);
 		for (const item of items) {
 			this.output.appendLine('  ' + (item.kind === 'node' ? `${item.path}${item.value !== undefined ? '  ' + JSON.stringify(item.value) : ''}` :
-				item.type ? `${item.value} (xs:${item.type})` : `${item.value}`));
+				item.type ? `${item.value} (xs:${item.type})` : (item.text ?? `${item.value}`).replace(/\n/g, '\n  ')));
 		}
 		// a value - e.g. count(//item) - or nothing found: shown only after the expression, and in the output
 		if (nodes.length === 0) {

@@ -530,6 +530,15 @@ function testXPathQuery(saxonJar) {
     // a map, array or function: as the adaptive output method writes it
     assert.deepStrictEqual(query("[89], map{'a':[1,'two',true()]}, count#1, [(//item)[1]]").items.map((item) => item.value),
         ['[89]', 'map{"a":[1,"two",true()]}', 'fn:count#1', '[<item xmlns="urn:orders" xmlns:x="urn:extra">pen</item>]']);
+    // and a map or array as xdm:debug() writes it, without color, for the Output panel - not a function
+    const texts = query("map{'name':'Ada','orders':array{map{'id':1},map{'id':2}}}, [1, 2], count#1").items.map((item) => item.text);
+    // (its entries in any order: Saxon 12's maps don't keep it)
+    assert.match(texts[0], /^\{\n[^]*\n\}$/, texts[0]);
+    assert.ok(texts[0].includes("  'name': 'Ada'"), texts[0]);
+    assert.ok(texts[0].includes("  'orders': [\n    {'id': 1},\n    {'id': 2}\n  ]"), texts[0]);
+    assert.doesNotMatch(texts[0], /\u001b/);
+    assert.strictEqual(texts[1], '[1, 2]');
+    assert.strictEqual(texts[2], undefined);
     const error = query('//order[').error;
     assert.strictEqual(error.code, 'XPST0003');
     assert.deepStrictEqual([error.line, error.column], [1, 8]);

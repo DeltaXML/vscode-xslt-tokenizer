@@ -115,6 +115,8 @@ final class XPathQuery {
         XdmValue value = selector.evaluate();
 
         List<Object> items = new ArrayList<Object>();
+        // compiled only if a map or array is found
+        XdmView view = new XdmView(config);
         int n = 0;
         for (XdmItem item : value) {
             if (++n > MAX_ITEMS) {
@@ -123,9 +125,22 @@ final class XPathQuery {
             items.add(item.isNode() ? node((XdmNode) item) : item instanceof XdmAtomicValue ?
                     Json.obj().with("kind", "atomic").with("type", ((XdmAtomicValue) item).getPrimitiveTypeName().getLocalName())
                             .with("value", item.getStringValue()) :
-                    Json.obj().with("kind", "other").with("value", adaptive(processor, item)));
+                    other(processor, view, item));
         }
         return Json.obj().with("count", value.size()).with("items", items);
+    }
+
+    // a map, array or function: its value on one line, for the result after the expression - and for a map or array,
+    // its text as xdm:debug() writes it, over several lines, for the Output panel, if xdm-view can be used
+    private static Json.Obj other(Processor processor, XdmView view, XdmItem item) {
+        Json.Obj result = Json.obj().with("kind", "other").with("value", adaptive(processor, item));
+        if (item instanceof net.sf.saxon.s9api.XdmMap || item instanceof net.sf.saxon.s9api.XdmArray) {
+            String text = view.renderPlain(item);
+            if (text != null) {
+                result.with("text", text.length() > MAX_VALUE_LENGTH ? text.substring(0, MAX_VALUE_LENGTH - 1) + "…" : text);
+            }
+        }
+        return result;
     }
 
     // a map, array or function, as the adaptive output method writes it - e.g. [89], map{"a":1}, fn:count#1 - on

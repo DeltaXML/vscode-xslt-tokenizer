@@ -28,6 +28,7 @@ final class XdmView {
     // xdm-view's functions aren't public (it isn't a package), so they're called by one of this stylesheet's, which is
     private static final String NS = "http://deltaxml.com/ns/xslt-debugger";
     private static final QName LOG_TEXT = new QName(NS, "log-text");
+    private static final QName PLAIN_TEXT = new QName(NS, "plain-text");
     private static final QName DEBUG_TEXT = new QName(NS, "debug-text");
     private static final String WRAPPER =
             "<xsl:stylesheet version='3.0' xmlns:xsl='http://www.w3.org/1999/XSL/Transform' xmlns:dbg='" + NS + "'" +
@@ -36,6 +37,10 @@ final class XdmView {
             "  <xsl:function name='dbg:log-text' visibility='public'>" +
             "    <xsl:param name='value'/>" +
             "    <xsl:sequence select='zxd:trace-text($value, (), true())'/>" +
+            "  </xsl:function>" +
+            "  <xsl:function name='dbg:plain-text' visibility='public'>" +
+            "    <xsl:param name='value'/>" +
+            "    <xsl:sequence select='zxd:trace-text($value, (), false())'/>" +
             "  </xsl:function>" +
             "  <xsl:function name='dbg:debug-text' visibility='public'>" +
             "    <xsl:param name='title'/>" +
@@ -56,6 +61,11 @@ final class XdmView {
     /** the value rendered - null if xdm-view can't be used (see problem()), or rendering it failed */
     String render(XdmValue value) {
         return call(LOG_TEXT, value);
+    }
+
+    /** the value rendered as render() does it, but without color - e.g. for VS Code's Output panel. Null as for render() */
+    String renderPlain(XdmValue value) {
+        return call(PLAIN_TEXT, value);
     }
 
     /**
