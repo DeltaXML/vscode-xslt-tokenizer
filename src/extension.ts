@@ -14,6 +14,7 @@ import { XSpecLabels } from './xspecLabels';
 import { XSpecCompat } from './xspecCompat';
 import { XSpecCleanup } from './xspecCleanup';
 import { XSpecScenario, XSpecPackageForm } from './xspecScenario';
+import { XSpecLike } from './xspecLike';
 import { XSpecTestController } from './xspecTestController';
 import { XSpecBreakpoints } from './xspecBreakpoints';
 import * as vscode from 'vscode';
@@ -474,6 +475,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, xspecDefinitionProvider));
 	// in an XSpec file with no outermost element yet, as '<' is typed: x:description (see XSpecScenario.rootCompletions)
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, { provideCompletionItems: (document, position) => XSpecScenario.rootCompletions(document, position) }, '<'));
+	// x:like's label: the labels of the scenarios it may use
+	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xspec' }, { provideCompletionItems: (document, position) => XSpecLike.completions(document, position) }, '"', '\''));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xml' }, xmlDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider({ language: 'xpath' }, xpathDefinitionProvider));
 	context.subscriptions.push(vscode.languages.registerDocumentLinkProvider({ language: 'xslt' }, xsltLinkProvider));
@@ -490,6 +493,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xslt' }, new XSLTSignatureHelpProvider(XSLTConfiguration.configuration, xsltDefintiionProvider), '(', ',', '"', '\'', '<'));
 	context.subscriptions.push(vscode.languages.registerSignatureHelpProvider({ language: 'xpath' }, new XSLTSignatureHelpProvider(XPathConfiguration.configuration), '(', ','));
 	context.subscriptions.push(vscode.languages.registerReferenceProvider({language: 'xslt'}, new XSLTReferenceProvider()));
+	// a scenario's label, or an x:like's: the x:like elements using the scenario
+	context.subscriptions.push(vscode.languages.registerReferenceProvider({ language: 'xspec' }, { provideReferences: (document, position, referenceContext) => XSpecLike.references(document, position, referenceContext.includeDeclaration) }));
 	context.subscriptions.push(vscode.languages.registerRenameProvider({language: 'xslt'}, new XSLTReferenceProvider()));
 	context.subscriptions.push(vscode.languages.registerCallHierarchyProvider({ language: 'xslt' }, new XsltCallHierarchyProvider()));
 	context.subscriptions.push(vscode.commands.registerCommand('xslt-xpath.addTaskInputs', () => SaxonJsTaskProvider.addInputsToTasks()));

@@ -1,4 +1,5 @@
 import { XSpecScenario } from './xspecScenario';
+import { XSpecLike } from './xspecLike';
 import * as vscode from 'vscode';
 import { PackageScope } from './packageScope';
 import { XsltPackages } from './xsltPackages';
@@ -87,7 +88,12 @@ export class XsltDefinitionProvider implements vscode.DefinitionProvider, vscode
 		}
 		// XSpec: an x:param of x:description, setting a global parameter of the stylesheet under test
 		if (this.docType === DocumentTypes.XSPEC) {
-			const param = XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
+			// x:like's label: the scenario with it
+			const scenarios = XSpecLike.definition(document, position);
+			if (scenarios) {
+				return scenarios[0];
+			}
+			const param =XSpecGlobalParams.paramAt(document.getText(), document.offsetAt(position), XsltDefinitionProvider.xspecPrefixOf(document), allImportedGlobals);
 			const location = param ? XsltTokenDefinitions.createLocationFromInstruction(param, document) : undefined;
 			if (location) {
 				return location;

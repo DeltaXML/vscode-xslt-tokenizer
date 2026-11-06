@@ -493,4 +493,53 @@ suite('XSpec', () => {
 		assert.lengthOf(reported, 1, reported.join('\n'));
 		assert.match(reported[0], /^XSpec: the file 'missing\.xml' of the href attribute isn't found/);
 	});
+
+	test('x:like: a problem for a label no scenario has, or more than one, or the scenario it\'s in - as XSpec stops the run', async () => {
+		const shared = `<x:scenario label="row" shared="yes"><x:expect label="a row" test="exists($x:result)"/></x:scenario>`;
+		assert.deepEqual(await problems(xspec(`${shared}
+<x:scenario label="s"><x:context><p/></x:context><x:like label="row"/></x:scenario>
+<x:scenario label="t"><x:context><p/></x:context><x:like><x:label>row</x:label></x:like></x:scenario>`)), []);
+		assert.deepEqual(await problems(xspec(`${shared}<x:scenario label="s"><x:context><p/></x:context><x:like label="rows"/></x:scenario>`)),
+			['XSpec: no scenario has the label \'rows\', for x:like - in this file, the XSpec files it imports or those importing it']);
+		const twice = await problems(xspec(`${shared}${shared}<x:scenario label="s"><x:context><p/></x:context><x:like label="row"/></x:scenario>`));
+		assert.lengthOf(twice, 1, twice.join('\n'));
+		assert.match(twice[0], /^XSpec: 2 scenarios have the label 'row'/);
+		assert.deepEqual(await problems(xspec(`<x:scenario label="s"><x:context><p/></x:context><x:like label="s"/><x:expect label="e" select="()"/></x:scenario>`)),
+			['XSpec: x:like uses the scenario \'s\' that it\'s in - a loop']);
+	});
+
+	test('x:like: a scenario in an XSpec file imported, or importing it - and the variables of the scenario using a shared one are in scope', async () => {
+		const library = file(`like-lib${count++}.xspec`, `<x:description ${xspecNs} stylesheet="sut.xsl">
+  <x:scenario label="lib row" shared="yes">
+    <x:variable name="lib-var" select="1"/>
+    <x:expect label="uses the using scenario's variable" test="$using-var = 2"/>
+  </x:scenario>
+  <x:scenario label="uses the importer's"><x:context><p/></x:context><x:like label="importer row"/></x:scenario>
+</x:description>`);
+		const importer = xspec(`<x:import href="${path.basename(library)}"/>
+<x:scenario label="importer row" shared="yes"><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="s"><x:context><p/></x:context><x:variable name="using-var" select="2"/><x:like label="lib row"/><x:expect label="uses the shared scenario's variable" test="$lib-var = 1"/></x:scenario>`);
+		assert.deepEqual(await problems(importer), []);
+		// the imported file, linted on its own while the file importing it is open
+		const libraryDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(library));
+		const libraryProblems = await moduleDiagnostics.call(XsltSymbolProvider, libraryDocument, false, XSpecConfiguration.configuration);
+		assert.deepEqual(libraryProblems.filter((d) => d.severity !== vscode.DiagnosticSeverity.Hint).map((d) => d.message), []);
+	});
+
+	test('x:like: completion of the scenarios\' labels - shared first, not the scenario it\'s in - going to the scenario, and finding the x:like elements using it', async () => {
+		const body = `<x:scenario label="row" shared="yes"><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="plain"><x:context><p/></x:context><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="s"><x:context><p/></x:context><x:like label="|"/></x:scenario>`;
+		const labels = await completions(xspec(body));
+		assert.deepEqual(labels.filter((l) => ['row', 'plain', 's'].includes(l)).sort(), ['plain', 'row']);
+		const where = async (content: string, command: string) => {
+			const locations = await at(xspec(content), command) as (vscode.Location | vscode.LocationLink)[];
+			return locations.map((l) => 'uri' in l ? l.range : l.targetRange).map((r) => `${r.start.line + 1}:${r.start.character}-${r.end.character}`).join(',');
+		};
+		const using = `<x:scenario label="row" shared="yes"><x:expect label="e" select="()"/></x:scenario>
+<x:scenario label="s"><x:context><p/></x:context><x:like label="r|ow"/></x:scenario>
+<x:scenario label="t"><x:context><p/></x:context><x:like label="row"/></x:scenario>`;
+		assert.strictEqual(await where(using, 'vscode.executeDefinitionProvider'), '2:19-22');
+		assert.strictEqual(await where(using.replace('r|ow', 'row').replace('label="row" shared', 'label="r|ow" shared'), 'vscode.executeReferenceProvider'), '2:19-22,3:64-67,4:64-67');
+	});
 });

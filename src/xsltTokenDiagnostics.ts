@@ -30,6 +30,7 @@ import * as fs from 'fs';
 import { XSpecHrefs } from './xspecHrefs';
 import { XSpecGlobalParams } from './xspecGlobalParams';
 import { XSpecCompat } from './xspecCompat';
+import { XSpecLike } from './xspecLike';
 import { UnionPatternPriority } from './unionPatternPriority';
 import { XslLexerLight } from './xslLexerLight';
 import { XSpecSourceMap } from './xspecSourceMap';
@@ -3436,6 +3437,8 @@ export class XsltTokenDiagnostics {
 			allDiagnostics.push(...XSpecGlobalParams.problems(document, xspecPrefix, importedInstructionData));
 			// x:expect elements XSpec 4 stops the run for, which XSpec before 1.0 ran
 			allDiagnostics.push(...XSpecCompat.problems(document));
+			// an x:like with no scenario with its label, or more than one, or one enclosing it
+			allDiagnostics.push(...XSpecLike.problems(document));
 			// with run-as="external", a function of the stylesheet tested called in an XPath expression: why it's not found
 			if (xspecExternalFnNames.length > 0) {
 				allDiagnostics.forEach((d) => {
@@ -4419,6 +4422,9 @@ export class XsltTokenDiagnostics {
 				parents.push(localName);
 			}
 		}
+		// and those of the XSpec files gathered with it - imported, or importing it - as x:like brings a shared scenario's
+		// into the scenario using it, where the using scenario's are in scope
+		XSpecLike.gatheredVariables(documentText, documentPath).forEach((name) => declared.add(name));
 		const testsStylesheet = !!stylesheetPath && fs.existsSync(stylesheetPath);
 		const helperPaths = [...documentText.matchAll(/<(?:[\w.-]+:)?helper\b[^>]*?\sstylesheet\s*=\s*(["'])(.*?)\1/g)].map((match) => HrefPaths.toPath(match[2], documentPath)).filter((p): p is string => !!p);
 		const externalModules = testsStylesheet && XsltTokenDiagnostics.isRunAsExternal(root) ? XsltTokenDiagnostics.xspecExternalModules(stylesheetPath!, helperPaths) : undefined;
