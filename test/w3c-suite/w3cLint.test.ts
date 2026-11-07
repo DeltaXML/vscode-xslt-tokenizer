@@ -9,7 +9,8 @@
  * - W3C_FILTER: a regular expression for the test-set names to lint, e.g. '^attr' - default all
  *
  * The results are results.jsonl (a line for each test case) and summary.md: for the test cases expected to compile,
- * the errors and warnings reported, grouped by message, with the test cases - and the linter's exceptions
+ * the errors and warnings reported, grouped by message, with the test cases - and the linter's exceptions. And for
+ * each suite, false-errors-<suite>.md: those test cases with errors, by test set, each error linked to its line
  */
 import * as vscode from 'vscode';
 import * as fs from 'fs';
@@ -154,9 +155,41 @@ suite('W3C XSLT test suites: lint', function () {
 		}
 		results.end();
 		fs.writeFileSync(path.join(outDir, 'summary.md'), summary(all));
+		for (const suiteDir of suites) {
+			const suite = path.basename(suiteDir);
+			fs.writeFileSync(path.join(outDir, `false-errors-${suite}.md`), falseErrors(all.filter((c) => c.suite === suite), suiteDir));
+		}
 		console.log(`results: ${outDir}`);
 	});
 });
+
+// a suite's false errors: each test case expected to compile that has errors reported, by test set, with a link to the
+// line of each error - in the stylesheet, or a module it imports or includes - to open in VS Code
+function falseErrors(cases: (TestCase & { problems: Problem[] })[], suiteDir: string): string {
+	const suite = path.basename(suiteDir);
+	const failing = cases.filter((c) => !c.skipped && (c.expectation === 'compiles' || c.expectation === 'dynamic-error') &&
+		c.problems.some((p) => p.severity === 'error'));
+	const link = (p: Problem) => `[${p.file}:${p.line}](${encodeURI(path.join(suiteDir, p.file))}#L${p.line})`;
+	const lines = [`# W3C false errors: ${suite}`, '',
+		`${failing.length} test cases expected to compile have errors reported, in ${new Set(failing.map((c) => c.set)).size} test sets. ` +
+		'Each error links to its line.', ''];
+	const sets = [...new Set(failing.map((c) => c.set))].sort();
+	for (const set of sets) {
+		const inSet = failing.filter((c) => c.set === set);
+		lines.push(`## ${set} (${inSet.length})`, '');
+		for (const c of inSet) {
+			// each error once: a stylesheet may be shared by test cases, and an imported module's errors repeated
+			const errors = [...new Map(c.problems.filter((p) => p.severity === 'error').map((p) => [`${p.file}:${p.line}:${p.message}`, p])).values()];
+			if (errors.length === 1) {
+				lines.push(`- **${c.name}** - ${link(errors[0])} - ${errors[0].message}`);
+			} else {
+				lines.push(`- **${c.name}**`, ...errors.map((p) => `  - ${link(p)} - ${p.message}`));
+			}
+		}
+		lines.push('');
+	}
+	return lines.join('\n');
+}
 
 function summary(all: (TestCase & { problems: Problem[], exception?: string })[]): string {
 	const lines: string[] = ['# W3C XSLT test suites: lint results', ''];
