@@ -73,3 +73,23 @@ The steps are in `demo.js`, one function per video. The pacing is in `PACE` at t
 `SHOW_CAPTIONS` turns the captions off. Captions are shown in the Demo › Captions view, not as notifications, so they're never mixed up with the extension's own. `XSLT_DEMO_FAST=1` plays a demo quickly, to check that every step works.
 
 The sample files are copied from `sample/` for each take, so the committed samples are never changed.
+
+## The recording window (demo profile)
+
+A separate VS Code profile, outside the home folder, so no user name appears in any path on screen - e.g. the
+extension's own jar in a task's command line. Its settings, extensions and remembered choices are its own.
+
+Open the demo workspace in it:
+
+```sh
+code --user-data-dir /Users/Shared/vscode-demo/data --extensions-dir /Users/Shared/vscode-demo/extensions /Users/Shared/xslt-demo
+```
+
+Install a new build of the extension into it, e.g. after `npx vsce package`:
+
+```sh
+code --user-data-dir /Users/Shared/vscode-demo/data --extensions-dir /Users/Shared/vscode-demo/extensions --install-extension xslt-xpath-2.1.1.vsix
+```
+
+Its settings are in `/Users/Shared/vscode-demo/data/User/settings.json`, e.g. `XSLT.tasks.saxonJar` set to a Saxon jar
+outside the home folder.
