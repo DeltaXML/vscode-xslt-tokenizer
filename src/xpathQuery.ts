@@ -26,8 +26,6 @@ export interface XPathQueryItem {
 	textIndex?: number;
 	value?: string;
 	type?: string;
-	// a map or array as xdm:debug() writes it, over several lines - for the Output panel, when xdm-view can be used
-	text?: string;
 }
 
 // as VS Code's vscode.getEditorLayout gives it: groups in rows or columns, nested, each with its size
@@ -44,6 +42,9 @@ export interface EditorLayout {
 export interface XPathQueryResult {
 	count?: number;
 	items?: XPathQueryItem[];
+	// the result (its first 100 items) as xdm:debug() writes it, without color - for the Output panel. Not given if
+	// xdm-view can't be used, e.g. for a function item
+	text?: string;
 	error?: { message: string; code?: string; line?: number; column?: number };
 }
 
@@ -56,6 +57,8 @@ export interface XPathQueryResult {
 export class XPathQuery {
 	public static readonly fileName = 'queries.xpath';
 	public static readonly mainClass = 'com.deltaxml.xslt.debug.XPathQuery';
+	// the most items of a result shown in the Output panel (XPathQuery.MAX_TEXT_ITEMS)
+	public static readonly maxTextItems = 100;
 	// a new query file's text: a first expression - the XML file's root element, quick to run - after a blank line, for
 	// its ▶ Run. How it's used is in the ▶ Run hover
 	public static seed(rootName?: string) {
@@ -628,6 +631,8 @@ export class XPathQuery {
 		const xmlDocument = await vscode.workspace.openTextDocument(target);
 		const { xpath, namespaces } = XPathQuery.withoutProlog(expression.text);
 		this.diagnostics.delete(queryDocument.uri);
+		// only this expression's result, so it's easy to find
+		this.output.clear();
 		let result: XPathQueryResult;
 		try {
 			result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Window, title: 'Evaluating XPath' }, () =>
@@ -641,6 +646,8 @@ export class XPathQuery {
 		}
 		if (result.error) {
 			this.setResult(queryDocument, expression.text);
+			this.output.appendLine(`Error${result.error.code ? ' ' + result.error.code : ''} for ${expression.text.replace(/\s+/g, ' ').trim()}`);
+			this.output.appendLine('  ' + result.error.message.replace(/\n/g, '\n  '));
 			this.showError(queryDocument, expression, result.error);
 			return;
 		}
@@ -728,9 +735,18 @@ export class XPathQuery {
 		const count = XPathQuery.countText(result);
 		const summary = count.replace(/^(\d+ items?)/, `$1 for ${oneLine}`);
 		this.output.appendLine(summary);
-		for (const item of items) {
-			this.output.appendLine('  ' + (item.kind === 'node' ? `${item.path}${item.value !== undefined ? '  ' + JSON.stringify(item.value) : ''}` :
-				item.type ? `${item.value} (xs:${item.type})` : (item.text ?? `${item.value}`).replace(/\n/g, '\n  ')));
+		if (result.text !== undefined) {
+			// as xdm:debug() writes it - or, if xdm-view couldn't be used, an item on each line
+			this.output.appendLine(result.text);
+			const count = result.count ?? items.length;
+			if (count > XPathQuery.maxTextItems) {
+				this.output.appendLine(`… the first ${XPathQuery.maxTextItems} of ${count} items shown`);
+			}
+		} else {
+			for (const item of items) {
+				this.output.appendLine('  ' + (item.kind === 'node' ? `${item.path}${item.value !== undefined ? '  ' + JSON.stringify(item.value) : ''}` :
+					item.type ? `${item.value} (xs:${item.type})` : `${item.value}`));
+			}
 		}
 		// a value - e.g. count(//item) - or nothing found: shown only after the expression, and in the output
 		if (nodes.length === 0) {

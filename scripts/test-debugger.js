@@ -530,15 +530,26 @@ function testXPathQuery(saxonJar) {
     // a map, array or function: as the adaptive output method writes it
     assert.deepStrictEqual(query("[89], map{'a':[1,'two',true()]}, count#1, [(//item)[1]]").items.map((item) => item.value),
         ['[89]', 'map{"a":[1,"two",true()]}', 'fn:count#1', '[<item xmlns="urn:orders" xmlns:x="urn:extra">pen</item>]']);
-    // and a map or array as xdm:debug() writes it, without color, for the Output panel - not a function
-    const texts = query("map{'name':'Ada','orders':array{map{'id':1},map{'id':2}}}, [1, 2], count#1").items.map((item) => item.text);
+    // and the whole result as xdm:debug() writes it, without color, for the Output panel: a map over several lines
     // (its entries in any order: Saxon 12's maps don't keep it)
-    assert.match(texts[0], /^\{\n[^]*\n\}$/, texts[0]);
-    assert.ok(texts[0].includes("  'name': 'Ada'"), texts[0]);
-    assert.ok(texts[0].includes("  'orders': [\n    {'id': 1},\n    {'id': 2}\n  ]"), texts[0]);
-    assert.doesNotMatch(texts[0], /\u001b/);
-    assert.strictEqual(texts[1], '[1, 2]');
-    assert.strictEqual(texts[2], undefined);
+    const map = query("map{'name':'Ada','orders':array{map{'id':1},map{'id':2}}}").text;
+    assert.match(map, /^\{\n[^]*\n\}$/, map);
+    assert.ok(map.includes("  'name': 'Ada'"), map);
+    assert.ok(map.includes("  'orders': [\n    {'id': 1},\n    {'id': 2}\n  ]"), map);
+    assert.doesNotMatch(map, /\u001b/);
+    // a sequence in parentheses: nodes as their paths above a copy, atomic values with their types where needed
+    const sequence = query("//order/@id, 'x y', 42, xs:date('2026-11-07'), //order[1]/item").text;
+    assert.match(sequence, /^\(\n[^]*\n\)$/, sequence);
+    for (const part of ['@id="A1",', '@id="B2",', "'x y',", '42,', '2026-11-07 (xs:date)', 'pen</item>']) {
+        assert.ok(sequence.includes(part), `${part} in ${sequence}`);
+    }
+    // the first 100 items only
+    const many = query('1 to 150').text;
+    assert.ok(many.includes('100') && !many.includes('101'), many);
+    // not with a function item, which xdm-view doesn't show yet: the items are still there
+    const withFunction = query('count#1, 1');
+    assert.strictEqual(withFunction.text, undefined);
+    assert.deepStrictEqual(withFunction.items.map((item) => item.value), ['fn:count#1', '1']);
     const error = query('//order[').error;
     assert.strictEqual(error.code, 'XPST0003');
     assert.deepStrictEqual([error.line, error.column], [1, 8]);
@@ -560,7 +571,8 @@ async function testXPathQueryServer(saxonJar) {
         assert.deepStrictEqual(first.items.map((item) => item.value), ['A1', 'B2']);
         const started = Date.now();
         const second = await server.request('java', args, undefined, { xpath: "map{'a':[1,2]}, 'x\ny'", xml });
-        assert.deepStrictEqual(second.items.map((item) => item.text ?? item.value), ["{\n  'a': [1, 2]\n}", 'x\ny']);
+        assert.deepStrictEqual(second.items.map((item) => item.value), ['map{"a":[1,2]}', 'x\ny']);
+        assert.ok(second.text.includes("  {\n    'a': [1, 2]\n  },"), second.text);
         const third = await server.request('java', args, undefined, { xpath: '//order[', xml });
         assert.strictEqual(third.error.code, 'XPST0003');
         // warm: well under a new JVM's start
